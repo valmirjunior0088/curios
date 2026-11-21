@@ -16,7 +16,7 @@ use {
         Step, Table,
     },
     crate::PreparedText,
-    curios_common::{Digest, Filed, Object, Ordered, Persistent, Qualifier, Sorted, SourceName},
+    curios_common::{Blob, Digest, Filed, Ordered, Persistent, Qualifier, Sorted, SourceName},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashSet},
@@ -403,7 +403,7 @@ pub fn in_walk_order(records: impl IntoIterator<Item = HeldRecord>) -> Records {
 
 /// A unit's baseline half: what a later lowering of the same sources reads of it, and nothing compiled after the unit does.
 ///
-/// **Each record and each scan an object of its own** ([`HalfEntry`]), stored apart and handed back where the half is restored ([`curios_common::Records`]): what is archived with the unit is the rest, the tables of each module body and each witness.
+/// **Each record and each scan a blob of its own** ([`HalfEntry`]), stored apart and handed back where the half is restored ([`curios_common::Records`]): what is archived with the unit is the rest, the tables of each module body and each witness.
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub struct BaselineHalf {
@@ -424,7 +424,7 @@ pub struct BaselineHalf {
     pub keyed: Sorted<curios_core::Global, Rc<Vec<curios_core::Global>>>,
 }
 
-/// An entry of a unit's baseline half as a cabinet keeps it, an object of its own bytes: a declaration's record, or a file's scan.
+/// An entry of a unit's baseline half as a cabinet keeps it, a blob of its own bytes: a declaration's record, or a file's scan.
 #[curios_archive::archived]
 pub enum HalfEntry {
     Record(LoweredDeclaration),
@@ -432,9 +432,9 @@ pub enum HalfEntry {
 }
 
 impl HalfEntry {
-    /// The object this entry is stored as: its archive, and the digest of it.
-    fn object(&self) -> Result<Object, String> {
-        curios_archive::to_bytes(self).map(|bytes| Object::of(bytes.to_vec()))
+    /// The blob this entry is stored as: its archive, and the digest of it.
+    fn blob(&self) -> Result<Blob, String> {
+        curios_archive::to_bytes(self).map(|bytes| Blob::of(bytes.to_vec()))
     }
 }
 
@@ -451,21 +451,21 @@ impl BaselineHalf {
             )
     }
 
-    /// The digest of each entry, in the order the unit names them: the one it was restored with or first filed under, and its object's otherwise.
+    /// The digest of each entry, in the order the unit names them: the one it was restored with or first filed under, and its blob's otherwise.
     pub(crate) fn digests(&self) -> Result<Vec<Digest>, String> {
         self.entries().map(|entry| entry.digest()).collect()
     }
 
-    /// The entries `wanted` asks for, as the objects a cabinet keeps them as, each archived now.
-    pub(crate) fn objects(&self, wanted: &dyn Fn(&Digest) -> bool) -> Result<Vec<Object>, String> {
-        let mut objects = Vec::new();
+    /// The entries `wanted` asks for, as the blobs a cabinet keeps them as, each archived now.
+    pub(crate) fn blobs(&self, wanted: &dyn Fn(&Digest) -> bool) -> Result<Vec<Blob>, String> {
+        let mut blobs = Vec::new();
         for entry in self.entries() {
             if wanted(&entry.digest()?) {
-                objects.push(entry.stored().object()?);
+                blobs.push(entry.stored().blob()?);
             }
         }
 
-        Ok(objects)
+        Ok(blobs)
     }
 }
 
@@ -486,7 +486,7 @@ impl Entry<'_> {
 
     /// The digest this entry is stored under.
     fn digest(&self) -> Result<Digest, String> {
-        let stored = || self.stored().object().map(|object| object.digest);
+        let stored = || self.stored().blob().map(|blob| blob.digest);
         match self {
             Entry::Record(record) => record.digest(|_| stored()),
             Entry::Scan(_, scan) => scan.digest(|_| stored()),
@@ -496,29 +496,29 @@ impl Entry<'_> {
 
 /// A unit's baseline half restored with no package standing on the machine: each scan's source holds its name alone.
 impl curios_common::Records for BaselineHalf {
-    fn restored(table: &[u8], entries: &[Object]) -> Result<Self, String> {
+    fn restored(table: &[u8], entries: &[Blob]) -> Result<Self, String> {
         Self::restored_filed(table, entries, &|_| None)
     }
 }
 
 impl BaselineHalf {
-    /// A unit's baseline half restored out of what the unit stores of it: the rest, archived with the unit, and each record and scan an object of its own, restored beside the digest it was found by, each scan lying in a source given the file `file_of` resolves its name to, where it resolves (`Scan::filed`).
+    /// A unit's baseline half restored out of what the unit stores of it: the rest, archived with the unit, and each record and scan a blob of its own, restored beside the digest it was found by, each scan lying in a source given the file `file_of` resolves its name to, where it resolves (`Scan::filed`).
     pub fn restored_filed(
         table: &[u8],
-        entries: &[Object],
+        entries: &[Blob],
         file_of: &dyn Fn(&SourceName) -> Option<PathBuf>,
     ) -> Result<Self, String> {
         let mut half = curios_archive::from_bytes::<BaselineHalf>(table)?;
         let mut records = Vec::new();
-        for object in entries {
-            match curios_archive::from_bytes::<HalfEntry>(object.bytes.as_slice())? {
+        for blob in entries {
+            match curios_archive::from_bytes::<HalfEntry>(blob.bytes.as_slice())? {
                 HalfEntry::Record(record) => {
-                    records.push(Rc::new(Filed::stored(record, object.digest)));
+                    records.push(Rc::new(Filed::stored(record, blob.digest)));
                 }
                 HalfEntry::Scan(module, scan) => {
                     half.scans.insert(
                         module,
-                        Rc::new(Filed::stored(scan.filed(file_of), object.digest)),
+                        Rc::new(Filed::stored(scan.filed(file_of), blob.digest)),
                     );
                 }
             }

@@ -2,7 +2,7 @@ use {
     super::*,
     crate::*,
     curios_archive::Bytes,
-    curios_common::{Member, Object, Qualifier},
+    curios_common::{Blob, Member, Qualifier},
 };
 
 /// A definition `name` of the ground type, whose body is `body`.
@@ -41,7 +41,7 @@ fn stored(items: &[Item], bytes: Bytes) -> Items {
     let parts = items
         .iter()
         .enumerate()
-        .map(|(member, item)| Object {
+        .map(|(member, item)| Blob {
             digest: ItemRun::identity(item).expect("an item archives"),
             bytes: bytes.clone(),
             member: Some(Member {

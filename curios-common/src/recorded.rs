@@ -1,14 +1,14 @@
-//! A table a unit stores by entry: a part of the unit's own, and each entry an object of the cabinet, read where the table is first asked for ([`Recorded`]), each entry keeping the digest it is stored under ([`Filed`]).
+//! A table a unit stores by entry: a part of the unit's own, and each entry a blob of the cabinet, read where the table is first asked for ([`Recorded`]), each entry keeping the digest it is stored under ([`Filed`]).
 //!
-//! **An entry kept is digested once.** A unit compiled over a baseline holds the baseline's entries shared, and an entry carries the digest of the object it is stored as, the one it was restored with or the first it was filed as: so a filing names what it kept by the digest it had and digests what it made alone.
+//! **An entry kept is digested once.** A unit compiled over a baseline holds the baseline's entries shared, and an entry carries the digest of the blob it is stored as, the one it was restored with or the first it was filed as: so a filing names what it kept by the digest it had and digests what it made alone.
 
 use {
-    crate::{Digest, Object},
+    crate::{Blob, Digest},
     curios_archive::Bytes,
     std::{cell::OnceCell, ops::Deref},
 };
 
-/// A value beside the digest of the object a cabinet keeps it as, once that is known: restored, it holds the digest it was found by, and made here, the one it is first filed as. Shared by every version that holds it, so a value kept from a baseline is never digested again.
+/// A value beside the digest of the blob a cabinet keeps it as, once that is known: restored, it holds the digest it was found by, and made here, the one it is first filed as. Shared by every version that holds it, so a value kept from a baseline is never digested again.
 #[derive(Debug, Clone)]
 pub struct Filed<T> {
     value: T,
@@ -24,7 +24,7 @@ impl<T> Filed<T> {
         }
     }
 
-    /// `value`, restored out of the object named `digest`.
+    /// `value`, restored out of the blob named `digest`.
     pub fn stored(value: T, digest: Digest) -> Self {
         Self {
             value,
@@ -63,19 +63,19 @@ impl<T> Deref for Filed<T> {
     }
 }
 
-/// A table that can be restored out of what a unit stores of it: a part of the unit's own, and the object of each entry.
+/// A table that can be restored out of what a unit stores of it: a part of the unit's own, and the blob of each entry.
 pub trait Records: Sized {
-    /// The table `table` and `entries` store. `Err` is bytes that hold no such table, or an object that is no entry of it.
-    fn restored(table: &[u8], entries: &[Object]) -> Result<Self, String>;
+    /// The table `table` and `entries` store. `Err` is bytes that hold no such table, or a blob that is no entry of it.
+    fn restored(table: &[u8], entries: &[Blob]) -> Result<Self, String>;
 }
 
-/// A table in hand, or what a unit stores of it until something asks for it: its own part and the object of each entry, kept as what the table is stored as again.
+/// A table in hand, or what a unit stores of it until something asks for it: its own part and the blob of each entry, kept as what the table is stored as again.
 ///
 /// Never changed once made, as [`curios_archive::Deferred`] is not: a unit compiled over another makes a table of its own, sharing the other's entries.
 #[derive(Debug, Clone)]
 pub struct Recorded<T> {
     value: OnceCell<T>,
-    stored: Option<(Bytes, Vec<Object>)>,
+    stored: Option<(Bytes, Vec<Blob>)>,
 }
 
 impl<T: Default> Default for Recorded<T> {
@@ -93,8 +93,8 @@ impl<T> Recorded<T> {
         }
     }
 
-    /// A table stored as its own part `table` and the objects of its entries, read when it is first asked for.
-    pub fn stored(table: impl Into<Bytes>, entries: Vec<Object>) -> Self {
+    /// A table stored as its own part `table` and the blobs of its entries, read when it is first asked for.
+    pub fn stored(table: impl Into<Bytes>, entries: Vec<Blob>) -> Self {
         Self {
             value: OnceCell::new(),
             stored: Some((table.into(), entries)),
@@ -102,7 +102,7 @@ impl<T> Recorded<T> {
     }
 
     /// What the table was restored from, where it was: what it is stored as again.
-    pub fn as_stored(&self) -> Option<(&Bytes, &[Object])> {
+    pub fn as_stored(&self) -> Option<(&Bytes, &[Blob])> {
         self.stored
             .as_ref()
             .map(|(table, entries)| (table, entries.as_slice()))
@@ -119,7 +119,7 @@ impl<T> Recorded<T> {
     /// The table, restored now by `restore` where nothing has asked for it before: for a table whose entries are read with what the process holds beside their bytes. `Err` is what it was stored as holding no such table.
     pub fn get_with(
         &self,
-        restore: impl FnOnce(&[u8], &[Object]) -> Result<T, String>,
+        restore: impl FnOnce(&[u8], &[Blob]) -> Result<T, String>,
     ) -> Result<&T, String> {
         if let Some(value) = self.value.get() {
             return Ok(value);

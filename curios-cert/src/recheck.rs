@@ -1595,12 +1595,12 @@ fn stored(
     let found = candidates
         .candidates(Facet::Judgment, &identity)
         .into_iter()
-        .filter_map(|object| {
-            let member = object
+        .filter_map(|blob| {
+            let member = blob
                 .member
                 .filter(|member| member.kind == ReadTable::KIND)?;
             let (name, reads, made) =
-                ReadTable::member(object.bytes.as_slice(), member.index).ok()?;
+                ReadTable::member(blob.bytes.as_slice(), member.index).ok()?;
             let made = made.filter(|made| {
                 made.input == identity
                     && made.signatures.len() == reads.signatures.len()
@@ -1609,7 +1609,7 @@ fn stored(
 
             Some((
                 name,
-                Rc::new(ReadRecord::restored(reads, Some(made), object.digest)),
+                Rc::new(ReadRecord::restored(reads, Some(made), blob.digest)),
             ))
         })
         .collect::<Vec<_>>();

@@ -14,7 +14,7 @@ pub use by::{AskedBy, Parts};
 
 use {
     crate::{ErasedUnit, constructor},
-    curios_common::{Digest, Facet, InKeyOrder, Object, Records, Sorted, candidate_name, digest},
+    curios_common::{Blob, Digest, Facet, InKeyOrder, Records, Sorted, candidate_name, digest},
     std::{
         cell::OnceCell,
         collections::{BTreeSet, HashMap},
@@ -174,7 +174,7 @@ pub type HeldAsked = Rc<AskedRecord>;
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub struct AskedItems {
-    /// **Stored apart, an object for each**, and handed back where the records are restored ([`Records`]): what is archived with the unit is the rest.
+    /// **Stored apart, a blob for each**, and handed back where the records are restored ([`Records`]): what is archived with the unit is the rest.
     #[archived_with(curios_archive::Skip)]
     items: Sorted<curios_core::Global, HeldAsked>,
     /// What the items read of declarations the unit does not hold, another unit's or no one's: each part with the digest it had, `None` where the name held no such part.
@@ -200,7 +200,7 @@ impl AskedItems {
         self.items.get(name)
     }
 
-    /// Each item's record as the unit holds it, in the order of the names the items declare first: what the unit stores an object for.
+    /// Each item's record as the unit holds it, in the order of the names the items declare first: what the unit stores a blob for.
     pub fn records(&self) -> impl Iterator<Item = (&curios_core::Global, &HeldAsked)> {
         self.items.iter()
     }
@@ -232,14 +232,14 @@ impl AskedItems {
 
 /// A unit's records restored out of what it stores of them: the rest, archived with the unit, and each item's record a member of a run ([`AskedTable`]), restored beside the digest it was found by. A run several records lie in is read once.
 impl Records for AskedItems {
-    fn restored(table: &[u8], entries: &[Object]) -> Result<Self, String> {
+    fn restored(table: &[u8], entries: &[Blob]) -> Result<Self, String> {
         let mut items = curios_archive::from_bytes::<AskedItems>(table)?;
         let mut runs = HashMap::<(usize, usize), Vec<Option<AskedEntry>>>::new();
-        for object in entries {
-            let member = object
+        for blob in entries {
+            let member = blob
                 .member
                 .ok_or("what erasing an item read is stored as a member of a run")?;
-            let bytes = object.bytes.as_slice();
+            let bytes = blob.bytes.as_slice();
             let run = match runs.entry((bytes.as_ptr() as usize, bytes.len())) {
                 std::collections::hash_map::Entry::Occupied(read) => read.into_mut(),
                 std::collections::hash_map::Entry::Vacant(unread) => {
@@ -253,7 +253,7 @@ impl Records for AskedItems {
                 .ok_or_else(|| format!("a run of erasures holds no member {}", member.index))?;
             items.items.insert(
                 name,
-                Rc::new(AskedRecord::restored(asked, made, object.digest)),
+                Rc::new(AskedRecord::restored(asked, made, blob.digest)),
             );
         }
 

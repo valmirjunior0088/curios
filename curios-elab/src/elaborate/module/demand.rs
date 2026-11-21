@@ -1084,7 +1084,7 @@ impl<'a> Demand<'a> {
             {
                 continue;
             }
-            let Some(items) = items_of(made, |identity| candidates.object(identity)) else {
+            let Some(items) = items_of(made, |identity| candidates.blob(identity)) else {
                 continue;
             };
             let alike = positions.iter().zip(&items).all(|(position, item)| {

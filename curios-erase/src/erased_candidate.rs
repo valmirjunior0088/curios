@@ -117,17 +117,16 @@ pub fn found(
     candidates
         .candidates(Facet::Erasure, input)
         .into_iter()
-        .filter_map(|object| {
-            let member = object
+        .filter_map(|blob| {
+            let member = blob
                 .member
                 .filter(|member| member.kind == AskedTable::KIND)?;
             let (named, asked, made) =
-                AskedTable::member(object.bytes.as_slice(), member.index).ok()?;
+                AskedTable::member(blob.bytes.as_slice(), member.index).ok()?;
             let made =
                 made.filter(|made| made.input == *input && made.reads.len() == asked.len())?;
 
-            (named == *name)
-                .then(|| Rc::new(AskedRecord::restored(asked, Some(made), object.digest)))
+            (named == *name).then(|| Rc::new(AskedRecord::restored(asked, Some(made), blob.digest)))
         })
         .collect()
 }

@@ -8,7 +8,7 @@ use {
     curios_abi::ForeignStore,
     curios_archive::{Bytes, joined, parted},
     curios_cert::{Accepted, Filed},
-    curios_common::{Digest, Mount, Object, Recorded},
+    curios_common::{Blob, Digest, Mount, Recorded},
     curios_core::{Anchors, Certification, Definitions, ItemRun, Lexicon, Lint, Places},
     curios_elab::{Candidating, Observed, Readers, Traces},
     curios_erase::ErasedUnit,
@@ -47,7 +47,7 @@ struct Produced {
     written: Written,
     /// Elaborated and zonked, as the certifier handed it back: elaboration's items, with every proof mark and value sort the certifier stated of them. This is what a successor's elaboration and the certifier's walk over it read where it stands.
     ///
-    /// **Stored without its items, which are read by item.** A compilation after the unit reads the declarations it names, so the unit stores the module's outline — each item's names and what each is declared as — and each item as an object of the cabinet, a member of a run consed with the items filed beside it, and a unit restored holds a module whose items are each read when something first asks ([`curios_core::WithoutItems`], [`Definitions::with_items`]).
+    /// **Stored without its items, which are read by item.** A compilation after the unit reads the declarations it names, so the unit stores the module's outline — each item's names and what each is declared as — and each item as a blob of the cabinet, a member of a run consed with the items filed beside it, and a unit restored holds a module whose items are each read when something first asks ([`curios_core::WithoutItems`], [`Definitions::with_items`]).
     #[archived_with(curios_core::WithoutItems)]
     core: Rc<Definitions>,
     /// Where `core` holds each name it defines, made the first time the unit is read by name and kept for as long as it is held: no compilation keys the unit again. Never stored, being read off `core`.
@@ -60,7 +60,7 @@ struct Produced {
     erased: Rc<ErasedUnit>,
     /// What each of the unit's declarations asked of the declarations around it as it elaborated: what a later compile of the same sources keeps a declaration's elaboration by.
     ///
-    /// **Of the unit's baseline half, with the text's** ([`PreparedText::baseline_digests`]): nothing compiled after the unit reads it, so it is stored beside what the unit is for its successors, each declaration's trace an object, and read when a compile over the unit first asks.
+    /// **Of the unit's baseline half, with the text's** ([`PreparedText::baseline_digests`]): nothing compiled after the unit reads it, so it is stored beside what the unit is for its successors, each declaration's trace a blob, and read when a compile over the unit first asks.
     #[archived_with(curios_archive::Skip)]
     traces: Rc<Recorded<Traces>>,
     /// Who asked what, of the unit's traces read backwards: what a recompile over the unit finds what an edit could reach by. Made the first time a recompile over the unit asks, or handed over by the recompile that made the unit, and kept beside its places; never stored, being read off the traces.
@@ -172,7 +172,7 @@ impl Produced {
         self.readers.get_or_init(|| Readers::of(self.traces()))
     }
 
-    /// This unit as it is stored, `unit` being its own archive and `reads`, of a certified unit, what judging each definition read, its own part and its entries: its index, the unit and then what it stores apart from itself ([`halved`]), and the objects the index names. What it stores apart is each part behind its length ([`joined`]) and read by whoever asks for it: the digests of its lowered items, its erased forms, its elaborated items, what each declaration asked as it elaborated and what erasing each item read ([`digests`]), then where its declarations lie, its import scopes and its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's, and `reads` behind them.
+    /// This unit as it is stored, `unit` being its own archive and `reads`, of a certified unit, what judging each definition read, its own part and its entries: its index, the unit and then what it stores apart from itself ([`halved`]), and the blobs the index names. What it stores apart is each part behind its length ([`joined`]) and read by whoever asks for it: the digests of its lowered items, its erased forms, its elaborated items, what each declaration asked as it elaborated and what erasing each item read ([`digests`]), then where its declarations lie, its import scopes and its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's, and `reads` behind them.
     ///
     /// **With `candidates`, what a cabinet files: each stage's records completed** ([`Candidating::complete`], [`ErasedUnit::complete`]), where a filing has not completed them, with what each declaration was made from, read and made, and named by those, so a cabinet finds them by what each was made from.
     fn indexed(
@@ -182,10 +182,10 @@ impl Produced {
         candidates: bool,
     ) -> Result<Indexed, String> {
         let items = match &self.written {
-            Written::Program { text, .. } => text.items_objects()?,
+            Written::Program { text, .. } => text.items_blobs()?,
             Written::CoreText { .. } => Vec::new(),
         };
-        let forms = self.erased.items_objects()?;
+        let forms = self.erased.items_blobs()?;
         let named = self.elaborated()?;
         // A unit whose records are as it restored them files them as it restored them, and one read from Core text was elaborated from nothing a candidate could be found by.
         if let (true, None, Written::Program { text, .. }) =
@@ -203,7 +203,7 @@ impl Produced {
                     .core
                     .items
                     .places()
-                    .zip(forms.iter().map(|object| object.digest))
+                    .zip(forms.iter().map(|blob| blob.digest))
                     .collect(),
             );
         }
@@ -228,8 +228,8 @@ impl Produced {
         let mut kinds = vec![elaborated, traces, asked, lowering, scopes, places];
 
         let mut parts = vec![
-            digests(items.iter().map(|object| &object.digest)),
-            digests(forms.iter().map(|object| &object.digest)),
+            digests(items.iter().map(|blob| &blob.digest)),
+            digests(forms.iter().map(|blob| &blob.digest)),
         ];
         parts.extend(kinds.iter().map(|kind| digests(kind.digests())));
         let apart = joined(
@@ -262,11 +262,11 @@ impl Produced {
         ))
     }
 
-    /// Complete the record of each declaration's elaboration a filing has not completed ([`Candidating::complete`]): `items` being the objects the unit's lowered items are stored as, and `named` the digest of each elaborated item ([`Produced::elaborated`]).
+    /// Complete the record of each declaration's elaboration a filing has not completed ([`Candidating::complete`]): `items` being the blobs the unit's lowered items are stored as, and `named` the digest of each elaborated item ([`Produced::elaborated`]).
     fn complete_elaborations(
         &self,
         text: &PreparedText,
-        items: &[Object],
+        items: &[Blob],
         named: &[(usize, Digest)],
     ) -> Result<(), String> {
         let lowered = text.core();
@@ -276,7 +276,7 @@ impl Produced {
             lowered
                 .items
                 .places()
-                .zip(items.iter().map(|object| object.digest)),
+                .zip(items.iter().map(|blob| blob.digest)),
             &self.core,
             self.places(),
             named.iter().copied(),
@@ -302,11 +302,11 @@ impl Produced {
             .collect()
     }
 
-    /// This unit with `bytes` as what it stores apart from itself ([`Unit::stored`]), each part a run of the buffer they are in and read when something first asks for it, and each object they name found by `find` now — see [`PreparedText::with_items`] and [`PreparedText::with_baseline`]. `Err` is bytes that are no such thing, or name an object `find` holds none for.
+    /// This unit with `bytes` as what it stores apart from itself ([`Unit::stored`]), each part a run of the buffer they are in and read when something first asks for it, and each blob they name found by `find` now — see [`PreparedText::with_items`] and [`PreparedText::with_baseline`]. `Err` is bytes that are no such thing, or name a blob `find` holds none for.
     pub fn with_apart(
         self,
         bytes: impl Into<Bytes>,
-        find: &dyn Fn(&Digest) -> Option<Object>,
+        find: &dyn Fn(&Digest) -> Option<Blob>,
     ) -> Result<Self, String> {
         let bytes = bytes.into();
         let fixed = matches!(bytes, Bytes::Constant(_));
@@ -523,7 +523,7 @@ impl Unit {
         Rc::ptr_eq(&self.unit.core, &other.unit.core)
     }
 
-    /// This unit as it is stored: its index, itself, its elaborated module without its items, then what it stores apart from itself and what the certifier's record does, what judging each definition read ([`Certification::recorded`]), each behind its length; and the objects the index names ([`Indexed::objects`]).
+    /// This unit as it is stored: its index, itself, its elaborated module without its items, then what it stores apart from itself and what the certifier's record does, what judging each definition read ([`Certification::recorded`]), each behind its length; and the blobs the index names ([`Indexed::blobs`]).
     ///
     /// **A stored unit says what its items mean, not where they were written or how they were come by.** An elaborated item is named by its form consed in a table of its own, one node for each structure as it is spelled, under no position, so an item elaborated now and the same item reused from a baseline are named alike, and one moved by an edit above it is stored as it was; the items a filing writes are consed in one table, so a node two of them spell is stored once.
     ///
@@ -545,11 +545,8 @@ impl Unit {
             .indexed(&unit, (Some((&table, reads)), &self.certification), false)
     }
 
-    /// The unit whose index is `index` ([`Unit::stored`]), each object it names found by `find`: decoded, what it stores apart from itself kept as the bytes it is, for whoever asks. `Err` is bytes that hold no unit, or an object `find` holds none for.
-    pub fn restored(
-        index: &[u8],
-        find: impl Fn(&Digest) -> Option<Object>,
-    ) -> Result<Self, String> {
+    /// The unit whose index is `index` ([`Unit::stored`]), each blob it names found by `find`: decoded, what it stores apart from itself kept as the bytes it is, for whoever asks. `Err` is bytes that hold no unit, or a blob `find` holds none for.
+    pub fn restored(index: &[u8], find: impl Fn(&Digest) -> Option<Blob>) -> Result<Self, String> {
         let (unit, apart) = halves(index).ok_or("not a unit's index")?;
 
         curios_archive::from_bytes::<Unit>(unit)?.with_apart(Bytes::from(apart.to_vec()), &find)
@@ -563,11 +560,11 @@ impl Unit {
         }
     }
 
-    /// This unit, decoded from its archive alone, with `bytes` as what it and its record store apart from themselves ([`Unit::stored`], [`Unit::imaged`]), each part a run of the buffer and each object it names found by `find` now. A unit whose `bytes` are a constant of the executable is the compiler's own ([`Unit::fixed`]). `Err` is bytes that are no such thing, or name an object `find` holds none for.
+    /// This unit, decoded from its archive alone, with `bytes` as what it and its record store apart from themselves ([`Unit::stored`], [`Unit::imaged`]), each part a run of the buffer and each blob it names found by `find` now. A unit whose `bytes` are a constant of the executable is the compiler's own ([`Unit::fixed`]). `Err` is bytes that are no such thing, or name a blob `find` holds none for.
     pub fn with_apart(
         self,
         bytes: Bytes,
-        find: &dyn Fn(&Digest) -> Option<Object>,
+        find: &dyn Fn(&Digest) -> Option<Blob>,
     ) -> Result<Self, String> {
         let [apart, reads, table]: [Bytes; 3] = parted(&bytes)
             .and_then(|parts| parts.try_into().ok())

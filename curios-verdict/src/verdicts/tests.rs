@@ -811,7 +811,7 @@ fn packs(root: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
-/// How many objects each pack of the cabinet at `root` holds, fewest first.
+/// How many blobs each pack of the cabinet at `root` holds, fewest first.
 fn packed_counts(root: &Path) -> Vec<usize> {
     let mut counts = packs(root)
         .into_iter()
@@ -825,10 +825,10 @@ fn packed_counts(root: &Path) -> Vec<usize> {
     counts
 }
 
-/// A unit compiled over its slot files the objects it made and none it kept: an edit to one declaration's text, of three, writes a pack of that declaration's lowered item, elaborated item, erased form and lowering record, of its file's scan and texts, and of the records of its elaboration, its erasure and its judgment, each named by what it was made from, beside the pack the first filing wrote.
+/// A unit compiled over its slot files the blobs it made and none it kept: an edit to one declaration's text, of three, writes a pack of that declaration's lowered item, elaborated item, erased form and lowering record, of its file's scan and texts, and of the records of its elaboration, its erasure and its judgment, each named by what it was made from, beside the pack the first filing wrote.
 #[test]
-fn a_refiling_writes_only_the_objects_it_made() {
-    let root = project("refiled-objects");
+fn a_refiling_writes_only_the_blobs_it_made() {
+    let root = project("refiled-blobs");
     write(&root, "shape/lib.crs", &library_of_three("first"));
     reused(&root);
     let [first] = packed_counts(&root)[..] else {
@@ -842,10 +842,10 @@ fn a_refiling_writes_only_the_objects_it_made() {
     assert!(reused(&root), "and what it filed is restored");
 }
 
-/// A slot names objects it does not hold: one whose objects are gone is not restored, and the compile that misses writes them again.
+/// A slot names blobs it does not hold: one whose blobs are gone is not restored, and the compile that misses writes them again.
 #[test]
-fn a_unit_whose_objects_are_gone_is_compiled_again() {
-    let root = project("objects-gone");
+fn a_unit_whose_blobs_are_gone_is_compiled_again() {
+    let root = project("blobs-gone");
     reused(&root);
     assert!(reused(&root), "filed by the first compilation");
 
@@ -855,11 +855,11 @@ fn a_unit_whose_objects_are_gone_is_compiled_again() {
         fs::remove_file(pack).expect("a pack a filing wrote");
     }
 
-    assert!(!reused(&root), "a slot naming objects nowhere is no unit");
+    assert!(!reused(&root), "a slot naming blobs nowhere is no unit");
     assert!(reused(&root), "and the recompile writes them again");
 }
 
-/// A pack is held to its name where it is read: a damaged one is taken away, the unit it held objects of is compiled again, and the filing that follows writes them again, as the very pack they were, since a pack is a function of what it holds.
+/// A pack is held to its name where it is read: a damaged one is taken away, the unit it held blobs of is compiled again, and the filing that follows writes them again, as the very pack they were, since a pack is a function of what it holds.
 #[test]
 fn a_damaged_pack_is_taken_away_and_written_again() {
     let root = project("damaged-pack");
@@ -872,7 +872,7 @@ fn a_damaged_pack_is_taken_away_and_written_again() {
     bytes[0] ^= 0xff;
     fs::write(pack, &bytes).unwrap();
 
-    assert!(!reused(&root), "a damaged pack's objects are not believed");
+    assert!(!reused(&root), "a damaged pack's blobs are not believed");
     assert_eq!(
         fs::read(pack).unwrap(),
         filed,

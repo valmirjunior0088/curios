@@ -78,7 +78,7 @@ mod recurse;
 pub use recurse::{grown, recurse};
 
 mod digest;
-pub use digest::{Digest, Fingerprint, Member, Object, digest};
+pub use digest::{Blob, Digest, Fingerprint, Member, digest};
 
 mod recorded;
 pub use recorded::{Filed, Recorded, Records};

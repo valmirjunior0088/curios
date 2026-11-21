@@ -6,7 +6,7 @@
 //!
 //! **What elaboration concluded of a declaration is its record's.** What a declaration reads of a definition besides its terms — its totality, how it applies its parameters, where its universe parameters reach ([`Classified`]) — is concluded where the declaration elaborates and held by the declaration's record from then on ([`Concluded`]), so a record a recompile shares, a cabinet holds or a compile adopts carries it, and the unit reads a definition's by the record that concludes of it. So is what a question about a place reads of the declaration: the type each of its written places settled at and each of its written binders was opened at ([`SettledPlace`]).
 //!
-//! **Each declaration's trace an object, stored with each name written once.** A trace is stored as an object of its own, and the traces a filing writes are the members of one run ([`TraceTable`]). A trace names the same few declarations its neighbours do: the library's traces hold some forty names each, drawn from the few thousand the library and its scope declare. A name is archived as its segments, and read back through the process's table at an allocation a segment, so a run holds a table of the names and of the witness keys, each once, and a question holds its place there. What the unit reads of other units, the declarations settled before the offer and the stored order are the unit's own, stored with it.
+//! **Each declaration's trace a blob, stored with each name written once.** A trace is stored as a blob of its own, and the traces a filing writes are the members of one run ([`TraceTable`]). A trace names the same few declarations its neighbours do: the library's traces hold some forty names each, drawn from the few thousand the library and its scope declare. A name is archived as its segments, and read back through the process's table at an allocation a segment, so a run holds a table of the names and of the witness keys, each once, and a question holds its place there. What the unit reads of other units, the declarations settled before the offer and the stored order are the unit's own, stored with it.
 //!
 //! **Completed where it is filed, and found by what its declaration was made from.** A cabinet's filing completes each trace with what the declaration was made from, what each question read and what it made ([`Made`]), and names it by those ([`TraceRecord::digest`]): the one record a stage keeps of a declaration, which a later compile keeps the declaration by where it holds the baseline and takes the declaration from where it finds the record among those a cabinet holds for the same input ([`curios_common::Candidates`]). A constructive trace, which "additionally stores the resulting value", where "it makes sense to record many constructive traces per key" (Mokhov, Mitchell and Peyton Jones, [Build Systems à la Carte](https://www.microsoft.com/en-us/research/wp-content/uploads/2018/03/build-systems.pdf), section 4.2.3), the value being held by its identity in the cabinet beside it.
 
@@ -15,9 +15,7 @@ mod tests;
 
 use {
     crate::{Answered, Question},
-    curios_common::{
-        Digest, Facet, InKeyOrder, Object, Persistent, Records, Sorted, candidate_name,
-    },
+    curios_common::{Blob, Digest, Facet, InKeyOrder, Persistent, Records, Sorted, candidate_name},
     curios_core::{
         Applications, Extent, Global, Lint, Order, ParameterField, Sharing, Term, Totality, Trace,
         Variance, WitnessKey, WrittenBinder,
@@ -198,7 +196,7 @@ pub type Entry<'t> = (
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub struct Traces {
-    /// **Stored apart, an object for each**, and handed back where the traces are restored ([`Records`]): what is archived with the unit is the rest.
+    /// **Stored apart, a blob for each**, and handed back where the traces are restored ([`Records`]): what is archived with the unit is the rest.
     #[archived_with(curios_archive::Skip)]
     declarations: Sorted<Global, HeldTrace>,
     /// What the declarations read of declarations the unit does not hold. See [`Foreign`].
@@ -347,7 +345,7 @@ impl Traces {
         self.declarations.get(name)
     }
 
-    /// Each declaration's trace as the unit holds it, in the order of the names the declarations are written as: what the unit stores an object for.
+    /// Each declaration's trace as the unit holds it, in the order of the names the declarations are written as: what the unit stores a blob for.
     pub fn declarations(&self) -> impl Iterator<Item = (&Global, &HeldTrace)> {
         self.declarations.iter()
     }
@@ -961,14 +959,14 @@ impl TraceTable {
 
 /// A unit's traces restored out of what it stores of them: the rest, archived with the unit, and each declaration's trace a member of a run ([`TraceTable`]), restored beside the digest it was found by. A run several traces lie in is read once.
 impl Records for Traces {
-    fn restored(table: &[u8], entries: &[Object]) -> Result<Self, String> {
+    fn restored(table: &[u8], entries: &[Blob]) -> Result<Self, String> {
         let mut traces = curios_archive::from_bytes::<Traces>(table)?;
         let mut runs = HashMap::<(usize, usize), Vec<Option<TracedEntry>>>::new();
-        for object in entries {
-            let member = object
+        for blob in entries {
+            let member = blob
                 .member
                 .ok_or("a trace is stored as a member of a run")?;
-            let bytes = object.bytes.as_slice();
+            let bytes = blob.bytes.as_slice();
             let run = match runs.entry((bytes.as_ptr() as usize, bytes.len())) {
                 std::collections::hash_map::Entry::Occupied(read) => read.into_mut(),
                 std::collections::hash_map::Entry::Vacant(unread) => {
@@ -982,7 +980,7 @@ impl Records for Traces {
                 .ok_or_else(|| format!("a run of traces holds no member {}", member.index))?;
             traces.share(
                 name,
-                Rc::new(TraceRecord::restored(trace, concluded, made, object.digest)),
+                Rc::new(TraceRecord::restored(trace, concluded, made, blob.digest)),
             );
         }
 

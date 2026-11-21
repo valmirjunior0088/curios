@@ -20,7 +20,7 @@ mod tests;
 use {
     crate::Global,
     curios_common::{
-        Digest, InKeyOrder, Object, Qualifier, Records, Sorted, Source, SourceName, Span, Table,
+        Blob, Digest, InKeyOrder, Qualifier, Records, Sorted, Source, SourceName, Span, Table,
         intern,
     },
     std::{
@@ -205,7 +205,7 @@ struct Sited {
 ///
 /// **Persistent**, so the anchors of a unit lowered over a baseline are the baseline's with the texts, names and fields of what it lowered again placed again.
 ///
-/// **Each source's texts an object of its own** ([`SourceTexts`]), holding the source once, stored apart and handed back where the table is restored ([`Records`]): what is archived with the unit is where each definition is named. A source is the grain its texts are stored at, as a file is the grain a lowering reads at: the texts of every source are grouped and digested where the unit is filed, which reads each source once, as a compile reads each file.
+/// **Each source's texts a blob of its own** ([`SourceTexts`]), holding the source once, stored apart and handed back where the table is restored ([`Records`]): what is archived with the unit is where each definition is named. A source is the grain its texts are stored at, as a file is the grain a lowering reads at: the texts of every source are grouped and digested where the unit is filed, which reads each source once, as a compile reads each file.
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub struct Anchors {
@@ -220,7 +220,7 @@ pub struct Anchors {
     fields: Sorted<Global, Vec<(String, Extent)>>,
 }
 
-/// The texts of one source as a cabinet keeps them, an object of its own: the source, once, and each text's key with where it lies in it.
+/// The texts of one source as a cabinet keeps them, a blob of its own: the source, once, and each text's key with where it lies in it.
 #[curios_archive::archived]
 pub struct SourceTexts {
     source: Source,
@@ -237,30 +237,30 @@ struct SourceText {
 }
 
 impl SourceTexts {
-    /// The object these texts are stored as: their archive, and the digest of it.
-    fn object(&self) -> Result<Object, String> {
-        curios_archive::to_bytes(self).map(|bytes| Object::of(bytes.to_vec()))
+    /// The blob these texts are stored as: their archive, and the digest of it.
+    fn blob(&self) -> Result<Blob, String> {
+        curios_archive::to_bytes(self).map(|bytes| Blob::of(bytes.to_vec()))
     }
 }
 
 /// Where each declaration lies, restored out of what a unit stores of it with no package standing on the machine: each source holds its name alone.
 impl Records for Anchors {
-    fn restored(table: &[u8], entries: &[Object]) -> Result<Self, String> {
+    fn restored(table: &[u8], entries: &[Blob]) -> Result<Self, String> {
         Self::restored_filed(table, entries, &|_| None)
     }
 }
 
 impl Anchors {
-    /// Where each declaration lies, restored out of what a unit stores of it: where each definition is named, archived with the unit, and each source's texts an object of its own, restored with the source shared by every text of it and given the file `file_of` resolves its name to, where it resolves.
+    /// Where each declaration lies, restored out of what a unit stores of it: where each definition is named, archived with the unit, and each source's texts a blob of its own, restored with the source shared by every text of it and given the file `file_of` resolves its name to, where it resolves.
     pub fn restored_filed(
         table: &[u8],
-        entries: &[Object],
+        entries: &[Blob],
         file_of: &dyn Fn(&SourceName) -> Option<PathBuf>,
     ) -> Result<Self, String> {
         let mut anchors = curios_archive::from_bytes::<Anchors>(table)?;
-        for object in entries {
+        for blob in entries {
             let SourceTexts { source, texts } =
-                curios_archive::from_bytes::<SourceTexts>(object.bytes.as_slice())?;
+                curios_archive::from_bytes::<SourceTexts>(blob.bytes.as_slice())?;
             let file = source.name().and_then(file_of);
             let source = Arc::new(source.with_file(file));
             for text in texts {
@@ -328,25 +328,25 @@ impl Anchors {
         sources
     }
 
-    /// The digest of each source's texts, in the order a unit names them ([`Anchors::objects`]).
+    /// The digest of each source's texts, in the order a unit names them ([`Anchors::blobs`]).
     pub fn digests(&self) -> Result<Vec<Digest>, String> {
         self.sources()
             .iter()
-            .map(|texts| texts.object().map(|object| object.digest))
+            .map(|texts| texts.blob().map(|blob| blob.digest))
             .collect()
     }
 
-    /// The source texts `wanted` asks for, as the objects a cabinet keeps them as, made now.
-    pub fn objects(&self, wanted: &dyn Fn(&Digest) -> bool) -> Result<Vec<Object>, String> {
-        let mut objects = Vec::new();
+    /// The source texts `wanted` asks for, as the blobs a cabinet keeps them as, made now.
+    pub fn blobs(&self, wanted: &dyn Fn(&Digest) -> bool) -> Result<Vec<Blob>, String> {
+        let mut blobs = Vec::new();
         for texts in self.sources() {
-            let object = texts.object()?;
-            if wanted(&object.digest) {
-                objects.push(object);
+            let blob = texts.blob()?;
+            if wanted(&blob.digest) {
+                blobs.push(blob);
             }
         }
 
-        Ok(objects)
+        Ok(blobs)
     }
 
     /// Record that `name` was written at `label`.

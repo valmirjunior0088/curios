@@ -12,7 +12,7 @@ use {
     crate::{
         Answered, HeldTrace, Made, Question, Read, TraceRecord, TraceTable, Traces, part_digest,
     },
-    curios_common::{Candidates, Digest, Facet, Object},
+    curios_common::{Blob, Candidates, Digest, Facet},
     curios_core::{Declarations, Declared, Definitions, Global, Item, ItemRun, Places},
     std::{cell::RefCell, collections::HashMap, rc::Rc},
 };
@@ -27,7 +27,7 @@ pub fn declaration_input(items: impl IntoIterator<Item = Digest>) -> Digest {
     Digest::of(&bytes)
 }
 
-/// The digest of the lowered item at `position` of `lowered`, as a cabinet keeps it: the object it was read from, where it was, and its archive otherwise.
+/// The digest of the lowered item at `position` of `lowered`, as a cabinet keeps it: the blob it was read from, where it was, and its archive otherwise.
 pub fn lowered_digest(lowered: &Definitions, position: usize) -> Result<Digest, String> {
     match lowered.items.part(position) {
         Some(stored) => Ok(stored.digest),
@@ -196,12 +196,12 @@ pub fn found(
     candidates
         .candidates(facet, input)
         .into_iter()
-        .filter_map(|object| {
-            let member = object
+        .filter_map(|blob| {
+            let member = blob
                 .member
                 .filter(|member| member.kind == TraceTable::KIND)?;
             let (traced, trace, concluded, made) =
-                TraceTable::member(object.bytes.as_slice(), member.index).ok()?;
+                TraceTable::member(blob.bytes.as_slice(), member.index).ok()?;
             let made =
                 made.filter(|made| made.input == *input && made.reads.len() == trace.len())?;
 
@@ -210,18 +210,18 @@ pub fn found(
                     trace,
                     concluded,
                     Some(made),
-                    object.digest,
+                    blob.digest,
                 ))
             })
         })
         .collect()
 }
 
-/// The items `made` names, read out of the objects `object` finds by their identities, each run checked once: `None` where one is not found.
-pub fn items_of(made: &Made, object: impl Fn(&Digest) -> Option<Object>) -> Option<Vec<Item>> {
-    let mut runs = Vec::<(Object, Vec<(usize, u32)>)>::new();
+/// The items `made` names, read out of the blobs `blob` finds by their identities, each run checked once: `None` where one is not found.
+pub fn items_of(made: &Made, blob: impl Fn(&Digest) -> Option<Blob>) -> Option<Vec<Item>> {
+    let mut runs = Vec::<(Blob, Vec<(usize, u32)>)>::new();
     for (at, identity) in made.outputs.iter().enumerate() {
-        let found = object(identity)?;
+        let found = blob(identity)?;
         let member = found.member.filter(|member| member.kind == ItemRun::KIND)?;
         match runs
             .iter_mut()

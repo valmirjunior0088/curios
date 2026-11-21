@@ -1,4 +1,4 @@
-//! One-time validation and per-thread restoration of the generated images: two units, `/sys` then `/std`, each framed by the build script as a cabinet slot frames one — a record of what the root was compiled from, ahead of the index of the certified [`Unit`] — beside one pack of the objects the index names, as a cabinet keeps them beside a slot.
+//! One-time validation and per-thread restoration of the generated images: two units, `/sys` then `/std`, each framed by the build script as a cabinet slot frames one — a record of what the root was compiled from, ahead of the index of the certified [`Unit`] — beside one pack of the blobs the index names, as a cabinet keeps them beside a slot.
 
 use {
     curios_archive::{Bytes, parted},
@@ -16,7 +16,7 @@ use {
 const SYS_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/sys.rkyv"));
 const STD_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/std.rkyv"));
 
-// The objects each image's index names, one pack beside each, as a cabinet keeps the packs of a slot's address beside it.
+// The blobs each image's index names, one pack beside each, as a cabinet keeps the packs of a slot's address beside it.
 const SYS_PACK: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/sys.pack"));
 const STD_PACK: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/std.pack"));
 
@@ -27,7 +27,7 @@ const DOCUMENTATION_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/doc
 const ROOTS: [(&str, &[u8], &[u8]); 2] =
     [("sys", SYS_BYTES, SYS_PACK), ("std", STD_BYTES, STD_PACK)];
 
-/// One image validated: its record and its unit, each as the zero-copy view bytecheck confirmed, what the unit stores apart from itself as the bytes it is, which nothing here reads, and the pack of the objects its index names.
+/// One image validated: its record and its unit, each as the zero-copy view bytecheck confirmed, what the unit stores apart from itself as the bytes it is, which nothing here reads, and the pack of the blobs its index names.
 type Validated = Result<
     (
         &'static ArchivedRecord,
@@ -69,7 +69,7 @@ fn validate_bytes(root: &str, bytes: &'static [u8], pack: &'static [u8]) -> Vali
             format!("invalid archived /{root}: not what a certified unit stores apart")
         })?;
     Pack::read(Bytes::from(pack))
-        .ok_or_else(|| format!("invalid archived /{root}: its objects are no pack"))?;
+        .ok_or_else(|| format!("invalid archived /{root}: its blobs are no pack"))?;
     let record = curios_archive::access::<ArchivedRecord>(record)
         .map_err(|error| format!("invalid archived /{root} record: {error}"))?;
     let unit = curios_archive::access::<ArchivedUnit>(unit)
@@ -95,14 +95,13 @@ fn restore_archives() -> [(Record, Unit); 2] {
                 Ok(archived) => *archived,
                 Err(error) => panic!("{error}"),
             };
-            let pack =
-                Pack::read(Bytes::from(pack)).expect("a validated image's objects are a pack");
+            let pack = Pack::read(Bytes::from(pack)).expect("a validated image's blobs are a pack");
 
             (
                 curios_archive::deserialize::<Record>(record).unwrap_or_else(|error| {
                     panic!("validated archived /{root} record failed to restore: {error}")
                 }),
-                // What the unit stores apart from itself, and each object it names, stays the slice of the executable it is: a compilation reads a lowered item where it names its declaration, and the baseline half where it lowers over this root.
+                // What the unit stores apart from itself, and each blob it names, stays the slice of the executable it is: a compilation reads a lowered item where it names its declaration, and the baseline half where it lowers over this root.
                 curios_archive::deserialize::<Unit>(unit)
                     .unwrap_or_else(|error| {
                         panic!("validated archived /{root} failed to restore: {error}")

@@ -5,35 +5,32 @@ use {
     std::io::Cursor,
 };
 
-/// One object of its own bytes.
-fn whole(bytes: &[u8]) -> Object {
-    Object::of(bytes.to_vec())
+/// One blob of its own bytes.
+fn whole(bytes: &[u8]) -> Blob {
+    Blob::of(bytes.to_vec())
 }
 
-/// Every object a pack holds is found by its name, as the bytes it was packed as, and a name it does not hold finds nothing.
+/// Every blob a pack holds is found by its name, as the bytes it was packed as, and a name it does not hold finds nothing.
 #[test]
-fn an_object_is_found_by_its_name() {
-    let objects = [b"one".as_slice(), b"two", b"three"].map(whole);
-    let pack = Pack::read(Bytes::from(packed(&objects))).expect("a pack reads back");
+fn a_blob_is_found_by_its_name() {
+    let blobs = [b"one".as_slice(), b"two", b"three"].map(whole);
+    let pack = Pack::read(Bytes::from(packed(&blobs))).expect("a pack reads back");
 
     assert_eq!(pack.len(), 3);
-    for object in &objects {
-        let found = pack.get(&object.digest).expect("an object packed");
-        assert_eq!(found.bytes.as_slice(), object.bytes.as_slice());
+    for blob in &blobs {
+        let found = pack.get(&blob.digest).expect("a blob packed");
+        assert_eq!(found.bytes.as_slice(), blob.bytes.as_slice());
         assert_eq!(found.member, None);
     }
     assert!(pack.get(&Digest::of(b"four")).is_none());
 }
 
-/// Which objects a pack holds is read off its end, in the order of their names, and a file that closes on no table names none.
+/// Which blobs a pack holds is read off its end, in the order of their names, and a file that closes on no table names none.
 #[test]
 fn what_a_pack_holds_is_read_off_its_end() {
-    let objects = [b"one".as_slice(), b"two", b"three"].map(whole);
-    let bytes = packed(&objects);
-    let mut names = objects
-        .iter()
-        .map(|object| object.digest)
-        .collect::<Vec<_>>();
+    let blobs = [b"one".as_slice(), b"two", b"three"].map(whole);
+    let bytes = packed(&blobs);
+    let mut names = blobs.iter().map(|blob| blob.digest).collect::<Vec<_>>();
     names.sort();
 
     assert_eq!(pack_names(&mut Cursor::new(&bytes)), Some(names));
@@ -44,9 +41,9 @@ fn what_a_pack_holds_is_read_off_its_end() {
     assert_eq!(pack_names(&mut Cursor::new(&bytes[..8])), None);
 }
 
-/// A pack is a function of what it holds: the same objects in another order, or one handed twice, pack to the same bytes and so the same name.
+/// A pack is a function of what it holds: the same blobs in another order, or one handed twice, pack to the same bytes and so the same name.
 #[test]
-fn the_same_objects_pack_to_the_same_name() {
+fn the_same_blobs_pack_to_the_same_name() {
     let one = packed(&[whole(b"a"), whole(b"b"), whole(b"c")]);
     let other = packed(&[whole(b"c"), whole(b"a"), whole(b"b"), whole(b"a")]);
 
@@ -58,7 +55,7 @@ fn the_same_objects_pack_to_the_same_name() {
 #[test]
 fn members_of_one_run_share_its_bytes() {
     let run = Bytes::from(b"a run of two members".to_vec());
-    let member = |form: &[u8], index| Object {
+    let member = |form: &[u8], index| Blob {
         digest: Digest::of(form),
         bytes: run.clone(),
         member: Some(Member {
@@ -82,7 +79,7 @@ fn members_of_one_run_share_its_bytes() {
     );
 }
 
-/// Bytes that are no pack are refused: another file, one cut short, or a table naming bytes past where the objects end.
+/// Bytes that are no pack are refused: another file, one cut short, or a table naming bytes past where the blobs end.
 #[test]
 fn bytes_that_are_no_pack_are_refused() {
     let bytes = packed(&[whole(b"one"), whole(b"two")]);
@@ -107,11 +104,11 @@ fn item(name: &str) -> Item {
 }
 
 /// A pack of `items`, each a member of one run, beside `alone`.
-fn pack_of(items: &[Item], alone: &[Object]) -> Pack {
+fn pack_of(items: &[Item], alone: &[Blob]) -> Pack {
     let run = Bytes::from(ItemRun::of(items).expect("a run archives"));
-    let mut objects = alone.to_vec();
+    let mut blobs = alone.to_vec();
     for (member, item) in items.iter().enumerate() {
-        objects.push(Object {
+        blobs.push(Blob {
             digest: ItemRun::identity(item).expect("an item archives"),
             bytes: run.clone(),
             member: Some(Member {
@@ -121,20 +118,20 @@ fn pack_of(items: &[Item], alone: &[Object]) -> Pack {
         });
     }
 
-    Pack::read(Bytes::from(packed(&objects))).expect("a pack reads back")
+    Pack::read(Bytes::from(packed(&blobs))).expect("a pack reads back")
 }
 
-/// Packs merged hold every object each held: one stored alone as it was, and every member in one run consed again, each found as the item it was.
+/// Packs merged hold every blob each held: one stored alone as it was, and every member in one run consed again, each found as the item it was.
 #[test]
 fn a_merge_conses_its_runs_into_one() {
     let (first, second) = ([item("a"), item("b")], [item("c")]);
     let alone = [whole(b"alone")];
     let packs = [pack_of(&first, &alone), pack_of(&second, &[])];
-    let merged = repacked(packs.iter().flat_map(Pack::objects)).expect("packs merge");
+    let merged = repacked(packs.iter().flat_map(Pack::blobs)).expect("packs merge");
     let merged = Pack::read(Bytes::from(merged)).expect("a merge is a pack");
 
     assert_eq!(merged.len(), 4);
-    let found = merged.get(&alone[0].digest).expect("an object alone");
+    let found = merged.get(&alone[0].digest).expect("a blob alone");
     assert_eq!(found.bytes.as_slice(), b"alone");
     let members = first
         .iter()

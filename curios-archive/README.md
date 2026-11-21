@@ -24,7 +24,7 @@ Zero-copy archiving for the workspace: the one crate that names rkyv ([One crate
 
 **Rationale.** A path or a spelling is interned once per process, and an archive names the same few thousand of them a hundred thousand times. Read through a `Proxy`, each occurrence is deserialized as strings of its own and then looked up and dropped: an allocation for the path and for each segment, every time. Read where it lies, an occurrence of a name the process holds is a lookup, and the archived form is unchanged.
 
-**Rejected.** Archiving a path as a shared pointer, written once for an archive and restored through its pool: it moves the archived form of every unit, and an object of its own bytes is one archive, so a path two objects hold is restored once for each.
+**Rejected.** Archiving a path as a shared pointer, written once for an archive and restored through its pool: it moves the archived form of every unit, and a blob of its own bytes is one archive, so a path two blobs hold is restored once for each.
 
 ### The entry points fix the error type
 

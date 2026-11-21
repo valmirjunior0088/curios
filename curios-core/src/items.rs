@@ -1,12 +1,12 @@
 //! A module's items, each in hand or restored the first time it is read.
 //!
-//! **A stored module is read by item.** A compilation reads of a unit in scope the declarations it names, and a library holds thousands a program names a few of; restored whole, every process pays for all of them before its first declaration. So a module that was stored holds a cell for each of its items and the object each was stored as, and reading the item at a place fills that cell and no other.
+//! **A stored module is read by item.** A compilation reads of a unit in scope the declarations it names, and a library holds thousands a program names a few of; restored whole, every process pays for all of them before its first declaration. So a module that was stored holds a cell for each of its items and the blob each was stored as, and reading the item at a place fills that cell and no other.
 //!
 //! **A member of a run is read with the run.** Elaborated items are stored several to a run, consed in one table ([`ItemRun`]): a run is read once for every member of it, through one pool where its bytes are a constant of the executable, so a node two members share is one allocation, and whole where they were read for one unit, since a view borrows the bytes it was checked over.
 //!
 //! **What a place declares is known without its item.** Where a module holds each name, which of its items are groups and whether two units declare one name are asked of every unit in scope by every compilation, and none of them reads a term: a stored module keeps the names each place declares beside its cells ([`Outlines`]).
 //!
-//! **An item stored on its own is stored again as it was read.** A module whose items were each archived apart is restored from those parts, each an object of the cabinet with its digest, and a version that shares one of its items hands back the object it was read from ([`Items::part`]), so a unit filed again names what it did not change by the digest it had, digesting nothing.
+//! **An item stored on its own is stored again as it was read.** A module whose items were each archived apart is restored from those parts, each a blob of the cabinet with its digest, and a version that shares one of its items hands back the blob it was read from ([`Items::part`]), so a unit filed again names what it did not change by the digest it had, digesting nothing.
 //!
 //! **Reading it is indexing it.** Every reader that goes by place is written as it would be over a vector, and a reader that walks every item restores every item: slow where a walk was not looked for, and never another answer.
 //!
@@ -15,7 +15,7 @@
 use {
     crate::{ArchivedItemRun, Declared, Definitions, Global, Item, ItemRun, Place},
     curios_archive::{Bytes, Pooled, Proxy, Via},
-    curios_common::{Object, Ordered},
+    curios_common::{Blob, Ordered},
     std::{
         borrow::Borrow,
         cell::{OnceCell, RefCell},
@@ -111,12 +111,12 @@ fn first_name(item: &Item) -> Option<&Global> {
     }
 }
 
-/// A stored module's items: a cell for each, what each declares, and the object each was stored as.
+/// A stored module's items: a cell for each, what each declares, and the blob each was stored as.
 struct Stored {
     cells: Vec<OnceCell<Item>>,
     outlines: Outlines,
-    /// The object each item was stored as: none where they were not handed over, and no item can be read.
-    parts: Vec<Object>,
+    /// The blob each item was stored as: none where they were not handed over, and no item can be read.
+    parts: Vec<Blob>,
     /// Each run a part is a member of, read the first time one of its members is, by where its bytes lie: a run is read once for every member of it.
     runs: RefCell<BTreeMap<(usize, usize), Rc<ReadRun>>>,
 }
@@ -174,8 +174,8 @@ impl Stored {
         }
     }
 
-    /// The object the item at `index` was stored as, where it was handed over.
-    fn part(&self, index: usize) -> Option<&Object> {
+    /// The blob the item at `index` was stored as, where it was handed over.
+    fn part(&self, index: usize) -> Option<&Blob> {
         self.parts.get(index)
     }
 }
@@ -240,7 +240,7 @@ impl Entry {
         }
     }
 
-    fn part(&self) -> Option<&Object> {
+    fn part(&self) -> Option<&Blob> {
         match self {
             Entry::Made(_) => None,
             Entry::Stored(stored, index) => stored.part(*index),
@@ -310,8 +310,8 @@ pub struct Changes {
 pub struct Items(Held);
 
 impl Items {
-    /// The items of a stored module whose items were each stored as an object: one for each of `outlines`, the item at a place read out of its part the first time it is asked for. No part is handed over yet where `parts` is empty, and reading an item is then a fault; `Err` is parts that are neither none nor one for each item.
-    pub fn parted(outlines: Outlines, parts: Vec<Object>) -> Result<Self, String> {
+    /// The items of a stored module whose items were each stored as a blob: one for each of `outlines`, the item at a place read out of its part the first time it is asked for. No part is handed over yet where `parts` is empty, and reading an item is then a fault; `Err` is parts that are neither none nor one for each item.
+    pub fn parted(outlines: Outlines, parts: Vec<Blob>) -> Result<Self, String> {
         if !parts.is_empty() && parts.len() != outlines.len() {
             return Err(format!(
                 "a module outlines {} items and stores {}",
@@ -328,16 +328,16 @@ impl Items {
         }))))
     }
 
-    /// These items, a stored module's ([`Items::parted`]), with `parts` handed over as the objects they were stored as.
-    pub fn with_parts(&self, parts: Vec<Object>) -> Result<Self, String> {
+    /// These items, a stored module's ([`Items::parted`]), with `parts` handed over as the blobs they were stored as.
+    pub fn with_parts(&self, parts: Vec<Blob>) -> Result<Self, String> {
         match &self.0 {
             Held::Stored(stored) => Self::parted(stored.outlines.clone(), parts),
             _ => Err("items not stored are handed no parts".to_string()),
         }
     }
 
-    /// The object the item at `place` was archived as on its own, where it was read from one and these items hold it as it was read: what it is archived as again.
-    pub fn part(&self, place: usize) -> Option<&Object> {
+    /// The blob the item at `place` was archived as on its own, where it was read from one and these items hold it as it was read: what it is archived as again.
+    pub fn part(&self, place: usize) -> Option<&Blob> {
         match &self.0 {
             Held::Made(_) => None,
             Held::Stored(stored) => stored.part(place),
@@ -791,7 +791,7 @@ impl fmt::Debug for Items {
     }
 }
 
-/// A module archived without its items: what each item declares, which is what every unit after it reads of it, its witnesses and its tests among it. A registry entry rides in the former that declares it, so it is read with that item. An item is stored as an object of its own, beside the unit, and read by whoever names it: a module restored holds its items as parts not yet handed over ([`Items::parted`], [`Definitions::with_items`]).
+/// A module archived without its items: what each item declares, which is what every unit after it reads of it, its witnesses and its tests among it. A registry entry rides in the former that declares it, so it is read with that item. An item is stored as a blob of its own, beside the unit, and read by whoever names it: a module restored holds its items as parts not yet handed over ([`Items::parted`], [`Definitions::with_items`]).
 pub struct Itemless;
 
 /// A module as [`Itemless`] archives it.

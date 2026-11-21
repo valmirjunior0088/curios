@@ -74,7 +74,7 @@ use {
     curios_abi::ForeignStore,
     curios_archive::Bytes,
     curios_common::{
-        Digest, Filed, Mount, Object, Persistent, Qualifier, Recorded, Report, RootKind, Source,
+        Blob, Digest, Filed, Mount, Persistent, Qualifier, Recorded, Report, RootKind, Source,
         SourceName, Span, SyntaxRegistry, grown,
     },
     curios_document::Documentation,
@@ -635,7 +635,7 @@ pub struct PreparedText {
     minted: Rc<curios_core::Minted>,
     /// Every binding a `use` brought into scope, with the spelling a reader wrote it under and, per definition, the ones in scope where it was written — see `Context::imports`. What a goal report's candidate pool reaches beyond the names the program already mentions, and half of what a report spells a name by ([`PreparedText::spellings`]).
     ///
-    /// **Stored apart from the unit**, each body's imports and each module's offer an object ([`PreparedText::imports_recorded`]): they are read by the unit's own reports and its documentation, and by nothing compiled after it.
+    /// **Stored apart from the unit**, each body's imports and each module's offer a blob ([`PreparedText::imports_recorded`]): they are read by the unit's own reports and its documentation, and by nothing compiled after it.
     #[archived_with(curios_archive::Skip)]
     imports: Recorded<curios_core::Imports>,
     /// The mounts this unit may name: the ones it declared a dependency on, or every open one in scope where it declared none, and its own. What its references were guarded by, and what drops a path it may not write from the table a report spells by.
@@ -649,7 +649,7 @@ pub struct PreparedText {
     broken: Vec<BrokenItem>,
     /// Where each source declaration this unit was lowered from lies: what a position in one of its terms is resolved against where a report is made — see `curios_core::Anchors`.
     ///
-    /// **Stored apart from the unit**, each source's texts an object ([`PreparedText::anchors_recorded`]): a report placed in one of the unit's declarations reads them, and a lowering over the unit, and no compilation that reports nothing.
+    /// **Stored apart from the unit**, each source's texts a blob ([`PreparedText::anchors_recorded`]): a report placed in one of the unit's declarations reads them, and a lowering over the unit, and no compilation that reports nothing.
     #[archived_with(curios_archive::Skip)]
     anchors: Recorded<curios_core::Anchors>,
     /// The packages the unit was restored for, each standing where this machine holds it: what each source of its stored texts and of its files' scans is given its file by where they are restored ([`PreparedText::read_for`]). None for a unit lowered here, whose sources hold their files, and for one restored for no source, the prelude's image among them, whose sources hold their names alone.
@@ -657,7 +657,7 @@ pub struct PreparedText {
     packages: Vec<PackageRoot>,
     /// What each source declaration lowered to beside its items, with what it asked of its scope, held by pointer since a unit lowered over this one keeps the ones that stand, and what each of the unit's files declared — see `lowered`.
     ///
-    /// **The unit's baseline half: what a later lowering of the same sources reads, and nothing compiled after this unit does.** So it is no part of what the unit is stored as for its successors. It is stored beside that, each record and each file's scan an object ([`PreparedText::baseline_digests`]), handed back where the unit is restored ([`PreparedText::with_baseline`]), and read when a lowering first asks.
+    /// **The unit's baseline half: what a later lowering of the same sources reads, and nothing compiled after this unit does.** So it is no part of what the unit is stored as for its successors. It is stored beside that, each record and each file's scan a blob ([`PreparedText::baseline_digests`]), handed back where the unit is restored ([`PreparedText::with_baseline`]), and read when a lowering first asks.
     #[archived_with(curios_archive::Skip)]
     baseline: Recorded<BaselineHalf>,
     /// Who read each binding, of the unit's lowered declarations read backwards: made the first time a lowering over the unit asks, or handed over by the lowering that made the unit over a baseline ([`LookupReaders`]).
@@ -1009,31 +1009,28 @@ impl PreparedText {
             .unwrap_or_else(|error| panic!("a unit's baseline half failed to restore: {error}"))
     }
 
-    /// What this unit's baseline half was restored from, where it was: its own part and the object of each entry, what it is stored as again.
-    pub fn baseline_stored(&self) -> Option<(&Bytes, &[Object])> {
+    /// What this unit's baseline half was restored from, where it was: its own part and the blob of each entry, what it is stored as again.
+    pub fn baseline_stored(&self) -> Option<(&Bytes, &[Blob])> {
         self.baseline.as_stored()
     }
 
-    /// The bytes of this unit's baseline half's own part, stored apart from what the unit is for its successors: the tables of each module body and each witness, each record and scan being an object of its own.
+    /// The bytes of this unit's baseline half's own part, stored apart from what the unit is for its successors: the tables of each module body and each witness, each record and scan being a blob of its own.
     pub fn baseline_table(&self) -> Result<Vec<u8>, String> {
         curios_archive::to_bytes(self.half()).map(|bytes| bytes.to_vec())
     }
 
-    /// The digest of each record and each scan of this unit's baseline half, in the order the unit names them: what a later lowering of the same sources keeps this unit's lowerings by, each an object of its own.
+    /// The digest of each record and each scan of this unit's baseline half, in the order the unit names them: what a later lowering of the same sources keeps this unit's lowerings by, each a blob of its own.
     pub fn baseline_digests(&self) -> Result<Vec<Digest>, String> {
         self.half().digests()
     }
 
-    /// The records and scans of this unit's baseline half that `wanted` asks for, as the objects a cabinet keeps them as.
-    pub fn baseline_objects(
-        &self,
-        wanted: &dyn Fn(&Digest) -> bool,
-    ) -> Result<Vec<Object>, String> {
-        self.half().objects(wanted)
+    /// The records and scans of this unit's baseline half that `wanted` asks for, as the blobs a cabinet keeps them as.
+    pub fn baseline_blobs(&self, wanted: &dyn Fn(&Digest) -> bool) -> Result<Vec<Blob>, String> {
+        self.half().blobs(wanted)
     }
 
-    /// This unit with `table` and `entries` as its baseline half ([`PreparedText::baseline_table`], [`PreparedText::baseline_objects`]), read when a lowering over the unit first asks: what a unit restored without one is given, since restoring it leaves the half empty.
-    pub fn with_baseline(mut self, table: impl Into<Bytes>, entries: Vec<Object>) -> Self {
+    /// This unit with `table` and `entries` as its baseline half ([`PreparedText::baseline_table`], [`PreparedText::baseline_blobs`]), read when a lowering over the unit first asks: what a unit restored without one is given, since restoring it leaves the half empty.
+    pub fn with_baseline(mut self, table: impl Into<Bytes>, entries: Vec<Blob>) -> Self {
         self.baseline = Recorded::stored(table, entries);
         self
     }
@@ -1043,24 +1040,24 @@ impl PreparedText {
         &self.imports
     }
 
-    /// Where this unit's declarations lie as it holds them, stored apart as its import scopes are, each source's texts an object.
+    /// Where this unit's declarations lie as it holds them, stored apart as its import scopes are, each source's texts a blob.
     pub fn anchors_recorded(&self) -> &Recorded<curios_core::Anchors> {
         &self.anchors
     }
 
-    /// This unit with `imports` as its import scopes and `anchors` as where its declarations lie, each its own part and the objects of its entries ([`PreparedText::imports_recorded`], [`PreparedText::anchors_recorded`]), each read when something first asks: what a restored unit is given, since restoring it leaves it with neither.
+    /// This unit with `imports` as its import scopes and `anchors` as where its declarations lie, each its own part and the blobs of its entries ([`PreparedText::imports_recorded`], [`PreparedText::anchors_recorded`]), each read when something first asks: what a restored unit is given, since restoring it leaves it with neither.
     pub fn with_reported(
         mut self,
-        imports: (impl Into<Bytes>, Vec<Object>),
-        anchors: (impl Into<Bytes>, Vec<Object>),
+        imports: (impl Into<Bytes>, Vec<Blob>),
+        anchors: (impl Into<Bytes>, Vec<Blob>),
     ) -> Self {
         self.imports = Recorded::stored(imports.0, imports.1);
         self.anchors = Recorded::stored(anchors.0, anchors.1);
         self
     }
 
-    /// This unit's lowered items, each an object stored on its own, in the order of the items: the one an item was restored from where the unit holds it as it was read, of this unit or of a baseline it is a version of, and its archive, made and digested now, otherwise.
-    pub fn items_objects(&self) -> Result<Vec<Object>, String> {
+    /// This unit's lowered items, each a blob stored on its own, in the order of the items: the one an item was restored from where the unit holds it as it was read, of this unit or of a baseline it is a version of, and its archive, made and digested now, otherwise.
+    pub fn items_blobs(&self) -> Result<Vec<Blob>, String> {
         let items = &self.core.items;
         items
             .places()
@@ -1074,16 +1071,14 @@ impl PreparedText {
 
                     Ok(stored.clone())
                 }
-                None => {
-                    curios_archive::to_bytes(&items[place]).map(|made| Object::of(made.to_vec()))
-                }
+                None => curios_archive::to_bytes(&items[place]).map(|made| Blob::of(made.to_vec())),
             })
             .collect()
     }
 
-    /// This unit with `objects` as its lowered items ([`PreparedText::items_objects`]), each read when something first asks for it: what a restored unit is given, since restoring it leaves its module without one. `Err` is not one for each item the unit outlines.
-    pub fn with_items(mut self, objects: Vec<Object>) -> Result<Self, String> {
-        self.core = self.core.with_items(objects)?;
+    /// This unit with `blobs` as its lowered items ([`PreparedText::items_blobs`]), each read when something first asks for it: what a restored unit is given, since restoring it leaves its module without one. `Err` is not one for each item the unit outlines.
+    pub fn with_items(mut self, blobs: Vec<Blob>) -> Result<Self, String> {
+        self.core = self.core.with_items(blobs)?;
 
         Ok(self)
     }

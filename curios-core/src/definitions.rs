@@ -16,7 +16,7 @@ use {
     },
     curios_abi::ForeignFunction,
     curios_common::{
-        Class, Digest, Facet, InKeyOrder, Mount, Object, Persistent, Plicity, Qualifier, Recorded,
+        Blob, Class, Digest, Facet, InKeyOrder, Mount, Persistent, Plicity, Qualifier, Recorded,
         Records, Sorted, SyntaxRegistry, candidate_name,
     },
     std::{
@@ -70,7 +70,7 @@ pub struct Certification {
     variances: Sorted<Global, Vec<Variance>>,
     /// What judging each definition read of other items: what a later walk over the unit decides by which of these verdicts stand, and what nothing compiled after the unit reads.
     ///
-    /// **Of the unit's baseline half**, as its traces are: skipped where the record is stored, stored beside it, each definition's reads an object ([`Certification::recorded`]), handed back where it is restored ([`Certification::with_reads`]), and read when a walk over the unit first asks.
+    /// **Of the unit's baseline half**, as its traces are: skipped where the record is stored, stored beside it, each definition's reads a blob ([`Certification::recorded`]), handed back where it is restored ([`Certification::with_reads`]), and read when a walk over the unit first asks.
     #[archived_with(curios_archive::Skip)]
     reads: Recorded<Read>,
     /// What judging each definition read, read backwards. See [`ReadBy`].
@@ -282,7 +282,7 @@ pub type HeldReads = Rc<ReadRecord>;
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct Read {
-    /// What judging each definition read of other items: stored apart, an object for each ([`ReadTable`]), and handed back where the record is restored ([`Records`]), what is archived with it being the rest.
+    /// What judging each definition read of other items: stored apart, a blob for each ([`ReadTable`]), and handed back where the record is restored ([`Records`]), what is archived with it being the rest.
     #[archived_with(curios_archive::Skip)]
     by: Sorted<Global, HeldReads>,
     /// What the walk read of each declaration its unit does not hold, another unit's. See [`Abroad`].
@@ -291,7 +291,7 @@ pub struct Read {
 }
 
 impl Read {
-    /// What judging each definition read, as the record holds it, in the order of the definitions' names: what the record stores an object for.
+    /// What judging each definition read, as the record holds it, in the order of the definitions' names: what the record stores a blob for.
     pub fn definitions(&self) -> impl Iterator<Item = (&Global, &HeldReads)> {
         self.by.iter()
     }
@@ -299,14 +299,14 @@ impl Read {
 
 /// What a walk's judgments read restored out of what a unit stores of them: the rest, archived with the record, and what judging each definition read a member of a run ([`ReadTable`]), restored beside the digest it was found by. A run several lie in is read once.
 impl Records for Read {
-    fn restored(table: &[u8], entries: &[Object]) -> Result<Self, String> {
+    fn restored(table: &[u8], entries: &[Blob]) -> Result<Self, String> {
         let mut read = curios_archive::from_bytes::<Read>(table)?;
         let mut runs = HashMap::<(usize, usize), Vec<Option<ReadEntry>>>::new();
-        for object in entries {
-            let member = object
+        for blob in entries {
+            let member = blob
                 .member
                 .ok_or("what a judgment read is stored as a member of a run")?;
-            let bytes = object.bytes.as_slice();
+            let bytes = blob.bytes.as_slice();
             let run = match runs.entry((bytes.as_ptr() as usize, bytes.len())) {
                 std::collections::hash_map::Entry::Occupied(held) => held.into_mut(),
                 std::collections::hash_map::Entry::Vacant(unread) => {
@@ -320,7 +320,7 @@ impl Records for Read {
                 .ok_or_else(|| format!("a run of reads holds no member {}", member.index))?;
             read.by.insert(
                 name,
-                Rc::new(ReadRecord::restored(reads, made, object.digest)),
+                Rc::new(ReadRecord::restored(reads, made, blob.digest)),
             );
         }
 
@@ -448,7 +448,7 @@ impl Certification {
             .unwrap_or_else(|error| panic!("a certifier's reads failed to restore: {error}"))
     }
 
-    /// What judging each definition read, as the record holds it: stored apart from the record, each definition's reads an object, since only a walk over its unit as a baseline reads them.
+    /// What judging each definition read, as the record holds it: stored apart from the record, each definition's reads a blob, since only a walk over its unit as a baseline reads them.
     pub fn recorded(&self) -> &Recorded<Read> {
         &self.reads
     }
@@ -457,7 +457,7 @@ impl Certification {
     pub fn with_reads(
         mut self,
         table: impl Into<curios_archive::Bytes>,
-        entries: Vec<Object>,
+        entries: Vec<Blob>,
     ) -> Self {
         self.reads = Recorded::stored(table, entries);
         self
@@ -1720,9 +1720,9 @@ impl Definitions {
         }
     }
 
-    /// This module, archived without its items ([`WithoutItems`](crate::WithoutItems)), with `objects` handed over as what each item was archived as, one for each, in their order: what a restored unit is given, since restoring it leaves its module without one. `Err` is not one for each item the module outlines.
-    pub fn with_items(mut self, objects: Vec<Object>) -> Result<Self, String> {
-        self.items = self.items.with_parts(objects)?;
+    /// This module, archived without its items ([`WithoutItems`](crate::WithoutItems)), with `blobs` handed over as what each item was archived as, one for each, in their order: what a restored unit is given, since restoring it leaves its module without one. `Err` is not one for each item the module outlines.
+    pub fn with_items(mut self, blobs: Vec<Blob>) -> Result<Self, String> {
+        self.items = self.items.with_parts(blobs)?;
 
         Ok(self)
     }
@@ -2163,7 +2163,7 @@ fn item_positions(
     }
 }
 
-/// Every position that can hold a bound value in the items of `module` it holds as other than an object a cabinet holds, item by item — see [`item_positions`]: an item read out of the object it was stored as was walked where it was filed, by the compiler that files this one, since a cabinet's address names its compiler.
+/// Every position that can hold a bound value in the items of `module` it holds as other than a blob a cabinet holds, item by item — see [`item_positions`]: an item read out of the blob it was stored as was walked where it was filed, by the compiler that files this one, since a cabinet's address names its compiler.
 fn made_positions(definitions: &Definitions, mut visit: impl FnMut(Option<&Global>, &dyn Carried)) {
     let items = &definitions.items;
     for place in items.places().filter(|place| items.part(*place).is_none()) {
@@ -2226,7 +2226,7 @@ impl fmt::Display for Positional {
 ///
 /// The two witness classes are asked differently from the other two, and deliberately. Those are read off the module's *terms*, because a metavariable or a free local anywhere in one is disqualifying. A witness reference is not: a stored unit legitimately mentions witnesses its predecessors declared, scoped to *their* mounts. What must hold is that every witness this module **declares** is scoped to a mount it owns and named by what it witnesses, which are questions about `Definitions::witnesses` rather than about any position — so they are asked over the declarations and not through the walk.
 ///
-/// The terms are those of the items the module holds as other than an object a cabinet holds, made by the compilation filing it: an item read out of the object it was stored as was refused or admitted by the filing that wrote it, the prelude's by its build, so a filing walks what its edit made and not the unit (`made_positions`).
+/// The terms are those of the items the module holds as other than a blob a cabinet holds, made by the compilation filing it: an item read out of the blob it was stored as was refused or admitted by the filing that wrote it, the prelude's by its build, so a filing walks what its edit made and not the unit (`made_positions`).
 ///
 /// It refuses what [`free_locals_of`] and [`open_positions_of`] report, over the same positions, at the other seam: the certifier refuses one where it walks a module, and this refuses one where a module is stored. Neither has a safe direction to degrade in — a local reaching either aliases silently with a binder some later walk mints, which admits rather than crashes. It still *describes* rather than judges by this module's rule — whether a node is a metavariable, and whether a variable is local, are properties of the representation, taking no reduction, no conversion and no `Driver`.
 pub fn validate_stored_identities(

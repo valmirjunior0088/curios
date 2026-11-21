@@ -11,7 +11,7 @@ pub fn reads_filed(recorded: &Recorded<Read>) -> Result<Vec<u8>, String> {
     let (table, kind) = reads_indexed(recorded)?;
     let digests = digests(kind.digests());
     let run = kind
-        .objects(&|_| true)?
+        .blobs(&|_| true)?
         .first()
         .map(|member| member.bytes.as_slice().to_vec())
         .unwrap_or_default();

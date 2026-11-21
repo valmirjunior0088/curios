@@ -1,9 +1,9 @@
-//! A unit as it is stored: its index, and the objects the index names, each entry of a kind a member of one run of it where a filing writes it.
+//! A unit as it is stored: its index, and the blobs the index names, each entry of a kind a member of one run of it where a filing writes it.
 
 use {
     crate::rerun,
     curios_archive::Bytes,
-    curios_common::{Digest, Facet, Member, Object, Recorded},
+    curios_common::{Blob, Digest, Facet, Member, Recorded},
     curios_core::{Anchors, Definitions, Global, HeldReads, Imports, ItemRun, Read, ReadTable},
     curios_elab::{HeldTrace, TraceTable, Traces},
     curios_erase::{AskedItems, AskedTable, HeldAsked},
@@ -11,20 +11,20 @@ use {
     std::{borrow::Cow, collections::BTreeSet, rc::Rc},
 };
 
-/// A unit as it is stored: its index, which every compilation after the unit restores and which names each object the unit stores on its own by its digest alone, and those objects ([`Indexed::objects`]).
+/// A unit as it is stored: its index, which every compilation after the unit restores and which names each blob the unit stores on its own by its digest alone, and those blobs ([`Indexed::blobs`]).
 ///
-/// **The index is a function of what was compiled**, since it names an object by what the object holds and never by where it is kept: a recompile files the index a whole compile files, and a record digests the index alone and so vouches for every object it names.
+/// **The index is a function of what was compiled**, since it names a blob by what the blob holds and never by where it is kept: a recompile files the index a whole compile files, and a record digests the index alone and so vouches for every blob it names.
 pub struct Indexed {
     index: Vec<u8>,
-    /// The objects stored alone: the lowered items and the erased forms.
-    alone: Vec<Object>,
+    /// The blobs stored alone: the lowered items and the erased forms.
+    alone: Vec<Blob>,
     /// The entries stored as members of runs, a kind at a time.
     kinds: Vec<Kind>,
 }
 
 impl Indexed {
     /// A unit stored as `index`, which names `alone` and every entry of `kinds` and nothing else.
-    pub(crate) fn new(index: Vec<u8>, alone: Vec<Object>, kinds: Vec<Kind>) -> Self {
+    pub(crate) fn new(index: Vec<u8>, alone: Vec<Blob>, kinds: Vec<Kind>) -> Self {
         Self {
             index,
             alone,
@@ -37,34 +37,34 @@ impl Indexed {
         &self.index
     }
 
-    /// The digest of every object the index names.
+    /// The digest of every blob the index names.
     pub fn digests(&self) -> impl Iterator<Item = &Digest> {
         self.alone
             .iter()
-            .map(|object| &object.digest)
+            .map(|blob| &blob.digest)
             .chain(self.kinds.iter().flat_map(Kind::digests))
     }
 
-    /// The objects the index names that `wanted` asks for: each stored alone as it is, and the entries of each kind, each once, as the members of one run of it, so a node or a name two of them hold is stored once.
-    pub fn objects(&self, wanted: impl Fn(&Digest) -> bool) -> Result<Vec<Object>, String> {
-        let mut objects = self
+    /// The blobs the index names that `wanted` asks for: each stored alone as it is, and the entries of each kind, each once, as the members of one run of it, so a node or a name two of them hold is stored once.
+    pub fn blobs(&self, wanted: impl Fn(&Digest) -> bool) -> Result<Vec<Blob>, String> {
+        let mut blobs = self
             .alone
             .iter()
-            .filter(|object| wanted(&object.digest))
+            .filter(|blob| wanted(&blob.digest))
             .cloned()
             .collect::<Vec<_>>();
         for kind in &self.kinds {
-            objects.extend(kind.objects(&wanted)?);
+            blobs.extend(kind.blobs(&wanted)?);
         }
 
-        Ok(objects)
+        Ok(blobs)
     }
 }
 
 /// The entries of one kind a unit names, each by its digest, as a filing writes the ones the cabinet lacks.
 pub enum Kind {
-    /// Entries a unit restored and holds as the objects it found them as: written again, where the cabinet lacks them, as a run of their kind ([`rerun`]).
-    Stored(Vec<Object>),
+    /// Entries a unit restored and holds as the blobs it found them as: written again, where the cabinet lacks them, as a run of their kind ([`rerun`]).
+    Stored(Vec<Blob>),
     /// The elaborated items of `core`, at each place with its digest.
     Items {
         core: Rc<Definitions>,
@@ -97,7 +97,7 @@ impl Kind {
     /// The digest of each entry, in the order the index names them.
     pub fn digests(&self) -> Box<dyn Iterator<Item = &Digest> + '_> {
         match self {
-            Kind::Stored(objects) => Box::new(objects.iter().map(|object| &object.digest)),
+            Kind::Stored(blobs) => Box::new(blobs.iter().map(|blob| &blob.digest)),
             Kind::Items { named, .. } => Box::new(named.iter().map(|(_, digest)| digest)),
             Kind::Traces(entries) => Box::new(entries.iter().map(|(digest, ..)| digest)),
             Kind::Asked(entries) => Box::new(entries.iter().map(|(digest, ..)| digest)),
@@ -109,17 +109,17 @@ impl Kind {
     }
 
     /// The entries `wanted` asks for, each once, as the members of one run of their kind.
-    pub fn objects(&self, wanted: &dyn Fn(&Digest) -> bool) -> Result<Vec<Object>, String> {
+    pub fn blobs(&self, wanted: &dyn Fn(&Digest) -> bool) -> Result<Vec<Blob>, String> {
         let mut seen = BTreeSet::new();
         let mut fresh = |digest: &Digest| wanted(digest) && seen.insert(*digest);
         match self {
-            Kind::Stored(objects) => {
-                let wanted = objects
+            Kind::Stored(blobs) => {
+                let wanted = blobs
                     .iter()
-                    .filter(|object| fresh(&object.digest))
+                    .filter(|blob| fresh(&blob.digest))
                     .cloned()
                     .collect::<Vec<_>>();
-                match wanted.first().and_then(|object| object.member) {
+                match wanted.first().and_then(|blob| blob.member) {
                     Some(member) => rerun(member.kind, &wanted),
                     None => Ok(wanted),
                 }
@@ -182,7 +182,7 @@ impl Kind {
                     .filter(|digest| fresh(digest))
                     .collect::<BTreeSet<_>>();
 
-                text.baseline_objects(&|digest| wanted.contains(digest))
+                text.baseline_blobs(&|digest| wanted.contains(digest))
             }
             Kind::Imports { text, digests } => {
                 let wanted = digests
@@ -190,7 +190,7 @@ impl Kind {
                     .filter(|digest| fresh(digest))
                     .collect::<BTreeSet<_>>();
 
-                imports(text)?.objects(&|digest| wanted.contains(digest))
+                imports(text)?.blobs(&|digest| wanted.contains(digest))
             }
             Kind::Anchors { text, digests } => {
                 let wanted = digests
@@ -198,7 +198,7 @@ impl Kind {
                     .filter(|digest| fresh(digest))
                     .collect::<BTreeSet<_>>();
 
-                anchors(text)?.objects(&|digest| wanted.contains(digest))
+                anchors(text)?.blobs(&|digest| wanted.contains(digest))
             }
             Kind::Reads(entries) => {
                 let entries = entries
@@ -224,18 +224,18 @@ impl Kind {
     }
 }
 
-/// The objects `digests` name, in their order, as the members of the run of `kind` that `run` is.
+/// The blobs `digests` name, in their order, as the members of the run of `kind` that `run` is.
 fn members(
     kind: u8,
     digests: impl IntoIterator<Item = Digest>,
     run: Vec<u8>,
-) -> Result<Vec<Object>, String> {
+) -> Result<Vec<Blob>, String> {
     let run = Bytes::from(run);
     digests
         .into_iter()
         .enumerate()
         .map(|(index, digest)| {
-            Ok(Object {
+            Ok(Blob {
                 digest,
                 bytes: run.clone(),
                 member: Some(Member {
@@ -357,7 +357,7 @@ pub fn traces_indexed(recorded: &Recorded<Traces>) -> Result<(Cow<'_, [u8]>, Kin
     Ok((Cow::Owned(table), Kind::Traces(entries)))
 }
 
-/// What erasing a unit's items read, as a unit stores it: the table archived with the unit, and each item's record an entry of erasure's kind, by the digest it is stored under. A record restored is stored again as the object it was found as.
+/// What erasing a unit's items read, as a unit stores it: the table archived with the unit, and each item's record an entry of erasure's kind, by the digest it is stored under. A record restored is stored again as the blob it was found as.
 pub fn asked_indexed(recorded: &Recorded<AskedItems>) -> Result<(Cow<'_, [u8]>, Kind), String> {
     if let Some((table, entries)) = recorded.as_stored() {
         return Ok((

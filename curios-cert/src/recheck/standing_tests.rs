@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::*,
     curios_common::fill,
-    curios_common::{Candidates, Digest, Facet, Member, Object, candidate_prefix},
+    curios_common::{Blob, Candidates, Digest, Facet, Member, candidate_prefix},
     curios_core::{
         Certification, Certified, Definitions, Item, ItemRun, Places, ReadTable, Reads, Term,
         Totality,
@@ -157,7 +157,7 @@ fn a_read_of_a_body_falls_where_its_definition_starts_or_stops_being_a_proof() {
 }
 
 /// What a cabinet holds of the walks filed into it, in memory: each record a member of its walk's run, under the name its filing completed it with.
-struct Shelf(Vec<Object>);
+struct Shelf(Vec<Blob>);
 
 impl Shelf {
     /// A cabinet holding `certification`, a walk of `module`, its records completed as a filing completes them.
@@ -179,13 +179,13 @@ impl Shelf {
             records
                 .iter()
                 .zip(0..)
-                .map(|(&(name, record), index)| Object {
+                .map(|(&(name, record), index)| Blob {
                     digest: record.digest(name).expect("a record archives"),
                     member: Some(Member {
                         kind: ReadTable::KIND,
                         index,
                     }),
-                    ..Object::of(run.clone())
+                    ..Blob::of(run.clone())
                 })
                 .collect(),
         )
@@ -193,20 +193,17 @@ impl Shelf {
 }
 
 impl Candidates for Shelf {
-    fn candidates(&self, facet: Facet, input: &Digest) -> Vec<Object> {
+    fn candidates(&self, facet: Facet, input: &Digest) -> Vec<Blob> {
         let prefix = candidate_prefix(facet, input);
         self.0
             .iter()
-            .filter(|object| object.digest.as_bytes().starts_with(&prefix))
+            .filter(|blob| blob.digest.as_bytes().starts_with(&prefix))
             .cloned()
             .collect()
     }
 
-    fn object(&self, digest: &Digest) -> Option<Object> {
-        self.0
-            .iter()
-            .find(|object| object.digest == *digest)
-            .cloned()
+    fn blob(&self, digest: &Digest) -> Option<Blob> {
+        self.0.iter().find(|blob| blob.digest == *digest).cloned()
     }
 }
 

@@ -445,7 +445,7 @@ fn std_undo_reproduction() {
                 .map(|(name, _)| *name)
                 .collect::<Vec<_>>();
             println!("{label}");
-            println!("  objects read {:>9}", cabinet.read().len());
+            println!("  blobs read {:>9}", cabinet.read().len());
             println!("  judged       {:>9}", judged.len());
             assert_eq!(judged, Vec::new(), "{label}: judged again");
             assert_stored_alike(&original, &undone);
@@ -609,10 +609,10 @@ fn std_image_division() {
                 .expect("the anchors serialize")
                 .len()
                 + held
-                    .objects(&|_| true)
+                    .blobs(&|_| true)
                     .expect("the anchors serialize")
                     .iter()
-                    .map(|object| object.bytes.as_slice().len())
+                    .map(|blob| blob.bytes.as_slice().len())
                     .sum::<usize>()
         };
         let imports = {
@@ -624,27 +624,27 @@ fn std_image_division() {
                 .expect("the import scopes serialize")
                 .len()
                 + held
-                    .objects(&|_| true)
+                    .blobs(&|_| true)
                     .expect("the import scopes serialize")
                     .iter()
-                    .map(|object| object.bytes.as_slice().len())
+                    .map(|blob| blob.bytes.as_slice().len())
                     .sum::<usize>()
         };
         let [lowered, forms, _, _, _, _, _, _, _, _, _, _, _] = apart_parts(&apart)
             .expect("what a unit stores apart")
             .map(|part| part.as_slice().len());
-        // Each lowered item, then each erased form, is an object stored alone, and the elaborated items are the members of one run.
-        let objects = stored
-            .objects(|_| true)
-            .expect("the library's objects serialize");
+        // Each lowered item, then each erased form, is a blob stored alone, and the elaborated items are the members of one run.
+        let blobs = stored
+            .blobs(|_| true)
+            .expect("the library's blobs serialize");
         let alone = |range: std::ops::Range<usize>| {
-            objects[range]
+            blobs[range]
                 .iter()
-                .map(|object| object.bytes.as_slice().len())
+                .map(|blob| blob.bytes.as_slice().len())
                 .sum::<usize>()
         };
         let (lowered, forms) = (lowered / 32, forms / 32);
-        let module = objects[lowered + forms..]
+        let module = blobs[lowered + forms..]
             .first()
             .map_or(0, |member| member.bytes.as_slice().len());
         let (lowered, forms) = (alone(0..lowered), alone(lowered..lowered + forms));
@@ -658,18 +658,18 @@ fn std_image_division() {
         .len();
 
         println!("\n=== how /std's stored unit divides ===");
-        // Every object once, a run its members share counted once.
-        let objects_held = objects
+        // Every blob once, a run its members share counted once.
+        let blobs_held = blobs
             .iter()
-            .map(|object| {
-                let bytes = object.bytes.as_slice();
+            .map(|blob| {
+                let bytes = blob.bytes.as_slice();
                 ((bytes.as_ptr(), bytes.len()), bytes.len())
             })
             .collect::<BTreeMap<_, _>>()
             .values()
             .sum::<usize>();
         row("the index", stored.index().len(), None);
-        row("its objects", objects_held, None);
+        row("its blobs", blobs_held, None);
         row(
             "what a successor restores",
             unit.len(),
@@ -768,14 +768,12 @@ fn std_image_division() {
             std.stored().expect("a unit serializes")
         );
         timed!(
-            "    serializing its objects, one run consed",
-            stored
-                .objects(|_| true)
-                .expect("a unit's objects serialize")
+            "    serializing its blobs, one run consed",
+            stored.blobs(|_| true).expect("a unit's blobs serialize")
         );
         timed!("    digesting the index", digest(stored.index()));
-        let pack = Pack::read(curios_archive::Bytes::from(packed(&objects)))
-            .expect("a unit's objects pack");
+        let pack =
+            Pack::read(curios_archive::Bytes::from(packed(&blobs))).expect("a unit's blobs pack");
         timed!(
             "    restoring the unit",
             Unit::restored(stored.index(), |digest| pack.get(digest)).expect("a unit restores")

@@ -279,7 +279,7 @@ impl<'a> ErasedOver<'a> {
                     return None;
                 }
                 let form = candidates
-                    .object(&made.forms)
+                    .blob(&made.forms)
                     .filter(|form| form.member.is_none())?;
 
                 Some((Held::stored(form), Rc::clone(&record)))

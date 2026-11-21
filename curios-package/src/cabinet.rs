@@ -1,4 +1,4 @@
-//! The cabinet: what `.curios/` keeps for reuse — materialized sources, fetched foreign modules, judged units and the objects their slots name, precompiled payloads and the compiler's memo — and where each family stands in it. Its families and their place in `.curios/` are [`crate::PRODUCTS`]'s map; the addresses a unit and a payload are filed under are `curios-verdict`'s, beside the record each is verified against.
+//! The cabinet: what `.curios/` keeps for reuse — materialized sources, fetched foreign modules, judged units and the blobs their slots name, precompiled payloads and the compiler's memo — and where each family stands in it. Its families and their place in `.curios/` are [`crate::PRODUCTS`]'s map; the addresses a unit and a payload are filed under are `curios-verdict`'s, beside the record each is verified against.
 
 #[cfg(test)]
 mod tests;
@@ -25,7 +25,7 @@ const PAYLOADS: &str = "payloads";
 
 /// What a project keeps for reuse: five families in a directory it shares with every project that names the same one.
 ///
-/// **The cabinet is not arbitrary, and it follows from the keys.** A materialized tree is named by its `c1:` hash, a fetched foreign module by its `f1:` hash, a judged unit by an address over its mounts, what it declared and its compiler, the objects its slot names by that address and their own digests, and a precompiled payload by an address over the executable's identity, the compiler and the engine that will run it — none of them says anything about *which* project asked, so each names the same thing wherever it is computed and all five are shareable. A unit's address says nothing about *which source*, either, which is why opening its slot verifies the files it was compiled from and refuses any that the asking compilation could not itself have read; a payload's slot is opened the same way. A built executable and a package's documentation are named by the package that declared them and belong to the project that built them, so they are [`Products`](crate::Products) and stay local. Content-derived keys are what make a shared cabinet possible at all; a path-keyed one could only ever have been local.
+/// **The cabinet is not arbitrary, and it follows from the keys.** A materialized tree is named by its `c1:` hash, a fetched foreign module by its `f1:` hash, a judged unit by an address over its mounts, what it declared and its compiler, the blobs its slot names by that address and their own digests, and a precompiled payload by an address over the executable's identity, the compiler and the engine that will run it — none of them says anything about *which* project asked, so each names the same thing wherever it is computed and all five are shareable. A unit's address says nothing about *which source*, either, which is why opening its slot verifies the files it was compiled from and refuses any that the asking compilation could not itself have read; a payload's slot is opened the same way. A built executable and a package's documentation are named by the package that declared them and belong to the project that built them, so they are [`Products`](crate::Products) and stay local. Content-derived keys are what make a shared cabinet possible at all; a path-keyed one could only ever have been local.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Cabinet {
     /// The directory the families stand in.
@@ -78,7 +78,7 @@ impl Cabinet {
         self.directory.join("foreign").join(scheme).join(digest)
     }
 
-    /// The slot a judged unit is filed in, under the address its mounts, what it declared and the certifier decide: one directory, holding its [`verdict`](Self::verdict) beside the packs of the objects it names and what its address's last collection found, which `curios-verdict` names.
+    /// The slot a judged unit is filed in, under the address its mounts, what it declared and the certifier decide: one directory, holding its [`verdict`](Self::verdict) beside the packs of the blobs it names and what its address's last collection found, which `curios-verdict` names.
     ///
     /// A directory for each address rather than a family for each kind of file, because an address is a unit's through every edit and a unit's baseline is its own address's slot: what a slot names is in its own directory, so finding it lists one directory, collecting it lists the same one, and two units never write one.
     pub fn slot(&self, slot: &str) -> PathBuf {

@@ -334,10 +334,10 @@ fn nominal_marks_read_the_type_formers_and_no_other_item() {
         former.clone(),
         Item::Let(Box::new(definition("after", UniverseContext::empty()))),
     ];
-    let unreadable = || Object::of(b"no item".to_vec());
+    let unreadable = || Blob::of(b"no item".to_vec());
     let parts = vec![
         unreadable(),
-        Object::of(
+        Blob::of(
             curios_archive::to_bytes(&former)
                 .expect("an item archives")
                 .to_vec(),

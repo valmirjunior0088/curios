@@ -4,7 +4,7 @@ use {
     crate::{compile::test_support::*, *},
     curios_cert::Rechecked,
     curios_common::{
-        Candidates, Digest, Facet, Object, Report, RootKind, candidate_prefix, test_support::*,
+        Blob, Candidates, Digest, Facet, Report, RootKind, candidate_prefix, test_support::*,
     },
     curios_core::{Definitions, Enter, Item, LintKind, Nominal, Sharing, Term, Variance},
     curios_elab::{DEFAULT_BUDGET, TraceTable, Traces},
@@ -21,42 +21,42 @@ use {
     },
 };
 
-/// What a cabinet holds of the units filed into it, by name, and the name of every object a compile read out of it: a cabinet's candidates, held in memory.
+/// What a cabinet holds of the units filed into it, by name, and the name of every blob a compile read out of it: a cabinet's candidates, held in memory.
 #[derive(Default)]
 pub struct Cabinet {
-    objects: BTreeMap<Digest, Object>,
+    blobs: BTreeMap<Digest, Blob>,
     read: RefCell<Vec<Digest>>,
 }
 
 impl Cabinet {
-    /// File `unit`: every object it names, each once, its records completed as a cabinet's filing completes them.
+    /// File `unit`: every blob it names, each once, its records completed as a cabinet's filing completes them.
     pub fn file(&mut self, unit: &Unit) {
         complete_records(unit);
         let stored = unit.stored().expect("a unit serializes");
-        for object in stored.objects(|_| true).expect("a unit's objects are made") {
-            self.objects.entry(object.digest).or_insert(object);
+        for blob in stored.blobs(|_| true).expect("a unit's blobs are made") {
+            self.blobs.entry(blob.digest).or_insert(blob);
         }
     }
 
-    /// The name of every object a compile read out of the cabinet, in the order it was read.
+    /// The name of every blob a compile read out of the cabinet, in the order it was read.
     pub fn read(&self) -> Vec<Digest> {
         self.read.borrow().clone()
     }
 }
 
 impl Candidates for Cabinet {
-    fn candidates(&self, facet: Facet, input: &Digest) -> Vec<Object> {
+    fn candidates(&self, facet: Facet, input: &Digest) -> Vec<Blob> {
         let prefix = candidate_prefix(facet, input);
-        self.objects
+        self.blobs
             .values()
-            .filter(|object| object.digest.as_bytes().starts_with(&prefix))
+            .filter(|blob| blob.digest.as_bytes().starts_with(&prefix))
             .cloned()
             .collect()
     }
 
-    fn object(&self, digest: &Digest) -> Option<Object> {
+    fn blob(&self, digest: &Digest) -> Option<Blob> {
         self.read.borrow_mut().push(*digest);
-        self.objects.get(digest).cloned()
+        self.blobs.get(digest).cloned()
     }
 }
 
@@ -594,11 +594,11 @@ pub fn assert_definitions_agree(whole: &Definitions, incremental: &Definitions) 
 /// What a unit stores of the lowering's baseline half `text` holds: its own part, then each record and scan, each stored alone.
 pub fn lowering_stored(text: &PreparedText) -> Vec<u8> {
     let mut bytes = text.baseline_table().expect("a baseline half serializes");
-    for object in text
-        .baseline_objects(&|_| true)
+    for blob in text
+        .baseline_blobs(&|_| true)
         .expect("a baseline half serializes")
     {
-        bytes.extend_from_slice(object.bytes.as_slice());
+        bytes.extend_from_slice(blob.bytes.as_slice());
     }
 
     bytes
@@ -638,19 +638,17 @@ pub fn asked_stored(asked: &AskedItems) -> Vec<u8> {
     bytes
 }
 
-/// `unit` stored and restored, the objects its index names found in one pack of their own, as a cabinet keeps them beside a slot.
+/// `unit` stored and restored, the blobs its index names found in one pack of their own, as a cabinet keeps them beside a slot.
 pub fn restored(unit: &Unit) -> Unit {
     let stored = unit.stored().expect("a unit serializes");
-    let objects = stored
-        .objects(|_| true)
-        .expect("a unit's objects serialize");
+    let blobs = stored.blobs(|_| true).expect("a unit's blobs serialize");
     let pack =
-        Pack::read(curios_archive::Bytes::from(packed(&objects))).expect("a unit's objects pack");
+        Pack::read(curios_archive::Bytes::from(packed(&blobs))).expect("a unit's blobs pack");
 
     Unit::restored(stored.index(), |digest| pack.get(digest)).expect("a stored unit restores")
 }
 
-/// That `incremental` is filed as `whole` is: each with its records completed as a filing completes them ([`complete_records`]), the same index, which names each object by its digest, and where they are not, which parts.
+/// That `incremental` is filed as `whole` is: each with its records completed as a filing completes them ([`complete_records`]), the same index, which names each blob by its digest, and where they are not, which parts.
 ///
 /// A unit is stored with its elaborated module consed up to spelling under no position ([`Unit::stored`]), so what is left to differ is what the two compilations concluded.
 pub fn assert_stored_alike(whole: &Unit, incremental: &Unit) {

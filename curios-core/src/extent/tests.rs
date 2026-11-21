@@ -132,7 +132,7 @@ fn an_unnamed_declaration_is_found_by_its_text() {
     assert!(later.resolve(&nat).is_none());
 }
 
-/// Where declarations lie is stored a source at a time: two texts of one source, the second sited in another copy of the same source, are one object, and the table restored from what it stores places each text where it lay.
+/// Where declarations lie is stored a source at a time: two texts of one source, the second sited in another copy of the same source, are one blob, and the table restored from what it stores places each text where it lay.
 #[test]
 fn texts_are_stored_a_source_at_a_time() {
     let text = "let first = 1;\nlet second = first;\n";
@@ -143,17 +143,14 @@ fn texts_are_stored_a_source_at_a_time() {
     anchors.site(anchor("second"), &span_of(&copy, "let second = first;"));
     anchors.site(anchor("other"), &span_of(&other, "let other = 2;"));
 
-    let objects = anchors.objects(&|_| true).expect("the texts archive");
-    assert_eq!(objects.len(), 2, "one object a source");
+    let blobs = anchors.blobs(&|_| true).expect("the texts archive");
+    assert_eq!(blobs.len(), 2, "one blob a source");
     assert_eq!(
-        objects
-            .iter()
-            .map(|object| object.digest)
-            .collect::<Vec<_>>(),
+        blobs.iter().map(|blob| blob.digest).collect::<Vec<_>>(),
         anchors.digests().expect("the texts archive")
     );
     let table = curios_archive::to_bytes(&anchors).expect("the table archives");
-    let restored = Anchors::restored(&table, &objects).expect("the table restores");
+    let restored = Anchors::restored(&table, &blobs).expect("the table restores");
     for (key, span) in anchors.texts() {
         assert_eq!(
             restored.text_of(key).as_ref().map(text_of),

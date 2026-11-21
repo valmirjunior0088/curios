@@ -15,8 +15,7 @@ use {
         WrittenBinder, WrittenSort,
     },
     curios_common::{
-        Digest, Filed, InKeyOrder, InfixOp, Object, Plicity, Qualifier, Records, Sorted, Symbol,
-        name,
+        Blob, Digest, Filed, InKeyOrder, InfixOp, Plicity, Qualifier, Records, Sorted, Symbol, name,
     },
     std::{
         borrow::Borrow,
@@ -571,7 +570,7 @@ impl Imported<'_> {
 ///
 /// **By module body, persistent**: a body's imports are its own, so what a unit lowered over a baseline brought into scope is the baseline's with the bodies it lowered again placed again.
 ///
-/// **Each body's imports and each module's offer an object of its own** ([`ImportsEntry`]), stored apart and handed back where the scopes are restored ([`Records`]): what is archived with the unit is where each definition was written.
+/// **Each body's imports and each module's offer a blob of its own** ([`ImportsEntry`]), stored apart and handed back where the scopes are restored ([`Records`]): what is archived with the unit is where each definition was written.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct Imports {
@@ -586,7 +585,7 @@ pub struct Imports {
     /// The public bindings of each module an entry imports: each label with what it resolves to, by label.
     #[archived_with(curios_archive::Skip)]
     members: Sorted<Qualifier, Rc<Filed<Offer>>>,
-    /// What each module body's `use` and `mod` lines name, where they write it ([`LineName`]), by the body: an object of its own, apart from the body's imports, so a line's place moving moves nothing a scope reads. A body whose lines name nothing holds none.
+    /// What each module body's `use` and `mod` lines name, where they write it ([`LineName`]), by the body: a blob of its own, apart from the body's imports, so a line's place moving moves nothing a scope reads. A body whose lines name nothing holds none.
     #[archived_with(curios_archive::Skip)]
     lines: Sorted<Qualifier, Rc<Filed<Vec<LineName>>>>,
 }
@@ -611,7 +610,7 @@ pub enum LineNamed {
 /// What an imported module offers: each public label with what it resolves to, by label.
 pub type Offer = Vec<(String, Global)>;
 
-/// An entry of a unit's import scopes as a cabinet keeps it, an object of its own bytes: a module body's imports, or what an imported module offers.
+/// An entry of a unit's import scopes as a cabinet keeps it, a blob of its own bytes: a module body's imports, or what an imported module offers.
 #[curios_archive::archived]
 pub enum ImportsEntry {
     Body(Qualifier, Vec<Import>),
@@ -620,32 +619,32 @@ pub enum ImportsEntry {
 }
 
 impl ImportsEntry {
-    /// The object this entry is stored as: its archive, and the digest of it.
-    fn object(&self) -> Result<Object, String> {
-        curios_archive::to_bytes(self).map(|bytes| Object::of(bytes.to_vec()))
+    /// The blob this entry is stored as: its archive, and the digest of it.
+    fn blob(&self) -> Result<Blob, String> {
+        curios_archive::to_bytes(self).map(|bytes| Blob::of(bytes.to_vec()))
     }
 }
 
-/// Import scopes restored out of what a unit stores of them: where each definition was written, archived with the unit, and each body's imports and each module's offer an object of its own, restored beside the digest it was found by.
+/// Import scopes restored out of what a unit stores of them: where each definition was written, archived with the unit, and each body's imports and each module's offer a blob of its own, restored beside the digest it was found by.
 impl Records for Imports {
-    fn restored(table: &[u8], entries: &[Object]) -> Result<Self, String> {
+    fn restored(table: &[u8], entries: &[Blob]) -> Result<Self, String> {
         let mut imports = curios_archive::from_bytes::<Imports>(table)?;
-        for object in entries {
-            match curios_archive::from_bytes::<ImportsEntry>(object.bytes.as_slice())? {
+        for blob in entries {
+            match curios_archive::from_bytes::<ImportsEntry>(blob.bytes.as_slice())? {
                 ImportsEntry::Body(body, held) => {
                     imports
                         .bodies
-                        .insert(body, Rc::new(Filed::stored(held, object.digest)));
+                        .insert(body, Rc::new(Filed::stored(held, blob.digest)));
                 }
                 ImportsEntry::Members(module, offered) => {
                     imports
                         .members
-                        .insert(module, Rc::new(Filed::stored(offered, object.digest)));
+                        .insert(module, Rc::new(Filed::stored(offered, blob.digest)));
                 }
                 ImportsEntry::Lines(body, lines) => {
                     imports
                         .lines
-                        .insert(body, Rc::new(Filed::stored(lines, object.digest)));
+                        .insert(body, Rc::new(Filed::stored(lines, blob.digest)));
                 }
             }
         }
@@ -701,35 +700,35 @@ impl Imports {
         self.bodies.iter().map(|(body, _)| body)
     }
 
-    /// The digest of each body's imports and of each module's offer, in the order a unit names them: each body's by the body, then each module's by the module. The one each was restored with or first filed under, and its object's otherwise.
+    /// The digest of each body's imports and of each module's offer, in the order a unit names them: each body's by the body, then each module's by the module. The one each was restored with or first filed under, and its blob's otherwise.
     pub fn digests(&self) -> Result<Vec<Digest>, String> {
         let bodies = self.bodies.iter().map(|(body, held)| {
             held.digest(|imports| {
                 ImportsEntry::Body(*body, imports.clone())
-                    .object()
-                    .map(|object| object.digest)
+                    .blob()
+                    .map(|blob| blob.digest)
             })
         });
         let members = self.members.iter().map(|(module, held)| {
             held.digest(|offered| {
                 ImportsEntry::Members(*module, offered.clone())
-                    .object()
-                    .map(|object| object.digest)
+                    .blob()
+                    .map(|blob| blob.digest)
             })
         });
         let lines = self.lines.iter().map(|(body, held)| {
             held.digest(|lines| {
                 ImportsEntry::Lines(*body, lines.clone())
-                    .object()
-                    .map(|object| object.digest)
+                    .blob()
+                    .map(|blob| blob.digest)
             })
         });
 
         bodies.chain(members).chain(lines).collect()
     }
 
-    /// The entries `wanted` asks for, as the objects a cabinet keeps them as, each archived now.
-    pub fn objects(&self, wanted: &dyn Fn(&Digest) -> bool) -> Result<Vec<Object>, String> {
+    /// The entries `wanted` asks for, as the blobs a cabinet keeps them as, each archived now.
+    pub fn blobs(&self, wanted: &dyn Fn(&Digest) -> bool) -> Result<Vec<Blob>, String> {
         let digests = self.digests()?;
         let entries = self
             .bodies
@@ -750,7 +749,7 @@ impl Imports {
             .iter()
             .zip(entries)
             .filter(|(digest, _)| wanted(digest))
-            .map(|(_, entry)| entry.object())
+            .map(|(_, entry)| entry.blob())
             .collect()
     }
 

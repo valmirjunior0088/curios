@@ -1,8 +1,8 @@
 use {super::*, curios_common::test_support::*, std::path::Path};
 
-/// One object of its own bytes.
-fn object(text: &str) -> Object {
-    Object::of(text.as_bytes().to_vec())
+/// One blob of its own bytes.
+fn blob(text: &str) -> Blob {
+    Blob::of(text.as_bytes().to_vec())
 }
 
 /// The time every handle here is opened at, unless a test moves it.
@@ -15,62 +15,62 @@ fn after(days: u64) -> SystemTime {
     now() + Duration::from_secs(days * 24 * 60 * 60)
 }
 
-/// An object written is found by its name as the bytes it was written as, and a name nothing wrote is missing.
+/// A blob written is found by its name as the bytes it was written as, and a name nothing wrote is missing.
 #[test]
-fn an_object_written_is_found_and_one_never_written_is_missing() {
+fn a_blob_written_is_found_and_one_never_written_is_missing() {
     let directory = Temporary::new("packs", "found");
     let packs = Packs::at(directory.to_path_buf(), now());
-    let written = [object("one"), object("two")];
+    let written = [blob("one"), blob("two")];
     packs.write(&written).expect("a pack is written");
 
     let found = Packs::at(directory.to_path_buf(), now())
         .find(&written[1].digest)
-        .expect("an object written");
+        .expect("a blob written");
     assert_eq!(found.bytes.as_slice(), b"two");
-    let never = object("three");
+    let never = blob("three");
     assert_eq!(
         packs.missing([&written[0].digest, &never.digest, &written[1].digest]),
         vec![never.digest]
     );
 }
 
-/// A filing at a time, the address stays geometric: however many packs were written, it holds no more than a logarithm of the objects, each still found, and another handle on the directory finds them too.
+/// A filing at a time, the address stays geometric: however many packs were written, it holds no more than a logarithm of the blobs, each still found, and another handle on the directory finds them too.
 #[test]
 fn filings_one_at_a_time_keep_the_packs_geometric() {
     let directory = Temporary::new("packs", "geometric");
     let packs = Packs::at(directory.to_path_buf(), now());
     let mut written = Vec::new();
     for at in 0..100 {
-        let filed = vec![object(&format!("object {at}"))];
+        let filed = vec![blob(&format!("blob {at}"))];
         packs.write(&filed).expect("a pack is written");
         written.extend(filed);
     }
 
     let held = packs.list();
-    assert!(held.len() <= 8, "{} packs hold 100 objects", held.len());
+    assert!(held.len() <= 8, "{} packs hold 100 blobs", held.len());
     let another = Packs::at(directory.to_path_buf(), now());
-    for object in &written {
+    for blob in &written {
         let found = another
-            .find(&object.digest)
-            .expect("every object written is held");
-        assert_eq!(found.bytes.as_slice(), object.bytes.as_slice());
+            .find(&blob.digest)
+            .expect("every blob written is held");
+        assert_eq!(found.bytes.as_slice(), blob.bytes.as_slice());
     }
 }
 
-/// The candidates made from one input are found together, whichever pack each was written in, and none made from another input or of another kind of object is.
+/// The candidates made from one input are found together, whichever pack each was written in, and none made from another input or of another kind of blob is.
 #[test]
 fn candidates_of_an_input_are_found_across_packs() {
     let directory = Temporary::new("packs", "candidates");
     let packs = Packs::at(directory.to_path_buf(), now());
     let (input, other) = (Digest::of(b"input"), Digest::of(b"other"));
-    let made = |input: &Digest, text: &str| Object {
+    let made = |input: &Digest, text: &str| Blob {
         digest: curios_common::candidate_name(Facet::Elaboration, input, text.as_bytes()),
         bytes: text.as_bytes().to_vec().into(),
         member: None,
     };
     let first = made(&input, "first");
     packs
-        .write(&[first.clone(), made(&other, "elsewhere"), object("plain")])
+        .write(&[first.clone(), made(&other, "elsewhere"), blob("plain")])
         .expect("a pack is written");
     let second = made(&input, "second");
     packs
@@ -80,14 +80,14 @@ fn candidates_of_an_input_are_found_across_packs() {
     let mut found = Packs::at(directory.to_path_buf(), now())
         .candidates(Facet::Elaboration, &input)
         .into_iter()
-        .map(|object| object.bytes.as_slice().to_vec())
+        .map(|blob| blob.bytes.as_slice().to_vec())
         .collect::<Vec<_>>();
     found.sort();
     assert_eq!(found, vec![b"first".to_vec(), b"second".to_vec()]);
     assert_eq!(
         packs
-            .object(&second.digest)
-            .map(|object| object.bytes.as_slice().to_vec()),
+            .blob(&second.digest)
+            .map(|blob| blob.bytes.as_slice().to_vec()),
         Some(b"second".to_vec())
     );
     assert!(
@@ -103,7 +103,7 @@ fn candidates_of_an_input_are_found_across_packs() {
 fn a_pack_other_than_its_name_is_taken_away() {
     let directory = Temporary::new("packs", "damaged");
     let packs = Packs::at(directory.to_path_buf(), now());
-    let written = [object("one")];
+    let written = [blob("one")];
     packs.write(&written).expect("a pack is written");
     let name = packs.list().pop().expect("one pack");
     let path = packs.path(&name);
@@ -125,30 +125,30 @@ fn a_pack_other_than_its_name_is_taken_away() {
     );
 }
 
-/// Which of `objects` the packs at `directory` hold, as a handle opened afresh finds them.
-fn held(directory: &Path, objects: &[Object]) -> Vec<bool> {
+/// Which of `blobs` the packs at `directory` hold, as a handle opened afresh finds them.
+fn held(directory: &Path, blobs: &[Blob]) -> Vec<bool> {
     let packs = Packs::at(directory.to_path_buf(), now());
 
-    objects
+    blobs
         .iter()
-        .map(|object| packs.find(&object.digest).is_some())
+        .map(|blob| packs.find(&blob.digest).is_some())
         .collect()
 }
 
-/// `objects`, by their digests.
-fn named(objects: &[&Object]) -> BTreeSet<Digest> {
-    objects.iter().map(|object| object.digest).collect()
+/// `blobs`, by their digests.
+fn named(blobs: &[&Blob]) -> BTreeSet<Digest> {
+    blobs.iter().map(|blob| blob.digest).collect()
 }
 
-/// An object the slot stops naming is dropped by the first collection that finds it unnamed five days after a collection first did, and kept by every one before; an object the slot names is kept whatever its pack holds beside it.
+/// A blob the slot stops naming is dropped by the first collection that finds it unnamed five days after a collection first did, and kept by every one before; a blob the slot names is kept whatever its pack holds beside it.
 #[test]
-fn an_object_unnamed_for_five_days_is_dropped() {
+fn a_blob_unnamed_for_five_days_is_dropped() {
     let directory = Temporary::new("packs", "collected");
-    let objects = [object("named"), object("dropped")];
+    let blobs = [blob("named"), blob("dropped")];
     Packs::at(directory.to_path_buf(), now())
-        .write(&objects)
+        .write(&blobs)
         .expect("a pack is written");
-    let only = named(&[&objects[0]]);
+    let only = named(&[&blobs[0]]);
     let collect = |day| {
         Packs::at(directory.to_path_buf(), after(day))
             .collect(&only)
@@ -158,19 +158,19 @@ fn an_object_unnamed_for_five_days_is_dropped() {
     collect(0);
     collect(1);
     assert_eq!(
-        held(&directory, &objects),
+        held(&directory, &blobs),
         [true, true],
         "found unnamed today"
     );
     collect(5);
     assert_eq!(
-        held(&directory, &objects),
+        held(&directory, &blobs),
         [true, true],
         "unnamed for four days"
     );
     collect(6);
     assert_eq!(
-        held(&directory, &objects),
+        held(&directory, &blobs),
         [true, false],
         "unnamed for five days"
     );
@@ -210,11 +210,11 @@ fn a_collection_sweeps_a_staging_five_days_old() {
 #[test]
 fn an_address_is_collected_once_a_day() {
     let directory = Temporary::new("packs", "daily");
-    let objects = [object("named"), object("dropped")];
+    let blobs = [blob("named"), blob("dropped")];
     Packs::at(directory.to_path_buf(), now())
-        .write(&objects)
+        .write(&blobs)
         .expect("a pack is written");
-    let only = named(&[&objects[0]]);
+    let only = named(&[&blobs[0]]);
     let collect = |day: SystemTime| {
         Packs::at(directory.to_path_buf(), day)
             .collect(&only)
@@ -226,12 +226,12 @@ fn an_address_is_collected_once_a_day() {
     collect(after(10));
     collect(after(10) + Duration::from_secs(60 * 60));
     assert_eq!(
-        held(&directory, &objects),
+        held(&directory, &blobs),
         [true, false],
         "dropped on day ten"
     );
 
-    let again = [object("named"), object("young")];
+    let again = [blob("named"), blob("young")];
     Packs::at(directory.to_path_buf(), after(10))
         .write(&again[1..])
         .expect("a pack is written");
@@ -244,20 +244,20 @@ fn an_address_is_collected_once_a_day() {
     );
 }
 
-/// An object named again before its five days are out is forgotten, and its time starts over if the slot stops naming it again.
+/// A blob named again before its five days are out is forgotten, and its time starts over if the slot stops naming it again.
 #[test]
-fn an_object_named_again_is_forgotten() {
+fn a_blob_named_again_is_forgotten() {
     let directory = Temporary::new("packs", "renamed");
-    let objects = [object("named"), object("returns")];
+    let blobs = [blob("named"), blob("returns")];
     Packs::at(directory.to_path_buf(), now())
-        .write(&objects)
+        .write(&blobs)
         .expect("a pack is written");
     let collect = |day, named: &BTreeSet<Digest>| {
         Packs::at(directory.to_path_buf(), after(day))
             .collect(named)
             .expect("an address is collected");
     };
-    let (both, first) = (named(&[&objects[0], &objects[1]]), named(&[&objects[0]]));
+    let (both, first) = (named(&[&blobs[0], &blobs[1]]), named(&[&blobs[0]]));
 
     collect(0, &first);
     collect(1, &first);
@@ -265,12 +265,12 @@ fn an_object_named_again_is_forgotten() {
     collect(5, &first);
     collect(9, &first);
     assert_eq!(
-        held(&directory, &objects),
+        held(&directory, &blobs),
         [true, true],
         "unnamed for four days again"
     );
     collect(10, &first);
-    assert_eq!(held(&directory, &objects), [true, false]);
+    assert_eq!(held(&directory, &blobs), [true, false]);
 }
 
 /// The smallest packs are merged until each left holds twice the one before it: the top of a geometric run stays, and what is merged with the small end grows to cover a pack it outweighs.

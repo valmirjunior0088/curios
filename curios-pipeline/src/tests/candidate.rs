@@ -64,7 +64,7 @@ fn form(unit: &Unit, name: &str) -> Digest {
         .expect("the unit holds the item");
 
     unit.erased()
-        .items_objects()
+        .items_blobs()
         .expect("an erased form archives")[at]
         .digest
 }

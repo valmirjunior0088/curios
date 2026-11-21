@@ -308,7 +308,7 @@ fn certified(
     (stated, anf)
 }
 
-/// Serialize one certified unit, as the fixed prelude images one ([`Unit::imaged`]), to `<root>.rkyv`, framed as a stored unit is — its record, of `reads` and of what each root before it contained, `after`, ahead of its index — and the objects its index names to `<root>.pack`, one pack as a cabinet keeps beside a slot, serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the digest of the unit's index, which is what the next root's record names it by.
+/// Serialize one certified unit, as the fixed prelude images one ([`Unit::imaged`]), to `<root>.rkyv`, framed as a stored unit is — its record, of `reads` and of what each root before it contained, `after`, ahead of its index — and the blobs its index names to `<root>.pack`, one pack as a cabinet keeps beside a slot, serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the digest of the unit's index, which is what the next root's record names it by.
 ///
 /// The image carries no version and is no stable interchange format: it is made again, or taken from the checkout's entry of the same key (`entry.rs`), whenever what the build links changes — the sources, this script, or any crate whose representation it serializes — so two incompatible images can never meet, and a schema beside the bytes could only ever compare one state of the sources against itself.
 ///
@@ -321,11 +321,11 @@ fn write_image(
     after: Vec<(String, String)>,
 ) -> String {
     let pack = |stored: &Indexed| {
-        let objects = stored
-            .objects(|_| true)
-            .unwrap_or_else(|error| panic!("/{root} objects serialization failed: {error}"));
+        let blobs = stored
+            .blobs(|_| true)
+            .unwrap_or_else(|error| panic!("/{root} blobs serialization failed: {error}"));
 
-        packed(&objects)
+        packed(&blobs)
     };
     let first = image
         .imaged()
@@ -333,9 +333,9 @@ fn write_image(
     let second = image
         .imaged()
         .unwrap_or_else(|error| panic!("/{root} archive repeat serialization failed: {error}"));
-    let objects = pack(&first);
+    let blobs = pack(&first);
     assert!(
-        first.index() == second.index() && objects == pack(&second),
+        first.index() == second.index() && blobs == pack(&second),
         "/{root} archive is not deterministic"
     );
 
@@ -347,14 +347,14 @@ fn write_image(
 
     let path = directory.join(format!("{root}.rkyv"));
     println!(
-        "/{root} archived to {} bytes, its objects to {}",
+        "/{root} archived to {} bytes, its blobs to {}",
         first.index().len(),
-        objects.len()
+        blobs.len()
     );
     fs::write(&path, framed(&recorded, first.index()))
         .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
     let path = directory.join(format!("{root}.pack"));
-    fs::write(&path, objects)
+    fs::write(&path, blobs)
         .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
 
     record.unit

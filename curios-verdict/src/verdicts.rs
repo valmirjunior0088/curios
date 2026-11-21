@@ -183,7 +183,7 @@ pub struct Verdicts {
     session: Option<Session>,
     /// The executable the entry this handle's fold ends in is, by its package's name and its own — `None` for a handle told of none, which files no entry's unit. See [`Verdicts::executing`].
     executable: Option<(String, String)>,
-    /// The packs of each slot's address this handle has read or filed objects at, by the slot: a pack is read once for as long as the handle lives, so a filing after a restore reads no pack the restore read.
+    /// The packs of each slot's address this handle has read or filed blobs at, by the slot: a pack is read once for as long as the handle lives, so a filing after a restore reads no pack the restore read.
     packs: RefCell<BTreeMap<String, Rc<Packs>>>,
 }
 
@@ -442,7 +442,7 @@ impl Verdicts {
             .map(|packs| -> Rc<dyn Candidates> { packs })
     }
 
-    /// The unit whose index `slot` holds as `index`, each object it names found among the packs of the slot's address, restored for `source`: each source of its stored texts holds the file its name resolves to where `source`'s packages stand. `None` where one of the objects is not found there, or the index holds no unit.
+    /// The unit whose index `slot` holds as `index`, each blob it names found among the packs of the slot's address, restored for `source`: each source of its stored texts holds the file its name resolves to where `source`'s packages stand. `None` where one of the blobs is not found there, or the index holds no unit.
     fn restored(&self, slot: &str, index: &[u8], source: &UnitSource<'_>) -> Option<Unit> {
         curios_profile::profile!("verdicts::restored");
         let packs = self.packs(slot)?;
@@ -452,28 +452,28 @@ impl Verdicts {
             .map(|unit| unit.read_for(source.packages()))
     }
 
-    /// File the objects of `stored` the packs of `slot`'s address do not hold, in one pack: what a slot naming them is renamed into place after.
-    fn file_objects(&self, slot: &str, stored: &Indexed) -> io::Result<()> {
-        curios_profile::profile!("verdicts::file_objects");
+    /// File the blobs of `stored` the packs of `slot`'s address do not hold, in one pack: what a slot naming them is renamed into place after.
+    fn file_blobs(&self, slot: &str, stored: &Indexed) -> io::Result<()> {
+        curios_profile::profile!("verdicts::file_blobs");
         let packs = self
             .packs(slot)
-            .ok_or_else(|| io::Error::other("a cabinet files objects"))?;
+            .ok_or_else(|| io::Error::other("a cabinet files blobs"))?;
         let missing = packs
             .missing(stored.digests())
             .into_iter()
             .collect::<BTreeSet<_>>();
-        let objects = stored
-            .objects(|digest| missing.contains(digest))
+        let blobs = stored
+            .blobs(|digest| missing.contains(digest))
             .map_err(io::Error::other)?;
 
-        packs.write(&objects)
+        packs.write(&blobs)
     }
 
     /// Collect the packs of `slot`'s address, whose slot now names what `stored` names ([`Packs::collect`]).
     fn collect(&self, slot: &str, stored: &Indexed) -> io::Result<()> {
         let packs = self
             .packs(slot)
-            .ok_or_else(|| io::Error::other("a cabinet collects objects"))?;
+            .ok_or_else(|| io::Error::other("a cabinet collects blobs"))?;
 
         packs.collect(&stored.digests().copied().collect())
     }
@@ -708,9 +708,9 @@ impl Cache for Verdicts {
             source.answered().to_vec(),
             placement.contained.clone(),
         );
-        // The objects first, so a slot never names one not yet written; then what the address's slot no longer names is collected.
+        // The blobs first, so a slot never names one not yet written; then what the address's slot no longer names is collected.
         let filed = self
-            .file_objects(&placement.slot, &placement.stored)
+            .file_blobs(&placement.slot, &placement.stored)
             .and_then(|()| curios_archive::to_bytes(&record).map_err(io::Error::other))
             .and_then(|record| replace(&placement.path, &record, placement.stored.index()))
             .and_then(|()| self.collect(&placement.slot, &placement.stored));

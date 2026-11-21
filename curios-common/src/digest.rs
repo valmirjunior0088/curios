@@ -1,4 +1,4 @@
-//! SHA-256 as the workspace's one content digest: the hex digest of some bytes, the [`Digest`] a cabinet names an [`Object`] by, and a [`Hasher`] that finishes into one.
+//! SHA-256 as the workspace's one content digest: the hex digest of some bytes, the [`Digest`] a cabinet names a [`Blob`] by, and a [`Hasher`] that finishes into one.
 //!
 //! This crate is the authority for `sha2`, on the rule that one crate names one external concern. Every digest a record is checked against, every cabinet key and every tree hash is spelled through here, and every part of a key is framed the one way [`Fingerprint::feed`] states — so nothing above this crate names the algorithm, and no two keys can disagree about how their parts are separated.
 
@@ -21,7 +21,7 @@ pub fn digest(bytes: &[u8]) -> String {
     fingerprint.hex()
 }
 
-/// The digest of some bytes as its thirty-two bytes, for a caller that keeps many and compares them: what [`digest`] spells in hex, and what a cabinet names an object by.
+/// The digest of some bytes as its thirty-two bytes, for a caller that keeps many and compares them: what [`digest`] spells in hex, and what a cabinet names a blob by.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Digest([u8; 32]);
 
@@ -66,24 +66,24 @@ impl fmt::Debug for Digest {
     }
 }
 
-/// A value as a cabinet keeps it, beside the digest it is found by: the bytes it was stored as, or the bytes of several values stored together with which of them it is. A value restored from a cabinet keeps the object it was read from, so storing it again digests nothing.
+/// A value as a cabinet keeps it, beside the digest it is found by: the bytes it was stored as, or the bytes of several values stored together with which of them it is. A value restored from a cabinet keeps the blob it was read from, so storing it again digests nothing.
 #[derive(Debug, Clone)]
-pub struct Object {
+pub struct Blob {
     pub digest: Digest,
     pub bytes: Bytes,
     /// Which of the values `bytes` holds together this one is: `None` where they hold it alone.
     pub member: Option<Member>,
 }
 
-/// Which of the values a run holds together an object is, and what kind of run it is: what says how the run is read, by whoever merges it with another of its kind.
+/// Which of the values a run holds together a blob is, and what kind of run it is: what says how the run is read, by whoever merges it with another of its kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Member {
     pub kind: u8,
     pub index: u32,
 }
 
-impl Object {
-    /// `bytes` as an object holding one value alone, digested now.
+impl Blob {
+    /// `bytes` as a blob holding one value alone, digested now.
     pub fn of(bytes: impl Into<Bytes>) -> Self {
         let bytes = bytes.into();
 
