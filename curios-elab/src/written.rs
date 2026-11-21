@@ -10,7 +10,8 @@ use {
     crate::{
         Binders, Context, Entailed, InductCase, Occurrence, Opened, Outcome, Resolution,
         convert_outcome, entail, enter_induct_case, is_prop, method_type, reduce_with, reference,
-        refine_head, resolve_witness, synth_neutral, trivially_inhabited, zonk_solved_term_metas,
+        refine_head, resolve_witness, sort_term, subsume_outcome, synth_neutral,
+        trivially_inhabited, zonk_solved_term_metas,
     },
     curios_common::{Plicity, recurse},
     curios_core::{
@@ -163,7 +164,7 @@ impl Writing {
                 field: Field::Struct(concept, index),
             }) => match self.method(context, dictionary, *concept, *index, None) {
                 Some(called) => called,
-                None => self.children(context, term, None),
+                None => self.children(context, term, &[]),
             },
             Subterm::InductType(induct_type) => {
                 let marks = context
@@ -271,14 +272,18 @@ impl Writing {
             }
             // A match as it is written has arms whose equations are not compiled yet: what is under them is left as it stands.
             Subterm::Transient(Transient::Matrix(_)) => {
-                self.unrefined(|writing| writing.children(context, term, None))
+                self.unrefined(|writing| writing.children(context, term, &[]))
             }
             Subterm::Intrinsic(intrinsic) => {
-                let proved = self.proved_again_there(context, intrinsic);
+                let held = self
+                    .proved_again_there(context, intrinsic)
+                    .into_iter()
+                    .chain(self.typed_again_there(context, intrinsic))
+                    .collect::<Vec<_>>();
 
-                self.children(context, term, proved)
+                self.children(context, term, &held)
             }
-            _ => self.children(context, term, None),
+            _ => self.children(context, term, &[]),
         }
     }
 
@@ -320,7 +325,7 @@ impl Writing {
             .collect()
     }
 
-    /// Which of `members`, filled at one site against the telescope `telescope_of` reads where the walk stands, elaboration would fill again there were it left out: a hidden member whose type is a proposition the fill proves, or the procedure that proves a bound from the facts in scope ([`proved_there`]). The telescope is the declaration's at levels of its own, as the name the reader writes is read, and each member's type is read with the members before it as they stand. None where the telescope cannot be read, and none under an arm whose equations were not installed.
+    /// Which of `members`, filled at one site against the telescope `telescope_of` reads where the walk stands, elaboration would fill again there were it left out: a hidden member whose type is a proposition the fill proves, or the procedure that proves a bound from the facts in scope ([`proved_there`]), and any other hidden member unification solves to it from the explicit members after it ([`determined`]). The telescope is the declaration's at levels of its own, as the name the reader writes is read, and each member's type is read with the members before it as they stand. None where the telescope cannot be read, and none under an arm whose equations were not installed.
     fn filled_again<B: Bound>(
         &self,
         context: &mut Context,
@@ -345,12 +350,17 @@ impl Writing {
                 return;
             };
             let mut cursor = telescope.cursor();
-            for (slot, (member, opened)) in members.iter().zip(opened).enumerate() {
+            for (slot, (member, opened)) in members.iter().zip(&opened).enumerate() {
                 let Some((_, bound)) = cursor.entry() else {
                     return;
                 };
                 filled[slot] = asked(member) && proved_there(context, &bound);
-                cursor.advance(opened);
+                cursor.advance(opened.clone());
+            }
+            for slot in 0..members.len() {
+                if !filled[slot] && asked(&members[slot]) {
+                    filled[slot] = determined(context, &telescope, members, &opened, slot);
+                }
             }
         });
 
@@ -480,6 +490,39 @@ impl Writing {
                 plicity: Plicity::Witness,
             }))
             .collect::<Vec<_>>();
+        // Where the method's own arguments stand in the parameters' group, a concept parameter they determine is left out, as a call's hidden argument is ([`Writing::filled_again`]).
+        let leading = match (merged, arguments) {
+            (true, Some(arguments)) => {
+                let members = params
+                    .iter()
+                    .map(|parameter| (Plicity::Implicit, parameter))
+                    .chain(std::iter::once((Plicity::Witness, dictionary)))
+                    .chain(
+                        arguments
+                            .iter()
+                            .map(|argument| (argument.plicity, &argument.term)),
+                    )
+                    .collect::<Vec<_>>();
+                let filled = self.filled_again(context, &members, |context| {
+                    match Term::unwrap_or_clone(method_type(context, &method)?) {
+                        Subterm::FuncType(FuncType { telescope }) => Some(telescope),
+                        _ => None,
+                    }
+                });
+                leading
+                    .into_iter()
+                    .zip(filled)
+                    .map(|(argument, filled)| match filled {
+                        true => Argument {
+                            term: held(context),
+                            plicity: argument.plicity,
+                        },
+                        false => argument,
+                    })
+                    .collect()
+            }
+            _ => leading,
+        };
         let reference = Term::from(Subterm::Transient(Transient::Method(method)));
         let own = arguments.map(|arguments| {
             arguments
@@ -906,8 +949,33 @@ impl Writing {
             .then_some(slot)
     }
 
-    /// A node of no rule of its own: each child term walked where it stands, under a variable of no type for every binder between the node and it, and the node rebuilt over what came back where a child changed. The child at `proved`, where one is named, is left as a held place instead ([`held`]): the proof an intrinsic holds, which elaboration proves again there.
-    fn children(&mut self, context: &mut Context, term: &Term, proved: Option<usize>) -> Term {
+    /// The type operands of `intrinsic` elaboration infers again where the walk stands, each by its position among the operands: one a later operand's type determines, which unification solves to it from that operand ([`typed_again`]) as it solves a call's hidden argument ([`determined`]). A program writes the operation by its call, `List/len(xs)`, and the type it was taken at is the elaborator's to fill.
+    fn typed_again_there(&self, context: &mut Context, intrinsic: &Intrinsic) -> Vec<usize> {
+        if self.unrefined > 0 {
+            return Vec::new();
+        }
+        let signature = intrinsic.signature(&context.syntax()).operands;
+        let operands = intrinsic
+            .operands()
+            .into_iter()
+            .map(|operand| self.released(operand))
+            .collect::<Vec<_>>();
+        let types = signature
+            .iter()
+            .map(|operand| match operand {
+                Operand::At(type_) => Some(self.released(type_)),
+                Operand::IsType | Operand::Function { .. } => None,
+            })
+            .collect::<Vec<_>>();
+
+        (0..operands.len())
+            .filter(|&slot| matches!(signature.get(slot), Some(Operand::IsType)))
+            .filter(|&slot| context.asking(|context| typed_again(context, &operands, &types, slot)))
+            .collect()
+    }
+
+    /// A node of no rule of its own: each child term walked where it stands, under a variable of no type for every binder between the node and it, and the node rebuilt over what came back where a child changed. Each child at a position `held` names is left as a held place instead ([`held`]): the proof an intrinsic holds, which elaboration proves again there, and a type operand it infers again.
+    fn children(&mut self, context: &mut Context, term: &Term, held_at: &[usize]) -> Term {
         let found = Rc::new(RefCell::new(Vec::new()));
         let sink = Rc::clone(&found);
         let mut collect = Visit::rewriting(
@@ -924,7 +992,7 @@ impl Writing {
         let mut walked = VecDeque::with_capacity(children.len());
         let mut changed = false;
         for (slot, (depth, child)) in children.iter().enumerate() {
-            if proved == Some(slot) {
+            if held_at.contains(&slot) {
                 changed = true;
                 walked.push_back(held(context));
                 continue;
@@ -1014,6 +1082,117 @@ pub fn proved_there(context: &mut Context, bound: &Term) -> bool {
     };
 
     inhabitant.is_some() || matches!(entail(context, bound, &reduced), Ok(Entailed::Proved(_)))
+}
+
+/// Whether unification, asked where the context stands, solves the type operand at `slot` of an intrinsic over `operands` to the operand it stands for, from the operands after it: a hole put where the operand stands in the type each later one is checked at, as `types` states it, that operand's own type held to it, and the hole's solution is the operand. A type no later operand's type names is not one elaboration infers.
+fn typed_again(
+    context: &mut Context,
+    operands: &[Term],
+    types: &[Option<Term>],
+    slot: usize,
+) -> bool {
+    let operand = &operands[slot];
+    let Ok(sort) = sort_term(context, operand) else {
+        return false;
+    };
+    let trial = context.solution_mark();
+    let hole = context.fresh_hole_metavar(sort.clone(), None);
+    let mut met = false;
+    let mut agreed = true;
+    for (later, type_) in operands.iter().zip(types).skip(slot + 1) {
+        let Some(type_) = type_ else {
+            continue;
+        };
+        let holed = replaced(type_, operand, &hole);
+        if holed == *type_ {
+            continue;
+        }
+        let converts = match synth_neutral(context, &Binders::default(), &Opened::default(), later)
+        {
+            Ok(Some(found)) => matches!(
+                subsume_outcome(context, &found, &holed, None, None),
+                Ok(Outcome::Converts)
+            ),
+            _ => false,
+        };
+        if !converts {
+            agreed = false;
+            break;
+        }
+        met = true;
+    }
+    let restored = met && agreed && {
+        let solved = zonk_solved_term_metas(context, &hole);
+        !solved.any_metavar(&mut |id| context.metavar_solution(id).is_none())
+            && matches!(
+                convert_outcome(context, &sort, &solved, operand),
+                Ok(Outcome::Converts)
+            )
+    };
+    context.rollback_solutions(trial);
+    context.end_solutions(trial);
+
+    restored
+}
+
+/// `term` with every occurrence of `operand` in it standing as `hole`.
+fn replaced(term: &Term, operand: &Term, hole: &Term) -> Term {
+    let (operand, hole) = (operand.clone(), hole.clone());
+    let mut visit = Visit::rewriting_shared(
+        |_, _| None,
+        Box::new(move |_, term: &Term| (*term == operand).then(|| hole.clone())),
+    );
+
+    term.traverse(&mut visit)
+}
+
+/// Whether unification, asked where the context stands, solves the hidden member at `slot` of `members`, read against `telescope` with each member opened as `opened` holds it, to the member it stands for: a hole put in its place, the type of each explicit member after it is held to the type its slot asks, and the hole's solution is the member. What a call left out is solved so where it is pasted, which reads its explicit arguments as these are read; the expected type a paste also meets can only solve more.
+fn determined<B: Bound>(
+    context: &mut Context,
+    telescope: &Telescope<B>,
+    members: &[(Plicity, &Term)],
+    opened: &[Term],
+    slot: usize,
+) -> bool {
+    let trial = context.solution_mark();
+    let mut cursor = telescope.cursor();
+    let mut hole = None;
+    for (index, ((plicity, _), opened)) in members.iter().zip(opened).enumerate() {
+        let Some((_, domain)) = cursor.entry() else {
+            break;
+        };
+        if index == slot {
+            let open = context.fresh_hole_metavar(domain.clone(), None);
+            hole = Some((open.clone(), domain));
+            cursor.advance(open);
+            continue;
+        }
+        if index > slot
+            && *plicity == Plicity::Explicit
+            && let Ok(Some(type_)) =
+                synth_neutral(context, &Binders::default(), &Opened::default(), opened)
+            && !matches!(
+                subsume_outcome(context, &type_, &domain, None, None),
+                Ok(Outcome::Converts)
+            )
+        {
+            hole = None;
+            break;
+        }
+        cursor.advance(opened.clone());
+    }
+    let restored = hole.is_some_and(|(hole, domain)| {
+        let solved = zonk_solved_term_metas(context, &hole);
+        !solved.any_metavar(&mut |id| context.metavar_solution(id).is_none())
+            && matches!(
+                convert_outcome(context, &domain, &solved, &opened[slot]),
+                Ok(Outcome::Converts)
+            )
+    });
+    context.rollback_solutions(trial);
+    context.end_solutions(trial);
+
+    restored
 }
 
 /// A place held for elaboration to fill, as `@_` holds one: the hole it lowers to.

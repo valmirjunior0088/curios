@@ -171,7 +171,7 @@ fn a_map_by_a_function_that_is_the_identity_almost_everywhere_is_not_its_list() 
         ("List/map(xs, (v: Nat) => v + 1 - 1)", "List/map(xs, (v: Nat) => v - 1 + 1)"),
         ("List/map([0], (v: Nat) => v + 1 - 1)", "List/map([0], (v: Nat) => v - 1 + 1)"),
     ])
-    .by_elaborator_in("/moved", |error| matches!(error, curios_elab::Error::TypeMismatch { expected, .. } if pinned(expected) == "/std/Eq/Eq(List(Nat))(List/map(@Nat, @Nat, xs, (v) => v - 1 + 1), xs)"));
+    .by_elaborator_in("/moved", |error| matches!(error, curios_elab::Error::TypeMismatch { expected, .. } if pinned(expected) == "/std/Eq/Eq(List(Nat))(List/map(@?, @?, xs, (v) => v - 1 + 1), xs)"));
 }
 
 // A left fold over a concatenation threads its accumulator through the operands in order; read in the other order, the fold of `[1] ++ [2]` by a step that does not commute would be `21` where it is `12`. The control states the order the fold threads.

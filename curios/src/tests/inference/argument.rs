@@ -122,7 +122,7 @@ fn a_missing_witness_after_a_written_one_is_named_by_its_own_position() {
     );
 }
 
-// An operator has no argument list, so its bound cannot be supplied where it is written. The report names the operator rather than its minted binder, spells the bound as the method it projects rather than the witness it projects from, and names the two ways that do establish it — the method call with its type argument first, since a leading `@` fills that slot.
+// An operator has no argument list, so its bound cannot be supplied where it is written. The report names the operator rather than its minted binder, spells the bound as the method it projects rather than the witness it projects from, and names the two ways that do establish it — the guard that decides it, and the method call with its type argument first, since a leading `@` fills that slot.
 #[test]
 fn an_operators_undischarged_bound_names_the_operator_and_what_establishes_it() {
     let report = error(
@@ -134,9 +134,9 @@ fn an_operators_undischarged_bound_names_the_operator_and_what_establishes_it() 
     );
     assert!(
         report.contains(
-            "the bound of the `/` operator was not discharged\n│  nothing discharged `/std/ops/Div/Ok(@Nat, n)`"
+            "the bound of the `/` operator was not discharged\n│  nothing discharged `/std/ops/Div/Ok(n)`"
         ) && report.contains(
-            "decide the bound with a guard before the operation\n│  or call `/std/ops/Div/div(@T, a, b, @proof)`"
+            "guard the operation with `n != 0`\n│  or call `/std/ops/Div/div(@T, a, b, @proof)`"
         ) && !report.contains("/(@")
             && !report.contains("witness~"),
         "unexpected report:\n{report}"

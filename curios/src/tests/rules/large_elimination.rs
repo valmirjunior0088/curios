@@ -398,7 +398,7 @@ fn a_cast_fires_or_stands_alike_in_every_spelling() {
     for (at, statement) in [
         (
             "/u_subst",
-            "/std/Eq/Eq(Nat)(/std/Eq/subst(@Nat, @a, @b, (_) => Nat, p, v), v)",
+            "/std/Eq/Eq(Nat)(/std/Eq/subst(@?, @?, @?, (_) => Nat, p, v), v)",
         ),
         (
             "/u_match",
@@ -406,15 +406,15 @@ fn a_cast_fires_or_stands_alike_in_every_spelling() {
         ),
         (
             "/u_lemma",
-            "/std/Eq/Eq(Nat)(/cast((_) => Nat, @a, @b, p, v), v)",
+            "/std/Eq/Eq(Nat)(/cast((_) => Nat, @?, @?, p, v), v)",
         ),
         (
             "/u_sym",
-            "/std/Eq/Eq(Nat)(/std/Eq/subst(@Nat, @a, @b, (_) => Nat, /std/Eq/sym(@Nat, @b, @a, /std/Eq/sym(@Nat, @a, @b, p)), v), v)",
+            "/std/Eq/Eq(Nat)(/std/Eq/subst(@?, @?, @?, (_) => Nat, /std/Eq/sym(@?, @?, @?, /std/Eq/sym(@?, @?, @?, p)), v), v)",
         ),
         (
             "/u_trans",
-            "/std/Eq/Eq(Nat)(/cast((_) => Nat, @a, @b, /std/Eq/trans(@Nat, @a, @b, @b, p, /std/Eq/Eq/refl(b)), v), v)",
+            "/std/Eq/Eq(Nat)(/cast((_) => Nat, @?, @?, /std/Eq/trans(@?, @?, @?, @b, p, /std/Eq/Eq/refl(b)), v), v)",
         ),
     ] {
         refusals.by_elaborator_in(at, |error| {

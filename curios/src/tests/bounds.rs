@@ -1302,6 +1302,29 @@ fn a_counterexample_names_a_call_whatever_a_fact_spells_inside_it() {
     }
 }
 
+/// A bound a callee's signature states is written as a program writes it: the length its index is bounded by is the call `List/len(xs)`, the type it was taken at left out, as elaboration infers it again from the list where the call is pasted; and a division's bound is its concept's method over the divisor, the concept's parameter left out as the divisor determines it.
+#[test]
+fn a_bound_from_a_signature_leaves_out_the_type_its_operands_restore() {
+    for (body, written) in [
+        (
+            "let last(xs: List(Nat)) -> Nat = List/get(xs, List/len(xs) - 1);",
+            "List/len(xs) - 1 < List/len(xs)",
+        ),
+        (
+            "let share(total: Nat, people: Nat) -> Nat = total / people;",
+            "Div/Ok(people)",
+        ),
+    ] {
+        let program = format!("{HEADER}\n{body}\nIo/pure(())");
+        let refused = typecheck(&program).expect_err("the bound is refused");
+
+        assert!(
+            refused.contains(written) && !refused.contains("@Nat"),
+            "{body}: {refused}"
+        );
+    }
+}
+
 #[test]
 fn a_refused_bound_names_each_guard_once_and_a_guard_as_the_way_out() {
     let refusal = |declared: &str, binders: &str, body: &str| {
@@ -1316,13 +1339,14 @@ fn a_refused_bound_names_each_guard_once_and_a_guard_as_the_way_out() {
             &format!("match {guard} | {taken} => List/get(xs, i) | {other} => 0 end"),
         )
     };
-    let by_guard = "decide the bound with a guard before the call\n│  or supply it explicitly, `List/get(@...)`";
+    let by_guard =
+        "guard the call with `i < List/len(xs)`\n│  or supply it explicitly, `List/get(@...)`";
 
-    // A guard one short of the bound: read as written, so named once, and a value it leaves — the atom spelled as the bound spells it, an implicit a call solved substituted.
+    // A guard one short of the bound: read as written, so named once, and a value it leaves — the atom spelled as the bound spells it, an implicit unification restores left out — with the guard that decides the bound as the way out.
     let short = index("i <= List/len(xs)", "true", "false");
     assert!(
         short.contains(
-            "    a guard, `i <= List/len(@Nat, xs)`\n│  it fails at `i = 0`, `List/len(@Nat, xs) = 0`\n"
+            "    a guard, `i <= List/len(xs)`\n│  it fails at `i = 0`, `List/len(xs) = 0`\n"
         ) && short.contains(by_guard),
         "{short}"
     );
@@ -1330,9 +1354,7 @@ fn a_refused_bound_names_each_guard_once_and_a_guard_as_the_way_out() {
     // A false arm is the other comparison, so both are named.
     let dual = index("List/len(xs) < i", "false", "true");
     assert!(
-        dual.contains(
-            "    a guard's false arm, `List/len(@Nat, xs) < i`: `i <= List/len(@Nat, xs)`\n"
-        ),
+        dual.contains("    a guard's false arm, `List/len(xs) < i`: `i <= List/len(xs)`\n"),
         "{dual}"
     );
 
@@ -1340,13 +1362,13 @@ fn a_refused_bound_names_each_guard_once_and_a_guard_as_the_way_out() {
     let apart = index("i == List/len(xs)", "false", "true");
     assert!(
         apart.contains(
-            "    a guard's false arm, `i == List/len(@Nat, xs)`: `i != List/len(@Nat, xs)`\n│  it fails at `i = 1`, `List/len(@Nat, xs) = 0`\n"
+            "    a guard's false arm, `i == List/len(xs)`: `i != List/len(xs)`\n│  it fails at `i = 1`, `List/len(xs) = 0`\n"
         ),
         "{apart}"
     );
     let unequal = index("i != List/len(xs)", "true", "false");
     assert!(
-        unequal.contains("    a guard, `i != List/len(@Nat, xs)`\n│  it fails at `i = 1`"),
+        unequal.contains("    a guard, `i != List/len(xs)`\n│  it fails at `i = 1`"),
         "{unequal}"
     );
 
@@ -1357,7 +1379,7 @@ fn a_refused_bound_names_each_guard_once_and_a_guard_as_the_way_out() {
         "Positive { n = n }.n",
     );
     assert!(
-        field.contains("it fails at `n = 0`\n│  decide the bound with a guard before the literal\n│  or write it explicitly, `Positive { @... }`"),
+        field.contains("it fails at `n = 0`\n│  guard the literal with `0 < n`\n│  or write it explicitly, `Positive { @... }`"),
         "{field}"
     );
 

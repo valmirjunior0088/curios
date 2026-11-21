@@ -349,6 +349,7 @@ fn a_dispatch_by_value_is_written_with_its_fallthrough() {
     );
 }
 
+// The list's element type is left as `@_`, which the list restores where the call is pasted, holding its place before the result type, which only the lambda's body states and the walk reads no lambda's type to restore.
 #[test]
 fn a_lambda_handed_to_a_call_is_written_where_it_stands() {
     let source = r#"
@@ -358,11 +359,11 @@ fn a_lambda_handed_to_a_call_is_written_where_it_stands() {
 
     assert_eq!(
         body(source, "subject"),
-        "(xs) => List/map(@Nat, @Nat, xs, (x) => x + 1)"
+        "(xs) => List/map(@_, @Nat, xs, (x) => x + 1)"
     );
 }
 
-// A function's witness is written `use Show(A)` in its type and `use _` in its lambda, and the call its body makes leaves the witness to resolution, which finds that binder.
+// A function's witness is written `use Show(A)` in its type and `use _` in its lambda, and the call its body makes leaves the witness to resolution, which finds that binder, and the concept's parameter to unification, which `x` gives it.
 #[test]
 fn a_witness_binder_is_written_unnamed_and_restored_where_it_is_used() {
     let source = r#"
@@ -374,12 +375,12 @@ fn a_witness_binder_is_written_unnamed_and_restored_where_it_is_used() {
         shown(source, "subject"),
         (
             "(@A: Type, use Show(A), x: A) -> Str".into(),
-            "(@A, use _, x) => Show/show(@A, x)".into()
+            "(@A, use _, x) => Show/show(x)".into()
         )
     );
 }
 
-// A witness a program names is one resolution would not put back: the table answers `Show(Nat)` with the library's, so the argument is written where the call was handed another.
+// A witness a program names is one resolution would not put back: the table answers `Show(Nat)` with the library's, so the argument is written where the call was handed another, and the parameter before it, which `n` restores, holds its place as `@_`.
 #[test]
 fn a_witness_resolution_would_not_restore_is_written() {
     let source = r#"
@@ -388,13 +389,10 @@ fn a_witness_resolution_would_not_restore_is_written() {
         pub let subject(n: Nat) -> Str = Show/show(@Nat, use loud, n);
     "#;
 
-    assert_eq!(
-        body(source, "subject"),
-        "(n) => Show/show(@Nat, use loud, n)"
-    );
+    assert_eq!(body(source, "subject"), "(n) => Show/show(@_, use loud, n)");
 }
 
-// A `use` argument resolution would put back is left to it, as the program left it.
+// A `use` argument resolution would put back is left to it, as the program left it, and the parameter `n` determines with it.
 #[test]
 fn a_witness_resolution_restores_is_left_out() {
     let source = r#"
@@ -402,5 +400,5 @@ fn a_witness_resolution_restores_is_left_out() {
         pub let subject(n: Nat) -> Str = Show/show(n);
     "#;
 
-    assert_eq!(body(source, "subject"), "(n) => Show/show(@Nat, n)");
+    assert_eq!(body(source, "subject"), "(n) => Show/show(n)");
 }

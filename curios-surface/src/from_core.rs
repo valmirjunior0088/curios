@@ -82,6 +82,11 @@ impl<'a> Frame<'a> {
 pub trait Writer<T, D: Dialect = Program> {
     fn operand(&self, operand: T) -> Option<Term<D>>;
 
+    /// Whether `operand`, standing at a hidden position under `mark`, is a place held for elaboration to fill, which a reader leaves out ([`hidden_run`]). Only the program's writer holds one: Core text and a quoted term write every operand as it stands.
+    fn held(&self, _mark: Plicity, _operand: &T) -> bool {
+        false
+    }
+
     /// The declaration of `/sys` at `path` ([`intrinsic_global`]), as a name.
     fn sys(&self, path: &str) -> Option<Term<D>>;
 }
@@ -89,6 +94,10 @@ pub trait Writer<T, D: Dialect = Program> {
 impl Writer<curios_core::Term> for Frame<'_> {
     fn operand(&self, operand: curios_core::Term) -> Option<Term> {
         sub(operand, *self)
+    }
+
+    fn held(&self, mark: Plicity, operand: &curios_core::Term) -> bool {
+        restorable(mark, operand)
     }
 
     fn sys(&self, path: &str) -> Option<Term> {
@@ -202,7 +211,7 @@ fn argument<D: Dialect>(plicity: Plicity, term: Term<D>) -> Argument<D> {
 }
 
 /// The form that holds a hidden member's place: `use _`, `@_`.
-fn placeholder() -> Term {
+fn placeholder<D: Dialect>() -> Term<D> {
     Subterm::Held.into()
 }
 
@@ -395,7 +404,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
                 )
                 .collect();
 
-            apply(head, hidden_run(members, frame)?)
+            apply(head, hidden_run(members, &frame)?)
         }
         curios_core::Subterm::StructType(curios_core::StructType { name, params, .. }) => {
             let marks = frame.spelling.nominal_marks(&name, params.len());
@@ -740,12 +749,13 @@ fn marked<T, D: Dialect>(
     explicits: Vec<T>,
     writer: &impl Writer<T, D>,
 ) -> Option<Vec<Argument<D>>> {
-    implicits
+    let members = implicits
         .into_iter()
         .map(|term| (Plicity::Implicit, term))
         .chain(explicits.into_iter().map(|term| (Plicity::Explicit, term)))
-        .map(|(plicity, term)| Some(argument(plicity, writer.operand(term)?)))
-        .collect()
+        .collect();
+
+    hidden_run(members, writer)
 }
 
 /// A function type's parameters from `cursor` on, each written into `params` in order, then its output: every entry type under the binders before it, and a witness binder's node in scope for everything after it.
@@ -861,14 +871,17 @@ fn call_arguments(arguments: Vec<curios_core::Argument>, frame: Frame) -> Option
         .map(|argument| (argument.plicity, argument.term))
         .collect();
 
-    hidden_run(members, frame)
+    hidden_run(members, &frame)
 }
 
-/// The members of one telescope filled at a site — a call's arguments, a literal's entries — each under its mark, by the rule [`call_arguments`] states.
-fn hidden_run(members: Vec<(Plicity, curios_core::Term)>, frame: Frame) -> Option<Vec<Argument>> {
+/// The members of one telescope filled at a site — a call's arguments, a literal's entries, an intrinsic's operands — each under its mark as `writer` writes it, by the rule [`call_arguments`] states, a member it holds for elaboration ([`Writer::held`]) left out or holding its place.
+fn hidden_run<T, D: Dialect>(
+    members: Vec<(Plicity, T)>,
+    writer: &impl Writer<T, D>,
+) -> Option<Vec<Argument<D>>> {
     let restored = members
         .iter()
-        .map(|(plicity, term)| restorable(*plicity, term))
+        .map(|(plicity, term)| writer.held(*plicity, term))
         .collect::<Vec<_>>();
 
     // Read from the back: whether a hidden member is written later in the run a position stands in.
@@ -886,7 +899,7 @@ fn hidden_run(members: Vec<(Plicity, curios_core::Term)>, frame: Frame) -> Optio
         match (restored, written_after) {
             (true, false) => {}
             (true, true) => written.push(argument(plicity, placeholder())),
-            (false, _) => written.push(argument(plicity, sub(term, frame)?)),
+            (false, _) => written.push(argument(plicity, writer.operand(term)?)),
         }
     }
 
@@ -910,7 +923,7 @@ fn nominal_arguments(
         })
         .collect();
 
-    hidden_run(members, frame)
+    hidden_run(members, &frame)
 }
 
 /// Whether a program writes the former a lambda eta-expands: its bare name, where the binders took every argument, or an indexed family at its parameters, which takes its indices in a call of their own. A family at some of its parameters is no call the grammar has — `Result(Error)` for `(A) => Result(Error, A)` — and the lambda is written as it stands. `terminal` is the lambda's body, read through the lambdas a family's other call nests in it.
