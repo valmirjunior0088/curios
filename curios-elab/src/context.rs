@@ -657,6 +657,26 @@ impl<'s> Context<'s> {
         self.underway.credits.credit(proof);
     }
 
+    /// Where the declaration under way writes its binder at `ordinal` among its written binders, as its lowering filed the place ([`curios_core::Mints::written`]): what a refusal about the binder stands on. The binder is credited as the refusal's to speak for ([`Credits::credit_refused`]), so no lint speaks of it again.
+    pub(crate) fn refused_binder(&mut self, ordinal: u32) -> Option<Extent> {
+        let declaration = self.underway.declaration;
+        self.underway.credits.credit_refused(declaration, ordinal);
+        let mints = match self.underway.needs.attempted() {
+            Some(name) => self.underway.minted.of(name),
+            None => &self.underway.minted.entry,
+        };
+        let binder = WrittenBinder {
+            declaration,
+            ordinal,
+        };
+
+        mints
+            .written
+            .iter()
+            .find(|(written, _, _)| *written == binder)
+            .map(|(_, extent, _)| *extent)
+    }
+
     /// [`Credits::credited_in`].
     pub(crate) fn credited_in(&self, names: &[Global]) -> Vec<(Global, u32)> {
         self.underway.credits.credited_in(names)

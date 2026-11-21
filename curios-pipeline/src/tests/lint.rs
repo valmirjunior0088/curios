@@ -1,6 +1,6 @@
 //! `unused-binder` and `unused-let` once elaboration has credited them: a binder only a proof the elaborator writes reads is used wherever that proof is written, `_` among them, and a credit names the declaration whose binder was read and no other.
 
-use {super::test_support::*, crate::*, curios_core::LintKind};
+use {super::test_support::*, crate::*, curios_common::About, curios_core::LintKind};
 
 /// The bound of `/` in the result type is discharged from `ok`, which nothing names: the proof is written while the type elaborates, under the type's own binder.
 #[test]
@@ -337,4 +337,33 @@ let _lone(n: Nat) -> Nat =
             "{round}"
         );
     }
+}
+
+/// A default named as a constructor is refused at the binder it is about, and the refusal speaks for that binder: no `unused-binder` lint stands beside it with another way out.
+#[test]
+fn a_binder_a_refusal_names_is_refused_there_and_linted_no_further() {
+    let source = "use /std/{Nat, Option};
+
+let pick(o: Option(Nat)) -> Nat =
+    match o | some(x) => x | none => 0 end;
+
+/std/print(\"x\")
+";
+    let Checked { entry, verdict } = checked_through(source, &Keeping::default());
+
+    let Err(CompileError::Failure(reports)) = verdict else {
+        panic!("the default is refused");
+    };
+    let Some(About::Place(span)) = &reports[0].about else {
+        panic!("the refusal is placed: {reports:?}");
+    };
+    assert_eq!(span.line_column(), (4, 30));
+    assert!(
+        entry
+            .lints
+            .iter()
+            .all(|lint| lint.kind != LintKind::UnusedBinder),
+        "{:?}",
+        entry.lints
+    );
 }

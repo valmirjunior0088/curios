@@ -1,6 +1,6 @@
-//! The written binders a proof the elaborator wrote read.
+//! The written binders a proof the elaborator wrote read, and those a refusal speaks for.
 //!
-//! The lowering records each written binder no written name references, and the one reference no written name makes is a proof the elaborator writes from the facts in scope: it reads the binders it sums. A binder one reads is *credited* here, by its declaration and its place among that declaration's written binders, and the binder lints a declaration's record is filed with report none it credits ([`binder_lints`](crate::binder_lints)). Appended to as proofs are written, and taken back where the candidate a proof was written inside is rolled back.
+//! The lowering records each written binder no written name references, and the one reference no written name makes is a proof the elaborator writes from the facts in scope: it reads the binders it sums. A binder one reads is *credited* here, by its declaration and its place among that declaration's written binders, and the binder lints a declaration's record is filed with report none it credits ([`binder_lints`](crate::binder_lints)). A binder a refusal names is credited too: what is wrong with it is said once, by the refusal, and a lint beside it would offer another way out. Appended to as proofs are written and refusals raised, and taken back where the candidate either was made inside is rolled back.
 
 use {
     curios_core::{Free, Global, Term, WrittenBinder},
@@ -45,6 +45,11 @@ impl Credits {
             .filter_map(|local| self.opened.get(local).copied())
             .collect::<Vec<_>>();
         self.credited.extend(read);
+    }
+
+    /// Credit the binder written at `written` among `declaration`'s written binders, which a refusal of that declaration names and speaks for.
+    pub fn credit_refused(&mut self, declaration: Option<Global>, written: u32) {
+        self.credited.push((declaration, written));
     }
 
     /// The written binders proofs have read in a definition `names` holds, each by its definition and its place, in order and each once: what the record of the declaration declaring them holds.

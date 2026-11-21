@@ -1219,20 +1219,28 @@ impl<'m> Compiler<'m> {
     /// The refusal of the arms' default where its name is a constructor of the family the outermost dispatch takes apart, the scrutinee itself ([`Error::MatrixDefaultNamesAConstructor`]): `| none =>` after `| some(x) =>` binds what the arms leave as `none`, where the case was meant. A literal's dispatch names no constructor, so over one any name stands; and a default over a tuple or a struct binds the whole, so a constructor of a field's family is no case it could mean.
     fn default_named_as_a_constructor(
         &self,
-        context: &Context,
+        context: &mut Context,
         split: &NominalSplit,
     ) -> Option<Error> {
         let row = self.fallthrough.as_ref()?.row;
         if !matches!(self.row(row).pattern, Pattern::Binder) {
             return None;
         }
-        let binder = self.labels[row].first()?.as_ref()?.hint()?.to_string();
+        let label = self.labels[row].first()?.as_ref()?;
+        let binder = label.hint()?.to_string();
         let constructor = split.constructor_named(context, &binder)?;
+        // The refusal stands on the binder it is about, and speaks for it: no lint says of it again what to write.
+        let at = label
+            .written()
+            .and_then(|ordinal| context.refused_binder(ordinal));
 
-        Some(Error::MatrixDefaultNamesAConstructor {
-            binder,
-            constructor,
-        })
+        Some(
+            Error::MatrixDefaultNamesAConstructor {
+                binder,
+                constructor,
+            }
+            .at_opt(at),
+        )
     }
 
     /// Rows grouped by the constructor they name, each group the arm of its case, over the payload's columns and then the columns left. A row that writes a binder joins every group, and where the family has a constructor no row names that inversion leaves possible, the rows that write a binder are the one arm of them all. The arms are elaborated in the order the family declares its constructors, as a match written one level deep has them.
