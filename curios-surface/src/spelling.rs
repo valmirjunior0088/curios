@@ -51,6 +51,8 @@ use {
 //
 // axis (h) — witnesses: the witness binders in scope where a reader stands ([`ReaderPosition`]), so that a reader's printer declines a term that refers to one, the grammar writing no name beside the witness mark. Which witnesses a report's term leaves out is settled before the term reaches a printer: the elaborator writes it as a program writes it where the reader stands, a witness resolution puts back there an open slot (`curios-elab`'s `written`). This printer prints a witness as it stands, which is what a dump, a certifier's refusal and a term a reader's printer declines are read as. Reports set it. Why is `documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md`.
 //
+// axis (i) — proofs: a flag under which the proof an intrinsic holds of its bound is written, a call taking it after its operands under `@` and an operator giving way to its function's call, wherever the proof is no place left to elaboration (`states`). A report sets it: its terms reach a printer through the elaborator's walk (`curios-elab`'s `written`), which leaves a proof elaboration proves again where the reader stands as a held place, so what is written is what the reader must write and `n / d` stays `n / d` where its bound is a fact in scope. A render the walk never saw — an answer's type, a dump — leaves it off, and writes no proof, as a program whose bounds discharge writes none.
+//
 // `Spelling::label` consults the shorten map first (globals), then the rename map (locals); a name in neither renders verbatim.
 
 /// How a term is spelled for a reader. The default spells nothing differently, which is what a faithful render uses.
@@ -70,6 +72,8 @@ pub struct Spelling {
     string_literal: Option<Global>,
     /// axis (g) — whether a nested concatenation keeps its grouping instead of being spliced into the enclosing literal.
     grouped: bool,
+    /// axis (i) — whether the proof an intrinsic holds is written where it is no place left to elaboration.
+    stated_proofs: bool,
     /// axis (b) for a reader: how the unit's names can be written and where its definitions sit, so a global is spelled as resolution would find it from where the reader stands. Takes precedence over the shorten map, which stays what a render without a reader — a dump, a certifier refusal — spells by.
     names: Option<Rc<ReaderNames>>,
     /// Where the reader stands (axes (b) and (h)).
@@ -236,6 +240,12 @@ impl Spelling {
     /// For the report that has found two sides rendering as one string: a nesting is a difference conversion can refuse on, and the splice is what hid it. A consumer that has detected that case re-renders under this before it reaches for the universe instances, since grouping changes nothing where no nesting is present.
     pub fn with_faithful_grouping(mut self) -> Self {
         self.grouped = true;
+        self
+    }
+
+    /// Write the proof an intrinsic holds of its bound wherever it is no place left to elaboration (axis (i)): for a term the elaborator's walk wrote for its reader, which holds a place for each proof elaboration proves again there.
+    pub fn with_stated_proofs(mut self) -> Self {
+        self.stated_proofs = true;
         self
     }
 
@@ -426,6 +436,11 @@ impl Spelling {
     /// Whether a nested concatenation keeps its grouping (axis (g)).
     pub fn keeps_grouping(&self) -> bool {
         self.grouped
+    }
+
+    /// Whether the proof an intrinsic holds is written where it is no place left to elaboration (axis (i)).
+    pub fn states_proofs(&self) -> bool {
+        self.stated_proofs
     }
 
     /// Whether universe instances are left out (axis (c)): what a reader's printer asks before it writes a term, since no program writes one.
@@ -1171,6 +1186,13 @@ pub enum IntrinsicForm<T = Term> {
         implicits: Vec<T>,
         explicits: Vec<T>,
     },
+    /// An operation called with the proof of its bound: its type arguments under `@`, the written ones, then the proof under `@`, where its `/sys` declaration takes it. What an operation that holds a proof is written as where its reader must write the proof too ([`intrinsic_form`]'s `states`), an operator's among them, by the function the operator stands for.
+    Proved {
+        path: String,
+        implicits: Vec<T>,
+        explicits: Vec<T>,
+        proof: T,
+    },
     /// An operator between its two operands.
     Infix(InfixOp, T, T),
     Bool(bool),
@@ -1224,7 +1246,7 @@ pub fn carrier_former(head: &HeadKey) -> Option<Global> {
         HeadKey::Nominal(_) | HeadKey::TupleType(_) => return None,
     };
 
-    match intrinsic_form(former, false) {
+    match intrinsic_form(former, false, |_| false) {
         IntrinsicForm::Named(path) => Some(intrinsic_global(path)),
         IntrinsicForm::Call { path, .. } => Some(intrinsic_global(&path)),
         _ => None,
@@ -1262,7 +1284,7 @@ pub fn intrinsic_former(global: &Global, operands: &[Term]) -> Option<Intrinsic>
                         IntrinsicFormer::Closed(former) => former(),
                         IntrinsicFormer::OverOne(former) => former(Term::type_ground()),
                     };
-                    let path = match intrinsic_form(spelled, false) {
+                    let path = match intrinsic_form(spelled, false, |_| false) {
                         IntrinsicForm::Named(path) => path.to_owned(),
                         IntrinsicForm::Call { path, .. } => path,
                         _ => unreachable!("a type former is written by its name"),
@@ -1292,12 +1314,28 @@ impl IntrinsicFormer {
     }
 }
 
-/// How `intrinsic` is written: see [`IntrinsicForm`]. Under `grouped` a nested concatenation stays the operand it is (axis (g)), where the splice would hide how a run is grouped.
+/// How `intrinsic` is written: see [`IntrinsicForm`]. Under `grouped` a nested concatenation stays the operand it is (axis (g)), where the splice would hide how a run is grouped. `states` answers, of the proof an operation holds of its bound, whether its reader must write it (axis (i)): the operation is then its call with the proof ([`IntrinsicForm::Proved`]), and otherwise the call or the operator that leaves the proof to elaboration.
 pub fn intrinsic_form<T: IntrinsicOperand>(
     intrinsic: Intrinsic<T>,
     grouped: bool,
+    states: impl Fn(&T) -> bool,
 ) -> IntrinsicForm<T> {
     let operator = |symbol: &str| InfixOp::from_symbol(symbol).expect("an operator's symbol");
+    // An operation that holds the proof of its bound, as its call: with the proof where its reader must write it, and as any other call where they need not.
+    let bounded = |path: &str, implicits: Vec<T>, explicits: Vec<T>, proof: T| match states(&proof)
+    {
+        true => IntrinsicForm::Proved {
+            path: path.into(),
+            implicits,
+            explicits,
+            proof,
+        },
+        false => IntrinsicForm::Call {
+            path: path.into(),
+            implicits,
+            explicits,
+        },
+    };
 
     match intrinsic {
         Intrinsic::BoolType => IntrinsicForm::Named("Bool"),
@@ -1329,13 +1367,19 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
         Intrinsic::NatDiv {
             dividend: l,
             divisor: r,
-            ..
-        } => IntrinsicForm::Infix(operator("/"), l, r),
+            non_zero,
+        } => match states(&non_zero) {
+            true => bounded("Nat/div", vec![], vec![l, r], non_zero),
+            false => IntrinsicForm::Infix(operator("/"), l, r),
+        },
         Intrinsic::NatRem {
             dividend: l,
             divisor: r,
-            ..
-        } => IntrinsicForm::Infix(operator("%"), l, r),
+            non_zero,
+        } => match states(&non_zero) {
+            true => bounded("Nat/rem", vec![], vec![l, r], non_zero),
+            false => IntrinsicForm::Infix(operator("%"), l, r),
+        },
         Intrinsic::NatLe(l, r) => IntrinsicForm::Infix(operator("<="), l, r),
         Intrinsic::NatAnd(l, r) => IntrinsicForm::Call {
             path: "Nat/and".into(),
@@ -1384,11 +1428,7 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
             implicits: vec![],
             explicits: vec![i],
         },
-        Intrinsic::NatToByte { nat, .. } => IntrinsicForm::Call {
-            path: "Nat/to_byte".into(),
-            implicits: vec![],
-            explicits: vec![nat],
-        },
+        Intrinsic::NatToByte { nat, below } => bounded("Nat/to_byte", vec![], vec![nat], below),
         Intrinsic::IntType => IntrinsicForm::Named("Int"),
         Intrinsic::Int(value) => IntrinsicForm::Int(value),
         Intrinsic::IntEql(l, r) => IntrinsicForm::Infix(operator("=="), l, r),
@@ -1399,18 +1439,17 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
         Intrinsic::IntDiv {
             dividend: l,
             divisor: r,
-            ..
-        } => IntrinsicForm::Infix(operator("/"), l, r),
+            non_zero,
+        } => match states(&non_zero) {
+            true => bounded("Int/div", vec![], vec![l, r], non_zero),
+            false => IntrinsicForm::Infix(operator("/"), l, r),
+        },
         // A natural, which `%` at `Int` widens: the operator spells the widening, and the remainder alone its `/sys` function.
         Intrinsic::IntRem {
             dividend: l,
             divisor: r,
-            ..
-        } => IntrinsicForm::Call {
-            path: "Int/rem".into(),
-            implicits: vec![],
-            explicits: vec![l, r],
-        },
+            non_zero,
+        } => bounded("Int/rem", vec![], vec![l, r], non_zero),
         Intrinsic::IntLt(l, r) => IntrinsicForm::Infix(operator("<"), l, r),
         Intrinsic::IntLe(l, r) => IntrinsicForm::Infix(operator("<="), l, r),
         Intrinsic::IntAnd(l, r) => IntrinsicForm::Call {
@@ -1524,13 +1563,13 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
             implicits: vec![],
             explicits: vec![i],
         },
-        Intrinsic::FltOfLeBytes { bytes: i, .. } => IntrinsicForm::Call {
-            path: "Flt/of_le_bytes".into(),
-            implicits: vec![],
-            explicits: vec![i],
-        },
-        // `%` at `Int` is the widening of Euclid's remainder, a natural, and is written as the operator.
-        Intrinsic::NatToInt(i) if matches!(i.as_intrinsic(), Some(Intrinsic::IntRem { .. })) => {
+        Intrinsic::FltOfLeBytes {
+            bytes: i,
+            eight_bytes,
+        } => bounded("Flt/of_le_bytes", vec![], vec![i], eight_bytes),
+        // `%` at `Int` is the widening of Euclid's remainder, a natural, and is written as the operator where the remainder's proof is left to elaboration: where its reader must write the proof, the widening is a call over the remainder's.
+        Intrinsic::NatToInt(i) if matches!(i.as_intrinsic(), Some(Intrinsic::IntRem { non_zero, .. }) if !states(non_zero)) =>
+        {
             let Some(Intrinsic::IntRem {
                 dividend, divisor, ..
             }) = i.into_intrinsic()
@@ -1564,11 +1603,7 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
             implicits: vec![],
             explicits: vec![i],
         },
-        Intrinsic::IntToNat { int: i, .. } => IntrinsicForm::Call {
-            path: "Int/to_nat".into(),
-            implicits: vec![],
-            explicits: vec![i],
-        },
+        Intrinsic::IntToNat { int: i, non_neg } => bounded("Int/to_nat", vec![], vec![i], non_neg),
         Intrinsic::IntToFlt(Rounding::TiesToEven, i) => IntrinsicForm::Call {
             path: "Int/to_flt".into(),
             implicits: vec![],
@@ -1579,26 +1614,14 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
             implicits: vec![],
             explicits: vec![i],
         },
-        Intrinsic::FltToNat { flt: i, .. } => IntrinsicForm::Call {
-            path: "Flt/to_nat".into(),
-            implicits: vec![],
-            explicits: vec![i],
-        },
-        Intrinsic::FltToInt { flt: i, .. } => IntrinsicForm::Call {
-            path: "Flt/to_int".into(),
-            implicits: vec![],
-            explicits: vec![i],
-        },
-        Intrinsic::FltMantissa { flt: i, .. } => IntrinsicForm::Call {
-            path: "Flt/mantissa".into(),
-            implicits: vec![],
-            explicits: vec![i],
-        },
-        Intrinsic::FltExponent { flt: i, .. } => IntrinsicForm::Call {
-            path: "Flt/exponent".into(),
-            implicits: vec![],
-            explicits: vec![i],
-        },
+        Intrinsic::FltToNat { flt: i, non_neg } => bounded("Flt/to_nat", vec![], vec![i], non_neg),
+        Intrinsic::FltToInt { flt: i, finite } => bounded("Flt/to_int", vec![], vec![i], finite),
+        Intrinsic::FltMantissa { flt: i, finite } => {
+            bounded("Flt/mantissa", vec![], vec![i], finite)
+        }
+        Intrinsic::FltExponent { flt: i, finite } => {
+            bounded("Flt/exponent", vec![], vec![i], finite)
+        }
         Intrinsic::BytesType => IntrinsicForm::Named("Bytes"),
         Intrinsic::Bytes(bytes) => IntrinsicForm::Bytes(packed_atoms(&bytes)),
         Intrinsic::BytesLen(b) => IntrinsicForm::Call {
@@ -1610,22 +1633,14 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
         Intrinsic::BytesGet {
             bytes: b,
             index: i,
-            in_range: _,
-        } => IntrinsicForm::Call {
-            path: "Bytes/get".into(),
-            implicits: vec![],
-            explicits: vec![b, i],
-        },
+            in_range,
+        } => bounded("Bytes/get", vec![], vec![b, i], in_range),
         Intrinsic::BytesSlice {
             bytes,
             start,
             length,
-            within: _,
-        } => IntrinsicForm::Call {
-            path: "Bytes/slice".into(),
-            implicits: vec![],
-            explicits: vec![bytes, start, length],
-        },
+            within,
+        } => bounded("Bytes/slice", vec![], vec![bytes, start, length], within),
         // An append has no named form in the surface: `x[..acc, b]` is how a program writes one, and so how a report does.
         Intrinsic::BytesAppend { bytes, element } => {
             let mut entries = Vec::new();
@@ -1647,30 +1662,18 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
         Intrinsic::BytesAnd {
             left,
             right,
-            same_length: _,
-        } => IntrinsicForm::Call {
-            path: "Bytes/and".into(),
-            implicits: vec![],
-            explicits: vec![left, right],
-        },
+            same_length,
+        } => bounded("Bytes/and", vec![], vec![left, right], same_length),
         Intrinsic::BytesOr {
             left,
             right,
-            same_length: _,
-        } => IntrinsicForm::Call {
-            path: "Bytes/or".into(),
-            implicits: vec![],
-            explicits: vec![left, right],
-        },
+            same_length,
+        } => bounded("Bytes/or", vec![], vec![left, right], same_length),
         Intrinsic::BytesXor {
             left,
             right,
-            same_length: _,
-        } => IntrinsicForm::Call {
-            path: "Bytes/xor".into(),
-            implicits: vec![],
-            explicits: vec![left, right],
-        },
+            same_length,
+        } => bounded("Bytes/xor", vec![], vec![left, right], same_length),
         // A parameterized type former is applied as its `/sys` global is, `List(Nat)` and never `List Nat`: the same type reaches a report as the intrinsic node and as that global applied, and a reader shown the two spelled apart is told two types where there is one.
         Intrinsic::ListType(elem) => IntrinsicForm::Call {
             path: "List".into(),
@@ -1690,34 +1693,22 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
             element: ty,
             list,
             index,
-            in_range: _,
-        } => IntrinsicForm::Call {
-            path: "List/get".into(),
-            implicits: vec![ty],
-            explicits: vec![list, index],
-        },
+            in_range,
+        } => bounded("List/get", vec![ty], vec![list, index], in_range),
         Intrinsic::ListSlice {
             element: ty,
             list,
             start,
             length,
-            within: _,
-        } => IntrinsicForm::Call {
-            path: "List/slice".into(),
-            implicits: vec![ty],
-            explicits: vec![list, start, length],
-        },
+            within,
+        } => bounded("List/slice", vec![ty], vec![list, start, length], within),
         Intrinsic::ListSet {
             element: ty,
             list,
             index,
             item,
-            in_range: _,
-        } => IntrinsicForm::Call {
-            path: "List/set".into(),
-            implicits: vec![ty],
-            explicits: vec![list, index, item],
-        },
+            in_range,
+        } => bounded("List/set", vec![ty], vec![list, index, item], in_range),
         Intrinsic::ListAppend {
             element: _,
             list,

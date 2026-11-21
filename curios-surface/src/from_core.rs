@@ -229,7 +229,9 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
             frame,
         )?,
         curios_core::Subterm::Intrinsic(intrinsic) => {
-            let form = intrinsic_form(intrinsic, frame.spelling.keeps_grouping());
+            let form = intrinsic_form(intrinsic, frame.spelling.keeps_grouping(), |proof| {
+                states(frame.spelling, proof)
+            });
 
             recurse(|| written_intrinsic(form, &frame))?
         }
@@ -990,6 +992,17 @@ pub fn written_intrinsic<T, D: Dialect>(
                 false => apply(writer.sys(&path)?, arguments),
             }
         }
+        IntrinsicForm::Proved {
+            path,
+            implicits,
+            explicits,
+            proof,
+        } => {
+            let mut arguments = marked(implicits, explicits, writer)?;
+            arguments.push(argument(Plicity::Implicit, writer.operand(proof)?));
+
+            apply(writer.sys(&path)?, arguments)
+        }
         IntrinsicForm::Infix(op, left, right) => {
             infix(op, writer.operand(left)?, writer.operand(right)?)
         }
@@ -1082,6 +1095,19 @@ fn written_flt<T, D: Dialect>(value: Floating, writer: &impl Writer<T, D>) -> Op
             Subterm::Literal(Literal::Bytes(bytes)).into(),
         )],
     ))
+}
+
+/// Whether a reader of `spelling` must write `proof`, the proof an intrinsic holds of its bound, to write the intrinsic: where the spelling states proofs (axis (i)) and the proof is no place left to elaboration. One is a held place, which a proof elaboration proves again where the reader stands was settled into, or the slot of an argument left out that elaboration never filled, which the program left to it as the operator and the bare call do; a goal the program wrote there is stated, as it was written.
+pub fn states(spelling: &Spelling, proof: &curios_core::Term) -> bool {
+    let left = matches!(
+        &**proof,
+        curios_core::Subterm::Metavar(curios_core::Metavar {
+            origin: curios_core::MetavarOrigin::Hole | curios_core::MetavarOrigin::Implicit(_),
+            ..
+        })
+    );
+
+    spelling.states_proofs() && !left
 }
 
 /// Whether `member`, standing at a hidden position under `mark`, is a place held for elaboration to fill. At a `use` position it is an open witness slot, which is what a witness resolution puts back where the reader stands was settled into before the term reached here, and what a goal still open is; at an `@` position it is a hole, which is what `@_` lowers to and what a proof elaboration fills again where the reader stands was settled into.

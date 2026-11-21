@@ -2373,9 +2373,16 @@ impl Error {
                 .collect();
         }
 
-        // Each report is spelled for the reader standing where it arose: a goal where it was written, anything else in its innermost declaration and scope.
-        let for_reader =
-            |position: ReaderPosition| Rc::new(spelling.as_ref().clone().for_reader(position));
+        // Each report is spelled for the reader standing where it arose: a goal where it was written, anything else in its innermost declaration and scope. Its terms were written for that reader by the walk, which holds a place for each proof elaboration proves again there: any other proof an intrinsic holds is stated.
+        let for_reader = |position: ReaderPosition| {
+            Rc::new(
+                spelling
+                    .as_ref()
+                    .clone()
+                    .for_reader(position)
+                    .with_stated_proofs(),
+            )
+        };
 
         // A report lands on what it is about: the position stamped on it, and where it has none, or one whose text is gone, the name of the declaration it arose in.
         let placed = |extent: Option<&Extent>, owner: Option<Global>| {

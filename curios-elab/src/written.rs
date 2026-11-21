@@ -16,8 +16,8 @@ use {
     curios_core::{
         Apply, Argument, Arity, Atom, Bound, CalleeId, Carrier, Cases, Field, Free, Func, FuncType,
         Global, InductArm, InductType, Infix, Instance, Intrinsic, Let, LetBinding, Match, Mention,
-        Method, Nat, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope, Term, Transient,
-        TupleType, Two, Visit, WitnessOrigin, method_labels,
+        Method, Nat, Operand, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope, Term,
+        Transient, TupleType, Two, Visit, WitnessOrigin, method_labels,
     },
     curios_num::Binary,
     std::{
@@ -163,7 +163,7 @@ impl Writing {
                 field: Field::Struct(concept, index),
             }) => match self.method(context, dictionary, *concept, *index, None) {
                 Some(called) => called,
-                None => self.children(context, term),
+                None => self.children(context, term, None),
             },
             Subterm::InductType(induct_type) => {
                 let marks = context
@@ -271,9 +271,14 @@ impl Writing {
             }
             // A match as it is written has arms whose equations are not compiled yet: what is under them is left as it stands.
             Subterm::Transient(Transient::Matrix(_)) => {
-                self.unrefined(|writing| writing.children(context, term))
+                self.unrefined(|writing| writing.children(context, term, None))
             }
-            _ => self.children(context, term),
+            Subterm::Intrinsic(intrinsic) => {
+                let proved = self.proved_again_there(context, intrinsic);
+
+                self.children(context, term, proved)
+            }
+            _ => self.children(context, term, None),
         }
     }
 
@@ -880,8 +885,29 @@ impl Writing {
         arm
     }
 
-    /// Any other node: each child term walked where it stands, under a variable of no type for every binder between the node and it, and the node rebuilt over what came back where a child changed.
-    fn children(&mut self, context: &mut Context, term: &Term) -> Term {
+    /// The operand of `intrinsic` that is the proof of its bound ([`Intrinsic::bound`]), by its place among the node's operands ([`Intrinsic::bound_slot`]), where elaboration would prove it again were the operation written without it where the walk stands ([`proved_there`]): the bound is the one the node's row demands of that operand ([`Intrinsic::signature`]), read under the binders entered. None for an operation that holds no proof, for a proof that is an open slot already, and under an arm whose equations were not installed.
+    fn proved_again_there(&self, context: &mut Context, intrinsic: &Intrinsic) -> Option<usize> {
+        let proof = intrinsic.bound()?;
+        if self.unrefined > 0 || matches!(&**proof, Subterm::Metavar(_)) {
+            return None;
+        }
+        let slot = intrinsic.bound_slot()?;
+        let Operand::At(bound) = intrinsic
+            .signature(&context.syntax())
+            .operands
+            .swap_remove(slot)
+        else {
+            return None;
+        };
+        let bound = self.released(&bound);
+
+        context
+            .asking(|context| proved_there(context, &bound))
+            .then_some(slot)
+    }
+
+    /// A node of no rule of its own: each child term walked where it stands, under a variable of no type for every binder between the node and it, and the node rebuilt over what came back where a child changed. The child at `proved`, where one is named, is left as a held place instead ([`held`]): the proof an intrinsic holds, which elaboration proves again there.
+    fn children(&mut self, context: &mut Context, term: &Term, proved: Option<usize>) -> Term {
         let found = Rc::new(RefCell::new(Vec::new()));
         let sink = Rc::clone(&found);
         let mut collect = Visit::rewriting(
@@ -897,7 +923,12 @@ impl Writing {
         let before = self.entered.len();
         let mut walked = VecDeque::with_capacity(children.len());
         let mut changed = false;
-        for (depth, child) in &children {
+        for (slot, (depth, child)) in children.iter().enumerate() {
+            if proved == Some(slot) {
+                changed = true;
+                walked.push_back(held(context));
+                continue;
+            }
             for _ in 0..*depth {
                 let binder = context.fresh(None);
                 self.entered.push(Term::free_var(&binder));

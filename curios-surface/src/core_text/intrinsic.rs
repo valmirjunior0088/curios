@@ -10,7 +10,7 @@ use {
     },
     crate::{
         BytesSegment, CoreForm, CoreIntrinsic, CoreText, CoreValue, Frame, IntrinsicForm, Literal,
-        NumLit, Rendered, Writer, intrinsic_form, sub, written_intrinsic,
+        NumLit, Rendered, Writer, intrinsic_form, states, sub, written_intrinsic,
     },
     curios_common::Span,
     curios_core::{Intrinsic, Nat, Subterm, Term, Universes},
@@ -744,7 +744,10 @@ fn reader_intrinsic<D: Rendered>(
     frame: Frame<'_, D>,
     leave: D::Leave,
 ) -> crate::Term<D> {
-    match intrinsic_form(intrinsic, frame.spelling.keeps_grouping()) {
+    let form = intrinsic_form(intrinsic, frame.spelling.keeps_grouping(), |proof| {
+        states(frame.spelling, proof)
+    });
+    match form {
         IntrinsicForm::Handle(token) => verbatim(leave, format!("Handle({token})")),
         form => written_intrinsic(form, &frame).expect("a reader writes every form but a handle"),
     }

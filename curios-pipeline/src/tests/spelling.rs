@@ -255,12 +255,15 @@ fn intrinsics_unreached_from_the_root() -> Vec<String> {
                     &mut written,
                     |written, term| {
                         if let Subterm::Intrinsic(node) = &**term {
-                            for grouped in [false, true] {
-                                match intrinsic_form(node.clone(), grouped) {
+                            for (grouped, stated) in
+                                [(false, false), (true, false), (false, true), (true, true)]
+                            {
+                                match intrinsic_form(node.clone(), grouped, |_| stated) {
                                     IntrinsicForm::Named(path) => {
                                         written.insert(intrinsic_global(path));
                                     }
-                                    IntrinsicForm::Call { path, .. } => {
+                                    IntrinsicForm::Call { path, .. }
+                                    | IntrinsicForm::Proved { path, .. } => {
                                         written.insert(intrinsic_global(&path));
                                     }
                                     _ => {}

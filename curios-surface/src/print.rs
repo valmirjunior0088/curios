@@ -1071,7 +1071,8 @@ impl<D: Layout> TreePrinter<D> {
 
     /// An intrinsic as core's one table writes it ([`intrinsic_form`]), through the translation a report's term is written by. A `/sys` declaration is the only place a text-stage intrinsic node exists, and a handle the host minted is one no source spells, shown by its token.
     fn intrinsic(self, intrinsic: Intrinsic<D>) -> Printer {
-        match intrinsic_form(intrinsic, true) {
+        // A `/sys` declaration's body is the operation over its own parameters, the proof among them: it reads by the operator or the bare call a program writes.
+        match intrinsic_form(intrinsic, true, |_| false) {
             IntrinsicForm::Handle(token) => pure(format!("Handle({token})")),
             form => {
                 self.term(written_intrinsic(form, &Quoted).expect("a quoted form is written whole"))

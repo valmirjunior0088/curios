@@ -14,7 +14,7 @@ use {
     curios_abi::{ForeignFunction, ResultShape, WireResults, WireReturn, WireType},
     curios_common::SyntaxRegistry,
     curios_num::{Binary, Floating, Integer, Rounding},
-    std::collections::BTreeSet,
+    std::{collections::BTreeSet, ptr},
 };
 
 /// The core type a host-boundary [`WireType`] denotes — the one reading of the signature shared by elaboration (operand checks, result records) and erasure, so the two cannot disagree about what crosses the wire.
@@ -882,6 +882,21 @@ impl Intrinsic {
         self.for_each_role(&mut |_| {}, |_, found| proof = Some(found));
 
         proof
+    }
+
+    /// Where the proof of this operation's bound ([`Intrinsic::bound`]) stands among its operands ([`Intrinsic::operands`]), where it states one: the field it is, so an operand that is the same term as the proof is not taken for it.
+    pub fn bound_slot(&self) -> Option<usize> {
+        let proof = self.bound()?;
+        let mut before = 0;
+        let mut slot = None;
+        self.for_each_operand(&mut |operand| {
+            if ptr::eq(operand, proof) {
+                slot = Some(before);
+            }
+            before += 1;
+        });
+
+        slot
     }
 
     /// Whether any operand this operation computes with satisfies `pred`: every operand but the proof of its bound ([`Intrinsic::bound`]), in field order.
