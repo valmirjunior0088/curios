@@ -85,7 +85,8 @@ fn a_program_both_checkers_refuse_names_each_refusal() {
     assert_eq!(put.said(Checker::Elaborator), "refused");
     assert_eq!(put.said(Checker::Certifier), "refused");
     assert!(
-        said.starts_with("REFUSED    by elaborator `PartialInErasedPosition`"),
+        said.starts_with("refused at `False`\n")
+            && said.contains("└─ [refused] by elaborator `PartialInErasedPosition`"),
         "{said}"
     );
     assert!(
@@ -103,7 +104,7 @@ fn a_program_refused_while_it_is_built_reaches_no_certifier() {
     assert_eq!(put.said(Checker::Certifier), "not asked");
     assert!(
         put.to_string()
-            .starts_with("REFUSED    by elaborator `UniverseInconsistency` in `/bad`"),
+            .contains("└─ [refused] by elaborator `UniverseInconsistency` in `/bad`"),
         "{put}"
     );
 }
@@ -119,7 +120,7 @@ fn core_text_is_put_to_the_certifier_alone() {
     assert_eq!(put.said(Checker::Certifier), "refused");
     assert!(
         put.to_string()
-            .starts_with("REFUSED    by certifier `NotDescending` at the closing term"),
+            .contains("└─ [refused] by certifier `NotDescending` at the closing term"),
         "{put}"
     );
 }

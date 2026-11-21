@@ -24,6 +24,10 @@ pub enum Kind {
     Local,
     /// A structure's field asked about by the place of its label: where the structure writes it, and what it declares it at.
     Field,
+    /// A term put at `False` that a checker refused, closed on who refused it and where.
+    Refused,
+    /// A term put at `False` that every checker it met admitted: a proof of `False`, a flaw in the checkers.
+    Admitted,
 }
 
 impl Kind {
@@ -38,6 +42,8 @@ impl Kind {
             Kind::Term => "term",
             Kind::Local => "local",
             Kind::Field => "field",
+            Kind::Refused => "refused",
+            Kind::Admitted => "admitted",
         }
     }
 
@@ -46,9 +52,9 @@ impl Kind {
         !matches!(self, Kind::Declaration | Kind::Module)
     }
 
-    /// Whether the kind says something went wrong, which is what is painted as trouble.
+    /// Whether the kind says something went wrong, which is what is painted as trouble: an error, and a proof of `False` the checkers admitted.
     pub fn troubled(self) -> bool {
-        self == Kind::Error
+        matches!(self, Kind::Error | Kind::Admitted)
     }
 }
 

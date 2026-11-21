@@ -562,7 +562,7 @@ impl Args for Query {
             .arg(flag(
                 "false",
                 FALSE.query_help(
-                    "Whether the checkers admit the closing term at `False`: ADMITTED or REFUSED first, what each checker made of it, then every refusal; exit 0 either way",
+                    "Whether the checkers admit the closing term at `False`: a block of the verdict, what each checker made of it, and who refused it, then every refusal; exit 0 either way",
                 ),
             ))
             // A view stands beside `--name` and in no query's group, which would refuse it there.

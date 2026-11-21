@@ -45,13 +45,11 @@ fn a_refused_program_is_answered_with_exit_zero() {
 
     assert_eq!(output.status.code(), Some(0), "{output:?}");
     assert!(
-        said.starts_with("REFUSED    by elaborator `PartialInErasedPosition`"),
+        said.starts_with("refused at `False`\n")
+            && said.contains("└─ [refused] by elaborator `PartialInErasedPosition`"),
         "{said}"
     );
-    assert!(
-        said.contains("\n           elaborator  refused\n"),
-        "{said}"
-    );
+    assert!(said.contains("\n│  elaborator: refused\n"), "{said}");
 }
 
 /// A refusal beneath the verdict closes on its place as the answer's reader spells it: a program of a package, read through its manifest, closes on the file as it is named where the reader stands, which is how a check of the same file closes it.
@@ -64,7 +62,7 @@ fn a_refusal_closes_on_its_place_as_a_check_spells_it() {
 
     assert_eq!(output.status.code(), Some(0), "{output:?}");
     assert!(
-        said.starts_with("REFUSED    by elaborator `TypeMismatch` at the closing term"),
+        said.contains("└─ [refused] by elaborator `TypeMismatch` at the closing term"),
         "{said}"
     );
     assert!(said.contains("\n└─ [error] app.crs:1:1\n"), "{said}");
@@ -89,7 +87,7 @@ fn core_text_is_put_to_the_certifier_alone() {
 
         assert_eq!(output.status.code(), Some(0), "{output:?}");
         assert!(
-            said.starts_with("REFUSED    by certifier `NotDescending`"),
+            said.contains("└─ [refused] by certifier `NotDescending`"),
             "{said}"
         );
         assert!(!said.contains("elaborator"), "{said}");

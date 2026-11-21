@@ -13,7 +13,7 @@ use {
         program_refusal, read_core_text,
     },
     curios_cert::certify_program,
-    curios_common::{Source, Style, SyntaxRegistry, Variants},
+    curios_common::{About, Kind, Report, Said, Source, Style, SyntaxRegistry, Variants},
     curios_core::{Global, Program, Term, Universes},
     curios_module::RootSource,
     curios_surface::{Entrypoint, FormScope, Spelling},
@@ -220,19 +220,25 @@ impl Put {
 }
 
 impl Put {
-    /// The answer as a reader of `style` is shown it: the verdict as its first word, `ADMITTED` or `REFUSED` and by whom; beneath it what each checker the term was put to made of it, lines that read the same whoever reads them; then every refusal as its checker reports it, rendered for that reader, so a refusal closes on its place as a check of the same subject closes it.
+    /// The answer as a reader of `style` is shown it: a block, as every answer is, headed by the verdict, a fact for what each checker the term was put to made of it, and closed on who refused it and where, each error by the name its variant is declared under, or on the type a proof of `False` was admitted at; then every refusal as its checker reports it, rendered for that reader, so a refusal closes on its place as a check of the same subject closes it.
     pub fn rendered(&self, style: &Style) -> String {
-        let mut lines = vec![match self.answer.admitted() {
-            true => format!("ADMITTED   at `{}`", self.empty.faithful()),
-            false => format!("REFUSED    by {}", self.answer.refusers()),
-        }];
-        lines.extend(self.asked.iter().map(|&checker| {
-            format!(
-                "           {:<10}  {}",
-                checker.to_string(),
-                self.said(checker)
-            )
-        }));
+        let (verdict, kind, about) = match self.answer.admitted() {
+            true => (
+                "admitted at `False`",
+                Kind::Admitted,
+                format!("at `{}`", self.empty.faithful()),
+            ),
+            false => (
+                "refused at `False`",
+                Kind::Refused,
+                format!("by {}", self.answer.refusers()),
+            ),
+        };
+        let block = self.asked.iter().fold(
+            Report::about(About::Named(about), Said::line(verdict)),
+            |block, &checker| block.stating(format!("{checker}: {}", self.said(checker))),
+        );
+        let mut lines = vec![block.rendered(kind, style).trim_end().to_string()];
         for refusal in self.answer.refusals() {
             lines.push(format!("\n{}", refusal.rendered(style).trim_end()));
         }

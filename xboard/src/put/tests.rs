@@ -256,12 +256,12 @@ fn a_proof_on_no_ticket_is_answered_as_the_product_answers_it() {
     assert!(
         program
             .to_string()
-            .starts_with("REFUSED    by elaborator `TypeMismatch` at the closing term\n"),
+            .contains("└─ [refused] by elaborator `TypeMismatch` at the closing term\n"),
         "{program}"
     );
     assert!(
         module.to_string().starts_with(
-            "REFUSED    by certifier `Mismatch` at the closing term\n           certifier   refused\n"
+            "refused at `False`\n│  certifier: refused\n└─ [refused] by certifier `Mismatch` at the closing term\n"
         ),
         "{module}"
     );

@@ -1294,7 +1294,7 @@ pub fn wonder_footprint(
     }
 }
 
-/// `wonder --false [SUBJECT]`: whether the checkers admit the program's closing term at `False`, to stdout — the verdict as the first word, `ADMITTED` or `REFUSED` and by whom, what each checker the subject meets made of it beneath, then every refusal as its checker reports it, rendered for the answer's reader as a check's refusals are ([`Put::rendered`]). Exit 0 once the question is answered, whichever way it went; a subject that does not lower or read was put to no checker, and stops the question as it stops a build.
+/// `wonder --false [SUBJECT]`: whether the checkers admit the program's closing term at `False`, to stdout — a block headed by the verdict, a fact for what each checker the subject meets made of it, and closed on who refused it, then every refusal as its checker reports it, rendered for the answer's reader as a check's refusals are ([`Put::rendered`]). Exit 0 once the question is answered, whichever way it went; a subject that does not lower or read was put to no checker, and stops the question as it stops a build.
 pub fn wonder_false(
     budget: u64,
     program: Program,
