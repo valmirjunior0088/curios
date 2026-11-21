@@ -67,7 +67,7 @@ fn the_extension_s_test_runs_after_the_grammar_it_hashes() {
     );
 }
 
-/// A filter given to the tests picks the suite, whose run takes it, and leaves the Binaryen check, which asks about another crate's build.
+/// A filter given to the tests picks the suite, whose run takes it, and leaves the Binaryen and prelude checks, which ask about other crates' builds.
 #[test]
 fn a_variable_given_runs_only_the_steps_that_use_it() {
     assert_eq!(
@@ -79,7 +79,8 @@ fn a_variable_given_runs_only_the_steps_that_use_it() {
         [
             "launcher build",
             "workspace test suite",
-            "workspace test binaryen-cache"
+            "workspace test binaryen-cache",
+            "workspace test prelude-cache"
         ]
     );
 }

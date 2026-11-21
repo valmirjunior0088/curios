@@ -49,3 +49,10 @@ run = [
     ["cargo", "build", "--package", "curios-binaryen"],
     ["CURIOS_BINARYEN_CACHED=1", "cargo", "clippy", "--package", "curios-binaryen", "--all-targets", "--keep-going"],
 ]
+
+[test.prelude-cache]
+description = "Hold the checkout's entry of the prelude's images: the prelude built alone, asked to compare, makes them again and refuses any the entry holds otherwise for their state, and linted alone, asked to reuse, takes them rather than making them; each a unit no other step builds, so the step runs the script after every edit to a crate it links"
+run = [
+    ["CURIOS_PRELUDE_ENTRY=compare", "cargo", "build", "--package", "curios-prelude"],
+    ["CURIOS_PRELUDE_ENTRY=reuse", "cargo", "clippy", "--package", "curios-prelude", "--all-targets", "--keep-going"],
+]
