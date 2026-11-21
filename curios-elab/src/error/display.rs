@@ -15,7 +15,7 @@ use {
     curios_analysis::{DeclaredPart, Erased, MemberLabel},
     curios_common::{Code, Kind, MAX_LINE_WIDTH, Plicity, Qualifier, Report, Said, Style},
     curios_core::{
-        Anchors, ArgumentSite, CalleeId, Free, Global, HeadKey, Level, Mention, Quality,
+        Anchors, ArgumentSite, CalleeId, Free, Global, HeadKey, Intrinsic, Level, Mention, Quality,
         ReduceError, Sort, Subterm, Term, UniverseMetaId, WitnessKey, WitnessRole,
     },
     curios_surface::{Spellable, Spelling},
@@ -290,6 +290,11 @@ fn refused(said: &mut Said, refusal: &Refusal, spelling: &Rc<Spelling>) {
             said.stating("a proof was found and did not check");
             said.stating("that is the compiler's fault: please report it");
         }
+        // A product of unknowns is an unknown of its own to the search, so it may find no proof and no values that break the bound: what it says is that it could not decide.
+        Conclusion::Counterexample(_) if refusal.considered().is_empty() => {
+            said.stating("the search finds no proof, and no values under which it fails");
+            said.stating("it reads a product of unknowns as an unknown of its own");
+        }
         Conclusion::Unsearched | Conclusion::Counterexample(_) => {}
     }
 }
@@ -328,9 +333,34 @@ fn fact_said(from: &Origin, statement: &Term, spelling: &Rc<Spelling>) -> String
     };
     let stated = statement.spelled(spelling).to_string();
     match from {
-        Origin::Guard(written, _) if written.spelled(spelling).to_string() == stated => origin,
+        // A guard taken as written states itself, whichever way round the procedure reads it: `guests > 0` is the fact `0 < guests`.
+        Origin::Guard(written, true)
+            if [Some(stated.clone()), mirrored(statement, spelling)]
+                .contains(&Some(written.spelled(spelling).to_string())) =>
+        {
+            origin
+        }
+        Origin::Guard(written, false) if written.spelled(spelling).to_string() == stated => origin,
         _ => format!("{origin}: `{stated}`"),
     }
+}
+
+/// A comparison of the order written the other way round, `b > a` for `a < b`: how a guard written as `>` reads as the fact it states.
+fn mirrored(statement: &Term, spelling: &Rc<Spelling>) -> Option<String> {
+    let (relation, left, right) = match &**statement {
+        Subterm::Intrinsic(Intrinsic::NatLt(left, right) | Intrinsic::IntLt(left, right)) => {
+            (">", left, right)
+        }
+        Subterm::Intrinsic(Intrinsic::NatLe(left, right) | Intrinsic::IntLe(left, right)) => {
+            (">=", left, right)
+        }
+        _ => return None,
+    };
+    Some(format!(
+        "{} {relation} {}",
+        right.spelled(spelling),
+        left.spelled(spelling)
+    ))
 }
 
 fn spelled_mention(name: &Mention, spelling: &Spelling) -> String {
@@ -1742,13 +1772,22 @@ impl Displayed<'_> {
                 if let Some(refusal) = refusal {
                     refused(f, refusal, spelling);
                 }
-                // A bound the search read is one the facts in scope may prove, so the way out named first is a fact: a guard. One it read nothing in has the written proof alone.
-                let searched = refusal.as_ref().is_some_and(|refusal| !refusal.is_silent());
+                // A bound the search read facts for, or found values breaking, is one a guard can decide, so the way out named first is that guard, written as the decision the bound asks for where it is one. One it read nothing in, or decided nothing of, has the written proof alone.
+                let searched = refusal.as_ref().is_some_and(|refusal| {
+                    !refusal.considered().is_empty()
+                        || matches!(refusal.conclusion(), Conclusion::Counterexample(values) if !values.is_empty())
+                });
+                let decision = refusal
+                    .as_ref()
+                    .and_then(|refusal| refusal.goal())
+                    .map(|goal| goal.spelled(spelling).to_string());
+                let guard = |before: &str| match &decision {
+                    Some(decision) => format!("guard the {before} with `{decision}`"),
+                    None => format!("decide the bound with a guard before the {before}"),
+                };
                 let guarded = |f: &mut Said, before: &str| {
                     if searched {
-                        f.stating(format_args!(
-                            "decide the bound with a guard before the {before}"
-                        ));
+                        f.stating(guard(before));
                     }
                 };
                 let or = if searched { "or " } else { "" };
@@ -1771,7 +1810,7 @@ impl Displayed<'_> {
                     // An operator has no argument list to write the bound into, so the report names the two places it can be established: a guard before the operation, or the method call the operator stands for — with its type argument first, since a leading `@` fills that slot and not the bound.
                     Callee::Operator { method, .. } => {
                         f.stating("an operator takes no written arguments");
-                        f.stating("decide the bound with a guard before the operation");
+                        f.stating(guard("operation"));
                         f.stating(format_args!(
                             "or call `{}(@T, a, b, @proof)`",
                             spelling.symbol(method)

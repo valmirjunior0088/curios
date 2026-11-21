@@ -25,6 +25,8 @@ pub struct Refusal {
     refuted: bool,
     /// Of a bound that is a conjunction, the conjunct the rest of the refusal is about: the first one not proved, at the depth its conjunction nests it.
     conjunct: Option<Term>,
+    /// The decision the bound asks for, as the bound spells it, where it is one: what a guard that decides the bound writes.
+    goal: Option<Term>,
 }
 
 /// The search's conclusion, as the report states it.
@@ -76,6 +78,16 @@ impl Refusal {
         self.conjunct.as_ref()
     }
 
+    pub fn goal(&self) -> Option<&Term> {
+        self.goal.as_ref()
+    }
+
+    /// This refusal, of a bound that asks for the decision `goal`.
+    pub(super) fn of_goal(mut self, goal: Option<Term>) -> Self {
+        self.goal = goal;
+        self
+    }
+
     /// Whether the refusal says anything at all: a bound the procedure read nothing in reports exactly as it would with no procedure. A conjunction's refusal names the conjunct it is about, so it says that much.
     pub fn is_silent(&self) -> bool {
         self.considered.is_empty()
@@ -110,6 +122,7 @@ impl Refusal {
             .flat_map(|(from, statement)| from.named().into_iter().chain([statement]))
             .chain(values.iter().map(|(atom, _)| atom))
             .chain(&self.conjunct)
+            .chain(&self.goal)
     }
 
     /// [`Refusal::terms`], each to be written over.
@@ -119,6 +132,7 @@ impl Refusal {
             unread,
             conclusion,
             conjunct,
+            goal,
             ..
         } = self;
         let values: &mut [(Term, String)] = match conclusion {
@@ -131,6 +145,7 @@ impl Refusal {
             .flat_map(|(from, statement)| from.named_mut().into_iter().chain([statement]))
             .chain(values.iter_mut().map(|(atom, _)| atom))
             .chain(conjunct)
+            .chain(goal)
     }
 
     /// The refusal with its counterexample's atoms written through `spelled`, each reduct as the operand stated beside it, in one pass ([`respelled`]): an outer reduct is replaced before one inside it, whichever reading found either.
@@ -159,7 +174,7 @@ impl Refusal {
         let considered = considered(facts);
         let outcome = match outcome {
             SearchOutcome::Counterexample(assignment) => {
-                Conclusion::Counterexample(counterexample(views, &assignment))
+                Conclusion::Counterexample(counterexample(views, &assignment, refuted))
             }
             SearchOutcome::Exhausted(cap) => Conclusion::Exhausted(cap),
             SearchOutcome::Unwritten => Conclusion::Unwritten,
@@ -172,6 +187,7 @@ impl Refusal {
             absurd,
             refuted,
             conjunct: None,
+            goal: None,
         }
     }
 }
@@ -196,7 +212,11 @@ pub(super) fn considered(facts: &Facts) -> Vec<(Origin, Term)> {
             considered.push(stated);
         }
     }
-    considered
+    // The guards are read innermost first, from the arm the bound stands in outwards; a report names them as the program writes them, outermost first, after the hypotheses.
+    let (guards, others): (Vec<_>, Vec<_>) = considered
+        .into_iter()
+        .partition(|(origin, _)| matches!(origin, Origin::Guard(..)));
+    others.into_iter().chain(guards.into_iter().rev()).collect()
 }
 
 /// What the procedure that proves a bound from the facts in scope says of a written goal that is a bound, for the goal's report: the procedure is what would have filled the goal had it been left out, so it answers the goal too.
@@ -234,8 +254,12 @@ impl Answer {
     }
 }
 
-/// Each atom's term and value, where every unknown is an atom; nothing where one is a product. An atom is the reduct the view read, written as its operands state it once every spelling a report has is known ([`Refusal::respelled`]).
-fn counterexample(views: &LinearViews, assignment: &[(Monomial, Rational)]) -> Vec<(Term, String)> {
+/// Each atom's term and value, where every unknown is an atom; nothing where one is a product. An atom is the reduct the view read, written as its operands state it once every spelling a report has is known ([`Refusal::respelled`]). `refuted` says that no program takes the values, which every atom is then named to show.
+fn counterexample(
+    views: &LinearViews,
+    assignment: &[(Monomial, Rational)],
+    refuted: bool,
+) -> Vec<(Term, String)> {
     if assignment
         .iter()
         .any(|(monomial, _)| monomial.atoms().len() != 1)
@@ -248,9 +272,22 @@ fn counterexample(views: &LinearViews, assignment: &[(Monomial, Rational)]) -> V
         .map(|(monomial, value)| (monomial.atoms()[0].clone(), value))
         .collect::<Vec<_>>();
     values.sort_by_key(|(atom, _)| atom.index());
-    values
+    let values = values
         .into_iter()
         .map(|(atom, value)| (views.term(&atom).clone(), value.to_string()))
+        .collect::<Vec<_>>();
+    // An operation of the carriers' arithmetic over another atom — `List/len(xs) - 1` beside `List/len(xs)` — is what the operation makes of that one, and in values a program takes, its value follows from theirs: named beside them, the two read as a contradiction to a reader who does not know how the operation is defined. Where no program takes the values, the atom is what shows it, `Nat/pow(2, n) = 1` beside `n = 1`, and stays. A call is no such operation, whatever it names inside it: the search reads it as an unknown of its own, and so does its reader.
+    let held = |atom: &Term| {
+        !refuted
+            && matches!(&**atom, Subterm::Intrinsic(_))
+            && values
+                .iter()
+                .any(|(other, _)| other != atom && atom.replace_term(other, atom) != *atom)
+    };
+    values
+        .iter()
+        .filter(|(atom, _)| !held(atom))
+        .cloned()
         .collect()
 }
 

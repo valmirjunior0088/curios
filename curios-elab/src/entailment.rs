@@ -348,7 +348,18 @@ fn linear(
     // A counterexample's atoms named in one pass through every spelling the report has, so an outer reduct is replaced before one inside it whichever reading found either: the operands as stated, and the operands written beneath them, which are asked only now the search is over. A bound that is a metavariable elaboration has solved, as the statement `proved()` leaves implicit is, opens to no `Holds`: the search read its reduct, and what the solution states is read here, for the report alone, since the proof is written over what the search read and one written over the solution does not check. A reading that runs out leaves its spellings out.
     let refused = |context: &mut Context, views: &LinearViews, outcome: SearchOutcome| {
         let refuted = refuted(context, views, &outcome);
-        let refusal = Refusal::of(&facts, views, outcome, absurd, refuted);
+        // The decision a guard would write, as the bound states it: a statement elaboration solved, as `proved()` leaves one implicit, by what its solution states, so a guard is written as the claim is and never as its reduct, which unfolds what the claim names.
+        let decided = match goal {
+            Goal::Decision(decision) => Some(match stated {
+                Some(stated) => stated.clone(),
+                None => held(context, &zonk_solved_term_metas(context, bound))
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| decision.clone()),
+            }),
+            Goal::Absurd | Goal::Disjunction(_) => None,
+        };
+        let refusal = Refusal::of(&facts, views, outcome, absurd, refuted).of_goal(decided);
         let inferred = match stated {
             Some(_) => Vec::new(),
             None => {
