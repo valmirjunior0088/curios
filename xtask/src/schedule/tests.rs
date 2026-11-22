@@ -100,7 +100,7 @@ fn the_handoff_runs_every_subject_s_steps_in_the_order_it_names_them() {
         "textmate",
         "vscode",
         "zed",
-        "tools",
+        "jig",
     ] {
         for step in tree.steps_of(&[subject.to_string()]) {
             assert!(

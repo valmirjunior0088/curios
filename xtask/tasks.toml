@@ -15,7 +15,7 @@ programs.trace_processor_shell = ">= 58.2"
 description = "Run every check the handoff holds work to: each subject's steps, each after what it requires and consumes"
 requires = [
     ".launcher", ".workspace", ".docs", ".compiler", ".bundle",
-    ".tree-sitter", ".textmate", ".vscode", ".zed", ".tools",
+    ".tree-sitter", ".textmate", ".vscode", ".zed", ".jig",
 ]
 
 [clean]

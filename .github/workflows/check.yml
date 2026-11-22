@@ -249,8 +249,8 @@ jobs:
       - name: Check the extension against the tree
         run: cargo xtask zed test
 
-  tools:
-    name: Tools
+  jig:
+    name: Jig
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -263,9 +263,9 @@ jobs:
           tool: nextest@${{ env.NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
-          key: tools
+          key: jig
           workspaces: .
       - name: Lint
-        run: cargo xtask tools lint
+        run: cargo xtask jig lint
       - name: Test
-        run: cargo xtask tools test
+        run: cargo xtask jig test
