@@ -296,7 +296,7 @@ pub fn successor_comparison(comparison: &Intrinsic) -> Option<Intrinsic> {
     };
 
     let spelling = match comparison {
-        Intrinsic::NatLt(..) => Intrinsic::nat_lte(left, right),
+        Intrinsic::NatLt(..) => Intrinsic::nat_le(left, right),
         Intrinsic::NatLe(..) => Intrinsic::nat_lt(left, right),
         Intrinsic::IntLt(..) => Intrinsic::IntLe(left, right),
         _ => Intrinsic::IntLt(left, right),
@@ -604,7 +604,7 @@ pub fn reduce_intrinsic(
                 Comparison::Gt => Some(false),
                 Comparison::Ge | Comparison::Ne | Comparison::Stuck => None,
             },
-            Intrinsic::nat_lte,
+            Intrinsic::nat_le,
         ),
         // Bitwise ops fold on unbounded ℕ, which the running program computes too: `and`, `or`, `xor` on the infinite binary expansion, `shl` as `· 2^n` and `shr` as `⌊·/2^n⌋`. The backend's i31 is a fast path that grows into a boxed magnitude, never a width that truncates.
         Intrinsic::NatAnd(left, right) => {

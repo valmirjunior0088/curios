@@ -460,7 +460,7 @@ impl Intrinsic {
     }
 
     /// A `NatLe` node from anything term-shaped.
-    pub fn nat_lte<F, S>(left: F, right: S) -> Self
+    pub fn nat_le<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,

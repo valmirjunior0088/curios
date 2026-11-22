@@ -244,7 +244,7 @@ fn an_equation_answers_a_term_the_readers_hold_equal_to_its_key() {
 
     let key = Term::intrinsic(Intrinsic::nat_lt(sum(&a, &b), nat(10)));
     let commuted = Term::intrinsic(Intrinsic::nat_lt(sum(&b, &a), nat(10)));
-    let dual = Term::intrinsic(Intrinsic::nat_lte(nat(10), sum(&b, &a)));
+    let dual = Term::intrinsic(Intrinsic::nat_le(nat(10), sum(&b, &a)));
     let other = Term::intrinsic(Intrinsic::nat_lt(sum(&a, &c), nat(10)));
 
     assert_eq!(
@@ -421,7 +421,7 @@ fn an_equation_hands_back_what_its_checker_is_to_ask() {
 
     let key = Term::intrinsic(Intrinsic::nat_lt(call(&f, &a, &b), nat(10)));
     let respelled = Term::intrinsic(Intrinsic::nat_lt(call(&f, &b, &a), nat(10)));
-    let dual = Term::intrinsic(Intrinsic::nat_lte(nat(10), call(&f, &b, &a)));
+    let dual = Term::intrinsic(Intrinsic::nat_le(nat(10), call(&f, &b, &a)));
     let other = Term::intrinsic(Intrinsic::nat_lt(call(&g, &b, &a), nat(10)));
 
     let Ok(Answered::Atoms(atoms)) =

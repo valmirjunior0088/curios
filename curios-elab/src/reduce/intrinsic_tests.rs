@@ -42,7 +42,7 @@ fn comparisons_decide_symbolic_successor_bounds() {
     assert_eq!(
         reduced(
             &mut context,
-            Term::intrinsic(Intrinsic::nat_lte(lit(1), succ(x())))
+            Term::intrinsic(Intrinsic::nat_le(lit(1), succ(x())))
         ),
         Subterm::Intrinsic(Intrinsic::Bool(true)),
     );
@@ -65,7 +65,7 @@ fn comparisons_decide_symbolic_successor_bounds() {
     assert_eq!(
         reduced(
             &mut context,
-            Term::intrinsic(Intrinsic::nat_lte(succ(x()), x()))
+            Term::intrinsic(Intrinsic::nat_le(succ(x()), x()))
         ),
         Subterm::Intrinsic(Intrinsic::Bool(false)),
     );
@@ -83,7 +83,7 @@ fn comparisons_decide_symbolic_successor_bounds() {
     assert_eq!(
         reduced(
             &mut context,
-            Term::intrinsic(Intrinsic::nat_lte(lit(2), succ(succ(x()))))
+            Term::intrinsic(Intrinsic::nat_le(lit(2), succ(succ(x()))))
         ),
         Subterm::Intrinsic(Intrinsic::Bool(true)),
     );

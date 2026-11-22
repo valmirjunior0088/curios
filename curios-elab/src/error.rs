@@ -23,7 +23,7 @@ use {
     std::{collections::BTreeMap, fmt, rc::Rc},
 };
 
-/// Why an arm is never taken, as a report on an error raised in it says: [`Error::InUnreachableArm`]'s reason.
+/// Why an arm is never taken, as a report on an error raised in it says: [`Error::InDeadArm`]'s reason.
 #[derive(Clone, Debug)]
 pub enum DeadArm {
     /// The arm's own guard `guard` is always `case`, a case other than the arm's.
@@ -452,7 +452,7 @@ macro_rules! shown_terms {
             | Self::InAlternative { error, .. }
             | Self::CheckedAs { error, .. }
             | Self::InScope { error, .. } => error.$recurse($visit),
-            Self::InUnreachableArm { dead, error } => {
+            Self::InDeadArm { dead, error } => {
                 for term in dead.$terms() {
                     $visit(term);
                 }
@@ -1240,7 +1240,7 @@ pub enum Error {
         error: Box<Error>,
     },
     /// An arm that is never taken raised `error`: the arm is dead, which the report says beside what failed, with `dead` as the reason. What the arm rests on fails there: a proof resting on its guard, no checker recording an equation under a spelling that mentions no local, and a fact read off an index its scrutinee does not have, a case whose indices clash being checked with none solved.
-    InUnreachableArm {
+    InDeadArm {
         dead: Box<DeadArm>,
         error: Box<Error>,
     },
@@ -1383,7 +1383,7 @@ variants!(Error {
     Pending,
     Located,
     InDeclaration,
-    InUnreachableArm,
+    InDeadArm,
     InAlternative,
     CheckedAs,
     InScope,
@@ -1396,7 +1396,7 @@ impl Error {
         let mut error = self;
         while let Error::Located { error: inner, .. }
         | Error::InDeclaration { error: inner, .. }
-        | Error::InUnreachableArm { error: inner, .. }
+        | Error::InDeadArm { error: inner, .. }
         | Error::InAlternative { error: inner, .. }
         | Error::CheckedAs { error: inner, .. }
         | Error::InScope { error: inner, .. } = error
@@ -1412,7 +1412,7 @@ impl Error {
         match self {
             Error::InDeclaration { names, error } => error.declared_in().or(names.first()),
             Error::Located { error, .. }
-            | Error::InUnreachableArm { error, .. }
+            | Error::InDeadArm { error, .. }
             | Error::InAlternative { error, .. }
             | Error::CheckedAs { error, .. }
             | Error::InScope { error, .. } => error.declared_in(),
@@ -2162,7 +2162,7 @@ impl Error {
             Self::Goals(_) => true,
             Self::Located { error, .. }
             | Self::InDeclaration { error, .. }
-            | Self::InUnreachableArm { error, .. }
+            | Self::InDeadArm { error, .. }
             | Self::InAlternative { error, .. }
             | Self::CheckedAs { error, .. }
             | Self::InScope { error, .. } => error.is_incomplete(),
@@ -2306,7 +2306,7 @@ impl Error {
 
     /// Say that the arm this error arose in is dead, for `dead`: a reason known where the arm opens, as its indices' clash is, or one a guard gives, found once an error is raised or a bound given up.
     pub fn in_dead_arm(self, dead: &DeadArm) -> Self {
-        Self::InUnreachableArm {
+        Self::InDeadArm {
             dead: Box::new(dead.clone()),
             error: Box::new(self),
         }
@@ -2339,7 +2339,7 @@ impl Error {
         match self {
             Self::InDeclaration { names, error } => error.owner().or(names.first().copied()),
             Self::Located { error, .. }
-            | Self::InUnreachableArm { error, .. }
+            | Self::InDeadArm { error, .. }
             | Self::InAlternative { error, .. }
             | Self::CheckedAs { error, .. }
             | Self::InScope { error, .. } => error.owner(),
@@ -2388,7 +2388,7 @@ impl Error {
             Self::InScope { scope, error } => error.reader_scope().or(Some(scope)),
             Self::Located { error, .. }
             | Self::InDeclaration { error, .. }
-            | Self::InUnreachableArm { error, .. }
+            | Self::InDeadArm { error, .. }
             | Self::InAlternative { error, .. }
             | Self::CheckedAs { error, .. } => error.reader_scope(),
             _ => None,
@@ -2419,7 +2419,7 @@ impl Error {
             }
             Self::Located { error, .. }
             | Self::InDeclaration { error, .. }
-            | Self::InUnreachableArm { error, .. }
+            | Self::InDeadArm { error, .. }
             | Self::InAlternative { error, .. }
             | Self::CheckedAs { error, .. }
             | Self::RejectedCandidate { error, .. } => error.let_go_of_frames(),
@@ -2460,7 +2460,7 @@ impl Error {
             | Self::InAlternative { error, .. }
             | Self::CheckedAs { error, .. }
             | Self::InScope { error, .. } => error.write_terms(context),
-            Self::InUnreachableArm { dead, error } => {
+            Self::InDeadArm { dead, error } => {
                 for term in dead.terms_mut() {
                     *term = written(context, term);
                 }
@@ -2719,7 +2719,7 @@ impl Error {
         match self {
             Self::Located { error, .. }
             | Self::InDeclaration { error, .. }
-            | Self::InUnreachableArm { error, .. }
+            | Self::InDeadArm { error, .. }
             | Self::InAlternative { error, .. }
             | Self::CheckedAs { error, .. }
             | Self::InScope { error, .. } => error.unwrapped(),
@@ -2734,7 +2734,7 @@ impl Error {
         match self {
             Self::Located { extent, error } => error.innermost_extent().or(Some(*extent)),
             Self::InDeclaration { error, .. }
-            | Self::InUnreachableArm { error, .. }
+            | Self::InDeadArm { error, .. }
             | Self::InAlternative { error, .. }
             | Self::CheckedAs { error, .. }
             | Self::InScope { error, .. } => error.innermost_extent(),
@@ -2816,7 +2816,7 @@ impl Exhaustion for Error {
             }
             Self::Located { error, .. }
             | Self::InDeclaration { error, .. }
-            | Self::InUnreachableArm { error, .. }
+            | Self::InDeadArm { error, .. }
             | Self::InAlternative { error, .. }
             | Self::CheckedAs { error, .. }
             | Self::InScope { error, .. } => error.refusal(),

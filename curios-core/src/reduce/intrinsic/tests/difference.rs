@@ -66,7 +66,7 @@ fn sides() -> Vec<(&'static str, Term)> {
 /// The four comparisons the roster builds, each by the spelling to name it by.
 fn comparisons() -> Vec<(&'static str, Relation)> {
     vec![
-        ("<=", |left, right| Intrinsic::nat_lte(left, right)),
+        ("<=", |left, right| Intrinsic::nat_le(left, right)),
         ("<", |left, right| Intrinsic::nat_lt(left, right)),
         ("==", |left, right| Intrinsic::nat_eql(left, right)),
         ("!=", |left, right| Intrinsic::nat_neq(left, right)),
@@ -127,11 +127,11 @@ fn the_facts_read_of_a_difference_hold_at_every_valuation() {
     let (x, y) = (sym(0, "x"), sym(1, "y"));
     let difference = Term::intrinsic(Intrinsic::nat_sub(x.clone(), y.clone()));
     let raised = add(y.clone(), difference.clone());
-    let within = Term::intrinsic(Intrinsic::nat_lte(difference.clone(), x.clone()));
-    let lower = Term::intrinsic(Intrinsic::nat_lte(x.clone(), raised.clone()));
+    let within = Term::intrinsic(Intrinsic::nat_le(difference.clone(), x.clone()));
+    let lower = Term::intrinsic(Intrinsic::nat_le(x.clone(), raised.clone()));
     let exact = Term::intrinsic(Intrinsic::nat_eql(raised, x.clone()));
-    let truncated = Term::intrinsic(Intrinsic::nat_lte(difference, lit(0)));
-    let guard = Term::intrinsic(Intrinsic::nat_lte(y, x));
+    let truncated = Term::intrinsic(Intrinsic::nat_le(difference, lit(0)));
+    let guard = Term::intrinsic(Intrinsic::nat_le(y, x));
     for a in 0..16u32 {
         for b in 0..16u32 {
             let at = |fact: &Term| value_at(fact, [a, b, 0]);

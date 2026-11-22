@@ -580,7 +580,7 @@ fn a_stuck_fold_is_taken_again_over_atoms_conversion_holds_one() {
 
     let equal = Term::intrinsic(Intrinsic::nat_eql(left.clone(), right.clone()));
     assert_eq!(decided(&mut context, equal.clone()), Ok(Some(true)));
-    let at_most = Term::intrinsic(Intrinsic::nat_lte(left.clone(), right.clone()));
+    let at_most = Term::intrinsic(Intrinsic::nat_le(left.clone(), right.clone()));
     assert_eq!(decided(&mut context, at_most), Ok(Some(true)));
     let difference = Term::intrinsic(Intrinsic::nat_sub(left.clone(), right.clone()));
     assert_eq!(reduce(&mut context, difference), Ok(nat(0)));

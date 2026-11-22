@@ -366,7 +366,7 @@ fn a_fold_over_atoms_classed_as_one_is_taken_again() {
 
     let equal = taken_again(Intrinsic::nat_eql(this.clone(), that.clone()));
     assert_eq!(equal.and_then(|term| term.as_bool()), Some(true));
-    let at_most = taken_again(Intrinsic::nat_lte(this.clone(), that.clone()));
+    let at_most = taken_again(Intrinsic::nat_le(this.clone(), that.clone()));
     assert_eq!(at_most.and_then(|term| term.as_bool()), Some(true));
     assert_eq!(taken_again(Intrinsic::nat_sub(this, that)), Some(lit(0)));
 }

@@ -616,7 +616,7 @@ impl Eraser<'_> {
             .rev()
             .map(|(tag, arm)| (tag, arm))
             .collect::<HashMap<_, _>>();
-        // A constructor the default covers is no arm, and is read of the family only where one is written: with a default the written arms alone, in the order the family declares them; without one every constructor, a missing one an unreachable arm.
+        // A constructor the default covers is no arm, and is read of the family only where one is written: with a default the written arms alone, in the order the family declares them; without one every constructor, a missing one a dead arm.
         let walked = {
             let family = m.family(context);
             match default {

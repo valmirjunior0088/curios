@@ -682,7 +682,7 @@ fn an_arm_learns_an_outer_variable_inside_an_index() {
 
 // An arm whose index equations clash re-types no local, in either checker. `mk()` targets `(0, 1)` and the scrutinee's indices are `(n, n)`, so the case is unreachable and its written arm is checked as written: its goal is the ambient `Eq()(n, 7)` taken at the case, `Eq()(0, 7)`, and `h` keeps its type `Eq()(n, 7)`. Both re-type by the shared `curios_analysis::retyped` over the solution the case actually has, which a clash leaves empty, so the refusal is the elaborator's; re-typing by the goal's own substitution would re-type `h` to `Eq()(0, 7)`, accept the arm, and hand the certifier a program it refuses.
 #[test]
-fn an_unreachable_arm_retypes_no_local() {
+fn a_dead_arm_retypes_no_local() {
     control(
         r#"
         use /std/{Nat, Eq};

@@ -78,7 +78,7 @@ fn a_comparison_and_its_dual_are_one_atom_at_two_polarities() {
 fn a_comparison_is_the_atom_of_what_it_states() {
     let (x, y, c, n) = (sym(0, "x"), sym(1, "y"), sym(2, "c"), sym(3, "n"));
     let less = Term::intrinsic(Intrinsic::nat_lt(x.clone(), y.clone()));
-    let successor = Term::intrinsic(Intrinsic::nat_lte(
+    let successor = Term::intrinsic(Intrinsic::nat_le(
         Nat::rebuild(1u32.into(), x.clone()),
         y.clone(),
     ));

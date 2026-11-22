@@ -1497,9 +1497,9 @@ pub fn enter_induct_case(
     Ok((targets, value))
 }
 
-/// Why the arm at `value` of a match on `head` is never taken, where a guard says so: its own, which is always another case ([`unreachable_arm`]), or that of an arm around it, which the arm's case contradicts ([`contradicted_guard`]). Asked where an error leaves the arm, and of each arm around a bound given up under one.
+/// Why the arm at `value` of a match on `head` is never taken, where a guard says so: its own, which is always another case ([`refuted_guard`]), or that of an arm around it, which the arm's case contradicts ([`contradicted_guard`]). Asked where an error leaves the arm, and of each arm around a bound given up under one.
 pub fn dead_guard(context: &mut Context, head: &Term, value: &Term) -> Option<DeadArm> {
-    if let Some(case) = unreachable_arm(context, head, value) {
+    if let Some(case) = refuted_guard(context, head, value) {
         return Some(DeadArm::Guard {
             guard: head.clone(),
             case,
@@ -1511,7 +1511,7 @@ pub fn dead_guard(context: &mut Context, head: &Term, value: &Term) -> Option<De
 }
 
 /// The case a guard always is, where that is a case other than `value`, the arm's: the arm is then never taken, and an error its body raises is reported as one in a dead arm — which is where a proof resting on the guard fails, since no equation is recorded under a spelling that mentions no local ([`records_case_equation`]). `None` where the guard is the arm's own case, or no literal or constructor at all — a guard its locals decide stays stuck.
-fn unreachable_arm(context: &mut Context, head: &Term, value: &Term) -> Option<Term> {
+fn refuted_guard(context: &mut Context, head: &Term, value: &Term) -> Option<Term> {
     let spelled = context.by_value(head);
     let case = reduce_with(context, &spelled).ok()?;
     another_case(context, &case, value, &[])

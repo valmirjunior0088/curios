@@ -46,7 +46,7 @@ fn spent(f: &mut Said, refusal: &ReduceError) {
 }
 
 /// What a report on a dead arm adds, a fact each: that the arm is never taken and what says so — its own guard, the guard of an arm around it that its case contradicts, or its scrutinee's indices, which also say it may be left out.
-pub fn unreachable_arm_note(said: &mut Said, dead: &DeadArm, spelling: &Rc<Spelling>) {
+pub fn dead_arm_note(said: &mut Said, dead: &DeadArm, spelling: &Rc<Spelling>) {
     said.stating("this arm is never taken");
     match dead {
         DeadArm::Guard { guard, case } => said.stating(format_args!(
@@ -2553,9 +2553,9 @@ impl Displayed<'_> {
             | Error::InScope { error, .. } => {
                 Displayed(error, Rc::clone(spelling), anchors).say(f);
             }
-            Error::InUnreachableArm { dead, error } => {
+            Error::InDeadArm { dead, error } => {
                 Displayed(error, Rc::clone(spelling), anchors).say(f);
-                unreachable_arm_note(f, dead, spelling);
+                dead_arm_note(f, dead, spelling);
             }
             Error::CheckedAs { site, error } => {
                 Displayed(error, Rc::clone(spelling), anchors).say(f);

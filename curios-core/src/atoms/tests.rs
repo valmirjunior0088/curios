@@ -69,11 +69,11 @@ fn nat(value: u32) -> Term {
 fn a_comparison_is_the_atom_of_what_it_states() {
     let (x, y) = (sym(0, "x"), sym(1, "y"));
     let less = Term::intrinsic(Intrinsic::nat_lt(x.clone(), y.clone()));
-    let successor = Term::intrinsic(Intrinsic::nat_lte(
+    let successor = Term::intrinsic(Intrinsic::nat_le(
         Nat::rebuild(1u32.into(), x.clone()),
         y.clone(),
     ));
-    let dual = Term::intrinsic(Intrinsic::nat_lte(y.clone(), x.clone()));
+    let dual = Term::intrinsic(Intrinsic::nat_le(y.clone(), x.clone()));
     let dual_successor = Term::intrinsic(Intrinsic::nat_lt(y, Nat::rebuild(1u32.into(), x)));
 
     assert!(same_atom(Carrier::Boolean, &less, &successor));
@@ -102,7 +102,7 @@ fn an_equality_is_read_as_what_it_states() {
     let mut atoms = Atoms::default();
     let (zero, negated) = atoms.signed(&Term::intrinsic(Intrinsic::nat_eql(n.clone(), nat(0))));
     assert!(!negated);
-    let at_most = Term::intrinsic(Intrinsic::nat_lte(n.clone(), nat(0)));
+    let at_most = Term::intrinsic(Intrinsic::nat_le(n.clone(), nat(0)));
     assert_eq!(atoms.signed(&at_most), (zero.clone(), false));
     let positive = Term::intrinsic(Intrinsic::nat_lt(nat(0), n.clone()));
     assert_eq!(atoms.signed(&positive), (zero.clone(), true));

@@ -710,7 +710,7 @@ fn int_reads_a_side_against_a_literal_as_it_stands() {
 #[test]
 fn a_floored_le_meets_the_lt_it_spells() {
     let (x, y) = (sym(0, "x"), sym(1, "y"));
-    let floored = Intrinsic::nat_lte(Nat::rebuild(1u32.into(), x.clone()), y.clone());
+    let floored = Intrinsic::nat_le(Nat::rebuild(1u32.into(), x.clone()), y.clone());
     let strict = Intrinsic::nat_lt(x, y);
 
     let aligned = align_comparisons(&mut Inert, &floored, &strict).expect("reduces");
@@ -729,7 +729,7 @@ fn a_natural_against_zero_meets_the_order_it_spells() {
     let apart = Intrinsic::NatNeq(x.clone(), lit(0));
     let positive = Intrinsic::nat_lt(lit(0), x.clone());
     let zero = Intrinsic::NatEql(x.clone(), lit(0));
-    let least = Intrinsic::nat_lte(x, lit(0));
+    let least = Intrinsic::nat_le(x, lit(0));
 
     for (this, that) in [
         (&apart, &positive),
@@ -758,7 +758,7 @@ fn a_disequality_of_two_open_sides_meets_no_order() {
 fn two_comparisons_whose_views_differ_are_respelled_alike() {
     let (n, x, y) = (sym(0, "n"), sym(1, "x"), sym(2, "y"));
     let strict = Intrinsic::nat_lt(n.clone(), Nat::rebuild(1u32.into(), y.clone()));
-    let loose = Intrinsic::nat_lte(x.clone(), y.clone());
+    let loose = Intrinsic::nat_le(x.clone(), y.clone());
 
     match align_comparisons(&mut Inert, &strict, &loose).expect("reduces") {
         Some(Aligned::Respelled(pair)) => {

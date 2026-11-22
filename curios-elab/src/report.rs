@@ -154,7 +154,7 @@ impl Error {
                 names,
                 error: Box::new(error.shown(context)),
             },
-            Self::InUnreachableArm { dead, error } => {
+            Self::InDeadArm { dead, error } => {
                 let error = error.shown(context);
                 // A guard that always takes another case changes no column's type, so it says nothing of a pattern written in a shape its column does not have, which a row written after the arm meets inside it too, where the row joins the arm's case.
                 if let DeadArm::Guard { .. } | DeadArm::EnclosingGuard { .. } = *dead
@@ -162,7 +162,7 @@ impl Error {
                 {
                     error
                 } else {
-                    Self::InUnreachableArm {
+                    Self::InDeadArm {
                         dead,
                         error: Box::new(error),
                     }
