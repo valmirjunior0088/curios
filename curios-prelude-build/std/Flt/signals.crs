@@ -191,11 +191,11 @@ let scaled(
 
 --- Both vectors' elements, `p`'s first.
 let both(@n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> List(Flt) =
-    [..Vec/to_list(p), ..Vec/to_list(q)];
+    [..p.list, ..q.list];
 
 --- The pairs of two vectors' elements.
 let pairs(@n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> List({Flt, Flt}) =
-    Vec/to_list(Vec/zip(p, q));
+    Vec/zip(p, q).list;
 
 --- What `rounded/sum(r, p)` raises.
 pub let sum(r: Rounding, p: List(Flt)) -> Exceptions =

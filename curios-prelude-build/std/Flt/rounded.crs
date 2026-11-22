@@ -156,7 +156,7 @@ pub let sum(r: Rounding, p: List(Flt)) -> Flt =
 
 --- IEEE's `dot` (§9.4): `Σ p_i · q_i` over two vectors of one length, every product and the sum exact and rounded once in `r`. An infinity times a zero is invalid.
 pub let dot(r: Rounding, @n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> Flt =
-    reduction/summed(r, List/map(Vec/to_list(Vec/zip(p, q)), ((a, b)) => reduction/product(a, b)));
+    reduction/summed(r, List/map(Vec/zip(p, q).list, ((a, b)) => reduction/product(a, b)));
 
 --- IEEE's `sumSquare` (§9.4): `Σ p_i²`, exact and rounded once in `r`.
 pub let sum_square(r: Rounding, p: List(Flt)) -> Flt =
@@ -172,10 +172,8 @@ pub let scaled_prod(r: Rounding, p: List(Flt)) -> {Flt, Int} =
 
 --- IEEE's `scaledProdSum` (§9.4): `Π (p_i + q_i)` as `scaled_prod` answers a product, each sum exact.
 pub let scaled_prod_sum(r: Rounding, @n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> {Flt, Int} =
-    reduction/scaled(r, List/map(Vec/to_list(Vec/zip(p, q)), ((a, b)) => reduction/sum(r, a, b)));
+    reduction/scaled(r, List/map(Vec/zip(p, q).list, ((a, b)) => reduction/sum(r, a, b)));
 
 --- IEEE's `scaledProdDiff` (§9.4): `Π (p_i - q_i)` as `scaled_prod` answers a product, each difference exact.
 pub let scaled_prod_diff(r: Rounding, @n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> {Flt, Int} =
-    reduction/scaled(
-        r,
-        List/map(Vec/to_list(Vec/zip(p, q)), ((a, b)) => reduction/sum(r, a, Flt/neg(b))));
+    reduction/scaled(r, List/map(Vec/zip(p, q).list, ((a, b)) => reduction/sum(r, a, Flt/neg(b))));

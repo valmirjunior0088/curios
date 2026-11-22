@@ -1,5 +1,5 @@
 -- The renderer: what a first frame writes, what a diff writes and skips, and that what it writes takes a terminal to the frame it was asked for.
-use /std/{Nat, Byte, Str, Bytes, List, Vec, Option, Result, Test, Tui};
+use /std/{Nat, Byte, Str, Bytes, List, Option, Result, Test, Tui};
 use /std/Tui/{Style, Line, Glyph, Frame, View};
 
 let esc: Str =
@@ -88,12 +88,9 @@ struct Screen: Type {
 }
 
 let cells_of(@w: Nat, @h: Nat, f: Frame(w, h)) -> List(List(Str)) =
-    List/map(
-        Vec/to_list(f),
-        (r) =>
-            List/map(
-                Vec/to_list(r),
-                (tile) => match tile | glyph(g, _) => Glyph/text(g) | continuation() => "" end));
+    List/map(f.list, (r) =>
+        List/map(r.list, (tile) =>
+            match tile | glyph(g, _) => Glyph/text(g) | continuation() => "" end));
 
 let set(row: List(Str), at: Nat, value: Str) -> List(Str) =
     List/map(

@@ -7,22 +7,22 @@ use {super::test_support::*, curios_elab::Error};
 fn a_recursive_call_at_the_predecessor_is_typed_there() {
     control(
         r#"
-        use /std/{Nat, Vec};
+        use /std/{Nat, Vec, List};
         let bogus(n : Nat) -> Vec(Nat, n) =
             match n
             | 0 => Vec/nil()
             | k + 1 => Vec/cons(k, bogus(k))
             end;
-        /std/print(Nat/to_str(Vec/first(bogus(3))))
+        /std/print(Nat/to_str(List/get(bogus(3).list, 0)))
         "#,
         b"2",
     )
     .refused(&[
-        ("{Nat, Vec}", "{Nat, Eq}"),
+        ("{Nat, Vec, List}", "{Nat, Eq}"),
         ("-> Vec(Nat, n) =", "-> Eq()(n, 0) ="),
         ("| 0 => Vec/nil()", "| 0 => Eq/refl()"),
         ("Vec/cons(k, bogus(k))", "bogus(k)"),
-        ("Nat/to_str(Vec/first(bogus(3)))", "\"FORGED\""),
+        ("Nat/to_str(List/get(bogus(3).list, 0))", "\"FORGED\""),
     ])
     .by_elaborator_in("/bogus", |error| {
         matches!(error, Error::TypeMismatch { .. })

@@ -36,10 +36,10 @@ let paint(pen: Pen, x: Nat, y: Nat, tile: Tile, before: Option(Tile)) -> Pen =
     end;
 
 let paint_row(@w: Nat, pen: Pen, y: Nat, row: Vec(Tile, w), before: Option(Vec(Tile, w))) -> Pen =
-    let tiles = List/zip(List/range(0, w), Vec/to_list(row));
+    let tiles = List/zip(List/range(0, w), row.list);
     let previous =
         match before
-        | some(b) => List/map(Vec/to_list(b), Option/some)
+        | some(b) => List/map(b.list, Option/some)
         | none() => List/replicate(w, Option/none())
         end;
     List/fold(
@@ -58,10 +58,10 @@ pub let render(
 ) -> Bytes =
     let bracket(b: Bytes) -> Bytes = match synchronized | true => b | false => x[] end;
     let clear = match previous | some(_) => x[] | none() => ansi/clear end;
-    let rows = List/zip(List/range(0, h), Vec/to_list(next));
+    let rows = List/zip(List/range(0, h), next.list);
     let before =
         match previous
-        | some(p) => List/map(Vec/to_list(p), Option/some)
+        | some(p) => List/map(p.list, Option/some)
         | none() => List/replicate(h, Option/none())
         end;
     let start =

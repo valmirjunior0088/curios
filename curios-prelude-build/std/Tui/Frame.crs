@@ -86,15 +86,13 @@ let above(@w: Nat, @h1: Nat, @h2: Nat, a: Frame(w, h1), b: Frame(w, h2)) -> Fram
     Vec/append(a, b);
 
 let fit(@w0: Nat, @h0: Nat, frame: Frame(w0, h0), w: Nat, h: Nat) -> Frame(w, h) =
-    resize(row_of(w, []), h, List/map(Vec/to_list(frame), (r) => row_of(w, Vec/to_list(r))));
+    resize(row_of(w, []), h, List/map(frame.list, (r) => row_of(w, r.list)));
 
 let crop(@w: Nat, @h: Nat, frame: Frame(w, h), x: Nat, y: Nat) -> Frame(w - x, h - y) =
     resize(
         row_of(w - x, []),
         h - y,
-        List/map(
-            drop_upto(Vec/to_list(frame), y),
-            (r) => row_of(w - x, drop_upto(Vec/to_list(r), x))));
+        List/map(drop_upto(frame.list, y), (r) => row_of(w - x, drop_upto(r.list, x))));
 
 let overlay(
     @w: Nat,
@@ -106,7 +104,7 @@ let overlay(
     x: Nat,
     y: Nat,
 ) -> Frame(w, h) =
-    let patches = List/map(Vec/to_list(top), Vec/to_list);
+    let patches = List/map(top.list, (r) => r.list);
     let splice(index: Nat, under: List(Tile)) -> List(Tile) =
         match y <= index
         | false => under
@@ -121,8 +119,8 @@ let overlay(
         row_of(w, []),
         h,
         List/map(
-            List/zip(List/range(0, h), Vec/to_list(base)),
-            (r: {Nat, Vec(Tile, w)}) => row_of(w, splice(r.0, Vec/to_list(r.1)))));
+            List/zip(List/range(0, h), base.list),
+            (r: {Nat, Vec(Tile, w)}) => row_of(w, splice(r.0, r.1.list))));
 
 let restyle(@w: Nat, @h: Nat, f: (Style) -> Style, frame: Frame(w, h)) -> Frame(w, h) =
     Vec/map(frame, (row) =>
@@ -152,14 +150,10 @@ pub let blank(w: Nat, h: Nat) -> Frame(w, h) =
 
 --- The frame as text, one string per row. A continuation contributes nothing, so a wide glyph reads back as itself.
 pub let to_lines(@w: Nat, @h: Nat, frame: Frame(w, h)) -> List(Str) =
-    List/map(
-        Vec/to_list(frame),
-        (r) =>
-            Str/flatten(
-                List/map(
-                    Vec/to_list(r),
-                    (tile) =>
-                        match tile | glyph(g, _) => Glyph/text(g) | continuation() => "" end)));
+    List/map(frame.list, (r) =>
+        Str/flatten(
+            List/map(r.list, (tile) =>
+                match tile | glyph(g, _) => Glyph/text(g) | continuation() => "" end)));
 
 --- The tile at `x`, `y`, under the evidence that both are within the frame.
 pub let get(
@@ -171,4 +165,5 @@ pub let get(
     @ok_x: Bool/Holds(x < w),
     @ok_y: Bool/Holds(y < h),
 ) -> Tile =
-    Vec/get(@Tile, @w, Vec/get(@Vec(Tile, w), @h, frame, y, @ok_y), x, @ok_x);
+    let row = List/get(frame.list, y);
+    List/get(row.list, x);
