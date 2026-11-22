@@ -37,4 +37,4 @@
 
 ## Verification and retirement
 
-Each stage's check, then `cargo xtask workspace lint`, the suite and `cargo xtask docs build`, and the measurements that read a stream run by name. Once stage 3 lands, [the measurement entry](../000-findings.md) is restated to read this trace, the decisions named above are restated, and this file is deleted.
+Each stage's check, then `cargo xtask workspace lint`, the suite and `cargo xtask docs build`, and the measurements that read a stream run by name. Once stage 3 lands, the decisions named above are restated, this file is deleted, and [A measurement files a record its figures are read from](../100-a-measurement-files-a-record-its-figures-are-read-from.md), which reads this trace, is released.

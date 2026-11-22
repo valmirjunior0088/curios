@@ -1,0 +1,54 @@
+# A measurement files a record its figures are read from
+
+**Adopted by the user on 2026-11-22.** Every measurement of the workspace is carried out as [A measured figure is counted where it can be, and gated only where it repeats](../design/a-measured-figure-is-counted-where-it-can-be-and-gated-only-where-it-repeats.md) states: it names its figures, counted before timed, read off the trace its run recorded ([A run is recorded as one Perfetto trace](tools/100-a-run-is-recorded-as-one-perfetto-trace.md)); one runner takes it by name under that decision's protocol; [`xbench`](../../xbench/README.md), reworked to own every measurement, files each sitting as a record and compares two by that decision's method; and a document's figure cites its record. Blocked on tools/100, whose trace is what a measurement reads.
+
+## What is wrong today
+
+- **Each measurement prints a table of its own and states its own protocol.** 48 measurements, ignored tests in 23 files (28 counted, 12 mixed, 8 timed, counted at `337c50857` by their `#[ignore = "measurement, …"]`), from `curios`'s `growth_slopes`, codegen censuses and ladders and reduction and unfolding measurements, to `curios-pipeline`'s `/std` censuses and `curios-prelude`'s image and tree measurements, each print what they saw with `println!` in a layout of their own, and each states in its doc comment the command that runs it, the build, the warm-up, the repetitions and the machine's state, as `fixpoint_pass_measurements` (`curios/src/tests/instrumented/fixpoint.rs`) does.
+- **A reading is pasted by hand.** A figure reaches a document or a *Latest reading* table beside its measurement by being copied off the printout, as about 25 figures of the design documents and crate READMEs and 49 of the doc comments quoted at a commit were; nothing files a reading, and two readings of one measurement are compared by eye.
+- **A protocol a decision states is retaken in a scratch copy.** One no test runs, as [A copy is planned within its allowance](../../curios-cps/README.md#a-copy-is-planned-within-its-allowance)'s, is retaken by hand in a copy of the tree at each commit it names, as its figures were on 2026-11-20.
+- **One quantity is read six ways.** A measurement reads a stream's fold, the counting allocator through `count_allocations`, `curios-core`'s node looks, the budget's units, `Instructions` and a clock, each by code of its own, and allocations are counted both by the recorder and by `count_allocations`.
+- **A count moves between runs of one compiler.** The compiler's maps hash with a seed each process draws — the standard maps' `RandomState`, and `Persistent`'s (`curios-common/src/persistent.rs`) — which [the growth entry](000-findings.md) reads moving one growth's slope between 2.16 and 3.21 over one compiler, where the decision fixes what a measured run depends on beyond its work.
+- **A measurement asserts what only a hand run checks, and on a count that moves.** `growth_slopes` (`curios/src/tests/instrumented/growth.rs`) refuses a slope past its bound, held only when someone runs it, failing today, and over instruction counts that move.
+- **The bench times alone, and its record holds its contest alone.** `xbench` files each sitting as `timings/NN.toml`, a contest of three contestants over six workloads, and reads only times: two sittings on two machines are refused whole, where a count of the same executions would compare; and no measurement's figures fit its record.
+
+## Goal
+
+- A measurement stays an ignored test beside the code it measures, reaching its crate's test support, and runs its workload under the recorder: its figures are named, each `counted` or `timed` with its unit, and read off its trace — spans, counters and samples — and its instruction count, by one harness, never printed by a table of its own.
+- One runner takes a measurement by name under the decision's protocol: its readings taken in groups, its variants interleaved within each, every reading kept, the compiler's hash seed fixed for the run, and a timed figure read on a machine its record names.
+- `xbench` owns every measurement: one record format, a sitting of one measurement at one commit; its corpus contest one measurement among them, each contestant's retired instructions counted beside its time; and its report comparing two records of a measurement by the decision's method, a counted figure across two machines where a timed one is refused.
+- A bound a measurement held is a test of the suite where its figure repeats exactly, and is a reading of its record where it does not.
+- A document's figure cites its record.
+
+## Settled
+
+- **A measurement lives beside its code.** As Go keeps a benchmark in its package's tests and runs it through its test tool, a measurement stays where it reaches what it measures; moving the 48 into `xbench` would export every crate's test support to it.
+- **`xbench` is reworked to own records.** Its timing already records what it was taken under and nothing derived from it, interleaves its contestants within groups, reads a figure as the median of group medians with their span, and calls a difference only where two spans are disjoint: the decision's method, kept. What changes is its record, widened from a contest's timings to any measurement's figures, the contest's `timings/NN.toml` migrated to it once; and its reading of each contestant, which gains the instructions the contestant retires, read by `Instructions` opened before each execution, whose count inherits into the process it starts.
+- **A counted figure compares across machines.** A comparison refused for a machine, a state or a pin that differs refuses its timed figures alone and compares its counted ones.
+- **Nothing is shared with `xboard`.** Its witnesses go to the checkers at every run and fail where they disagree with their ticket; a record is a historical fact a report reads.
+
+**Rejected.** The measurements moved into `xbench` as its instruments, rustc-perf's and LLVM LNT's shape, which crosses every crate's test support. Measurement records in a second format beside `xbench`'s timings, two shapes of record and two readers. The contest kept timed alone, which leaves every sitting on another machine without a comparison.
+
+## Open questions
+
+- **Which counted figures repeat exactly today.** A look, a budget unit or an allocation may repeat where an instruction does not, the work an order of a map's keys drives moving the last alone. Settled by one counted measurement run ten times on today's compiler, each instrument's span read; it decides which figures stage 1's seed must make exact.
+- **How the seed is fixed for a measured run.** The candidates: every map of the compiler hashes through one hasher of `curios-common`'s, drawing its seed per process unless the program that measures fixes it in code, as it installs the recorder; or a hasher that draws no seed anywhere, as rustc's FxHash, which leaves a compiler's maps open to keys built to collide. Settled by the count of the maps it reaches, beside the instructions' span with the seed fixed.
+- **How looks and instructions reach a trace.** `curios-core` counts looks a thread at a time and hands them out by resetting them (`take_looks`, `curios-core/src/term.rs`), and `curios-profile`, which the recorder is, reaches no crate of the compiler's; and an instruction count read at every span boundary is a system call a span, which [`curios-profile`'s README](../../curios-profile/README.md#four-instruments-because-time-and-bytes-cannot-tell-waste-from-bad-inputs-and-neither-sees-everything-a-stage-does) rejects. The candidate: the recorder takes counters its program hands it, read where it reads the allocator, a look count among them read without resetting; and the harness reads `Instructions` at the measurement's own phases alone, written into the trace as a counter of the measurement's.
+- **How a record leaves a test.** A test binary takes no argument of its own, and [profiling is configured in code, never from the environment](../../curios-profile/README.md#profiling-is-configured-in-code-never-from-the-environment). The candidates: the harness prints the record on standard output, as `go test -bench` prints its lines, and the runner files what it printed out of what else the test and the test harness printed; or the harness writes the record to a place of its own crate's `.artifacts/`, named in code, and the runner files that file, which holds the record whole.
+- **What the runner is.** `cargo xbench measure <NAME>`, beside `collect`, which the contest becomes one case of.
+
+## Stages
+
+**1. What a measured run depends on, fixed.** The investigation of which counted figures repeat, then the seed fixed for a measured run as the open question settles it. Check: a counted measurement run ten times reads each figure the investigation names exact with a span of nought.
+
+**2. `xbench`'s record.** The record format; the contest's timings migrated to it; each contestant's instructions counted beside its time; the report comparing counted figures across machines and refusing timed ones; `xbench`'s README restated, its framing as an orientation bench and not a rigorous one among it. Check: every migrated timing reports as it did; a sitting files each contestant's instructions; two sittings on two machines compare their counted figures and refuse their timed ones.
+
+**3. The harness and the runner, with one consumer.** The harness that names a figure and reads it off a trace and an instruction count; the runner taking a measurement by name; and `fixpoint_pass_measurements` ported as their first consumer, its printed table and its protocol paragraph retired. Check: the runner files a record of it whose figures equal its trace's summary.
+
+**4. The measurements ported.** A file group a commit — `instrumented/`, `codegen/`, `reduction.rs` and `unfolding.rs`, `laws/`, `curios-pipeline`'s, `curios-prelude`'s and `curios-core`'s, `bundle/` — each measurement naming its figures through the harness, its table and protocol paragraph retired, a bound it asserted lifted into a test of the suite where its figure repeats and dropped to its record where it does not; and each protocol a decision states that no test runs made a measurement, the allowance's first. Check: each files a record; each lifted bound passes or is filed where it fails today.
+
+**5. The figures cited by their records.** Each document's and doc comment's figure re-cited to a record of its measurement as it is retaken, a *Latest reading* table replaced by its record. Check: no figure in the tree quotes a measurement's printout.
+
+## Verification and retirement
+
+Each stage's check, then `cargo xtask workspace lint`, `cargo xtask tools lint`, the suite and `cargo xtask docs build`. Once stage 5 lands, `.claude/rules/documentation.md`'s measured figure is restated to cite the decision and the record, and this file is deleted.
