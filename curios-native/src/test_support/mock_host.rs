@@ -863,6 +863,10 @@ impl HostOps for MockHost {
             },
             Mode::Write => self.files.truncate(&path),
             Mode::Append => self.files.ensure(&path),
+            Mode::Create => match self.files.contains(&path) {
+                true => Err(Failure::AlreadyExists),
+                false => self.files.ensure(&path),
+            },
         }?;
 
         Ok(self.mint(MockResource::File(MockFile {

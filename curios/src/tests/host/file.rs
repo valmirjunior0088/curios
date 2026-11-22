@@ -141,3 +141,26 @@ fn a_scoped_file_reads_through_its_stream_witness_across_a_suspension() {
     run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"first\nsecond\n");
 }
+
+/// A file opened to create is one nothing was at: the first open writes it, and a second at the same path is refused with `already_exists`, the first one's contents kept.
+#[test]
+fn a_file_opened_to_create_refuses_a_path_something_is_at() {
+    let source = r#"
+        use /std/{File, Path, Try, Io, Str, Show};
+        let made() -> /std/Io(Str) =
+            match Try/run(Try/scope((s) => Try/bind(File/open(s, Path/of_str("lock"), File/Mode/create()), (f) => Io/write(f, Str/to_bytes("first")))))!
+            | success(_) => Io/pure("made")
+            | failure(e) => Io/pure(Show/show(e))
+            end;
+        let entry() -> /std/Io({}) =
+            let first = made()!;
+            let second = made()!;
+            /std/print(Str/join(" ", [first, second]));
+        entry()
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    run_text(source, system).expect("expected result");
+    assert_eq!(io.output(), b"made already_exists");
+    assert_eq!(io.file(b"lock"), Some(b"first".to_vec()));
+}

@@ -230,6 +230,7 @@ pub enum Mode {
     Write,
     Append,
     ReadWrite,
+    Create,
 }
 
 impl ClosedCode for Mode {
@@ -238,6 +239,7 @@ impl ClosedCode for Mode {
         (Mode::Write, OpenModeCodes::WRITE),
         (Mode::Append, OpenModeCodes::APPEND),
         (Mode::ReadWrite, OpenModeCodes::READ_WRITE),
+        (Mode::Create, OpenModeCodes::CREATE),
     ];
 }
 

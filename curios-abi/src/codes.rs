@@ -130,6 +130,8 @@ code_sets! {
         APPEND = 2 => append;
         /// Open an existing file to read and to write, neither created nor truncated: how a terminal is opened, one handle for both directions.
         READ_WRITE = 3 => read_write;
+        /// Open for writing a file this open creates: `AlreadyExists` where anything is at the path, so of two openers racing for it exactly one has it.
+        CREATE = 4 => create;
     }
 
     /// What `file_stat` found at a path, mirrored by `/sys/file_kind` and the guest's `/std/fs/Kind`. `file_stat` follows symbolic links, so `SYMLINK` is reported only where the link's target is missing.

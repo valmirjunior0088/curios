@@ -844,6 +844,7 @@ impl HostOps for OsHost {
             Mode::Write => options.write(true).create(true).truncate(true),
             Mode::Append => options.append(true).create(true),
             Mode::ReadWrite => options.read(true).write(true),
+            Mode::Create => options.write(true).create_new(true),
         };
 
         // Opened without blocking, so the open waits on no peer: a FIFO's other end, a device's carrier. Never as the controlling terminal, which a terminal a process leading its session opens would otherwise become, its hangup then ending the process. What the path turns out to name decides how it is filed.

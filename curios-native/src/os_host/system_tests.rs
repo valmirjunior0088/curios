@@ -1,4 +1,4 @@
-//! What the system answers: randomness, an environment variable, the clock, and a file's modification time.
+//! What the system answers: randomness, an environment variable, the clock, a file's modification time, and an open that creates.
 
 use {super::*, curios_common::test_support::*};
 
@@ -46,4 +46,19 @@ fn a_modification_time_before_the_epoch_crosses_as_itself() {
     let stat = host.file_stat(path.into_os_string().into_vec()).unwrap();
 
     assert_eq!((stat.mtime_secs, stat.mtime_nanos), (-2, 500_000_000));
+}
+
+/// An open to create takes a path nothing is at, and a second open at it is `AlreadyExists`, the operating system answering both: `O_CREAT | O_EXCL`.
+#[test]
+fn an_open_to_create_is_refused_where_the_file_exists() {
+    let host = OsHost::with_args(vec![]);
+    let dir = Temporary::new("runtime-open", "create");
+    fs::create_dir(&dir).expect("a fresh temporary directory");
+    let path = dir.join("lock").into_os_string().into_vec();
+
+    assert!(host.file_open(path.clone(), Mode::Create).is_ok());
+    assert!(matches!(
+        host.file_open(path, Mode::Create),
+        Err(Failure::AlreadyExists)
+    ));
 }
