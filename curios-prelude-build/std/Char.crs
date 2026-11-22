@@ -160,6 +160,10 @@ pub let is_upper(c: Char) -> Bool =
 pub let is_alpha(c: Char) -> Bool =
     unicode/held(/sys/unicode/alphabetic, c);
 
+--- Whether `c` is `White_Space`, as the database states: the six `is_ascii_whitespace` asks of, the next line, the line and paragraph separators, and every space separator (`Zs`), the no-break and the ideographic spaces among them.
+pub let is_whitespace(c: Char) -> Bool =
+    unicode/held(/sys/unicode/white_space, c);
+
 --- Whether `c` is `Cased`: a letter with case, or one the database counts among them.
 pub let is_cased(c: Char) -> Bool =
     unicode/held(/sys/unicode/cased, c);

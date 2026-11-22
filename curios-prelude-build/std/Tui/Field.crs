@@ -46,7 +46,7 @@ let forth(s: Str, at: Str/At(s)) -> Str/At(s) =
 -- Whether the cluster that begins at `at` is a space between words.
 let spaced(s: Str, at: Str/At(s)) -> Bool =
     match Str/At/try_next(s, at)
-    | some(n) => Char/is_ascii_whitespace(n.char)
+    | some(n) => Char/is_whitespace(n.char)
     | none() => false
     end;
 

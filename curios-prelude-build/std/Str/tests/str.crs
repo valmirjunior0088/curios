@@ -60,9 +60,16 @@ test between_spans_every_codepoint_width =
     let s = "aé€😀b";
     Test/equal(Str/between(s, Str/At/of_offset(s, 1), Str/At/of_offset(s, 10)), "é€😀");
 
--- `Str/trim` strips only leading and trailing ASCII whitespace, leaving an interior multibyte scalar intact.
+-- `Str/trim` strips leading and trailing whitespace, leaving an interior multibyte scalar intact.
 test trim_keeps_interior_multibyte =
     Test/equal(Str/trim("  café  "), "café");
+
+-- Whitespace is Unicode's: a no-break space, an ideographic space and a line separator go at either end, one between two words stays, and ASCII whitespace goes as before.
+test trim_strips_unicode_whitespace_at_either_end_and_keeps_it_inside =
+    Test/all([
+        Test/equal(Str/trim("\u{A0}\u{3000}a\u{2028}b \t\u{2028}"), "a\u{2028}b"),
+        Test/equal(Str/trim_start("\u{3000} a"), "a"),
+        Test/equal(Str/trim_end("a\u{A0}\n"), "a")]);
 
 -- An all-whitespace string trims to empty: `trim_start` finds no character to keep, and what it answers then is the empty text.
 test trim_all_whitespace_is_empty =
