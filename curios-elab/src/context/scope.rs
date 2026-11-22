@@ -350,7 +350,7 @@ impl<'s> Context<'s> {
             return;
         }
         let solution = [(*name, value.clone())];
-        let named = self
+        let mut named = self
             .typing
             .frames
             .scrutinee_equations()
@@ -361,6 +361,8 @@ impl<'s> Context<'s> {
                     .then_some((frame, key, entry, original))
             })
             .collect::<Vec<_>>();
+        // Outermost frame first, each frame's in the order it registered them: the order the certifier restates them in (`Scope::restate`), so both number an arm's instances alike.
+        named.sort_by_key(|(frame, ..)| *frame);
 
         // Each equation restated is one equation in the arm's frame, all its spellings one number, as they were one where it was registered: the view an equation's spelling is settled again in withholds every spelling of it.
         let mut equations = HashMap::new();

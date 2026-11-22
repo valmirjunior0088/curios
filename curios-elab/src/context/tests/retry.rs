@@ -294,3 +294,42 @@ fn a_withheld_equation_stays_withheld_where_its_frames_are_stood_on() {
         "the arm that closed it does not"
     );
 }
+
+/// An arm that refines a variable restates every equation naming it into its own frame, numbered outermost frame first, the order the certifier restates them in (`Scope::restate`), so the two checkers number an arm's instances alike.
+///
+/// Mutation-checked: with `Context::restate_equations` taking the equations innermost frame first, as the frames are walked, the inner guard's instance is numbered first.
+#[test]
+fn an_arms_restated_equations_are_numbered_outermost_frame_first() {
+    let mut context = context();
+    let n = context.fresh(Some("n"));
+    let m = context.fresh(Some("m"));
+    let literal = |value: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(value)));
+    let truth = Term::intrinsic(Intrinsic::Bool(true));
+    let outer = Term::intrinsic(Intrinsic::nat_lt(Term::free_var(&n), Term::free_var(&m)));
+    let inner = Term::intrinsic(Intrinsic::nat_le(Term::free_var(&n), Term::free_var(&m)));
+
+    context.with_frame(|context| {
+        context.assume(&n, &nat());
+        context.assume(&m, &nat());
+        context.refine_scrutinee_spellings(vec![(outer.clone(), outer.clone(), false)], &truth);
+        context.with_frame(|context| {
+            context.refine_scrutinee_spellings(vec![(inner.clone(), inner.clone(), false)], &truth);
+            context.with_frame(|context| {
+                context.refine(&n, &literal(5));
+
+                let numbered = |key: &Term| {
+                    context
+                        .visible_scrutinee_entries()
+                        .find(|(_, written, _)| *written == key)
+                        .map(|(_, _, entry)| entry.equation)
+                        .expect("the arm restates the equation at its instance")
+                };
+                let outer_instance =
+                    Term::intrinsic(Intrinsic::nat_lt(literal(5), Term::free_var(&m)));
+                let inner_instance =
+                    Term::intrinsic(Intrinsic::nat_le(literal(5), Term::free_var(&m)));
+                assert!(numbered(&outer_instance) < numbered(&inner_instance));
+            });
+        });
+    });
+}
