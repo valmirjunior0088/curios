@@ -3,13 +3,14 @@
 use {
     curios::CABINET,
     curios_common::test_support::*,
+    curios_native::test_support::*,
     std::{
         ffi::OsStr,
         fs,
         io::{Read, Write, pipe},
         os::unix::ffi::OsStrExt,
         path::Path,
-        process::{Command, Output, Stdio},
+        process::{Command, ExitStatus, Output, Stdio},
     },
 };
 
@@ -97,6 +98,35 @@ fn fed(root: &Path, arguments: &[&str], stdin: &str) -> Output {
         .unwrap();
 
     child.wait_with_output().expect("the compiler exits")
+}
+
+/// [`fed`], with both of the compiler's output streams on one pipe, as a terminal shows them: how it exited, and what it wrote in the order it wrote it.
+fn merged(root: &Path, arguments: &[&str], stdin: &str) -> (ExitStatus, String) {
+    let (mut merged, writer) = pipe().unwrap();
+    // The command holds the parent's copies of the write end until it is dropped, and the read below ends only once every copy is closed.
+    let mut child = {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_curios"));
+        command.env_remove(CABINET);
+        command
+            .current_dir(root)
+            .args(arguments)
+            .stdin(Stdio::piped())
+            .stdout(writer.try_clone().unwrap())
+            .stderr(writer);
+        command.spawn().expect("run the compiler")
+    };
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(stdin.as_bytes())
+        .unwrap();
+
+    let mut output = Vec::new();
+    merged.read_to_end(&mut output).unwrap();
+    let status = child.wait().unwrap();
+
+    (status, String::from_utf8(output).unwrap())
 }
 
 fn stdout(output: &Output) -> String {
@@ -526,34 +556,79 @@ fn run_forwards_an_argument_that_is_not_utf8_as_its_bytes() {
 fn run_delivers_both_streams_in_the_order_the_program_wrote_them() {
     let root = temporary("stream-order");
     fs::create_dir_all(&root).unwrap();
-    let (mut merged, writer) = pipe().unwrap();
-    // The command holds the parent's copies of the write end until it is dropped, and the read below ends only once every copy is closed.
-    let mut child = {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_curios"));
-        command.env_remove(CABINET);
-        command
-            .current_dir(&root)
-            .args(["run", "-"])
-            .stdin(Stdio::piped())
-            .stdout(writer.try_clone().unwrap())
-            .stderr(writer);
-        command.spawn().expect("run the compiler")
-    };
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(
-            b"let main() -> /std/Io({}) = let _ = /std/print(\"a\")!;\nlet _ = /std/print_err(\"b\")!;\n/std/print(\"c\\n\");\nmain()\n",
-        )
-        .unwrap();
+    let (status, output) = merged(
+        &root,
+        &["run", "-"],
+        "let main() -> /std/Io({}) = let _ = /std/print(\"a\")!;\nlet _ = /std/print_err(\"b\")!;\n/std/print(\"c\\n\");\nmain()\n",
+    );
 
-    let mut output = Vec::new();
-    merged.read_to_end(&mut output).unwrap();
-    assert!(child.wait().unwrap().success());
-
-    let output = String::from_utf8(output).unwrap();
+    assert!(status.success(), "{output}");
     assert!(output.ends_with("abc\n"), "{output}");
+}
+
+/// Live, a run leaves the compile's tree and then what the program wrote: the region is gone before the program's first byte, and none of it is left behind.
+#[test]
+fn a_live_run_leaves_the_tree_then_what_the_program_wrote() {
+    let root = temporary("live-run");
+    fs::create_dir_all(&root).unwrap();
+    let (status, output) = merged(
+        &root,
+        &["--progress", "live", "run", "-"],
+        "let _ = /std/print(\"a\\n\")!;\n/std/print_err(\"b\\n\")\n",
+    );
+    assert!(status.success(), "{output}");
+    let mut screen = Screen::default();
+    screen.write(&output);
+    let shown = screen.shown();
+
+    in_order(
+        &shown,
+        &[
+            "<stdin>\n├─ check; ",
+            "s\n├─ build; ",
+            "s\n└─ emit; ",
+            "s\na\nb\n",
+        ],
+    );
+    assert_eq!(shown.lines().count(), 6, "{shown}");
+}
+
+/// Live, a test run leaves each subject's tree as the tree drawing writes it: what a test writes quoted beneath its node, where the region stood when it wrote, and no line of the region left once the run ends.
+#[test]
+fn a_live_test_run_leaves_the_trees_and_nothing_of_the_region() {
+    let root = project("live-outcomes");
+    let (status, output) = merged(&root, &["--progress", "live", "test"], "");
+    assert_eq!(status.code(), Some(1), "{output}");
+    let mut screen = Screen::default();
+    screen.write(&output);
+    let shown = screen.shown();
+
+    in_order(
+        &shown,
+        &[
+            "/app\n├─ check with its tests; ",
+            "\n└─ store; ",
+            "s\n\n/app\n├─ check; ",
+            "\n├─ build; ",
+            "\n├─ emit; ",
+            "\n├─ /app/doubling_passes; ✓ passed in ",
+            "\n├─ /app/addition_passes; ✓ passed in ",
+            "\n├─ /app/equality_fails\n│  > comparing\n│  ✗ failed in ",
+            "; lib.crs:11:6\n│    not equal\n│      obtained: `4`\n│      expected: `5`\n",
+            "├─ /app/overflow_traps; ✗ trapped in ",
+            "├─ /app/exits_seven; ✗ exited 7 in ",
+            "├─ /app/effect_passes; ✓ passed in ",
+            "└─ 3 passed, 1 failed, 1 trapped, 1 exited; ",
+            "s\n\n/app\n├─ check; ",
+            "\n└─ store; ",
+            "s\n\napp\n├─ check; ",
+            "\n└─ 0 passed, 0 failed\n\n3 passed, 1 failed, 1 trapped, 1 exited; ",
+        ],
+    );
+    // A row the region left would name a node again, or count units.
+    assert_eq!(shown.matches("├─ /app/").count(), 6, "{shown}");
+    assert_eq!(shown.matches("├─ check; ").count(), 3, "{shown}");
+    assert!(!shown.contains(" units; "), "{shown}");
 }
 
 #[test]

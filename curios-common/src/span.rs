@@ -34,6 +34,11 @@ fn columns(cluster: &str) -> usize {
     }
 }
 
+/// Each grapheme cluster of `text`, in order, with the columns a terminal draws it in, by the rule a caret is padded by: what a line laid out on a terminal is measured and cut by, at a cluster and never inside one.
+pub fn clusters(text: &str) -> impl Iterator<Item = (&str, usize)> {
+    graphemes(text).map(|cluster| (cluster, columns(cluster)))
+}
+
 /// One unit of input text — its name and its file where it has them, or inline text with neither — always handed out as `Arc<Source>` so every [`Span`] into it shares the one allocation instead of copying or re-reading the text, and so a span can cross a thread. Reference-counted rather than interned: a language server loads a new text on every edit, and a count is what frees the old one once nothing points into it.
 ///
 /// **A name is stored and a file is not.** What a source is named ([`SourceName`]) is what everything stored, recorded or keyed beyond one process holds, so a stored unit is the same bytes wherever its package stands. The file is where this process found the text, a path of this machine: it is resolved where a source is read, or restored for a unit whose package stands on the machine, and nothing archives it.

@@ -3,7 +3,7 @@
 //! **The payload, not the wasm module, is what this hands back**, and that is what lets one stored artifact serve `run` and `compile` alike: `run` executes it in-process exactly as it executes a fresh one, and `compile` appends it to the embedded launcher or writes it beside a page. Optimization and precompilation therefore happen here rather than in `main`, which is left dispatching.
 
 use {
-    crate::{Piece, Step, Subject, Tree, apart},
+    crate::{Piece, Step, Subject, Tree, apart, planned, settle, settled},
     curios::{engine, opened, optimize, supplied, to_cwasm},
     curios_abi::ForeignStore,
     curios_common::{OsError, Qualifier, Report, STDIN_NAME, Source, Style},
@@ -299,6 +299,7 @@ impl Steps {
     /// Fold one [`Progress`] event onto the trees, opening and closing nodes as units and the entry begin and end. `verdicts` is the one the fold files into, which says whether a unit has a `store` node to come and, once its filing ends, whether the cabinet took it.
     pub fn told(&mut self, progress: Progress<'_>, verdicts: Option<&Verdicts>) {
         match progress {
+            Progress::Planned { units } => planned(units),
             // A recompile over a baseline reads as a compile: what the node reports is that the unit is being checked and how long it took.
             Progress::Compiling {
                 unit: prefix,
@@ -330,14 +331,15 @@ impl Steps {
                 tree.open(Step::Check { tested: false }, last);
                 self.program = Some(tree);
             }
-            // What the cabinet held is not narrated.
-            Progress::Reused(_) => {}
-            // A unit's check ends with the fold's step; the entry's has ended already, where its lowering began.
+            // What the cabinet held is not narrated, and is settled.
+            Progress::Reused(_) => settled(),
+            // A unit's check ends with the fold's step, which settles it; the entry's has ended already, where its lowering began.
             Progress::Compiled { unit } => {
                 if let Some(tree) = self.tree_of(unit)
                     && tree.is_open()
                 {
                     tree.done();
+                    settled();
                 }
             }
             Progress::Filing { unit } => {
@@ -463,11 +465,12 @@ impl Asking {
         }
     }
 
-    /// Part what was narrated from what follows it, once.
+    /// Part what was narrated from what follows it, once, the live region cleared before the answer is written past it.
     fn parted(&mut self) {
         if mem::take(&mut self.narrated) {
             apart();
         }
+        settle();
     }
 }
 
@@ -494,6 +497,7 @@ impl Telling for Asking {
                 if mem::take(&mut self.narrated) {
                     apart();
                 }
+                settle();
             }
             Progress::Entry { held: false } => self.narrated = true,
             _ => {}

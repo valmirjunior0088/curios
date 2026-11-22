@@ -185,4 +185,29 @@ pub enum Event {
     Apart,
     /// A block written whole as its writer rendered it, under no subject.
     Said { text: Piece },
+    /// A fold plans this many units, which the live drawing counts what is done against.
+    Planned { units: usize },
+    /// A unit a fold planned is settled: compiled, or taken from the cabinet.
+    Settled,
+}
+
+impl Event {
+    /// The tree the event is of, and none where it is said under no subject.
+    pub fn tree(&self) -> Option<Opened> {
+        match self {
+            Event::Named { tree, .. }
+            | Event::Began { tree, .. }
+            | Event::Closed { tree, .. }
+            | Event::Stood { tree, .. }
+            | Event::Tested { tree, .. }
+            | Event::Summed { tree, .. }
+            | Event::Left { tree } => Some(*tree),
+            Event::Alone { .. }
+            | Event::Total { .. }
+            | Event::Apart
+            | Event::Said { .. }
+            | Event::Planned { .. }
+            | Event::Settled => None,
+        }
+    }
 }

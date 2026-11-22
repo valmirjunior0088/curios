@@ -320,8 +320,9 @@ fn dispatch() -> Result<(), Failure> {
                 .check(&foreigns)
                 .map_err(|refusal| unlinked(refusal, manifest.as_deref(), cabinet))?;
 
-            // Nothing announces the run: what follows is the program's own output.
+            // Nothing announces the run: what follows is the program's own output, written past the transcript.
             tree.close();
+            settle();
 
             // SAFETY: `payload_of` precompiled the payload in this process or read it back from the project's own cabinet, where a compilation of this compiler filed it.
             let compiled = unsafe { Compiled::deserialize(&cwasm, foreigns) }.map_err(|error| {
@@ -790,6 +791,7 @@ fn dispatch() -> Result<(), Failure> {
                                 counted = true;
                             }
                             (false, Formatted::Changed(text) | Formatted::Unchanged(text)) => {
+                                settle();
                                 answer(text);
                             }
                         }
@@ -953,6 +955,7 @@ fn dispatch() -> Result<(), Failure> {
                     .about_path(&stream)
             })?;
 
+            settle();
             answer(report.render());
         }
     }
@@ -960,9 +963,17 @@ fn dispatch() -> Result<(), Failure> {
     Ok(())
 }
 
-/// The one place the process exits: the report of a command that could not get to its end, and every [`Failure`]'s code.
+/// The one place the process exits: the report of a command that could not get to its end, every [`Failure`]'s code, and the transcript's end, whatever the command came to.
 fn main() -> ExitCode {
-    match dispatch() {
+    let code = exited(dispatch());
+    finish();
+
+    code
+}
+
+/// The report of what stopped a command, where something did, and the code the process exits with.
+fn exited(dispatched: Result<(), Failure>) -> ExitCode {
+    match dispatched {
         Ok(()) => ExitCode::SUCCESS,
         Err(Failure::Stopped(stopped)) => {
             said(Piece::rendered(|style| stopped.rendered(style)));

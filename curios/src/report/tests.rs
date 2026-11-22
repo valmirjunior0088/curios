@@ -1,8 +1,13 @@
-//! How the paths and the counts a report names are spelled, what a piece of a line holds beside its paint, how each drawing draws one record, and which drawing a command is made in.
+//! How the paths and the counts a report names are spelled, what a piece of a line holds beside its paint, how each drawing draws one record, the live drawing frame by frame on a screen that reads the controls it writes, and which drawing a command is made in.
 
 use {
     super::*,
-    std::{ffi::OsStr, path::Path},
+    curios_native::test_support::*,
+    std::{
+        ffi::OsStr,
+        path::Path,
+        time::{Duration, Instant},
+    },
 };
 
 /// A piece holds what its reader is shown and, beside it, what is kept: painted where the reader sees colour, the text itself in the kept form, and an escape sequence the text carries is the text's own in both.
@@ -353,4 +358,304 @@ fn a_tests_ending_stands_after_what_it_wrote() {
         ended(Wrote::Open),
         "\nTested `/app/draws`: passed in 0.0s\n"
     );
+}
+
+/// A terminal of eighty columns and thirty rows.
+const TERMINAL: (u16, u16) = (80, 30);
+
+/// `tenths` of a second past `start`.
+fn at(start: Instant, tenths: u64) -> Instant {
+    start + Duration::from_millis(100 * tenths)
+}
+
+/// A unit's tree checked then stored, and a program's built over it: what `run` tells of a package, one subject open at a time, each event a tenth of a second after the one before.
+fn one_at_a_time() -> Vec<Event> {
+    let unit = Opened::minted();
+    let program = Opened::minted();
+    let step = |tree, step, last| Event::Began {
+        tree,
+        node: Node::Step(step),
+        last,
+    };
+    let done = |tree| Event::Closed {
+        tree,
+        closing: Closing::Done(Duration::from_millis(100)),
+        beneath: Vec::new(),
+    };
+
+    vec![
+        Event::Planned { units: 1 },
+        Event::Named {
+            tree: unit,
+            subject: "/app".to_string(),
+            manifest: None,
+        },
+        step(unit, Step::Check { tested: false }, false),
+        done(unit),
+        Event::Settled,
+        step(unit, Step::Store, true),
+        done(unit),
+        Event::Named {
+            tree: program,
+            subject: "app".to_string(),
+            manifest: None,
+        },
+        step(program, Step::Check { tested: false }, false),
+        done(program),
+        step(program, Step::Build, false),
+        done(program),
+        step(program, Step::Emit, true),
+        done(program),
+    ]
+}
+
+/// The screen `events` leave, told a tenth of a second apart on `TERMINAL`, `finished` or interrupted after the last.
+fn screen(events: Vec<Event>, finished: bool) -> Screen {
+    let start = Instant::now();
+    let mut live = Live::new(start);
+    let mut screen = Screen::default();
+    let mut tenths = 0;
+    for event in events {
+        tenths += 1;
+        screen.write(&live.draw(event, at(start, tenths), TERMINAL).shown);
+    }
+    if finished {
+        screen.write(&live.finish().shown);
+    }
+
+    screen
+}
+
+/// With one subject open at a time, the screen a finished command leaves is the tree drawing's bytes: the region gone, nothing it showed left behind.
+#[test]
+fn one_subject_at_a_time_leaves_the_trees_and_nothing_else() {
+    let mut trees = Trees::default();
+    let treed = one_at_a_time()
+        .into_iter()
+        .map(|event| trees.draw(event).plain)
+        .collect::<String>();
+
+    assert_eq!(screen(one_at_a_time(), true).shown(), treed);
+}
+
+/// Mid-run, the running node stands beneath what is settled, as it will read when it closes, its time after `;`, over the count of what is done; an interrupted command leaves that frame.
+#[test]
+fn a_running_node_reads_as_it_will_when_it_closes() {
+    let events = one_at_a_time();
+    // The plan, the unit named, its check begun.
+    let begun = events[..3].to_vec();
+
+    assert_eq!(
+        screen(begun, false).shown(),
+        "/app\n├─ check; 0.0s\n0 of 1 units; 0.3s\n"
+    );
+}
+
+/// A subject that begins while an older one is open waits in the region, its tree so far beneath the older one's running node; it is written above, whole and in its turn, once the older one ends, even where it ended first.
+#[test]
+fn a_subject_that_ends_behind_an_older_one_is_written_in_its_turn() {
+    let older = Opened::minted();
+    let younger = Opened::minted();
+    let named = |tree, subject: &str| Event::Named {
+        tree,
+        subject: subject.to_string(),
+        manifest: None,
+    };
+    let check = |tree| Event::Began {
+        tree,
+        node: Node::Step(Step::Check { tested: false }),
+        last: true,
+    };
+    let done = |tree| Event::Closed {
+        tree,
+        closing: Closing::Done(Duration::from_millis(100)),
+        beneath: Vec::new(),
+    };
+    let start = Instant::now();
+    let mut live = Live::new(start);
+    let mut screen = Screen::default();
+    for (event, tenths) in [
+        (named(older, "/lib"), 0),
+        (check(older), 1),
+        (named(younger, "app"), 2),
+        (check(younger), 3),
+        (done(younger), 5),
+    ] {
+        screen.write(&live.draw(event, at(start, tenths), TERMINAL).shown);
+    }
+    assert_eq!(
+        screen.shown(),
+        "/lib\n└─ check; 0.4s\napp\n└─ check; 0.1s\n",
+        "the younger subject ended, and waits, settled, in the region"
+    );
+
+    screen.write(&live.draw(done(older), at(start, 6), TERMINAL).shown);
+    assert_eq!(
+        screen.shown(),
+        "/lib\n└─ check; 0.1s\n\napp\n└─ check; 0.1s\n",
+        "both are written above in the order they opened, a blank line between, and no region is left"
+    );
+
+    // Both ended, so the next subject streams: what closes of it is written for good at once.
+    let next = Opened::minted();
+    let mut kept = String::new();
+    for (event, tenths) in [(named(next, "/next"), 7), (check(next), 8), (done(next), 9)] {
+        let frame = live.draw(event, at(start, tenths), TERMINAL);
+        screen.write(&frame.shown);
+        kept.push_str(&frame.above.plain);
+    }
+    assert_eq!(kept, "\n/next\n└─ check; 0.1s\n");
+    assert_eq!(
+        screen.shown(),
+        "/lib\n└─ check; 0.1s\n\napp\n└─ check; 0.1s\n\n/next\n└─ check; 0.1s\n"
+    );
+}
+
+/// Each tree is a block parted from what stands above it by one blank line, as is a line under no subject, and a blank line already there is not doubled.
+#[test]
+fn a_tree_is_parted_from_what_stands_above_it_by_one_blank_line() {
+    let mut trees = Trees::default();
+    let library = Opened::minted();
+    let program = Opened::minted();
+    let tenth = Duration::from_millis(100);
+    let drawn = [
+        Event::Named {
+            tree: library,
+            subject: "/app".to_string(),
+            manifest: None,
+        },
+        Event::Began {
+            tree: library,
+            node: Node::Step(Step::Check { tested: false }),
+            last: true,
+        },
+        Event::Closed {
+            tree: library,
+            closing: Closing::Ended("refused".to_string(), tenth),
+            beneath: Vec::new(),
+        },
+        Event::Apart,
+        Event::Said {
+            text: Piece::from("type mismatch\n└─ [error] lib.crs:1:1"),
+        },
+        Event::Named {
+            tree: program,
+            subject: "app".to_string(),
+            manifest: None,
+        },
+        Event::Stood {
+            tree: program,
+            step: Step::Write,
+            last: true,
+            stands: Piece::from("app.wasm"),
+            beneath: Vec::new(),
+        },
+        Event::Total {
+            text: Piece::from("1 written"),
+            taken: None,
+        },
+    ]
+    .into_iter()
+    .map(|event| trees.draw(event).plain)
+    .collect::<String>();
+
+    assert_eq!(
+        drawn,
+        "/app\n└─ check; refused in 0.1s\n\ntype mismatch\n└─ [error] lib.crs:1:1\n\napp\n└─ write; app.wasm\n\n1 written\n"
+    );
+
+    // As `lint` parts its trees from the answer it writes on standard output, then counts it.
+    let mut trees = Trees::default();
+    let unit = Opened::minted();
+    let linted = [
+        Event::Named {
+            tree: unit,
+            subject: "/app".to_string(),
+            manifest: None,
+        },
+        Event::Stood {
+            tree: unit,
+            step: Step::Format,
+            last: true,
+            stands: Piece::from("rewritten"),
+            beneath: Vec::new(),
+        },
+        Event::Apart,
+        Event::Total {
+            text: Piece::from("2 lints"),
+            taken: None,
+        },
+    ]
+    .into_iter()
+    .map(|event| trees.draw(event).plain)
+    .collect::<String>();
+
+    assert_eq!(linted, "/app\n└─ format; rewritten\n\n2 lints\n");
+}
+
+/// More open subjects than a third of the terminal holds are counted, not shown.
+#[test]
+fn a_region_holds_a_third_of_the_terminal_and_counts_the_rest() {
+    let start = Instant::now();
+    let mut live = Live::new(start);
+    let mut screen = Screen::default();
+    for subject in 0..8 {
+        let tree = Opened::minted();
+        let named = Event::Named {
+            tree,
+            subject: format!("/unit{subject}"),
+            manifest: None,
+        };
+        let began = Event::Began {
+            tree,
+            node: Node::Step(Step::Check { tested: false }),
+            last: true,
+        };
+        screen.write(&live.draw(named, start, (80, 12)).shown);
+        screen.write(&live.draw(began, start, (80, 12)).shown);
+    }
+
+    // The streaming subject's line above, and a region of a third of the twelve rows beneath it.
+    assert_eq!(
+        screen.shown(),
+        "/unit0\n└─ check; 0.0s\n/unit1\n└─ check; 0.0s\n+ 6 more\n"
+    );
+}
+
+/// A row wider than the terminal is cut at its end, `…` in its last column.
+#[test]
+fn a_row_wider_than_the_terminal_ends_in_an_ellipsis() {
+    assert_eq!(cut("├─ check; 2.4s", 80), "├─ check; 2.4s");
+    assert_eq!(cut("├─ check; 2.4s", 8), "├─ chec…");
+    assert_eq!(cut("日本語", 4), "日…");
+}
+
+/// A region is drawn for the terminal's size as it reports it, and for eighty columns and twenty-four rows in any measure it reports as nothing or where there is no terminal to ask.
+#[test]
+fn a_terminal_that_reports_no_size_is_drawn_for_eighty_by_twenty_four() {
+    assert_eq!(sized(Some((120, 40))), (120, 40));
+    assert_eq!(sized(Some((0, 0))), (80, 24));
+    assert_eq!(sized(Some((120, 0))), (120, 24));
+    assert_eq!(sized(None), (80, 24));
+}
+
+/// The region is gone before what writes past the drawing, and nothing of it is ever written for good.
+#[test]
+fn the_region_is_cleared_before_a_program_writes_and_never_kept() {
+    let events = one_at_a_time();
+    let start = Instant::now();
+    let mut live = Live::new(start);
+    let mut screen = Screen::default();
+    let mut kept = String::new();
+    for (tenths, event) in (0..).zip(events[..3].iter().cloned()) {
+        let frame = live.draw(event, at(start, tenths), TERMINAL);
+        screen.write(&frame.shown);
+        kept.push_str(&frame.above.plain);
+    }
+    assert!(screen.shown().contains("├─ check; "), "{}", screen.shown());
+    assert_eq!(kept, "/app\n", "a running node is no line written for good");
+
+    screen.write(&live.settle());
+    screen.write("ok\n");
+    assert_eq!(screen.shown(), "/app\nok\n");
 }

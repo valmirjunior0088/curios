@@ -1,11 +1,12 @@
 //! What the CLI says while it works.
 //!
-//! One transcript, told as events ([`Event`]) and drawn where it is told ([`tell`]): each subject a tree, and beneath it a node for each thing done for it, written `label; outcome` ([`Trees`]):
+//! One transcript, told as events ([`Event`]) and drawn where it is told ([`tell`]), live on a terminal ([`Live`]) — each subject a tree, and beneath it a node for each thing done for it, written `label; outcome` ([`Trees`]), what is still running redrawn beneath — and as plain lines everywhere else ([`Lines`]):
 //!
 //! ```text
 //! /geometry
 //! ├─ check; 1.6s
 //! └─ store; 0.1s
+//!
 //! hello
 //! ├─ check; 0.1s
 //! ├─ build; 0.2s
@@ -14,7 +15,7 @@
 //!
 //! **Everything here goes to stderr.** `curios run` hands stdout to the program it executes, so a line of the transcript written there would corrupt `curios run report.crs > report.json`.
 //!
-//! **An event is data until it is drawn**, as a report is: what happened to which tree, its words as text, so whoever tells it holds nothing of the drawing and the drawing nothing of the compiler. Nothing written is taken back: the bytes are the same in a pipe, a log file and a CI transcript as they are on a terminal, colour apart.
+//! **An event is data until it is drawn**, as a report is: what happened to which tree, its words as text, so whoever tells it holds nothing of the drawing and the drawing nothing of the compiler. Nothing written for good is taken back: the plain bytes are the same in a pipe, a log file and a CI transcript as they are on a terminal, colour apart, and the live drawing redraws only the region beneath what it has written.
 //!
 //! **Colour is a layer, decided once** ([`paint`]): a subject bold, the tree and the times dim, and what went wrong red. It changes no byte beneath it, and a line is made of pieces built in both forms ([`Piece`]), as whoever reads standard error sees one and plain, which is what is kept of the transcript for a page ([`keep`]).
 //!
@@ -27,12 +28,17 @@ mod event;
 use event::*;
 pub use event::{Opened, Step};
 
+mod live;
+use live::*;
+
 mod plain;
 use plain::*;
 
 mod transcript;
 use transcript::*;
-pub use transcript::{Drawing, PROGRESS, Relayed, keep, kept, relay, transcribe, written_past};
+pub use transcript::{
+    Drawing, PROGRESS, Relayed, finish, keep, kept, relay, settle, transcribe, written_past,
+};
 
 mod tree;
 use tree::*;
@@ -243,6 +249,16 @@ pub fn apart() {
 /// `text` written whole, under no subject: the report of what stopped a command, a running program's stop, what stopped a rung's compile past it.
 pub fn said(text: impl Into<Piece>) {
     tell(Event::Said { text: text.into() });
+}
+
+/// A fold plans `units` units: what the live drawing counts what is done against.
+pub fn planned(units: usize) {
+    tell(Event::Planned { units });
+}
+
+/// A unit a fold planned is settled: compiled, or taken from the cabinet.
+pub fn settled() {
+    tell(Event::Settled);
 }
 
 /// `manifest` as a reader standing in `here` would spell it: nothing when it sits right there, a climb of `../` when it sits above, and the path itself anywhere else — `--manifest` can name a file off to the side.

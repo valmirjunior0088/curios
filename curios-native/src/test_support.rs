@@ -15,9 +15,14 @@
 //! It starts the engine as every test does, with no map for a sampler ([`start_test_engine`](crate::test_support::start_test_engine)).
 //!
 //! And it holds the mock host the suites run programs against, [`MockHost`](crate::test_support::MockHost): a host made of memory, whose disk, network and devices a test seeds and reads back, and which no build that ships runs a program under.
+//!
+//! And a terminal as a drawing that redraws in place writes to one, [`Screen`](crate::test_support::Screen): what the command line's live transcript is checked against, frame by frame and over a whole run.
 
 mod mock_host;
 pub use mock_host::{MockHost, MockHostBuilder, MockIo, SocketEvent};
+
+mod screen;
+pub use screen::Screen;
 
 use {
     super::*,

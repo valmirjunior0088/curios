@@ -81,6 +81,7 @@ fn folded_offered(
             cache,
             |progress| {
                 events.push(match progress {
+                    Progress::Planned { units } => format!("planned {units}"),
                     Progress::Compiling { unit: prefix, .. } => {
                         format!("compiling {}", prefix.join())
                     }
@@ -110,7 +111,7 @@ fn a_hit_is_reused_before_a_baseline_is_asked_for() {
         put: Cell::new(0),
     };
 
-    assert_eq!(folded(&stub), ["reused /lib"]);
+    assert_eq!(folded(&stub), ["planned 1", "reused /lib"]);
     assert_eq!(stub.put.get(), 0, "a hit is not handed back");
 }
 
@@ -125,6 +126,7 @@ fn a_miss_with_a_baseline_is_announced_as_a_recompile_and_handed_to_put() {
     assert_eq!(
         folded(&stub),
         [
+            "planned 1",
             "recompiling /lib",
             "compiled /lib",
             "filing /lib",
@@ -149,6 +151,7 @@ fn a_miss_without_a_baseline_compiles_whole() {
     assert_eq!(
         folded(&stub),
         [
+            "planned 1",
             "compiling /lib",
             "compiled /lib",
             "filing /lib",
@@ -171,6 +174,7 @@ fn an_offered_baseline_is_taken_by_a_cache_and_by_nothing_else() {
     assert_eq!(
         folded_offered(Some(&taking), &[("lib", BASE)], Some(&offered)),
         [
+            "planned 1",
             "recompiling /lib",
             "compiled /lib",
             "filing /lib",
@@ -179,7 +183,7 @@ fn an_offered_baseline_is_taken_by_a_cache_and_by_nothing_else() {
     );
     assert_eq!(
         folded_offered(None, &[("lib", BASE)], Some(&offered)),
-        ["compiling /lib", "compiled /lib"],
+        ["planned 1", "compiling /lib", "compiled /lib"],
         "no cache, no taker"
     );
 }

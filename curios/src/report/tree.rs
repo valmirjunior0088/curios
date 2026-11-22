@@ -8,6 +8,8 @@
 //!
 //! **The subject's line is written with its first node**, so a subject nothing had to be done for says nothing: what the cabinet already held is not narrated.
 //!
+//! **Each tree is a block**, parted by a blank line from what stands above it, as is each line under no subject — the run's total, an address served —, and never by two.
+//!
 //! **A node's line is built by unterminated writes.** The label reaches the reader before the work it names, and what closes the line is what the work came to. A compiler that dies mid-step leaves the line open, so the last thing written is how far it got.
 //!
 //! **The connector is the plan's.** `├─` is written where more nodes are planned and `└─` at the last, before either's work is done, so a tree a refusal cuts short ends on `├─`: the steps it planned and never reached are the ones missing.
@@ -161,10 +163,33 @@ impl Drawn {
     }
 }
 
+/// Where what the drawing wrote last leaves the screen: whether anything was written, and whether it ended on a blank line, which parts it from what follows.
+#[derive(Default, Clone, Copy)]
+struct Tail {
+    written: bool,
+    ended: bool,
+    blank: bool,
+}
+
+impl Tail {
+    /// The tail `drawn` leaves, written after this one.
+    fn after(self, drawn: &str) -> Self {
+        match drawn.is_empty() {
+            true => self,
+            false => Self {
+                written: true,
+                ended: drawn.ends_with('\n'),
+                blank: drawn.ends_with("\n\n") || (drawn == "\n" && self.ended),
+            },
+        }
+    }
+}
+
 /// Today's drawing of the transcript, with what it holds of each tree it was told of.
 #[derive(Default)]
 pub struct Trees {
     drawn: BTreeMap<Opened, Drawn>,
+    tail: Tail,
 }
 
 impl Trees {
@@ -172,11 +197,32 @@ impl Trees {
     pub const fn new() -> Self {
         Self {
             drawn: BTreeMap::new(),
+            tail: Tail {
+                written: false,
+                ended: false,
+                blank: false,
+            },
         }
     }
 
-    /// What `event` is drawn as on standard error.
+    /// What `event` is drawn as on standard error: each tree, and each line under no subject, a block parted from what stands above it by a blank line.
     pub fn draw(&mut self, event: Event) -> Piece {
+        let drawn = self.drawn(event);
+        self.tail = self.tail.after(&drawn.plain);
+
+        drawn
+    }
+
+    /// `block`, a tree's first line or a line under no subject, parted from what was written before it by a blank line, where something was and no blank line parts it already.
+    fn parted(&self, block: Piece) -> Piece {
+        match self.tail.written && !self.tail.blank && !block.plain.is_empty() {
+            true => Piece::from("\n").then(block),
+            false => block,
+        }
+    }
+
+    /// What `event` is drawn as, before the drawing notes where it leaves the screen.
+    fn drawn(&mut self, event: Event) -> Piece {
         match event {
             Event::Named {
                 tree,
@@ -262,7 +308,11 @@ impl Trees {
             }
             Event::Summed { tree, sum, taken } => {
                 let mut drawn = self.drawn.remove(&tree).unwrap_or_default();
-                let summed = drawn.headed().then(dim(CORNER)).then(" ").then(sum);
+                let summed = self
+                    .parted(drawn.headed())
+                    .then(dim(CORNER))
+                    .then(" ")
+                    .then(sum);
 
                 match taken {
                     Some(taken) => summed.then("; ").then(dim(seconds(taken))).then("\n"),
@@ -273,34 +323,38 @@ impl Trees {
                 let mut drawn = self.drawn.remove(&tree).unwrap_or_default();
 
                 match drawn.governed {
-                    true => drawn.headed(),
+                    true => self.parted(drawn.headed()),
                     false => Piece::default(),
                 }
             }
-            Event::Alone { step, outcome } => Piece::from(format_args!("{}; ", step.label()))
-                .then(outcome)
-                .then("\n"),
+            Event::Alone { step, outcome } => self.parted(
+                Piece::from(format_args!("{}; ", step.label()))
+                    .then(outcome)
+                    .then("\n"),
+            ),
             Event::Total {
                 text,
                 taken: Some(taken),
-            } => text.then("; ").then(dim(seconds(taken))).then("\n"),
-            Event::Total { text, taken: None } => text.then("\n"),
+            } => self.parted(text.then("; ").then(dim(seconds(taken))).then("\n")),
+            Event::Total { text, taken: None } => self.parted(text.then("\n")),
             Event::Apart => Piece::from("\n"),
             Event::Said { text } => text.then("\n"),
+            // What a fold plans and settles is counted where a region is drawn, and written nowhere.
+            Event::Planned { .. } | Event::Settled => Piece::default(),
         }
     }
 
-    /// A node of `tree` begun: its subject's line where none has written it, then the node's connector and label, unterminated.
+    /// A node of `tree` begun: its subject's line where none has written it, parted from what stands above it, then the node's connector and label, unterminated.
     fn began(&mut self, tree: Opened, label: &str, last: bool) -> Piece {
         let drawn = self.drawn.entry(tree).or_default();
         drawn.last = last;
+        let headed = drawn.headed();
         let connector = match last {
             true => CORNER,
             false => BRANCH,
         };
 
-        drawn
-            .headed()
+        self.parted(headed)
             .then(dim(connector))
             .then(format_args!(" {label}"))
     }

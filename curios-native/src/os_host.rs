@@ -716,6 +716,13 @@ impl Default for OsHost {
     }
 }
 
+/// The columns and rows of the terminal this process's standard error is, where it is one: what a drawing redrawn on it is cut to and capped by, read again whenever it draws, since a terminal is resized under it.
+pub fn standard_error_size() -> Option<(u16, u16)> {
+    tcgetwinsize(stderr().as_fd())
+        .ok()
+        .map(|size| (size.ws_col, size.ws_row))
+}
+
 /// Give back every terminal still taken. `instantiate` drops the host after a trap is classified and before the process exits, so a trap or an `exit` leaves each terminal as the program found it, whether or not the program's own scope ran.
 impl Drop for OsHost {
     fn drop(&mut self) {

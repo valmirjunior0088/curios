@@ -1764,6 +1764,9 @@ where
     P: FnMut(Progress<'_>),
 {
     let mut produced: Vec<Unit> = Vec::new();
+    progress(Progress::Planned {
+        units: sources.len(),
+    });
 
     for (index, (source, offered)) in sources.iter().enumerate() {
         // The last unit is the fold's subject, and the one whose lowering and findings are told.
@@ -2051,6 +2054,8 @@ pub struct Listeners<'a> {
 ///
 /// Deliberately separate from the [`Stage`] observer, which belongs to `wonder --stage`: one reports *what is happening* and the other *what was produced*, and a caller wants either without the other.
 pub enum Progress<'a> {
+    /// The fold is about to take this many mounted units, each compiled or taken from the cabinet, in the order it takes them.
+    Planned { units: usize },
     /// A mounted unit is about to be compiled, named by the prefix it claims, with what it is compiled for: built, or tested, its tests with it.
     Compiling {
         unit: &'a Qualifier,

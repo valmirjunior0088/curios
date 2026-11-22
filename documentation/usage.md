@@ -104,12 +104,13 @@ Eleven commands. What each takes and leaves:
 
 ## What a command reports
 
-A command narrates on standard error what it does for each subject, drawn one of two ways: `live` on a terminal, a subject alone on a line and beneath it a node for each thing done for it, the node's label written before its work and what the work came to after it; and `plain` everywhere else, a line each time a step begins or ends, each line standing alone.
+A command narrates on standard error what it does for each subject, drawn one of two ways: `live` on a terminal, a subject alone on a line and beneath it a node for each thing done for it, the node's label written before its work and what the work came to after it, each tree parted from the one above it by a blank line; and `plain` everywhere else, a line each time a step begins or ends, each line standing alone.
 
 ```text
 /geometry
 ├─ check; 1.6s
 └─ store; 0.1s
+
 hello
 ├─ check; 0.1s
 ├─ build; 0.2s
@@ -131,7 +132,9 @@ A node that finished closes with what it took, `; 0.3s`. One that did not closes
 
 A plain line is a verb, the subject's name in backticks, then what the event carries. A step's two lines share its verb, its present participle where it begins and its past where it ends, `Checking` and `Checked`, and how it ended stands after the subject where it did not simply finish, `` Checked `app`: refused in 0.3s ``, as where its work came to stand does, `` Wrote `hello`: .curios/native/hello/hello ``. A step said at once, its outcome known as it begins, is its closing line alone, `` Serving `app`: http://127.0.0.1:8000/ ``, and what stands beneath a node — why a cabinet took nothing, the keys `pin` wrote — is indented under its line in one block. Lines of different subjects interleave in the order their steps happen, and each names its subject, so none needs the line before it.
 
-`--progress <DRAWING>` chooses the drawing, `plain` or `live`; without it the environment's `CURIOS_PROGRESS` does, and without either it is `live` where standard error is a terminal, `TERM` is not `dumb` and `CI` is unset, and `plain` everywhere else: in a pipe, a log file, a CI transcript, and wherever a screen reader is better served by lines that stand alone. Neither drawing rewrites or erases anything, and each writes the same bytes wherever it is drawn, colour apart.
+Live, what is settled stands above what is open. The oldest subject still open is written as its steps close, as the tree above shows, and beneath it a region is redrawn up to ten times a second: its running step as it will read when it closes, `├─ check; 2.4s`, each later subject's tree so far, and what is done, `2 of 7 units; 2.4s`. A subject that ends while an older one runs waits in the region and is written in its turn, so the scrollback is the trees in the order their subjects began. The region takes at most a third of the terminal, counting the rest as `+ 3 more`, each of its rows cut at the terminal's width with `…`, and is gone before anything else is written there — an answer, the program `run` runs, a terminal a test takes. Nothing above it is ever moved or erased, no alternate screen or hidden cursor is used, and an interrupted command leaves its last frame.
+
+`--progress <DRAWING>` chooses the drawing, `plain` or `live`; without it the environment's `CURIOS_PROGRESS` does, and without either it is `live` where standard error is a terminal, `TERM` is not `dumb` and `CI` is unset, and `plain` everywhere else: in a pipe, a log file, a CI transcript, and wherever a screen reader is better served by lines that stand alone. Plain writes the same bytes wherever it is drawn, colour apart, and nothing of the terminal is read but whether standard error is one.
 
 What the compiler says of a program is a report, and every report has one form, a block:
 
@@ -320,6 +323,7 @@ The report is on standard error, on each subject's own tree, after the nodes tha
 /demo
 ├─ check with its tests; 0.3s
 └─ store; 0.0s
+
 /demo
 ├─ check; 0.0s
 ├─ build; 0.2s
@@ -376,8 +380,10 @@ Each fetch is a subject of its own — a package by the prefix it mounts, a modu
 ```text
 /json
 └─ fetch; 1.4s
+
 sha2
 └─ fetch; 0.3s
+
 2 fetched
 ```
 
@@ -489,6 +495,7 @@ Standard error narrates what had to be compiled, as [`wonder`](#wonder) does, an
 /demo
 ├─ check with its tests; 0.3s
 └─ store; 0.0s
+
 demo
 └─ check; 0.1s
 
@@ -520,8 +527,10 @@ A file that changes is a subject, spelled from where the invocation stands, with
 ```text
 lib.crs
 └─ format; rewritten
+
 shapes.crs
 └─ format; rewritten
+
 2 rewritten, 5 unchanged
 ```
 
