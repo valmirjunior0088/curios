@@ -25,7 +25,7 @@ let magnitude_stop(acc: Nat, seen: Bool, pend: Bool) -> Parse(Str, Nat) =
     | _ => Parse/fail("expected digit")
     end;
 
---- The largest magnitude a TOML integer has: `2⁶³`, which only the most negative 64-bit integer reaches. TOML 1.0 asks for every 64-bit signed integer and an error past them, and a magnitude is refused the digit it passes this, so no longer numeral is read to its end.
+--- The largest magnitude a TOML integer has: `2⁶³`, which only the most negative 64-bit integer reaches. TOML 1.0 asks for every 64-bit signed integer and an error past them; a magnitude is refused at the digit that passes this, so a longer numeral is never read to its end.
 let magnitude_limit: Nat =
     9223372036854775808;
 

@@ -5,7 +5,7 @@ use /std/{Nat, Eq, proved, Bool};
 -- By induction on `b`, each step the exponent's law at a successor.
 --- A power of a power is the power to the product of the exponents.
 ---
---- Conversion decides a sum in an exponent and no product of two, since this law beside `pow(x, 2) = x * x` gives a power of a product, which at two literals factors a base.
+--- Conversion decides a sum in an exponent but not a product: with `pow(x, 2) = x * x`, this law would give a power of a product, which at two literals would factor a base.
 pub let of_pow(x: Nat, a: Nat, b: Nat) -> Eq()(pow(pow(x, a), b), pow(x, a * b)) =
     match b
     | 0 => Eq/refl()
@@ -21,7 +21,7 @@ pub let of_mul(x: Nat, y: Nat, a: Nat) -> Eq()(pow(x * y, a), pow(x, a) * pow(y,
 
 --- A power of a positive base is positive.
 ---
---- Conversion holds a power at least one where it holds the base so as a term, `pow(2, k)` or `pow(x + 1, k)`, and reads no hypothesis: under one this is the step, a product of two positives at each successor.
+--- Conversion sees that a power is at least one where it sees the base is, as in `pow(2, k)` or `pow(x + 1, k)`, but reads no hypothesis: under one, a proof takes this lemma.
 pub let positive(x: Nat, k: Nat, p: Bool/Holds(0 < x)) -> Bool/Holds(0 < pow(x, k)) =
     match k
     | 0 => Bool/True/qed()

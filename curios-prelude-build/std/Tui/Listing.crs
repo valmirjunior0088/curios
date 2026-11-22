@@ -1,7 +1,7 @@
 use /std/{Nat, Str, Bool, List, Option};
 use /std/Tui/{Style, View, Pane, Key};
 
---- Items of any type, one of them selected where there are any, and the first of them shown: a selection that leaves the rows shown scrolls them as little as brings it back, and one that moves within them leaves them where they are.
+--- Items of any type, one selected when there are any, and the first one shown: when the selection leaves the visible rows, they scroll just enough to bring it back, and a move within them leaves them still.
 pub struct Listing(A: Type): pub Type {
     items: List(A),
     --- The selected item, none where there are no items.
@@ -66,7 +66,7 @@ pub let handle(@A: Type, l: Listing(A), k: Key, rows: Nat) -> Listing(A) =
         end
     end;
 
---- The items as rows, each as `show` writes it, the selected one in `highlight`: from the first row the listing keeps, moved as little as keeps the selection among the rows at the height it is given. A listing with nothing selected highlights no row.
+--- The items as rows, each as `show` writes it, the selected one in `highlight`, from the listing's first shown row, moved as little as keeps the selection visible at the given height. With nothing selected, no row is highlighted.
 pub let view(@A: Type, l: Listing(A), show: (A) -> Str, style: Style, highlight: Style) -> Pane =
     (w, h) =>
         let chosen = index(l);

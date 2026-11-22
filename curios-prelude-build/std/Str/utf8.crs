@@ -136,7 +136,7 @@ let each_below(k: Nat) -> Bool =
     | kp + 1 => begins_scalars(Nat/to_byte(kp % 256)) && each_below(kp)
     end;
 
---- `classify`'s promise, decided once over every byte rather than proved family by family: the check is a structural recursion the build runs, so a change to `classify`'s ranges that broke it would stop the build rather than wait for a proof to be revisited.
+--- `classify`'s promise, checked once over all 256 bytes instead of proved family by family: the build evaluates it, so a change to `classify`'s ranges that broke it stops the build.
 let every_byte: Bool/Holds(each_below(256)) =
     Bool/True/qed();
 

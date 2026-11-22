@@ -49,7 +49,7 @@ let at_lead(s: Scan) -> Bool =
 
 --- That `b`, read from the scan state `s`, lands back between characters: `Valid` from any state.
 ---
---- Decided, so it has no constructors to walk. A proof walks the bytes instead: `from(s, x[c, ..t])` *is* `from(step(c, s), t)`, so the evidence for the whole is already the evidence for the tail. A recursive call writes the tail it moves to, as `@t`, since inferring it from the evidence would take the whole.
+--- Decided, so it has no constructors to match. A proof walks the bytes instead: `from(s, x[c, ..t])` reduces to `from(step(c, s), t)`, so the evidence for the whole is the evidence for the tail. A recursive call passes the tail explicitly, as `@t`, since inferring it from the evidence would need the whole.
 pub let from(s: Scan, b: Bytes) -> Prop =
     Bool/Holds(at_lead(scan_from(s, b)));
 
@@ -78,7 +78,6 @@ let append(
 pub let try(s: Scan, b: Bytes) -> Option(from(s, b)) =
     Bool/holds(at_lead(scan_from(s, b)));
 
---- Valid bytes concatenate to valid bytes.
 pub let concat(@a: Bytes, @b: Bytes, va: Valid(a), vb: Valid(b)) -> Valid(x[..a, ..b]) =
     Eq/subst(
         (sc: Scan) => Bool/Holds(at_lead(sc)),
@@ -155,7 +154,7 @@ let interrupted(
         end
     end;
 
---- Self-synchronization, first half: bytes valid from `s` and cut where a character may begin are valid up to the cut. A scan reaching the cut inside a character meets either the end, where validity says it must have left, or a byte continuing none, which sends it bad.
+--- Self-synchronization, first half: bytes valid from `s` and cut where a character may begin are valid up to the cut. A scan that reached the cut inside a character would either end there, which validity rules out, or meet a byte that continues nothing and go bad.
 let seam_before(
     s: Scan,
     h: Bool/Holds(scan_continues(s)),
@@ -255,7 +254,7 @@ pub let begins(@b: Bytes, v: Valid(b)) -> Bool/Holds(Str/At/starts(b)) =
     end;
 
 -- Each byte steps the evidence as the scan does, specialized by its guard, so a byte out of range is the bad state that valid bytes never reach, and a character cut short is a scan left inside it at the end.
---- The rest of a character owed `rem` continuation bytes, the first between `lo` and `hi`, over the bits `partial` has gathered: read off the bytes the evidence says follow, in a line rather than a call each, and ended at a scalar value because it can only end at one.
+--- The rest of a character still owed `rem` continuation bytes, the first in `lo..=hi`, over the bits `partial` holds. It reads the bytes the evidence says follow and ends at a scalar value, the only place it can end.
 let finish(
     rem: Nat,
     lo: Nat,

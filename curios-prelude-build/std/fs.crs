@@ -5,9 +5,7 @@ use /std/internal/{Status};
 
 --- What is at a path.
 pub induct Kind: pub Type
---- A regular file.
 | file()
---- A directory.
 | directory()
 --- A symbolic link.
 | symlink()

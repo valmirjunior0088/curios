@@ -15,7 +15,6 @@ pub let Above(@K: Type, use Key(K), @V: Type, found: Option({K, V}), x: K) -> Pr
     | some(entry) => Bool/Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(x, entry.0))
     end;
 
---- A map's greatest key is one of its keys.
 pub let among(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Among(greatest(m), keys(m)) =
     Eq/subst(
         (l: List(K)) => Among(Node/greatest(m.root), l),

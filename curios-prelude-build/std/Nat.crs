@@ -15,25 +15,25 @@ pub use lt/{let lt};
 pub mod le;
 pub use le/{let le};
 
---- The smaller of two naturals, and the laws a hypothesis decides it by.
+--- The smaller of two naturals, and its laws under a hypothesis.
 ---
---- Conversion decides `min` from its operands as terms — it commutes, associates, drops an operand another is at most and stands a shared literal outside — and reads no hypothesis, so under a guard on `a <= b` these laws are the step.
+--- Conversion decides `min` from its operands alone: it commutes and associates, drops an operand another is at most, and pulls out a shared literal. It reads no hypothesis, so under a guard on `a <= b` these laws do the rewriting.
 pub mod min;
 pub use min/{let min};
 
---- The larger of two naturals, and the laws a hypothesis decides it by.
+--- The larger of two naturals, and its laws under a hypothesis.
 pub mod max;
 pub use max/{let max};
 
---- A power, and the laws no sum in its exponent states.
+--- A power, and the laws conversion does not decide.
 ---
---- Conversion decides `pow` as a morphism of its exponent at a fixed base: a sum there is a product, a literal so many factors, and a power of a base it holds at least one is at least one. A power of a power, a power of a product, and a power of a base only a hypothesis holds positive are the lemmas here.
+--- Conversion treats `pow` at a fixed base as a morphism of its exponent: a sum in the exponent is a product, a literal is that many factors, and a power of a base it sees is at least one is at least one. The lemmas here cover the rest: a power of a power, a power of a product, and a power of a base only a hypothesis makes positive.
 pub mod pow;
 pub use pow/{let pow};
 
---- A left shift, and the split of its count.
+--- A left shift, and splitting its count.
 ---
---- Conversion reads a shift as its value times a power of two and splits a count that is a sum; the lemma here splits one at a count below it, which only a hypothesis says.
+--- Conversion reads a shift as its value times a power of two and splits a count that is a sum; the lemma here splits a count at a smaller one, which only a hypothesis allows.
 pub mod shl;
 pub use shl/{let shl};
 
@@ -164,7 +164,7 @@ pub let lcm(a: Nat, b: Nat) -> Nat =
 
 --- The floor of the square root. General recursion, so a type may not mention it.
 ---
---- Newton's iteration from a power of two above the root, so the cost is the root's bit width rather than the root: counting up to it would take `2⁶⁴` steps for a 128-bit `n`, an input an unbounded `Nat` holds.
+--- Newton's iteration from a power of two above the root, so the cost grows with the root's bit width rather than the root: counting up would take `2⁶⁴` steps for a 128-bit `n`.
 pub let sqrt(n: Nat) -> Nat =
     let go(x: Nat) -> Nat =
         match x

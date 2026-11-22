@@ -6,7 +6,7 @@ pub let leads(@T: Type, le: (T, T) -> Bool, a: T, l: List(T)) -> Bool =
 
 --- Whether each element of `l` stands in `le` to the one after it.
 ---
---- A decision, so `Bool/Holds(ordered(l, le))` is discharged by reduction over a closed list and the same function answers for a list met at run time. `le` is any relation: a comparator is read as one through `Ord/le` and `Ord/then`.
+--- A decision, so `Bool/Holds(ordered(l, le))` is discharged by reduction over a closed list, and the same function checks a list at run time. `le` is any relation; a comparator is read as one through `Ord/le` or `Ord/then`.
 pub let ordered(@T: Type, l: List(T), le: (T, T) -> Bool) -> Bool =
     match l
     | [] => true

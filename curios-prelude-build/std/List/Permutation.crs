@@ -22,7 +22,6 @@ end
 
 pub use Permutation/*;
 
---- A list is a permutation of itself.
 pub let refl(@T: Type, l: List(T)) -> Permutation()(l, l) =
     match l
     | [] => Permutation/nil()

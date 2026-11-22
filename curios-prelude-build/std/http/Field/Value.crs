@@ -7,7 +7,7 @@ pub let admits(b: Byte) -> Bool =
     let n = Byte/to_nat(b);
     n == '\t' || n >= 32 && n != 127;
 
---- A field's value: the octets the wire carries, none of them a control octet but the tab, so no value a message holds can end its line. It is octets and not text, since a value may hold obs-text; `to_str` reads one that is. A literal's is decided where it is written, and octets met at run time are read by `of_bytes`.
+--- A field's value: the octets the wire carries, none of them a control octet except tab, so no value can end its line. It is octets rather than text, since a value may hold obs-text; `to_str` reads one that is text. A literal is checked where it is written, and octets met at run time go through `of_bytes`.
 pub struct Value: pub Type {
     --- The octets, as the wire carries them.
     bytes: Bytes,
@@ -139,7 +139,7 @@ let month_admitted(m: Month) -> Bool/Holds(Bytes/all(Str/to_bytes(month_name(m))
     | october() | november() | december() => Bool/True/qed()
     end;
 
---- The moment as a field's value, in the fixed-length form HTTP sends a date in (RFC 9110 §5.6.7), `Sun, 06 Nov 1994 08:49:37 GMT`: its date and time in UTC, or `none` where its year has more than the four digits the form has room for. Each octet is built as one a value may hold, so a message is dated with no check that could refuse.
+--- The moment as a field's value, in the fixed-length form HTTP sends a date in (RFC 9110 §5.6.7), `Sun, 06 Nov 1994 08:49:37 GMT`: its date and time in UTC, or `none` where its year has more digits than the form's four. Every octet is built valid, so dating a message needs no check that could fail.
 pub let of_timestamp(t: Timestamp) -> Option(Value) =
     of_utc(OffsetDateTime/of_timestamp(t, Offset/utc).date_time);
 

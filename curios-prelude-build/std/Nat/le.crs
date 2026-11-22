@@ -2,15 +2,12 @@ pub use /sys/Nat/{le};
 
 use /std/{Nat, Bool, Eq};
 
---- `n <= n`.
 pub let refl(n: Nat) -> Bool/Holds(n <= n) =
     Bool/True/qed();
 
---- `a <= a + k`.
 pub let add_r(a: Nat, k: Nat) -> Bool/Holds(a <= a + k) =
     Bool/True/qed();
 
---- `a < b` gives `a <= b`.
 pub let of_lt(a: Nat, b: Nat, p: Bool/Holds(a < b)) -> Bool/Holds(a <= b) =
     match a
     | 0 => Bool/True/qed()
@@ -22,7 +19,6 @@ pub let of_lt(a: Nat, b: Nat, p: Bool/Holds(a < b)) -> Bool/Holds(a <= b) =
     end;
 
 -- How a proof the elaborator writes from the facts in scope reads an equation: as this bound and the one [`Eq/sym`] turns it into.
---- An equation's bound: `a = b` gives `a <= b`.
 pub let of_eq(@a: Nat, @b: Nat, e: Eq()(a, b)) -> Bool/Holds(a <= b) =
     Eq/subst((x: Nat) => Bool/Holds(a <= x), e, refl(a));
 
@@ -47,7 +43,6 @@ pub let trans(
         end
     end;
 
---- `a <= b` gives `n + a <= n + b`.
 pub let add_mono_l(n: Nat, @a: Nat, @b: Nat, p: Bool/Holds(a <= b)) -> Bool/Holds(n + a <= n + b) =
     p;
 
@@ -64,7 +59,6 @@ pub let add(
     trans(@a + c, @b + c, @b + d, p, q);
 
 -- The successor case is one application of [`add_mono_l`]: `(a + 1) * k` is `k + a * k`, which is what that step has to produce.
---- `a <= b` gives `a * k <= b * k`.
 pub let mul_mono_r(@a: Nat, @b: Nat, k: Nat, p: Bool/Holds(a <= b)) -> Bool/Holds(a * k <= b * k) =
     match a
     | 0 => Bool/True/qed()
@@ -75,7 +69,7 @@ pub let mul_mono_r(@a: Nat, @b: Nat, k: Nat, p: Bool/Holds(a <= b)) -> Bool/Hold
         end
     end;
 
---- `a <= b + (a - b)`: adding back what a difference took off reaches at least the minuend. The half of the adjunction `a - b <= c` iff `a <= b + c` that holds with nothing known of `a` and `b`, which conversion does not decide: a proof the elaborator writes reads it beside `a - b <= a` before it splits on `b <= a`.
+--- `a <= b + (a - b)`: adding back what a subtraction took off reaches at least the minuend, whatever `a` and `b` are. It is the half of `a - b <= c` iff `a <= b + c` that needs no hypothesis, and conversion does not decide it.
 pub let add_sub(a: Nat, b: Nat) -> Bool/Holds(a <= b + (a - b)) =
     match b
     | 0 => refl(a)

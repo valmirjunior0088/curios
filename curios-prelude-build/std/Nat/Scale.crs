@@ -2,7 +2,7 @@ use /std/{Nat, Eq, proved, Bool};
 
 --- A positive `n` as an odd number at a binary scale: `n` is `2 * half + 1` shifted left by `count`.
 ---
---- `count` is how many factors of two `n` holds, and `2 * half + 1` is what is left of `n` without them, odd by its shape, so no proposition has to say so. [`of`] finds the two by halving, and [`unique`] says no other pair rebuilds `n`.
+--- `count` is how many factors of two `n` holds, and `2 * half + 1` is what remains, odd by its shape, so no proposition needs to say so. [`of`] finds both by halving, and [`unique`] says no other pair rebuilds `n`.
 pub struct Scale(n: Nat): pub Type {
     --- How many factors of two `n` holds.
     count: Nat,

@@ -3,9 +3,8 @@ use /std/List/{Member, ordered};
 
 --- Every element of a list stands in `le` to every element after it.
 ---
---- What `ordered` says of adjacent elements, said of every pair: the two agree where `le` is transitive, by `of_ordered`, and this is the one a proof reads an element and a later one off.
+--- `ordered` says it of adjacent elements; the two agree where `le` is transitive (`of_ordered`), and this is the one a proof reads an element and a later one from.
 pub induct Pairwise(@T: Type, le: (T, T) -> Bool): (List(T)) -> pub Prop
---- The empty list.
 | empty(): ([])
 --- An element in `le` to everything after it, ahead of a list that is pairwise.
 | cons(

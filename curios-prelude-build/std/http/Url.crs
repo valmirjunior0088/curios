@@ -187,7 +187,7 @@ let escaped_bytes(b: Bytes) -> Field/Value =
         end
     end;
 
---- `s` as the wire carries it, a value a field may hold: every octet that is not visible ASCII written as its `%XX`. Text `of_str` read is unchanged by it, and text that reached a `Url` by another road still cannot end a line.
+--- `s` as the wire carries it, a value a field may hold: every octet that is not visible ASCII is written as `%XX`. Text that `of_str` read comes out unchanged, and text that reached a `Url` another way still cannot end a line.
 pub let escaped(s: Str) -> Field/Value =
     escaped_bytes(Str/to_bytes(s));
 

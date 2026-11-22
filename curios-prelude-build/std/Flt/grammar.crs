@@ -7,7 +7,7 @@ use /std/Flt/digits/{pow2, div_mod};
 pub let decimal_value(run: Str) -> Nat =
     Str/fold(run, 0, (c, n) => n * 10 + (Char/to_nat(c) - '0'));
 
---- The rounding a value of `negative`'s sign past the overflow threshold takes in `r`, or one under half the least subnormal when `below`: a stand-in far past the threshold, or far under it, rounded where `r` sends it. The decimal and hex readers answer from these before building a number that large or that small.
+--- What a value of `negative`'s sign beyond the overflow threshold rounds to in `r`, or one below half the least subnormal when `below`. The decimal and hex readers answer with it rather than build so large or so small a number.
 pub let clamped(r: Rounding, negative: Bool, below: Bool) -> Flt =
     match below
     | true => exact/round(r, negative, 1, -1200, false)

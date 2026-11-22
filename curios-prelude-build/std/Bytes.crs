@@ -185,9 +185,9 @@ pub let not(b: Bytes) -> Bytes =
 
 --- `b` moved `count` bytes toward the high end, zero bytes entering at the low end and whatever passes the top discarded.
 ---
---- Under the carrier's reading — least significant first, which is what `of_nat` writes — that is multiplication by 256 to the `count`, at the run's own width. A count past the length answers all zeros rather than a shorter run: the width belongs to the value.
+--- Read least significant byte first, as `of_nat` writes, it multiplies by `256^count` at the run's own width. A count past the length gives all zeros rather than a shorter run: the width belongs to the value.
 ---
---- Whole bytes, not bits: a byte string has no finer position to move by, and a shift by bits is `Nat`'s.
+--- Whole bytes, not bits: a byte string has no finer position, and a bit shift is `Nat`'s.
 pub let shl(b: Bytes, count: Nat) -> Bytes =
     match count <= len(b)
     | true => x[..replicate(count, 0x00), ..slice(b, 0, len(b) - count)]
@@ -256,7 +256,7 @@ pub let index_of(b: Bytes, x: Byte) -> Option({at: Nat, within: Bool/Holds(at < 
 pub let contains(b: Bytes, x: Byte) -> Bool =
     Option/is_some(index_of(b, x));
 
---- Whether `pred` accepts every byte of `b`, which it does of none. It is the recursion over `b` itself, so over a byte and the bytes after it it reduces to the byte's answer and the rest's: what a proof about a byte put in front reads.
+--- Whether `pred` accepts every byte of `b`; true of the empty run. It recurs on `b` itself, so on a byte followed by more it reduces to that byte's answer and the rest's, which is what a proof about a prepended byte reads.
 pub let all(b: Bytes, pred: (Byte) -> Bool) -> Bool =
     match b | x[] => true | x[h, ..t] => pred(h) && all(t, pred) end;
 

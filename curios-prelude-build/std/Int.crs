@@ -12,29 +12,29 @@ pub use lt/{let lt};
 pub mod le;
 pub use le/{let le};
 
---- The smaller of two integers, and the laws a hypothesis decides it by.
+--- The smaller of two integers, and its laws under a hypothesis.
 ---
---- Conversion decides `min` from its operands as terms and reads no hypothesis, as `Nat`'s does, so under a guard on `a <= b` these laws are the step.
+--- Conversion decides `min` from its operands alone, as `Nat`'s does, and reads no hypothesis, so under a guard on `a <= b` these laws do the rewriting.
 pub mod min;
 pub use min/{let min};
 
---- The larger of two integers, and the laws a hypothesis decides it by.
+--- The larger of two integers, and its laws under a hypothesis.
 pub mod max;
 pub use max/{let max};
 
 --- The magnitude of an integer, as a `Nat`, and what it widens back to under a hypothesis on the integer's sign.
 ---
---- Conversion decides `abs` from its operand as a term: a negation and a literal factor leave it, and a non-negative combination of widened naturals is its own preimage. It reads no hypothesis, so under a guard on `+0 <= a` these laws are the step.
+--- Conversion decides `abs` from its operand alone: a negation or a literal factor passes through it, and a non-negative combination of widened naturals is its own preimage. It reads no hypothesis, so under a guard on `+0 <= a` these laws do the rewriting.
 pub mod abs;
 pub use abs/{let abs};
 
---- `-1`, `+0` or `+1` by the sign of an integer, and the laws a hypothesis decides it by.
+--- `-1`, `+0` or `+1` by the sign of an integer, and its laws under a hypothesis.
 pub mod sign;
 pub use sign/{let sign};
 
 --- A product, and the cancellation of a nonzero factor.
 ---
---- Conversion decides a product as a polynomial of its factors and cancels none: without the premise that a factor is not zero, `a * k = b * k` says nothing of `a` and `b`.
+--- Conversion decides a product as a polynomial in its factors and cancels nothing: without the premise that a factor is nonzero, `a * k = b * k` says nothing of `a` and `b`.
 pub mod mul;
 pub use mul/{let mul};
 
@@ -61,9 +61,9 @@ pub let NonZero(a: Int) -> Prop =
 pub let NonNeg(a: Int) -> Prop =
     Bool/Holds(a >= +0);
 
---- An integer is a natural widened, or one below the negation of one: the two canonical forms, as the family's indices.
+--- An integer is a widened natural, or one below the negation of one: its two canonical forms, as the family's indices.
 ---
---- Matching on [`view`] refines `i` to its form in each arm, which is how a proof takes an integer apart — `Int` has no constructors of its own, and this is the case split it would have. Nothing here is primitive: the view is built from `Int/to_nat`, and the order laws in `lt` and `le` go through it and through `Nat`.
+--- Matching on [`view`] refines `i` to its form in each arm, which is how a proof takes an integer apart: `Int` has no constructors of its own, and this is the case split they would give. Nothing here is primitive: the view is built from `Int/to_nat`, and the order laws in `lt` and `le` go through it and through `Nat`.
 pub induct Sign: (Int) -> pub Type
 --- `i` is the natural `n`, widened.
 | nonneg(n: Nat): (Nat/to_int(n))

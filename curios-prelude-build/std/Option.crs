@@ -69,7 +69,7 @@ pub let get(@A: Sort, m: Option(A), @ok: IsSome(m)) -> A =
 
 --- `some` is injective: two equal options that each hold a value hold one value.
 ---
---- What takes an encoding apart with no value invented. A reader that answers an option is one function of every input, so `Eq/cong` carries an equation between two encodings to one between what it reads from each, and this carries that to the values read.
+--- What lets a decoder take an encoding apart without inventing a value: a reader that answers an option is a function, so `Eq/cong` turns an equation between two encodings into one between the options read, and this turns that into one between the values.
 pub let some_injective(@A: Sort, @x: A, @y: A, same: Eq()(some(x), some(y))) -> Eq()(x, y) =
     match same | refl() => Eq/refl() end;
 

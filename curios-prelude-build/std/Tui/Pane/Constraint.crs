@@ -26,7 +26,7 @@ let claimed(avail: Nat, c: Constraint) -> Nat =
 let weight(c: Constraint) -> Nat =
     match c | min(_) => 1 | fill(k) => k | _ => 0 end;
 
---- `avail` shared among `cs` in one deterministic pass: what lengths, floors and percentages claim first, then what they leave among the floors and the fills by weight, and the rounding's shortfall to the last of those. An axis the claims overrun answers the claims as written, and a view cuts it where it ends.
+--- `avail` shared among `cs` in one deterministic pass: lengths, floors and percentages claim first, the rest is shared among the floors and the fills by weight, and the rounding's shortfall goes to the last of those. Claims that overrun the axis are answered as written, and the view cuts them where it ends.
 pub let distribute(cs: List(Constraint), avail: Nat) -> List(Nat) =
     let total(ns: List(Nat)) -> Nat = List/fold(ns, 0, (n, sum) => n + sum);
     let fixed = total(List/map(cs, (c) => claimed(avail, c)));

@@ -29,7 +29,6 @@ satisfy Cmp(Instant) {
 --- The monotonic clock: seconds since a fixed origin, signed, and the nanoseconds past them.
 foreign clock_mono() -> {secs: Int, nanos: Nat};
 
---- The clock now.
 pub let now() -> Io(Instant) =
     let r = clock_mono()!;
     Io/pure(Instant { nanos = r.secs * 1000000000 + Nat/to_int(r.nanos) });

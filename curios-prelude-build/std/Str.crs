@@ -53,7 +53,6 @@ end
 
 --- Text: bytes certified as UTF-8.
 pub struct Str: pub Type {
-    --- The bytes themselves.
     bytes: Bytes,
     --- Why they are well-formed UTF-8.
     @valid: Valid(bytes),
@@ -64,7 +63,7 @@ pub let to_bytes(s: Str) -> Bytes =
     s.bytes;
 
 -- Each byte is put to `scan_from` by itself rather than to `step`: only bytes that are not text are read here, and a second caller of `step` would keep it from being folded into the scan every `of_bytes` runs.
---- How many bytes of what a scan has read are text once it has read `rest` from `sc`: `last`, where it last stood between characters, when it meets a byte the encoding does not admit or ends inside a character. `read` is how many bytes lie before `rest`.
+--- How many of the bytes read so far are text once `rest` has been read from `sc`. On a byte UTF-8 does not admit, or at an end inside a character, it is `last`, the last offset that fell between characters. `read` counts the bytes before `rest`.
 let text_before(sc: Scan, rest: Bytes, read: Nat, last: Nat) -> Nat =
     match rest
     | x[] => last
@@ -173,7 +172,7 @@ struct Lowering: Type {
     held: Option(Str),
 }
 
---- `s` in lower case, Unicode's `toLowercase`: each character by its full mapping, `Char/to_lower`, and a capital sigma that ends a word as `ς`, where `Final_Sigma` holds — after a cased character and any case-ignorable ones, and before no cased character past any case-ignorable ones — so `ΟΔΟΣ` becomes `οδος`.
+--- `s` in lower case, as Unicode's `toLowercase`: each character by its full mapping (`Char/to_lower`), except that a capital sigma ending a word becomes `ς` (`Final_Sigma`: after a cased character and before none, case-ignorable characters skipped), so `ΟΔΟΣ` becomes `οδος`.
 pub let to_lower(s: Str) -> Str =
     let settled(written: Str, held: Option(Str), next_cased: Bool) -> Str =
         match held
@@ -392,7 +391,7 @@ let stopped(
         boundary = Eq/subst((x: Bytes) => Bool/Holds(At/starts(x)), Eq/sym(e), Valid/begins(v)),
         stop = stop);
 
---- How many bytes the characters `pred` accepts take at the front of `b`, counted on from `taken`, and the character it refused: a walk over the bytes it reads, which decodes each character at its lead byte as [`fold`] does and stops at the first one refused. Where it stands in `whole` rides beside it as proofs alone, so where it stops is a position of `whole` with no cut made.
+--- How many bytes at the front of `b` hold characters `pred` accepts, counted on from `taken`, and the first character it refused. It decodes as [`fold`] does. Its place in `whole` is carried as proofs only, so the stop is a position of `whole` without a slice being made.
 -- A stop passes the walk's own `b`: filled from the refined type, a hidden argument is `x[h, ..t]` rebuilt where the walk stands.
 let leading(
     b: Bytes,
@@ -724,7 +723,7 @@ pub let split_once(s: Str, sep: Str) -> Option({Str, Str}) =
 
 --- Whether `needle` occurs in `s` as a run of characters.
 ---
---- Named apart from [`contains`], which is the element reading `/std/List` and `/std/Bytes` both give that word. The substring family beside it — `starts_with`, `ends_with`, `strip_prefix`, `strip_suffix`, `split_once`, `split`, `replace` and `index_of_substr` — takes a `Str` needle too and needs no such mark, because none of them names an operation another carrier spells differently.
+--- Not `contains`, which tests for one element here as in `/std/List` and `/std/Bytes`. The rest of the substring family (`starts_with`, `ends_with`, `strip_prefix`, `strip_suffix`, `split_once`, `split`, `replace` and `index_of_substr`) takes a `Str` needle under its usual name, since no other carrier uses those names differently.
 pub let has_substr(s: Str, needle: Str) -> Bool =
     Option/is_some(first_occurrence(s, needle));
 
@@ -768,7 +767,7 @@ pub let replace(s: Str, from: Str, to: Str) -> Str =
             "")
     end;
 
---- `s` with each character `with` answers for replaced by the answer, and the runs between copied as the pieces of `s` they are, so what comes back is text without being checked again: one walk forward, which is what an encoder escapes through.
+--- `s` with each character that `with` maps to `some` replaced by its answer. The runs between are copied as slices of `s`, so the result needs no revalidation. Encoders escape through it.
 pub let escape(s: Str, with: (Char) -> Option(Str)) -> Str =
     At/forward(
         (at) => (written: Str, run: At(s), ordered: Bool/Holds(run.offset <= at.offset)) -> Str,

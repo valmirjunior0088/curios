@@ -22,7 +22,6 @@ pub let ord(a: Bytes, b: Bytes) -> Ordering =
         end
     end;
 
---- A run is `eq` to itself.
 pub let refl(a: Bytes) -> Eq()(ord(a, a), Ordering/eq()) =
     match a | x[] => Eq/refl() | x[_, ..t] => refl(t) end;
 

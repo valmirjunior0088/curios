@@ -16,7 +16,6 @@ pub let of_bytes(b: Bytes) -> Path =
 pub let of_str(s: Str) -> Path =
     Path { Str/to_bytes(s) };
 
---- The bytes.
 pub let to_bytes(p: Path) -> Bytes =
     p.0;
 

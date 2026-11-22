@@ -1,6 +1,6 @@
 use /std/{Nat, Bool, proved};
 
---- Whether every code from `min` to `max` is a scalar value: the range lies below the surrogates, or past them and at most `U+10FFFF`. One contiguous range, so these two cases are the whole of it, and of one code it is `Char/Valid`.
+--- Whether every code from `min` to `max` is a scalar value: the range lies wholly below the surrogates, or wholly above them and at most `U+10FFFF`. For a single code it is `Char/Valid`.
 pub let scalars(min: Nat, max: Nat) -> Bool =
     max < 0xD800 || min >= 0xE000 && max <= 0x10FFFF;
 

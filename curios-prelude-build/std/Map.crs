@@ -32,15 +32,14 @@ use /std/ops/{Eql};
 
 --- A map from keys of type `K` to values, built and read under one `Key(K)` dictionary, which its type names.
 ---
---- A map holds, hidden, the proof that its trie is sound: at every branch, the branch's position is the first at which its keys differ, and each of its sixteen twigs holds the keys with that twig's digit there. Every operation that builds a map builds the proof, and it erases.
+--- Every map carries, erased, the proof that its trie is sound: each branch sits at the first position where its keys differ, and each of its sixteen twigs holds the keys whose digit there is that twig's. Every operation that builds a map builds the proof.
 ---
---- A leaf holds the key itself and its encoding is derived where a comparison needs it, so the keys come back as they went in. The shape of the trie is a function of the encoding, which is why the dictionary is a parameter: a map built under another is a value of another type, and every operation walks under the dictionary its map's type names.
+--- A leaf holds the key itself and derives its encoding when a comparison needs it, so keys come back as they went in. The trie's shape is a function of the encoding, which is why the dictionary is a type parameter: maps under two dictionaries are two types, and every operation uses the dictionary its map's type names.
 pub struct Map(K: Type, use Key(K), V: Type): Type {
     root: Node(K, V),
     @sound: Node/Sound(root),
 }
 
---- The empty map.
 pub let empty(@K: Type, use Key(K), @V: Type) -> Map(K, V) =
     Map { root = Node/empty(), @sound = Bool/True/qed() };
 

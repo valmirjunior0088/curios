@@ -8,7 +8,6 @@ pub use decode/{let decode};
 
 use /std/{Bool, Flt, Str, List};
 
---- A JSON value.
 pub induct Json: pub Type
 | null()
 --- `true` or `false`.

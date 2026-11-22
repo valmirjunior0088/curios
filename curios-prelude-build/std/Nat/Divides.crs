@@ -8,7 +8,6 @@ end
 
 pub use Divides/*;
 
---- `d` divides itself.
 pub let refl(d: Nat) -> Divides(d, d) =
     Divides/intro(1, Eq/refl());
 
@@ -18,7 +17,6 @@ pub let trans(@a: Nat, @b: Nat, @c: Nat, p: Divides(a, b), q: Divides(b, c)) -> 
     | (intro(k, e), intro(m, f)) => Divides/intro(m * k, Eq/subst((x: Nat) => Eq()(c, m * x), e, f))
     end;
 
---- Every number divides zero.
 pub let zero(d: Nat) -> Divides(d, 0) =
     Divides/intro(0, Eq/refl());
 
@@ -92,7 +90,7 @@ pub let of_rem(n: Nat, d: Nat, @ok: Bool/Holds(0 < d), h: Bool/Holds(n % d == 0)
 
 --- A divisor leaves no remainder: `Divides(d, n)` gives `n % d == 0`, the converse of [`of_rem`].
 ---
---- A multiple's remainder by a symbolic divisor is zero by neither reduction nor the facts in scope; it is [`Nat/DivMod/unique`] at the multiplier and a remainder of zero.
+--- Neither reduction nor the facts in scope show a multiple's remainder by a symbolic divisor to be zero, so a proof that needs it takes this lemma.
 pub let to_rem(n: Nat, d: Nat, @ok: Bool/Holds(0 < d), p: Divides(d, n)) -> Bool/Holds(n % d == 0) =
     match p
     | intro(k, e) =>

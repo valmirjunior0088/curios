@@ -27,7 +27,6 @@ pub use encode/{let encode};
 use /std/{Int, Flt, Bool, Str, List, Map};
 use /std/time/{Date, Time, DateTime, OffsetDateTime, rfc3339};
 
---- A TOML value.
 pub induct Toml: pub Type
 --- A string.
 | str(Str)

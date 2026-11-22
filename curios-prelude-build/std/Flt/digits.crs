@@ -208,7 +208,7 @@ pub let setup(f_mant: Nat, exp_field: Nat) -> Start =
         end
     end;
 
---- The digits `ds` with the decimal point `k` places into them: before them behind zeros when `k` is not positive, between two of them when it falls inside, and after them behind zeros when it falls past the end. The digits are split as a list, where the point's place needs no proof of being a character boundary.
+--- The digits `ds` with the decimal point `k` places into them: before them, after zeros, when `k` is not positive; between two of them when it falls inside; and after them, behind zeros, when it falls past the end.
 pub let layout(ds: List(Nat), k: Int) -> Str =
     let len = List/len(ds);
     let leading = (pad: Nat) => Str/flatten(["0.", Str/repeat("0", pad), digits_to_str(ds)]);
@@ -255,7 +255,7 @@ pub let decimal_digits(r: Rounding, negative: Bool, m: Nat, e: Int, k: Int) -> N
             rem != 0);
     match up | true => q + 1 | false => q end;
 
---- `to_str_significant` in the direction `r`. The exponent of the last digit is first estimated from the binary exponent — `log₁₀ 2` is `0.30103` to five places, which puts the estimate at most one off — then settled by the digits it gives: too many, and the exponent steps up; too few, and it steps down, answering a carry to `10ⁿ` as one digit at the exponent above.
+--- `to_str_significant` in the direction `r`. The exponent of the last digit is estimated from the binary exponent, within one since `log₁₀ 2` is `0.30103` to five places, and then corrected by the digits it yields.
 pub let to_str_significant_in(r: Rounding, f: Flt, n: Nat) -> Str =
     match Dyadic/try_of(f)
     | some(d), d.mantissa != +0 => significant(r, d, n)

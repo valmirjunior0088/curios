@@ -14,11 +14,9 @@ let held(
 ) -> Eq()(Option/is_some(x), Option/is_some(y)) =
     Eq/cong((m: Option(A)) => Option/is_some(m), e);
 
---- The empty set has no element.
 pub let of_empty(@K: Type, use Map/Key(K), k: K) -> Eq()(has(empty(), k), false) =
     Eq/refl();
 
---- `insert` makes its key an element.
 pub let of_insert(@K: Type, use Map/Key(K), s: Set(K), k: K) -> Eq()(has(insert(s, k), k), true) =
     held(Map/try_get/of_insert(s.map, k, ()));
 
@@ -33,7 +31,6 @@ pub let of_insert_other(
 ) -> Eq()(has(insert(s, k), other), has(s, other)) =
     held(Map/try_get/of_insert_other(s.map, k, (), other, apart));
 
---- `remove` makes its key no element.
 pub let of_remove(@K: Type, use Map/Key(K), s: Set(K), k: K) -> Eq()(has(remove(s, k), k), false) =
     held(Map/try_get/of_remove(s.map, k));
 

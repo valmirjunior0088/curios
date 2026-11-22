@@ -3,9 +3,7 @@ pub use /sys/Int/{sign};
 use /std/{Nat, Int, Eq, Bool};
 
 -- Each is by [`Int/view`], whose arms are the forms a sign is computed of.
---- `sign(a)` is `+1` where `a` is above zero.
----
---- Conversion decides a sign where the comparison decides the operand's as a term, and reads no hypothesis: under one these laws are the step.
+--- Conversion decides a sign where the operand's term alone decides the comparison; it reads no hypothesis, so under one a proof takes these laws.
 pub let of_pos(a: Int, p: Bool/Holds(+0 < a)) -> Eq()(sign(a), +1) =
     match Int/view(a)
     | nonneg(0) => match p end
@@ -13,26 +11,22 @@ pub let of_pos(a: Int, p: Bool/Holds(+0 < a)) -> Eq()(sign(a), +1) =
     | neg(_) => match p end
     end;
 
---- `sign(a)` is `-1` where `a` is below zero.
 pub let of_neg(a: Int, p: Bool/Holds(a < +0)) -> Eq()(sign(a), -1) =
     match Int/view(a)
     | nonneg(_) => match p end
     | neg(_) => Eq/refl()
     end;
 
---- `sign(a)` is at least `-1`, whatever `a` is.
 pub let at_least(a: Int) -> Bool/Holds(-1 <= sign(a)) =
     match Int/view(a)
     | nonneg(0) | nonneg(_ + 1) | neg(_) => Bool/True/qed()
     end;
 
---- `sign(a)` is at most `+1`, whatever `a` is.
 pub let at_most(a: Int) -> Bool/Holds(sign(a) <= +1) =
     match Int/view(a)
     | nonneg(0) | nonneg(_ + 1) | neg(_) => Bool/True/qed()
     end;
 
---- `sign(a)` is at most zero where `a` is.
 pub let of_not_pos(a: Int, p: Bool/Holds(a <= +0)) -> Bool/Holds(sign(a) <= +0) =
     match Int/view(a)
     | nonneg(0) => Bool/True/qed()
@@ -40,14 +34,12 @@ pub let of_not_pos(a: Int, p: Bool/Holds(a <= +0)) -> Bool/Holds(sign(a) <= +0) 
     | neg(_) => Bool/True/qed()
     end;
 
---- `sign(a)` is at least zero where `a` is.
 pub let of_not_neg(a: Int, p: Bool/Holds(+0 <= a)) -> Bool/Holds(+0 <= sign(a)) =
     match Int/view(a)
     | nonneg(0) | nonneg(_ + 1) => Bool/True/qed()
     | neg(_) => match p end
     end;
 
---- The sign of a product is the product of the signs.
 pub let of_mul(a: Int, b: Int) -> Eq()(sign(a * b), sign(a) * sign(b)) =
     match (Int/view(a), Int/view(b))
     | (nonneg(0), _)
@@ -59,7 +51,6 @@ pub let of_mul(a: Int, b: Int) -> Eq()(sign(a * b), sign(a) * sign(b)) =
     | (neg(_), neg(_)) => Eq/refl()
     end;
 
---- A sign is its own sign.
 pub let of_sign(a: Int) -> Eq()(sign(sign(a)), sign(a)) =
     match Int/view(a)
     | nonneg(m) => match m | 0 | _ + 1 => Eq/refl() end

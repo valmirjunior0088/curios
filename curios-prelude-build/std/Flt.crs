@@ -393,7 +393,7 @@ pub let try_to_int(f: Flt) -> Option(Int) =
 ---
 --- `==` and `<` stay IEEE's comparisons, which call the two zeros equal and leave a NaN unordered. This is the order `Ord`, and so `List/sort`, needs, and the identity `Hash` already reads. It is also how this library spells IEEE's `totalOrder(x, y)`, as `ord(x, y) != gt`, and `totalOrderMag(x, y)`, as `ord(abs(x), abs(y)) != gt`.
 ---
---- It computes the order `Nat/ord` reads through [`total_key`], which is injective ([`total_key_injective`]): that order is total and answers `eq` exactly at an equation by `Nat/ord`'s laws. That `ord` is that order at every pair, the comparisons it leads with included, is not proved here: no law ties `Flt`'s `<` to the bits.
+--- It compares [`total_key`]s, an injective encoding ([`total_key_injective`]), so the order is total and answers `eq` exactly at equality, by `Nat/ord`'s laws. That `ord` agrees with that order at every pair, including the comparisons it starts with, is not proved: no law ties `Flt`'s `<` to the bits.
 pub let ord(x: Flt, y: Flt) -> Ordering =
     match
     | x < y => Ordering/lt()

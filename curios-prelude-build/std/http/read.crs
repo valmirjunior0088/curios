@@ -116,7 +116,7 @@ let head_from(
         end
     end;
 
---- A message's head: the bytes of its start line and its fields, their line ends between them, without the empty line that ends them. `lenient` passes over the empty lines a request may be preceded by (RFC 9112 §2.2). The state is how far the reading has come, so a look reads only the octets that arrived since the last. A start line past `limits.line` is refused, and so is a head past `limits.head`, the empty lines before it counted.
+--- A message's head: the bytes of its start line and its fields, their line ends between them, without the empty line that ends them. `lenient` passes over the empty lines a request may be preceded by (RFC 9112 §2.2). The state records how far the reading has come, so each look reads only the octets that arrived since the last. A start line past `limits.line` is refused, and so is a head past `limits.head`, the empty lines before it counted.
 pub let head(
     limits: Limits,
     lenient: Bool,
@@ -283,7 +283,7 @@ let trailers_from(
         end
     end;
 
---- A chunked body (RFC 9112 §7.1): the content its chunks hold, the trailer section read past and dropped. The state is what the reading has decoded and where it resumes, so a look reads the octets that arrived since the last, and a size line it completes once more, for the size the line states. A size line that is none, a chunk not followed by a line end, a size line past `limits.chunk_line`, a trailer section past `limits.head` and content past `limits.content` are refused.
+--- A chunked body (RFC 9112 §7.1): the content its chunks hold, the trailer section read past and dropped. The state records what has been decoded and where to resume, so each look reads only the octets that arrived since the last, re-reading a size line it completes. A malformed size line, a chunk not followed by a line end, a size line past `limits.chunk_line`, a trailer section past `limits.head` and content past `limits.content` are refused.
 pub let chunked(
     limits: Limits,
     decoded: Decoded,
@@ -296,7 +296,7 @@ pub let chunked(
         trailers_from(limits, decoded.content, at, line, searched, ending, held)
     end;
 
---- A body as `framing` delimits it: nothing, `length`'s octets, `chunked`'s content, or everything until its stream ends. The state is what the reading has decoded, which a chunked body alone keeps apart from the bytes held. A body framed by the close is never taken: it wants more until whoever owns its stream sees it end, when the bytes held are the body, and it holds no more than `limits.content`.
+--- A body as `framing` delimits it: nothing, `length`'s octets, `chunked`'s content, or everything until its stream ends. Only a chunked body keeps its decoded state apart from the bytes held. A body framed by the close is never complete here: it asks for more until whoever owns the stream sees it end, when the bytes held are the body, up to `limits.content`.
 pub let body(
     limits: Limits,
     framing: Framing,

@@ -28,7 +28,7 @@ pub struct At(P: (Bytes, Nat) -> Prop, input: Bytes): Type {
     holds: P(input, offset),
 }
 
---- A parser reading an `I`, whose positions know `P`: from a position in the input to a position and a value, or a refusal. Every position it hands on carries `P`, so a primitive reads what its carrier's positions know rather than checking it again. `Parse(I, A)` names it by its carrier alone, which is the spelling everything but a primitive uses.
+--- A parser reading an `I` whose positions carry `P`: from a position to a position and a value, or a refusal. Every position it passes on carries `P`, so a primitive relies on what its carrier's positions guarantee instead of checking again. `Parse(I, A)` names it by its carrier alone, the spelling everything but a primitive uses.
 pub struct Of(I: Type, P: (Bytes, Nat) -> Prop, A: Type): Type {
     run(input: Bytes, at: At(P, input)) -> Result(Error, {At(P, input), A}),
 }
@@ -103,7 +103,7 @@ pub let bind(
 ) -> Parse(I, B) =
     chain(p, f);
 
---- `p`, or `q` from the same position when `p` declines. A committed refusal is reported as it is; when both decline, the refusal that reached further is reported, since that alternative read more of the input as its shape, and `p`'s where they stopped at one offset.
+--- `p`, or else `q` from the same position when `p` declines. A committed refusal is reported as it is; when both decline, the one that got further is reported, since that alternative matched more of the input, and `p`'s on a tie.
 pub let or(@I: Type, use Input(I), @A: Type, p: Parse(I, A), q: Parse(I, A)) -> Parse(I, A) =
     Of {
         run(input, at) =

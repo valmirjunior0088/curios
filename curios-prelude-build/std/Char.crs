@@ -60,7 +60,7 @@ pub let ord(a: Char, b: Char) -> Ordering =
 -- Read through `ord` it would be a stuck match on an `Ordering`, which no law relates to another.
 --- Whether `a` is below `b` in code-point order.
 ---
---- Stated on the code points directly, as `Byte`'s order is on its values, so that a comparison of characters is a comparison of naturals once unfolded and reduces as one — its negation is its dual, and swapping its operands is the mirrored comparison.
+--- Defined on the code points, as `Byte`'s order is on its values, so it reduces to a comparison of naturals with the same laws: its negation is the dual comparison, and swapping the operands mirrors it.
 pub let lt(a: Char, b: Char) -> Bool =
     a.code < b.code;
 
@@ -136,7 +136,7 @@ pub let to_upper(c: Char) -> Str =
 let lower_lands: Bool/Holds(unicode/every_record_lands(/sys/unicode/lower)) =
     Bool/True/qed();
 
---- `c` in lower case: its full mapping, the database's `Lowercase_Mapping`, as text — `İ` becoming `i̇` — and `c` itself where the database maps it to no other. It reads no context, so `Σ` is `σ`; `Str/to_lower` writes a word's final sigma `ς`.
+--- `c` in lower case, as text: its full mapping, the database's `Lowercase_Mapping` (`İ` becomes `i̇`), or `c` itself where there is none. It reads no context, so `Σ` becomes `σ`; `Str/to_lower` writes a word's final sigma as `ς`.
 pub let to_lower(c: Char) -> Str =
     unicode/mapping(/sys/unicode/lower, lower_lands, c);
 
@@ -144,7 +144,7 @@ pub let to_lower(c: Char) -> Str =
 let fold_lands: Bool/Holds(unicode/every_record_lands(/sys/unicode/fold)) =
     Bool/True/qed();
 
---- `c` folded for caseless comparison: its full folding, the database's `Case_Folding` of its common and full rows, as text — `ß` and `ẞ` becoming `ss`, `Σ` and `ς` both `σ` — and `c` itself where the database folds it to no other. What `Str/to_casefold` writes for each character of a text.
+--- `c` folded for caseless comparison, as text: its full folding, the database's `Case_Folding` common and full rows (`ß` and `ẞ` become `ss`, `Σ` and `ς` both become `σ`), or `c` itself where there is none. `Str/to_casefold` applies it to each character.
 pub let to_casefold(c: Char) -> Str =
     unicode/mapping(/sys/unicode/fold, fold_lands, c);
 

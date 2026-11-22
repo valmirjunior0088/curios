@@ -2,7 +2,7 @@ use /std/{Nat, Byte, Bytes, Bool, List};
 
 --- How a value encodes to the bytes that identify it.
 ---
---- The encoding is a value's identity and is *determined*: one value encodes to one byte string, in any program, from the value and the carrier's documented reading alone — which is what `/std/Map/Key` adds injectivity and the type's own order to, and what makes two runs of the same program agree.
+--- The encoding is a value's identity and is *determined*: one value always encodes to the same bytes, in any program, from the value and its carrier's documented reading alone. `/std/Map/Key` adds injectivity and the type's own order on top of it, and it is what makes two runs of one program agree.
 pub concept Hash(T: Type): pub Type {
     --- The encoding.
     hash(T) -> Bytes,
@@ -17,7 +17,7 @@ let padded(b: Bytes, width: Nat) -> Bytes =
 
 --- `b` behind its four-byte length.
 ---
---- Four bytes because the minimal encoding of any length a `Bytes` value can have is at most that long, so the frame is self-delimiting: a concatenation of framed parts splits back into exactly the parts it was built from. Fixed width is what makes that true, not which end the length reads from.
+--- Four bytes because the minimal encoding of any length a `Bytes` value can have fits in four, so the frame is self-delimiting: a concatenation of framed parts splits back into exactly those parts. The fixed width is what makes that true, not the length's byte order.
 pub let framed(b: Bytes) -> Bytes =
     Bytes/flatten([padded(Bytes/of_nat(Bytes/len(b)), 4), b]);
 
@@ -35,7 +35,7 @@ let lane(b: Bytes, base: Nat, prime: Nat, @ok: Bool/Holds(0 < prime)) -> Nat =
 -- Every intermediate stays below `2^30`, so a lane never leaves the range a `Nat` is held unboxed in: an accumulator is below its prime, so a step is below `prime · base + 257`, and each pair below is chosen to keep it there. `Nat` has no wrapping arithmetic, so the modulus is what bounds a lane.
 --- Eight bytes summarizing `b`.
 ---
---- **Not stable across compiler versions: do not persist or transmit one.** Three polynomial lanes at distinct primes, which is enough for dedup, cache keys and bloom filters and is not adversarially resistant — anyone who chooses the input can collide it. Encode with `Hash/hash` where the bytes must keep meaning.
+--- **Not stable across compiler versions: do not persist or transmit one.** It runs three polynomial lanes at distinct primes: enough for dedup, cache keys and Bloom filters, but not adversarially resistant, since whoever chooses the input can force a collision. Use `Hash/hash` where the bytes must keep their meaning.
 pub let digest(b: Bytes) -> Bytes =
     Bytes/flatten([
         padded(Bytes/of_nat(lane(b, 127, 8388593)), 3),

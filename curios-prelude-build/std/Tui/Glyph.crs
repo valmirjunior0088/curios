@@ -7,7 +7,7 @@ pub let printable(c: Char) -> Bool =
     let code = Char/to_nat(c);
     0x20 <= code && (code < 0x7F || 0x9F < code);
 
---- One grapheme cluster as a terminal draws it, in one column or two. Every character of it is printable by proof, so nothing a glyph holds reaches a terminal as a control; and its width is the one `of_cluster` measures, since only this module builds one.
+--- One grapheme cluster as a terminal draws it, one or two columns wide. Every character in it is proved printable, so no glyph reaches a terminal as a control; its width is the one `of_cluster` measured, since only this module builds glyphs.
 pub struct Glyph: Type {
     chars: List(Char),
     wide: Bool,
@@ -30,7 +30,6 @@ pub let text(g: Glyph) -> Str =
 pub let width(g: Glyph) -> Nat =
     match g.wide | true => 2 | false => 1 end;
 
---- A space.
 pub let space: Glyph =
     Glyph { chars = [' '], wide = false };
 
@@ -75,7 +74,7 @@ let pictured(code: Nat, @block: Bool/Holds(0x2400 <= code && code < 0x2440)) -> 
         wide = false,
         @printable = List/all/cons(printable, shown, [], drawn, Bool/True/qed()) };
 
---- The glyph a terminal is shown in place of `c` where `c` is a control, since a control written to a terminal is obeyed rather than drawn: its picture from the Control Pictures block for a C0 control and DEL, and the replacement character for a C1 control or any other.
+--- What a terminal shows in place of `c` when `c` is a control, since a terminal obeys a control rather than drawing it: its Control Pictures symbol for a C0 control or DEL, and the replacement character for a C1 control or any other.
 pub let picture(c: Char) -> Glyph =
     let code = Char/to_nat(c);
     match

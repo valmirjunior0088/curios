@@ -1,7 +1,7 @@
 use /std/{Nat, Bool, Str, Char};
 use /std/Tui/{Style, Line, View, Pane, Key};
 
---- A line of text and a cursor within it, at a position of the text rather than a count of its characters, and always where an extended grapheme cluster begins: the cursor moves, and the text is cut, a cluster at a time.
+--- A line of text and a cursor in it. The cursor is a position in the text, not a count of characters, and always at the start of an extended grapheme cluster: it moves, and the text is cut, a cluster at a time.
 pub struct Field: pub Type {
     text: Str,
     cursor: Str/At(text),

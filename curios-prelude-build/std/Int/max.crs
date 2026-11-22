@@ -9,12 +9,9 @@ let raised(a: Int, n: Nat) -> Eq()(max(a, a + Nat/to_int(n)), a + Nat/to_int(n))
 let lowered(b: Int, n: Nat) -> Eq()(max(b + Nat/to_int(n), b), b + Nat/to_int(n)) =
     Eq/refl();
 
---- `max(a, b)` is `b` where `a <= b`.
----
---- Conversion decides it where it decides the comparison of the two operands as terms, and reads no hypothesis: this is the step a proof takes under one.
+--- Conversion decides `max` where it can compare the two operands from their terms alone; it reads no hypothesis, so under one a proof takes this lemma or [`of_ge`].
 pub let of_le(a: Int, b: Int, p: Bool/Holds(a <= b)) -> Eq()(max(a, b), b) =
     raised(a, Int/to_nat(b - a, @p));
 
---- `max(a, b)` is `a` where `b <= a`.
 pub let of_ge(a: Int, b: Int, p: Bool/Holds(b <= a)) -> Eq()(max(a, b), a) =
     lowered(b, Int/to_nat(a - b, @p));

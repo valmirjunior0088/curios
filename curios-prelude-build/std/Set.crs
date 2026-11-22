@@ -18,7 +18,6 @@ pub struct Set(K: Type, use Map/Key(K)): Type {
     map: Map(K, {}),
 }
 
---- The empty set.
 pub let empty(@K: Type, use Map/Key(K)) -> Set(K) =
     Set { map = Map/empty() };
 

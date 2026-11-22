@@ -124,7 +124,7 @@ and all(@E: Type, ds: List(Directive(E))) -> Asked(E) =
             quit = first.quit || rest.quit }
     end;
 
---- The program's fold with no terminal: `events` through `update` from the initial model, stopping at the first `quit`, at `w` by `h` until an event says the terminal is another size. Answers the model, whether it quit, the size it stands at, its view there, and every action it asked for, unrun: what it performs and what it runs with the terminal given back, in order.
+--- The program's fold without a terminal, for tests: `events` go through `update` from the initial model until the first `quit`, at `w` by `h` until an event resizes. It answers the model, whether it quit, its final size, its view there, and every action it asked for, unrun, in order: what it performs and what it runs with the terminal handed back.
 pub let drive(
     @M: Type,
     @E: Type,

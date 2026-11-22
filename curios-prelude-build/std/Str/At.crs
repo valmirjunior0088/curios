@@ -8,7 +8,7 @@ use /std/ops/{Eql, Cmp};
 
 --- Whether a character may begin at the front of `rest`: it is empty, or its first byte continues none.
 ---
---- One byte decides it, which is what makes a position cheap to check. What gives the one-byte fact its meaning is UTF-8's self-synchronization, which `Str/Valid/before` and `Str/Valid/after` prove: valid text cut where a character may begin is valid text on both sides.
+--- One byte decides it, which keeps a position cheap to check. One byte suffices because UTF-8 self-synchronizes: valid text cut where a character may begin is valid on both sides, as `Str/Valid/before` and `Str/Valid/after` prove.
 pub let starts(rest: Bytes) -> Bool =
     match rest
     | x[] => true
@@ -209,7 +209,7 @@ pub let try_prev(
     | false => Option/none()
     end;
 
---- The position past the extended grapheme cluster that begins at `at`, and the proof that it lies past: what a reader sees as one character, which may be several characters of `s` — a letter and its marks, an emoji sequence, a flag. Its boundaries are UAX #29's, over the classes `Char` reads from the Unicode Character Database the toolchain pins.
+--- The position past the extended grapheme cluster that begins at `at`, with the proof that it is past. A cluster is what a reader sees as one character, and may be several characters of `s`: a letter and its marks, an emoji sequence, a flag. Boundaries follow UAX #29, over the Unicode Character Database the toolchain pins.
 pub let next_grapheme(
     s: Str,
     at: At(s),
@@ -253,7 +253,7 @@ pub let try_next_grapheme(
     | false => Option/none()
     end;
 
---- The position where the extended grapheme cluster before `at` begins and the proof that it lies before, or `none` at the start of `s`. A boundary is decided by the text before it, so the clusters are walked from the start of `s`.
+--- The position where the extended grapheme cluster before `at` begins, with the proof that it is before, or `none` at the start of `s`. A boundary depends on the text before it, so the clusters are walked from the start of `s`: the cost grows with `at`'s offset.
 pub let try_prev_grapheme(
     s: Str,
     at: At(s),
@@ -272,9 +272,9 @@ pub let try_prev_grapheme(
             end,
         start(s));
 
---- Recursion forward through the positions of `s`: `step` answers `P(at)` and may recur at any position past `at` — with the proof that it lies past, which is what [`next`] and [`skip`] answer — so a walk forward is total without recursing on its own, and computes wherever a value is demanded, in a type as at runtime.
+--- A total walk forward through the positions of `s`. `step` computes `P(at)` and may continue at any later position, given the proof that it is later, which [`next`] and [`skip`] return. The walk needs no recursion of its own, so it also reduces inside a type.
 ---
---- It is for a walk that must stand at its positions, as a grapheme cluster's breaks do; a walk that stops where a predicate does reads the bytes it walks instead, as [`Str/span`] does, and builds its position once where it stops.
+--- Use it when the walk must stop at every position, as grapheme breaking does. A walk that only stops where a predicate fails is cheaper as [`Str/span`], which reads bytes and builds one position at the end.
 pub let forward(
     @s: Str,
     P: (At(s)) -> Type,

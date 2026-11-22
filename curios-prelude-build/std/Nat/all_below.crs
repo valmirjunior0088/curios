@@ -2,7 +2,7 @@ use /std/{Nat, Bool, Eq, proved};
 
 --- Whether `p` accepts every number below `k`.
 ---
---- A decision, so `Bool/Holds(all_below(k, p))` at a literal `k` is discharged by reduction running `p` at each number: a fact of every byte is had that way where the logic reads nothing of the operation it is about.
+--- A decision, so at a literal `k`, `Bool/Holds(all_below(k, p))` is discharged by reduction, running `p` on each number. That is how a fact about every byte is proved where the logic cannot see inside the operation it concerns.
 pub let all_below(k: Nat, p: (Nat) -> Bool) -> Bool =
     match k | 0 => true | j + 1 => p(j) && all_below(j, p) end;
 

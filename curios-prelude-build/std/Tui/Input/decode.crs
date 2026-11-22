@@ -120,7 +120,7 @@ struct Sequence: Type {
     next: Nat,
 }
 
---- The control sequence whose parameter bytes begin at `i`, or `none` where the chunk ends first. A private marker — `<`, `=`, `>` or `?` — is read where it opens the parameters. Parameters are `;` apart and their sub-parameters `:` apart, read as ECMA-48 reads them: digits accumulate from zero, an empty one is `none`, its default being each control function's to state, and an empty last one is left out. A byte no sequence holds ends it unread, its final 0, and is read again on its own.
+--- The control sequence whose parameter bytes begin at `i`, or `none` where the chunk ends first. A private marker (`<`, `=`, `>` or `?`) is read where it opens the parameters. Parameters are `;` apart and their sub-parameters `:` apart, read as ECMA-48 reads them: digits accumulate from zero, an empty one is `none`, each control function stating its own default, and an empty last one is left out. A byte that cannot appear in a sequence ends it unread, with final byte 0, and is then read on its own.
 let sequence(b: Bytes, i: Nat) -> Option(Sequence) =
     let marker = Option/unwrap_or(Option/filter(at(b, i), (n) => Nat/in_range(n, 0x3C, 0x3F)), 0);
     let start = match marker == 0 | true => i | false => i + 1 end;

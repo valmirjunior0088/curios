@@ -8,7 +8,7 @@ let high(x: Nat) -> Nat =
 let low(x: Nat) -> Nat =
     Nat/and(x, 15);
 
---- The digit of `k` in its byte `g` at place `o` of four: place zero says the byte is there, the next two are its high and its low nibble, and the fourth is none a fork reads. A byte the run does not have has every digit zero, so a run that ends is below every run that goes on.
+--- The digit of `k` at byte `g`, place `o` of four: place zero says whether the byte exists, the next two are its high and low nibble, and no fork reads the fourth. A missing byte has every digit zero, so a run that ends sorts before every run that continues.
 let at_place(k: Bytes, g: Nat, o: Nat) -> Nat =
     match g < Bytes/len(k)
     | false => 0
@@ -48,9 +48,9 @@ let parts(a: Bytes, b: Bytes, g: Nat) -> Parted =
         end
     end;
 
---- The first position two runs differ at, or that they are one run: the place a byte is there in one and not in the other, or the nibble two bytes first differ at.
+--- The first position at which two runs differ, or that they are one run: where a byte exists in one and not the other, or the nibble at which two bytes first differ.
 ---
---- A walk on the two runs' structure, so a type may name it.
+--- It recurs on the runs' structure, so a type may mention it.
 pub let crit(a: Bytes, b: Bytes) -> Parted =
     parts(a, b, 0);
 
@@ -326,7 +326,7 @@ let headed(
         Eq/sym(Nat/ord/of_lt(Byte/to_nat(h), Byte/to_nat(k), ordered)),
         Eq/refl());
 
---- A run apart from another at a position it has the lesser digit at is before it in the order of bytes: the digits are the bytes' own nibbles from their tops, behind a digit that says a byte is there, so the first position two runs differ at is where `Bytes/ord` decides.
+--- A run whose digit is the smaller at the first position where it differs from another is before it in byte order: the digits are each byte's nibbles from the top, after a digit marking that the byte exists, so that position is where `Bytes/ord` decides.
 pub let before(
     a: Bytes,
     b: Bytes,

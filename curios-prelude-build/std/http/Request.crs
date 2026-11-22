@@ -70,7 +70,7 @@ let length_line(r: Request) -> Bytes =
     | false => x[]
     end;
 
---- The request as the bytes sent on the wire: the request line as HTTP/1.1, `Host`, `Connection: close`, since a client keeps no connection, the length where there is a body or the method always states one, the headers the renderer does not own, then the body. The target and the host are written percent-encoded wherever the wire cannot carry an octet of them, so every request is one a wire can carry and there is nothing to refuse.
+--- The request as the bytes sent on the wire: the request line as HTTP/1.1, `Host`, `Connection: close` since a client keeps no connection, the length where there is a body or the method always states one, the headers the renderer does not own, then the body. The target and the host are percent-encoded wherever the wire cannot carry an octet of them, so every request can be sent and nothing is refused.
 pub let render(r: Request) -> Bytes =
     x[
         ..Str/to_bytes(Method/to_str(r.method)),

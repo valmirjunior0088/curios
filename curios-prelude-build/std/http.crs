@@ -30,7 +30,7 @@ pub use Framing/{let Framing};
 
 --- The pieces a message is read in: its head, a body of a stated length, a chunked body.
 ---
---- Each is a function of the bytes held that answers the piece, a refusal, or that more is wanted. They hold no stream: a program with a transport of its own reads HTTP through them as the server and the client do.
+--- Each takes the bytes held so far and answers the piece, a refusal, or a request for more. They hold no stream, so a program with its own transport reads HTTP through them, as the server and the client do.
 pub mod read;
 
 --- A head's lines: the start line of each direction and the field lines after it.

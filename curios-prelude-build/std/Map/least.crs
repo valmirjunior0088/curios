@@ -21,7 +21,6 @@ pub let Below(@K: Type, use Key(K), @V: Type, found: Option({K, V}), x: K) -> Pr
     | some(entry) => Bool/Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(entry.0, x))
     end;
 
---- A map's least key is one of its keys.
 pub let among(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Among(least(m), keys(m)) =
     Eq/subst(
         (l: List(K)) => Among(Node/least(m.root), l),

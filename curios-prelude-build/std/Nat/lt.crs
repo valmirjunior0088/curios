@@ -33,7 +33,7 @@ pub let of_lt_le(
 
 --- Two bounded digits in adjacent places stay under the product of their radices: `a < m` and `b < n` give `a * n + b < m * n`.
 ---
---- The bound every positional encoding wants, and the step a proof the elaborator writes from the facts in scope states a quotient's upper bound with: `x < (x / d + 1) * d`, read as the remainder beside its quotient's multiple. `a * n + b < a * n + n` *is* `b < n` after cancellation, so the hypothesis inhabits the first step unchanged; what the second step needs is that `a + 1 <= m` scales, which is [`Nat/le/mul_mono_r`].
+--- The bound every positional encoding needs, and the one a quotient's upper bound `x < (x / d + 1) * d` rests on.
 pub let add_mul_lt(
     a: Nat,
     b: Nat,

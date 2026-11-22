@@ -23,22 +23,18 @@ let below(
         end
     end;
 
---- A number is `eq` to itself.
 pub let refl(a: Nat) -> Eq()(ord(a, a), Ordering/eq()) =
     Eq/refl();
 
---- `a < b` gives `ord(a, b)` as `lt`.
 pub let of_lt(a: Nat, b: Nat, p: Bool/Holds(a < b)) -> Eq()(ord(a, b), Ordering/lt()) =
     match a < b
     | true => Eq/refl()
     | false => match proved(@Bool/False) end
     end;
 
---- An equation gives `ord(a, b)` as `eq`.
 pub let of_eq(a: Nat, b: Nat, e: Eq()(a, b)) -> Eq()(ord(a, b), Ordering/eq()) =
     Eq/subst((x: Nat) => Eq()(ord(a, x), Ordering/eq()), e, refl(a));
 
---- `b < a` gives `ord(a, b)` as `gt`.
 pub let of_gt(a: Nat, b: Nat, p: Bool/Holds(b < a)) -> Eq()(ord(a, b), Ordering/gt()) =
     match
     | a < b => match proved(@Bool/False) end
@@ -46,7 +42,6 @@ pub let of_gt(a: Nat, b: Nat, p: Bool/Holds(b < a)) -> Eq()(ord(a, b), Ordering/
     | _ => Eq/refl()
     end;
 
---- `ord(a, b)` is `lt` only where `a < b`.
 pub let lt(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/lt())) -> Bool/Holds(a < b) =
     match
     | a < b => Bool/True/qed()
@@ -62,7 +57,6 @@ pub let eq(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/eq())) -> Eq()(a, b) =
     | _ => match Ordering/gt_neq_eq(h) end
     end;
 
---- `ord(a, b)` is `gt` only where `b < a`.
 pub let gt(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/gt())) -> Bool/Holds(b < a) =
     match
     | a < b => match Ordering/gt_neq_lt(Eq/sym(h)) end
@@ -70,7 +64,6 @@ pub let gt(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/gt())) -> Bool/Holds(b < 
     | _ => below(a, b, proved(), Bool/True/qed())
     end;
 
---- `ord(a, b)` is not `gt` only where `a <= b`.
 pub let le(a: Nat, b: Nat, h: Bool/Holds(Ordering/is_le(ord(a, b)))) -> Bool/Holds(a <= b) =
     match
     | a < b => proved()
@@ -78,7 +71,6 @@ pub let le(a: Nat, b: Nat, h: Bool/Holds(Ordering/is_le(ord(a, b)))) -> Bool/Hol
     | _ => match h end
     end;
 
---- `a <= b` gives `ord(a, b)` as `lt` or `eq`.
 pub let of_le(a: Nat, b: Nat, p: Bool/Holds(a <= b)) -> Bool/Holds(Ordering/is_le(ord(a, b))) =
     match
     | a < b => Bool/True/qed()

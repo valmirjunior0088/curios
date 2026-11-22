@@ -5,9 +5,9 @@ let none_below(m: Nat, k: Nat, below: Bool/Holds(m < k), within: Bool/Holds(k <=
     proved();
 
 -- The loop is local to a wrapper that does not recurse, so inlining the wrapper at a call fuses `step` into the loop. A `descend` that passed `step` to itself would keep an indirect call at every level, and run out of stack sooner.
---- The fixpoint over a measure, and induction over one where `P` is a family of propositions: the step may assume `P` at every state whose measure is below `s`'s.
+--- Recursion on a measure: `step` handles `s` and may recurse at any state whose measure is smaller, given the proof. With `P` a family of propositions it is induction on the measure.
 ---
---- The recursion is structural, on a number the measure fits under, so it is total as it stands and computes wherever a value is demanded, in a type as at runtime. The step never meets the bound: it is handed a hypothesis that recurs at any state below, with the proof that it lies below, which the arithmetic in scope usually writes. Over the identity it is course-of-values recursion on `Nat`.
+--- It is total as written and reduces inside types. The step never sees the bound; the proof that a state's measure is smaller is usually written by the elaborator from the facts in scope. With the identity measure it is course-of-values recursion on `Nat`.
 pub let descend(
     @S: Type,
     measure: (S) -> Nat,

@@ -55,7 +55,7 @@ let drive(
 
 --- `l` sorted by `ord`, stably: elements `ord` ties keep the order they came in.
 ---
---- A merge sort over a stack of runs, so it costs `n log n` comparisons and its depth is the logarithm of its input. Its answer is a permutation of `l` whatever `ord` is, by `permuted`, and in order under `Ord/Flips(ord)`, by `ordered` and `sorted`.
+--- A merge sort over a stack of runs: `n log n` comparisons, and a recursion depth logarithmic in the input. Its answer is a permutation of `l` whatever `ord` is (`permuted`), and in order where `ord` satisfies `Ord/Flips` (`ordered`, `sorted`).
 pub let sort_by(@T: Type, l: List(T), ord: (T, T) -> Ordering) -> List(T) =
     drive(ord, [], l);
 
@@ -590,7 +590,7 @@ let drive_ordered(
 
 --- Over a list in order by `second` at every pair, the sort's answer is in order by `ord` and then by `second`, at adjacent elements, under `ord`'s flip.
 ---
---- The one theorem of the sort's order. At a `second` that always holds it says the answer is in order, which is `sorted`. At a `second` that is an earlier sort's order it says two sorts in a row order by both keys, the later first. And it is what stable means: among the elements `ord` ties, whatever order `second` names of the input, the answer keeps.
+--- The one theorem about the sort's order. With a `second` that always holds, it says the answer is in order: that is `sorted`. With `second` an earlier sort's order, it says two sorts in a row order by both keys, the later first. And it is what stability means: among the elements `ord` ties, the answer keeps whatever order `second` names of the input.
 pub let ordered(
     @T: Type,
     ord: (T, T) -> Ordering,

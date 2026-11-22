@@ -14,7 +14,7 @@ let cancel_positive(
 
 --- A nonzero factor on the right cancels: `a * k = b * k` gives `a = b`.
 ---
---- The integral-domain fact, which stands in for an inverse where there is none. Conversion never takes it, since without the premise the equation says nothing of `a` and `b`. A factor below zero is the one above zero negated, which leaves the equation one.
+--- The integral-domain fact, standing in for the inverse `Int` lacks. Conversion never applies it, since without the premise the equation says nothing of `a` and `b`.
 pub let cancel_r(a: Int, b: Int, k: Int, e: Eq()(a * k, b * k), @nz: Int/NonZero(k)) -> Eq()(a, b) =
     match Int/trichotomy(k, +0)
     | lt(p) => cancel_positive(a, b, +0 - k, Eq/cong((x: Int) => +0 - x, e), p)

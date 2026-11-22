@@ -2,7 +2,7 @@ use /std/{Nat, Byte, Bytes, Bool, Eq, Ordering, proved};
 
 --- Whether `a` and `b` part at a byte where `a`'s is the smaller, neither running out before it.
 ---
---- It is `ord`'s `lt` where a byte decides it and no run's end does, so it stands whatever follows either run: what the encoding of one value owes another's where encodings are joined, and what a complement of every byte reverses.
+--- It is `ord`'s `lt` decided at a byte rather than by one run ending first, so it holds whatever follows either run. That is what one value's encoding must guarantee against another's where encodings are concatenated, and what complementing every byte reverses.
 pub let below(a: Bytes, b: Bytes) -> Bool =
     match a
     | x[] => false

@@ -12,7 +12,6 @@ pub let try(a: Nat, b: Nat) -> Option(Coprime(a, b)) =
     | false => Option/none()
     end;
 
---- `Coprime(a, b)` gives `Coprime(b, a)`.
 pub let symmetric(@a: Nat, @b: Nat, c: Coprime(a, b)) -> Coprime(b, a) =
     Eq/trans(Gcd/symmetric(b, a), c);
 

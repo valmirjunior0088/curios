@@ -28,7 +28,6 @@ pub let open(path: Bytes, mode: Mode) -> Try(Io, Io/Error, Handle) =
     let () = Status/succeeded(reply.status)!;
     Try/pure(reply.handle);
 
---- Close this handle.
 foreign handle_close(Handle) -> {};
 
 --- Close `h`. Closing a handle that names nothing does nothing.

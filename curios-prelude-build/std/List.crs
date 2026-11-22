@@ -193,7 +193,7 @@ pub let each(@M: (Type) -> Type, @T: Type, use Monad(M), l: List(T), f: (T) -> M
     end;
 
 -- A span of two or more is its two halves, each half its length rounded down, around the single between them where the halves leave one over. So every call is on a quotient by two, a descent the termination check reads, which is what lets the function stand in a type with no count beside it. A span stays within `n`, since its halves and the single between them lie inside it.
---- `n` singles combined as a balanced tree, so `combine` nests to a depth logarithmic in `n` rather than `n`. Each single is asked for with the proof that its index is below `n`, so a caller indexing `n` elements reads them without a default.
+--- `n` singles combined as a balanced tree, so `combine` nests to a depth logarithmic in `n` rather than `n`. Each single is requested with the proof that its index is below `n`, so a caller indexing `n` elements needs no default.
 pub let balanced(
     @A: Type,
     n: Nat,

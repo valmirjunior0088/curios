@@ -12,7 +12,6 @@ let floor_mul(x: Nat, y: Nat) -> Bool/Holds(+0 <= Nat/to_int(x) * Nat/to_int(y))
 let positive(m: Nat, y: Nat) -> Bool/Holds(+0 < Nat/to_int(m + 1) + Nat/to_int(y)) =
     Bool/True/qed();
 
---- `n <= n`.
 pub let refl(n: Int) -> Bool/Holds(n <= n) =
     Bool/True/qed();
 
@@ -52,7 +51,6 @@ pub let add_mono_l(n: Int, @a: Int, @b: Int, p: Bool/Holds(a <= b)) -> Bool/Hold
     p;
 
 -- How a proof the elaborator writes from the facts in scope reads an equation: as this bound and the one [`Eq/sym`] turns it into.
---- An equation's bound: `a = b` gives `a <= b`.
 pub let of_eq(@a: Int, @b: Int, e: Eq()(a, b)) -> Bool/Holds(a <= b) =
     Eq/subst((x: Int) => Bool/Holds(a <= x), e, refl(a));
 

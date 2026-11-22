@@ -3,7 +3,7 @@ use /std/Nat/{Divides};
 
 --- A greatest common divisor of `a` and `b`, with what makes it one: it divides both, and every common divisor divides it.
 ---
---- [`of`] builds it by Euclid's algorithm, in one recursion that carries the proofs with the value, so a law is a field read off the result or follows from [`unique`] and none recurses again. The proofs erase, and what runs is the algorithm.
+--- [`of`] runs Euclid's algorithm in one recursion that carries the proofs alongside the value, so each law is a field of the result or follows from [`unique`], and none recurses again. The proofs erase, leaving the algorithm.
 pub struct Gcd(a: Nat, b: Nat): pub Type {
     --- The divisor.
     value: Nat,
@@ -26,7 +26,7 @@ pub let step(a: Nat, b: Nat, @ok: Bool/Holds(0 < b), below: Gcd(b, a % b)) -> Gc
 
 --- The greatest common divisor of `a` and `b` with its proofs, `a` itself where `b` is zero.
 ---
---- A descent on `b`: a step hands on `b` and `a % b`, and a remainder is below its divisor by reduction. On closed operands it computes where a type mentions it.
+--- Total by descent on `b`, so on closed operands it computes inside a type.
 pub let of(a: Nat, b: Nat) -> Gcd(a, b) =
     Nat/descend(
         (y: Nat) => y,
@@ -53,7 +53,6 @@ pub let unique(@a: Nat, @b: Nat, g: Gcd(a, b)) -> Eq()(g.value, Nat/gcd(a, b)) =
         of(a, b).greatest(g.value, g.left, g.right),
         g.greatest(Nat/gcd(a, b), of(a, b).left, of(a, b).right));
 
---- `gcd(a, b)` is `gcd(b, a)`.
 pub let symmetric(a: Nat, b: Nat) -> Eq()(Nat/gcd(a, b), Nat/gcd(b, a)) =
     let g = of(a, b);
     unique(

@@ -49,7 +49,7 @@ pub use Byte/{let Byte};
 
 --- Natural numbers, unbounded: a machine word while a value is small, and a run of limbs once it outgrows one.
 ---
---- Subtraction truncates at zero. Division and remainder carry the precondition `Nat/NonZero(b)`, which is `Bool/Holds(0 < b)`. `lt` and `le` beneath hold the order lemmas a bound's proof is built from.
+--- Subtraction truncates at zero. Division and remainder require `Nat/NonZero(b)`, which is `Bool/Holds(0 < b)`. `Nat/lt` and `Nat/le` hold the order lemmas bounds are proved with.
 pub mod Nat;
 pub use Nat/{let Nat};
 
@@ -69,13 +69,13 @@ pub use Bytes/{let Bytes};
 
 --- One Unicode scalar value, certified against the surrogate range.
 ---
---- A conversion that always yields one builds its certificate, and one that may not answers an `Option`, so no character is ever a stand-in. Classification and case conversion follow the Unicode Character Database the toolchain pins; the `is_ascii_*` and `to_ascii_*` forms ask of ASCII alone.
+--- A conversion to `Char` either proves its result a scalar value or returns an `Option`: nothing is silently replaced. Classification and case conversion follow the Unicode Character Database the toolchain pins; the `is_ascii_*` and `to_ascii_*` forms consider ASCII alone.
 pub mod Char;
 pub use Char/{let Char};
 
 --- Text as certified UTF-8.
 ---
---- It is addressed by position — a byte offset at which a character begins, so a piece cut between two is whole characters — and counted in Unicode scalar values where a count is what is meant. Validity is checked once, where bytes become text through `of_bytes`, which answers where they stop being text when they are not, and every operation carries it from there, so nothing downstream checks it again. Comparison is code-point order.
+--- A position is a byte offset proved to fall between characters (`Str/At`), so a slice is always whole characters; a count is in Unicode scalar values. Validity is checked once, when `of_bytes` turns bytes into text and reports where they stop being UTF-8 if they do; every operation preserves it, so nothing checks it again. Strings compare in code-point order.
 pub mod Str;
 pub use Str/{let Str};
 
@@ -107,7 +107,7 @@ pub use State/{let State};
 
 --- A map from keys of one type to values, built and read under the `Map/Key` dictionary its type names.
 ---
---- A key is held as it went in and handed back at its own type, in the keys' own order: a `Map/Key` witness proves its encoding injective and in that order, a map holds the proof that its trie is sound, and that its keys are in order is a theorem beside `keys`. A map under another dictionary is a value of another type, and `rekey` moves one across.
+--- Keys are stored as given and come back in their own order. Three proofs carry that: a `Map/Key` witness proves its encoding injective and order-preserving, every map holds the proof that its trie is sound, and the order of `keys` is a theorem beside it. The dictionary is part of the type, so maps under two dictionaries are two types; `rekey` converts between them.
 pub mod Map;
 pub use Map/{let Map};
 
@@ -121,7 +121,7 @@ pub use Path/{let Path};
 
 --- A parser monad over an input's bytes or its text.
 ---
---- One parser type, `Parse(I, A)`, indexed by the carrier it reads: `Parse(Bytes, A)` reads bytes, whose positions lie within the input, and `Parse(Str, A)` reads text, whose positions are boundaries of valid text, so a text primitive reads characters and pieces of the input by position. The combinators and `run` are written once for both; each carrier's primitives live under `Parse/bytes` and `Parse/str`, one spelling per operation, and one that takes a run stops where its predicate does. A parser declines when the input is not its shape, and `or` tries the alternative, reporting the refusal that reached further when neither fits; once `commit` has said the input is its shape, a refusal is reported instead. A parser that must consume everything ends with `eof()`. A refusal is a `Parse/Error`: what was wanted and the byte offset it was wanted at.
+--- One parser type, `Parse(I, A)`, for either carrier: `Parse(Bytes, A)` reads bytes, and `Parse(Str, A)` reads text, its positions always between characters. The combinators and `run` are shared; each carrier's primitives are under `Parse/bytes` and `Parse/str`. A parser declines input that is not its shape, and `or` then tries the alternative, reporting whichever refusal got further when neither fits; after `commit`, a refusal is final. End with `eof()` to require the whole input. A refusal is a `Parse/Error`: what was expected, and at which byte offset.
 pub mod Parse;
 pub use Parse/{let Parse};
 
@@ -149,7 +149,7 @@ pub use Box/{let Box};
 
 --- The error channel over a monad: an `M(Result(E, A))` sequenced so that a failure stops the region.
 ---
---- A bare `Result`, an action of the base monad, and an `Io` action where the base admits one all sequence in a `Try` region with `!`. Every host operation that can fail is a `Try` over its base, and `both` and `all` run actions that may fail side by side, the first failure answering for all of them.
+--- Inside a `Try` region, `!` sequences a `Result`, an action of the base monad, or an `Io` action where the base lifts one. Every host operation that can fail returns a `Try`. `both` and `all` run fallible actions side by side, the first failure failing them all.
 pub mod Try;
 pub use Try/{let Try};
 
@@ -175,7 +175,7 @@ pub use Fmt/{let Fmt};
 ---
 --- `Instant`, `Timestamp` and the `Duration` between two of either; `Date`, `Time`, `DateTime` and `Offset`, and the `OffsetDateTime` where the calendar meets the timeline.
 ---
---- `Instant` is a reading of the monotonic clock, good for measuring alone; `Timestamp` is a moment that means something; `Duration` is the distance between two of either, signed. Each is one count of nanoseconds, and the two moments do not convert. The civil types are a date's and a time's fields under the proofs that they spell one, in the proleptic Gregorian calendar with a year 0, and a civil value names a moment only at an offset: `OffsetDateTime/of_timestamp` and `to_timestamp` are the crossings. An `Offset` is what RFC 9557 reads one as: so many seconds east of UTC, or the local offset unknown, which `Z` writes.
+--- `Instant` reads the monotonic clock and is for measuring; `Timestamp` is a moment on the wall clock; `Duration` is the signed distance between two of either. Each is a count of nanoseconds, and the two kinds of moment do not convert. The civil types hold their fields with proofs that they are in range, in the proleptic Gregorian calendar with a year 0, and a civil value names a moment only at an offset: `OffsetDateTime/of_timestamp` and `to_timestamp` convert. An `Offset` follows RFC 9557: so many seconds east of UTC, or the local offset unknown, which `Z` writes.
 pub mod time;
 
 --- Randomness from the host, in `Io`.
@@ -231,12 +231,12 @@ pub use Html/{let Html};
 -- Applications: protocols and frameworks.
 --- HTTP/1.1 over `tcp`: the vocabulary of an exchange as data, a client that performs one and a server that answers one.
 ---
---- A message is read as RFC 9112 frames it, through pieces that hold no stream, and made as one a wire can carry: a field's name is a token, its value holds no control octet, and the renderers write the framing fields themselves. Each end takes one message per connection and whole bodies, within bounds it states: the client under a deadline and a redirect limit, the server answering a refused request with its status and closing only once its peer has had the reply.
+--- Messages are parsed as RFC 9112 frames them, by readers that hold no stream, and every message the types admit can be sent: a field name is a token, a field value holds no control octet, and the renderer writes the framing fields. Each end handles one message per connection, with whole bodies, within limits it states: the client has a deadline and a redirect limit, and the server answers a malformed request with its status and closes only once the peer has the reply.
 pub mod http;
 
 --- A command line described as data: the commands, options and positionals a program declares, and the parse a line reads into.
 ---
---- A declaration that describes no one command line is refused where it is written, and the declaration decides the parse's type. An argument and a command are read by name, and a name the declaration lacks is refused where it is written. The token grammar is GNU's.
+--- A malformed declaration, such as two options sharing a name, is refused where it is written, and the declaration determines the parsed result's type. Arguments and commands are read by name, and reading a name the declaration lacks is refused where it is written. Tokens follow GNU's conventions.
 pub mod Cli;
 pub use Cli/{let Cli};
 

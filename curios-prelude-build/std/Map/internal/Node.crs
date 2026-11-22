@@ -824,7 +824,7 @@ pub let rebased(
 ) -> Apart(k, a, c) =
     turned(a, k, c, reheaded(f, a, k, c, turned(k, f, c, apart), agree));
 
---- A branch with one twig updated to a node answering `x` at `k` in its place, `k`'s digit there the twig's, answers `x` at `k` in the branch's place: an encoding with another digit there finds what it found, and is not `k`.
+--- Updating the twig `k`'s digit picks to a node that answers `x` at `k` gives a branch that answers `x` at `k`: an encoding with another digit there finds what it found before, and is not `k`.
 pub let branch_answers(
     @K: Type,
     use Key(K),
@@ -1110,7 +1110,7 @@ pub let wedged(
                 (j, under) => Eq/sym(first_agrees(l, c, 0, k, twigs, some, j, under))),
         many = two };
 
---- A leaf of `key`, whose encoding is `k`, wedged in beside a sound node it parts from at `c`, the node forking past `c`, answers `key`'s value at `k` in the node's place: an encoding at the leaf's digit there is not the node's, and one at another digit is not `k`.
+--- A leaf for `key`, encoded `k`, wedged beside a sound node it parts from at `c`, the node forking past `c`, answers `key`'s value at `k`: an encoding with the leaf's digit at `c` is not the node's, and one with another digit is not `k`.
 pub let wedge_answers(
     @K: Type,
     use Key(K),
@@ -1251,7 +1251,7 @@ pub let first_filled(
         end
     end;
 
---- How an insertion under the node `t` of the key whose encoding is `k`, at `v`, ended: `t` held nothing, for the branch above to fill; a node with the key's leaf added, or one with the value of a leaf it held replaced, either of which may stand where `t` did and answers `v` at `k` in its place; or `t` as it was beside the position the key first parts from its keys at, and its first key's digit there, where its leaf is still to be wedged in above.
+--- How inserting `v` at `k` under the node `t` ended: `t` was empty, for the branch above to fill; a node with the key's leaf added, or with the value of the leaf it held replaced, either standing where `t` did and answering `v` at `k`; or `t` unchanged, with the position where the key first parts from its keys and its first key's digit there, for the branch above to wedge the new leaf in.
 pub induct Inserted(K: Type, use Key(K), V: Type, t: Node(K, V), k: Bytes, v: V): pub Type
 | vacant(empty: Eq()(t, Node/empty()))
 | added(
@@ -1619,7 +1619,7 @@ pub let Gone(@K: Type, use Key(K), @V: Type, t: Node(K, V), k: Bytes) -> Prop =
         match k == j | true => Option/none() | false => find(t, j) end,
         Option/none());
 
---- How a removal under the node `t` of the key whose encoding is `k` ended: the key was not there, and `t` answers nothing at `k`; the node held that key alone, and nothing is left of it; or what is left of the node, which may stand where `t` did and answers nothing at `k` in its place.
+--- How removing `k` under the node `t` ended: the key was absent, and `t` answers nothing at `k`; the node held that key alone, and nothing is left; or what is left, which stands where `t` did and answers nothing at `k`.
 pub induct Removed(K: Type, use Key(K), V: Type, t: Node(K, V), k: Bytes): pub Type
 | absent(n: Node(K, V), @back: Eq()(n, t), answers: Answers(t, t, k, Option/none()))
 | gone(empty: Gone(t, k))

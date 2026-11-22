@@ -6,7 +6,7 @@ pub use parse/{decode, unescape};
 use /std/{Str, Char, Bool, List, Option, Spell, Show, Fmt};
 use /std/ops/{Eql};
 
---- An HTML tree: an element with its attributes and children, written `<name></name>`; one written `<name/>`, as the void elements are; text; a comment; or a run of trees standing where one does. Text is written escaped, so no value that lands in it can be read as markup. The shape of the tree is the author's, as it is in the browser: no element name is consulted, so whether `void` suits the element is theirs to know.
+--- An HTML tree: an element with its attributes and children, written `<name></name>`; a void element, written `<name/>`; text; a comment; or a run of trees standing as one. Text is written escaped, so no value placed in it can be read as markup. The tree's shape is the author's: no element name is consulted, so whether an element should be void is theirs to know.
 pub induct Html: pub Type
 --- An element with its attributes and children, written `<name></name>`.
 | element(Str, List(Attr), List(Html))
@@ -14,7 +14,6 @@ pub induct Html: pub Type
 | void(Str, List(Attr))
 --- Text, written escaped so nothing in it reads as markup.
 | text(Str)
---- A comment.
 | comment(Str)
 --- A run of trees standing where one does.
 | fragment(List(Html))

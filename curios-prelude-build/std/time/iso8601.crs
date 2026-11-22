@@ -125,7 +125,6 @@ let month_and_day(year: Int) -> Parse(Str, Date) =
     | none() => Parse/fail("invalid date")
     end;
 
---- A date.
 pub let date() -> Parse(Str, Date) =
     let y = year()!;
     date_after(y);
