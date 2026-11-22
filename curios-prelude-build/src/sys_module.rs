@@ -902,7 +902,9 @@ fn box_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
             ),
         ),
         documented(
-            &["The value `b` holds."],
+            &[
+                "The value `b` holds now: an observation, which a wait may leave stale, where a change computed from the value `change` hands its function is not.",
+            ],
             operation(
                 "held",
                 &["T", "b"],
