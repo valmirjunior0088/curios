@@ -14,7 +14,7 @@ pub fn root() -> &'static Path {
         .expect("xtask sits one level below the workspace root")
 }
 
-/// Where cargo puts what it builds, honoring the same override cargo itself honors: the task files' `{target}`.
+/// Where cargo puts what it builds, honoring the same override cargo itself honors: the task files' `{!cargo_target_dir}`.
 pub fn target_directory() -> PathBuf {
     match env::var_os("CARGO_TARGET_DIR") {
         Some(directory) => root().join(directory),
@@ -22,7 +22,7 @@ pub fn target_directory() -> PathBuf {
     }
 }
 
-/// Cargo's home, where it fetches what a build depends on and builds it from, honoring the same override cargo itself honors: the task files' `{cargo_home}`.
+/// Cargo's home, where it fetches what a build depends on and builds it from, honoring the same override cargo itself honors: the task files' `{!cargo_home}`.
 pub fn cargo_home() -> PathBuf {
     match env::var_os("CARGO_HOME") {
         Some(home) => PathBuf::from(home),
@@ -30,5 +30,5 @@ pub fn cargo_home() -> PathBuf {
     }
 }
 
-/// The triple this tool was built for, which is the host: the task files' `{host}`.
+/// The triple this tool was built for, which is the host: the task files' `{!host_triple}`.
 pub const HOST_TRIPLE: &str = env!("CURIOS_HOST_TRIPLE");

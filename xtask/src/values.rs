@@ -1,10 +1,10 @@
 //! What a run fills a command's braces with.
 //!
-//! **A variable is a constant of the run.** Each has one value for the whole run: what its file writes, what the command line gave, or what a command printed, asked once and only where a step that runs uses it. The built-ins are the triple `xtask` was built for, cargo's target directory, Cargo's home and the toolchain's root, the last asked of the pinned `rustc` once a run, and a produced file stands for its path, from the repository's root wherever a step runs.
+//! **A variable is a constant of the run.** Each has one value for the whole run: what its file writes, what the command line gave, or what a command printed, asked once and only where a step that runs uses it. The values the runner fills, each written after a `!`, are the triple `xtask` was built for, Cargo's target directory, Cargo's home and the toolchain's root, the last asked of the pinned `rustc` once a run, and a produced file stands for its path, from the repository's root wherever a step runs.
 
 use {
     crate::{
-        Fill, HOST_TRIPLE, Name, Piece, Tree, Variable, Word, ask, cargo_home, dotted, root,
+        Fill, HOST_TRIPLE, Name, Piece, Tree, Variable, Word, ask, cargo_home, from_top, root,
         target_directory,
     },
     std::{
@@ -89,9 +89,11 @@ impl<'a> Values<'a> {
                     self.given.get(name).unwrap_or(otherwise).clone(),
                 ])),
             },
-            Fill::Host | Fill::Target | Fill::CargoHome | Fill::Sysroot | Fill::Produced(_) => {
-                self.text(word).map(|text| Some(vec![text]))
-            }
+            Fill::HostTriple
+            | Fill::CargoTargetDir
+            | Fill::CargoHome
+            | Fill::RustSysroot
+            | Fill::Produced(_) => self.text(word).map(|text| Some(vec![text])),
         }
     }
 
@@ -101,10 +103,12 @@ impl<'a> Values<'a> {
         for piece in &word.0 {
             match piece {
                 Piece::Text(written) => text.push_str(written),
-                Piece::Value(Fill::Host) => text.push_str(HOST_TRIPLE),
-                Piece::Value(Fill::Target) => text.push_str(&target_directory().to_string_lossy()),
+                Piece::Value(Fill::HostTriple) => text.push_str(HOST_TRIPLE),
+                Piece::Value(Fill::CargoTargetDir) => {
+                    text.push_str(&target_directory().to_string_lossy())
+                }
                 Piece::Value(Fill::CargoHome) => text.push_str(&cargo_home().to_string_lossy()),
-                Piece::Value(Fill::Sysroot) => text.push_str(self.sysroot()?),
+                Piece::Value(Fill::RustSysroot) => text.push_str(self.sysroot()?),
                 Piece::Value(Fill::Produced(name)) => {
                     text.push_str(&self.path(name)?.to_string_lossy())
                 }
@@ -114,7 +118,7 @@ impl<'a> Values<'a> {
                         text.push_str(self.given.get(name).unwrap_or(otherwise))
                     }
                     Variable::Output(_) | Variable::Flag { .. } => {
-                        unreachable!("the reader keeps `{}` a word of its own", dotted(name))
+                        unreachable!("the reader keeps `{}` a word of its own", from_top(name))
                     }
                 },
             }
@@ -129,7 +133,7 @@ impl<'a> Values<'a> {
             return Ok(sysroot);
         }
         let printed = ask(Command::new("rustc"), &["--print", "sysroot"]).map_err(|error| {
-            format!("`{{sysroot}}` is what `rustc --print sysroot` prints: {error}")
+            format!("`{{!rust_sysroot}}` is what `rustc --print sysroot` prints: {error}")
         })?;
 
         Ok(self.sysroot.get_or_init(|| printed.trim().to_string()))
@@ -151,7 +155,7 @@ impl<'a> Values<'a> {
         .map_err(|error| {
             format!(
                 "`{}` is what `{}` prints: {error}",
-                dotted(name),
+                from_top(name),
                 command.join(" ")
             )
         })?;

@@ -14,7 +14,7 @@ fn run_refused(variables: &str, run: &str) -> String {
 fn a_write_names_its_file_and_what_it_holds_beside_the_commands() {
     let tree = tree(&[(
         "a",
-        "description = \"A\"\nvariables.landing = \"held\"\n[s]\ndescription = \"S\"\nrun = [[\"true\"], { write = \"{target}/landing\", contents = \"{landing}\" }]\n",
+        "description = \"A\"\nvariables.landing = \"held\"\n[s]\ndescription = \"S\"\nrun = [[\"true\"], { write = \"{!cargo_target_dir}/landing\", contents = \"{.a.variables.landing}\" }]\n",
     )])
     .unwrap();
 
@@ -26,11 +26,14 @@ fn a_write_names_its_file_and_what_it_holds_beside_the_commands() {
     assert_eq!(
         path.0,
         [
-            Piece::Value(Fill::Target),
+            Piece::Value(Fill::CargoTargetDir),
             Piece::Text("/landing".to_string())
         ]
     );
-    assert_eq!(contents.alone(), Some(&Fill::Variable(name("a.landing"))));
+    assert_eq!(
+        contents.alone(),
+        Some(&Fill::Variable(name("a.variables.landing")))
+    );
 }
 
 #[test]
@@ -49,8 +52,11 @@ fn a_write_of_a_value_that_may_be_several_words_is_refused() {
     let flag = "variables.only.flag = \"-E\"\nvariables.only.help = \"H\"\n";
 
     assert!(
-        run_refused(flag, "[{ write = \"a\", contents = \"{only}\" }]")
-            .contains("may stand for several words or none")
+        run_refused(
+            flag,
+            "[{ write = \"a\", contents = \"{.a.variables.only}\" }]"
+        )
+        .contains("may stand for several words or none")
     );
 }
 
@@ -67,7 +73,8 @@ fn a_flag_that_is_no_short_or_long_spelling_is_refused() {
         let variables = ["variables.only.flag = ", flag, "\n"].concat();
 
         assert!(
-            run_refused(&variables, "[\"echo\", \"{only}\"]").contains("a flag is one spelling"),
+            run_refused(&variables, "[\"echo\", \"{.a.variables.only}\"]")
+                .contains("a flag is one spelling"),
             "{flag}"
         );
     }

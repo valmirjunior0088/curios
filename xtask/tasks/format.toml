@@ -4,7 +4,7 @@ description = "Every tree's formatting, written; the trees' lints hold it"
 description = "Format the workspace's Rust, the corpus's Rust twins included"
 run = [
     ["cargo", "fmt", "--all"],
-    ["rustfmt", "--edition", "{workspace.edition}", "{workspace.loose}"],
+    ["rustfmt", "--edition", "{.workspace.variables.edition}", "{.workspace.variables.loose}"],
 ]
 
 [web]

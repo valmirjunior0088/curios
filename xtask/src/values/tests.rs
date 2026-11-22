@@ -37,7 +37,7 @@ fn words(tree: &Tree, given: &[(&str, &str)]) -> Option<Vec<String>> {
 fn a_list_stands_for_its_words() {
     let tree = step(
         "variables.list = [\"x\", \"y\"]",
-        "[\"echo\", \"{list}\", \"z\"]",
+        "[\"echo\", \"{.a.variables.list}\", \"z\"]",
     );
 
     assert_eq!(words(&tree, &[]).unwrap(), ["echo", "x", "y", "z"]);
@@ -45,7 +45,10 @@ fn a_list_stands_for_its_words() {
 
 #[test]
 fn a_string_sits_inside_a_word_beside_text() {
-    let tree = step("variables.name = \"x\"", "[\"echo\", \"--{name}=1\"]");
+    let tree = step(
+        "variables.name = \"x\"",
+        "[\"echo\", \"--{.a.variables.name}=1\"]",
+    );
 
     assert_eq!(words(&tree, &[]).unwrap(), ["echo", "--x=1"]);
 }
@@ -54,12 +57,12 @@ fn a_string_sits_inside_a_word_beside_text() {
 fn a_flag_is_its_flag_and_value_where_given_and_nothing_where_not() {
     let tree = step(
         "variables.only = { flag = \"-E\" }",
-        "[\"echo\", \"{only}\"]",
+        "[\"echo\", \"{.a.variables.only}\"]",
     );
 
     assert_eq!(words(&tree, &[]).unwrap(), ["echo"]);
     assert_eq!(
-        words(&tree, &[("a.only", "test(~x)")]).unwrap(),
+        words(&tree, &[("a.variables.only", "test(~x)")]).unwrap(),
         ["echo", "-E", "test(~x)"]
     );
 }
@@ -69,11 +72,11 @@ fn a_flag_is_its_flag_and_value_where_given_and_nothing_where_not() {
 fn a_flag_of_two_spellings_is_handed_on_by_its_long_one() {
     let tree = step(
         "variables.only = { flag = [\"-E\", \"--filterset\"] }",
-        "[\"echo\", \"{only}\"]",
+        "[\"echo\", \"{.a.variables.only}\"]",
     );
 
     assert_eq!(
-        words(&tree, &[("a.only", "test(~x)")]).unwrap(),
+        words(&tree, &[("a.variables.only", "test(~x)")]).unwrap(),
         ["echo", "--filterset", "test(~x)"]
     );
 }
@@ -82,12 +85,12 @@ fn a_flag_of_two_spellings_is_handed_on_by_its_long_one() {
 fn an_argument_is_its_default_where_none_is_given() {
     let tree = step(
         "variables.file = { argument = \"PATH\", else = \"default.crs\" }",
-        "[\"echo\", \"{file}\"]",
+        "[\"echo\", \"{.a.variables.file}\"]",
     );
 
     assert_eq!(words(&tree, &[]).unwrap(), ["echo", "default.crs"]);
     assert_eq!(
-        words(&tree, &[("a.file", "other.crs")]).unwrap(),
+        words(&tree, &[("a.variables.file", "other.crs")]).unwrap(),
         ["echo", "other.crs"]
     );
 }
@@ -97,11 +100,11 @@ fn an_argument_is_its_default_where_none_is_given() {
 fn a_command_whose_printed_list_is_empty_is_not_run() {
     let empty = step(
         "variables.files = { run = [\"true\"] }",
-        "[\"echo\", \"{files}\"]",
+        "[\"echo\", \"{.a.variables.files}\"]",
     );
     let printed = step(
         "variables.files = { run = [\"echo\", \"one\"] }",
-        "[\"echo\", \"{files}\"]",
+        "[\"echo\", \"{.a.variables.files}\"]",
     );
 
     assert_eq!(words(&empty, &[]), None);
@@ -114,7 +117,7 @@ fn a_produced_file_is_its_path_from_the_root() {
         ("xtask/tasks.toml", "description = \"The top\"\n"),
         (
             "xtask/tasks/a.toml",
-            "description = \"A\"\n[s]\ndescription = \"S\"\nproduces = { out = \"some/{host}.d\" }\nrun = [[\"touch\", \"{out}\"]]\n",
+            "description = \"A\"\n[s]\ndescription = \"S\"\nproduces = { out = \"some/{!host_triple}.d\" }\nrun = [[\"touch\", \"{.a.s.produces.out}\"]]\n",
         ),
     ])
     .unwrap();

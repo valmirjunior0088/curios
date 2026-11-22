@@ -93,14 +93,14 @@ fn a_task_named_like_a_command_outside_the_tree_is_refused() {
 fn a_refusal_names_its_file_line_and_column_and_marks_the_place() {
     let refusal = tree(&[(
         "a",
-        "description = \"A\"\n[s]\ndescription = \"S\"\nrequires = [\"nothing\"]\n",
+        "description = \"A\"\n[s]\ndescription = \"S\"\nrequires = [\".nothing\"]\n",
     )])
     .unwrap_err()
     .to_string();
 
     assert!(
-        refusal.starts_with("xtask/tasks/a.toml:4:13: `nothing` names nothing"),
+        refusal.starts_with("xtask/tasks/a.toml:4:13: `.nothing` names nothing"),
         "{refusal}"
     );
-    assert!(refusal.ends_with("^^^^^^^^^"), "{refusal}");
+    assert!(refusal.ends_with("^^^^^^^^^^"), "{refusal}");
 }

@@ -23,7 +23,7 @@ run = [
 [build]
 description = "Generate the parsers from the grammars, the program's into `base/src/` and Core text's into `core/src/`, where the repository commits them"
 dir = "editors/tree-sitter"
-consumes = ["installed"]
+consumes = [".tree-sitter.install.produces.installed"]
 produces.parser = "editors/tree-sitter/base/src"
 run = [
     ["npm", "run", "generate"],
@@ -32,7 +32,7 @@ run = [
 [test]
 description = "Regenerate the parsers, then parse the standard library, the corpus and the board's Core text"
 dir = "editors/tree-sitter"
-consumes = ["installed"]
+consumes = [".tree-sitter.install.produces.installed"]
 run = [
     ["npm", "test"],
 ]

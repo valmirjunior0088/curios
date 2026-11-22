@@ -8,18 +8,29 @@ variables.program.help = "The .crs entry file to run"
 [debug]
 description = "Run one program under a recorder with the compiler in debug, the build iterating already has, so a question asked of a change costs the change; then fold what it filed"
 # Two invocations of one build: a stream is worth reading exactly when the run did not finish, and such a run never reaches its last step, so the fold is a pass of its own, by the compiler that wrote the stream.
-consumes = ["launcher.binary"]
+consumes = [".launcher.build.produces.binary"]
 run = [
-    ["cargo", "run", "--package", "curios", "--", "--profile", "{stream}", "run", "{program}"],
-    ["cargo", "run", "--package", "curios", "--", "profile", "{stream}"],
+    [
+        "cargo", "run", "--package", "curios", "--",
+        "--profile", "{.profile.variables.stream}",
+        "run", "{.profile.variables.program}",
+    ],
+    ["cargo", "run", "--package", "curios", "--", "profile", "{.profile.variables.stream}"],
 ]
 
 [release]
 description = "Run one program under a recorder with the compiler in release, the shipped compiler's, whose timings a specification quotes; then fold what it filed"
-consumes = ["launcher.binary"]
+consumes = [".launcher.build.produces.binary"]
 run = [
-    ["cargo", "run", "--release", "--package", "curios", "--", "--profile", "{stream}", "run", "{program}"],
-    ["cargo", "run", "--release", "--package", "curios", "--", "profile", "{stream}"],
+    [
+        "cargo", "run", "--release", "--package", "curios", "--",
+        "--profile", "{.profile.variables.stream}",
+        "run", "{.profile.variables.program}",
+    ],
+    [
+        "cargo", "run", "--release", "--package", "curios", "--",
+        "profile", "{.profile.variables.stream}",
+    ],
 ]
 
 [prelude]

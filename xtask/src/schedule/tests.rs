@@ -71,7 +71,10 @@ fn the_extension_s_test_runs_after_the_grammar_it_hashes() {
 #[test]
 fn a_variable_given_runs_only_the_steps_that_use_it() {
     assert_eq!(
-        scheduled("workspace", &[("workspace.expression", "test(~cli)")]),
+        scheduled(
+            "workspace",
+            &[("workspace.variables.expression", "test(~cli)")]
+        ),
         ["launcher build", "workspace test suite"]
     );
     let whole = scheduled("workspace", &[]);

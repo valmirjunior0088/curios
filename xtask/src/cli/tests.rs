@@ -42,15 +42,18 @@ fn a_path_the_tree_does_not_hold_is_refused() {
 fn a_flag_is_taken_where_a_step_under_the_path_uses_it() {
     let expected = Asked::Task {
         name: name("workspace test"),
-        given: [(name("workspace expression"), "test(~cli)".to_string())]
-            .into_iter()
-            .map(|(name, value)| {
-                (
-                    name.join(".").split('.').map(str::to_string).collect(),
-                    value,
-                )
-            })
-            .collect(),
+        given: [(
+            name("workspace variables expression"),
+            "test(~cli)".to_string(),
+        )]
+        .into_iter()
+        .map(|(name, value)| {
+            (
+                name.join(".").split('.').map(str::to_string).collect(),
+                value,
+            )
+        })
+        .collect(),
     };
 
     assert_eq!(

@@ -23,7 +23,7 @@ run = [
 [test]
 description = "Hold the TextMate grammars to their snapshots"
 dir = "editors/textmate"
-consumes = ["installed"]
+consumes = [".textmate.install.produces.installed"]
 run = [
     ["npm", "test"],
 ]

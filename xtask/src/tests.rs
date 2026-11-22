@@ -131,7 +131,7 @@ fn the_edition_handed_to_rustfmt_is_the_workspace_s() {
     let manifest = MANIFEST.parse::<toml_edit::DocumentMut>().unwrap();
 
     assert_eq!(
-        written(&tree(), "workspace.edition"),
+        written(&tree(), "workspace.variables.edition"),
         manifest["workspace"]["package"]["edition"]
             .as_str()
             .unwrap()
@@ -142,9 +142,11 @@ fn the_edition_handed_to_rustfmt_is_the_workspace_s() {
 #[test]
 fn the_workspace_s_biome_steps_reach_every_file_biome_reads_of_it() {
     let tree = tree();
-    let Variable::Words(handed) =
-        &tree.variables[&vec!["workspace".to_string(), "web".to_string()]]
-    else {
+    let Variable::Words(handed) = &tree.variables[&vec![
+        "workspace".to_string(),
+        "variables".to_string(),
+        "web".to_string(),
+    ]] else {
         panic!("the workspace's web paths are words");
     };
     // The one list `biome.json` holds, read as text: the file is JSON, which nothing else here parses.

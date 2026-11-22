@@ -21,7 +21,7 @@ fn group() -> Name {
 #[test]
 fn a_step_behind_one_that_failed_is_not_run_and_the_rest_go_on() {
     let tree = tree(
-        "[broken]\ndescription = \"B\"\nrun = [[\"false\"]]\n[behind]\ndescription = \"Behind\"\nrequires = [\"broken\"]\nrun = [[\"true\"]]\n[apart]\ndescription = \"Apart\"\nrun = [[\"true\"]]\n",
+        "[broken]\ndescription = \"B\"\nrun = [[\"false\"]]\n[behind]\ndescription = \"Behind\"\nrequires = [\".a.broken\"]\nrun = [[\"true\"]]\n[apart]\ndescription = \"Apart\"\nrun = [[\"true\"]]\n",
     );
 
     assert_eq!(
@@ -45,7 +45,7 @@ fn a_step_that_leaves_no_file_it_produces_fails() {
 #[test]
 fn a_run_of_steps_that_pass_passes() {
     let tree = tree(
-        "[first]\ndescription = \"F\"\nrun = [[\"true\"], [\"true\"]]\n[second]\ndescription = \"S\"\nrequires = [\"first\"]\nrun = [[\"true\"]]\n",
+        "[first]\ndescription = \"F\"\nrun = [[\"true\"], [\"true\"]]\n[second]\ndescription = \"S\"\nrequires = [\".a.first\"]\nrun = [[\"true\"]]\n",
     );
 
     assert_eq!(perform(&tree, &group(), &Given::new()), Ok(()));

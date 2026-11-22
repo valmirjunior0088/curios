@@ -2,7 +2,7 @@
 //!
 //! **A file is a group, and a key's meaning is where it sits.** `xtask/tasks.toml` is the group the files in `xtask/tasks/` belong to, each a group named after its file. A file's top level holds `description`, `variables`, `programs`, and its steps and groups; a group holds only steps and groups; a step holds `description`, `requires`, `consumes`, `produces`, `run` and `dir`, and no table of its own. So whether a key is an attribute or a child is read off its position, and one out of place is refused rather than guessed at.
 //!
-//! **A name is a path, and it names one thing.** A file's variables, produced files, steps and groups share one namespace, and a name declared twice in it is refused. Without a dot a name is the file's own; with dots it is a path from the top, as the command line spells it. `requires` names steps and groups, `consumes` produced files, and the braces in a command a variable or a produced file. Each resolves as the tree is read, so a name that names nothing, or the wrong kind of thing, is refused before anything runs, and so is a command that reads a file its step does not consume, which would run without the edge that orders it.
+//! **A name is the path to where it is declared, written from the top with a leading `.`, and it names one thing.** Each segment is a key, read from the top one projection at a time: a step or a group is its tables, `.workspace.lint.clippy`; a variable sits under its file's `variables`, `.workspace.variables.edition`; and a produced file under its step's `produces`, `.launcher.build.produces.binary`. So a name reads the same wherever it is written, and says where to find what it names. `requires` names steps and groups, `consumes` produced files, and the braces in a command a variable or a produced file, or, with a `!` where the `.` stands, a value the runner fills ([`BUILT_INS`]). Each resolves as the tree is read, so a name that names nothing, one written without its `.`, or one naming the wrong kind of thing, is refused before anything runs, and so is a command that reads a file its step does not consume, which would run without the edge that orders it.
 
 use {
     crate::root,
@@ -35,8 +35,13 @@ const DIRECTORY: &str = "xtask/tasks";
 /// The words `cargo xtask` keeps for its commands outside the tree, which no task may take.
 pub const COMMANDS: [&str; 2] = ["release", "installer"];
 
-/// The values the runner fills without a declaration.
-const BUILT_INS: [&str; 4] = ["host", "target", "cargo_home", "sysroot"];
+/// The values the runner fills, which no file declares: each written after a `!` in a brace, `{!host_triple}`, named as Cargo and `rustc` name what it holds.
+const BUILT_INS: [&str; 4] = [
+    "host_triple",
+    "cargo_target_dir",
+    "cargo_home",
+    "rust_sysroot",
+];
 
 /// The keys a step may hold.
 const STEP_KEYS: [&str; 6] = [
@@ -51,9 +56,14 @@ const STEP_KEYS: [&str; 6] = [
 /// What names a task, a variable or a produced file: its words from the top, as the command line spells a task.
 pub type Name = Vec<String>;
 
-/// A name as a reader writes it, with dots.
+/// A name's words joined by dots.
 pub fn dotted(name: &[String]) -> String {
     name.join(".")
+}
+
+/// A name as a file writes it: the path from the top, with its leading `.`.
+pub fn from_top(name: &[String]) -> String {
+    format!(".{}", dotted(name))
 }
 
 /// A name as the command line spells it, with spaces.
@@ -188,14 +198,14 @@ pub enum Piece {
 /// What a pair of braces stands for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Fill {
-    /// The triple `xtask` was built for.
-    Host,
-    /// Cargo's target directory.
-    Target,
-    /// Cargo's home.
+    /// The triple `xtask` was built for, `!host_triple`.
+    HostTriple,
+    /// Cargo's target directory, `!cargo_target_dir`.
+    CargoTargetDir,
+    /// Cargo's home, `!cargo_home`.
     CargoHome,
-    /// The toolchain's root, as the pinned `rustc` prints it.
-    Sysroot,
+    /// The toolchain's root, as the pinned `rustc` prints it, `!rust_sysroot`.
+    RustSysroot,
     Variable(Name),
     /// A produced file's path.
     Produced(Name),
@@ -308,7 +318,7 @@ struct Written<'a> {
     span: Option<Range<usize>>,
 }
 
-/// What a name in a file's namespace is.
+/// What a name declares.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Kind {
     Task,
@@ -402,7 +412,7 @@ impl Tree {
                             file.refuse(item.span(), "`variables` is a table of names".to_string())
                         })?;
                         for (name, value) in table.iter() {
-                            let name = scoped(&file.scope, name);
+                            let name = scoped(&scoped(&file.scope, "variables"), name);
                             declare(&mut kinds, file, &name, Kind::Variable, value.span())?;
                             let variable = variable_of(file, value)?;
                             tree.variables.insert(name, variable);
@@ -501,7 +511,7 @@ impl Tree {
                     )
                 })?;
                 for (name, value) in table.iter() {
-                    let name = scoped(&file.scope, name);
+                    let name = scoped(&scoped(&step.name, "produces"), name);
                     declare(&mut kinds, file, &name, Kind::Produced, value.span())?;
                 }
             }
@@ -512,7 +522,8 @@ impl Tree {
         for (index, step) in written.iter().enumerate() {
             let file = &files[step.file];
             let resolve = |text: &str, span: Option<Range<usize>>| {
-                let name = resolved(&file.scope, text);
+                let name =
+                    resolved(text).ok_or_else(|| file.refuse(span.clone(), unrooted(text)))?;
                 match kinds.get(&name) {
                     Some(kind) => Ok((name, *kind)),
                     None => Err(file.refuse(span, format!("`{text}` names nothing"))),
@@ -524,7 +535,7 @@ impl Tree {
                 None => {
                     return Err(file.refuse(
                         step.span.clone(),
-                        format!("step `{}` has no `description`", dotted(&step.name)),
+                        format!("step `{}` has no `description`", from_top(&step.name)),
                     ));
                 }
             };
@@ -565,7 +576,7 @@ impl Tree {
                         )
                     })?;
                     let path = word_of(file, path, value.span(), &kinds, &tree.variables)?;
-                    let name = scoped(&file.scope, name);
+                    let name = scoped(&scoped(&step.name, "produces"), name);
                     tree.produced.insert(
                         name.clone(),
                         Produced {
@@ -590,7 +601,7 @@ impl Tree {
                     {
                         return Err(file.refuse(
                             word.span(),
-                            format!("`{}` is a file this step neither consumes nor produces, so nothing orders it after the step that makes it", dotted(name)),
+                            format!("`{}` is a file this step neither consumes nor produces, so nothing orders it after the step that makes it", from_top(name)),
                         ));
                     }
                 }
@@ -632,7 +643,7 @@ impl Tree {
                     step.span.clone(),
                     format!(
                         "step `{}` neither runs nor requires anything",
-                        dotted(&step.name)
+                        from_top(&step.name)
                     ),
                 ));
             }
@@ -769,7 +780,7 @@ impl Tree {
                         "these steps run after each other: {}",
                         cycle
                             .iter()
-                            .map(|step| dotted(&self.steps[*step].name))
+                            .map(|step| from_top(&self.steps[*step].name))
                             .collect::<Vec<_>>()
                             .join(", ")
                     ),
@@ -781,22 +792,27 @@ impl Tree {
     }
 }
 
-/// `key` declared in the namespace of the file whose group is `scope`.
+/// The name of `key` declared under the table `scope` names.
 fn scoped(scope: &[String], key: &str) -> Name {
     let mut name = scope.to_vec();
     name.push(key.to_string());
     name
 }
 
-/// A name as written in the file whose group is `scope`: its own without a dot, a path from the top with dots.
-fn resolved(scope: &[String], text: &str) -> Name {
-    match text.contains('.') {
-        true => text.split('.').map(str::to_string).collect(),
-        false => scoped(scope, text),
-    }
+/// A name as written: the keys from the top after its leading `.`, and `None` for one written without it.
+fn resolved(text: &str) -> Option<Name> {
+    text.strip_prefix('.')
+        .map(|path| path.split('.').map(str::to_string).collect())
 }
 
-/// Declare `name` as a `kind`, refusing a name its namespace already holds.
+/// What refuses a name written without its leading `.`.
+fn unrooted(text: &str) -> String {
+    format!(
+        "`{text}` is no path: a name is written from the top with a leading `.`, as `.workspace.variables.edition`"
+    )
+}
+
+/// Declare `name` as a `kind`, refusing a name already declared.
 fn declare(
     kinds: &mut BTreeMap<Name, Kind>,
     file: &File<'_>,
@@ -804,17 +820,8 @@ fn declare(
     kind: Kind,
     span: Option<Range<usize>>,
 ) -> Result<(), Refusal> {
-    if kind != Kind::Task
-        && let [last] = &name[name.len() - 1..]
-        && BUILT_INS.contains(&last.as_str())
-    {
-        return Err(file.refuse(
-            span,
-            format!("`{last}` is a value the runner fills, which no file declares"),
-        ));
-    }
     if kinds.insert(name.clone(), kind).is_some() {
-        return Err(file.refuse(span, format!("`{}` is declared twice", dotted(name))));
+        return Err(file.refuse(span, format!("`{}` is declared twice", from_top(name))));
     }
 
     Ok(())
@@ -857,7 +864,7 @@ fn walk<'a>(
     }
 
     if table.is_empty() {
-        return Err(file.refuse(span, format!("`{}` is empty", dotted(&name))));
+        return Err(file.refuse(span, format!("`{}` is empty", from_top(&name))));
     }
     tree.groups.insert(
         name.clone(),
@@ -1088,7 +1095,7 @@ fn write_of(
                 value.span(),
                 format!(
                     "a write's `{key}` is one string, and `{}` may stand for several words or none",
-                    dotted(name)
+                    from_top(name)
                 ),
             ));
         }
@@ -1121,13 +1128,23 @@ fn word_of(
             .map(|close| open + close)
             .ok_or_else(|| refuse(format!("`{text}` opens a brace it does not close")))?;
         let written = &rest[open + 1..close];
-        let fill = match written {
-            "host" => Fill::Host,
-            "target" => Fill::Target,
-            "cargo_home" => Fill::CargoHome,
-            "sysroot" => Fill::Sysroot,
-            _ => {
-                let name = resolved(&file.scope, written);
+        let fill = match written.strip_prefix('!') {
+            Some("host_triple") => Fill::HostTriple,
+            Some("cargo_target_dir") => Fill::CargoTargetDir,
+            Some("cargo_home") => Fill::CargoHome,
+            Some("rust_sysroot") => Fill::RustSysroot,
+            Some(filled) => {
+                return Err(refuse(format!(
+                    "`!{filled}` is no value the runner fills, which are {}",
+                    BUILT_INS
+                        .iter()
+                        .map(|name| format!("`!{name}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )));
+            }
+            None => {
+                let name = resolved(written).ok_or_else(|| refuse(unrooted(written)))?;
                 match kinds.get(&name) {
                     Some(Kind::Variable) => Fill::Variable(name),
                     Some(Kind::Produced) => Fill::Produced(name),
@@ -1160,7 +1177,7 @@ fn word_of(
             {
                 return Err(refuse(format!(
                     "`{}` stands for several words or none, so it is a word of its own",
-                    dotted(name)
+                    from_top(name)
                 )));
             }
         }

@@ -5,12 +5,19 @@ description = "Build the browser bundle for wasm32-unknown-unknown and generate 
 produces.bindings = "curios-js/.artifacts/wasm32-unknown-unknown"
 run = [
     ["cargo", "build", "--release", "--package", "curios-js", "--target", "wasm32-unknown-unknown", "--keep-going"],
-    ["wasm-bindgen", "--target", "web", "--out-dir", "{bindings}", "{target}/wasm32-unknown-unknown/release/curios_js.wasm"],
+    [
+        "wasm-bindgen", "--target", "web",
+        "--out-dir", "{.bundle.build.produces.bindings}",
+        "{!cargo_target_dir}/wasm32-unknown-unknown/release/curios_js.wasm",
+    ],
 ]
 
 [test]
 description = "Run a compiled program under a JavaScript engine, against the browser harness's own host"
-consumes = ["bindings"]
+consumes = [".bundle.build.produces.bindings"]
 run = [
-    ["CURIOS_JS={bindings}", "node", "--test", "curios-browser/src/harness.test.mjs"],
+    [
+        "CURIOS_JS={.bundle.build.produces.bindings}",
+        "node", "--test", "curios-browser/src/harness.test.mjs",
+    ],
 ]

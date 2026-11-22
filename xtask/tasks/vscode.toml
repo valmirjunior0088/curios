@@ -23,7 +23,7 @@ run = [
 [build]
 description = "Bundle the VS Code extension and the TextMate grammars it ships, and write its package as it ships, which the snapshots never load"
 dir = "editors/vscode"
-consumes = ["installed"]
+consumes = [".vscode.install.produces.installed"]
 run = [
     ["npm", "run", "package"],
 ]
