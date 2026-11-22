@@ -807,3 +807,56 @@ match s | Sized { @m, _ } => m end
             (identifier)))
         (path
           (identifier))))))
+
+================================================================================
+A constructor holds a binder's value to its one case, and the arrow tells a local function from it
+================================================================================
+
+let refl() = p;
+let cons(head, @_, (a, b)) = whole;
+let one() -> Nat = 1;
+(pair(x, _)) => x
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (let_term
+    (let_binding
+      (constructor_pattern
+        (identifier))
+      (path
+        (identifier)))
+    (let_term
+      (let_binding
+        (constructor_pattern
+          (identifier)
+          (constructor_argument
+            (identifier))
+          (constructor_argument
+            (identifier))
+          (constructor_argument
+            (tuple_pattern
+              (pattern_field
+                (identifier))
+              (pattern_field
+                (identifier)))))
+        (path
+          (identifier)))
+      (let_term
+        (let_binding
+          (identifier)
+          (parameters)
+          (path
+            (identifier))
+          (number))
+        (lambda
+          (lambda_parameters
+            (lambda_parameter
+              (constructor_pattern
+                (identifier)
+                (constructor_argument
+                  (identifier))
+                (constructor_argument
+                  (identifier)))))
+          (path
+            (identifier)))))))

@@ -4398,6 +4398,15 @@
           "name": "struct_pattern"
         },
         {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_held_constructor"
+          },
+          "named": true,
+          "value": "constructor_pattern"
+        },
+        {
           "type": "SYMBOL",
           "name": "parenthesized_pattern"
         }
@@ -4662,6 +4671,108 @@
         {
           "type": "STRING",
           "value": ")"
+        }
+      ]
+    },
+    "_held_constructor": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_name"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "("
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "SEQ",
+                  "members": [
+                    {
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_held_argument"
+                      },
+                      "named": true,
+                      "value": "constructor_argument"
+                    },
+                    {
+                      "type": "REPEAT",
+                      "content": {
+                        "type": "SEQ",
+                        "members": [
+                          {
+                            "type": "STRING",
+                            "value": ","
+                          },
+                          {
+                            "type": "ALIAS",
+                            "content": {
+                              "type": "SYMBOL",
+                              "name": "_held_argument"
+                            },
+                            "named": true,
+                            "value": "constructor_argument"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "STRING",
+                      "value": ","
+                    },
+                    {
+                      "type": "BLANK"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
+          "type": "STRING",
+          "value": ")"
+        }
+      ]
+    },
+    "_held_argument": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "@"
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_pattern"
         }
       ]
     },
@@ -6025,6 +6136,19 @@
     [
       "let_member",
       "_binder"
+    ],
+    [
+      "let_member",
+      "_held_constructor",
+      "_binder"
+    ],
+    [
+      "_held_constructor",
+      "_binder"
+    ],
+    [
+      "sugar_parameter",
+      "_held_argument"
     ],
     [
       "satisfy_item",

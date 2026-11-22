@@ -883,6 +883,10 @@
           "named": true
         },
         {
+          "type": "parenthesized_pattern",
+          "named": true
+        },
+        {
           "type": "string",
           "named": true
         },
@@ -891,11 +895,19 @@
           "named": true
         },
         {
+          "type": "struct_pattern",
+          "named": true
+        },
+        {
           "type": "successor_pattern",
           "named": true
         },
         {
           "type": "tuple_match_pattern",
+          "named": true
+        },
+        {
+          "type": "tuple_pattern",
           "named": true
         }
       ]
@@ -2110,6 +2122,10 @@
         "required": true,
         "types": [
           {
+            "type": "constructor_pattern",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -2256,6 +2272,10 @@
         "multiple": false,
         "required": true,
         "types": [
+          {
+            "type": "constructor_pattern",
+            "named": true
+          },
           {
             "type": "identifier",
             "named": true
@@ -3606,6 +3626,10 @@
         "required": false,
         "types": [
           {
+            "type": "constructor_pattern",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -3905,6 +3929,10 @@
       "required": true,
       "types": [
         {
+          "type": "constructor_pattern",
+          "named": true
+        },
+        {
           "type": "identifier",
           "named": true
         },
@@ -3957,6 +3985,10 @@
       "multiple": false,
       "required": true,
       "types": [
+        {
+          "type": "constructor_pattern",
+          "named": true
+        },
         {
           "type": "identifier",
           "named": true
@@ -4793,6 +4825,10 @@
         "required": true,
         "types": [
           {
+            "type": "constructor_pattern",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -5254,6 +5290,10 @@
       "multiple": true,
       "required": false,
       "types": [
+        {
+          "type": "constructor_pattern",
+          "named": true
+        },
         {
           "type": "identifier",
           "named": true

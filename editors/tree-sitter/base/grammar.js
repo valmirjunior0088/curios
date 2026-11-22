@@ -31,6 +31,11 @@ module.exports = grammar({
     [$.function_type_parameter, $.tuple_field],
     [$.function_type_parameter, $._pattern],
     [$.let_member, $._binder],
+    // `let name(` opens a function's parameters or a constructor's payloads; the `->` after the list decides.
+    [$.let_member, $._held_constructor, $._binder],
+    [$._held_constructor, $._binder],
+    // `(name(p, …` opens a field's definition sugar or the constructor a lambda's parameter holds; what follows the list decides.
+    [$.sugar_parameter, $._held_argument],
     // `satisfy(...)` starts either a witness telescope or a contextual function call; what follows the parentheses decides.
     [$.satisfy_item, $._path_head],
     // A sort word in parentheses may be a term or a lambda binder; the closing suffix decides.
@@ -659,6 +664,7 @@ module.exports = grammar({
         $._binder,
         $.tuple_pattern,
         $.struct_pattern,
+        alias($._held_constructor, $.constructor_pattern),
         $.parenthesized_pattern,
       ),
 
@@ -687,6 +693,17 @@ module.exports = grammar({
       ),
 
     parenthesized_pattern: ($) => seq("(", $._pattern, ")"),
+
+    // A constructor holding its value to its one case, as a match's lone arm does, read by a query as an arm's constructor is: its payloads are binder patterns, a hidden one under `@`.
+    _held_constructor: ($) =>
+      seq(
+        field("name", $._name),
+        "(",
+        commaList(alias($._held_argument, $.constructor_argument)),
+        ")",
+      ),
+
+    _held_argument: ($) => seq(optional("@"), $._pattern),
 
     // ---- Refutable patterns ----
 
