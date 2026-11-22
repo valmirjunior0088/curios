@@ -145,6 +145,73 @@ let query_str(q: Option(Str)) -> Str =
 pub let to_str(u: Url) -> Str =
     Str/flatten([Scheme/to_str(u.scheme), "://", u.host, port_str(u), u.path, query_str(u.query)]);
 
+-- Whether `r` opens with a scheme (RFC 3986 §3.1): a letter, then letters, digits, `+`, `-` and `.`, up to a `:`. A reference that does is a URL of its own.
+let has_scheme(r: Str) -> Bool =
+    match Str/split_once(r, ":")
+    | some((name, _)) =>
+        match Str/to_list(name)
+        | [first, ..rest] =>
+            Char/is_ascii_alpha(first)
+                && List/all(rest, (c) =>
+                    Char/is_ascii_alpha(c) || Char/is_ascii_digit(c) || c == '+' || c == '-'
+                        || c == '.')
+        | [] => false
+        end
+    | none() => false
+    end;
+
+-- `path` with its `.` and `..` segments removed, as RFC 3986 §5.2.4 removes them: a `.` is dropped and a `..` drops the segment before it, neither climbing past the root, and either one ending the path leaves it ending in `/`.
+let without_dots(path: Str) -> Str =
+    let walk(segments: List(Str), kept: List(Str)) -> List(Str) =
+        match segments
+        | [] => kept
+        | [s, ..more] =>
+            let closed(k: List(Str)) -> List(Str) = match more | [] => [..k, ""] | _ => k end;
+            match s
+            | "." => walk(more, closed(kept))
+            | ".." =>
+                walk(more, closed(match List/len(kept) | 0 => [] | n + 1 => List/take(kept, n) end))
+            | _ => walk(more, [..kept, s])
+            end
+        end;
+    let segments = match Str/split(path, "/") | [_, ..rest] => rest | [] => [] end;
+    Str/concat("/", Str/join("/", walk(segments, [])));
+
+-- `reference` beside the last segment of `base`, as RFC 3986 §5.2.3 merges a relative path.
+let merged(base: Str, reference: Str) -> Str =
+    let segments = Str/split(base, "/");
+    Str/flatten([Str/join("/", List/take(segments, List/len(segments) - 1)), "/", reference]);
+
+--- `reference` read against `base`, as RFC 3986 §5.2 resolves one and a client follows a `Location`: a reference with a scheme of its own is a URL of its own, `//host…` takes `base`'s scheme, a path from `/` takes `base`'s host and port, a relative path is merged with `base`'s directory, and `?…` alone keeps `base`'s path. `.` and `..` segments are removed, a fragment is dropped, and an empty reference is `base`. What it resolves to is read as `of_str` reads a URL, so a scheme other than `http` and `https` is refused.
+pub let resolve(base: Url, reference: Str) -> Result(Parse/Error, Url) =
+    let r =
+        match Str/split_once(reference, "#")
+        | some((before, _)) => before
+        | none() => reference
+        end;
+    match
+    | has_scheme(r) => of_str(r)
+    | Str/starts_with(r, "//") => of_str(Str/flatten([Scheme/to_str(base.scheme), ":", r]))
+    | _ =>
+        let (p, q) =
+            match Str/split_once(r, "?")
+            | some((p, q)) => (p, Option/some(q))
+            | none() => (r, Option/none())
+            end;
+        let path =
+            match
+            | Str/is_empty(p) => base.path
+            | Str/starts_with(p, "/") => without_dots(p)
+            | _ => without_dots(merged(base.path, p))
+            end;
+        let query =
+            match q
+            | none(), Str/is_empty(p) => base.query
+            | _ => q
+            end;
+        of_str(to_str(Url { ..base, path = path, query = query }))
+    end;
+
 -- The sixteen hexadecimal digits, uppercase, each an octet a value may hold.
 let hex_octets: List(Field/Value/Octet) =
     [

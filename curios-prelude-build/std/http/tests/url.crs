@@ -1,5 +1,5 @@
 -- A URL read into its parts and written back, and its components encoded and decoded.
-use /std/{Option, Result, Eq, Test};
+use /std/{Str, List, Option, Result, Eq, Test};
 use /std/http/{Url};
 
 -- A URL reads into its parts; the fragment is dropped, the port is the scheme's when unwritten, and the path is `/` when empty.
@@ -84,3 +84,57 @@ let _decodes_in_a_type: Eq()(Url/decode("a%20b+c%C3%A9"), Option/some("a b cé")
 
 let _refuses_a_short_escape_in_a_type: Eq()(Url/decode("a%2"), Option/none()) =
     Eq/refl();
+
+-- RFC 3986 §5.4's examples, normal and abnormal, resolved against its base as that section answers them; `g:h` and `http:g` name no scheme or no host a `Url` holds and are refused, and a URL with no path is written with `/`, as a `Url` holds one.
+test a_reference_resolves_as_rfc_3986_answers_its_examples =
+    let base = Url/lit("http://a/b/c/d;p?q");
+    let resolved(r: Str) -> Str =
+        match Url/resolve(base, r)
+        | success(u) => Url/to_str(u)
+        | failure(_) => "refused"
+        end;
+    let cases: List({Str, Str}) =
+        [
+            ("g:h", "refused"),
+            ("g", "http://a/b/c/g"),
+            ("./g", "http://a/b/c/g"),
+            ("g/", "http://a/b/c/g/"),
+            ("/g", "http://a/g"),
+            ("//g", "http://g/"),
+            ("?y", "http://a/b/c/d;p?y"),
+            ("g?y", "http://a/b/c/g?y"),
+            ("#s", "http://a/b/c/d;p?q"),
+            ("g#s", "http://a/b/c/g"),
+            ("g?y#s", "http://a/b/c/g?y"),
+            (";x", "http://a/b/c/;x"),
+            ("g;x", "http://a/b/c/g;x"),
+            ("g;x?y#s", "http://a/b/c/g;x?y"),
+            ("", "http://a/b/c/d;p?q"),
+            (".", "http://a/b/c/"),
+            ("./", "http://a/b/c/"),
+            ("..", "http://a/b/"),
+            ("../", "http://a/b/"),
+            ("../g", "http://a/b/g"),
+            ("../..", "http://a/"),
+            ("../../", "http://a/"),
+            ("../../g", "http://a/g"),
+            ("../../../g", "http://a/g"),
+            ("../../../../g", "http://a/g"),
+            ("/./g", "http://a/g"),
+            ("/../g", "http://a/g"),
+            ("g.", "http://a/b/c/g."),
+            (".g", "http://a/b/c/.g"),
+            ("g..", "http://a/b/c/g.."),
+            ("..g", "http://a/b/c/..g"),
+            ("./../g", "http://a/b/g"),
+            ("./g/.", "http://a/b/c/g/"),
+            ("g/./h", "http://a/b/c/g/h"),
+            ("g/../h", "http://a/b/c/h"),
+            ("g;x=1/./y", "http://a/b/c/g;x=1/y"),
+            ("g;x=1/../y", "http://a/b/c/y"),
+            ("g?y/./x", "http://a/b/c/g?y/./x"),
+            ("g?y/../x", "http://a/b/c/g?y/../x"),
+            ("g#s/./x", "http://a/b/c/g"),
+            ("g#s/../x", "http://a/b/c/g"),
+            ("http:g", "refused")];
+    Test/equal(List/map(cases, (c) => resolved(c.0)), List/map(cases, (c) => c.1));
