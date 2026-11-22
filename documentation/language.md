@@ -470,15 +470,17 @@ No program with a goal compiles. The other declarations are still checked in the
 
 A `let`, a lambda and a function type are whole-term forms: a body or a tail extends to the end of the term around it. There is no ascription `term: type`: a `:` annotation stands only at a binder and a signature.
 
+A `let` chain stands only as a body: a function's, a lambda's, a `match` arm's, a test's or a top-level value's, a program's final term, and the tail of another chain. Anywhere else — a `let`'s value, an argument, a list element, a field's value, a scrutinee, an operand, between parentheses — it is refused, so a value is never a chain, and a value that sequences is a function, `let name() -> T = …;`, called where its value is needed. Why: [Bang sequencing is governed by the region's type](design/surface/bang-sequencing-is-governed-by-the-regions-type.md).
+
 An infix operand is an atom — a literal, a name, a sort (`Type`, `Prop` or `Sort`), a tuple, a tuple type, a structure literal, a goal, a `match`, or a term in parentheses — followed by any chain of calls, projections and postfix `!`. A `match`, headed or not, is an atom because `end` closes it. A whole-term form is no operand until it is put in parentheses.
 
 ```text
 1 + match flag | true => 1 | false => 0 end
 match chosen | left() => f | right() => g end(x)
-1 + (let n = 2; n * n)
+1 + ((x) => x * x)(2)
 ```
 
-A position that takes a whole term needs no parentheses: a call's argument, a list element, a field's value, a scrutinee and an arm's body.
+A position that takes a whole term needs no parentheses: a call's argument, a list element, a field's value, a scrutinee and an arm's body, a `let` chain standing only in the last.
 
 ## Operators
 
@@ -517,9 +519,9 @@ pub let parser() -> Parse(Bytes, Nat) =
     Parse/pure(Byte/to_nat(a) + Byte/to_nat(b));
 ```
 
-A `!` may stand at any depth where its region's type sequences: in a top-level value, a program's final term, a test's body or a witness's field. A function needs no permission to hold one.
+A `!` stands in a function's body, at any depth there: a declared function's, a local function's, a lambda's or a witness method's, and a test's body and a program's final term, each a function of none the runner calls. A top-level value and a witness's value hold none, and a `!` there is refused: a value that sequences is a function of none, called where its description is needed.
 
-A `match` arm and a guard each keep a region of their own, and a local `let`'s value shares the region around it; no `let !` header or `end` marks a region. Why: [Bang sequencing is governed by the region's type](design/surface/bang-sequencing-is-governed-by-the-regions-type.md).
+A `match` arm and a guard each keep a region of their own, and a local `let`'s value, which is a term and never a chain ([Whole-term forms and operand positions](#whole-term-forms-and-operand-positions)), shares the region around it; no `let !` header or `end` marks a region. Why: [Bang sequencing is governed by the region's type](design/surface/bang-sequencing-is-governed-by-the-regions-type.md).
 
 An action of another monad than its region's is lifted through the `Monad/Lift` witness declared for that pair, and refused where none is ([Lifting between monads](#lifting-between-monads)).
 
@@ -869,7 +871,7 @@ pub let found(condition: Bool, map: Map(Str, Nat), key: Str) -> Nat =
 
 ## Declarations and modules
 
-A program is top-level items followed by one final term, the description it performs, which may sequence with `!` directly. A module is top-level items alone.
+A program is top-level items followed by one final term, the description it performs, which may sequence with `!` directly, as a function's body does. A module is top-level items alone.
 
 The final term is performed through `/std/Program`, the concept whose `execute` says what a value of a type does as a whole program, so its type is any with a witness there:
 
@@ -895,7 +897,7 @@ main()
 
 A top-level `let` states its type, by an annotation or as a function's parameters and result type.
 
-That is also what tells an item from the final term: in a program, a top-level `let` with no annotation is no item but a local `let` that opens the final term. A top-level definition's value is checked at the type its annotation states. A local binding shares the region around it, and an annotation gives its value no region of its own.
+That is also what tells an item from the final term: in a program, a top-level `let` with no annotation is no item but a local `let` that opens the final term. A top-level definition's value is checked at the type its annotation states, and holds no `!`: a definition that sequences is a function, of no parameters where it takes none.
 
 A top-level value is computed the first time the program reads it, once, and not at all where nothing reads it, as a recursive value is: a program that never reads a value whose computation does not end runs to its end, and one that reads it stops where it reads it. Why: [A top-level value is computed where its unit is compiled](design/compilation/a-top-level-value-is-computed-where-its-unit-is-compiled.md).
 

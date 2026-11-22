@@ -13,12 +13,12 @@ fn a_blocks_type_reads_its_local_by_value_where_the_block_is_left() {
         let tag(z: Nat) -> Eq()(z, z) = Eq/refl();
 
         let read() -> Nat =
-            let x = (let n = 2; tag(n));
+            let x = (() => let n = 2; tag(n))();
             let _y: Eq()(2, 2) = x;
             0;
 
         let unread() -> Nat =
-            let _x = (let n = 2; tag(n));
+            let _x = (() => let n = 2; tag(n))();
             0;
 
         print(Nat/to_str(read() + unread()))
@@ -36,12 +36,12 @@ fn a_recursive_blocks_type_reads_its_member_as_the_groups() {
         let tag(z: Nat) -> Eq()(z, z) = Eq/refl();
 
         let read() -> Nat =
-            let x = (let g(k: Nat) -> Nat = match k | 0 => 0 | j + 1 => g(j) end; tag(g(1)));
+            let x = (() => let g(k: Nat) -> Nat = match k | 0 => 0 | j + 1 => g(j) end; tag(g(1)))();
             let _y: Eq()(0, 0) = x;
             0;
 
         let unread() -> Nat =
-            let _x = (let g(k: Nat) -> Nat = match k | 0 => 0 | j + 1 => g(j) end; tag(g(1)));
+            let _x = (() => let g(k: Nat) -> Nat = match k | 0 => 0 | j + 1 => g(j) end; tag(g(1)))();
             0;
 
         print(Nat/to_str(read() + unread()))
@@ -67,11 +67,11 @@ fn a_block_gives_an_implicit_its_type_whichever_argument_is_read_first() {
 
         let first(d: Le(2)) -> Nat =
             let s: Eq(@Le(2))(d, d) = Eq/refl();
-            both((let n = 2; mk(@n)), s);
+            both((() => let n = 2; mk(@n))(), s);
 
         let second(d: Le(2)) -> Nat =
             let s: Eq(@Le(2))(d, d) = Eq/refl();
-            both(s, (let n = 2; mk(@n)));
+            both(s, (() => let n = 2; mk(@n))());
 
         print(Nat/to_str(first(Le { low = 1 }) + second(Le { low = 1 })))
         "#);
@@ -94,12 +94,12 @@ fn a_solution_naming_a_blocks_local_reads_it_by_value_where_the_block_is_left() 
         let wrap(@A: Type, a: A) -> Eq(@A)(a, a) = Eq/refl();
 
         let read(p: Le(2)) -> Nat =
-            let r = (let x = 2; let q: Le(x) = p; wrap(q));
+            let r = (() => let x = 2; let q: Le(x) = p; wrap(q))();
             let _y: Eq(@Le(2))(p, p) = r;
             0;
 
         let unread(p: Le(2)) -> Nat =
-            let _r = (let x = 2; let q: Le(x) = p; wrap(q));
+            let _r = (() => let x = 2; let q: Le(x) = p; wrap(q))();
             0;
 
         print(Nat/to_str(read(Le { low = 0 }) + unread(Le { low = 0 })))
@@ -129,12 +129,12 @@ fn a_problem_parked_in_a_block_solves_an_implicit_the_block_left_unsolved() {
         let take(t: Tag(true, Le(2))) -> Nat = 0;
 
         let read(p: Le(2)) -> Nat =
-            let r = (let x = 2; let q: Le(x) = p; hold(q));
+            let r = (() => let x = 2; let q: Le(x) = p; hold(q))();
             let n = settle(r.0, Eq/refl());
             n + take(r.1);
 
         let unread(p: Le(2)) -> Nat =
-            let r = (let x = 2; let q: Le(x) = p; hold(q));
+            let r = (() => let x = 2; let q: Le(x) = p; hold(q))();
             settle(r.0, Eq/refl());
 
         print(Nat/to_str(read(Le { low = 0 }) + unread(Le { low = 0 })))
@@ -154,7 +154,7 @@ fn an_implicit_a_block_left_unsolved_takes_a_name_the_blocks_local_stands_for() 
 
         let f(d: Nat) -> Nat =
             let s: Eq(@Nat)(d, d) = Eq/refl();
-            let r = (let x = d; pick(x));
+            let r = (() => let x = d; pick(x))();
             both(r, s);
 
         print(Nat/to_str(f(1)))
@@ -180,7 +180,7 @@ fn an_implicit_born_in_a_block_is_solved_once_the_block_is_left() {
 
         let f(d: Le(2)) -> Nat =
             let s: Eq(@Le(2))(d, d) = Eq/refl();
-            let x = (let n = 2; mk(@n));
+            let x = (() => let n = 2; mk(@n))();
             both(x, s);
 
         print(Nat/to_str(f(Le { low = 1 })))

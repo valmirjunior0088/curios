@@ -940,7 +940,15 @@ impl<D: Layout> TreePrinter<D> {
     fn attached_body(self, introducer: &'static str, body: Term<D>) -> Printer {
         group(flat([
             pure(introducer),
-            indent(flat([line(), self.term(body)])),
+            indent(flat([line(), self.body(body)])),
+        ]))
+    }
+
+    /// [`TreePrinter::attached_body`] for a value, which is a term and never a chain.
+    fn attached_value(self, introducer: &'static str, value: Term<D>) -> Printer {
+        group(flat([
+            pure(introducer),
+            indent(flat([line(), self.term(value)])),
         ]))
     }
 
@@ -986,7 +994,7 @@ impl<D: Layout> TreePrinter<D> {
                 ),
                 self.attached_body(" =", field.value),
             ]),
-            (Some(label), None) => flat([pure(label), self.attached_body(" =", field.value)]),
+            (Some(label), None) => flat([pure(label), self.attached_value(" =", field.value)]),
             (None, _) => self.term(field.value),
         }
     }
@@ -1080,7 +1088,20 @@ impl<D: Layout> TreePrinter<D> {
         }
     }
 
+    /// A term: in a program a block stands here only as a function of none applied to none, the one spelling a program has for a block where it reads a term.
     fn term(self, term: Term<D>) -> Printer {
+        match !D::CHAINS_ANYWHERE && matches!(term.as_subterm(), Subterm::Let(_)) {
+            true => flat([
+                pure("(() =>"),
+                indent(flat([hard_line(), self.body(term), ends()])),
+                pure(")()"),
+            ]),
+            false => self.body(term),
+        }
+    }
+
+    /// A body: a term, or a `let` chain written as it stands.
+    fn body(self, term: Term<D>) -> Printer {
         self.term_followed(term, flat([]))
     }
 
@@ -1104,7 +1125,10 @@ impl<D: Layout> TreePrinter<D> {
             Subterm::Let(_) | Subterm::FuncType(_) | Subterm::Func(_) => true,
             _ => false,
         };
-        match (parenthesized, matches!(term.as_subterm(), Subterm::Let(_))) {
+        match (
+            parenthesized,
+            D::CHAINS_ANYWHERE && matches!(term.as_subterm(), Subterm::Let(_)),
+        ) {
             // A `let` ends its own line, so parenthesized it opens a block: one level in after the parenthesis, as a broken call's arguments stand, the closer riding its last line.
             (true, true) => flat([
                 pure("("),
@@ -1359,14 +1383,8 @@ impl<D: Layout> TreePrinter<D> {
                         flat(parts)
                     })
                     .collect::<Vec<_>>();
-                // A run of statements reads as one block, so a block written as the tail of another is one only between parentheses.
-                let tail = match tail.as_subterm() {
-                    Subterm::Let(_) => {
-                        flat([pure("("), self.term(tail), indent(ends()), pure(")")])
-                    }
-                    _ => self.term(tail),
-                };
-                flat(statements.into_iter().chain([tail]))
+                // A block written as the tail of another reads as its statements continuing, which lowers to the same nesting.
+                flat(statements.into_iter().chain([self.body(tail)]))
             }
             Subterm::Bang(term) => return self.suffix_head(term, flat([pure("!"), suffix])),
             // An overflowing operator chain breaks with the operator leading the continuation line.
@@ -1388,12 +1406,11 @@ impl<D: Layout> TreePrinter<D> {
 
     /// A `let` signature and body. `top` selects the corpus's top-level shape — the body *always* on the next line after `=` — while a local binding's body rides the `=` inline when it fits.
     fn let_signature(self, signature: LetSignature<D>, top: bool) -> Printer {
-        let bound = |body: Term<D>| {
-            if top {
-                flat([pure(" ="), hard_line(), indent(self.term(body))])
-            } else {
-                self.attached_body(" =", body)
-            }
+        // A top-level definition's body is a body, and so is a function's; a local value is a term.
+        let bound = |body: Term<D>, function: bool| match (top, function) {
+            (true, _) => flat([pure(" ="), hard_line(), indent(self.body(body))]),
+            (false, true) => self.attached_body(" =", body),
+            (false, false) => self.attached_value(" =", body),
         };
         match signature {
             LetSignature::Name { type_, body } => flat([
@@ -1401,7 +1418,7 @@ impl<D: Layout> TreePrinter<D> {
                     Some(type_) => flat([pure(": "), self.term(type_)]),
                     None => pure(""),
                 },
-                bound(body),
+                bound(body, false),
             ]),
             // The parameter list and the `-> output` share **one** group, so what is measured is the whole signature rather than the parameters alone. Measured apart, parameters that fit on their own stay flat and leave the return type to break — which puts the `{` of a tuple type at the end of a long line and its `}` alone with the `=`. Together, the parameters break first and the return type, now starting a fresh line, fits beside the arrow. Should it still not fit, its own group breaks then, which is the right order of concessions.
             LetSignature::Func {
@@ -1410,7 +1427,7 @@ impl<D: Layout> TreePrinter<D> {
                 body,
             } => {
                 let signature = self.signature(params, output);
-                flat([signature, bound(body)])
+                flat([signature, bound(body, true)])
             }
         }
     }
@@ -1436,7 +1453,7 @@ impl<D: Layout> TreePrinter<D> {
                 D::declared(&test.core, test.label),
                 pure(" ="),
                 hard_line(),
-                indent(flat([self.term(test.body), ends()])),
+                indent(flat([self.body(test.body), ends()])),
                 pure(";"),
             ]),
         )
@@ -2117,12 +2134,12 @@ impl<D: CoreWritten> TreePrinter<D> {
     fn core_entry(self, entry: CoreEntry<D>) -> Printer {
         match entry.type_ {
             Some(type_) => flat([
-                self.term(entry.body),
+                self.body(entry.body),
                 hard_line(),
                 pure(": "),
                 self.term(type_),
             ]),
-            None => self.term(entry.body),
+            None => self.body(entry.body),
         }
     }
 }
@@ -2156,9 +2173,9 @@ pub fn print_core_term(term: Term<CoreText>) -> Printer {
     CORE_TEXT.term(term)
 }
 
-/// A program's term, keeping what `flat_match` says of a match on one line.
+/// A program's whole term, keeping what `flat_match` says of a match on one line: a body, which writes a chain as it stands.
 pub fn print_term(term: Term, flat_match: FlatMatch) -> Printer {
-    program(flat_match).term(term)
+    program(flat_match).body(term)
 }
 
 /// A program's match-arm pattern alone, as a report names a row by it.
@@ -2397,7 +2414,7 @@ fn print_witness_entry(printer: TreePrinter<Program>, field: WitnessField) -> Pr
         ]),
         None => flat([
             pure(field.label.to_string()),
-            printer.attached_body(" =", field.value),
+            printer.attached_value(" =", field.value),
         ]),
     }
 }

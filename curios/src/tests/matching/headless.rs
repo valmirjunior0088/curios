@@ -147,7 +147,7 @@ fn the_arms_after_a_failed_condition_learn_it_and_after_a_missed_bind_nothing() 
         let learned(b: Bool) -> Nat =
             match
             | b => 1
-            | _ => (let _: Holds(Bool/not(b)) = True/qed(); 0)
+            | _ => let _: Holds(Bool/not(b)) = True/qed(); 0
             end;
         /std/print(Nat/to_str(learned(false)))
         "#;
@@ -159,7 +159,7 @@ fn the_arms_after_a_failed_condition_learn_it_and_after_a_missed_bind_nothing() 
         let unlearned(b: Bool) -> Nat =
             match
             | true = b => 1
-            | _ => (let _: Holds(Bool/not(b)) = True/qed(); 0)
+            | _ => let _: Holds(Bool/not(b)) = True/qed(); 0
             end;
         /std/print(Nat/to_str(unlearned(false)))
         "#;

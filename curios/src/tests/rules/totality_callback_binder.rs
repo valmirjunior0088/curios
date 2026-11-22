@@ -52,7 +52,7 @@ fn a_callback_applied_to_a_local_that_shadows_a_payload_is_graded_at_the_locals_
         let some(l : List(Rose), p : (Rose) -> Bool) -> Bool =
             match l
             | [] => false
-            | [h, ..t] => (let t = h; p(t)) || some(t, p)
+            | [h, ..t] => (() => let t = h; p(t))() || some(t, p)
             end;
         let has_zero(t : Rose) -> Bool =
             match t
@@ -63,7 +63,10 @@ fn a_callback_applied_to_a_local_that_shadows_a_payload_is_graded_at_the_locals_
         "#,
         b"ok",
     )
-    .refused(&[("(let t = h; p(t))", "(let t = Rose/node(1, l); p(t))")])
+    .refused(&[(
+        "(() => let t = h; p(t))()",
+        "(() => let t = Rose/node(1, l); p(t))()",
+    )])
     .by_elaborator_in("/Zeroed", |error| {
         matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
     })
@@ -85,7 +88,7 @@ fn a_callback_applied_to_a_nested_members_parameter_that_shadows_a_payload_is_gr
             match l
             | [] => false
             | [h, ..t] =>
-                (let go(n : Nat) -> Bool = match n | 0 => p(h) | k + 1 => go(k) end; go(3))
+                (() => let go(n : Nat) -> Bool = match n | 0 => p(h) | k + 1 => go(k) end; go(3))()
                 || nested(t, p)
             end;
         let has_one(t : Rose) -> Bool =

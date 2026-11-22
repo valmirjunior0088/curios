@@ -36,6 +36,11 @@ module.exports = grammar(curios, {
     ]),
 
   rules: {
+    // Core text spells a block wherever Core holds one, so a `let` chain is a term here, and a body is any term.
+    _term: ($, original) => choice($.let_term, original),
+
+    _body: ($) => $._term,
+
     // Items, then the term the text closes with and the type it states on the line beneath it.
     source_file: ($) => seq(repeat($._core_item), optional($.entry)),
 

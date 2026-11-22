@@ -118,7 +118,7 @@ fn an_unread_construction_in_an_exit_arm_leaves_the_loop_its_window() {
             | x[] => k
             | x[h, ..t] =>
                 match h == 46
-                | true => (let _ = x[h, ..t]; k)
+                | true => let _ = x[h, ..t]; k
                 | false => walk(t, k + 1)
                 end
             end;

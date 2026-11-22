@@ -1,17 +1,17 @@
 //! `!` regions at runtime: dispatch through a user witness, left-to-right threading, and mixed action types.
 
 use {
-    crate::tests::test_support::*, curios_common::fill, curios_module::RootSource,
-    curios_native::test_support::*, curios_surface::Entrypoint,
+    crate::tests::test_support::*, curios_module::RootSource, curios_native::test_support::*,
+    curios_surface::Entrypoint,
 };
 
 #[test]
-fn values_entrypoints_and_witness_methods_sequence_in_their_expected_monads() {
+fn functions_entrypoints_and_witness_methods_sequence_in_their_expected_monads() {
     for source in [
         r#"
         use /std/{Io, print};
-        let task: Io({}) = let _ = print("a")!; print("b");
-        let _ = task!;
+        let task() -> Io({}) = let _ = print("a")!; print("b");
+        let _ = task()!;
         print("c")
         "#,
         r#"
@@ -109,68 +109,12 @@ fn region_mixes_action_types() {
     assert_eq!(io.output(), b"AB");
 }
 
-/// A nested block's first statement has no privilege over the statements after it: every action belongs to the enclosing function's region.
 #[test]
-fn unused_bindings_do_not_change_where_nested_actions_sequence() {
-    for prefix in ["", "let _ = 0;", "let _ = 0; let _ = 1;"] {
-        let source = fill!(
-            r#"
-            use /std/{Io, Nat, print};
-            let main() -> Io({}) =
-                let task: Io(Nat) = (
-                    ${prefix}
-                    let _ = print("task")!;
-                    Io/pure(7));
-                print("made");
-            main()
-            "#,
-            prefix
-        );
-        assert_eq!(run(&source), b"taskmade");
-    }
-}
-
-#[test]
-fn nested_bindings_keep_their_names_without_capturing_sibling_arguments() {
-    let source = r#"
-        use /std/{Io, Nat, print};
-        let main() -> Io({}) =
-            let n = 10;
-            let result = Nat/add((
-                let n = 1;
-                let next: Nat = Io/pure(n + 1)!;
-                next), n);
-            print(Nat/to_str(result));
-        main()
-        "#;
-    assert_eq!(run(source), b"12");
-}
-
-#[test]
-fn destructured_values_remain_in_scope_after_nested_bangs() {
-    let source = r#"
-        use /std/{Io, Nat, print};
-        struct Pair: Type { first: Nat, second: Nat }
-        let main() -> Io({}) =
-            let result = Nat/add((
-                let Pair { first = a, second = b } = Io/pure(Pair { first = 3, second = 4 })!;
-                let _ = print("x")!;
-                a + b), 2);
-            print(Nat/to_str(result));
-        main()
-        "#;
-    assert_eq!(run(source), b"x9");
-}
-
-#[test]
-fn a_nested_failure_stops_the_enclosing_result_computation() {
+fn a_failure_inside_an_argument_stops_the_enclosing_result_computation() {
     let source = r#"
         use /std/{Result, Str, Nat, print};
         let result() -> Result(Str, Nat) =
-            Result/success(Nat/add((
-                let _ = 0;
-                let n = Result/failure(@Str, @Nat, "failed")!;
-                n), 1));
+            Result/success(Nat/add(Result/failure(@Str, @Nat, "failed")!, 1));
         match result()
         | success(n) => print(Nat/to_str(n))
         | failure(message) => print(message)
@@ -180,15 +124,14 @@ fn a_nested_failure_stops_the_enclosing_result_computation() {
 }
 
 #[test]
-fn a_nested_recursive_function_keeps_the_value_bound_before_it() {
+fn a_local_recursive_function_keeps_the_value_bound_before_it() {
     let source = r#"
         use /std/{Io, Nat, print};
         let main() -> Io({}) =
-            let result = Nat/add((
-                let base = Io/pure(3)!;
-                let count(n: Nat) -> Nat =
-                    match n | 0 => base | k + 1 => count(k) + 1 end;
-                count(2)), 4);
+            let base = Io/pure(3)!;
+            let count(n: Nat) -> Nat =
+                match n | 0 => base | k + 1 => count(k) + 1 end;
+            let result = Nat/add(count(2), 4);
             print(Nat/to_str(result));
         main()
         "#;

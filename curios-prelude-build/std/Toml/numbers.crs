@@ -171,7 +171,7 @@ let exp_stop(acc: Nat, seen: Bool, pend: Bool) -> Parse(Str, Nat) =
     | _ => Parse/fail("expected digit")
     end;
 
-let exp_digits: Parse(Str, Nat) =
+let exp_digits() -> Parse(Str, Nat) =
     let go(acc: Nat, seen: Bool, pend: Bool) -> Parse(Str, Nat) =
         let next = Parse/str/peek!;
         match next
@@ -218,7 +218,7 @@ let frac_part(sig0: Nat, count0: Nat) -> Parse(Str, {Nat, Nat, Nat, Bool}) =
 
 let exp_fields() -> Parse(Str, {Nat, Bool, Bool}) =
     let (eneg, _) = sign()!;
-    let emag = exp_digits!;
+    let emag = exp_digits()!;
     Parse/pure((emag, eneg, true));
 
 let exp_part() -> Parse(Str, {Nat, Bool, Bool}) =

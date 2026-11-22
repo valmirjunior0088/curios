@@ -12,7 +12,7 @@ use {
         CasePayloadParam, ConceptField, DOC_BEFORE_NOTHING, Doc, FuncTypeParam, GroupItem,
         InductIndex, Label, Module, Name, Program, StructField, Term, TopCase, TopConcept,
         TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness,
-        UseGroup, WitnessField, WordAt, one_of, parse_declared_label, parse_doc,
+        UseGroup, WitnessField, WordAt, one_of, parse_body, parse_declared_label, parse_doc,
         parse_identifier_raw, parse_term, parse_whitespace, reserved_keyword, text_after,
         word_after,
     },
@@ -135,7 +135,7 @@ pub fn parse_test_member<'a, D: Grammar>(fields: D::Fields) -> impl Parser<'a, T
             fields.clone(),
             commit(
                 parse_literal("=")
-                    .and_keep(parse_term::<D>)
+                    .and_keep(parse_body::<D>)
                     .and_drop(parse_terminator("a `test`"))
                     .and_drop(parse_whitespace),
             ),
@@ -1085,8 +1085,14 @@ pub fn parse_witness_field<'a>(state: ParserState<'a>) -> Parsed<'a, WitnessFiel
                 .map(Some)
                 .or(parse_field_equals.map(|()| None)),
         )
-        // As in `parse_tuple_field`: past the `=` the implementation must follow, so a mistake in it is the diagnosis rather than the `}` the entry list falls back to.
-        .and(commit(parse_term))
+        // As in `parse_tuple_field`: past the `=` the implementation must follow, so a mistake in it is the diagnosis rather than the `}` the entry list falls back to. A method written with its parameters is a function, whose body may be a chain.
+        .flat_map(|(label, func_params)| {
+            let value = match func_params {
+                Some(_) => commit(parse_body).boxed(),
+                None => commit(parse_term).boxed(),
+            };
+            value.map(move |value| ((label.clone(), func_params.clone()), value))
+        })
         .map(
             |((label, func_params), value): ((Label, _), _)| WitnessField {
                 label,

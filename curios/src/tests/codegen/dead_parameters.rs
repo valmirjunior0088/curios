@@ -78,10 +78,11 @@ fn recursive_arguments_keep_their_positions_and_effects() {
             | 0 => a * 1000 + b
             | k + 1 => walk(k, b + 2, unused, a + 1)
             end;
+        let after(_: {}, x: Nat) -> Nat = x;
         let entry() -> Io({}) =
             let n = List/len(Proc/args()!);
             let _ = /std/print("before:")!;
-            let first = walk(n, n + 3, (let _ = /std/print("argument:")!; n + 100), n + 5);
+            let first = walk(n, n + 3, after(/std/print("argument:")!, n + 100), n + 5);
             let _ = Io/yield()!;
             let _ = /std/print("after:")!;
             /std/print(Nat/to_str(first + walk(n + 1, n + 7, n + 200, n + 11)));

@@ -52,8 +52,7 @@ mod error;
 pub use error::{
     BinderSite, Callee, CycleMember, DeadArm, Declined, EmbeddingDiagnosis, ErasedSite, Error,
     FieldReading, FunctionTyped, GoalReport, Joining, Need, OpenKey, PatternShape, ReaderScope,
-    Reading, RecordKeyword, RegionOwner, Runner, ShapeDiagnosis, Underivable, Watched,
-    WrittenLiteral,
+    Reading, RecordKeyword, Runner, ShapeDiagnosis, Underivable, Watched, WrittenLiteral,
 };
 
 mod report;

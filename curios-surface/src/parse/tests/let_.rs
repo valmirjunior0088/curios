@@ -178,3 +178,39 @@ fn every_declaration_label_spans_its_word_alone() {
         .collect::<Vec<_>>();
     assert_eq!(spelled, ["x", "Inner", "Foo", "Pt", "Sh", "it", "clock"]);
 }
+
+// A `let` chain stands only as a body, so a value, an argument, a list element, a field's value and a parenthesized term each refuse one, naming the rule at its `let`.
+#[test]
+fn a_chain_where_a_term_is_read_is_refused_naming_the_rule() {
+    for source in [
+        "let f() -> Nat = let x = let y = 1; y; x;",
+        "let f() -> Nat = g(1, let y = 1; y);",
+        "let f() -> List(Nat) = [let y = 1; y];",
+        "let f() -> P = P { x = let y = 1; y };",
+        "let f() -> Nat = 1 + (let y = 1; y);",
+    ] {
+        let report = source.parse::<Module>().unwrap_err().format();
+        assert!(
+            report.contains("a `let` chain stands only as a body"),
+            "{source:?} reported {report}"
+        );
+    }
+}
+
+// A chain is read where a body is: a function's and a top-level value's, a lambda's, an arm's, a test's, a function field's and a chain's own tail.
+#[test]
+fn a_chain_is_read_wherever_a_body_is() {
+    for source in [
+        "let f() -> Nat = let y = 1; y;",
+        "let v : Nat = let y = 1; y;",
+        "let f() -> (Nat) -> Nat = (n) => let y = n; y;",
+        "let f(b: Bool) -> Nat = match b | true => let y = 1; y | false => 0 end;",
+        "test t = let y = 1; Test/pass();",
+        "let f() -> P = P { g(n) = let y = n; y };",
+        "let f() -> Nat = let y = 1; let z = y; z;",
+    ] {
+        if let Err(error) = source.parse::<Module>() {
+            panic!("{source:?} refused: {}", error.format());
+        }
+    }
+}

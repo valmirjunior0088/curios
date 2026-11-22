@@ -243,10 +243,10 @@ test comments_and_line_endings_are_read_and_junk_is_refused =
 
 -- Arrays and inline tables nest, and the encoder's output is a fixed point of decode-then-encode: the second row re-encodes the first row's output and compares.
 test nested_arrays_and_inline_tables_reach_a_fixed_point =
+    let c1 = canon("[[a]]\nb = { c = 2 }\n[a.d]\ne = 1");
     Test/equal(
         [
             canon("[[a]]\nb = { c = 2 }\n[a.d]\ne = 1"),
-            let c1 = canon("[[a]]\nb = { c = 2 }\n[a.d]\ne = 1");
             Bool/to_str(Str/eql(c1, canon(c1))),
             canon("b = [1, [2]]")],
         ["a = [{ b = { c = 2 }, d = { e = 1 } }]\n", "true", "b = [1, [2]]\n"]);

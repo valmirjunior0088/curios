@@ -186,7 +186,7 @@ fn a_guard_answers_its_definition_one_unfolding_down() {
 
         let below(k : Nat) -> Nat =
             match small(k)
-            | true => (let _p : Holds(k < 10) = True/qed(); k)
+            | true => let _p : Holds(k < 10) = True/qed(); k
             | false => 10
             end;
 
@@ -235,7 +235,7 @@ fn a_guard_whose_definition_is_a_match_answers_that_match() {
 
         let inside(k : Nat) -> Nat =
             match between(k)
-            | true => (let _p : Holds(also_between(k)) = True/qed(); k)
+            | true => let _p : Holds(also_between(k)) = True/qed(); k
             | false => 0
             end;
 

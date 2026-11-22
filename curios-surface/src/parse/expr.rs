@@ -64,7 +64,7 @@ pub fn refusing<'a>(
 pub fn parse_binding<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, (Label, LetSignature<D>)> {
-    bound(parse_let_signature).parse(state)
+    bound(parse_member_signature).parse(state)
 }
 
 // One `let` statement: `let pattern (: T)? = e;`, or the group `let f … and g … and h …;` whose later members are plain labels with mandatory types.
@@ -153,9 +153,16 @@ pub fn parse_func_let_signature<'a, D: Grammar>(
     }
 }
 
-// The plain `: T = body` form with a mandatory type.
-pub fn parse_required_name_signature<'a, D: Grammar>(
-    owns_body: bool,
+/// Where a `let` that states its type stands, which decides what its value is read as: at the top level, a body, and after `and` in a local group, a term, as every local value is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Placed {
+    Top,
+    Member,
+}
+
+// The plain `: T = value` form with a mandatory type.
+fn parse_required_name_signature<'a, D: Grammar>(
+    placed: Placed,
 ) -> impl Parser<'a, LetSignature<D>> {
     move |state: ParserState<'a>| {
         refusing(":=", DEFINITION_TAKES_EQUALS)
@@ -163,7 +170,10 @@ pub fn parse_required_name_signature<'a, D: Grammar>(
             .and_keep(parse_term::<D>)
             .and_drop(refusing(":=", DEFINITION_TAKES_EQUALS))
             .and_drop(parse_literal("="))
-            .and(body(owns_body))
+            .and(match placed {
+                Placed::Top => body(true).boxed(),
+                Placed::Member => commit(parse_term::<D>).boxed(),
+            })
             .map(|(type_, body)| LetSignature::Name {
                 type_: Some(type_),
                 body,
@@ -176,8 +186,8 @@ pub fn parse_required_name_signature<'a, D: Grammar>(
 fn body<'a, D: Grammar>(owned: bool) -> impl Parser<'a, Term<D>> {
     move |state: ParserState<'a>| {
         (match owned {
-            true => commit(parse_term::<D>).boxed(),
-            false => parse_term::<D>.boxed(),
+            true => commit(parse_body::<D>).boxed(),
+            false => parse_body::<D>.boxed(),
         })
         .parse(state)
     }
@@ -205,14 +215,26 @@ pub fn parse_optional_name_signature<'a, D: Grammar>(
 //
 // The local spelling, `= body` with no type, is refused by the rule rather than by the token: both forms above fail at the `=` without consuming it, so the report would be the sugar's `Expected '('`, which names one of the two tokens that would have served and reads as a demand for a parameter list. The `=` is consumed before the failure so this arm is the furthest and wins [`Parser::or`]'s tie-break, as `refuse_declaration_head` does, and read raw so the caret underlines the `=` alone.
 pub fn parse_let_signature<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, LetSignature<D>> {
-    parse_func_let_signature(true)
-        .or(parse_required_name_signature(true))
-        .or(mark().and_drop(take_exact("=")).flat_map(|start| {
-            fail_from(
-                &start,
-                &["this definition states no type", "a top-level `let` and every member after `and` state theirs, `: T = …` or `(params) -> T = …`", "only a local `let` may leave its type out"],
-            )
-        })).parse(state)
+    stated::<D>(Placed::Top).parse(state)
+}
+
+// `parse_let_signature` for a member of a local group after the first: a function's body is a body as anywhere, and a value is a term, as every local value is.
+fn parse_member_signature<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, LetSignature<D>> {
+    stated::<D>(Placed::Member).parse(state)
+}
+
+// A signature that states its type, at `placed`.
+fn stated<'a, D: Grammar>(placed: Placed) -> impl Parser<'a, LetSignature<D>> {
+    move |state: ParserState<'a>| {
+        parse_func_let_signature(true)
+            .or(parse_required_name_signature(placed))
+            .or(mark().and_drop(take_exact("=")).flat_map(|start| {
+                fail_from(
+                    &start,
+                    &["this definition states no type", "a top-level `let` and every member after `and` state theirs, `: T = …` or `(params) -> T = …`", "only a local `let` may leave its type out"],
+                )
+            })).parse(state)
+    }
 }
 
 // Like `parse_let_signature`, but the plain form's type annotation may be omitted. Used only by local `let`, where the body's type can be inferred.
@@ -229,7 +251,7 @@ pub fn parse_local_let_signature<'a, D: Grammar>(
 // `many1` parses the whole run of `let` statements in a loop, then the tail once, and they become a single flat `Let` block — one node for the whole run, not a right-nested chain — so nothing downstream (clone, lowering) recurses once per binding. The leading `mark` on the first statement and the trailing `mark` after the tail span the block.
 pub fn parse_let<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     many1(|| mark().and(parse_let_group))
-        .and(parse_term::<D>.and(mark))
+        .and(parse_body::<D>.and(mark))
         .map(|(statements, (tail, end))| {
             // `many1` guarantees at least one statement, so the span start is defined.
             let span = statements[0].0.to(&end);
@@ -674,6 +696,34 @@ pub fn parse_term<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>>
     recurse(|| memoize(MEMO_TERM, term()).parse(state))
 }
 
+/// A body: a `let` chain, or a term. What a function's, a lambda's, an arm's, a test's and a top-level value's definition closes with, a program's final term and a chain's own tail; every other position reads a term, which in a program opens with no `let`, so a value is never a chain and a value that sequences is a function.
+pub fn parse_body<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
+    // A body that opens with `let` is a chain and nothing else, so the chain owns the diagnosis. The look ahead decides without failing, so a body that opens with no `let` is diagnosed by the term grammar alone.
+    look_ahead(parse_keyword(Keyword::Let))
+        .map(|()| true)
+        .or(pure(false))
+        .flat_map(|chain| match chain {
+            true => commit(parse_let).boxed(),
+            false => parse_term.boxed(),
+        })
+        .parse(state)
+}
+
+/// What refuses a `let` chain where a program reads a term.
+const CHAIN_IS_A_BODY: &[&str] = &[
+    "a `let` chain stands only as a body: a function's, a lambda's, a `match` arm's, a test's or a top-level value's, a program's final term, or the tail of another chain",
+    "a value that sequences is a function, `let name() -> T = …;`, called where its value is needed",
+];
+
+// A `let` where a program reads a term, refused by name at the word, and committed: left to the other alternatives, a tuple would read the word as a field's label and report the token after it.
+fn refuse_chain<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
+    look_ahead(parse_keyword(Keyword::Let))
+        .and_keep(mark())
+        .and_drop(take_exact(Keyword::Let.spelling()))
+        .flat_map(|start| commit(fail_from(&start, CHAIN_IS_A_BODY)))
+        .parse(state)
+}
+
 /// A term, with the probe for a second one on its line.
 fn term<'a, D: Grammar>() -> impl Parser<'a, Term<D>> {
     move |state: ParserState<'a>| {
@@ -682,7 +732,10 @@ fn term<'a, D: Grammar>() -> impl Parser<'a, Term<D>> {
                 // At end of input there is no character for [`refuse_non_term`] to consume, so every alternative below declines at the same offset and the tie-break reports the first of them. This stands ahead of them so that tie names the input instead.
                 look_ahead(take_eof)
                     .and_keep(fail(&["obtained: the end of the file", "expected: a term"]))
-                    .or(parse_let)
+                    .or(match D::CHAINS_ANYWHERE {
+                        true => parse_let.boxed(),
+                        false => refuse_chain.boxed(),
+                    })
                     .or(parse_func_type)
                     .or(parse_func)
                     .or(parse_infix_expr(0).and_drop(refuse_juxtaposed_term))

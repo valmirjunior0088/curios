@@ -8,8 +8,8 @@ mod tests;
 use {
     super::{
         BinderSite, Callee, CycleMember, DeadArm, Declined, ErasedSite, Error, FieldReading,
-        GoalReport, Need, PatternShape, RecordKeyword, RegionOwner, ShapeDiagnosis, Underivable,
-        Watched, WrittenLiteral,
+        GoalReport, Need, PatternShape, RecordKeyword, ShapeDiagnosis, Underivable, Watched,
+        WrittenLiteral,
     },
     crate::{Answer, Conclusion, Origin, Refusal, ordinal, premise_label},
     curios_analysis::{DeclaredPart, Erased, MemberLabel},
@@ -1779,13 +1779,17 @@ impl Displayed<'_> {
                 f.stating("`!` sequences in its region's monad, read from the region's type");
                 f.stating("annotate the enclosing result type to fix the monad");
             }
-            Error::BangRegionNotAMonad { region, owner } => {
+            Error::BangRegionNotAMonad { region } => {
                 f.text("not a monad");
                 f.stating(format_args!("region: {}", Code(region.spelled(spelling))));
                 f.stating("`!` sequences in its region's monad, read from the region's type");
-                if let RegionOwner::Function = owner {
-                    f.stating("a function whose result is not a monad has nowhere to sequence one");
-                }
+                f.stating("a function whose result is not a monad has nowhere to sequence one");
+            }
+            Error::BangOutsideAFunction => {
+                f.text("`!` outside a function");
+                f.stating("`!` sequences in a function's body, a test's body and a program's final term included");
+                f.stating("a top-level value and a witness's value hold none");
+                f.stating("write the value as a function, `let name() -> T = …;`, and call it");
             }
             Error::OperatorUndefined { symbol, type_ } => {
                 f.text("undefined operator");

@@ -1057,11 +1057,12 @@ pub enum Error {
     BangRegionUndetermined,
     /// A postfix `!` in a region whose type is *known* and is no monad — the rigid twin of [`Error::BangRegionUndetermined`], and the case `documentation/language.md` states as "a `(Str, Bool) -> Bool` has nowhere to sequence one".
     ///
-    /// Raised by `elaborate_bang` alone, which reads the region's monad and resolves its `Monad` witness itself: a region whose head applies to nothing has no monad to read, and one whose monad has no witness has nothing to sequence through. Left to `/std/Monad/bind`, either would be reported against a premise of a call the author never wrote. `region` is the type the reader must look at, and `owner` what the region belongs to, which says why it is that type.
+    /// Raised by `elaborate_bang` alone, which reads the region's monad and resolves its `Monad` witness itself: a region whose head applies to nothing has no monad to read, and one whose monad has no witness has nothing to sequence through. Left to `/std/Monad/bind`, either would be reported against a premise of a call the author never wrote. `region` is the type the reader must look at, the result of the function the `!` stands in.
     BangRegionNotAMonad {
         region: Box<Term>,
-        owner: RegionOwner,
     },
+    /// A postfix `!` outside a function's body: in a top-level value or a witness's value. A function's body is the one region a `!` sequences in, a test's body and a program's final term each counting as one, so a value that sequences is written as a function of none.
+    BangOutsideAFunction,
     /// An infix operator whose concept has no registry entry, so there is nothing to dispatch through — an embedding that elaborates without the prelude (`infix_method`). With the prelude in scope, an operator at a type no witness covers reports [`Error::NoWitness`] instead. The `symbol` is the operator's spelling; `type_` is the resolved operand type.
     OperatorUndefined {
         symbol: String,
@@ -1347,6 +1348,7 @@ variants!(Error {
     AmbiguousSpines,
     BangRegionUndetermined,
     BangRegionNotAMonad,
+    BangOutsideAFunction,
     OperatorUndefined,
     UndischargedBound,
     UninferredImplicit,
@@ -1543,11 +1545,14 @@ impl Error {
         Self::BangRegionUndetermined
     }
 
-    pub fn bang_region_not_a_monad<U: Into<Term>>(region: U, owner: RegionOwner) -> Self {
+    pub fn bang_region_not_a_monad<U: Into<Term>>(region: U) -> Self {
         Self::BangRegionNotAMonad {
             region: Box::new(region.into()),
-            owner,
         }
+    }
+
+    pub fn bang_outside_a_function() -> Self {
+        Self::BangOutsideAFunction
     }
 
     pub fn not_a_function<U: Into<Term>, V: Into<Term>>(head_type: U, reduced: V) -> Self {
@@ -2791,17 +2796,6 @@ pub enum ErasedSite {
     },
     /// The bound a built-in operation states of an operand.
     OperandBound(Box<Term>),
-}
-
-/// What the region a `!` sequences in belongs to, which says why the region has the type it has.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RegionOwner {
-    /// A function's body, whose type is the function's result.
-    Function,
-    /// The value of a definition its author wrote at the top level, whose type is the definition's: a region of its own, not one step of a program.
-    Definition,
-    /// The value of anything else declared — a test, a witness — or a program's final term.
-    Declaration,
 }
 
 /// What a binder written under the wrong mark was a binder of.

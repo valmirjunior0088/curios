@@ -4,8 +4,8 @@ use {
     super::{Bracket, ByValue, DefEntry, Frames, Height, KeptWindow, Withheld},
     crate::DefinedGroup,
     crate::{
-        Context, DeadArm, HeldFrames, Question, RegionOwner, ScrutineeEntry, hold_at_one_instance,
-        key_spelling, shallow_scrutinee, zonk_solved_term_metas,
+        Context, DeadArm, HeldFrames, Question, ScrutineeEntry, hold_at_one_instance, key_spelling,
+        shallow_scrutinee, zonk_solved_term_metas,
     },
     curios_analysis::{reads_one_of, records_case_equation},
     curios_common::Plicity,
@@ -48,13 +48,9 @@ impl<'s> Context<'s> {
         }
     }
 
-    /// What the region a `!` sequences in here belongs to: a function's body where a frame that stands opened one, and otherwise the value being elaborated.
-    pub(crate) fn region_owner(&self) -> RegionOwner {
-        match (self.typing.frames.in_body(), self.underway.defining) {
-            (true, _) => RegionOwner::Function,
-            (false, true) => RegionOwner::Definition,
-            (false, false) => RegionOwner::Declaration,
-        }
+    /// Whether a `!` may sequence here: in a function's body, where a frame that stands opened one, or in a test's body or a program's final term, each a function of none the runner calls. A top-level value and a witness's value hold none, so a function's body is the one region a `!` sequences in.
+    pub(crate) fn sequences(&self) -> bool {
+        self.typing.frames.in_body() || self.underway.performed
     }
 
     pub(super) fn enter_frame(&mut self) {

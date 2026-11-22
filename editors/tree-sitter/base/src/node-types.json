@@ -48,10 +48,6 @@
           "named": true
         },
         {
-          "type": "let_term",
-          "named": true
-        },
-        {
           "type": "list_literal",
           "named": true
         },
@@ -608,10 +604,6 @@
             "named": true
           },
           {
-            "type": "let_term",
-            "named": true
-          },
-          {
             "type": "list_literal",
             "named": true
           },
@@ -785,10 +777,6 @@
         },
         {
           "type": "lambda",
-          "named": true
-        },
-        {
-          "type": "let_term",
           "named": true
         },
         {
@@ -1001,10 +989,6 @@
           },
           {
             "type": "lambda",
-            "named": true
-          },
-          {
-            "type": "let_term",
             "named": true
           },
           {
@@ -1252,10 +1236,6 @@
             "named": true
           },
           {
-            "type": "let_term",
-            "named": true
-          },
-          {
             "type": "list_literal",
             "named": true
           },
@@ -1366,10 +1346,6 @@
             "named": true
           },
           {
-            "type": "let_term",
-            "named": true
-          },
-          {
             "type": "list_literal",
             "named": true
           },
@@ -1477,10 +1453,6 @@
           },
           {
             "type": "lambda",
-            "named": true
-          },
-          {
-            "type": "let_term",
             "named": true
           },
           {
@@ -1901,10 +1873,6 @@
             "named": true
           },
           {
-            "type": "let_term",
-            "named": true
-          },
-          {
             "type": "list_literal",
             "named": true
           },
@@ -2200,10 +2168,6 @@
             "named": true
           },
           {
-            "type": "let_term",
-            "named": true
-          },
-          {
             "type": "list_literal",
             "named": true
           },
@@ -2348,10 +2312,6 @@
           },
           {
             "type": "lambda",
-            "named": true
-          },
-          {
-            "type": "let_term",
             "named": true
           },
           {
@@ -2696,10 +2656,6 @@
             "named": true
           },
           {
-            "type": "let_term",
-            "named": true
-          },
-          {
             "type": "list_literal",
             "named": true
           },
@@ -2911,10 +2867,6 @@
         },
         {
           "type": "lambda",
-          "named": true
-        },
-        {
-          "type": "let_term",
           "named": true
         },
         {
@@ -3341,10 +3293,6 @@
             "named": true
           },
           {
-            "type": "let_term",
-            "named": true
-          },
-          {
             "type": "list_literal",
             "named": true
           },
@@ -3514,10 +3462,6 @@
         },
         {
           "type": "lambda",
-          "named": true
-        },
-        {
-          "type": "let_term",
           "named": true
         },
         {
@@ -3720,10 +3664,6 @@
             "named": true
           },
           {
-            "type": "let_term",
-            "named": true
-          },
-          {
             "type": "list_literal",
             "named": true
           },
@@ -3836,10 +3776,6 @@
         },
         {
           "type": "lambda",
-          "named": true
-        },
-        {
-          "type": "let_term",
           "named": true
         },
         {
@@ -4092,10 +4028,6 @@
           },
           {
             "type": "lambda",
-            "named": true
-          },
-          {
-            "type": "let_term",
             "named": true
           },
           {
@@ -4503,10 +4435,6 @@
           "named": true
         },
         {
-          "type": "let_term",
-          "named": true
-        },
-        {
           "type": "list_literal",
           "named": true
         },
@@ -4626,10 +4554,6 @@
         },
         {
           "type": "lambda",
-          "named": true
-        },
-        {
-          "type": "let_term",
           "named": true
         },
         {
@@ -4927,10 +4851,6 @@
             "named": true
           },
           {
-            "type": "let_term",
-            "named": true
-          },
-          {
             "type": "list_literal",
             "named": true
           },
@@ -5183,10 +5103,6 @@
           "named": true
         },
         {
-          "type": "let_term",
-          "named": true
-        },
-        {
           "type": "list_literal",
           "named": true
         },
@@ -5428,10 +5344,6 @@
           },
           {
             "type": "lambda",
-            "named": true
-          },
-          {
-            "type": "let_term",
             "named": true
           },
           {

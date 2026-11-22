@@ -466,8 +466,8 @@ fn a_map_a_reader_holds_beside_its_insert_answers_as_if_copied() {
             probe(x, n);
     "#;
     for start in [
-        "(let m = fill(n % 50 + 3, Map/empty()); looped(m, m, n % 7))",
-        "(let m = fill(n % 50 + 3, Map/empty()); let p = fill(n % 50 + 4, Map/empty()); called(m, m, n % 7) + called(p, p, n % 7) * 100000)",
+        "(() => let m = fill(n % 50 + 3, Map/empty()); looped(m, m, n % 7))()",
+        "(() => let m = fill(n % 50 + 3, Map/empty()); let p = fill(n % 50 + 4, Map/empty()); called(m, m, n % 7) + called(p, p, n % 7) * 100000)()",
         "outer(fill(n % 50 + 3, Map/empty()), n % 7)",
     ] {
         let (lowered, module) = modules(&program(definitions, start));

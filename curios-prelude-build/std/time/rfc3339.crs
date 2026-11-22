@@ -18,13 +18,13 @@ pub let whole_minutes(o: Offset) -> Option(WholeMinutes(o)) =
     Bool/holds(Offset/ahead(o) % 60 == +0);
 
 --- A date as RFC 3339 reads one: four digits of year, a month and a day.
-pub let date: Parse(Str, Date) =
+pub let date() -> Parse(Str, Date) =
     let y = iso8601/digits(4)!;
     iso8601/date_after(Nat/to_int(y));
 
 --- An offset as RFC 3339 reads one: `Z`, `z` or whole minutes east of UTC.
-pub let offset: Parse(Str, Offset) =
-    let o = iso8601/offset!;
+pub let offset() -> Parse(Str, Offset) =
+    let o = iso8601/offset()!;
     match whole_minutes(o)
     | some(_) => Parse/pure(o)
     | none() => Parse/fail("RFC 3339 writes an offset in whole minutes")

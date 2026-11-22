@@ -5,7 +5,7 @@ use {
     },
     crate::{
         Alternative, Func, Guard, HeadlessArm, HeadlessMatch, Match, MatrixArm, Subterm, Term,
-        parse_term, parse_whitespace,
+        parse_body, parse_term, parse_whitespace,
     },
     curios_common::Keyword,
     curios_parse::{
@@ -23,7 +23,7 @@ pub fn parse_func<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>>
         .and_drop(parse_literal("=>"))
         // Past the arrow this is a lambda and nothing else, so a parameter it refuses and its body own the diagnosis. Left to backtrack, the parameter list would be re-read as a tuple or a parenthesized term and the arrow itself would become the complaint.
         .flat_map(members)
-        .and(commit(parse_term::<D>))
+        .and(commit(parse_body::<D>))
         .map(|(params, body)| Subterm::Func(Func { params, body }).into())
         .parse(state)
 }
@@ -102,7 +102,7 @@ pub fn parse_induct_match_branch<'a, D: Grammar>(
             parse_alternatives::<D>
                 .and(parse_later_guards::<D>)
                 .and_drop(parse_literal("=>"))
-                .and(parse_term::<D>),
+                .and(parse_body::<D>),
         ))
         .map(|((alternatives, guards), body)| MatrixArm {
             alternatives,
@@ -161,7 +161,7 @@ fn parse_headless_arm<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Head
         .and(commit(
             parse_later_guards::<D>
                 .and_drop(parse_literal("=>"))
-                .and(parse_term::<D>),
+                .and(parse_body::<D>),
         ))
         .map(|(first, (mut guards, body))| {
             guards.insert(0, first);
@@ -193,7 +193,7 @@ fn parse_headless_default<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, 
             false => parse_literal("|")
                 .and_keep(parse_literal("_"))
                 .and_drop(parse_literal("=>"))
-                .and_keep(parse_term::<D>)
+                .and_keep(parse_body::<D>)
                 .or(parse_headless_arm::<D>.map(|arm| arm.body))
                 .boxed(),
         })

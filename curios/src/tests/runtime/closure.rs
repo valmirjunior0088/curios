@@ -70,7 +70,7 @@ fn local_binders_shadow_module_bindings_without_leaking() {
                 let go : /std/Nat = 3;
                 go;
             pub let sibling : /std/Nat =
-                let probe : /std/Nat = (let go : /std/Nat = 3; go);
+                let probe : /std/Nat = (() => let go : /std/Nat = 3; go)();
                 go;
         end
         let entry() -> /std/Io({}) =
@@ -172,12 +172,12 @@ fn nested_local_rec_runs_correctly() {
         run(r#"
         use /std/{Nat, Str, Bytes, Io};
         let f(n : Nat) -> Nat =
-            (let go(i : Nat) -> Nat =
+            (() => let go(i : Nat) -> Nat =
                 match i
                 | 0 => 0
                 | k + 1 => go(k) + 1
                 end;
-             go(n));
+             go(n))();
         let entry() -> /std/Io({}) =
             /std/print(Nat/to_str(f(Bytes/len(/std/rand/bytes(4)!))));
         entry()
@@ -193,12 +193,12 @@ fn local_rec_calls_enclosing_rec_member() {
         run(r#"
         use /std/{Nat, Str, Bytes, Io};
         let f(n : Nat) -> Nat =
-            (let go(i : Nat) -> Nat =
+            (() => let go(i : Nat) -> Nat =
                 match i
                 | 0 => 0
                 | k + 1 => f(k) + go(k)
                 end;
-             go(n));
+             go(n))();
         let entry() -> /std/Io({}) =
             /std/print(Nat/to_str(f(Bytes/len(/std/rand/bytes(3)!))));
         entry()

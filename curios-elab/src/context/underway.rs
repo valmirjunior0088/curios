@@ -81,8 +81,8 @@ pub struct Underway<'s> {
     pub broken: BTreeSet<Global>,
     /// The declaration being elaborated (`Context::enter_declaration`); `None` for an entry's final term.
     pub declaration: Option<Global>,
-    /// Whether the value being elaborated is a definition's its author wrote at the top level (`Context::enter_value`): a region of its own, which a `!` refused there names.
-    pub defining: bool,
+    /// Whether the value being elaborated is one the runner performs as a function of none — a test's body (`Context::enter_value`) or a program's final term (`Context::enter_entry`) — which a `!` sequences in as it does in any function's body.
+    pub performed: bool,
     /// What each auto-lift site named as written, under the extent its `lift` wrapper took — see [`EmbeddingSite`]. One entry per such site the unit elaborates, read only where a missing embedding is reported, so a scan serves.
     pub embedding_sites: Vec<(Extent, EmbeddingSite)>,
     /// The members of the group being elaborated, each beside the local its group names it by while it elaborates ([`Context::within_group`](super::Context::within_group)). Empty outside one.
@@ -115,7 +115,7 @@ impl Default for Underway<'_> {
             minted: Rc::default(),
             broken: BTreeSet::new(),
             declaration: None,
-            defining: false,
+            performed: false,
             embedding_sites: Vec::new(),
             group: Vec::new(),
             imports: Imports::default(),

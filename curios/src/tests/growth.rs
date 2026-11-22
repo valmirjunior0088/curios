@@ -456,7 +456,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
                     0 => "a".to_string(),
                     _ => format!("x{}", index - 1),
                 };
-                format!("(let x{index} = {value}; {tail})")
+                format!("(() => let x{index} = {value}; {tail})()")
             });
             program(&format!("let f(a: Nat) -> Nat = {term};\n"), "f(a)")
         }

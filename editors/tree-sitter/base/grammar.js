@@ -44,8 +44,8 @@ module.exports = grammar({
   ],
 
   rules: {
-    // An entrypoint is items then one final term; a module file is items only.
-    source_file: ($) => seq(repeat($._item), optional($._term)),
+    // An entrypoint is items then one final term, a body; a module file is items only.
+    source_file: ($) => seq(repeat($._item), optional($._body)),
 
     // A comment opens with `-- `, with the space, or is a bare `--` ending its line, as the compiler reads it; `--glued` is not one, so a line the compiler refuses is not painted as a comment. A documentation comment opens with `--- ` or is a bare `---`.
     comment: (_) =>
@@ -82,7 +82,7 @@ module.exports = grammar({
 
     let_member: ($) => seq(field("name", $._declared_name), $._signature),
 
-    // `(params) -> type = body` or `: type = body`.
+    // `(params) -> type = body` or `: type = body`: a top-level definition's body, which may be a chain.
     _signature: ($) =>
       choice(
         seq(
@@ -90,9 +90,25 @@ module.exports = grammar({
           "->",
           field("type", $._term),
           "=",
-          field("body", $._term),
+          field("body", $._body),
         ),
-        seq(":", field("type", $._term), "=", field("body", $._term)),
+        seq(":", field("type", $._term), "=", field("body", $._body)),
+      ),
+
+    // A member of a local group after the first: a function's body is a body, and a value is a term, as every local value is.
+    local_member: ($) =>
+      seq(
+        field("name", $._declared_name),
+        choice(
+          seq(
+            field("parameters", $.parameters),
+            "->",
+            field("type", $._term),
+            "=",
+            field("body", $._body),
+          ),
+          seq(":", field("type", $._term), "=", field("body", $._term)),
+        ),
       ),
 
     mod_item: ($) =>
@@ -267,13 +283,16 @@ module.exports = grammar({
         "}",
       ),
 
-    // `label = value` or the definition sugar `label(params) = value`.
+    // `label = value`, a term, or the definition sugar `label(params) = body`, a function's body.
     field_definition: ($) =>
-      seq(
-        field("name", $._name),
-        optional(field("parameters", $.sugar_parameters)),
-        "=",
-        field("value", $._term),
+      choice(
+        seq(
+          field("name", $._name),
+          field("parameters", $.sugar_parameters),
+          "=",
+          field("value", $._body),
+        ),
+        seq(field("name", $._name), "=", field("value", $._term)),
       ),
 
     sugar_parameters: ($) => seq("(", commaList($.sugar_parameter), ")"),
@@ -303,7 +322,7 @@ module.exports = grammar({
         "test",
         field("name", $._declared_name),
         "=",
-        field("body", $._term),
+        field("body", $._body),
         ";",
       ),
 
@@ -349,9 +368,12 @@ module.exports = grammar({
 
     // ---- Terms ----
 
-    _term: ($) => choice($.let_term, $.function_type, $.lambda, $._infix),
+    // A `let` chain stands only as a body: a function's, a lambda's, an arm's, a test's or a top-level value's, a program's final term and a chain's own tail. Everywhere else a term is read, which opens with no `let`.
+    _body: ($) => choice($.let_term, $._term),
 
-    let_term: ($) => seq($.let_binding, field("body", $._term)),
+    _term: ($) => choice($.function_type, $.lambda, $._infix),
+
+    let_term: ($) => seq($.let_binding, field("body", $._body)),
 
     let_binding: ($) =>
       seq(
@@ -363,7 +385,7 @@ module.exports = grammar({
             "->",
             field("type", $._term),
             "=",
-            field("value", $._term),
+            field("value", $._body),
           ),
           seq(
             optional(seq(":", field("type", $._term))),
@@ -371,7 +393,7 @@ module.exports = grammar({
             field("value", $._term),
           ),
         ),
-        repeat(seq("and", $.let_member)),
+        repeat(seq("and", alias($.local_member, $.let_member))),
         ";",
       ),
 
@@ -394,7 +416,7 @@ module.exports = grammar({
         repeat(seq("|", field("pattern", $._match_pattern))),
         repeat(seq(",", field("guard", $.guard))),
         "=>",
-        field("body", $._term),
+        field("body", $._body),
       ),
 
     guarded_arm: ($) =>
@@ -403,7 +425,7 @@ module.exports = grammar({
         field("guard", $.guard),
         repeat(seq(",", field("guard", $.guard))),
         "=>",
-        field("body", $._term),
+        field("body", $._body),
       ),
 
     // A bind's pattern is read as a term: every refutable pattern shape is also a term shape, and a highlighter has no need to tell them apart.
@@ -424,7 +446,7 @@ module.exports = grammar({
       seq(
         field("parameters", $.lambda_parameters),
         "=>",
-        field("body", $._term),
+        field("body", $._body),
       ),
 
     _infix: ($) => choice($.binary, $._applied),

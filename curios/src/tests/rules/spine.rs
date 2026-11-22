@@ -105,15 +105,15 @@ fn two_calls_that_differ_in_a_relevant_argument_stay_apart_wherever_they_sit() {
         let halved(m : Nat) -> Nat = match m | 0 => 0 | k + 1 => k end;
 
         let apart(a : Nat, b : Nat)
-            -> Eq(@(Nat))((let z = halved(a); z), (let z = halved(a); z)) = Eq/refl();
+            -> Eq(@(Nat))((() => let z = halved(a); z)(), (() => let z = halved(a); z)()) = Eq/refl();
 
         /std/print("ok")
         "#,
         b"ok",
     )
     .refused(&[(
-        "(let z = halved(a); z)) = Eq/refl()",
-        "(let z = halved(b); z)) = Eq/refl()",
+        "(() => let z = halved(a); z)()) = Eq/refl()",
+        "(() => let z = halved(b); z)()) = Eq/refl()",
     )])
     .by_elaborator_in("/apart", |error| {
         matches!(error, Error::TypeMismatch { .. })

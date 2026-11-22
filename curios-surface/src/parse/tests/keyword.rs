@@ -75,7 +75,7 @@ fn a_word_that_begins_with_a_digit_cannot_be_a_binder_or_a_label() {
         ("let f(9: Nat) -> Nat = 9;", "9"),
         ("struct P : Type { 1st : Nat }", "1st"),
         ("induct T : Type | 2nd(Nat) end", "2nd"),
-        ("let g : Nat = (let 3 = 1; 2);", "3"),
+        ("let g : Nat = let 3 = 1; 2;", "3"),
     ] {
         let error = source.parse::<Module>().unwrap_err();
         assert!(

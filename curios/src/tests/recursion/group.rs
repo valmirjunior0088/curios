@@ -205,9 +205,9 @@ fn a_member_typed_at_a_sibling_reads_it_by_value() {
     };
 
     for group in [
-        "and val: Nat =
+        "and val: Nat = (() =>
             let x: T(2) = n;
-            x;
+            x)();
         val + 1;",
         "and f(x: T(0)) -> T(0) = x;
         f(n) + 1;",

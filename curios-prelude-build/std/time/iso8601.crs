@@ -65,7 +65,7 @@ let fraction_digits(taken: Nat, acc: Nat) -> Parse(Str, Nat) =
     end;
 
 -- A fraction: a point and one digit at least, or nothing for none.
-let fraction_part: Parse(Str, Nat) =
+let fraction_part() -> Parse(Str, Nat) =
     let point = Parse/optional(Parse/str/expect('.'))!;
     match point
     | some(_) =>
@@ -84,7 +84,7 @@ pub let write_year(year: Int) -> Str =
     end;
 
 --- A year: four digits, or a sign and four digits at least.
-pub let year: Parse(Str, Int) =
+pub let year() -> Parse(Str, Int) =
     let sign = Parse/optional(Parse/str/char_if((c) => c == '+' || c == '-'))!;
     match sign
     | none() =>
@@ -126,8 +126,8 @@ let month_and_day(year: Int) -> Parse(Str, Date) =
     end;
 
 --- A date.
-pub let date: Parse(Str, Date) =
-    let y = year!;
+pub let date() -> Parse(Str, Date) =
+    let y = year()!;
     date_after(y);
 
 --- `08:49:37.5`: the hour, the minute and the second, and the fraction where there is one, as RFC 3339 writes a time too.
@@ -141,7 +141,7 @@ pub let write_time(t: Time) -> Str =
         fraction(t.nanosecond)]);
 
 --- A time of day, the reader committed to one past the `:` after its hour; a second of 60 is a leap second, and a fraction past nine digits is read to the nanosecond, as RFC 3339 reads a time too.
-pub let time: Parse(Str, Time) =
+pub let time() -> Parse(Str, Time) =
     let h = fixed(2, 0)!;
     let () = expect(':', "malformed date-time")!;
     Parse/commit(time_after(h));
@@ -151,7 +151,7 @@ let time_after(h: Nat) -> Parse(Str, Time) =
     let m = fixed(2, 0)!;
     let () = expect(':', "malformed date-time")!;
     let s = fixed(2, 0)!;
-    let n = fraction_part!;
+    let n = fraction_part()!;
     match Time/try_of(h, m, s, n)
     | some(t) => Parse/pure(t)
     | none() => Parse/fail("invalid time")
@@ -206,7 +206,7 @@ let offset_after(sign: Char) -> Parse(Str, Offset) =
     end;
 
 --- An offset: `Z` or `z`, or a sign and hours and minutes.
-pub let offset: Parse(Str, Offset) =
+pub let offset() -> Parse(Str, Offset) =
     let zulu = Parse/optional(Parse/str/char_if((c) => c == 'Z' || c == 'z'))!;
     match zulu
     | some(_) => Parse/pure(Offset/unknown())
@@ -220,10 +220,10 @@ pub let write_date_time(dt: DateTime) -> Str =
     Str/flatten([write_date(dt.date), "T", write_time(dt.time)]);
 
 --- A date and a time, `T` between them, or the lowercase `t` or a space RFC 3339 §5.6 admits.
-pub let date_time: Parse(Str, DateTime) =
-    let d = date!;
+pub let date_time() -> Parse(Str, DateTime) =
+    let d = date()!;
     let _ = Parse/label(Parse/str/char_if((c) => c == 'T' || c == 't' || c == ' '), "expected T")!;
-    let t = time!;
+    let t = time()!;
     Parse/pure(DateTime { date = d, time = t });
 
 --- `2024-02-29T08:49:37+05:30`.
@@ -231,9 +231,9 @@ pub let write_offset_date_time(odt: OffsetDateTime) -> Str =
     Str/concat(write_date_time(odt.date_time), write_offset(odt.offset));
 
 --- A date and a time at an offset.
-pub let offset_date_time: Parse(Str, OffsetDateTime) =
-    let dt = date_time!;
-    let o = offset!;
+pub let offset_date_time() -> Parse(Str, OffsetDateTime) =
+    let dt = date_time()!;
+    let o = offset()!;
     Parse/pure(OffsetDateTime { date_time = dt, offset = o });
 
 --- `PT1H30M`, `PT1.5S`, `-PT1.5S`, `PT0S`: a duration in hours, minutes and seconds, the parts that are zero left out.
@@ -292,7 +292,7 @@ let duration_parts(hours: Nat, minutes: Nat, last: Nat) -> Parse(Str, Int) =
     end;
 
 --- A duration: an optional `-`, then `PT` and its parts.
-pub let duration: Parse(Str, Duration) =
+pub let duration() -> Parse(Str, Duration) =
     let minus = Parse/optional(Parse/str/expect('-'))!;
     let () = expect('P', "expected P")!;
     let () = expect('T', "expected T")!;

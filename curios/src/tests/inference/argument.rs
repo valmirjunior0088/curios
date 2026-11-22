@@ -1,6 +1,6 @@
 //! What a refusal at an argument tells the reader about the call it sits in.
 
-use {crate::tests::test_support::*, curios_common::fill};
+use crate::tests::test_support::*;
 
 // A lambda handed in where the callee takes its list — the argument order every other language uses for `map` — is refused as a lambda against a non-function type, which is true and not what the reader needs. The report names the parameter the lambda filled and the parameter the callee takes a function as.
 #[test]
@@ -182,23 +182,20 @@ fn a_mismatched_argument_names_the_parameter_it_was_checked_as() {
     );
 }
 
-// The parameter travels with the type the argument is checked at, into an arm of a `match` and the tail of a block the argument is: each is checked at that type, and refused there.
+// The parameter travels with the type the argument is checked at, into an arm of a `match` the argument is: the arm is checked at that type, and refused there.
 #[test]
-fn a_mismatch_in_an_arm_or_a_tail_of_an_argument_names_the_parameter() {
-    for argument in ["match b | true => \"yes\" | false => 2 end", "let k = 2; k"] {
-        let report = error(&fill!(
-            r#"
-            let pair(n: /std/Nat, s: /std/Str) -> /std/Nat = n;
-            let bad(b: /std/Bool) -> /std/Nat = pair(1, ${argument});
-            /std/print("no")
-            "#,
-            argument = argument
-        ));
-        assert!(
-            report.contains("checked as `s`, the 2nd argument of `pair`"),
-            "unexpected report for `{argument}`:\n{report}"
-        );
-    }
+fn a_mismatch_in_an_arm_of_an_argument_names_the_parameter() {
+    let report = error(
+        r#"
+        let pair(n: /std/Nat, s: /std/Str) -> /std/Nat = n;
+        let bad(b: /std/Bool) -> /std/Nat = pair(1, match b | true => "yes" | false => 2 end);
+        /std/print("no")
+        "#,
+    );
+    assert!(
+        report.contains("checked as `s`, the 2nd argument of `pair`"),
+        "{report}"
+    );
 }
 
 // A literal's field fills a slot of its structure, and an operand one of its operator, each named as its reader wrote it.

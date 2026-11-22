@@ -194,7 +194,7 @@ pub let to_str(d: Date) -> Str =
 
 --- The Date ISO 8601's extended format writes as `s`, or `none` for text that writes none.
 pub let of_str(s: Str) -> Option(Date) =
-    iso8601/whole(iso8601/date, s);
+    iso8601/whole(iso8601/date(), s);
 
 satisfy Show(Date) {
     show = to_str,

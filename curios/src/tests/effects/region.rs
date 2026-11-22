@@ -124,7 +124,7 @@ fn a_bang_in_a_region_that_is_no_monad_names_the_region_type() {
             r#"
         use /std/{Io};
         use /std/Bool/{True, Holds};
-        let _sequenced: Holds(true) = (let _ = Io/pure(1)!; True/qed());
+        let sequenced() -> Holds(true) = let _ = Io/pure(1)!; True/qed();
         /std/Io/pure(())
         "#,
             "True",
@@ -138,7 +138,7 @@ fn a_bang_in_a_region_that_is_no_monad_names_the_region_type() {
 
 /// Values and functions receive the same type-directed sequencing diagnosis, placed at the written action.
 #[test]
-fn values_and_functions_report_the_same_invalid_sequencing_types() {
+fn a_function_names_its_invalid_sequencing_type_and_a_value_the_rule_it_breaks() {
     for (binding, refusal) in [
         ("let n: Nat = Io/pure(3)!;", "region: `Nat`"),
         ("let cell: Cell({}) = Cell/new()!;", "region: `Cell({})`"),
@@ -148,12 +148,13 @@ fn values_and_functions_report_the_same_invalid_sequencing_types() {
         ),
     ] {
         let function = binding.replacen(':', "() ->", 1);
-        for declaration in [binding, &function] {
+        for (declaration, refusal) in [(binding, "`!` outside a function"), (&function, refusal)] {
             let source = fill!(
                 "use /std/{Nat, List, Cell, Io};\n${declaration}\n()\n",
                 declaration
             );
-            let error = typecheck(&source).expect_err("sequencing needs a suitable monad");
+            let error = typecheck(&source)
+                .expect_err("sequencing needs a function whose result is a suitable monad");
             assert!(error.contains(refusal), "{error}");
             assert!(error.contains(declaration), "{error}");
             assert!(error.contains('^'), "{error}");

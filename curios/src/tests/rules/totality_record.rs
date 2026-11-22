@@ -587,8 +587,8 @@ fn a_member_handed_bare_where_no_part_lies_at_the_field_applied_calls_its_leadin
     )
     .refused(&[
         (
-            "(y) => match y | 0 => 1",
-            "let q = 1; (y) => match y | 0 => q",
+            "(y) => match y | 0 => 1 | k + 1 => apply1(W, k) end",
+            "(() => let q = 1; (y: Nat) => match y | 0 => q | k + 1 => apply1(W, k) end)()",
         ),
         ("apply1(W, k)", "apply1(W, y)"),
     ])

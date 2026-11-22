@@ -159,9 +159,9 @@ fn the_entrypoint_expression_is_not_a_blind_spot() {
         | sink(f : (A) -> /std/Bool/False)
         end
 
-        /std/print(
-            let forge(x : (let Bad : Type = Sink({}); Bad)) -> {} = ();
-            "ok"
+        /std/print((() =>
+            let forge(x : (() => let Bad : Type = Sink({}); Bad)()) -> {} = ();
+            "ok")()
         )
         "#,
         b"ok",
@@ -205,9 +205,9 @@ fn a_type_level_rec_through_an_arrow_is_diagnosed_not_aborted() {
 fn a_local_type_level_rec_through_an_arrow_is_diagnosed_too() {
     control(
         r#"
-        /std/print(
-            let forge(x : (let Bad : Prop = ({}) -> /std/Bool/False; Bad)) -> {} = ();
-            "ok"
+        /std/print((() =>
+            let forge(x : (() => let Bad : Prop = ({}) -> /std/Bool/False; Bad)()) -> {} = ();
+            "ok")()
         )
         "#,
         b"ok",
@@ -509,7 +509,7 @@ fn a_proof_or_type_that_may_not_terminate_is_refused_wherever_it_stands() {
         pub let in_a_signature(_: Holds(decide(()))) -> Nat = 0;
         pub let in_a_groups_tail: Nat = let h(u: {}) -> Box = Box { p = True/qed() }; let _: Claim = h(()).p; 0;
         pub let in_a_type_in_a_groups_tail: Nat = let d(u: {}) -> Bool = true; let f(_: Holds(d(()))) -> Nat = 0; 0;
-        pub let in_a_lets_tail: Nat = let g: ({}) -> Box = (let h(u: {}) -> Box = Box { p = True/qed() }; h); let _: Claim = g(()).p; 0;
+        pub let in_a_lets_tail: Nat = let g: ({}) -> Box = (() => let h(u: {}) -> Box = Box { p = True/qed() }; h)(); let _: Claim = g(()).p; 0;
 
         /std/print(Nat/to_str(in_a_let + in_an_implicit + in_a_signature(True/qed())))
         "#,
@@ -521,7 +521,7 @@ fn a_proof_or_type_that_may_not_terminate_is_refused_wherever_it_stands() {
         ("let decide(u: {}) -> Bool = true;", "let decide(u: {}) -> Bool = decide(u);"),
         ("let h(u: {}) -> Box = Box { p = True/qed() }; let _", "let h(u: {}) -> Box = h(u); let _"),
         ("let d(u: {}) -> Bool = true;", "let d(u: {}) -> Bool = d(u);"),
-        ("(let h(u: {}) -> Box = Box { p = True/qed() }; h)", "(let h(u: {}) -> Box = h(u); h)"),
+        ("(() => let h(u: {}) -> Box = Box { p = True/qed() }; h)()", "(() => let h(u: {}) -> Box = h(u); h)()"),
     ]);
 
     for at in [

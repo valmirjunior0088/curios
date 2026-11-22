@@ -179,7 +179,7 @@ const TYPED: &[Context] = &[
         Former::Let,
         "",
         "{T}",
-        "(let z = {hole}; z)",
+        "(() => let z = {hole}; z)()",
     ),
 ];
 

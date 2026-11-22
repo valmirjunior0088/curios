@@ -58,7 +58,7 @@ fn a_proof_at_a_polymorphic_head_is_rejected() {
         r#"
         let ignore(@A : Type, x : A, p : /std/Bool/True) -> A = x;
 
-        let leak() -> /std/Nat = ignore(0, let b : /std/Bool/True = /std/Bool/True/qed(); b);
+        let leak() -> /std/Nat = ignore(0, (() => let b : /std/Bool/True = /std/Bool/True/qed(); b)());
 
         /std/print(/std/Nat/to_str(leak()))
         "#,
@@ -104,7 +104,7 @@ fn a_proof_at_an_arm_binder_head_is_rejected() {
 
         let leak(h : Holder) -> /std/Nat =
             match h
-            | hold(f) => f(let b : /std/Bool/True = /std/Bool/True/qed(); b)
+            | hold(f) => f((() => let b : /std/Bool/True = /std/Bool/True/qed(); b)())
             end;
 
         /std/print(/std/Nat/to_str(leak(make())))
@@ -143,7 +143,7 @@ fn a_proof_at_a_sequence_arm_binder_head_is_rejected() {
         let apply_it(fs : /std/List((/std/Bool/True) -> /std/Nat)) -> /std/Nat =
             match fs
             | [] => 0
-            | [head, ..tail] => head(let b : /std/Bool/True = /std/Bool/True/qed(); b)
+            | [head, ..tail] => head((() => let b : /std/Bool/True = /std/Bool/True/qed(); b)())
             end;
 
         /std/print(/std/Nat/to_str(apply_it([])))
@@ -185,7 +185,7 @@ fn a_proof_at_a_struct_projection_head_is_rejected() {
 
         let api : Api = Api { take = (p) => 7 };
 
-        let leak() -> /std/Nat = api.take(let b : /std/Bool/True = /std/Bool/True/qed(); b);
+        let leak() -> /std/Nat = api.take((() => let b : /std/Bool/True = /std/Bool/True/qed(); b)());
 
         /std/print(/std/Nat/to_str(leak()))
         "#,
@@ -234,7 +234,7 @@ fn a_proof_at_a_concept_method_head_is_rejected() {
             drain(x, p) = x,
         }
 
-        let leak() -> /std/Nat = Sink/drain(5, let b : /std/Bool/True = /std/Bool/True/qed(); b);
+        let leak() -> /std/Nat = Sink/drain(5, (() => let b : /std/Bool/True = /std/Bool/True/qed(); b)());
 
         /std/print(/std/Nat/to_str(leak()))
         "#,
@@ -281,7 +281,7 @@ fn a_proof_looping_through_a_projected_inner_group_is_rejected() {
         use /std/Bool/{True, False};
 
         let f(n : Nat) -> True =
-            (let g(m : Nat) -> True = True/qed(); g)(n);
+            (() => let g(m : Nat) -> True = True/qed(); g)()(n);
 
         let held = f;
 
@@ -324,7 +324,7 @@ fn a_proof_projecting_an_inner_group_that_does_not_call_back_is_accepted() {
         let outer(n : Nat) -> True =
             match n
             | 0 => True/qed()
-            | p + 1 => (let keep(t : True) -> True = t; keep)(outer(p))
+            | p + 1 => (() => let keep(t : True) -> True = t; keep)()(outer(p))
             end;
 
         let proved : True = outer(3);

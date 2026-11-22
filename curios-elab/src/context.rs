@@ -645,13 +645,19 @@ impl<'s> Context<'s> {
     pub(crate) fn enter_item(&mut self, declaration: Option<Global>) {
         self.underway.credits.begin_item();
         self.underway.attempt.universe_solver.open_scheme();
-        self.underway.defining = false;
+        self.underway.performed = false;
         self.enter_declaration(declaration);
     }
 
-    /// Elaborate the value of a declaration of `kind` from here on: a definition its author wrote is a region of its own ([`Context::region_owner`]).
+    /// Elaborate the value of a declaration of `kind` from here on: a test's body is a function's ([`Context::sequences`]).
     pub(crate) fn enter_value(&mut self, kind: &DefinitionKind) {
-        self.underway.defining = matches!(kind, DefinitionKind::Authored);
+        self.underway.performed = matches!(kind, DefinitionKind::Test);
+    }
+
+    /// Elaborate an entry's final term from here on: an item of no declaration, whose body is a function's, of none, the runner calls ([`Context::sequences`]).
+    pub(crate) fn enter_entry(&mut self) {
+        self.enter_item(None);
+        self.underway.performed = true;
     }
 
     /// Elaborate `declaration`, a member of the item being elaborated, from here on: whose written binders the locals opened next count among.

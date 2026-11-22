@@ -241,12 +241,7 @@ fn a_positional_field_opening_with_a_keyword_is_left_alone() {
         error.format()
     );
 
-    for source in [
-        "{match b | true => Type end, Type}",
-        "{let (a, b) : P = p; a, Type}",
-    ] {
-        if let Err(error) = source.parse::<Term>() {
-            panic!("{source}\n{}", error.format());
-        }
+    if let Err(error) = "{match b | true => Type end, Type}".parse::<Term>() {
+        panic!("{}", error.format());
     }
 }

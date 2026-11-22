@@ -325,7 +325,9 @@ fn every_law_holds_over_atoms_spelled_two_ways() {
                 (
                     match side {
                         Side::Left => format!("({matched})"),
-                        Side::Right => format!("(let stated: Same({of}) = {matched}; stated)"),
+                        Side::Right => {
+                            format!("(() => let stated: Same({of}) = {matched}; stated)()")
+                        }
                     },
                     format!("{name}c: Bool, {name}0: {of}, {name}1: {of}"),
                 )

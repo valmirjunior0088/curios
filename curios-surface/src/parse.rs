@@ -15,7 +15,7 @@ use match_expr::*;
 
 mod expr;
 use expr::*;
-pub use expr::{op_precedence, parse_term};
+pub use expr::{op_precedence, parse_body, parse_term};
 
 mod top_level;
 use top_level::*;
@@ -145,7 +145,7 @@ pub fn parse_whole_term<D: Grammar>(source: &Arc<Source>) -> Result<Term<D>, Par
     curios_profile::profile!("parse", group = "term");
     run_parser(
         parse_whitespace
-            .and_keep(parse_term::<D>)
+            .and_keep(parse_body::<D>)
             .and_drop(take_eof),
         source,
     )
@@ -153,7 +153,7 @@ pub fn parse_whole_term<D: Grammar>(source: &Arc<Source>) -> Result<Term<D>, Par
 
 /// The formatter's optional tail: a whole term when one follows, `None` at end of input. The term comes first so that a tail garbled past its first token commits under [`Parser::or`]'s progress rule and is refused with the term's own message at its own position — what the compiler reports for the same program. A module file's items end at end of input, where the term fails without progress, and the alternative answers `None`.
 pub fn parse_optional_term<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Option<Term<D>>> {
-    parse_term::<D>
+    parse_body::<D>
         .map(Some)
         .or(take_eof().map(|()| None))
         .parse(state)
@@ -207,7 +207,7 @@ pub fn parse_program_end<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, (
             .and_drop(take_exact(";"))
             .flat_map(|start| fail_from(&start, PROGRAM_TAKES_NO_SEMICOLON)))
         .or(mark()
-            .and(look_ahead(parse_term::<D>).map(|_| true).or(pure(false)))
+            .and(look_ahead(parse_body::<D>).map(|_| true).or(pure(false)))
             .flat_map(|(start, begins_a_term)| match begins_a_term {
                 true => take_n(1)
                     .and_keep(fail_from(&start, PROGRAM_CLOSES_WITH_ONE_TERM))

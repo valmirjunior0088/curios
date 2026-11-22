@@ -203,13 +203,13 @@ pub fn tower(shape: Shape, lines: usize) -> String {
             let _ = writeln!(source, "\nlet keep(x: T{lines}) -> T{lines} = x;");
         }
         Shape::Fields => {
-            source.push_str("use /std/{Nat};\n\nstruct S: Type {\n    f: (\n");
+            source.push_str("use /std/{Nat};\n\nstruct S: Type {\n    f: (() =>\n");
             chain(&mut source, "        ", "t", lines, "Nat", |t| {
                 fill!("{${t}, ${t}}", t)
             });
             let _ = writeln!(
                 source,
-                "        t{lines}\n    )\n}}\n\nlet keep(s: S) -> S = s;"
+                "        t{lines}\n    )()\n}}\n\nlet keep(s: S) -> S = s;"
             );
         }
         Shape::TwoTowers => {

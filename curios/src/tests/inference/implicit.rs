@@ -463,7 +463,7 @@ fn a_candidate_rejected_where_its_implicit_was_born_is_reported_as_one() {
         let f(y: Nat, z: Nat) -> Nat =
             let g = Eq/refl();
             match y <= z
-            | true => (let r: Eq(@Le(z))(Le { low = y }, Le { low = y }) = Eq/refl(); both(g, r))
+            | true => let r: Eq(@Le(z))(Le { low = y }, Le { low = y }) = Eq/refl(); both(g, r)
             | false => 0
             end;
 
@@ -491,7 +491,7 @@ fn a_candidate_rejected_where_its_implicit_was_born_is_reported_as_one() {
 
         let f(y: Nat, z: Nat) -> Nat =
             match y <= z
-            | true => (let g = Eq/refl(); let r: Eq(@Le(z))(Le { low = y }, Le { low = y }) = Eq/refl(); both(g, r))
+            | true => let g = Eq/refl(); let r: Eq(@Le(z))(Le { low = y }, Le { low = y }) = Eq/refl(); both(g, r)
             | false => 0
             end;
 

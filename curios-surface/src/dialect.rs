@@ -66,6 +66,9 @@ pub trait Dialect: Clone + fmt::Debug + PartialEq + 'static {
     type Head: Clone + fmt::Debug + PartialEq;
     /// What a decorator states: before a case, a declaration's word, a group's `and`, or a binder's word. None where nothing is written.
     type Fields: Clone + fmt::Debug + PartialEq + Default;
+
+    /// Whether a `let` chain stands wherever a term does: in Core text, which spells the blocks Core holds wherever they stand, and not in a program, which reads one only as a body, the parser's and the printer's rule alike.
+    const CHAINS_ANYWHERE: bool;
 }
 
 /// The language a person writes: a `.crs` file, a program or a module.
@@ -85,6 +88,7 @@ impl Dialect for Program {
     type PatternForm = Unwritable;
     type Head = ();
     type Fields = ();
+    const CHAINS_ANYWHERE: bool = false;
 }
 
 impl Dialect for CoreText {
@@ -92,6 +96,7 @@ impl Dialect for CoreText {
     type PatternForm = CoreIntrinsic;
     type Head = CoreHead;
     type Fields = Vec<DecoratorField>;
+    const CHAINS_ANYWHERE: bool = true;
 }
 
 /// What a print shows and no grammar reads back: Core text's forms, and the ones only a bounded print or a reader's spelling writes. No parser makes a tree of it, so none is read as Core text.
@@ -103,6 +108,7 @@ impl Dialect for Shown {
     type PatternForm = CoreIntrinsic<Shown>;
     type Head = CoreHead<Shown>;
     type Fields = Vec<DecoratorField<Shown>>;
+    const CHAINS_ANYWHERE: bool = true;
 }
 
 /// A dialect a render of Core builds a tree of: Core text's own, which a reader reads back, or a shown one. Both hold Core text's forms; what no grammar reads is built only under a leave, which a shown tree's render holds and Core text's has no value of, so no walk writes one into a tree a reader reads.

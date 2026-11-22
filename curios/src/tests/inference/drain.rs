@@ -239,7 +239,7 @@ fn a_plain_argument_is_held_to_the_value_its_calls_type_states() {
     assert!(tuple.contains("term mismatch"), "{tuple}");
 }
 
-// A literal that parks inside an argument — a match arm's tuple, a `let` body's — is run by its retry or by the completion of the term that awaits its type, and is held to the call's type as the argument itself is. Mutation-checked, as above.
+// A literal that parks inside an argument — a match arm's tuple — is run by its retry or by the completion of the term that awaits its type, and is held to the call's type as the argument itself is. Mutation-checked, as above.
 #[test]
 fn a_literal_inside_an_argument_is_held_to_the_value_its_calls_type_states() {
     let arm = error(
@@ -254,16 +254,4 @@ fn a_literal_inside_an_argument_is_held_to_the_value_its_calls_type_states() {
         "#,
     );
     assert!(arm.contains("term mismatch"), "{arm}");
-
-    let body = error(
-        r#"
-        use /std/{Nat};
-        induct Boxed(@A : Type) : (A) -> Type
-        | box(z : A) : (z)
-        end
-        let boxed : Boxed()((7, 8)) = Boxed/box(let t = 1; (t, 2));
-        /std/print("unreachable")
-        "#,
-    );
-    assert!(body.contains("term mismatch"), "{body}");
 }

@@ -100,11 +100,11 @@ fn alternatives_too_long_for_a_line_continue_at_the_arms_column() {
     );
 }
 
-// A `let` ends its own line, so a parenthesized one opens a block: one level in after the parenthesis, the closer riding its last line, as a broken call's arguments stand, and the chain around it breaks as it does around a broken call. Left on the parenthesis's line, its body printed at the indentation of the line the parenthesis opens on, left of the `let` it belongs to.
+// A block a program reads as an operand is a function of none applied, and its `let` ends its own line, so the block opens after the arrow: one level in, the closer and the application riding its last line, and the chain around it breaks as it does around a broken call.
 #[test]
-fn a_parenthesized_let_opens_a_block_after_its_parenthesis() {
+fn a_block_applied_as_an_operand_opens_after_its_arrow() {
     assert_eq!(
-        render("12345 + (let n = 2; n * n)", 100),
-        "12345\n    + (\n        let n = 2;\n        n * n)"
+        render("12345 + (() => let n = 2; n * n)()", 100),
+        "12345\n    + (() =>\n        let n = 2;\n        n * n)()"
     );
 }

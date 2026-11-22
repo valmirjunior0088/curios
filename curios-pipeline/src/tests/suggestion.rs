@@ -424,7 +424,7 @@ fn a_goal_under_two_guards_is_offered_the_proof_the_inner_one_gives() {
             match p(x)
             | true =>
                 match q(p(x), y) <= z
-                | true => (let h: Holds(y <= z) = ?; y)
+                | true => let h: Holds(y <= z) = ?; y
                 | false => 0
                 end
             | false => 0

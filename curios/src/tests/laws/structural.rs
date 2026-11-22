@@ -93,8 +93,8 @@ pub const SEEDS: &[Seeds] = &[
             ),
             held("delta", "forward(g)", "g"),
             miss("delta, another definition", "shifted(g)", "g"),
-            held("zeta", "(let h = g; h)", "g"),
-            miss("zeta, another value", "(let h = k; h)", "g"),
+            held("zeta", "(() => let h = g; h)()", "g"),
+            miss("zeta, another value", "(() => let h = k; h)()", "g"),
             held(
                 "iota at Bool",
                 "match true | true => g | false => k end",

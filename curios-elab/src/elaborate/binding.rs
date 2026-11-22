@@ -4,10 +4,10 @@ use {
     },
     crate::{
         BinderSite, Binding, Context, DomainScope, EmbeddingSite, ErasedSite, Error, Expectation,
-        Mode, Occurrence, ParkedWork, Provenance, RegionOwner, Restriction, SlotPositions, Turns,
-        check, check_is_sort, convert, elaborate, expect, expect_as, metavar_origins,
-        metavar_spines, mismatch, read_by_value, reduce_with, resolve_witness_goal,
-        resolve_witness_goal_or, stuck_on_metavar, written_monad, zonk_solved_term_metas,
+        Mode, Occurrence, ParkedWork, Provenance, Restriction, SlotPositions, Turns, check,
+        check_is_sort, convert, elaborate, expect, expect_as, metavar_origins, metavar_spines,
+        mismatch, read_by_value, reduce_with, resolve_witness_goal, resolve_witness_goal_or,
+        stuck_on_metavar, written_monad, zonk_solved_term_metas,
     },
     curios_common::{InfixOp, Plicity, Symbol, recurse},
     curios_core::{
@@ -626,6 +626,9 @@ pub fn elaborate_bang(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
+    if !context.sequences() {
+        return Err(Error::bang_outside_a_function().at_opt(term.extent()));
+    }
     let Mode::Check(expected) = &mode else {
         return Err(Error::bang_region_undetermined().at_opt(term.extent()));
     };
@@ -635,7 +638,6 @@ pub fn elaborate_bang(
     if region_flex(context, &region) {
         return park_checking(context, term, expected);
     }
-    let owner = context.region_owner();
 
     // Auto-lift, decided before anything elaborates by reading declared shapes: both monads keyable and different means the action is wrapped in `/std/Monad/Lift`'s `lift`, whose `use` slot resolves the declared embedding — or reports the missing edge. An unreadable action stays unwrapped and keeps the ordinary mismatch; the explicit `lift(action)` spelling always remains.
     let region_shape = monad_shape(context, &region)?;
@@ -653,9 +655,9 @@ pub fn elaborate_bang(
     //
     // **Whether the region is a monad at all is decided here, not left to the wrapper.** The region is already reduced and not flex, so its head is a former, a variable or an atom; a variable-headed region — `M(Nat)` under a `use Monad(M)` premise — is exactly what the imitation solves. `None` therefore means the head applies to nothing and `?M(?B)` can never meet it; a monad read and no witness of it means nothing to sequence through. Left to the wrapper, either would be reported against a premise of a call the author never wrote. Deciding both here changes no acceptance, only what the reader is told.
     let Some(monad) = region_monad(context, &region, term.extent())? else {
-        return Err(Error::bang_region_not_a_monad(region, owner).at_opt(term.extent()));
+        return Err(Error::bang_region_not_a_monad(region).at_opt(term.extent()));
     };
-    let witness = sequencing_witness(context, &monad, region, owner, term)?;
+    let witness = sequencing_witness(context, &monad, region, term)?;
     let bind = context.syntax().monad.bind;
     let head = Term::registered_method(bind);
     let arguments = [(Plicity::Implicit, monad)]
@@ -702,7 +704,6 @@ fn sequencing_witness(
     context: &mut Context,
     monad: &Term,
     region: Term,
-    owner: RegionOwner,
     term: &Term,
 ) -> Result<Option<Term>, Error> {
     let bind = context.syntax().monad.bind;
@@ -731,7 +732,7 @@ fn sequencing_witness(
     let (slot, witness) =
         context.fresh_witness_metavar(goal.clone(), term.extent(), provenance.clone());
     resolve_witness_goal_or(context, slot, &goal, provenance, term, |_, _| {
-        Error::bang_region_not_a_monad(region, owner)
+        Error::bang_region_not_a_monad(region)
     })?;
 
     Ok(Some(witness))

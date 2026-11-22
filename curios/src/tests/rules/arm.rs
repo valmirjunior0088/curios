@@ -122,7 +122,7 @@ fn a_classing_made_under_an_arms_equation_answers_nothing_after_the_arm() {
         use /std/Bool/{True, Holds};
 
         let leak(f: (Nat) -> Nat, h: (Nat) -> Nat, x: Nat) -> True =
-            let warm: Nat = match h(x) | 0 => (let seen: Eq()(f(h(x)) - f(0), 0) = Eq/refl(); 0) | k + 1 => 0 end;
+            let warm: Nat = match h(x) | 0 => let seen: Eq()(f(h(x)) - f(0), 0) = Eq/refl(); 0 | k + 1 => 0 end;
             True/qed();
 
         /std/print(Nat/to_str(0))
@@ -166,7 +166,7 @@ fn a_guard_settled_in_one_arm_of_a_split_answers_nothing_in_the_other() {
             | false => match guard end
             | true =>
                 match c
-                | false => (let settled: Holds(k(0)) = True/qed(); True/qed())
+                | false => let settled: Holds(k(0)) = True/qed(); True/qed()
                 | true => True/qed()
                 end
             end;
@@ -305,7 +305,7 @@ fn a_guard_settled_under_an_inner_arms_equation_answers_nothing_after_that_arm()
         let leak(g: (Bool) -> Bool, c: Bool, h: (F(g(c))) -> Nat, k: (Nat) -> Bool, p: F(g(c)), q: F(g(c))) -> True =
             match (match h(p) == h(q) | true => k(0) | false => k(1) end)
             | true =>
-                let split: {} = match g(c) | false => () | true => (let one: Holds(h(p) + h(q) == h(p) + h(p)) = True/qed(); ()) end;
+                let split: {} = match g(c) | false => () | true => let one: Holds(h(p) + h(q) == h(p) + h(p)) = True/qed(); () end;
                 let after: True = True/qed();
                 True/qed()
             | false => True/qed()
@@ -327,7 +327,7 @@ fn a_refused_arm_is_not_withdrawn_by_its_siblings_equation() {
 
         let w(g: (Bool) -> Bool, e: Bool, h: Holds(g(e))) -> Holds(g(e)) =
             match g(e)
-            | false => (let k: Holds(g(e) == false) = True/qed(); match h end)
+            | false => let k: Holds(g(e) == false) = True/qed(); match h end
             | true => True/qed()
             end;
 
@@ -350,7 +350,7 @@ fn a_guard_restated_in_an_inner_arm_is_settled_nowhere_in_it() {
         let f(P: ((Nat) -> Bool) -> Prop, c: Bool, h: (F(c)) -> Nat, k: (Nat) -> Bool, p: F(c), q: F(c), into: (Holds(k(0) || true)) -> P(k)) -> (Holds(match h(p) == h(q) | true => k(0) | false => k(1) end)) -> P(k) =
             match (match h(p) == h(q) | true => k(0) | false => k(1) end)
             | true => (_: Holds(true)) =>
-                let split: {} = match c | false => () | true => (let inside: Holds(k(0)) = True/qed(); ()) end;
+                let split: {} = match c | false => () | true => let inside: Holds(k(0)) = True/qed(); () end;
                 let after: Holds(k(0) || true) = True/qed();
                 into(after)
             | false => (g: Holds(false)) => match g end
@@ -381,7 +381,7 @@ fn a_guard_restated_in_a_nested_split_is_settled_nowhere_in_either_arm() {
         let f(P: ((Nat) -> Bool) -> Prop, c: Bool, d: Bool, h: (F(c)) -> Nat, k: (Nat) -> Bool, p: F(c), q: F(c), into: (Holds(k(0) || true)) -> P(k)) -> (Holds(match h(p) == h(q) | true => k(0) | false => k(1) end)) -> P(k) =
             match (match h(p) == h(q) | true => k(0) | false => k(1) end)
             | true => (_: Holds(true)) =>
-                let split: {} = match c | false => () | true => (match d | true => (let inside: Holds(k(0) || true) = True/qed(); ()) | false => () end) end;
+                let split: {} = match c | false => () | true => (match d | true => let inside: Holds(k(0) || true) = True/qed(); () | false => () end) end;
                 let after: Holds(k(0) || true) = True/qed();
                 into(after)
             | false => (g: Holds(false)) => match g end
@@ -573,7 +573,7 @@ fn a_guard_settled_under_a_character_arm_answers_nothing_after_that_arm() {
         let leak(c: Char, h: (F(Char/to_nat(c))) -> Nat, k: (Nat) -> Bool, p: F(Char/to_nat(c)), q: F(Char/to_nat(c))) -> True =
             match (match h(p) == h(q) | true => k(0) | false => k(1) end)
             | true =>
-                let split: {} = match c | 'a' => (let one: Holds(h(p) + h(q) == h(p) + h(p)) = True/qed(); ()) | _ => () end;
+                let split: {} = match c | 'a' => let one: Holds(h(p) + h(q) == h(p) + h(p)) = True/qed(); () | _ => () end;
                 let after: True = True/qed();
                 True/qed()
             | false => True/qed()

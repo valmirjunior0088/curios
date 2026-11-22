@@ -1783,7 +1783,7 @@ fn elaborate_entry(
     let Some(entry) = entry else {
         return Ok(None);
     };
-    context.enter_item(None);
+    context.enter_entry();
     let mode = match &entry.type_ {
         Some(stated) => Mode::Check(Expectation::own(check_is_sort(context, stated)?.0)),
         None => Mode::Infer,

@@ -25,7 +25,7 @@ fn an_implicit_born_under_two_guards_is_solved_from_an_arm_inside() {
             match p(x)
             | true =>
                 match q(p(x), y) <= z
-                | true => (let r: Eq(@Le(z))(Le { low = y }, Le { low = y }) = Eq/refl(); same(r))
+                | true => let r: Eq(@Le(z))(Le { low = y }, Le { low = y }) = Eq/refl(); same(r)
                 | false => 0
                 end
             | false => 0
@@ -36,8 +36,8 @@ fn an_implicit_born_under_two_guards_is_solved_from_an_arm_inside() {
             | true =>
                 match q(p(x), y) <= z
                 | true =>
-                    (let r: Eq(@Le(z))(Le { low = y }, Le { low = y }) = Eq/refl();
-                    same(match b | true => r | false => r end))
+                    let r: Eq(@Le(z))(Le { low = y }, Le { low = y }) = Eq/refl();
+                    same(match b | true => r | false => r end)
                 | false => 0
                 end
             | false => 0
@@ -48,8 +48,8 @@ fn an_implicit_born_under_two_guards_is_solved_from_an_arm_inside() {
             | true =>
                 match q(p(x), y) <= z
                 | true =>
-                    (let r: Eq(@Le(z))(Le { low = y }, Le { low = y }) = Eq/refl();
-                    same(match p(k) | true => r | false => r end))
+                    let r: Eq(@Le(z))(Le { low = y }, Le { low = y }) = Eq/refl();
+                    same(match p(k) | true => r | false => r end)
                 | false => 0
                 end
             | false => 0
@@ -58,8 +58,8 @@ fn an_implicit_born_under_two_guards_is_solved_from_an_arm_inside() {
         let under_one_guard(y: Nat, z: Nat, b: Bool) -> Nat =
             match y <= z
             | true =>
-                (let r: Eq(@Le(z))(Le { low = y }, Le { low = y }) = Eq/refl();
-                same(match b | true => r | false => r end))
+                let r: Eq(@Le(z))(Le { low = y }, Le { low = y }) = Eq/refl();
+                same(match b | true => r | false => r end)
             | false => 0
             end;
 

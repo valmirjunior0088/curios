@@ -80,7 +80,7 @@ fn a_group_closed_over_the_declarations_parameter_is_read_by_its_unfolding() {
 
         struct S(X: Type): pub Type {
             n: Nat,
-            f: (let R(k: Nat) -> Type = match k | 0 => X | _ => {Nat, R(k - 1)} end; Option(R(n))),
+            f: (() => let R(k: Nat) -> Type = match k | 0 => X | _ => {Nat, R(k - 1)} end; Option(R(n)))(),
         }
 
         induct G: pub Type

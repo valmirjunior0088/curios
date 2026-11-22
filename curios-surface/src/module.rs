@@ -2,8 +2,8 @@ use {
     super::{
         Argument, CoreFile, Dialect, FlatMatch, FuncParam, FuncSugarParam, FuncTypeParam,
         ITEM_HEADS, Intrinsic, Label, LetSignature, Name, Program, Subterm, Term, Tuple, TupleType,
-        TupleTypeParam, WordAt, WrittenIn, clear_comments, parse_file_head, parse_optional_term,
-        parse_program_end, parse_term, parse_top_item, print_module_items, print_term,
+        TupleTypeParam, WordAt, WrittenIn, clear_comments, parse_body, parse_file_head,
+        parse_optional_term, parse_program_end, parse_top_item, print_module_items, print_term,
         signature_type, take_comments,
     },
     curios_abi::WireSignature,
@@ -537,7 +537,7 @@ const PROGRAM_ENDS_BEFORE_ITS_TERM: &[&str] = &[
 
 /// The term `items` close with, and the end of the program past it: a program's whole tail.
 fn closing<'a>(items: Vec<Recovered<TopItem>>) -> impl Parser<'a, Entrypoint> {
-    parse_term
+    parse_body
         .and_drop(parse_program_end::<Program>)
         .map(move |tail| Entrypoint::new(into_module(items), tail))
 }

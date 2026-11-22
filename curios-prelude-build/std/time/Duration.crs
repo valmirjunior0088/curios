@@ -77,7 +77,7 @@ pub let to_str(d: Duration) -> Str =
 
 --- The length ISO 8601's extended format writes as `s`, or `none` for text that writes none.
 pub let of_str(s: Str) -> Option(Duration) =
-    iso8601/whole(iso8601/duration, s);
+    iso8601/whole(iso8601/duration(), s);
 
 satisfy Show(Duration) {
     show = to_str,

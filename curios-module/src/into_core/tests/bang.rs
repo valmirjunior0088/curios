@@ -44,9 +44,9 @@ fn sibling_values_lower_their_own_sequencing_regions() {
 fn functions_inside_type_expressions_use_the_same_sequencing_lowering() {
     for source in [
         "let x: action! = body; x",
-        "let x: (let chosen: M = action!; project(chosen)) = body; x",
-        "let x: (let f() -> M = action!; project(f())) = body; x",
-        "let x: (let f: () -> M = () => action!; project(f())) = body; x",
+        "let x: (() => let chosen: M = action!; project(chosen))() = body; x",
+        "let x: (() => let f() -> M = action!; project(f()))() = body; x",
+        "let x: (() => let f: () -> M = () => action!; project(f()))() = body; x",
         "let x: F(() => action!) = body; x",
     ] {
         let _ = run(source);

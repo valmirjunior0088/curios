@@ -9,8 +9,8 @@ use {
     },
     crate::{
         Binder, FuncParam, FuncTypeParam, Label, StructLit, StructLitEntry, Subterm, Term, Tuple,
-        TupleField, TupleType, TupleTypeParam, parse_identifier_raw, parse_term, parse_whitespace,
-        reserved_keyword,
+        TupleField, TupleType, TupleTypeParam, parse_body, parse_identifier_raw, parse_term,
+        parse_whitespace, reserved_keyword,
     },
     curios_common::{Plicity, is_reserved},
     curios_parse::{
@@ -193,11 +193,21 @@ pub fn parse_field_equals<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
         .parse(state)
 }
 
+// A labeled field's value: a body where the field is written as a function, `label(params) = body`, and a term where it is a value.
+fn field_value<'a, D: Grammar>(function: bool) -> impl Parser<'a, Term<D>> {
+    match function {
+        true => parse_body::<D>.boxed(),
+        false => parse_term::<D>.boxed(),
+    }
+}
+
 // A tuple-literal / struct-literal field: `label = value`, the definition sugar `label(params) = value` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar — or a positional value.
 pub fn parse_tuple_field<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, TupleField<D>> {
     parse_tuple_field_prefix
         // Past a guarded `=` the value must follow: no positional field can hold one at its top level, so the field owns the diagnosis rather than falling back to the positional reading and leaving the enclosing `}` or `)` to complain at the label.
-        .and(commit(parse_term::<D>))
+        .flat_map(|prefix| {
+            commit(field_value(prefix.1.is_some())).map(move |value| (prefix.clone(), value))
+        })
         .map(|((label, func_params), value)| TupleField {
             label: Some(label),
             func_params,
@@ -221,7 +231,9 @@ pub fn parse_tuple<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>
         .map(|(first, rest)| iter::once(first).chain(rest).collect::<Vec<_>>())
         .or(parse_literal("(")
             .and_keep(parse_tuple_field_prefix)
-            .and(parse_term::<D>)
+            .flat_map(|prefix| {
+                field_value(prefix.1.is_some()).map(move |value| (prefix.clone(), value))
+            })
             .map(|((label, func_params), value)| {
                 vec![TupleField {
                     label: Some(label),

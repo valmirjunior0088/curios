@@ -409,21 +409,16 @@ fn a_conflict_an_argument_closes_names_the_parameter_it_was_checked_as() {
     );
 }
 
-// The parameter travels with the type the argument is checked at: into an arm of a `match` the argument is, and into the tail of a block, each closing the conflict where it stands.
+// The parameter travels with the type the argument is checked at, into an arm of a `match` the argument is, closing the conflict where it stands.
 #[test]
-fn a_conflict_closed_in_an_arm_or_a_tail_of_an_argument_names_the_parameter() {
-    for argument in [
-        "match b | true => tie(G) | false => /std/Nat end",
-        "let t = tie(G); t",
-    ] {
-        let message = error(&format!(
-            "{TIED}        let bad(b: /std/Bool, G: (Type) -> Type) -> Type = coerce({argument}, G);\n        /std/print(\"no\")\n"
-        ));
-        assert!(
-            message.contains("checked as `A`, the 1st argument of `coerce`"),
-            "the message for `{argument}` names the parameter:\n{message}"
-        );
-    }
+fn a_conflict_closed_in_an_arm_of_an_argument_names_the_parameter() {
+    let message = error(&format!(
+        "{TIED}        let bad(b: /std/Bool, G: (Type) -> Type) -> Type = coerce(match b | true => tie(G) | false => /std/Nat end, G);\n        /std/print(\"no\")\n"
+    ));
+    assert!(
+        message.contains("checked as `A`, the 1st argument of `coerce`"),
+        "the message names the parameter:\n{message}"
+    );
 }
 
 // A call inside an argument checks its own argument as its own parameter, and both slots tie the levels on the cycle: each is named, the innermost where the report stands.

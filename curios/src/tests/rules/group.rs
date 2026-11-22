@@ -13,9 +13,9 @@ fn a_member_known_to_terminate_is_read_by_value_in_its_groups_bodies() {
 
         pub let outer(_: Bool) -> Holds(true) =
             let Flip(b: Bool) -> Prop = match b | false => True | true => False end
-            and claimed: Holds(true) =
+            and claimed: Holds(true) = (() =>
                 let _: Flip(false) = True/qed();
-                True/qed();
+                True/qed())();
             claimed;
 
         print("ok")
@@ -46,9 +46,9 @@ fn a_member_of_a_group_that_owes_no_descent_is_read_once_known_to_terminate() {
 
         pub let outer(_: Bool) -> Bool =
             let b: Bool = true
-            and c: Bool =
+            and c: Bool = (() =>
                 let _: Holds(b) = True/qed();
-                false;
+                false)();
             c;
 
         print("ok")
@@ -66,9 +66,9 @@ fn a_member_on_a_cycle_that_does_not_descend_stands_for_nothing_in_its_bodies() 
 
         pub let outer(_: Nat) -> Bool =
             let b(n: Nat) -> Bool = match n | 0 => true | k + 1 => b(k) end
-            and c: Bool =
+            and c: Bool = (() =>
                 let _: Holds(b(0)) = True/qed();
-                false;
+                false)();
             c;
 
         print("")

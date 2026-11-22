@@ -933,7 +933,7 @@ pub const TWO_CALLS_OF_ONE_DEFINITION_CONVERT_WHEREVER_THEY_SIT: &str = r#"
         -> Eq(@({Nat, Nat}))((through(n, p), 0), (through(n, q), 0)) = Eq/refl();
 
     let in_a_let(n : Nat, p : Zero(n), q : Zero(n))
-        -> Eq(@(Nat))((let z = through(n, p); z), (let z = through(n, q); z)) = Eq/refl();
+        -> Eq(@(Nat))((() => let z = through(n, p); z)(), (() => let z = through(n, q); z)()) = Eq/refl();
 
     let in_a_list(n : Nat, p : Zero(n), q : Zero(n))
         -> Eq(@(List(Nat)))([through(n, p)], [through(n, q)]) = Eq/refl();
@@ -1037,7 +1037,7 @@ pub const A_CAST_ALONG_A_PROOF_WRITTEN_AS_A_REDEX_IS_ITS_ARGUMENT: &str = r#"
     use /std/{Eq, Nat};
 
     let through_a_let(P : (Nat) -> Type, a : Nat, b : Nat, p : Eq()(a + b, b + a), v : P(a + b))
-        -> Eq()(Eq/subst(P, (let q = p; q), v), v) = Eq/refl();
+        -> Eq()(Eq/subst(P, (() => let q = p; q)(), v), v) = Eq/refl();
 
     let through_a_function(P : (Nat) -> Type, a : Nat, b : Nat, p : Eq()(a + b, b + a), v : P(a + b))
         -> Eq()(Eq/subst(P, ((q : Eq()(a + b, b + a)) => q)(p), v), v) = Eq/refl();
