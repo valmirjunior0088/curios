@@ -233,7 +233,29 @@ fn parse_pattern_inner<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Pat
         .or(parse_literal("(")
             .and_keep(parse_pattern::<D>)
             .and_drop(parse_literal(")")))
+        .or(parse_ctor_pattern::<D>)
         .or(parse_decorated_binder::<D>.map(Pattern::Binder))
+        .parse(state)
+}
+
+// A constructor binder pattern `tag(p, …)`, [`parse_ctor_match_pattern`]'s shape over binder patterns, each payload under its mark. Tried before the bare name its tag would otherwise be read as, and never committed: a definition sugar's head, `f(x: T)`, shares the prefix, and a `let` tells the two apart only at the `->` the sugar writes ([`super::expr`]'s `parse_let_group`). A payload under `use` is no pattern, and fails here for the forms sharing the prefix to report.
+fn parse_ctor_pattern<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Pattern<D>> {
+    let argument = |state: ParserState<'a>| {
+        parse_mark
+            .flat_map(|plicity| match plicity {
+                Plicity::Witness => fail(PATTERN_TAKES_NO_USE[0]).boxed(),
+                Plicity::Explicit | Plicity::Implicit => parse_pattern::<D>
+                    .map(move |pattern| (plicity, pattern))
+                    .boxed(),
+            })
+            .parse(state)
+    };
+
+    parse_written_word
+        .and_drop(parse_literal("("))
+        .and(sep_by0_trailing(argument, || parse_literal(",")))
+        .and_drop(parse_literal(")"))
+        .map(|(tag, args)| Pattern::Variant { tag, args })
         .parse(state)
 }
 

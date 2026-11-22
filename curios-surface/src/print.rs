@@ -349,7 +349,7 @@ impl<D: Layout> TreePrinter<D> {
         }
     }
 
-    /// A binder pattern: a plain name, a tuple pattern, or a struct pattern — the literal mirror of the `Tuple`/`StructLit` term-printing arms below, with `Term` replaced by `Pattern`.
+    /// A binder pattern: a plain name, a tuple pattern, a struct pattern, or a constructor — the literal mirror of the `Tuple`/`StructLit` term-printing arms below, with `Term` replaced by `Pattern`, and of a match's constructor pattern.
     fn pattern(self, pattern: Pattern<D>) -> Printer {
         match pattern {
             Pattern::Binder(binder) => self.binder(binder),
@@ -382,6 +382,18 @@ impl<D: Layout> TreePrinter<D> {
                         })
                         .collect(),
                     "}",
+                ),
+            ]),
+            Pattern::Variant { tag, args } => flat([
+                pure(tag),
+                listed(
+                    "(",
+                    args.into_iter()
+                        .map(|(plicity, pattern)| {
+                            flat([print_plicity(plicity), self.pattern(pattern)])
+                        })
+                        .collect(),
+                    ")",
                 ),
             ]),
         }

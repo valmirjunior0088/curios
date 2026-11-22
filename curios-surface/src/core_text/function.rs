@@ -122,7 +122,7 @@ pub fn function_read(
         .map(|param| {
             let label = match &param.pattern {
                 Pattern::Binder(binder) => LabelRead::binder(binder)?,
-                Pattern::Tuple(_) | Pattern::Struct { .. } => {
+                Pattern::Tuple(_) | Pattern::Struct { .. } | Pattern::Variant { .. } => {
                     return Err(ReadError::at(
                         Refusal::ProgramForm("a parameter's pattern"),
                         body.span(),

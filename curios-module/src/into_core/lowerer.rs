@@ -246,7 +246,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 let leaves = pattern_names(&param.pattern).len();
                 let binder = match &param.pattern {
                     Pattern::Binder(_) => signature.leaves[seen].clone(),
-                    Pattern::Tuple(_) | Pattern::Struct { .. } => {
+                    Pattern::Tuple(_) | Pattern::Struct { .. } | Pattern::Variant { .. } => {
                         (String::new(), self.context.fresh_binder(None))
                     }
                 };
@@ -344,6 +344,14 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
     /// Note `group`, whose pattern wrote `binders`, as a `let` that runs no action, once however often its text is lowered: one none of whose binders anything reads is an unread site. Where a binder it writes is no candidate, a leaf placed nowhere, nothing is noted.
     fn note_let(&self, group: &LetGroup, binders: &[Binder]) {
+        // A constructor in the pattern holds the value to its case, which what follows may rest on, as a match's lone arm does: such a `let` reads its value whatever its binders are.
+        if group
+            .members
+            .iter()
+            .any(|member| holds_constructor(&member.binder))
+        {
+            return;
+        }
         let span = group
             .members
             .first()
@@ -1290,7 +1298,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             let leaves = &binders[seen..seen + pattern_names(pattern).len()];
             match pattern {
                 Pattern::Binder(_) => lowered.push((*plicity, leaves[0].1, domain)),
-                Pattern::Tuple(_) | Pattern::Struct { .. } => {
+                Pattern::Tuple(_) | Pattern::Struct { .. } | Pattern::Variant { .. } => {
                     let synthetic = self.context.fresh_binder(None);
                     // A structure's held arm holds its shape as it binds its leaves; a tuple's chain reads fields a held shape outside it stands for.
                     if let Pattern::Tuple(_) = pattern {
@@ -1502,7 +1510,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     frames.push(self.held_frame(pattern, binder, binders)?);
                     self.pattern_field_frames(fields, binder, binders, frames)?;
                 }
-                Pattern::Struct { .. } => {
+                // A structure's shape and a constructor's case are held by the arm that takes the value apart, which binds their leaves.
+                Pattern::Struct { .. } | Pattern::Variant { .. } => {
                     let binder = self.context.fresh_binder(None);
                     frames.push(RegionFrame::Let {
                         binder,
@@ -1529,6 +1538,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Pattern::Struct { head, .. } => (
                 self.held_pattern(pattern, leaves, &mut bound)?,
                 head.span().cloned(),
+            ),
+            Pattern::Variant { tag, .. } => (
+                self.held_pattern(pattern, leaves, &mut bound)?,
+                tag.span().cloned(),
             ),
             Pattern::Tuple(TuplePattern { fields, span }) => {
                 let held = curios_core::Pattern::Tuple(
@@ -1595,6 +1608,16 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                         })
                         .collect::<Result<_, Error>>()?,
                 },
+                Pattern::Variant { tag, args } => curios_core::Pattern::Variant {
+                    tag: curios_core::Atom::from(tag.as_str()),
+                    at: self.written_at(tag),
+                    args: args
+                        .iter()
+                        .map(|(plicity, arg)| {
+                            Ok((*plicity, self.held_pattern(arg, leaves, bound)?))
+                        })
+                        .collect::<Result<_, Error>>()?,
+                },
             })
         })
     }
@@ -1612,7 +1635,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Pattern::Tuple(TuplePattern { fields, .. }) => {
                 self.lower_pattern_fields(fields, synthetic, leaves, tail)
             }
-            Pattern::Struct { .. } => self.wrap(
+            Pattern::Struct { .. } | Pattern::Variant { .. } => self.wrap(
                 vec![self.held_frame(pattern, *synthetic, &mut leaves.iter())?],
                 tail,
             ),
@@ -1983,6 +2006,10 @@ fn pattern_labels(pattern: &Pattern) -> Vec<(String, Option<Span>)> {
             .iter()
             .flat_map(|(_, field)| pattern_labels(&field.value))
             .collect(),
+        Pattern::Variant { args, .. } => args
+            .iter()
+            .flat_map(|(_, arg)| pattern_labels(arg))
+            .collect(),
     }
 }
 
@@ -1996,6 +2023,20 @@ fn pattern_span(pattern: &Pattern) -> Option<Span> {
     Some(Span::new(first.source.clone(), first.start, last.end))
 }
 
+/// Whether `pattern` holds a constructor anywhere, which reads the value it takes apart.
+fn holds_constructor(pattern: &Pattern) -> bool {
+    match pattern {
+        Pattern::Binder(_) => false,
+        Pattern::Tuple(TuplePattern { fields, .. }) => {
+            fields.iter().any(|field| holds_constructor(&field.value))
+        }
+        Pattern::Struct { fields, .. } => fields
+            .iter()
+            .any(|(_, field)| holds_constructor(&field.value)),
+        Pattern::Variant { .. } => true,
+    }
+}
+
 /// Every `Pattern::Binder` leaf name in `pattern`, recursing through nested tuple/struct fields in field order.
 fn pattern_names(pattern: &Pattern) -> Vec<String> {
     match pattern {
@@ -2007,6 +2048,10 @@ fn pattern_names(pattern: &Pattern) -> Vec<String> {
         Pattern::Struct { fields, .. } => fields
             .iter()
             .flat_map(|(_, field)| pattern_names(&field.value))
+            .collect(),
+        Pattern::Variant { args, .. } => args
+            .iter()
+            .flat_map(|(_, arg)| pattern_names(arg))
             .collect(),
     }
 }

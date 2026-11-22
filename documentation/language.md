@@ -359,7 +359,7 @@ A lambda is a parameter list, `=>` and a body.
 (f, value) => f(value)
 ```
 
-A parameter is a binder, or an irrefutable tuple or structure pattern. It may be annotated where its type is not given by context.
+A parameter is a binder, or an [irrefutable pattern](#irrefutable-binder-patterns): a tuple, a structure or a constructor. It may be annotated where its type is not given by context.
 
 A lambda's parameters are a telescope, as a function type's are: an annotation may name the parameters before it, including the names an earlier pattern binds. An earlier parameter shadows a module's binding of the same name in a later annotation, as it does in the body.
 
@@ -402,7 +402,7 @@ pub let five: Nat =
 
 The parameters of a `let` or a `satisfy` are a signature, written as a [function type](#function-types)'s, except that a plain or `@` parameter is always named. One the body never names is `_: type`: `let positive(n: Nat, @_: Holds(0 < n)) -> Nat = n;` takes its bound as an implicit argument, which the body has as a fact. A witness parameter is `use Concept(args)`. A field written `label(params) = value` inside a tuple, a structure or a witness binds as a [lambda](#lambdas) does: a name or a [pattern](#irrefutable-binder-patterns), marked `@` or not, its annotation optional, or `use _`.
 
-A binder may be an irrefutable tuple or structure pattern:
+A binder may be an irrefutable tuple, structure or constructor pattern:
 
 ```crs
 use /std/{Nat};
@@ -424,7 +424,7 @@ So `let n: Nat = n + 1;` names the binding it declares, not an outer `n`, and is
 
 ### Irrefutable binder patterns
 
-The binders of a `let`, a lambda and a function's parameters take nested tuple and structure patterns.
+The binders of a `let`, a lambda and a function's parameters take nested tuple, structure and constructor patterns.
 
 ```crs
 use /std/{Nat};
@@ -451,6 +451,18 @@ A structure pattern writes its fields where its literal would write them, and ma
 - A pattern over a concept value writes its methods alone; a superclass field has no binder.
 
 `Point { x, y }` is the positional form, its fields binders named after the fields. Parentheses group a pattern without changing it: `((x, y))` is `(x, y)`.
+
+A constructor pattern `tag(p, …)` holds its value to that one case, as a match's lone arm does: its payloads bind, an index the case solves refines what follows, and a value whose type has another case is refused as a match missing that arm is, naming the case. It is written where a match of one arm would be:
+
+```crs
+use /std/{Eq};
+
+pub let symmetric(@A: Type, @x: A, @y: A, p: Eq()(x, y)) -> Eq()(y, x) =
+    let refl() = p;
+    Eq/refl();
+```
+
+A `let` written `let name(…) =` holds its value to the case `name`, and one written `let name(…) -> T =` defines a function: the `->` that states a function's result is what tells the two apart.
 
 A pattern that can fail belongs to `match`.
 

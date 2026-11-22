@@ -217,7 +217,9 @@ fn row_places<D: Rendered>(body: &crate::Term<D>) -> Vec<crate::Binder<D>> {
             .iter()
             .map(|param| match &param.pattern {
                 crate::Pattern::Binder(binder) => binder.label.clone().into(),
-                crate::Pattern::Tuple(_) | crate::Pattern::Struct { .. } => "_".into(),
+                crate::Pattern::Tuple(_)
+                | crate::Pattern::Struct { .. }
+                | crate::Pattern::Variant { .. } => "_".into(),
             })
             .collect(),
         _ => Vec::new(),
@@ -599,7 +601,9 @@ fn function_words(body: &crate::Term<CoreText>) -> Option<Vec<String>> {
                 .iter()
                 .map(|param| match &param.pattern {
                     crate::Pattern::Binder(binder) => binder.label.to_string(),
-                    crate::Pattern::Tuple(_) | crate::Pattern::Struct { .. } => "_".to_string(),
+                    crate::Pattern::Tuple(_)
+                    | crate::Pattern::Struct { .. }
+                    | crate::Pattern::Variant { .. } => "_".to_string(),
                 })
                 .collect(),
         ),

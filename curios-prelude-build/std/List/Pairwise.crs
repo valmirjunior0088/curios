@@ -25,7 +25,8 @@ pub let head(
     @t: List(T),
     whole: Pairwise(le)([h, ..t]),
 ) -> (y: T, Member()(y, t)) -> Bool/Holds(le(h, y)) =
-    match whole | cons(head, _) => head end;
+    let cons(head, _) = whole;
+    head;
 
 --- The tail of a pairwise list is pairwise.
 pub let tail(

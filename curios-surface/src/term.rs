@@ -248,7 +248,7 @@ pub struct Tuple<D: Dialect = Program> {
     pub fields: Vec<TupleField<D>>,
 }
 
-/// A binder pattern at `let`, lambda-parameter, or function-definition-sugar parameter position: a plain name, or a tuple/struct destructuring that desugars — at lowering, in `into_core` — into a fresh synthetic binder plus a chain of ordinary projection `let`s, exactly what a person would hand-write. Always irrefutable: unlike a match-arm pattern, there is no constructor-tag case, since these binder sites never dispatch on shape — a tuple/struct value always has exactly one shape.
+/// A binder pattern at `let`, lambda-parameter, or function-definition-sugar parameter position: a plain name, a tuple/struct destructuring that desugars — at lowering, in `into_core` — into a fresh synthetic binder plus a chain of ordinary projection `let`s, exactly what a person would hand-write, or a constructor, which holds its value to the one case as a match's lone arm does. Irrefutable by coverage rather than by grammar: a constructor whose value's type has another case is refused as a match missing that arm is.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pattern<D: Dialect = Program> {
     /// A name, or `_`, which holds the position and binds nothing. A member with no binder at all — a `use` premise — is not a pattern: the site that admits one holds it apart ([`FuncSugarParam::Premise`]).
@@ -258,6 +258,11 @@ pub enum Pattern<D: Dialect = Program> {
     Struct {
         head: Name,
         fields: Vec<(Plicity, PatternField<D>)>,
+    },
+    /// A constructor over a pattern for each payload it writes, each under the mark it is written under ([`MatchPattern::Variant`]): the value is held to the one case, its payloads bound and an index the case solves refining what follows.
+    Variant {
+        tag: Label,
+        args: Vec<(Plicity, Pattern<D>)>,
     },
 }
 
@@ -618,7 +623,7 @@ pub fn func_sugar_type_params<D: Dialect>(params: &[FuncSugarParam<D>]) -> Vec<F
                     ..
                 } => Some(binder.label.clone()),
                 FuncSugarParam::Bound {
-                    binder: Pattern::Tuple(_) | Pattern::Struct { .. },
+                    binder: Pattern::Tuple(_) | Pattern::Struct { .. } | Pattern::Variant { .. },
                     ..
                 }
                 | FuncSugarParam::Premise(_) => None,

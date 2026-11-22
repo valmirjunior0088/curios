@@ -110,3 +110,21 @@ fn a_declaration_holding_a_goal_reports_no_let() {
         Vec::<String>::new()
     );
 }
+
+/// A constructor in a `let`'s pattern holds its value to that case, which what follows may rest on, so the `let` is read whatever its binders are: one binding nothing is no unused `let`, and an unread binder inside one is reported as a binder.
+#[test]
+fn a_let_holding_its_value_to_a_constructor_is_read_whatever_it_binds() {
+    assert_eq!(
+        lints(
+            r#"
+        pub induct Pair: pub Type | pair(Type, Type) end
+        pub let first(p: Pair) -> Type =
+            let pair(_, _) = p;
+            let pair(a, b) = p;
+            a;
+        Type
+    "#
+        ),
+        ["unused-binder: unused binder\n  `b` is never used\n  write `_` in its name's place"]
+    );
+}

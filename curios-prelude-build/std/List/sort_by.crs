@@ -381,7 +381,8 @@ let layered_over(
     @rest: List(Option(List(T))),
     layered: Layered(second)([top, ..rest]),
 ) -> Across(second, flat(rest), held(top)) =
-    match layered | level(over, _) => over end;
+    let level(over, _) = layered;
+    over;
 
 let layered_below(
     @T: Type,

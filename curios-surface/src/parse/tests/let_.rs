@@ -1,6 +1,6 @@
 //! `let` and its `and` groups, `test` declarations, and the span each declaration's label takes.
 
-use crate::*;
+use {crate::*, curios_common::Plicity};
 
 #[test]
 fn top_let_without_pub() {
@@ -212,5 +212,50 @@ fn a_chain_is_read_wherever_a_body_is() {
         if let Err(error) = source.parse::<Module>() {
             panic!("{source:?} refused: {}", error.format());
         }
+    }
+}
+
+/// A `let` written `name(…) =` holds its value to the case `name`, its payloads binder patterns under their marks, and prints back as written; written with the `->` a function states its result with, it defines a local function. Mutation-checked: with the constructor pattern left out of the binder patterns, the first `let` is refused.
+#[test]
+fn a_let_tells_a_constructor_pattern_from_a_local_function_at_its_arrow() {
+    let first = |source: &str| {
+        let Subterm::Let(let_) = source.parse::<Term>().unwrap().as_subterm().clone() else {
+            panic!("expected a let");
+        };
+        let_.groups[0].members[0].clone()
+    };
+
+    let held = first("let cons(head, @_, (a, b)) = whole; head");
+    let Pattern::Variant { tag, args } = &held.binder else {
+        panic!("expected a constructor pattern, got {:?}", held.binder);
+    };
+    assert_eq!(tag.as_str(), "cons");
+    assert_eq!(
+        args.iter().map(|(mark, _)| *mark).collect::<Vec<_>>(),
+        [Plicity::Explicit, Plicity::Implicit, Plicity::Explicit]
+    );
+    assert!(matches!(
+        held.signature,
+        LetSignature::Name { type_: None, .. }
+    ));
+    assert!(matches!(
+        first("let refl() = p; u").binder,
+        Pattern::Variant { .. }
+    ));
+
+    let defined = first("let one() -> Nat = 1; one()");
+    assert!(matches!(defined.binder, Pattern::Binder(_)));
+    assert!(matches!(defined.signature, LetSignature::Func { .. }));
+
+    for source in [
+        "let cons(head, @_, (a, b)) = whole; head",
+        "let refl() = p; u",
+    ] {
+        let term = source.parse::<Term>().unwrap();
+        assert_eq!(
+            term.to_string().parse::<Term>().unwrap(),
+            term,
+            "round-trip failed for {source:?}"
+        );
     }
 }

@@ -2,6 +2,7 @@
 
 mod alternative;
 mod binder;
+mod binder_pattern;
 mod byte;
 mod dispatch;
 mod goal;

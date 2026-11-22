@@ -1,12 +1,12 @@
 use {
     super::{
         DEFINITION_NAMES_ITS_MEMBERS, Grammar, MEMO_ATOMIC_TERM, MEMO_TERM, Read,
-        comment_ending_at, members, parse_caller_sort, parse_func, parse_func_type,
-        parse_intrinsic, parse_keyword, parse_keyword_at, parse_let_binder, parse_literal,
-        parse_mark, parse_match, parse_name, parse_numbered_binder, parse_parens, parse_pattern,
-        parse_premise, parse_prop, parse_qualified_name, parse_struct_lit, parse_terminator,
-        parse_tuple, parse_tuple_type, parse_type, parse_unreadable_binder, parse_usize_raw,
-        parse_written_word_raw, refused,
+        comment_ending_at, members, parse_caller_sort, parse_decorated_binder, parse_func,
+        parse_func_type, parse_intrinsic, parse_keyword, parse_keyword_at, parse_let_binder,
+        parse_literal, parse_mark, parse_match, parse_name, parse_numbered_binder, parse_parens,
+        parse_pattern, parse_premise, parse_prop, parse_qualified_name, parse_struct_lit,
+        parse_terminator, parse_tuple, parse_tuple_type, parse_type, parse_unreadable_binder,
+        parse_usize_raw, parse_written_word_raw, refused,
     },
     crate::{
         Apply, Argument, Binder, Dialect, Field, FuncSugarParam, Infix, Label, Let, LetBinding,
@@ -70,8 +70,7 @@ pub fn parse_binding<'a, D: Grammar>(
 // One `let` statement: `let pattern (: T)? = e;`, or the group `let f … and g … and h …;` whose later members are plain labels with mandatory types.
 fn parse_let_group<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, LetGroup<D>> {
     parse_keyword(Keyword::Let)
-        .and_keep(parse_let_binder::<D>)
-        .and(parse_local_let_signature)
+        .and_keep(parse_let_member::<D>)
         .map(|(binder, signature)| LetBinding {
             word: WordAt::default(),
             binder,
@@ -237,12 +236,14 @@ fn stated<'a, D: Grammar>(placed: Placed) -> impl Parser<'a, LetSignature<D>> {
     }
 }
 
-// Like `parse_let_signature`, but the plain form's type annotation may be omitted. Used only by local `let`, where the body's type can be inferred.
-pub fn parse_local_let_signature<'a, D: Grammar>(
+// A local `let`'s first member: a name and the definition sugar, or a pattern and the plain form, whose type may be omitted. The two share the prefix `name(…)`, a function's parameters or a constructor's payloads, and are told apart at the `->` the sugar states its result with, which never follows a pattern: `let f() -> Nat = …` defines `f`, and `let refl() = p;` holds `p` to the case `refl`.
+fn parse_let_member<'a, D: Grammar>(
     state: ParserState<'a>,
-) -> Parsed<'a, LetSignature<D>> {
-    parse_func_let_signature(false)
-        .or(parse_optional_name_signature)
+) -> Parsed<'a, (Pattern<D>, LetSignature<D>)> {
+    parse_decorated_binder::<D>
+        .map(Pattern::Binder)
+        .and(parse_func_let_signature(false))
+        .or(parse_let_binder::<D>.and(parse_optional_name_signature))
         .parse(state)
 }
 
