@@ -277,7 +277,7 @@ fn a_floating_point_pattern_is_refused_by_name_where_it_starts() {
             "{source:?} reported {report}"
         );
         assert!(
-            report.contains(&format!("`| x, x == {literal} =>`")),
+            report.contains("bind the value and test it in a guard, by the comparison you mean"),
             "{source:?} reported {report}"
         );
         let column = source.find(literal).expect("the literal is written") + 1;

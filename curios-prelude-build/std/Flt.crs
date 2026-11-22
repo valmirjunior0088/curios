@@ -45,9 +45,9 @@ use digits/{pow2, render, to_str_significant_in};
 mod grammar;
 use grammar/{of_decimal_in, of_str_in, of_hex_str_in};
 
-use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, Show, Spell, Fmt, Ord,
-    Hash, Vec, Eq, proved};
-use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
+use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, Show, Spell, Fmt, Hash,
+    Vec, Eq, proved};
+use /std/ops/{Cmp, Add, Sub, Mul, Div, Rem};
 
 --- That `b` is eight bytes long, decided.
 pub let EightBytes(b: Bytes) -> Prop =
@@ -67,7 +67,7 @@ pub let NonNeg(f: Flt) -> Prop =
 
 --- Whether `f` is a NaN, of either sign and kind.
 pub let is_nan(f: Flt) -> Bool =
-    Bool/not(f == f);
+    Bool/not(eql(f, f));
 
 --- Whether `f` is a signaling NaN: a NaN whose quiet bit is clear.
 pub let is_signaling(f: Flt) -> Bool =
@@ -79,11 +79,11 @@ pub let is_sign_minus(f: Flt) -> Bool =
 
 --- Whether `f` is an infinity of either sign.
 pub let is_infinite(f: Flt) -> Bool =
-    f == +inf.0 || f == -inf.0;
+    eql(f, +inf.0) || eql(f, -inf.0);
 
 --- Whether `f` is a zero of either sign.
 pub let is_zero(f: Flt) -> Bool =
-    f == +0.0;
+    eql(f, +0.0);
 
 --- Whether `f` is subnormal: nonzero and finite with the exponent field clear.
 pub let is_subnormal(f: Flt) -> Bool =
@@ -247,7 +247,7 @@ pub let next_up(f: Flt) -> Flt =
     let b = exact/bits(f);
     match
     | is_nan(f) => f + f
-    | f == +inf.0 => f
+    | eql(f, +inf.0) => f
     | is_zero(f) => exact/of_bits(1)
     | is_sign_minus(f) => exact/of_bits(b - 1)
     | _ => exact/of_bits(b + 1)
@@ -341,7 +341,7 @@ pub let payload(f: Flt) -> Flt =
 --- `p` as a payload, when it is an integral float in `[low, 2^51)`.
 let admissible(p: Flt, low: Nat) -> Option(Nat) =
     let n = try_to_nat(p)!;
-    match Nat/to_flt(n) == p && n >= low && n < payload_room
+    match eql(Nat/to_flt(n), p) && n >= low && n < payload_room
     | true => Option/some(n)
     | false => Option/none()
     end;
@@ -391,7 +391,7 @@ pub let try_to_int(f: Flt) -> Option(Int) =
 
 --- The two in IEEE 754's total order, which tells every `Flt` apart: the negative NaNs, then `-inf` up through `-0`, then `+0` up through `+inf`, then the positive NaNs. NaNs order by their bits outward from the infinity of their sign, so a signaling NaN sits nearer it than a quiet one, as §5.10 orders them.
 ---
---- `==` and `<` stay IEEE's comparisons, which call the two zeros equal and leave a NaN unordered. This is the order `Ord`, and so `List/sort`, needs, and the identity `Hash` already reads. It is also how this library spells IEEE's `totalOrder(x, y)`, as `ord(x, y) != gt`, and `totalOrderMag(x, y)`, as `ord(abs(x), abs(y)) != gt`.
+--- [`eql`] and `<` stay IEEE's comparisons, which call the two zeros equal and leave a NaN unordered. This is the order a sort of floats names, `List/sort_by(xs, Flt/ord)`, since `Flt` has no `==` and so no `Ord`, and the identity `Hash` already reads. It is also how this library spells IEEE's `totalOrder(x, y)`, as `ord(x, y) != gt`, and `totalOrderMag(x, y)`, as `ord(abs(x), abs(y)) != gt`.
 ---
 --- It compares [`total_key`]s, an injective encoding ([`total_key_injective`]), so the order is total and answers `eq` exactly at equality, by `Nat/ord`'s laws. That `ord` agrees with that order at every pair, including the comparisons it starts with, is not proved: no law ties `Flt`'s `<` to the bits.
 pub let ord(x: Flt, y: Flt) -> Ordering =
@@ -414,6 +414,14 @@ pub let total_key(f: Flt) -> Nat =
 --- A float is its bytes: two floats with one encoding are one float.
 pub let eq_of_le_bytes(a: Flt, b: Flt, same: Eq()(to_le_bytes(a), to_le_bytes(b))) -> Eq()(a, b) =
     Option/some_injective(Eq/cong(try_of_le_bytes, same));
+
+--- Whether `a` and `b` are one float, bit for bit: the relation `Eq` is, which tells `+0.0` from `-0.0` and holds of a NaN and itself, where [`eql`] is IEEE's equality and does neither. Java's `Double.equals` and Julia's `===`.
+pub let identical(a: Flt, b: Flt) -> Bool =
+    to_le_bytes(a) == to_le_bytes(b);
+
+--- Two identical floats are one float.
+pub let eq_of_identical(a: Flt, b: Flt, same: Bool/Holds(identical(a, b))) -> Eq()(a, b) =
+    eq_of_le_bytes(a, b, Bytes/eq_of_eql(to_le_bytes(a), to_le_bytes(b), same));
 
 -- So the order `Nat/ord` reads through the key is a total order that answers `eq` exactly at an equation, by `Nat/ord`'s own laws. A key at or above `2^63` is a pattern with its sign clear, lifted, and one below it a pattern with its sign set, complemented, and neither map folds two patterns into one below `2^64`, where eight bytes keep every pattern.
 --- Two floats with one [`total_key`] are one float: the key tells every pattern apart.
@@ -552,11 +560,6 @@ pub let to_str_significant(f: Flt, n: Nat, @ok: Bool/Holds(0 < n)) -> Str =
     | k + 1 => to_str_significant_in(Rounding/ties_to_even(), f, k + 1)
     end;
 
-satisfy Eql(Flt) {
-    eql = eql,
-    neq = neq,
-}
-
 satisfy Cmp(Flt) {
     lt = lt,
     le = le,
@@ -627,10 +630,6 @@ satisfy Spell(Flt) {
             | false => Str/concat(unsigned, ".0")
             end
         end,
-}
-
-satisfy Ord(Flt) {
-    ord = ord,
 }
 
 --- The little-endian bit pattern, so distinct floats encode distinctly, every NaN pattern among them.

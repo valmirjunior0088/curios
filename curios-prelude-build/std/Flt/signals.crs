@@ -132,7 +132,7 @@ pub let to_integral_exact(r: Rounding, a: Flt) -> Exceptions =
     match
     | Flt/is_signaling(a) => invalid
     | Flt/is_nan(a) => Exceptions/none
-    | _ => Exceptions { ..Exceptions/none, inexact = rounded/to_integral(r, a) != a }
+    | _ => Exceptions { ..Exceptions/none, inexact = Flt/neq(rounded/to_integral(r, a), a) }
     end;
 
 --- What `rounded/scale(r, f, n)` raises: invalid for a signaling NaN, nothing for a NaN, an infinity or a zero, and otherwise what rounding the exact `f · 2^n` raises.

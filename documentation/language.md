@@ -725,7 +725,7 @@ pub let command(name: Str) -> Nat =
 
 A character matches by its code point and a string by its bytes, a one-line and a block string alike, so a string pattern stands wherever a pattern does: `| some("--help") =>`, `| ["run", ..rest] =>`. A `Char` takes no numeral, and a `Str` no packed run.
 
-A floating-point literal is no pattern: a pattern tests a value's identity, which tells `+0.0` from `-0.0` and one NaN from another, where `==` does neither, so a [guard](#guards) tests a float, `| x, x == 1.5 =>`.
+A floating-point literal is no pattern: a pattern tests a value's identity, which tells `+0.0` from `-0.0` and one NaN from another, and `Flt` has no `==`, so a [guard](#guards) tests a float by the comparison meant: IEEE equality, `| x, Flt/eql(x, 1.5) =>`, or the same bit pattern, `Flt/identical`.
 
 ### List case split
 

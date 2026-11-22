@@ -215,12 +215,12 @@ fn infix_equality_is_overloaded_for_bool() {
 
 #[test]
 fn infix_rem_on_flt_computes_fmod() {
-    // `%` on `Flt` is exact `fmod` (`FltRem`), which the emitter computes in its shared `$flt/rem` helper. `5.5 % 2.0 == 1.5`, so the branch is `true`.
+    // `%` on `Flt` is exact `fmod` (`FltRem`), which the emitter computes in its shared `$flt/rem` helper. `5.5 % 2.0` is `1.5`, so the branch is `true`.
     assert_eq!(
         run(r#"
-            use /std/{Str, Io};
+            use /std/{Str, Io, Flt};
             let entry() -> /std/Io({}) =
-                let _ = (match 5.5 % 2.0 == 1.5
+                let _ = (match Flt/eql(5.5 % 2.0, 1.5)
                 | true => /std/print("yes")
                 | false => /std/print("no")
                 end)!;

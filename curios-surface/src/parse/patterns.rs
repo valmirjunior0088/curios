@@ -537,20 +537,17 @@ fn parse_numeral_match_pattern<'a, D: Grammar>(
             }
         })
         .and_keep(mark())
-        .and(spanned(parse_number::<D>))
-        .flat_map(|(start, (span, literal))| match &*literal {
+        .and(parse_number::<D>)
+        .flat_map(|(start, literal)| match &*literal {
             Subterm::NumLit(numeral) => pure(MatchPattern::Numeral(numeral.clone())).boxed(),
-            _ => {
-                let written = span.source.text()[span.start..span.end].trim_end();
-                commit(fail_from(
-                    &start,
-                    vec![
-                        "a floating-point literal is no pattern: a pattern tests identity, which tells `+0.0` from `-0.0` where `==` does not".to_string(),
-                        format!("bind the value and test it in a guard: `| x, x == {written} =>`"),
-                    ],
-                ))
-                .boxed()
-            }
+            _ => commit(fail_from(
+                &start,
+                vec![
+                    "a floating-point literal is no pattern: a pattern tests identity, which tells `+0.0` from `-0.0` and one NaN from another".to_string(),
+                    "bind the value and test it in a guard, by the comparison you mean: IEEE equality or the same bit pattern".to_string(),
+                ],
+            ))
+            .boxed(),
         })
         .parse(state)
 }

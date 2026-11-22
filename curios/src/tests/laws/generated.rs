@@ -241,6 +241,8 @@ impl Spelling<'_> {
             (_, Operation::Product) => infix("*"),
             (_, Operation::Quotient) => infix("/"),
             (_, Operation::Remainder) => infix("%"),
+            (Carrier::Float, Operation::Equal) => call("Flt/eql"),
+            (Carrier::Float, Operation::Unequal) => call("Flt/neq"),
             (_, Operation::Equal) => infix("=="),
             (_, Operation::Unequal) => infix("!="),
             (_, Operation::Less) => infix("<"),

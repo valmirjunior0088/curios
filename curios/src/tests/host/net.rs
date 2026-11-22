@@ -388,14 +388,14 @@ fn a_foreign_byte_crosses_as_its_word_in_both_directions() {
 ///
 /// **Nothing boxes the result here.** Its only use is a comparison, which wants the raw carrier, so the representation analysis holds the returned parameter in an `f64` register and no `$flt` is ever allocated. A boxing step at the call site would have built one for a value nothing reads as a reference.
 ///
-/// The comparison is what makes this an assertion rather than a smoke test: a number that arrived in the wrong carrier is not an `Flt` a `==` can read, so the exit code says the value came back usable rather than merely that the call returned.
+/// The comparison is what makes this an assertion rather than a smoke test: a number that arrived in the wrong carrier is not an `Flt` that `Flt/eql` can read, so the exit code says the value came back usable rather than merely that the call returned.
 #[test]
 fn a_foreign_flt_crosses_raw_in_both_directions() {
     let source = r#"
         foreign halve(Flt) -> Flt;
         let entry() -> /std/Io({}) =
             let halved = halve(/std/Nat/to_flt(84))!;
-            let matched = halved == /std/Nat/to_flt(42);
+            let matched = /std/Flt/eql(halved, /std/Nat/to_flt(42));
             let _ = /std/Proc/exit(@{}, match matched | true => 7 | false => 1 end)!;
             /std/Io/pure(());
         entry()
@@ -425,7 +425,7 @@ fn a_foreign_flt_may_stand_before_another_result() {
         foreign probe(Nat) -> {value: Flt, status: Nat};
         let entry() -> /std/Io({}) =
             let answered = probe(3)!;
-            let matched = answered.value == /std/Nat/to_flt(6);
+            let matched = /std/Flt/eql(answered.value, /std/Nat/to_flt(6));
             let _ = /std/Proc/exit(@{}, match matched | true => /std/Nat/to_byte(answered.status % 256) | false => 1 end)!;
             /std/Io/pure(());
         entry()

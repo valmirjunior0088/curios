@@ -235,17 +235,17 @@ test ord_is_the_order_of_its_key =
         List/concat_map(specimens, (x: Flt) =>
             List/map(specimens, (y: Flt) => Nat/ord(Flt/total_key(x), Flt/total_key(y)))));
 
--- A sort through `Ord(Flt)` places a NaN and the two zeros the same way whatever order they arrive in, which an order that answered `gt` for a NaN on both sides could not.
+-- A sort by `Flt/ord` places a NaN and the two zeros the same way whatever order they arrive in, which an order that answered `gt` for a NaN on both sides could not.
 test sort_places_nan_and_zeros_the_same_for_every_arrival_order =
     Test/all([
         Test/equal(
-            spelled(List/sort([+1.0, +nan.0, +0.5, -0.0, +0.0])),
+            spelled(List/sort_by([+1.0, +nan.0, +0.5, -0.0, +0.0], Flt/ord)),
             ["-0", "+0", "+0.5", "+1", "+nan"]),
         Test/equal(
-            spelled(List/sort([+nan.0, +0.0, +1.0, -0.0, +0.5])),
+            spelled(List/sort_by([+nan.0, +0.0, +1.0, -0.0, +0.5], Flt/ord)),
             ["-0", "+0", "+0.5", "+1", "+nan"]),
         Test/equal(
-            spelled(List/sort([+0.5, -0.0, +nan.0, +1.0, +0.0])),
+            spelled(List/sort_by([+0.5, -0.0, +nan.0, +1.0, +0.0], Flt/ord)),
             ["-0", "+0", "+0.5", "+1", "+nan"])]);
 
 -- `of_str` reads every spelling `to_str` writes, the infinities and the default NaN among them, in any case and with an optional sign.
@@ -615,19 +615,18 @@ test reductions_round_once_and_signal_as_ieee_defines =
         Test/equal(sf, +1993),
         Test/equal(pr >= +1.0 && pr < +2.0, true),
         Test/equal(
-            Flt/scaled_prod_sum(Vec/of_list([+1.0, +2.0]), Vec/of_list([+2.0, +2.0])),
-            (+1.5, +3)),
+            Spell/spell(Flt/scaled_prod_sum(Vec/of_list([+1.0, +2.0]), Vec/of_list([+2.0, +2.0]))),
+            Spell/spell((+1.5, +3))),
         Test/equal(
-            Flt/scaled_prod_diff(Vec/of_list([+inf.0]), Vec/of_list([+inf.0])).0
-                != Flt/scaled_prod_diff(Vec/of_list([+inf.0]), Vec/of_list([+inf.0])).0,
+            Flt/is_nan(Flt/scaled_prod_diff(Vec/of_list([+inf.0]), Vec/of_list([+inf.0])).0),
             true)]);
 
 test augmented_operations_answer_the_error =
     let tiny = Flt/scale(+1.0, -60);
     Test/all([
-        Test/equal(Flt/augmented_add(+1.0, tiny), (+1.0, tiny)),
-        Test/equal(Flt/augmented_sub(+1.0, +1.0), (+0.0, +0.0)),
-        Test/equal(Flt/augmented_mul(+inf.0, +2.0), (+inf.0, +inf.0)),
+        Test/equal(Spell/spell(Flt/augmented_add(+1.0, tiny)), Spell/spell((+1.0, tiny))),
+        Test/equal(Spell/spell(Flt/augmented_sub(+1.0, +1.0)), Spell/spell((+0.0, +0.0))),
+        Test/equal(Spell/spell(Flt/augmented_mul(+inf.0, +2.0)), Spell/spell((+inf.0, +inf.0))),
         Test/equal(signals/augmented_add(+1.0, tiny), Exceptions/none),
         Test/equal(
             signals/augmented_mul(
@@ -675,3 +674,28 @@ test narrowings_answer_their_partiality_with_an_option =
         Test/equal(Flt/try_to_int(-1.5), Option/some(-1)),
         Test/equal(Flt/try_to_int(-inf.0), Option/none()),
         Test/equal(Flt/try_to_int(+nan.0), Option/none())]);
+
+-- `identical` is the bit pattern: the two zeros apart, a NaN identical to itself, and a quiet NaN apart from a signaling one, where `eql` answers IEEE's way on each.
+test identical_compares_bit_patterns_where_eql_is_ieee =
+    Test/equal(
+        [
+            Flt/identical(+0.0, -0.0),
+            Flt/identical(+nan.0, +nan.0),
+            Flt/identical(+nan.0, Flt/signaling_nan(+1.0)),
+            Flt/identical(+1.5, +1.5),
+            Flt/eql(+0.0, -0.0),
+            Flt/eql(+nan.0, +nan.0)],
+        [false, true, false, true, true, false]);
+
+-- The predicates answer at the edges IEEE's equality has: `-0.0` is zero, a NaN of either kind is a NaN and no infinity, and the infinities are infinite.
+test the_predicates_answer_at_the_zeros_the_nans_and_the_infinities =
+    Test/equal(
+        [
+            Flt/is_zero(-0.0),
+            Flt/is_zero(+0.0),
+            Flt/is_nan(+nan.0),
+            Flt/is_nan(Flt/signaling_nan(+1.0)),
+            Flt/is_nan(+inf.0),
+            Flt/is_infinite(-inf.0),
+            Flt/is_infinite(+nan.0)],
+        [true, true, true, true, false, true, false]);

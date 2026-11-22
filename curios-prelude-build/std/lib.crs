@@ -59,7 +59,7 @@ pub use Int/{let Int};
 
 --- IEEE binary64 floating point.
 ---
---- Every comparison is IEEE's, so a NaN fails them all. Division is total. The narrowings to `Int` and `Nat` carry the decided bounds `Finite` and `NonNeg`, and the decimal conversions round-trip: text is read correctly rounded, and written as the shortest decimal that reads back.
+--- There is no `==`, since IEEE's equality calls the two zeros equal and a NaN unequal to itself, which no equivalence does: `eql` is that equality, and `identical` compares bit patterns, as `Eq` does. Every ordering is IEEE's, so a NaN fails them all. Division is total. The narrowings to `Int` and `Nat` carry the decided bounds `Finite` and `NonNeg`, and the decimal conversions round-trip: text is read correctly rounded, and written as the shortest decimal that reads back.
 pub mod Flt;
 pub use Flt/{let Flt};
 

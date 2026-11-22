@@ -177,7 +177,7 @@ fn a_guard_settled_in_one_arm_of_a_split_answers_nothing_in_the_other() {
         .by_elaborator_in("/leak", |error| matches!(error, Error::TypeMismatch { .. }));
 }
 
-// IEEE's `==` calls the two zeros equal where they are two terms, so a float equality's arm learns the comparison and no equation of its operands. Read as one, `eq_of_eql` would prove `+0.0` and `-0.0` one value, whose bytes differ. The control states the comparison the arm learns, which holds of `+0.0` and `-0.0`.
+// IEEE's equality, `Flt/eql`, calls the two zeros equal where they are two terms, so a float equality's arm learns the comparison and no equation of its operands. Read as one, `eq_of_eql` would prove `+0.0` and `-0.0` one value, whose bytes differ. The control states the comparison the arm learns, which holds of `+0.0` and `-0.0`.
 #[test]
 fn a_float_equality_arm_learns_no_equation_of_its_operands() {
     control(
@@ -185,19 +185,19 @@ fn a_float_equality_arm_learns_no_equation_of_its_operands() {
         use /std/{Flt, Eq};
         use /std/Bool/{True, Holds};
 
-        let eq_of_eql(a: Flt, b: Flt, h: Holds(a == b)) -> Holds(a == b) =
-            match a == b | true => True/qed() | false => match h end end;
+        let eq_of_eql(a: Flt, b: Flt, h: Holds(Flt/eql(a, b))) -> Holds(Flt/eql(a, b)) =
+            match Flt/eql(a, b) | true => True/qed() | false => match h end end;
 
-        let _same: Holds(+0.0 == -0.0) = eq_of_eql(+0.0, -0.0, True/qed());
+        let _same: Holds(Flt/eql(+0.0, -0.0)) = eq_of_eql(+0.0, -0.0, True/qed());
 
         /std/print("ok")
         "#,
         b"ok",
     )
     .refused(&[
-        ("-> Holds(a == b) =", "-> Eq()(a, b) ="),
+        ("-> Holds(Flt/eql(a, b)) =", "-> Eq()(a, b) ="),
         ("| true => True/qed()", "| true => Eq/refl()"),
-        ("let _same: Holds(+0.0 == -0.0)", "let _forged: Eq()(+0.0, -0.0)"),
+        ("let _same: Holds(Flt/eql(+0.0, -0.0))", "let _forged: Eq()(+0.0, -0.0)"),
     ])
     .by_elaborator_in(
         "/eq_of_eql",

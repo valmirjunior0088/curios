@@ -63,8 +63,22 @@ fn the_non_finite_literals_are_the_values_flt_computes() {
         let _neg_inf: Eq()(-inf.0, Flt/div(-1.0, +0.0)) = Eq/refl();
         let _nan: Eq()(+nan.0, Flt/div(+0.0, +0.0)) = Eq/refl();
         let _neg_nan: Eq()(-nan.0, Flt/neg(+nan.0)) = Eq/refl();
-        /std/print(match +nan.0 == +nan.0 | true => "equal" | false => "unequal" end)
+        /std/print(match Flt/eql(+nan.0, +nan.0) | true => "equal" | false => "unequal" end)
         "#;
 
     assert_eq!(run(source), b"unequal");
+}
+
+/// Two floats have no `==`: IEEE's equality calls the two zeros equal and a NaN unequal to itself, so it decides no `Eq`, and `Flt` satisfies no `Eql`. A program names the comparison it means, `Flt/eql` or `Flt/identical`.
+#[test]
+fn two_floats_have_no_equality_operator() {
+    let report = error(
+        r#"
+        use /std/{Flt, print};
+        let _same: /std/Bool = +1.5 == +1.5;
+        print("")
+        "#,
+    );
+
+    assert!(report.contains("wanted: `/std/ops/Eql(Flt)`"), "{report}");
 }
