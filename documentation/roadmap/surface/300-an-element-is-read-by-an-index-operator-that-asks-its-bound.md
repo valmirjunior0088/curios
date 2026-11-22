@@ -38,4 +38,4 @@ Settled by the user on 2026-11-20.
 
 ## Retirement
 
-When stage 4 lands, the operator is `documentation/language.md`'s and its concept `/std/ops`'s, the entry in `surface/000-findings.md` is gone, and this file is deleted.
+When stage 4 lands, the operator is `documentation/language.md`'s and its concept `/std/ops`'s, and this file is deleted.
