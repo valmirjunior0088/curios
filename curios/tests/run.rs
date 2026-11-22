@@ -5,7 +5,7 @@ use {
     curios_common::test_support::*,
     std::{
         fs,
-        io::{Read, Write},
+        io::{BufRead, BufReader, Read, Write},
         path::Path,
         process::{Command, Stdio},
         sync::mpsc,
@@ -232,4 +232,51 @@ fn a_print_after_standard_output_is_finished_ends_the_program_saying_why() {
             .contains("standard output could not be written: not_found"),
         "{output:?}"
     );
+}
+
+const CUT_LAST: &str = r#"
+use /std/{Nat, Bytes, Str, Try, Io, Proc};
+use /std/time/{Duration};
+let grown(b: Bytes, n: Nat) -> Bytes = match n | 0 => b | m + 1 => grown(x[..b, ..b], m) end;
+let entry() -> Io({}) =
+    let timed = Io/timeout(Duration/of_millis(10), Try/run(Io/write(Proc/stdout, grown(x[0x61], 20))))!;
+    let said = match timed | none() => "cut\n" | some(_) => "all\n" end;
+    let _ = Try/run(Io/write(Proc/stderr, Str/to_bytes(said)))!;
+    Io/pure(());
+entry()
+"#;
+
+// A write to standard output a timeout cuts, the program's last, reaches its reader whole: the program's end hands on what the stream held. The reader reads only once the program has said on standard error, past the command's own progress lines, that the write was cut, so the pipe is full when it is; against an end that discarded what the stream held, it read the part the pipe took before the cut.
+#[test]
+fn a_cut_write_to_standard_output_reaches_its_reader_at_the_programs_end() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_curios"))
+        .env_remove(CABINET)
+        .args(["run", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(CUT_LAST.as_bytes())
+        .unwrap();
+    let said = BufReader::new(child.stderr.take().unwrap())
+        .lines()
+        .map(Result::unwrap)
+        .find(|line| line == "cut" || line == "all");
+    let mut written = Vec::new();
+    child
+        .stdout
+        .take()
+        .unwrap()
+        .read_to_end(&mut written)
+        .unwrap();
+    let status = child.wait().unwrap();
+
+    assert_eq!(said.as_deref(), Some("cut"));
+    assert_eq!(written.len(), 1 << 20, "{status:?}");
+    assert!(status.success(), "{status:?}");
 }

@@ -642,6 +642,28 @@ impl OsHost {
         Ok(())
     }
 
+    /// Hand on what `outbound` holds of standard output's and standard error's writes, waiting on each stream's reader as a process's exit waits on it: what a write a `select` or `timeout` cut left held is written once nothing else will. A stream that fails drops the rest, nothing being left to answer it.
+    fn hand_on_standard_at_end(&self) {
+        let mut outbound = self.outbound.lock().unwrap();
+        for (io, stream, fd) in [
+            (Handle::Stdout, 0, stdout().as_fd()),
+            (Handle::Stderr, 1, stderr().as_fd()),
+        ] {
+            let Some(mut held) = outbound.remove(&io.bytes()) else {
+                continue;
+            };
+            while self.hand_on_standard(stream, fd, &mut held) == Err(Failure::WouldBlock) {
+                let _ = ready(
+                    &[Watched {
+                        fd,
+                        asked: PollFlags::OUT,
+                    }],
+                    None,
+                );
+            }
+        }
+    }
+
     /// Start the thread that gives back every terminal still taken when a terminating signal arrives and then lets the signal end the process, so its parent sees it end by that signal; once, at the first take. A host whose handlers the system refuses still takes its terminal, and only a signal then leaves it as the program set it.
     ///
     /// Each signal wakes the thread through a pipe of its own, which its handler writes with `write(2)`. A socket pair would be woken with `send(2)`, which a sandbox that forbids sending on sockets refuses, and the signal would be caught and never acted on. The thread is waiting before any handler is registered, and a signal whose registration fails keeps its default action, so no signal is caught that nothing reads.
@@ -775,9 +797,10 @@ pub fn standard_error_size() -> Option<(u16, u16)> {
         .map(|size| (size.ws_col, size.ws_row))
 }
 
-/// Give back every terminal still taken. `instantiate` drops the host after a trap is classified and before the process exits, so a trap or an `exit` leaves each terminal as the program found it, whether or not the program's own scope ran.
+/// Hand on what the host still holds of the standard streams' writes, then give back every terminal still taken. `instantiate` drops the host after a trap is classified and before the process exits, so a program's end, by its answer, a trap or an `exit`, leaves no message it wrote to standard output or standard error unwritten, and each terminal as the program found it, whether or not the program's own scope ran.
 impl Drop for OsHost {
     fn drop(&mut self) {
+        self.hand_on_standard_at_end();
         give_back_all(&self.taken);
     }
 }
