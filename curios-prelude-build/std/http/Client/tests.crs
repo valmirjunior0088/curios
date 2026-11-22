@@ -1,0 +1,57 @@
+-- What a redirect asks for: RFC 9110 §15.4's methods and contents, and the credentials handed on only within the origin.
+use /std/{Str, Nat, Bytes, List, Test};
+use /std/http/{Method, Url, Request, Field};
+use /std/http/Client/{redirected};
+
+let sent: Request =
+    Request {
+        method = Method/post(),
+        url = Url/lit("https://a.example/form"),
+        headers =
+            [
+                Field/of("Authorization", "Basic eDp5"),
+                Field/of("Cookie", "s=1"),
+                Field/of("Content-Type", "text/plain"),
+                Field/of("Accept", "*/*")],
+        body = x['h', 'i'] };
+
+-- The method, the URL, the fields' names and the content's length a request carries.
+let carried(r: Request) -> Str =
+    Str/join(" ", [
+        Method/to_str(r.method),
+        Url/to_str(r.url),
+        Str/join(",", List/map(r.headers, (f: Field) => f.name.text)),
+        Nat/to_str(Bytes/len(r.body))]);
+
+-- A `303` turns a `POST` into a `GET` without its content or the fields describing it, as does a `302`; a `307` and a `308` keep both; within the origin the credentials go on.
+test a_redirect_keeps_the_method_and_content_its_status_says =
+    let next = Url/lit("https://a.example/next");
+    Test/all([
+        Test/equal(
+            carried(redirected(sent, 303, next)),
+            "GET https://a.example/next Authorization,Cookie,Accept 0"),
+        Test/equal(
+            carried(redirected(sent, 302, next)),
+            "GET https://a.example/next Authorization,Cookie,Accept 0"),
+        Test/equal(
+            carried(redirected(sent, 307, next)),
+            "POST https://a.example/next Authorization,Cookie,Content-Type,Accept 2"),
+        Test/equal(
+            carried(redirected(sent, 308, next)),
+            "POST https://a.example/next Authorization,Cookie,Content-Type,Accept 2"),
+        Test/equal(
+            carried(redirected(Request { ..sent, method = Method/head(), body = x[] }, 303, next)),
+            "HEAD https://a.example/next Authorization,Cookie,Content-Type,Accept 0")]);
+
+-- Another host, another port and a fall from `https` to `http` are each another origin, and the credentials stay behind.
+test a_redirect_to_another_origin_hands_on_no_credentials =
+    Test/all([
+        Test/equal(
+            carried(redirected(sent, 307, Url/lit("https://b.example/"))),
+            "POST https://b.example/ Content-Type,Accept 2"),
+        Test/equal(
+            carried(redirected(sent, 307, Url/lit("https://a.example:8443/"))),
+            "POST https://a.example:8443/ Content-Type,Accept 2"),
+        Test/equal(
+            carried(redirected(sent, 307, Url/lit("http://a.example/form"))),
+            "POST http://a.example/form Content-Type,Accept 2")]);

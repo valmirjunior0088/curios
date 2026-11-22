@@ -26,15 +26,15 @@ use {
 
 /// One `#[test]` per module of tests `/std` declares, each by the subject it stands in — none for the root's own — and the roster [`every_test_stands_in_a_rostered_module`] holds the library against, declared from one list so the two cannot disagree.
 macro_rules! claims {
-    ($($name:ident => [$($subject:literal)?]),* $(,)?) => {
+    ($($name:ident => [$($subject:literal),*]),* $(,)?) => {
         $(
             #[test]
             fn $name() {
-                run_module(&tests_of(&[$($subject)?]));
+                run_module(&tests_of(&[$($subject),*]));
             }
         )*
 
-        const ROSTER: &[&[&str]] = &[$(&[$($subject)?]),*];
+        const ROSTER: &[&[&str]] = &[$(&[$($subject),*]),*];
     };
 }
 
@@ -66,10 +66,11 @@ claims! {
     try_ => ["Try"],
     cli => ["Cli"],
     http => ["http"],
+    http_client => ["http", "Client"],
     tui => ["Tui"],
 }
 
-/// The module of tests `subject` declares, `/std/<subject>/tests`, or the root's own, `/std/tests`, for none.
+/// The module of tests `subject` declares, `/std/<subject>/tests` for a path of one segment or more, or the root's own, `/std/tests`, for none.
 fn tests_of(subject: &[&str]) -> Qualifier {
     Qualifier::from(
         ["std"]

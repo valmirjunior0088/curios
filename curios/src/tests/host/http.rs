@@ -422,6 +422,7 @@ fn a_client_reads_a_reply_as_its_framing_delimits_it() {
     a_reply_cut_short_is_incomplete_with_what_arrived(&client);
     a_reply_that_is_not_read_says_why(&client);
     a_reply_sent_ahead_of_a_failed_write_is_the_answer(&client);
+    a_redirect_goes_where_its_location_resolves(&client);
 }
 
 // A reply is read to where its framing ends, and no further: the peer answers and keeps the connection open, so a client that read to the close would wait out its deadline. A reply to `HEAD` that states a length has no body to wait for, and a `100 Continue` ahead of the final reply is passed over.
@@ -511,4 +512,20 @@ fn a_reply_sent_ahead_of_a_failed_write_is_the_answer(client: &Compiled) {
     let silent = MockHost::builder().net_deaf([("example.com:80", Vec::<&str>::new())]);
 
     assert_eq!(got(client, silent), "net broken_pipe");
+}
+
+// A redirect goes where its `Location` resolves against the URL asked for: `//host/path` names another host, which the client connects to, rather than a path on the first.
+fn a_redirect_goes_where_its_location_resolves(client: &Compiled) {
+    let host = MockHost::builder().net_open([
+        (
+            "example.com:80",
+            vec!["HTTP/1.1 303 See Other\r\nLocation: //other.example/x\r\nContent-Length: 0\r\n\r\n"],
+        ),
+        (
+            "other.example:80",
+            vec!["HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok"],
+        ),
+    ]);
+
+    assert_eq!(got(client, host), "200 ok");
 }

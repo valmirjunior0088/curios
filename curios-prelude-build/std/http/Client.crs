@@ -1,4 +1,6 @@
-use /std/{Bytes, Str, Nat, Bool, Option, Result, Try, Io};
+mod tests;
+
+use /std/{Bytes, Str, Nat, Bool, List, Option, Result, Try, Io};
 use /std/Io/{Reader};
 use /std/time/{Duration};
 use /std/tcp/{Socket};
@@ -92,29 +94,45 @@ let exchange(c: Client, request: Request) -> Try(Io, Error, Response) =
 let is_redirect(code: Nat) -> Bool =
     code == 301 || code == 302 || code == 303 || code == 307 || code == 308;
 
---- Where a redirect points: an absolute `Location`, or a path on the same origin.
-let target_of(from: Url, location: Str) -> Option(Url) =
-    match Str/strip_prefix(location, "/")
-    | some(path) =>
-        match Url/of_str(
-            Str/flatten([Url/to_str(Url { ..from, path = "/", query = Option/none() }), path]))
-        | success(u) => Option/some(u)
-        | failure(_) => Option/none()
-        end
-    | none() =>
-        match Url/of_str(location)
-        | success(u) => Option/some(u)
-        | failure(_) => Option/none()
-        end
-    end;
-
+-- Where a redirect points: its `Location`, resolved against the URL the request went to.
 let redirect_of(request: Request, response: Response) -> Option(Url) =
     match is_redirect(response.status.code)
     | false => Option/none()
     | true =>
         Option/bind(
             Option/bind(Response/header(response, "Location"), Field/Value/to_str),
-            (location) => target_of(request.url, location))
+            (location) => Result/to_option(Url/resolve(request.url, location)))
+    end;
+
+-- Whether `a` and `b` are one origin: RFC 6454's scheme, host and port.
+let same_origin(a: Url, b: Url) -> Bool =
+    a.scheme == b.scheme && Str/eql_ignoring_ascii_case(a.host, b.host) && a.port == b.port;
+
+-- Whether `f` speaks for the user to the origin it was written for, which another origin is not to be handed.
+let credential(f: Field) -> Bool =
+    List/any(
+        ["Authorization", "Proxy-Authorization", "Cookie"],
+        (name) => Field/Name/is(f.name, name));
+
+-- Whether `f` describes the request's content, as RFC 9110 §15.4 lists the fields that go with it.
+let describes_content(f: Field) -> Bool =
+    List/any(
+        ["Content-Encoding", "Content-Language", "Content-Location", "Content-Type",
+            "Content-Length", "Digest", "Last-Modified"],
+        (name) => Field/Name/is(f.name, name));
+
+--- The request a redirect with status `code` to `target` asks for, as RFC 9110 §15.4 has a user agent rebuild it: a `303` is a `GET` without content, a `HEAD` staying a `HEAD`, as is a `301` or a `302` answering a `POST`; a `307` and a `308` keep the method and the content. The fields that describe content go where it goes, and where `target` is another origin than the request's, a change of scheme included, the request's credentials (`Authorization`, `Proxy-Authorization`, `Cookie`) are not handed on.
+let redirected(request: Request, code: Nat, target: Url) -> Request =
+    let to_get =
+        code == 303 && request.method != Method/head()
+            || (code == 301 || code == 302) && request.method == Method/post();
+    let within = same_origin(request.url, target);
+    let kept =
+        List/filter(request.headers, (f) =>
+            Bool/not(to_get && describes_content(f)) && (within || Bool/not(credential(f))));
+    match to_get
+    | true => Request { method = Method/get(), url = target, headers = kept, body = x[] }
+    | false => Request { ..request, url = target, headers = kept }
     end;
 
 let follow(c: Client, request: Request, left: Nat) -> Try(Io, Error, Response) =
@@ -124,7 +142,7 @@ let follow(c: Client, request: Request, left: Nat) -> Try(Io, Error, Response) =
     | some(target) =>
         match left
         | 0 => Try/raise(Error/redirected(c.redirects))
-        | rest + 1 => follow(c, Request { ..request, url = target }, rest)
+        | rest + 1 => follow(c, redirected(request, response.status.code, target), rest)
         end
     end;
 
