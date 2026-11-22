@@ -105,11 +105,13 @@ The Curios certifier, what Lean and Rocq call the kernel: it decides, from a fin
 
 **Rejected.** The prelude in scope, which a refusal does not need and this crate's suites cannot reach. A candidate built in `curios-core`'s constructors, which rots with the representation it spells; below the walk too, where an attack is a Rust test of the function it calls and its candidate is still text.
 
-### The universe decisions are the certifier's
+### The universe decisions are the shared layer's
 
-**Decision.** The two decisions over a universe constraint set — the level entailment oracle (`entails`) and satisfiability (`satisfiable`) — sit in this crate rather than with the shared analyses.
+**Decision.** The two decisions over a universe constraint set — the level entailment oracle (`entails`) and satisfiability (`satisfiable`) — sit with the shared analyses, which both checkers call: the certifier for `Certifier::level_leq` and the walk's universe verdict, the elaborator for its store's consistency and the relations its weak join keeps. They stand in this crate until [compilation/100](../documentation/roadmap/compilation/100-a-declarations-universe-levels-are-decided-by-the-least-model-both-checkers-read.md) moves them.
 
-**Rationale.** They take a constraint set rather than an `Driver`, so nothing reaches them through the seam the shared analyses run behind, and the certifier is their only caller: `Certifier::level_leq` for the first, the walk's universe verdict for the second.
+**Rationale.** A decision procedure for one fixed theory, the semilattice with a successor, is a function of a constraint set with one answer, which [the independence decision](../documentation/design/soundness/an-independent-certifier-re-checks-what-the-elaborator-accepts.md) shares as arithmetic over the representation: two copies could disagree only by a slip, and the second opinion on levels stands in which constraints each checker collects. Kept here, the certifier their only caller, they left the elaborator deciding the same theory by an exponential search with a cap of its own.
+
+**Rejected.** The decisions kept with the certifier and stated a second time in the elaborator, a second engine for one rule.
 
 ## Measuring the certifier
 
