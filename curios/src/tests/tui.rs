@@ -465,7 +465,7 @@ fn a_failed_draw_ends_the_run_with_its_error() {
         host,
         HostOp::HandleWrite,
         2,
-        Err::<u64, Failure>(Failure::PermissionDenied),
+        Err::<(), Failure>(Failure::PermissionDenied),
     );
     run_text(IDLE_PROGRAM, failing).expect("the run ends");
     let output = String::from_utf8_lossy(&io.output()).into_owned();

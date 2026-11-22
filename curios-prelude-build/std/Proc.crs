@@ -169,10 +169,11 @@ satisfy Io/Close(Output) {
 }
 
 let ended(o: Output) -> Try(Io, Io/Error, {}) =
+    let () = Io/flush(o)!;
     let () = Io/close(o)!;
     Try/pure(());
 
---- The reader at the other end reads the end of the stream: the stream is closed, which is the one way a pipe or a standard stream tells its reader it has ended. Writing it after answers `not_found`, as a closed handle does.
+--- The reader at the other end reads the end of the stream: what the stream still holds of its writes is handed on, and the stream is closed, which is the one way a pipe or a standard stream tells its reader it has ended. Writing it after answers `not_found`, as a closed handle does.
 satisfy Io/Finish(Output) {
     finish(o) = ended(o),
 }

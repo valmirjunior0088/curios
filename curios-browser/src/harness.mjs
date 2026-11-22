@@ -145,13 +145,13 @@ export async function run(config) {
     }
   };
 
-  // The output streams take every write whole. Standard input is not open for writing, as on every host.
+  // The output streams take every write whole and hand it on as they take it, so nothing is held for a flush. Standard input is not open for writing, as on every host.
   const write = (handle, ref) => {
     const bytes = decodeBytes(ref);
     const key = keyOf(handle);
 
     if (closed.has(key)) {
-      return [status.NOT_FOUND, 0n];
+      return status.NOT_FOUND;
     }
 
     switch (key) {
@@ -162,12 +162,12 @@ export async function run(config) {
         emitted("stderr", bytes);
         break;
       case STDIN:
-        return [status.EBADF, 0n];
+        return status.EBADF;
       default:
-        return [status.NOT_FOUND, 0n];
+        return status.NOT_FOUND;
     }
 
-    return [status.OK, BigInt(bytes.length)];
+    return status.OK;
   };
 
   const deniedHandle = () => [status.PERMISSION_DENIED, emptyBytes()];

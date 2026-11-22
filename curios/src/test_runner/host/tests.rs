@@ -71,14 +71,3 @@ fn an_empty_line_and_a_line_written_over_keep_the_frame() {
         "│  > one\n│  >\n│  > two\r│  > 2\r\n"
     );
 }
-
-/// A write is answered with how many of the test's own bytes were taken, whatever the frame added beside them.
-#[test]
-fn a_framed_write_answers_for_the_tests_own_bytes() {
-    let (host, _, _) = fronted();
-
-    assert_eq!(
-        HostOps::handle_write(&host, Handle::Stderr, b"a\nb\n".to_vec()).unwrap(),
-        4
-    );
-}

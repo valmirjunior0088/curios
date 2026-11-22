@@ -54,7 +54,6 @@ fn result_records_keep_their_labels() {
     };
 
     assert_eq!(labels(HostOp::HandleRead), ["status", "bytes"]);
-    assert_eq!(labels(HostOp::HandleWrite), ["status", "written"]);
     assert_eq!(labels(HostOp::FileOpen), ["status", "handle"]);
     assert_eq!(labels(HostOp::DnsLookup), ["status", "addresses"]);
     assert_eq!(labels(HostOp::SocketOpen), ["status", "handle"]);

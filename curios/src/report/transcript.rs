@@ -250,17 +250,17 @@ pub fn written_past(tree: Opened, relayed: &mut Relayed) {
     }
 }
 
-/// Relay `bytes`, which the work of `tree`'s open node wrote on the stream `quoted` names, each line behind its frame as that stream's reader sees it, through `write`, which writes a run of bytes on that stream and answers how many it took; `relayed` is what that work wrote before. Answers how many of the work's own bytes were taken: a frame is never left half written before them, a run the stream took only part of ends the relay there, and a failure after the first run is met at the next write.
+/// Relay `bytes`, which the work of `tree`'s open node wrote on the stream `quoted` names, each line behind its frame as that stream's reader sees it, through `write`, which takes a run of bytes whole for that stream or fails; `relayed` is what that work wrote before. The first failure ends the relay and is answered, so the work learns its bytes were not taken whole, and the runs before it stand relayed.
 pub fn relay<E>(
     tree: Opened,
     relayed: &mut Relayed,
     quoted: Quoted,
     bytes: &[u8],
-    mut write: impl FnMut(&[u8]) -> Result<usize, E>,
-) -> Result<usize, E> {
+    mut write: impl FnMut(&[u8]) -> Result<(), E>,
+) -> Result<(), E> {
     // An empty write is no write: it ends no line.
     if bytes.is_empty() {
-        return Ok(0);
+        return Ok(());
     }
     let style = match quoted {
         Quoted::Output => answered(),
@@ -273,55 +273,44 @@ pub fn relay<E>(
     }
     relayed.writing(tree, &mut transcript);
 
-    let mut taken = 0;
-    while taken < bytes.len() {
-        let (owed, length) = framed_run(relayed.column, &bytes[taken..]);
-        let own = &bytes[taken..taken + length];
+    let mut rest = bytes;
+    let mut relayed_whole = Ok(());
+    while !rest.is_empty() {
+        let (owed, length) = framed_run(relayed.column, rest);
+        let (own, after) = rest.split_at(length);
         let frame = transcript.drawer.frame(tree, owed, quoted, style);
-        let wrote = match run(&frame, own, &mut relayed.column, &mut write) {
-            Ok(wrote) => wrote,
-            Err(failure) if taken == 0 => return Err(failure),
-            // What the stream took before it failed was written: the work is told of that much, and meets the failure at its next write.
-            Err(_) => break,
-        };
+        if let Err(failure) = run(&frame, own, &mut relayed.column, &mut write) {
+            relayed_whole = Err(failure);
+            break;
+        }
         let plain = transcript.drawer.frame(tree, owed, quoted, &Style::plain());
         if let Some(kept) = transcript.kept.as_mut() {
             kept.extend_from_slice(plain.as_bytes());
-            kept.extend_from_slice(&own[..wrote]);
+            kept.extend_from_slice(own);
         }
-        taken += wrote;
-        if wrote < own.len() {
-            break;
-        }
+        rest = after;
     }
     if let (Drawer::Live(live), Column::Start) = (&mut transcript.drawer, relayed.column) {
         eprint!("{}", live.tick(Instant::now(), measured()));
     }
 
-    Ok(taken)
+    relayed_whole
 }
 
-/// Write `own`, one run of the work's bytes, behind `frame`, what its line is owed, and answer how many of them `write` took, leaving `column` where the stream stands.
+/// Write `own`, one run of the work's bytes, behind `frame`, what its line is owed, each taken whole by `write`, leaving `column` where the stream stands.
 fn run<E>(
     frame: &str,
     own: &[u8],
     column: &mut Column,
-    write: &mut impl FnMut(&[u8]) -> Result<usize, E>,
-) -> Result<usize, E> {
+    write: &mut impl FnMut(&[u8]) -> Result<(), E>,
+) -> Result<(), E> {
     if !frame.is_empty() {
-        let mut rest = frame.as_bytes();
-        while !rest.is_empty() {
-            let wrote = write(rest)?.min(rest.len());
-            if wrote == 0 {
-                break;
-            }
-            rest = &rest[wrote..];
-        }
+        write(frame.as_bytes())?;
         // The frame opened the line, whatever becomes of the bytes behind it.
         *column = Column::Within;
     }
-    let wrote = write(own)?.min(own.len());
-    *column = column.after(&own[..wrote]);
+    write(own)?;
+    *column = column.after(own);
 
-    Ok(wrote)
+    Ok(())
 }

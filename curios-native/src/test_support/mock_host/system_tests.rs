@@ -13,7 +13,7 @@ fn use_after_close_on_a_handle_is_a_loud_miss_not_an_alias() {
 
     // Open a write-mode file, write to it, then close it.
     let handle = host.file_open(b"f".to_vec(), Mode::Write).unwrap();
-    assert_eq!(host.handle_write(handle.clone(), b"x".to_vec()), Ok(1));
+    assert_eq!(host.handle_write(handle.clone(), b"x".to_vec()), Ok(()));
     host.handle_close(handle.clone());
 
     // Write after close is a loud `NotFound`, never a silent success...
@@ -33,7 +33,7 @@ fn use_after_close_on_a_handle_is_a_loud_miss_not_an_alias() {
         host.handle_write(handle, b"z".to_vec()),
         Err(Failure::NotFound)
     );
-    assert_eq!(host.handle_write(fresh, b"ok".to_vec()), Ok(2));
+    assert_eq!(host.handle_write(fresh, b"ok".to_vec()), Ok(()));
 }
 
 /// A writing `file_open` under a directory that is not there answers `NotFound`, as the OS does, rather than filing a file whose parent `file_stat` would then deny; once the directory is made, the same open succeeds and the parent stats as a directory.
@@ -51,7 +51,7 @@ fn a_writing_open_under_a_missing_directory_is_refused_until_the_directory_exist
 
     assert_eq!(host.dir_create(b"a".to_vec()), Ok(()));
     let handle = host.file_open(b"a/b.txt".to_vec(), Mode::Write).unwrap();
-    assert_eq!(host.handle_write(handle.clone(), b"x".to_vec()), Ok(1));
+    assert_eq!(host.handle_write(handle.clone(), b"x".to_vec()), Ok(()));
     host.handle_close(handle);
     assert!(matches!(
         host.file_stat(b"a".to_vec()),
@@ -159,7 +159,7 @@ fn waiting_on_what_is_not_a_child_leaves_it_filed() {
     let file = host.file_open(b"f".to_vec(), Mode::Write).unwrap();
 
     assert_eq!(host.proc_wait(file.clone()), Err(Failure::NotFound));
-    assert_eq!(host.handle_write(file, b"x".to_vec()), Ok(1));
+    assert_eq!(host.handle_write(file, b"x".to_vec()), Ok(()));
 }
 
 /// A spawn answers the parent's end of each stream it piped and nothing for the rest, and a piped output reads back what the script wrote.

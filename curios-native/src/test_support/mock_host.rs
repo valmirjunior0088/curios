@@ -1219,17 +1219,15 @@ impl HostOps for MockHost {
         }
     }
 
-    fn handle_write(&self, io: Handle, bytes: Vec<u8>) -> Result<u64, Failure> {
-        // The direction and the kind first, as the native host checks them; an empty write writes nothing.
+    fn handle_write(&self, io: Handle, bytes: Vec<u8>) -> Result<(), Failure> {
+        // The direction and the kind first, as the native host checks them; an empty write takes nothing.
         self.stream(&io, Direction::Write)?;
 
         if bytes.is_empty() {
-            return Ok(0);
+            return Ok(());
         }
 
-        // The in-memory sink always takes the whole buffer in one go, so a successful write reports the full length and never `WouldBlock`.
-        let full = bytes.len() as u64;
-
+        // The in-memory sink hands on every message whole as it takes it, so it holds nothing for a flush to hand on.
         if matches!(io, Handle::Stdout | Handle::Stderr) {
             self.output.lock().unwrap().extend_from_slice(&bytes);
 
@@ -1237,7 +1235,7 @@ impl HostOps for MockHost {
                 self.errors.lock().unwrap().extend_from_slice(&bytes);
             }
 
-            return Ok(full);
+            return Ok(());
         }
 
         match self.table.lock().unwrap().get(&io) {
@@ -1245,14 +1243,14 @@ impl HostOps for MockHost {
             Some(MockResource::File(open)) => {
                 self.files.append(&open.path, &bytes);
 
-                Ok(full)
+                Ok(())
             }
             // Inbound (accepted) connection: capture the response bytes so a test can inspect what the server wrote back.
             Some(MockResource::Inbound(conn)) => {
                 self.captures.lock().unwrap()[conn.capture].extend_from_slice(&bytes);
                 self.wrote(bytes.len());
 
-                Ok(full)
+                Ok(())
             }
             // A peer that has stopped reading takes nothing, as a connection whose far end is closed.
             Some(MockResource::Outbound(stream)) if stream.deaf => Err(Failure::BrokenPipe),
@@ -1260,10 +1258,10 @@ impl HostOps for MockHost {
             Some(MockResource::Outbound(_)) => {
                 self.wrote(bytes.len());
 
-                Ok(full)
+                Ok(())
             }
             // A child's piped stdin: accepted and discarded too.
-            Some(MockResource::Sink) => Ok(full),
+            Some(MockResource::Sink) => Ok(()),
             // A serial port: capture the bytes under its path, so a test can see the command the program sent the device.
             Some(MockResource::Serial(port)) => {
                 self.serial_written
@@ -1273,13 +1271,13 @@ impl HostOps for MockHost {
                     .or_default()
                     .extend_from_slice(&bytes);
 
-                Ok(full)
+                Ok(())
             }
             // The controlling terminal: written where standard output writes, as the terminal behind it.
             Some(MockResource::Terminal) => {
                 self.output.lock().unwrap().extend_from_slice(&bytes);
 
-                Ok(full)
+                Ok(())
             }
             _ => Err(Failure::NotFound),
         }

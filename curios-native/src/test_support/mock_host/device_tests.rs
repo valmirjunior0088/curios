@@ -66,7 +66,7 @@ fn the_terminal_reads_the_scripted_keys_and_a_dropped_host_gives_it_back() {
     let tty = terminal(&host);
 
     assert_eq!(host.handle_read(tty.clone(), 8), Ok(Some(b"q".to_vec())));
-    assert_eq!(host.handle_write(tty.clone(), b"frame".to_vec()), Ok(5));
+    assert_eq!(host.handle_write(tty.clone(), b"frame".to_vec()), Ok(()));
     assert_eq!(host.tty_take(tty, b"/leave".to_vec()), Ok(()));
     drop(host);
 

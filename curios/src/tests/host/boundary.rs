@@ -122,9 +122,9 @@ fn a_file_kind_no_code_names_fails_the_stat() {
     );
 }
 
-/// A write the host accepts nothing of would be resent for ever, so the library reads it as a failure and its loop ends.
+/// A write takes the whole of its message before anything waits, so one the host answers would block is a reply its row rules out, which the library reads as a failure rather than a wait.
 #[test]
-fn a_write_that_accepts_nothing_is_a_failure() {
+fn a_write_the_host_answers_would_block_is_a_failure() {
     let code = answering(
         r#"
         use /std/{Io, Try, Proc};
@@ -135,7 +135,7 @@ fn a_write_that_accepts_nothing_is_a_failure() {
         "#,
         MockHost::builder().build().0,
         HostOp::HandleWrite,
-        vec![RawValue::Nat(StatusCodes::OK), RawValue::Nat(0)],
+        vec![RawValue::Nat(StatusCodes::WOULD_BLOCK)],
     );
 
     assert_eq!(code, Ok(7));

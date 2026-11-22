@@ -74,7 +74,7 @@ fn a_loopback_connect_settles_and_both_ends_would_block_before_data() {
         host.handle_read(server.clone(), 8),
         Err(Failure::WouldBlock)
     );
-    assert_eq!(host.handle_write(client.clone(), b"ping".to_vec()), Ok(4));
+    assert_eq!(host.handle_write(client.clone(), b"ping".to_vec()), Ok(()));
     assert!(awaited(&host, &server, true, false));
     assert_eq!(
         host.handle_read(server.clone(), 8),
@@ -86,7 +86,7 @@ fn a_loopback_connect_settles_and_both_ends_would_block_before_data() {
     host.handle_close(listener);
 }
 
-/// A TLS upgrade files the stream and touches the socket not at all: the client hello leaves only when the guest first writes, which answers `WouldBlock` while the reply is awaited, and the bytes the server side then reads are a TLS handshake record — the handshake is driven by the guest's own reads and writes and parks like any other progress. A plaintext reply is not TLS, so the client's next read reports `TlsError`, with the handle still filed for its finalizer to close.
+/// A TLS upgrade files the stream and touches the socket not at all: the client hello leaves only when the guest first writes, which takes its bytes and holds them while the reply is awaited, a flush answering `WouldBlock` meanwhile, and the bytes the server side then reads are a TLS handshake record — the handshake is driven by the guest's own reads and writes and parks like any other progress. A plaintext reply is not TLS, so the client's next read reports `TlsError`, with the handle still filed for its finalizer to close.
 #[test]
 fn a_tls_upgrade_is_driven_by_the_reads_and_writes_that_follow() {
     let host = OsHost::with_args(vec![]);
@@ -100,10 +100,8 @@ fn a_tls_upgrade_is_driven_by_the_reads_and_writes_that_follow() {
         host.handle_read(server.clone(), 8),
         Err(Failure::WouldBlock)
     );
-    assert_eq!(
-        host.handle_write(client.clone(), b"x".to_vec()),
-        Err(Failure::WouldBlock)
-    );
+    assert_eq!(host.handle_write(client.clone(), b"x".to_vec()), Ok(()));
+    assert_eq!(host.handle_flush(client.clone()), Err(Failure::WouldBlock));
 
     assert!(awaited(&host, &server, true, false));
     let hello = host
@@ -247,11 +245,11 @@ fn a_finished_socket_ends_for_its_peer_and_still_reads() {
         Err(Failure::NotFound)
     );
 
-    assert_eq!(host.handle_write(server.clone(), b"done".to_vec()), Ok(4));
+    assert_eq!(host.handle_write(server.clone(), b"done".to_vec()), Ok(()));
     assert_eq!(host.handle_finish(server.clone()), Ok(()));
     assert_eq!(read_to_the_end(&host, &client), b"done");
 
-    assert_eq!(host.handle_write(client.clone(), b"late".to_vec()), Ok(4));
+    assert_eq!(host.handle_write(client.clone(), b"late".to_vec()), Ok(()));
     host.handle_close(client);
     assert_eq!(read_to_the_end(&host, &server), b"late");
 
@@ -310,7 +308,7 @@ fn a_tls_upgrade_that_cannot_start_leaves_the_socket_connected() {
         host.tls_start(client.clone(), b"\xff".to_vec()),
         Err(Failure::TlsError)
     );
-    assert_eq!(host.handle_write(client.clone(), b"x".to_vec()), Ok(1));
+    assert_eq!(host.handle_write(client.clone(), b"x".to_vec()), Ok(()));
 
     assert!(awaited(&host, &server, true, false));
     assert_eq!(host.handle_read(server.clone(), 8), Ok(Some(b"x".to_vec())));

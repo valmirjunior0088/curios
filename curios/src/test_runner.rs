@@ -542,10 +542,10 @@ impl Reporting for Printing<'_, '_> {
         let tree = self.printer.testing();
         let relayed = match stream {
             Stream::Stdout => relay(tree, &mut self.relayed, Quoted::Output, bytes, |run| {
-                io::stdout().write_all(run).map(|()| run.len())
+                io::stdout().write_all(run)
             }),
             Stream::Stderr => relay(tree, &mut self.relayed, Quoted::Error, bytes, |run| {
-                io::stderr().write_all(run).map(|()| run.len())
+                io::stderr().write_all(run)
             }),
         };
         relayed.expect("failed relaying");

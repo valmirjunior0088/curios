@@ -22,7 +22,7 @@ use {
     },
     rustls::{
         ClientConfig, ClientConnection, ConnectionCommon, RootCertStore, ServerConfig,
-        ServerConnection, StreamOwned, crypto::ring, pki_types::ServerName,
+        ServerConnection, SideData, StreamOwned, crypto::ring, pki_types::ServerName,
     },
     signal_hook::{
         consts::{SIGHUP, SIGINT, SIGQUIT, SIGTERM},
@@ -30,12 +30,14 @@ use {
     },
     socket2::{Domain, SockAddr, Socket, Type},
     std::{
+        collections::{HashMap, VecDeque},
         env,
         ffi::OsStr,
         fs::{self, File, OpenOptions},
         future,
         io::{self, Error, ErrorKind, Read, Write, stderr, stdin, stdout},
         net::{Shutdown, SocketAddr, ToSocketAddrs},
+        ops::{Deref, DerefMut},
         os::{
             fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd},
             unix::{
@@ -494,10 +496,12 @@ pub struct OsHost {
     taken: Arc<Mutex<Vec<Taken>>>,
     /// Whether the thread that gives every terminal back at a terminating signal is running, started by the first take.
     signals: OnceLock<()>,
-    /// Whether standard output and standard error are a pipe or a socket, read on the first write to each: a gated write to one is bounded by what it takes without blocking. See [`OsHost::write_standard`].
+    /// Whether standard output and standard error are a pipe or a socket, read on the first write to each: a gated write to one is bounded by what it takes without blocking. See [`OsHost::hand_on_standard`].
     bounded: [OnceLock<bool>; 2],
     /// Which standard streams the program closed, by their place among input, output and error: a closed one's token names nothing, as any closed handle's does. See [`OsHost::close_standard`].
     closed: [AtomicBool; 3],
+    /// What the host still holds of the writes it took, by the token of the handle they were written to: a write takes its whole message here, and every write, flush and finish of the handle hands on what is here before anything else, so no message is cut by what a peer has not yet taken. A handle that holds nothing has no entry, and closing one drops its entry, as a close never waits on the wire. Locked before the table wherever both are.
+    outbound: Mutex<HashMap<Vec<u8>, VecDeque<u8>>>,
 }
 
 impl OsHost {
@@ -520,6 +524,7 @@ impl OsHost {
                 AtomicBool::new(false),
                 AtomicBool::new(false),
             ],
+            outbound: Mutex::new(HashMap::new()),
         }
     }
 
@@ -569,25 +574,72 @@ impl OsHost {
         }
     }
 
-    /// One write to standard output or standard error, gated as standard input's read is.
+    /// What `outbound` holds of `io`'s writes handed on as far as `io` takes it now, the entry kept while something stays held and dropped once nothing does or the stream has failed, so a failure is answered once, by the row that meets it.
+    fn handed_on(
+        &self,
+        outbound: &mut HashMap<Vec<u8>, VecDeque<u8>>,
+        io: &Handle,
+    ) -> Result<(), Failure> {
+        let mut held = outbound.remove(&io.bytes()).unwrap_or_default();
+        let handed = self.hand_on(io, &mut held);
+        if handed == Err(Failure::WouldBlock) && !held.is_empty() {
+            outbound.insert(io.bytes(), held);
+        }
+
+        handed
+    }
+
+    /// Hand on `held`, what the host holds of `io`'s writes, as far as `io` takes it now: `Ok` once nothing is held, `WouldBlock` while the handle takes no more, and the stream's failure otherwise. A TLS stream's records are pushed behind its plaintext, so `Ok` there means `rustls` holds none of them either. The standard output streams are written through their raw descriptors, never `std`'s own buffer, which would hold what the guest wrote where neither the other stream's writes nor a flush can reach it.
+    fn hand_on(&self, io: &Handle, held: &mut VecDeque<u8>) -> Result<(), Failure> {
+        match io {
+            Handle::Stdout => return self.hand_on_standard(0, stdout().as_fd(), held),
+            Handle::Stderr => return self.hand_on_standard(1, stderr().as_fd(), held),
+            Handle::Stdin => return Ok(()),
+            Handle::Other(_) => {}
+        }
+
+        match self.table.lock().unwrap().get_mut(io) {
+            Some(OsResource::File(file)) => drained(held, |bytes| file.write(bytes)),
+            Some(OsResource::Connected(socket)) => drained(held, |bytes| socket.write(bytes)),
+            Some(OsResource::ClientTls(tls)) => tls_drained(held, tls),
+            Some(OsResource::ServerTls(tls)) => tls_drained(held, tls),
+            Some(OsResource::Descriptor(fd) | OsResource::Fifo(fd)) => drained(held, |bytes| {
+                rustix::io::write(&*fd, bytes).map_err(Error::from)
+            }),
+            Some(OsResource::Serial(port)) => drained(held, |bytes| {
+                rustix::io::write(&*port, bytes).map_err(Error::from)
+            }),
+            // Nothing is held of a kind no write reaches.
+            Some(_) => Ok(()),
+            None => Err(Failure::NotFound),
+        }
+    }
+
+    /// [`OsHost::hand_on`] for standard output or standard error, gated as standard input's read is.
     ///
-    /// The descriptor is the process's, shared with whatever else writes to it, so its flags are never touched: a zero-timeout poll asks whether it would take bytes now, and `WouldBlock` answers where it would not, which a program suspends on a watch of and resends. A ready pipe or socket is only sure to take `PIPE_BUF` bytes without blocking, so a write to one hands it at most that; a terminal or a file takes the whole.
-    fn write_standard(
+    /// The descriptor is the process's, shared with whatever else writes to it, so its flags are never touched: a zero-timeout poll asks before each write whether it would take bytes now, and `WouldBlock` answers where it would not. A ready pipe or socket is only sure to take `PIPE_BUF` bytes without blocking, so each write to one hands it at most that; a terminal or a file takes the whole.
+    fn hand_on_standard(
         &self,
         stream: usize,
         fd: BorrowedFd<'_>,
-        bytes: &[u8],
-    ) -> Result<u64, Failure> {
-        if !writable_now(fd) {
-            return Err(Failure::WouldBlock);
-        }
+        held: &mut VecDeque<u8>,
+    ) -> Result<(), Failure> {
         let bounded = *self.bounded[stream].get_or_init(|| pipe_or_socket(fd));
-        let taken = match bounded {
-            true => &bytes[..bytes.len().min(PIPE_BUF)],
-            false => bytes,
-        };
 
-        write_once(|| rustix::io::write(fd, taken).map_err(Error::from))
+        while !held.is_empty() {
+            if !writable_now(fd) {
+                return Err(Failure::WouldBlock);
+            }
+            let (front, _) = held.as_slices();
+            let taken = match bounded {
+                true => &front[..front.len().min(PIPE_BUF)],
+                false => front,
+            };
+            let wrote = write_once(|| rustix::io::write(fd, taken).map_err(Error::from))?;
+            held.drain(..wrote);
+        }
+
+        Ok(())
     }
 
     /// Start the thread that gives back every terminal still taken when a terminating signal arrives and then lets the signal end the process, so its parent sees it end by that signal; once, at the first take. A host whose handlers the system refuses still takes its terminal, and only a signal then leaves it as the program set it.
@@ -1117,6 +1169,8 @@ impl HostOps for OsHost {
     }
 
     fn handle_close(&self, io: Handle) {
+        self.outbound.lock().unwrap().remove(&io.bytes());
+
         match standard(&io) {
             Some(place) => self.close_standard(&io, place),
             None => {
@@ -1243,61 +1297,58 @@ impl HostOps for OsHost {
         read_outcome(result, buffer)
     }
 
-    fn handle_write(&self, io: Handle, bytes: Vec<u8>) -> Result<u64, Failure> {
-        if self.closed(&io) {
-            return Err(Failure::NotFound);
-        }
+    fn handle_write(&self, io: Handle, bytes: Vec<u8>) -> Result<(), Failure> {
+        self.stream(&io, Direction::Write)?;
 
-        // An empty write writes nothing: it only asks whether the handle could be written.
+        // An empty write takes nothing: it only asks whether the handle could be written.
         if bytes.is_empty() {
-            return self.stream(&io, Direction::Write).map(|()| 0);
+            return Ok(());
         }
 
-        match io {
-            // The standard output streams are written through their raw descriptors, one attempt per call as every other handle is: `std`'s own buffer would hold what the guest wrote where neither the other stream's writes nor a flush can reach it, and the guest's output would arrive out of the order it was written in.
-            Handle::Stdout => return self.write_standard(0, stdout().as_fd(), &bytes),
-            Handle::Stderr => return self.write_standard(1, stderr().as_fd(), &bytes),
-            // Standard input is open to read only, as a descriptor opened to read is.
-            Handle::Stdin => return Err(bad_descriptor()),
-            Handle::Other(_) => {}
+        let mut outbound = self.outbound.lock().unwrap();
+        match outbound.get_mut(&io.bytes()) {
+            // The message is held whole or not at all: where the host cannot hold it beside what it holds already, the write fails having taken none of it.
+            Some(held) => {
+                if held.try_reserve(bytes.len()).is_err() {
+                    return Err(Failure::Other(Errno::NOMEM.raw_os_error() as u32));
+                }
+                held.extend(bytes);
+            }
+            None => {
+                outbound.insert(io.bytes(), VecDeque::from(bytes));
+            }
         }
 
-        let mut table = self.table.lock().unwrap();
-
-        match table.get_mut(&io) {
-            Some(OsResource::File(file)) => write_once(|| file.write(&bytes)),
-            Some(OsResource::Connected(socket)) => write_once(|| socket.write(&bytes)),
-            // A TLS write completes the pending handshake first and accepts no plaintext until it has, so `WouldBlock` here reports nothing accepted and the caller resends. Once established it takes plaintext into `rustls`'s records, as much as its buffer holds, and pushes them to the socket as far as the socket allows; what the socket did not take waits for the next read, write or `handle_flush` of the handle, and a `handle_close` drops it.
-            Some(OsResource::ClientTls(tls)) => tls_write(|| tls.write(&bytes)),
-            Some(OsResource::ServerTls(tls)) => tls_write(|| tls.write(&bytes)),
-            Some(OsResource::Descriptor(fd) | OsResource::Fifo(fd)) => {
-                write_once(|| rustix::io::write(&*fd, &bytes).map_err(Error::from))
-            }
-            Some(OsResource::Serial(port)) => {
-                write_once(|| rustix::io::write(&*port, &bytes).map_err(Error::from))
-            }
-            _ => Err(Failure::NotFound),
+        // The message is held, so a stream that takes no more of it now has taken it all the same: what is held waits for the next row of the handle.
+        match self.handed_on(&mut outbound, &io) {
+            Err(Failure::WouldBlock) => Ok(()),
+            handed => handed,
         }
     }
 
     fn handle_flush(&self, io: Handle) -> Result<(), Failure> {
-        if standard(&io).is_some() {
-            return match self.closed(&io) {
-                true => Err(Failure::NotFound),
-                false => Ok(()),
-            };
+        let names = match standard(&io) {
+            Some(_) => !self.closed(&io),
+            None => self.table.lock().unwrap().get(&io).is_some(),
+        };
+        if !names {
+            return Err(Failure::NotFound);
         }
 
-        // Only a TLS stream holds anything of what a write accepted: its records, which `rustls` pushes to the socket as far as the socket takes them. Every other kind wrote straight through.
-        match self.table.lock().unwrap().get_mut(&io) {
-            Some(OsResource::ClientTls(tls)) => flush_tls(&mut tls.conn, &mut tls.sock),
-            Some(OsResource::ServerTls(tls)) => flush_tls(&mut tls.conn, &mut tls.sock),
-            Some(_) => Ok(()),
-            None => Err(Failure::NotFound),
-        }
+        self.handed_on(&mut self.outbound.lock().unwrap(), &io)
     }
 
     fn handle_finish(&self, io: Handle) -> Result<(), Failure> {
+        // Only a connected stream has a sending half of its own, and only once what is held of its writes is handed on is it ended.
+        let finishes = matches!(
+            self.table.lock().unwrap().get(&io),
+            Some(OsResource::Connected(_) | OsResource::ClientTls(_) | OsResource::ServerTls(_))
+        );
+        if !finishes {
+            return Err(Failure::NotFound);
+        }
+        self.handed_on(&mut self.outbound.lock().unwrap(), &io)?;
+
         match self.table.lock().unwrap().get_mut(&io) {
             Some(OsResource::Connected(socket)) => finish(socket),
             Some(OsResource::ClientTls(tls)) => finish_tls(&mut tls.conn, &mut tls.sock),
@@ -1662,26 +1713,63 @@ fn bad_descriptor() -> Failure {
     failure_from_error(Error::from(Errno::BADF))
 }
 
-/// One write attempt's reply, retried while an interruption stops it before any progress. A descriptor that takes nothing of a nonempty buffer and reports nothing has no failure to name, so it is the errno-less `Other(0)` — never a success its caller would resend forever.
-fn write_once(mut write: impl FnMut() -> io::Result<usize>) -> Result<u64, Failure> {
+/// One write attempt's reply, how many bytes it took, retried while an interruption stops it before any progress. A descriptor that takes nothing of a nonempty buffer and reports nothing has no failure to name, so it is the errno-less `Other(0)` — never a success its caller would offer the same bytes again forever.
+fn write_once(mut write: impl FnMut() -> io::Result<usize>) -> Result<usize, Failure> {
     loop {
         match write() {
             Ok(0) => return Err(Failure::Other(0)),
-            Ok(accepted) => return Ok(accepted as u64),
+            Ok(accepted) => return Ok(accepted),
             Err(error) if error.kind() == ErrorKind::Interrupted => {}
             Err(error) => return Err(failure_from_error(error)),
         }
     }
 }
 
-/// A TLS write's reply, retried while an interruption stops it before any progress. `rustls` accepts nothing of a nonempty buffer when its own is full, which is `WouldBlock`: nothing can be accepted now, and the socket's writability is what frees room.
-fn tls_write(mut write: impl FnMut() -> io::Result<usize>) -> Result<u64, Failure> {
+/// `held` written through `write`, a write attempt at a time, until nothing is held: `WouldBlock` where a descriptor takes no more now, and the failure of an attempt as [`write_once`] answers it.
+fn drained(
+    held: &mut VecDeque<u8>,
+    mut write: impl FnMut(&[u8]) -> io::Result<usize>,
+) -> Result<(), Failure> {
+    while !held.is_empty() {
+        let (front, _) = held.as_slices();
+        let wrote = write_once(|| write(front))?;
+        held.drain(..wrote);
+    }
+
+    Ok(())
+}
+
+/// [`drained`] for a TLS stream: its plaintext taken into `rustls` as far as its buffer holds it, and the records then pushed to the socket as [`flush_tls`] pushes them, round after round while each takes something: `Ok` once nothing is held and `rustls` holds no record. A write completes a pending handshake first and takes no plaintext until it has, so a stream still shaking hands keeps its plaintext held.
+fn tls_drained<C, Data>(
+    held: &mut VecDeque<u8>,
+    tls: &mut StreamOwned<C, Socket>,
+) -> Result<(), Failure>
+where
+    C: DerefMut + Deref<Target = ConnectionCommon<Data>>,
+    Data: SideData,
+{
     loop {
-        match write() {
-            Ok(0) => return Err(Failure::WouldBlock),
-            Ok(accepted) => return Ok(accepted as u64),
-            Err(error) if error.kind() == ErrorKind::Interrupted => {}
-            Err(error) => return Err(tls_failure(error)),
+        let before = held.len();
+        while !held.is_empty() {
+            let (front, _) = held.as_slices();
+            match tls.write(front) {
+                // `rustls`'s buffer is full: its records go first.
+                Ok(0) => break,
+                Ok(taken) => {
+                    held.drain(..taken);
+                }
+                Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                Err(error) if error.kind() == ErrorKind::WouldBlock => break,
+                Err(error) => return Err(tls_failure(error)),
+            }
+        }
+        flush_tls(&mut tls.conn, &mut tls.sock)?;
+
+        if held.is_empty() {
+            return Ok(());
+        }
+        if held.len() == before {
+            return Err(Failure::WouldBlock);
         }
     }
 }

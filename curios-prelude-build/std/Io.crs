@@ -156,9 +156,9 @@ pub use Read/*;
 
 --- What a stream is written through.
 pub concept Write(S: Type): pub Type {
-    --- Writes the whole of the bytes, a short write resent. A write cancelled where it waits after a short write has sent part of the bytes, so `select` and `timeout` may leave a stream with a part of what was written.
+    --- Writes the whole of the bytes: taken whole before anything waits, then handed on. A write cancelled where it waits leaves its bytes whole in what the stream holds, which the next write, flush or finish of the stream hands on first, so `select` and `timeout` never leave part of a write on a stream.
     write(S, Bytes) -> Try(Io, Error, {}),
-    --- Hand on what the stream holds of the writes it accepted: a TLS stream's records, which a write can accept before the socket takes them. Every other stream holds nothing.
+    --- Hand on what the stream still holds of the writes it took: what a write cancelled where it waited left, and a TLS stream's records. A serial port then waits until the device has sent it.
     flush(S) -> Try(Io, Error, {}),
 }
 
@@ -191,7 +191,7 @@ let drain(
 pub let read_all(@S: Type, use Read(S), s: S) -> Try(Io, Error, Bytes) =
     drain((n, @positive) => Read/read(@S, s, n, @positive));
 
---- Every chunk of `from` written to `to` until `from` ends; the first failure on either side is the answer. A copy cancelled where it waits has moved part of the stream.
+--- Every chunk of `from` written to `to` until `from` ends; the first failure on either side is the answer. A chunk read is taken by the write before anything waits, so a copy cancelled where it waits has moved whole chunks and lost none.
 pub let copy(@S: Type, @T: Type, use Read(S), use Write(T), from: S, to: T) -> Try(Io, Error, {}) =
     let go() -> Try(Io, Error, {}) =
         let c = Read/read(from, 4096)!;
@@ -381,7 +381,7 @@ pub let all(@A: Type, actions: List(Io(A))) -> Io(List(A)) =
 
 --- The answer of the first of `actions` to finish; every other one is cancelled where it waits. They are stepped in list order, so of two that can answer at once the earlier wins: `select([a, Io/pure(d)])` tries `a` and answers `d` rather than wait, and in a loop an action that is always ready starves the ones after it. Which action answered is its answer's to say. With no action, nothing answers.
 ---
---- An action cancelled where it waits has taken nothing, unless it took something and then waited again. A take, a read, a join, a `Future`'s wait and a sleep can be dropped and run again without loss; a `write` dropped after a short write has sent part of its bytes, and `read_all` and `copy` lose what they had moved. Keep what must not be lost as the last step of its action, and do what follows after `select` answers. An action of your own that holds something across a wait of its own keeps it where a drop cannot lose it: in a `Box` before it waits, as `Io/Reader` keeps the bytes it read ahead, or in a release deferred to its scope, which is told the scope was `cancelled`.
+--- An action cancelled where it waits has taken nothing, unless it took something and then waited again. A take, a read, a join, a `Future`'s wait, a sleep, a `write` and a `copy` can be dropped and run again without loss — a write takes its whole message before it waits, so a dropped one leaves it whole for the stream to hand on — and `read_all` loses what it had read. Keep what must not be lost as the last step of its action, and do what follows after `select` answers. An action of your own that holds something across a wait of its own keeps it where a drop cannot lose it: in a `Box` before it waits, as `Io/Reader` keeps the bytes it read ahead, or in a release deferred to its scope, which is told the scope was `cancelled`.
 pub let select(@A: Type, actions: List(Io(A))) -> Io(A) =
     let won: Future(A) = Future/new()!;
     let () = drive(List/map(actions, (a: Io(A)) => into(a, won)), nothing_more, answered(won))!;

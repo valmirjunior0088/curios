@@ -162,7 +162,7 @@ fn a_stream_is_open_the_ways_its_host_opened_it() {
     );
     assert_eq!(host.handle_read(writing.clone(), 8).map(|_| ()), EBADF);
     assert_eq!(host.handle_read(reading, 2), Ok(Some(b"te".to_vec())));
-    assert_eq!(host.handle_write(writing, b"x".to_vec()), Ok(1));
+    assert_eq!(host.handle_write(writing, b"x".to_vec()), Ok(()));
 }
 
 /// A request for nothing checks the handle and moves nothing: a zero read of a spent stream is empty bytes rather than its end, and an empty write is `0`.
@@ -172,7 +172,7 @@ fn a_request_for_nothing_moves_nothing() {
 
     assert_eq!(host.handle_read(Handle::Stdin, 0), Ok(Some(vec![])));
     assert_eq!(host.handle_read(Handle::Stdin, 8), Ok(None));
-    assert_eq!(host.handle_write(Handle::Stdout, vec![]), Ok(0));
+    assert_eq!(host.handle_write(Handle::Stdout, vec![]), Ok(()));
     assert_eq!(
         host.handle_read(Handle::Other(vec![0xff]), 0),
         Err(Failure::NotFound)
@@ -248,7 +248,7 @@ fn a_waiting_peer_closes_once_this_side_has_finished() {
     assert!(host.wait(vec![watch.clone()]).is_err());
     host.handle_close(watch);
 
-    assert_eq!(host.handle_write(conn.clone(), b"pong".to_vec()), Ok(4));
+    assert_eq!(host.handle_write(conn.clone(), b"pong".to_vec()), Ok(()));
     assert_eq!(host.handle_finish(conn.clone()), Ok(()));
     assert!(reading());
     assert_eq!(host.handle_read(conn.clone(), 8), Ok(None));
@@ -342,15 +342,13 @@ fn a_read_answers_no_more_than_it_was_asked() {
     );
 }
 
-/// A write accepts no more than it was offered, and at least a byte of a buffer that holds one.
+/// A write takes the whole of its message, which the scripted stream hands on as it takes it.
 #[test]
-fn a_write_accepts_within_what_it_was_offered() {
-    let (host, _io) = MockHost::builder().build();
-    let accepted = host
-        .handle_write(Handle::Stdout, b"hello".to_vec())
-        .unwrap();
+fn a_write_takes_the_whole_of_its_message() {
+    let (host, io) = MockHost::builder().build();
 
-    assert!((1..=5).contains(&accepted));
+    assert_eq!(host.handle_write(Handle::Stdout, b"hello".to_vec()), Ok(()));
+    assert_eq!(io.output(), b"hello");
 }
 
 /// A watch is ready for what it asks and no other: a stream with a chunk to read is ready to read and to write, and a child that still runs, which a watch waits on for its end, for neither. A look at several answers a byte for each, in their order.
@@ -400,6 +398,6 @@ fn a_closed_standard_stream_names_nothing() {
     let watch = host.handle_watch(Handle::Stdin, true, false);
     assert_eq!(host.handle_ready(vec![watch]), [EventCodes::READY]);
 
-    assert_eq!(host.handle_write(Handle::Stderr, b"kept".to_vec()), Ok(4));
+    assert_eq!(host.handle_write(Handle::Stderr, b"kept".to_vec()), Ok(()));
     assert_eq!(io.output(), b"kept");
 }

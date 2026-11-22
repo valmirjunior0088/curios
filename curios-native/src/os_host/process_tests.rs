@@ -3,7 +3,11 @@
 use {
     super::test_support::*,
     super::*,
-    std::{num::NonZeroU32, thread, time::Duration},
+    std::{
+        num::NonZeroU32,
+        thread,
+        time::{Duration, Instant},
+    },
 };
 
 /// A piped child stream is filed non-blocking by `proc_spawn`: before the child writes, a read answers `WouldBlock` instead of blocking the caller; bytes it echoes come back through `handle_read` once a watch of it is ready; closing its stdin ends it, its stdout reads to its end, and `proc_wait` reaps it. These streams are what let a drain suspend instead of blocking the run.
@@ -33,7 +37,7 @@ fn a_piped_child_stream_is_filed_non_blocking() {
         host.handle_read(stdout.clone(), 8),
         Err(Failure::WouldBlock)
     );
-    assert_eq!(host.handle_write(stdin.clone(), b"abc".to_vec()), Ok(3));
+    assert_eq!(host.handle_write(stdin.clone(), b"abc".to_vec()), Ok(()));
     assert!(awaited(&host, &stdout, true, false));
     assert_eq!(
         host.handle_read(stdout.clone(), 8),
@@ -56,6 +60,106 @@ fn a_piped_child_stream_is_filed_non_blocking() {
     assert_eq!(host.proc_wait(child), Ok(ChildExit::Code(0)));
 
     host.handle_close(stdout);
+}
+
+/// A write takes the whole of its message and holds what the pipe has no room for, which each flush hands on as the reader makes room: `cat` echoes the message whole, and a flush answers `WouldBlock` until nothing is held. A mebibyte is past what the two pipes and `cat` hold between them.
+#[test]
+fn a_write_holds_what_its_pipe_has_no_room_for_until_flushes_hand_it_on() {
+    let host = OsHost::with_args(vec![]);
+    let ChildHandles {
+        child,
+        stdin: Some(stdin),
+        stdout: Some(stdout),
+        stderr: None,
+    } = host
+        .proc_spawn(
+            vec![b"/bin/cat".to_vec()],
+            vec![],
+            vec![],
+            StdioMode::Pipe,
+            StdioMode::Pipe,
+            StdioMode::Null,
+        )
+        .unwrap()
+    else {
+        panic!("the piped streams, and only they, are answered");
+    };
+    let message: Vec<u8> = (0..1 << 20).map(|i: u32| (i % 251) as u8).collect();
+
+    assert_eq!(host.handle_write(stdin.clone(), message.clone()), Ok(()));
+    assert_eq!(host.handle_flush(stdin.clone()), Err(Failure::WouldBlock));
+
+    let given_up = Instant::now() + Duration::from_secs(10);
+    let mut echoed = Vec::new();
+    while echoed.len() < message.len() {
+        assert!(
+            Instant::now() < given_up,
+            "the echo stalled at {}",
+            echoed.len()
+        );
+        let _ = host.handle_flush(stdin.clone());
+        match host.handle_read(stdout.clone(), 65536) {
+            Ok(Some(bytes)) => echoed.extend(bytes),
+            Err(Failure::WouldBlock) => thread::sleep(Duration::from_millis(1)),
+            other => panic!("the echo ended early: {other:?}"),
+        }
+    }
+    assert!(
+        echoed == message,
+        "the message is echoed whole and in order"
+    );
+    assert_eq!(host.handle_flush(stdin.clone()), Ok(()));
+
+    host.handle_close(stdin);
+    assert!(awaited(&host, &child, true, false));
+    assert_eq!(host.proc_wait(child), Ok(ChildExit::Code(0)));
+    host.handle_close(stdout);
+}
+
+/// A flush that meets a reader gone answers the broken pipe once and drops what was held, so the flush after it answers that nothing is held.
+#[test]
+fn a_drain_that_fails_is_answered_once_and_drops_what_was_held() {
+    let host = OsHost::with_args(vec![]);
+    let ChildHandles {
+        child,
+        stdin: Some(stdin),
+        stdout: None,
+        stderr: None,
+    } = host
+        .proc_spawn(
+            vec![b"/bin/sleep".to_vec(), b"0.2".to_vec()],
+            vec![],
+            vec![],
+            StdioMode::Pipe,
+            StdioMode::Null,
+            StdioMode::Null,
+        )
+        .unwrap()
+    else {
+        panic!("the piped stream, and only it, is answered");
+    };
+
+    assert_eq!(
+        host.handle_write(stdin.clone(), vec![b'x'; 1 << 20]),
+        Ok(())
+    );
+    assert_eq!(host.handle_flush(stdin.clone()), Err(Failure::WouldBlock));
+    assert!(awaited(&host, &child, true, false));
+    assert_eq!(host.proc_wait(child), Ok(ChildExit::Code(0)));
+
+    // Another test's child may have been forked while the read end was open and hold it until its `exec`, so the broken pipe may arrive a few flushes late as `WouldBlock`.
+    let mut flushed = host.handle_flush(stdin.clone());
+    for _ in 0..100 {
+        if flushed != Err(Failure::WouldBlock) {
+            break;
+        }
+        thread::sleep(Duration::from_millis(10));
+        flushed = host.handle_flush(stdin.clone());
+    }
+    assert_eq!(flushed, Err(Failure::BrokenPipe));
+    assert_eq!(host.handle_flush(stdin.clone()), Ok(()));
+
+    host.handle_close(stdin);
 }
 
 /// A real child end to end: `echo` is spawned with its output piped, its handle becomes readable once the reaper has recorded the exit, `proc_wait` reports a clean zero, and the piped output is what it wrote. The inherited stdin and the null stderr have no handle.

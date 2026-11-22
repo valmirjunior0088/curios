@@ -51,7 +51,7 @@ fn a_serial_drain_answers_once_the_output_has_left() {
         .serial_open(name, 115_200, 8, SerialParity::None, 1, SerialFlow::None)
         .unwrap();
 
-    assert_eq!(host.handle_write(port.clone(), b"ok".to_vec()), Ok(2));
+    assert_eq!(host.handle_write(port.clone(), b"ok".to_vec()), Ok(()));
     assert_eq!(come(&host, host.serial_drain(port.clone())), Ok(()));
 
     let mut arrived = [0; 8];

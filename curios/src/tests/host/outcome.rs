@@ -76,7 +76,7 @@ fn a_stream_row_s_failure_is_the_error_it_names() {
         ),
         (
             "Io/write(/std/Proc/stdout, x[1])",
-            vec![(HostOp::HandleWrite, denied(vec![nat(0)]))],
+            vec![(HostOp::HandleWrite, denied(vec![]))],
         ),
         (
             "Io/flush(/std/Proc/stdout)",
@@ -172,6 +172,8 @@ fn a_serial_drain_s_failure_is_the_error_it_names() {
         r#"let port = Serial/open(s, Path/of_str("/dev/x"), Serial/config(9600))!; Serial/drain(port)"#,
         vec![
             (HostOp::SerialOpen, ok(vec![bytes(&[7])])),
+            // A drain hands on what the host holds of the port's writes before the device's wait.
+            (HostOp::HandleFlush, ok(vec![])),
             (HostOp::SerialDrain, denied(vec![])),
         ],
     )]);

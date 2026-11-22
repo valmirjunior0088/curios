@@ -63,10 +63,10 @@ let answered(b: Bytes) -> Io/Chunk =
 --- Read up to so many bytes: `ok` beside them, `eof` at the end of the stream, or the status of the failure.
 foreign handle_read(Handle, Nat) -> {status: Nat, bytes: Bytes};
 
---- Write these bytes: `ok` beside how many were accepted, or the status of the failure.
-foreign handle_write(Handle, Bytes) -> {status: Nat, written: Nat};
+--- Take the whole of these bytes into what the host holds of this handle's writes, and hand on what the handle takes now: `ok`, or the status of the failure, none of them taken.
+foreign handle_write(Handle, Bytes) -> Nat;
 
---- Hand on what is still held of this handle's writes: `ok`, or the status of the failure.
+--- Hand on what the host still holds of this handle's writes: `ok` once it holds none, or the status of the failure, what was held then dropped.
 foreign handle_flush(Handle) -> Nat;
 
 --- End this handle's sending half: `ok`, or the status of the failure.
@@ -109,26 +109,15 @@ let read_waiting(h: Handle, n: Nat, @_: Bool/Holds(0 < n)) -> Io(Result(Error, I
             | failed(e) => Io/pure(Result/failure(e))
             end);
 
---- The whole of `b`, waiting while the host would block and resending a short write; the first failure is the answer. A write that accepted nothing of bytes there were is a reply its row rules out, a write the host answers taking a byte at least: a loop that resent what is left would resend it for ever.
+--- The whole of `b` written to `h`: taken whole into what the host holds of `h`'s writes before anything waits, then handed on, waiting while the host still holds any; the first failure is the answer. Cancelled where it waits, the write leaves its bytes whole in what the host holds, which the next write, flush or finish of `h` hands on first. A write the host answers would block is a reply its row rules out, since the row takes the whole of what it is given.
 let write_waiting(h: Handle, b: Bytes) -> Io(Result(Error, {})) =
-    retried(
-        h,
-        Interest/writable,
-        handle_write(h, b),
-        (r) => r.status,
-        (reply, settled) =>
-            match settled
-            | ok() =>
-                match
-                | reply.written == 0 && 0 < Bytes/len(b) =>
-                    Io/pure(Result/failure(Error/invalid_reply()))
-                | reply.written < Bytes/len(b) => write_waiting(h, Bytes/drop(b, reply.written))
-                | _ => Io/pure(Result/success(()))
-                end
-            | _ => Try/run(Status/answer(settled))
-            end);
+    let status = handle_write(h, b)!;
+    match Status/of_code(status)
+    | settled(ok()) => flush_waiting(h)
+    | _ => Try/run(Status/succeeded(status))
+    end;
 
---- What `h` holds of the writes it accepted, handed on, waiting while the host would block.
+--- What the host holds of `h`'s writes, handed on, waiting while it holds any.
 let flush_waiting(h: Handle) -> Io(Result(Error, {})) =
     retried(
         h,

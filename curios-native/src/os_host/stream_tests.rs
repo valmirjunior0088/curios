@@ -184,7 +184,7 @@ fn a_request_for_nothing_checks_the_handle_and_moves_nothing() {
     assert_eq!(host.handle_read(null.clone(), 0), Ok(Some(vec![])));
     assert_eq!(host.handle_read(null.clone(), 8), Ok(None));
     assert_eq!(host.handle_read(unknown.clone(), 0), Err(Failure::NotFound));
-    assert_eq!(host.handle_write(Handle::Stdout, vec![]), Ok(0));
+    assert_eq!(host.handle_write(Handle::Stdout, vec![]), Ok(()));
     assert_eq!(host.handle_write(unknown, vec![]), Err(Failure::NotFound));
 
     host.handle_close(null);
@@ -214,7 +214,7 @@ fn a_watch_is_ready_for_what_it_asks() {
     let host = OsHost::with_args(vec![]);
     let (listener, client, server) = loopback_pair(&host);
 
-    assert_eq!(host.handle_write(client.clone(), b"x".to_vec()), Ok(1));
+    assert_eq!(host.handle_write(client.clone(), b"x".to_vec()), Ok(()));
 
     // The byte is waited for first, since it may not have crossed the loopback yet.
     assert!(awaited(&host, &server, true, false));
@@ -230,19 +230,20 @@ fn a_watch_is_ready_for_what_it_asks() {
     host.handle_close(listener);
 }
 
-/// A write accepts no more than it was offered, and at least a byte of a buffer that holds one.
+/// A write takes the whole of its message, and a file, which the disk answers, has it all once the write answers.
 #[test]
-fn a_write_accepts_within_what_it_was_offered() {
+fn a_write_takes_the_whole_of_its_message() {
     let host = OsHost::with_args(vec![]);
     let dir = Temporary::new("runtime-write", "accepted");
     fs::create_dir(&dir).expect("a fresh temporary directory");
+    let path = dir.join("out");
 
     let file = host
-        .file_open(dir.join("out").into_os_string().into_vec(), Mode::Write)
+        .file_open(path.clone().into_os_string().into_vec(), Mode::Write)
         .unwrap();
-    let accepted = host.handle_write(file.clone(), vec![b'x'; 4096]).unwrap();
 
-    assert!((1..=4096).contains(&accepted));
+    assert_eq!(host.handle_write(file.clone(), vec![b'x'; 4096]), Ok(()));
+    assert_eq!(fs::read(&path).expect("the file written").len(), 4096);
     host.handle_close(file);
 }
 
@@ -333,7 +334,7 @@ fn the_null_device_reads_its_end_and_takes_every_write() {
     let writer = host.file_open(b"/dev/null".to_vec(), Mode::Write).unwrap();
 
     assert_eq!(host.handle_read(reader.clone(), 8), Ok(None));
-    assert_eq!(host.handle_write(writer.clone(), b"gone".to_vec()), Ok(4));
+    assert_eq!(host.handle_write(writer.clone(), b"gone".to_vec()), Ok(()));
 
     host.handle_close(reader);
     host.handle_close(writer);

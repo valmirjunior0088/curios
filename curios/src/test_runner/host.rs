@@ -55,7 +55,7 @@ impl<H: HostOps> HostFront for TestHost<H> {
         &self.host
     }
 
-    fn handle_write(&self, h: Handle, b: Vec<u8>) -> Result<u64, Failure> {
+    fn handle_write(&self, h: Handle, b: Vec<u8>) -> Result<(), Failure> {
         let quoted = match h {
             Handle::Stdout => Quoted::Output,
             Handle::Stderr => Quoted::Error,
@@ -65,20 +65,14 @@ impl<H: HostOps> HostFront for TestHost<H> {
             return self.host.handle_write(h, b);
         }
 
-        // Each run the transcript frames is written whole on the stream the test wrote on, and answered with how much of it the host took.
-        let taken = relay(
+        // Each run the transcript frames is taken whole by the stream the test wrote on.
+        relay(
             self.frame.tree,
             &mut self.frame.relayed(),
             quoted,
             &b,
-            |run| {
-                self.host
-                    .handle_write(h.clone(), run.to_vec())
-                    .map(|wrote| usize::try_from(wrote).unwrap_or(usize::MAX))
-            },
-        )?;
-
-        Ok(u64::try_from(taken).unwrap_or(u64::MAX))
+            |run| self.host.handle_write(h.clone(), run.to_vec()),
+        )
     }
 
     fn proc_spawn(
