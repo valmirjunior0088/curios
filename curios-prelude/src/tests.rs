@@ -443,63 +443,95 @@ fn written_whole(
     (scope, Rc::new(spelling))
 }
 
-/// Every unit of the prelude reads back as the unit it is, item for item and by Core's equality, each read over the units before it, from the tree of Core text it is written whole as and from the text that tree prints as, and as again where each node met again is named: the writer is the reader's inverse, and the printer and the parser hold one another to every form the prelude's terms take. What it reads back is written whole as the text it was read from, so each binder's label, which Core's equality does not read, is read as the text states it.
-#[test]
-fn every_unit_of_the_prelude_reads_back_from_its_core_text() {
+/// Every unit of the prelude reads back, under the whole spelling or the one that shares (`sharing`) and from the tree or the text (`from`), as the unit it is, item for item and by Core's equality, each read over the units before it, from the tree of Core text it is written whole as and from the text that tree prints as, and as again where each node met again is named: the writer is the reader's inverse, and the printer and the parser hold one another to every form the prelude's terms take. What it reads back is written whole as the text it was read from, so each binder's label, which Core's equality does not read, is read as the text states it.
+///
+/// The four ways are four tests ([`every_unit_of_the_prelude_reads_back_from_its_core_tree`] and its three siblings), each a walk of the whole prelude, so they run side by side.
+fn every_unit_reads_back(sharing: bool, from: ReadFrom) {
     with_prelude(|prelude| {
         for (index, unit) in prelude.iter().enumerate() {
             let (scope, whole) = written_whole(prelude, index);
-            let sharing = Rc::new((*whole).clone().with_sharing());
-            for spelling in [whole, sharing] {
-                let written = unit.core();
-                let tree = written.spelled(&spelling).written();
-                let text = written.spelled(&spelling).to_string();
-                let parsed = text
-                    .parse::<CoreFile>()
-                    .unwrap_or_else(|error| panic!("{}", error.format()));
-                let spelled = |item: &Item| {
-                    Definitions {
-                        items: vec![item.clone()].into(),
-                    }
-                    .spelled(&spelling)
-                    .to_string()
-                };
-                for (from, file) in [("tree", &tree), ("text", &parsed)] {
-                    let (read, entry) = to_core(file, Some(&scope))
-                        .unwrap_or_else(|error| panic!("from its {from}: {}", refusal(&error)));
-                    assert!(entry.is_none(), "a unit closes with no entry");
-                    for (place, (read, written)) in
-                        read.items.iter().zip(written.items.iter()).enumerate()
-                    {
-                        assert!(
-                            read == written,
-                            "item {place} reads back from its {from} otherwise:\n{}\nas\n{}",
-                            spelled(written),
-                            spelled(read)
-                        );
-                    }
-                    assert_eq!(read.items.len(), written.items.len(), "the unit's items");
-                    // Core's equality reads no binder's label, so the text the unit read back writes is held to the one it was read from: what a whole write states of each binder is read onto it.
-                    let again = read.spelled(&spelling).to_string();
-                    if let Some((line, (was, is))) = text
-                        .lines()
-                        .zip(again.lines())
-                        .enumerate()
-                        .find(|(_, (was, is))| was != is)
-                    {
-                        panic!(
-                            "from its {from}, line {line} writes again otherwise:\n{was}\nas\n{is}"
-                        );
-                    }
-                    assert_eq!(
-                        again.lines().count(),
-                        text.lines().count(),
-                        "from its {from}"
-                    );
+            let spelling = match sharing {
+                true => Rc::new((*whole).clone().with_sharing()),
+                false => whole,
+            };
+            let written = unit.core();
+            let text = written.spelled(&spelling).to_string();
+            let (from, file) = match from {
+                ReadFrom::Tree => ("tree", written.spelled(&spelling).written()),
+                ReadFrom::Text => (
+                    "text",
+                    text.parse::<CoreFile>()
+                        .unwrap_or_else(|error| panic!("{}", error.format())),
+                ),
+            };
+            let spelled = |item: &Item| {
+                Definitions {
+                    items: vec![item.clone()].into(),
                 }
+                .spelled(&spelling)
+                .to_string()
+            };
+            let (read, entry) = to_core(&file, Some(&scope))
+                .unwrap_or_else(|error| panic!("from its {from}: {}", refusal(&error)));
+            assert!(entry.is_none(), "a unit closes with no entry");
+            for (place, (read, written)) in read.items.iter().zip(written.items.iter()).enumerate()
+            {
+                assert!(
+                    read == written,
+                    "item {place} reads back from its {from} otherwise:\n{}\nas\n{}",
+                    spelled(written),
+                    spelled(read)
+                );
             }
+            assert_eq!(read.items.len(), written.items.len(), "the unit's items");
+            // Core's equality reads no binder's label, so the text the unit read back writes is held to the one it was read from: what a whole write states of each binder is read onto it.
+            let again = read.spelled(&spelling).to_string();
+            if let Some((line, (was, is))) = text
+                .lines()
+                .zip(again.lines())
+                .enumerate()
+                .find(|(_, (was, is))| was != is)
+            {
+                panic!("from its {from}, line {line} writes again otherwise:\n{was}\nas\n{is}");
+            }
+            assert_eq!(
+                again.lines().count(),
+                text.lines().count(),
+                "from its {from}"
+            );
         }
     });
+}
+
+/// What a unit of the prelude is read back from: the tree of Core text it is written whole as, or the text that tree prints as.
+#[derive(Clone, Copy)]
+enum ReadFrom {
+    Tree,
+    Text,
+}
+
+/// [`every_unit_reads_back`] from the tree, under the whole spelling.
+#[test]
+fn every_unit_of_the_prelude_reads_back_from_its_core_tree() {
+    every_unit_reads_back(false, ReadFrom::Tree);
+}
+
+/// [`every_unit_reads_back`] from the text, under the whole spelling.
+#[test]
+fn every_unit_of_the_prelude_reads_back_from_its_core_text() {
+    every_unit_reads_back(false, ReadFrom::Text);
+}
+
+/// [`every_unit_reads_back`] from the tree, every node met again named.
+#[test]
+fn every_unit_of_the_prelude_reads_back_from_its_shared_core_tree() {
+    every_unit_reads_back(true, ReadFrom::Tree);
+}
+
+/// [`every_unit_reads_back`] from the text, every node met again named.
+#[test]
+fn every_unit_of_the_prelude_reads_back_from_its_shared_core_text() {
+    every_unit_reads_back(true, ReadFrom::Text);
 }
 
 /// **Every unit of the prelude is written whole as `curios format` writes it**: a dump and a formatted `.crsc` are laid out by one printer, so formatting what Core prints changes nothing.
