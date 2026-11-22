@@ -12,11 +12,15 @@ cargo xtask profile debug programs/hello_world.crs
 
 The flag is not a mode, so it measures whatever the invocation does anyway — `run`, `test`, `document`, a package build — and it takes its destination rather than defaulting to one, so no path lives in the compiler. A stream is one file, whole: it grows for as long as its run records. A run nobody asked records nothing, which keeps every compiler a test spawns from filing anything; instrumentation nobody listens to costs one relaxed atomic load per span.
 
-Nothing waits for the end: each packet is on disk before the step after it runs, so a compilation that hangs, overflows its stack or aborts loses nothing a buffer held, and the first write that fails ends the stream, so a disk that fills leaves a file read the same way. Ask `curios profile` of a killed run's file and its summary states the spans still open: the stack each thread was inside when the run stopped. A question the summary does not answer is asked of the file in [Perfetto's UI](https://ui.perfetto.dev), which opens it as a timeline, a track a thread, and answers SQL on its query page:
+Nothing waits for the end: each packet is on disk before the step after it runs, so a compilation that hangs, overflows its stack or aborts loses nothing a buffer held, and the first write that fails ends the stream, so a disk that fills leaves a file read the same way. Ask `curios profile` of a killed run's file and its summary states the spans still open: the stack each thread was inside when the run stopped.
 
-```sql
-select name, count(*) as calls, sum(dur) / 1e6 as ms from slice group by name order by ms desc limit 20
+A question the summary does not answer is asked of the file by Perfetto's own reader. [Perfetto's UI](https://ui.perfetto.dev) opens it as a timeline, a track a thread, and answers SQL on its query page. `cargo xtask profile query [SQL] [STREAM]` asks `trace_processor_shell`, the same reader on the command line, a question in the same SQL, by default where the time went in the stream `profile debug` files:
+
+```sh
+cargo xtask profile query "select count(*) as calls from slice where name = 'reduce::settle'"
 ```
+
+The task files pin `trace_processor_shell` at Perfetto's v58.2 or later, the release whose schema the recorder's messages are generated from, and no step fetches it: Perfetto publishes it a platform at a time, `https://commondatastorage.googleapis.com/perfetto-luci-artifacts/v58.2/<platform>/trace_processor_shell`, `<platform>` one of `linux-amd64`, `linux-arm64`, `mac-amd64` and `mac-arm64`. It reads a stream cut inside a packet as `curios profile` does, up to its last whole packet, the cut one dropped without a word, and a span the dropped packet would have ended left unfinished.
 
 The prelude is built by a build script, the compiler run over the standard library, and a build script takes no flag, so it records nothing. Its work is a crate's, `curios-prelude-build`, which a measurement among `curios`'s profile tests runs again under the recorder, filing the stream at `curios/.artifacts/prelude.pftrace`. `cargo xtask profile prelude` runs it and prints `curios profile`'s answer for the stream, which `curios profile` gives again, with any view:
 

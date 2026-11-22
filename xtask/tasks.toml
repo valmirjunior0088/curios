@@ -8,6 +8,8 @@ programs.node = ">= 22"
 programs.npm = "11.17.0"
 # The generator must match the `wasm-bindgen` crate `Cargo.lock` gives the bundle, which a test holds this to.
 programs.wasm-bindgen = "0.2.129"
+# A minimum, since Perfetto publishes the reader a platform at a time and a contributor installs it: the release whose schema `curios-profile` generates its messages from.
+programs.trace_processor_shell = ">= 58.2"
 
 [handoff]
 description = "Run every check the handoff holds work to: each subject's steps, each after what it requires and consumes"

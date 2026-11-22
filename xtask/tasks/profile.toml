@@ -1,13 +1,19 @@
-description = "A run under a recorder, and the fold of what it filed"
-# The one place the stream's location is spelled: the compiler takes it as an argument and keeps no default, so what is written and what is read back cannot drift.
-variables.stream = "curios/.artifacts/profile.pftrace"
+description = "A run under a recorder, the summary of what it filed, and a question asked of it"
+# The one place the stream's location is spelled: the compiler takes it as an argument and keeps no default, so what is written, summarized and asked cannot drift. A run asked of another stream, the prelude's among them, names it.
+variables.stream.argument = "STREAM"
+variables.stream.else = "curios/.artifacts/profile.pftrace"
+variables.stream.help = "The stream a run under a recorder files, and a query reads"
 variables.program.argument = "PATH"
 variables.program.else = "programs/hello_world.crs"
 variables.program.help = "The .crs entry file to run"
+# A question asked unasked is the one every profile is first asked: where the time went.
+variables.sql.argument = "SQL"
+variables.sql.else = "select name, count(*) as calls, round(sum(dur) / 1e6, 3) as ms from slice group by name order by ms desc limit 20"
+variables.sql.help = "The question to ask, in Perfetto's SQL"
 
 [debug]
-description = "Run one program under a recorder with the compiler in debug, the build iterating already has, so a question asked of a change costs the change; then fold what it filed"
-# Two invocations of one build: a stream is worth reading exactly when the run did not finish, and such a run never reaches its last step, so the fold is a pass of its own, by the compiler that wrote the stream.
+description = "Run one program under a recorder with the compiler in debug, the build iterating already has, so a question asked of a change costs the change; then summarize what it filed"
+# Two invocations of one build: a stream is worth reading exactly when the run did not finish, and such a run never reaches its last step, so the summary is a pass of its own, by the compiler that wrote the stream.
 consumes = [".launcher.build.produces.binary"]
 run = [
     [
@@ -19,7 +25,7 @@ run = [
 ]
 
 [release]
-description = "Run one program under a recorder with the compiler in release, the shipped compiler's, whose timings a specification quotes; then fold what it filed"
+description = "Run one program under a recorder with the compiler in release, the shipped compiler's, whose timings a specification quotes; then summarize what it filed"
 consumes = [".launcher.build.produces.binary"]
 run = [
     [
@@ -34,12 +40,22 @@ run = [
 ]
 
 [prelude]
-description = "Run the prelude's build under a recorder, its stream filed where the measurement says, and fold what it filed"
+description = "Run the prelude's build under a recorder, its stream filed where the measurement says, and summarize what it filed"
 # A measurement is asked, and no build is: a build script takes no argument, so the prelude's work runs again in `curios`'s profile tests, under nextest as every test step runs, in release, the level a build script's copy is compiled at. Building the test builds the compiler beside it, which embeds the launcher.
 consumes = [".launcher.build.produces.binary"]
 run = [
     [
         "cargo", "nextest", "run", "--release", "--package", "curios", "--test", "profile",
         "--run-ignored", "only", "--no-capture", "--filterset", "test(=prelude_build_profile)",
+    ],
+]
+
+[query]
+description = "Ask a stream a question in Perfetto's SQL, through trace_processor"
+# Perfetto's own reader answers, so what this says of a stream is what Perfetto's UI and its query page say of the same file, past what the summary states.
+run = [
+    [
+        "trace_processor_shell", "--query-string", "{.profile.variables.sql}",
+        "{.profile.variables.stream}",
     ],
 ]
