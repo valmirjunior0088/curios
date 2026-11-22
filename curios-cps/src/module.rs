@@ -528,7 +528,7 @@ impl Module {
                     Node::Cell { op, return_to, .. } if *return_to == sentinel => {
                         operation = operation.or(Some(op.result_arity()));
                     }
-                    Node::Channel { op, return_to, .. } if *return_to == sentinel => {
+                    Node::Box { op, return_to, .. } if *return_to == sentinel => {
                         operation = operation.or(Some(op.result_arity()));
                     }
                     Node::Intrinsic { op, return_to, .. } if *return_to == sentinel => {

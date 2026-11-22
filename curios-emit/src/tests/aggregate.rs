@@ -113,14 +113,11 @@ fn cell_fill_and_poll_use_the_cell_struct() {
 }
 
 #[test]
-fn taking_a_channel_item_clears_the_slot_without_a_host_call() {
-    let wat = wat(&channel_roundtrip());
-    assert_contains(&wat, "array.new_default $elems");
-    assert_contains(&wat, "array.get $elems");
-    assert_contains(&wat, "ref.null any");
-    // One store enqueues; the other clears the consumed slot. Creation guards the requested capacity before allocating; the state transitions need no host operation.
-    assert_eq!(count(&wat, "array.set $elems"), 2, "{wat}");
-    assert_contains(&wat, "call $refuse/capacity");
+fn a_box_is_made_read_and_set_in_its_struct_without_a_host_call() {
+    let wat = wat(&box_roundtrip());
+    assert_contains(&wat, "struct.new $box");
+    assert_contains(&wat, "struct.set $box");
+    assert_contains(&wat, "struct.get $box");
     assert_eq!(count(&wat, "(call "), 0, "{wat}");
 }
 

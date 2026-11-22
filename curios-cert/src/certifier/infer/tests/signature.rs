@@ -182,7 +182,7 @@ fn inside() -> Vec<Term> {
     rows.iter().map(|row| term(row)).collect()
 }
 
-/// One closed application of every row that states a bound, one step past the edge of the domain it states, the bound closed with the proof that closes it inside. A channel's capacity is the one bound here over a row no fold answers.
+/// One closed application of every row that states a bound, one step past the edge of the domain it states, the bound closed with the proof that closes it inside.
 fn outside() -> Vec<Term> {
     let rows = [
         proved("#NatDiv(7, 0, ${qed})"),
@@ -205,7 +205,6 @@ fn outside() -> Vec<Term> {
         proved("#FltOfLeBytes(x[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], ${qed})"),
         proved("#ListGet(#NatType, #List(#NatType, [4, 5]), 2, ${qed})"),
         proved("#ListSlice(#NatType, #List(#NatType, [4, 5]), 1, 2, ${qed})"),
-        proved("#Channel(#NatType, 0, ${qed})"),
         proved("#BytesGet(x[0xA5, 0xA5], 2, ${qed})"),
         proved("#BytesSlice(x[0xA5, 0xA5], 1, 2, ${qed})"),
         proved("#BytesAnd(x[0xA5, 0xA5], x[0xA5], ${qed})"),
@@ -395,34 +394,25 @@ const OUTCOMES: &str = r#"
 #{polarities = [Strict]}
 induct /sys/Option(A: Type): pub Type
 end
-#{polarities = [Strict]}
-induct /sys/Channel/Take(A: Type): pub Type
-end
-induct /sys/Channel/Push: pub Type
-end
 "#;
 
-/// The rows no fold answers are the effect carrier's: its two constructors, and the cell and channel operations. Nothing computes against them, and the one thing a wrong row among them could do to admit is hand out what a description yields — `Io` has no eliminator only while no row is one, and a host call that diverges inhabits `Io` at any type. So each is typed at an `Io`, and reduction leaves each the node it was: `bind(pure(x), f)` is not `f(x)`.
+/// The rows no fold answers are the effect carrier's: its two constructors, and the cell and box operations. Nothing computes against them, and the one thing a wrong row among them could do to admit is hand out what a description yields — `Io` has no eliminator only while no row is one, and a host call that diverges inhabits `Io` at any type. So each is typed at an `Io`, and reduction leaves each the node it was: `bind(pure(x), f)` is not `f(x)`.
 ///
-/// Mutation-checked as the grid above is: `IoBind` producing its bare result type, and a channel's count a bare `Nat`, each fail the first assertion.
+/// Mutation-checked as the grid above is: `IoBind` producing its bare result type, and a box's read its bare element, each fail the first assertion.
 #[test]
 fn every_row_no_fold_answers_produces_an_inert_description() {
     let mut certifier = certifier_with_bounds();
     declared(&mut certifier, OUTCOMES);
-    let rows: [Term; 12] = under(
+    let rows: [Term; 8] = under(
         &mut certifier,
-        "cell: #CellType(#NatType), channel: #ChannelType(#NatType)",
+        "cell: #CellType(#NatType), held: #BoxType(#NatType)",
         &[
             "#Cell(#NatType)".to_string(),
             "#CellFill(#NatType, cell, 1)".to_string(),
             "#CellPoll(#NatType, cell, {})".to_string(),
-            proved("#Channel(#NatType, 1, ${qed})"),
-            "#ChannelPush(#NatType, channel, 1)".to_string(),
-            "#ChannelTake(#NatType, channel, {})".to_string(),
-            "#ChannelClose(#NatType, channel)".to_string(),
-            "#ChannelClosed(#NatType, channel)".to_string(),
-            "#ChannelCount(#NatType, channel)".to_string(),
-            "#ChannelCapacity(#NatType, channel)".to_string(),
+            "#Box(#NatType, 1)".to_string(),
+            "#BoxHeld(#NatType, held)".to_string(),
+            "#BoxSet(#NatType, held, 1)".to_string(),
             "#IoPure(#NatType, 1)".to_string(),
             "#IoBind(#NatType, #NatType, #IoPure(#NatType, 1), (item: #NatType) => #IoPure(#NatType, item))"
                 .to_string(),
@@ -470,12 +460,12 @@ fn a_literal_is_typed_at_the_carrier_its_payload_is_a_value_of() {
     }
 }
 
-/// A parameterized former's sort is its element's level and never its element's sort: a list, a cell, a channel or a description of proofs is data at level zero, and one of types sits where those types do, a level above the types themselves. Reading the element's sort instead would type a list of proofs at `Prop`, and pinning the level at zero would make a list of types as small as the types it lists.
+/// A parameterized former's sort is its element's level and never its element's sort: a list, a cell, a box or a description of proofs is data at level zero, and one of types sits where those types do, a level above the types themselves. Reading the element's sort instead would type a list of proofs at `Prop`, and pinning the level at zero would make a list of types as small as the types it lists.
 ///
 /// Mutation-checked at `sort_of_intrinsic`: answering `Prop` for an element that is one fails the first case, and answering level zero whatever the element's level fails the third.
 #[test]
 fn a_parameterized_former_sits_at_its_elements_level_and_never_in_prop() {
-    for former in ["#ListType", "#CellType", "#ChannelType", "#IoType"] {
+    for former in ["#ListType", "#CellType", "#BoxType", "#IoType"] {
         let mut certifier = certifier();
         let formed: [Term; 3] = under(
             &mut certifier,

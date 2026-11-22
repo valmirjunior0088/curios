@@ -248,7 +248,7 @@ pub fn contify_call(module: &mut Module, callee: FunctionId, call: NodeId) {
             | Node::Cell {
                 return_to: target, ..
             }
-            | Node::Channel {
+            | Node::Box {
                 return_to: target, ..
             }
             | Node::Intrinsic {

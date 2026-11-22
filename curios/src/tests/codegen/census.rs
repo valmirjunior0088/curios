@@ -577,7 +577,7 @@ impl<'m> Census<'m> {
                 Node::Cell {
                     args, return_to, ..
                 }
-                | Node::Channel {
+                | Node::Box {
                     args, return_to, ..
                 } => {
                     self.result_conts.insert(*return_to);

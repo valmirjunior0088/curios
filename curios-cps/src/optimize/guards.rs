@@ -176,7 +176,7 @@ fn enclosing_continuations(module: &Module) -> Enclosing {
                     | Node::Switch { .. }
                     | Node::Foreign { .. }
                     | Node::Cell { .. }
-                    | Node::Channel { .. }
+                    | Node::Box { .. }
                     | Node::Intrinsic { .. }
                     | Node::Halt { .. }
                     | Node::Panic(_)

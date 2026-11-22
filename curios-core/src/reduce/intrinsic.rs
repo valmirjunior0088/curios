@@ -2208,7 +2208,7 @@ pub fn reduce_intrinsic(
         Intrinsic::CellType(element) => Ok(Subterm::Intrinsic(Intrinsic::CellType(
             reducer.reduce(element.clone())?,
         ))),
-        Intrinsic::ChannelType(element) => Ok(Subterm::Intrinsic(Intrinsic::ChannelType(
+        Intrinsic::BoxType(element) => Ok(Subterm::Intrinsic(Intrinsic::BoxType(
             reducer.reduce(element.clone())?,
         ))),
         Intrinsic::Cell { element } => Ok(Subterm::Intrinsic(Intrinsic::Cell {
@@ -2232,57 +2232,23 @@ pub fn reduce_intrinsic(
             cell: reducer.reduce(cell.clone())?,
             universes: universes.clone(),
         })),
-        Intrinsic::Channel {
-            element,
-            capacity,
-            positive,
-        } => Ok(Subterm::Intrinsic(Intrinsic::Channel {
+        Intrinsic::Box { element, value } => Ok(Subterm::Intrinsic(Intrinsic::Box {
             element: reducer.reduce(element.clone())?,
-            capacity: reducer.reduce(capacity.clone())?,
-            positive: positive.clone(),
-        })),
-        Intrinsic::ChannelPush {
-            element,
-            channel,
-            value,
-        } => Ok(Subterm::Intrinsic(Intrinsic::ChannelPush {
-            element: reducer.reduce(element.clone())?,
-            channel: reducer.reduce(channel.clone())?,
             value: reducer.reduce(value.clone())?,
         })),
-        Intrinsic::ChannelTake {
-            element,
-            channel,
-            universes,
-        } => Ok(Subterm::Intrinsic(Intrinsic::ChannelTake {
+        Intrinsic::BoxHeld { element, target } => Ok(Subterm::Intrinsic(Intrinsic::BoxHeld {
             element: reducer.reduce(element.clone())?,
-            channel: reducer.reduce(channel.clone())?,
-            universes: universes.clone(),
+            target: reducer.reduce(target.clone())?,
         })),
-        Intrinsic::ChannelClose { element, channel } => {
-            Ok(Subterm::Intrinsic(Intrinsic::ChannelClose {
-                element: reducer.reduce(element.clone())?,
-                channel: reducer.reduce(channel.clone())?,
-            }))
-        }
-        Intrinsic::ChannelClosed { element, channel } => {
-            Ok(Subterm::Intrinsic(Intrinsic::ChannelClosed {
-                element: reducer.reduce(element.clone())?,
-                channel: reducer.reduce(channel.clone())?,
-            }))
-        }
-        Intrinsic::ChannelCount { element, channel } => {
-            Ok(Subterm::Intrinsic(Intrinsic::ChannelCount {
-                element: reducer.reduce(element.clone())?,
-                channel: reducer.reduce(channel.clone())?,
-            }))
-        }
-        Intrinsic::ChannelCapacity { element, channel } => {
-            Ok(Subterm::Intrinsic(Intrinsic::ChannelCapacity {
-                element: reducer.reduce(element.clone())?,
-                channel: reducer.reduce(channel.clone())?,
-            }))
-        }
+        Intrinsic::BoxSet {
+            element,
+            target,
+            value,
+        } => Ok(Subterm::Intrinsic(Intrinsic::BoxSet {
+            element: reducer.reduce(element.clone())?,
+            target: reducer.reduce(target.clone())?,
+            value: reducer.reduce(value.clone())?,
+        })),
         Intrinsic::IoType(result) => {
             let result = reducer.reduce(result.clone())?;
             Ok(Subterm::Intrinsic(Intrinsic::io_type(result)))

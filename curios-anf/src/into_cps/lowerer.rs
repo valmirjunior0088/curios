@@ -7,12 +7,10 @@ use {
         Analysis, Atom, Block, BlockId, ConstructorId, Emitter, FamilyEncoding, FamilyId, Function,
         FunctionId, KnotMember, Module, Operation, RecGroup, RecGroupId, Rhs, SequenceFacts,
         SequenceGrain, SequenceOp, Statement, StatementId, Terminator, UnconsSequenceStep, ValueId,
-        VariantArm, cell_op, operation_intrinsic, sequence_census, sequence_intrinsic,
+        VariantArm, box_op, cell_op, operation_intrinsic, sequence_census, sequence_intrinsic,
         sequence_len_op,
     },
-    crate::{
-        CellOperation, ChannelOperation, Intrinsic, Keys, SuspensionOperation, droppable_functions,
-    },
+    crate::{CellOperation, Intrinsic, Keys, SuspensionOperation, droppable_functions},
     curios_abi::ForeignFunction,
     curios_common::recurse,
     curios_num::Natural,
@@ -342,7 +340,7 @@ impl Lowerer<'_> {
         self.lower_knot(&group.functions, &values, rest, terminator, target)
     }
 
-    /// Tie a knot by need: a recursive group's, `functions` beside its computed `values`, or a top-level statement's, a knot of its own. Every computed member gets an empty write-once result cell, a capacity-one initializer channel, and a forcing function. All storage is allocated before closures are bound, and all initializers are queued before any forcing read. The force polls the result, returns it if present, otherwise takes the initializer, runs it and fills the result. Both containers empty means reentrant forcing and reports `Cycle`. A read of a member calls its force right before the statement that reads it, on each path that reads it and no earlier on it (see [`Lowerer::with_cell_reads`]), so an arm that does not read a member does not compute it.
+    /// Tie a knot by need: a recursive group's, `functions` beside its computed `values`, or a top-level statement's, a knot of its own. Every computed member gets an empty write-once result cell, a box holding what forcing it does next, a cycle function and a forcing function. All storage is made before closures are bound, each box holding its member's cycle, and every box is set to its member's initializer before any forcing read. The force answers a filled result; otherwise it reads the box, sets the cycle there, runs what it read and fills the result, so a force that reaches its own member again runs the cycle and reports `Cycle`. A read of a member calls its force right before the statement that reads it, on each path that reads it and no earlier on it (see [`Lowerer::with_cell_reads`]), so an arm that does not read a member does not compute it.
     ///
     /// Forcing on first use is what the language means by a recursive value and by a top-level one, and what the compile-time evaluator does for a closed knot and an item — `force_toplevel` treats either as a CAF with a cycle guard — so the erased program agrees with both on every forward reference, whatever the verifier can or cannot see through. What makes by need *sound* is that an initializer performs no effect, the rule the verifier holds a group's to and what a top-level value is: running it later, or not at all, is unobservable, and the only behaviours forcing can move are a trap and divergence, which it only delays.
     ///
@@ -360,7 +358,8 @@ impl Lowerer<'_> {
             .map(|&(value, _)| {
                 let knot = KnotMember {
                     result: self.emitter.add_value(None),
-                    initializer: self.emitter.add_value(None),
+                    next: self.emitter.add_value(None),
+                    cycle: self.emitter.reserve_function(),
                     force: self.emitter.reserve_function(),
                 };
                 self.emitter.note_knot_member(value, knot);
@@ -368,8 +367,9 @@ impl Lowerer<'_> {
             })
             .collect();
         for (&(value, _), knot) in values.iter().zip(&members) {
-            self.emitter
-                .define_force(*knot, self.emitter.arena_value_name(value));
+            let hint = self.emitter.arena_value_name(value);
+            self.emitter.define_cycle(*knot, hint.clone());
+            self.emitter.define_force(*knot, hint);
         }
 
         // The members are in the map before any body below is lowered, so a read of a computed sibling — from a function member, a thunk, or the rest — forces it where it stands.
@@ -381,35 +381,34 @@ impl Lowerer<'_> {
 
         let mut body = self.lower_statements(rest, terminator, target);
 
-        // Publish all initializers before the body can force any member. Each channel is fresh, open, and has capacity one, so every push is taken.
+        // Set every box to its initializer before the body can force any member.
         for (knot, thunk) in members.iter().zip(&thunks).rev() {
-            let after_store = self.emitter.reserve_continuation();
-            let status = self.emitter.add_value(None);
+            let after_set = self.emitter.reserve_continuation();
             self.emitter.define_continuation(
-                after_store,
+                after_set,
                 curios_cps::Continuation {
                     lineage: self.emitter.lineage(),
-                    debug_name: Some("knot/stored".into()),
-                    params: vec![status],
+                    debug_name: Some("knot/set".into()),
+                    params: Vec::new(),
                     body,
                     terminates: false,
                 },
             );
-            let store = self.emitter.add_node(curios_cps::Node::Channel {
-                op: curios_cps::ChannelOp::Push,
+            let set = self.emitter.add_node(curios_cps::Node::Box {
+                op: curios_cps::BoxOp::Set,
                 args: vec![
-                    curios_cps::Atom::Value(knot.initializer),
+                    curios_cps::Atom::Value(knot.next),
                     curios_cps::Atom::Fun(*thunk),
                 ],
-                return_to: after_store,
+                return_to: after_set,
             });
             body = self.emitter.add_node(curios_cps::Node::LetCont {
-                continuations: vec![after_store],
-                body: store,
+                continuations: vec![after_set],
+                body: set,
             });
         }
 
-        // Binding order, outside in: the cells and channels; the force functions, which capture only that storage; the function members, which call the force functions; the thunks, which call both.
+        // Binding order, outside in: the cycle functions, which capture nothing; the cells and the boxes, each box holding its cycle; the force functions, which capture only that storage; the function members, which call the force functions; the thunks, which call both.
         body = self.emitter.add_node(curios_cps::Node::LetFun {
             functions: thunks,
             body,
@@ -424,27 +423,25 @@ impl Lowerer<'_> {
             body,
         });
         for knot in members.iter().rev() {
-            let channel_bound = self.emitter.reserve_continuation();
+            let box_bound = self.emitter.reserve_continuation();
             self.emitter.define_continuation(
-                channel_bound,
+                box_bound,
                 curios_cps::Continuation {
                     lineage: self.emitter.lineage(),
-                    debug_name: Some("knot/channel".into()),
-                    params: vec![knot.initializer],
+                    debug_name: Some("knot/box".into()),
+                    params: vec![knot.next],
                     body,
                     terminates: false,
                 },
             );
-            let channel = self.emitter.add_node(curios_cps::Node::Channel {
-                op: curios_cps::ChannelOp::New,
-                args: vec![curios_cps::Atom::Literal(curios_cps::Literal::Nat(
-                    Natural::from(1u32),
-                ))],
-                return_to: channel_bound,
+            let made = self.emitter.add_node(curios_cps::Node::Box {
+                op: curios_cps::BoxOp::New,
+                args: vec![curios_cps::Atom::Fun(knot.cycle)],
+                return_to: box_bound,
             });
             body = self.emitter.add_node(curios_cps::Node::LetCont {
-                continuations: vec![channel_bound],
-                body: channel,
+                continuations: vec![box_bound],
+                body: made,
             });
             let bound = self.emitter.reserve_continuation();
             self.emitter.define_continuation(
@@ -467,10 +464,13 @@ impl Lowerer<'_> {
                 body: reserve,
             });
         }
-        body
+        self.emitter.add_node(curios_cps::Node::LetFun {
+            functions: members.iter().map(|knot| knot.cycle).collect(),
+            body,
+        })
     }
 
-    /// `value`'s initializer as a nullary function: what its channel holds until something forces it. It forces each member it reads where it reads it, so a member it depends on is computed when it is needed — the by-need order, found by running rather than computed ahead.
+    /// `value`'s initializer as a nullary function: what its box holds until something forces it. It forces each member it reads where it reads it, so a member it depends on is computed when it is needed — the by-need order, found by running rather than computed ahead.
     fn define_thunk(&mut self, value: ValueId, init: Initializer) -> curios_cps::FunctionId {
         let thunk = self.emitter.reserve_function();
         let return_cont = self.emitter.reserve_continuation();
@@ -778,56 +778,20 @@ impl Lowerer<'_> {
                     }
                 })
             }
-            Rhs::Channel {
+            Rhs::Box {
                 operation,
                 operands,
             } => {
+                let op = box_op(*operation);
                 let args = operands
                     .iter()
                     .map(|&atom| self.emitter.lower_atom(atom))
                     .collect();
-                let op = match operation {
-                    ChannelOperation::New => curios_cps::ChannelOp::New,
-                    ChannelOperation::Push { .. } => curios_cps::ChannelOp::Push,
-                    ChannelOperation::Take { .. } => curios_cps::ChannelOp::Take,
-                    ChannelOperation::Close => curios_cps::ChannelOp::Close,
-                    ChannelOperation::Closed => curios_cps::ChannelOp::Closed,
-                    ChannelOperation::Count => curios_cps::ChannelOp::Count,
-                    ChannelOperation::Capacity => curios_cps::ChannelOp::Capacity,
-                };
-                let outcomes = match operation {
-                    ChannelOperation::Push {
-                        taken,
-                        full,
-                        closed,
-                    } => vec![(*taken, false), (*full, false), (*closed, false)],
-                    ChannelOperation::Take { item, empty, ended } => {
-                        vec![
-                            (*item, self.holds_value(*item)),
-                            (*empty, false),
-                            (*ended, false),
-                        ]
-                    }
-                    _ => Vec::new(),
-                };
-                if !outcomes.is_empty() {
-                    let (join, fresh) = self.open_join(site);
-                    self.lower_outcome(join, fresh, op.result_arity(), &outcomes, |return_to| {
-                        curios_cps::Node::Channel {
-                            op,
-                            args,
-                            return_to,
-                        }
-                    })
-                } else {
-                    self.split(op.result_arity(), site, |return_to| {
-                        curios_cps::Node::Channel {
-                            op,
-                            args,
-                            return_to,
-                        }
-                    })
-                }
+                self.split(op.result_arity(), site, |return_to| curios_cps::Node::Box {
+                    op,
+                    args,
+                    return_to,
+                })
             }
             Rhs::Foreign { foreign, operands } => {
                 let function = self
@@ -1896,7 +1860,7 @@ fn resume_role(node: &curios_cps::Node) -> &'static str {
     match node {
         curios_cps::Node::ApplyFun { .. } => "apply/resume",
         curios_cps::Node::Cell { .. } => "cell/resume",
-        curios_cps::Node::Channel { .. } => "channel/resume",
+        curios_cps::Node::Box { .. } => "box/resume",
         curios_cps::Node::Intrinsic { .. } => "intrinsic/resume",
         curios_cps::Node::Foreign { .. } => "foreign/resume",
         _ => "resume",

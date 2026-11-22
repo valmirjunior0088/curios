@@ -166,7 +166,7 @@ fn curry_through_a_list_is_refused_at_the_family_alone() {
     );
 }
 
-// A record held by a carrier no value hands it back through: `struct Bad { held: Io((Bad) -> False) }`, a description of its own refutation, and `struct Bad { held: Cell(Bad) }` and `{ held: Channel(Bad) }`, which hold it as a plain payload would. `Io` is covariant, so the arrow inside it counts where it stands, and a cell or a channel is read and written, so either is invariant: each is refused, the shapes a carrier with an eliminator would turn into Curry's paradox.
+// A record held by a carrier no value hands it back through: `struct Bad { held: Io((Bad) -> False) }`, a description of its own refutation, and `struct Bad { held: Cell(Bad) }` and `{ held: Box(Bad) }`, which hold it as a plain payload would. `Io` is covariant, so the arrow inside it counts where it stands, and a cell or a box is read and written, so either is invariant: each is refused, the shapes a carrier with an eliminator would turn into Curry's paradox.
 #[test]
 fn a_record_held_by_an_effectful_carrier_is_refused() {
     for (carrier, held) in [
@@ -175,7 +175,7 @@ fn a_record_held_by_an_effectful_carrier_is_refused() {
             "#IoType((x: #{node = StructType} /Bad()) -> /std/Bool/False)",
         ),
         ("a cell", "#CellType(#{node = StructType} /Bad())"),
-        ("a channel", "#ChannelType(#{node = StructType} /Bad())"),
+        ("a box", "#BoxType(#{node = StructType} /Bad())"),
     ] {
         let verdicts = core_text_refusals(&fill!(
             "${PROPOSITIONS}\nstruct /Bad: pub Type { held: ${held} }\n\n/std/Bool/False",

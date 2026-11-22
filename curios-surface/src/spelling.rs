@@ -1241,7 +1241,7 @@ pub fn carrier_former(head: &HeadKey) -> Option<Global> {
         HeadKey::Handle => Intrinsic::HandleType,
         HeadKey::List => Intrinsic::ListType(Term::type_ground()),
         HeadKey::Cell => Intrinsic::CellType(Term::type_ground()),
-        HeadKey::Channel => Intrinsic::ChannelType(Term::type_ground()),
+        HeadKey::Box => Intrinsic::BoxType(Term::type_ground()),
         HeadKey::Io => Intrinsic::IoType(Term::type_ground()),
         HeadKey::Nominal(_) | HeadKey::TupleType(_) => return None,
     };
@@ -1271,7 +1271,7 @@ pub fn intrinsic_former(global: &Global, operands: &[Term]) -> Option<Intrinsic>
             let over_one: [fn(Term) -> Intrinsic; 4] = [
                 Intrinsic::ListType,
                 Intrinsic::CellType,
-                Intrinsic::ChannelType,
+                Intrinsic::BoxType,
                 Intrinsic::IoType,
             ];
 
@@ -1759,8 +1759,8 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
             implicits: vec![],
             explicits: vec![elem],
         },
-        Intrinsic::ChannelType(elem) => IntrinsicForm::Call {
-            path: "Channel".into(),
+        Intrinsic::BoxType(elem) => IntrinsicForm::Call {
+            path: "Box".into(),
             implicits: vec![],
             explicits: vec![elem],
         },
@@ -1783,50 +1783,24 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
             implicits: vec![element],
             explicits: vec![cell],
         },
-        Intrinsic::Channel {
-            element,
-            capacity,
-            positive,
-        } => IntrinsicForm::Call {
-            path: "Channel/new".into(),
+        Intrinsic::Box { element, value } => IntrinsicForm::Call {
+            path: "Box/new".into(),
             implicits: vec![element],
-            explicits: vec![capacity, positive],
+            explicits: vec![value],
         },
-        Intrinsic::ChannelPush {
+        Intrinsic::BoxHeld { element, target } => IntrinsicForm::Call {
+            path: "Box/held".into(),
+            implicits: vec![element],
+            explicits: vec![target],
+        },
+        Intrinsic::BoxSet {
             element,
-            channel,
+            target,
             value,
         } => IntrinsicForm::Call {
-            path: "Channel/push".into(),
+            path: "Box/set".into(),
             implicits: vec![element],
-            explicits: vec![channel, value],
-        },
-        Intrinsic::ChannelTake {
-            element, channel, ..
-        } => IntrinsicForm::Call {
-            path: "Channel/take".into(),
-            implicits: vec![element],
-            explicits: vec![channel],
-        },
-        Intrinsic::ChannelClose { element, channel } => IntrinsicForm::Call {
-            path: "Channel/close".into(),
-            implicits: vec![element],
-            explicits: vec![channel],
-        },
-        Intrinsic::ChannelClosed { element, channel } => IntrinsicForm::Call {
-            path: "Channel/closed".into(),
-            implicits: vec![element],
-            explicits: vec![channel],
-        },
-        Intrinsic::ChannelCount { element, channel } => IntrinsicForm::Call {
-            path: "Channel/count".into(),
-            implicits: vec![element],
-            explicits: vec![channel],
-        },
-        Intrinsic::ChannelCapacity { element, channel } => IntrinsicForm::Call {
-            path: "Channel/capacity".into(),
-            implicits: vec![element],
-            explicits: vec![channel],
+            explicits: vec![target, value],
         },
         Intrinsic::IoType(result) => IntrinsicForm::Call {
             path: "Io".into(),

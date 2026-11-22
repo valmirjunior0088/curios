@@ -851,14 +851,7 @@ fn every_returning_operation_retains_its_result_receiver() {
     use crate::*;
     use curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType};
     use std::sync::Arc;
-    for kind in [
-        "known",
-        "closure",
-        "foreign",
-        "cell",
-        "channel",
-        "intrinsic",
-    ] {
+    for kind in ["known", "closure", "foreign", "cell", "box", "intrinsic"] {
         let mut p = Program::new();
         let target_params = p.params(1);
         let target = p.function(target_params, nat(0));
@@ -880,7 +873,7 @@ fn every_returning_operation_retains_its_result_receiver() {
         let width = match kind {
             "foreign" => foreign.signature().imported_results().len(),
             "cell" => CellOp::Poll.result_arity(),
-            "channel" => ChannelOp::Take.result_arity(),
+            "box" => BoxOp::Held.result_arity(),
             _ => 1,
         };
         let results = p.params(width);
@@ -920,8 +913,8 @@ fn every_returning_operation_retains_its_result_receiver() {
                 args: vec![Atom::Filler],
                 return_to: resume,
             },
-            "channel" => Node::Channel {
-                op: ChannelOp::Take,
+            "box" => Node::Box {
+                op: BoxOp::Held,
                 args: vec![Atom::Filler],
                 return_to: resume,
             },

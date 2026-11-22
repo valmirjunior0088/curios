@@ -12,9 +12,9 @@ mod tests;
 use {
     super::{Landing, Linked, Mark},
     crate::{
-        Atom, BlockId, CellOperation, ChannelOperation, ConstantId, ConstructorId, FamilyId,
-        ForeignId, FunctionId, Interface, Module, ProductFields, ProductId, ProductSchema, Rhs,
-        Statement, Tables, Terminator, ValueId,
+        Atom, BlockId, CellOperation, ConstantId, ConstructorId, FamilyId, ForeignId, FunctionId,
+        Interface, Module, ProductFields, ProductId, ProductSchema, Rhs, Statement, Tables,
+        Terminator, ValueId,
     },
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -108,29 +108,9 @@ impl Named {
                 }
                 CellOperation::New | CellOperation::Fill => {}
             },
-            Rhs::Channel { operation, .. } => match *operation {
-                ChannelOperation::Push {
-                    taken,
-                    full,
-                    closed,
-                } => {
-                    self.constructor(module, taken)?;
-                    self.constructor(module, full)?;
-                    self.constructor(module, closed)?;
-                }
-                ChannelOperation::Take { item, empty, ended } => {
-                    self.constructor(module, item)?;
-                    self.constructor(module, empty)?;
-                    self.constructor(module, ended)?;
-                }
-                ChannelOperation::New
-                | ChannelOperation::Close
-                | ChannelOperation::Closed
-                | ChannelOperation::Count
-                | ChannelOperation::Capacity => {}
-            },
             Rhs::Foreign { foreign, .. } => self.foreigns.note(*foreign),
             Rhs::Alias(_)
+            | Rhs::Box { .. }
             | Rhs::Apply { .. }
             | Rhs::Operation { .. }
             | Rhs::Sequence { .. }

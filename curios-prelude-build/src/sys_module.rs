@@ -886,35 +886,47 @@ fn cell_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
     ]
 }
 
-fn channel_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
-    let outcomes: Module = r#"
-        --- The outcome of one nonblocking push.
-        pub induct Push: pub Type
-        | taken()
-        | full()
-        | closed()
-        end
-        --- The outcome of one nonblocking take.
-        pub induct Take(A: Sort): pub Type
-        | item(A)
-        | empty()
-        | ended()
-        end
-    "#
-    .parse()
-    .expect("ordinary channel outcomes parse");
-    let query = |label, description, node| {
-        documented(&[description], operation(label, &["T", "c"], syntax, node))
-    };
-    outcomes.items.into_iter().chain(items(vec![
-        documented(&["A bounded FIFO with positive capacity."], operation("new", &["T", "capacity", "positive"], syntax, Intrinsic::Channel { element: name("T"), capacity: name("capacity"), positive: name("positive") })),
-        documented(&["Append if open and not full, reporting this attempt's outcome."], operation("push", &["T", "c", "value"], syntax, Intrinsic::ChannelPush { element: name("T"), channel: name("c"), value: name("value") })),
-        query("take", "Remove the oldest item; empty while open, ended when closed and drained.", Intrinsic::ChannelTake { element: name("T"), channel: name("c"), universes: curios_core::Universes::default() }),
-        query("close", "Prevent later pushes, preserving queued items for draining. Repeated closes do nothing.", Intrinsic::ChannelClose { element: name("T"), channel: name("c") }),
-        query("closed", "Whether the channel has been closed.", Intrinsic::ChannelClosed { element: name("T"), channel: name("c") }),
-        query("count", "The number of queued items. This observation reserves nothing.", Intrinsic::ChannelCount { element: name("T"), channel: name("c") }),
-        query("capacity", "The positive bound supplied at creation.", Intrinsic::ChannelCapacity { element: name("T"), channel: name("c") }),
-    ])).collect()
+// A box always holds one value. `/std/Box` re-exports `new` and `held` and keeps `set` behind its own `change`, so a program changes a box only by a function of what it holds.
+fn box_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
+    vec![
+        documented(
+            &["A new box holding `v`."],
+            operation(
+                "new",
+                &["T", "v"],
+                syntax,
+                Intrinsic::Box {
+                    element: name("T"),
+                    value: name("v"),
+                },
+            ),
+        ),
+        documented(
+            &["The value `b` holds."],
+            operation(
+                "held",
+                &["T", "b"],
+                syntax,
+                Intrinsic::BoxHeld {
+                    element: name("T"),
+                    target: name("b"),
+                },
+            ),
+        ),
+        documented(
+            &["Make `b` hold `v` from now on."],
+            operation(
+                "set",
+                &["T", "b", "v"],
+                syntax,
+                Intrinsic::BoxSet {
+                    element: name("T"),
+                    target: name("b"),
+                    value: name("v"),
+                },
+            ),
+        ),
+    ]
 }
 
 // The monad of the `/sys/Io` type, and nothing else: `Io` owns the sequencing, never the operations. An operation belongs with its subject — the one its own store row names, not the type its result wears.
@@ -1143,10 +1155,14 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
             items(cell_ops(syntax)),
         ),
         SysModule::carrier(
-            "Channel",
-            &["A bounded FIFO shared within one program instance."],
-            operation("Channel", &["T"], syntax, Intrinsic::ChannelType(name("T"))),
-            channel_ops(syntax),
+            "Box",
+            &[
+                "One value kept for whoever holds the box, changed only by a pure function of it: nothing waits inside a change, so no branch sees a change half made, and no cancellation leaves one.",
+                "",
+                "A box is shared, not copied: every copy of a value holding it holds the one box. A change is one box's: two boxes are two places, and changes to them one after the other are seen apart by any branch that runs between them. A value read with `held` and kept across a wait may be stale by the time it is used; a change computed from the value `change` hands its function is not.",
+            ],
+            operation("Box", &["T"], syntax, Intrinsic::BoxType(name("T"))),
+            items(box_ops(syntax)),
         ),
         SysModule::carrier(
             "Io",

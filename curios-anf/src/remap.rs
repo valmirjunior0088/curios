@@ -8,8 +8,8 @@
 
 use {
     crate::{
-        Atom, Block, BlockId, CellOperation, ChannelOperation, ConstantId, ConstructorId, FamilyId,
-        ForeignId, Function, FunctionId, ProductId, RecGroup, RecGroupId, RecValue, Rhs, Statement,
+        Atom, Block, BlockId, CellOperation, ConstantId, ConstructorId, FamilyId, ForeignId,
+        Function, FunctionId, ProductId, RecGroup, RecGroupId, RecValue, Rhs, Statement,
         StatementId, Terminator, UnconsSequenceStep, ValueId, VariantArm,
     },
     std::collections::BTreeMap,
@@ -237,31 +237,11 @@ impl Remap<'_> {
                 },
                 operands: atoms(operands),
             },
-            Rhs::Channel {
+            Rhs::Box {
                 operation,
                 operands,
-            } => Rhs::Channel {
-                operation: match *operation {
-                    ChannelOperation::Push {
-                        taken,
-                        full,
-                        closed,
-                    } => ChannelOperation::Push {
-                        taken: self.constructor(taken),
-                        full: self.constructor(full),
-                        closed: self.constructor(closed),
-                    },
-                    ChannelOperation::Take { item, empty, ended } => ChannelOperation::Take {
-                        item: self.constructor(item),
-                        empty: self.constructor(empty),
-                        ended: self.constructor(ended),
-                    },
-                    operation @ (ChannelOperation::New
-                    | ChannelOperation::Close
-                    | ChannelOperation::Closed
-                    | ChannelOperation::Count
-                    | ChannelOperation::Capacity) => operation,
-                },
+            } => Rhs::Box {
+                operation: *operation,
                 operands: atoms(operands),
             },
             Rhs::Foreign { foreign, operands } => Rhs::Foreign {

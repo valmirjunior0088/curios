@@ -127,9 +127,9 @@ pub fn foreign_signature(
     }
 }
 
-/// The closed set of intrinsics of the core calculus: the built-in types (`BoolType`, `NatType`, `IntType`, `FltType`, `BytesType`, `ListType`, `HandleType`, `CellType`, `ChannelType`, `IoType`), their literals, and the operator families over them. A host call is *not* here, exiting included: [`Subterm::Foreign`] is a term former of its own, because what it means is read off an ABI row rather than fixed by this enum. Operand positions hold full terms, so an intrinsic participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.
+/// The closed set of intrinsics of the core calculus: the built-in types (`BoolType`, `NatType`, `IntType`, `FltType`, `BytesType`, `ListType`, `HandleType`, `CellType`, `BoxType`, `IoType`), their literals, and the operator families over them. A host call is *not* here, exiting included: [`Subterm::Foreign`] is a term former of its own, because what it means is read off an ABI row rather than fixed by this enum. Operand positions hold full terms, so an intrinsic participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.
 ///
-/// An intrinsic that performs an effect returns an `Io`, including guest cell and channel operations. Its result is stated by `Intrinsic::signature` and checked by both drivers; a new effectful variant must be given an `IoType` result when it is added.
+/// An intrinsic that performs an effect returns an `Io`, including guest cell and box operations. Its result is stated by `Intrinsic::signature` and checked by both drivers; a new effectful variant must be given an `IoType` result when it is added.
 ///
 /// **Generic over what an operand is**, which is [`Term`] in this crate and every stage below it. `curios-module` holds the same enum over the surface term, for the `/sys` roster to plant in a declaration's body, so the surface tree restates no variant and lowering one is [`try_map`](Self::try_map) over its operands. Everything that gives an intrinsic meaning — its signature, its reduction, its algebra — is stated at `Term` alone.
 ///
@@ -394,37 +394,20 @@ pub enum Intrinsic<T = Term> {
         cell: T,
         universes: Universes,
     },
-    ChannelType(T),
-    Channel {
+    // A box always holds one value: it is made holding it, read whole and set whole. `target` names the box, `box` being a reserved word of Rust's.
+    BoxType(T),
+    Box {
         element: T,
-        capacity: T,
-        positive: T,
-    },
-    ChannelPush {
-        element: T,
-        channel: T,
         value: T,
     },
-    ChannelTake {
+    BoxHeld {
         element: T,
-        channel: T,
-        universes: Universes,
+        target: T,
     },
-    ChannelClose {
+    BoxSet {
         element: T,
-        channel: T,
-    },
-    ChannelClosed {
-        element: T,
-        channel: T,
-    },
-    ChannelCount {
-        element: T,
-        channel: T,
-    },
-    ChannelCapacity {
-        element: T,
-        channel: T,
+        target: T,
+        value: T,
     },
     // The opaque carrier of a host effect: `Io(T)` is a *description* of a computation that yields a `T`, never the `T` itself.
     //
@@ -1200,7 +1183,7 @@ impl Intrinsic {
                 terms.iter().for_each(&mut *visit);
             }
 
-            Intrinsic::CellType(a) | Intrinsic::ChannelType(a) | Intrinsic::Cell { element: a } => {
+            Intrinsic::CellType(a) | Intrinsic::BoxType(a) | Intrinsic::Cell { element: a } => {
                 visit(a)
             }
             Intrinsic::CellPoll {
@@ -1208,26 +1191,13 @@ impl Intrinsic {
                 cell: b,
                 ..
             }
-            | Intrinsic::ChannelTake {
+            | Intrinsic::Box {
                 element: a,
-                channel: b,
-                ..
+                value: b,
             }
-            | Intrinsic::ChannelClose {
+            | Intrinsic::BoxHeld {
                 element: a,
-                channel: b,
-            }
-            | Intrinsic::ChannelClosed {
-                element: a,
-                channel: b,
-            }
-            | Intrinsic::ChannelCount {
-                element: a,
-                channel: b,
-            }
-            | Intrinsic::ChannelCapacity {
-                element: a,
-                channel: b,
+                target: b,
             } => {
                 visit(a);
                 visit(b);
@@ -1237,23 +1207,14 @@ impl Intrinsic {
                 cell: b,
                 value: c,
             }
-            | Intrinsic::ChannelPush {
+            | Intrinsic::BoxSet {
                 element: a,
-                channel: b,
+                target: b,
                 value: c,
             } => {
                 visit(a);
                 visit(b);
                 visit(c);
-            }
-            Intrinsic::Channel {
-                element: a,
-                capacity: b,
-                positive: p,
-            } => {
-                visit(a);
-                visit(b);
-                bound(visit, p);
             }
         }
     }
@@ -1267,9 +1228,7 @@ impl Intrinsic {
     /// The universe instance carried by an operation whose result names an ordinary polymorphic family; none for every other operation.
     pub fn result_universes(&self) -> Option<&Universes> {
         match self {
-            Self::CellPoll { universes, .. } | Self::ChannelTake { universes, .. } => {
-                Some(universes)
-            }
+            Self::CellPoll { universes, .. } => Some(universes),
             _ => None,
         }
     }
@@ -1277,9 +1236,7 @@ impl Intrinsic {
     /// The instance elaboration fills from the checked result type; later traversals preserve and substitute it like a nominal occurrence's own vector.
     pub fn result_universes_mut(&mut self) -> Option<&mut Universes> {
         match self {
-            Self::CellPoll { universes, .. } | Self::ChannelTake { universes, .. } => {
-                Some(universes)
-            }
+            Self::CellPoll { universes, .. } => Some(universes),
             _ => None,
         }
     }
@@ -1617,7 +1574,7 @@ impl Intrinsic {
             Intrinsic::HandleType => Intrinsic::HandleType,
             Intrinsic::Handle(token) => Intrinsic::Handle(*token),
             Intrinsic::CellType(a) => Intrinsic::CellType(visit.visit_subterm(a)),
-            Intrinsic::ChannelType(a) => Intrinsic::ChannelType(visit.visit_subterm(a)),
+            Intrinsic::BoxType(a) => Intrinsic::BoxType(visit.visit_subterm(a)),
             Intrinsic::Cell { element } => Intrinsic::Cell {
                 element: visit.visit_subterm(element),
             },
@@ -1639,48 +1596,22 @@ impl Intrinsic {
                 cell: visit.visit_subterm(cell),
                 universes: visit.visit_universes(universes),
             },
-            Intrinsic::Channel {
-                element,
-                capacity,
-                positive,
-            } => Intrinsic::Channel {
+            Intrinsic::Box { element, value } => Intrinsic::Box {
                 element: visit.visit_subterm(element),
-                capacity: visit.visit_subterm(capacity),
-                positive: visit.visit_subterm(positive),
-            },
-            Intrinsic::ChannelPush {
-                element,
-                channel,
-                value,
-            } => Intrinsic::ChannelPush {
-                element: visit.visit_subterm(element),
-                channel: visit.visit_subterm(channel),
                 value: visit.visit_subterm(value),
             },
-            Intrinsic::ChannelTake {
+            Intrinsic::BoxHeld { element, target } => Intrinsic::BoxHeld {
+                element: visit.visit_subterm(element),
+                target: visit.visit_subterm(target),
+            },
+            Intrinsic::BoxSet {
                 element,
-                channel,
-                universes,
-            } => Intrinsic::ChannelTake {
+                target,
+                value,
+            } => Intrinsic::BoxSet {
                 element: visit.visit_subterm(element),
-                channel: visit.visit_subterm(channel),
-                universes: visit.visit_universes(universes),
-            },
-            Intrinsic::ChannelClose { element, channel } => Intrinsic::ChannelClose {
-                element: visit.visit_subterm(element),
-                channel: visit.visit_subterm(channel),
-            },
-            Intrinsic::ChannelClosed { element, channel } => Intrinsic::ChannelClosed {
-                element: visit.visit_subterm(element),
-                channel: visit.visit_subterm(channel),
-            },
-            Intrinsic::ChannelCount { element, channel } => Intrinsic::ChannelCount {
-                element: visit.visit_subterm(element),
-                channel: visit.visit_subterm(channel),
-            },
-            Intrinsic::ChannelCapacity { element, channel } => Intrinsic::ChannelCapacity {
-                element: visit.visit_subterm(element),
-                channel: visit.visit_subterm(channel),
+                target: visit.visit_subterm(target),
+                value: visit.visit_subterm(value),
             },
             Intrinsic::IoType(a) => Intrinsic::IoType(visit.visit_subterm(a)),
             Intrinsic::IoPure {
@@ -2053,7 +1984,7 @@ impl<T> Intrinsic<T> {
             Intrinsic::HandleType => Intrinsic::HandleType,
             Intrinsic::Handle(token) => Intrinsic::Handle(*token),
             Intrinsic::CellType(a) => Intrinsic::CellType(operand(a)?),
-            Intrinsic::ChannelType(a) => Intrinsic::ChannelType(operand(a)?),
+            Intrinsic::BoxType(a) => Intrinsic::BoxType(operand(a)?),
             Intrinsic::Cell { element } => Intrinsic::Cell {
                 element: operand(element)?,
             },
@@ -2075,48 +2006,22 @@ impl<T> Intrinsic<T> {
                 cell: operand(cell)?,
                 universes: universes.clone(),
             },
-            Intrinsic::Channel {
-                element,
-                capacity,
-                positive,
-            } => Intrinsic::Channel {
+            Intrinsic::Box { element, value } => Intrinsic::Box {
                 element: operand(element)?,
-                capacity: operand(capacity)?,
-                positive: operand(positive)?,
-            },
-            Intrinsic::ChannelPush {
-                element,
-                channel,
-                value,
-            } => Intrinsic::ChannelPush {
-                element: operand(element)?,
-                channel: operand(channel)?,
                 value: operand(value)?,
             },
-            Intrinsic::ChannelTake {
+            Intrinsic::BoxHeld { element, target } => Intrinsic::BoxHeld {
+                element: operand(element)?,
+                target: operand(target)?,
+            },
+            Intrinsic::BoxSet {
                 element,
-                channel,
-                universes,
-            } => Intrinsic::ChannelTake {
+                target,
+                value,
+            } => Intrinsic::BoxSet {
                 element: operand(element)?,
-                channel: operand(channel)?,
-                universes: universes.clone(),
-            },
-            Intrinsic::ChannelClose { element, channel } => Intrinsic::ChannelClose {
-                element: operand(element)?,
-                channel: operand(channel)?,
-            },
-            Intrinsic::ChannelClosed { element, channel } => Intrinsic::ChannelClosed {
-                element: operand(element)?,
-                channel: operand(channel)?,
-            },
-            Intrinsic::ChannelCount { element, channel } => Intrinsic::ChannelCount {
-                element: operand(element)?,
-                channel: operand(channel)?,
-            },
-            Intrinsic::ChannelCapacity { element, channel } => Intrinsic::ChannelCapacity {
-                element: operand(element)?,
-                channel: operand(channel)?,
+                target: operand(target)?,
+                value: operand(value)?,
             },
             Intrinsic::IoType(a) => Intrinsic::IoType(operand(a)?),
             Intrinsic::IoPure {

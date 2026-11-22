@@ -136,7 +136,7 @@ fn classify_under(
             | Intrinsic::HandleType => Sort::type_at(Level::zero()),
             Intrinsic::ListType(element)
             | Intrinsic::CellType(element)
-            | Intrinsic::ChannelType(element)
+            | Intrinsic::BoxType(element)
             | Intrinsic::IoType(element) => {
                 let element = element.clone();
                 // A list, cell, or description of proofs is not itself a proposition — it has length, identity, or an effect, so its inhabitants are distinguishable and proof irrelevance does not apply. It lands at `Type` whatever its element's quality, at the element's level. For `Io` that is what keeps sort-driven erasure from dropping a description of a proof and its host effect with it.
@@ -167,13 +167,9 @@ fn classify_under(
             | Intrinsic::Cell { .. }
             | Intrinsic::CellPoll { .. }
             | Intrinsic::CellFill { .. }
-            | Intrinsic::Channel { .. }
-            | Intrinsic::ChannelPush { .. }
-            | Intrinsic::ChannelTake { .. }
-            | Intrinsic::ChannelClose { .. }
-            | Intrinsic::ChannelClosed { .. }
-            | Intrinsic::ChannelCount { .. }
-            | Intrinsic::ChannelCapacity { .. }
+            | Intrinsic::Box { .. }
+            | Intrinsic::BoxHeld { .. }
+            | Intrinsic::BoxSet { .. }
             | Intrinsic::Flt(..)
             | Intrinsic::FltAbs(..)
             | Intrinsic::FltAdd(..)

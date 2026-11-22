@@ -17,7 +17,7 @@
 //!
 //! The host ABI is untouched by the rope: wire `Bytes` payloads cross the boundary as the flat `$bytes`/`$elems` arrays (params are taken exact before the call, a payload exactly its run, and results are embedded into fresh leaves after it), so curios-native and the curios-js bridge only ever see flat arrays, each read by its own length.
 
-use super::{ChannelData, RopeData, Table, concrete_val};
+use super::{RopeData, Table, concrete_val};
 
 /// `Flt` — a boxed `f64`: `struct (field $special (f64))`.
 pub fn flt_sub_type(special_field: curios_wasm::FieldName) -> curios_wasm::SubType {
@@ -233,8 +233,8 @@ pub fn big_sub_type(
     }
 }
 
-/// A write-once cell: the nullable field starts empty, and `CellOp::Fill` permits its one transition to a non-null payload.
-pub fn cell_sub_type(
+/// A holder of one reference in a field of its own: a write-once cell, whose nullable field starts empty and `CellOp::Fill` permits its one transition to a non-null payload, and a box, made holding its value and set whole.
+pub fn holder_sub_type(
     special_field: curios_wasm::FieldName,
     top_type: curios_wasm::ValType,
 ) -> curios_wasm::SubType {
@@ -248,34 +248,5 @@ pub fn cell_sub_type(
                 mutability: curios_wasm::Mutability::Var,
             },
         )])),
-    }
-}
-
-/// A channel owns its preallocated nullable slots; taking an item clears its slot before returning it.
-pub fn channel_sub_type(data: &ChannelData) -> curios_wasm::SubType {
-    let word = curios_wasm::FieldType {
-        storage_type: curios_wasm::StorageType::Val(curios_wasm::ValType::Num(
-            curios_wasm::NumType::I32,
-        )),
-        mutability: curios_wasm::Mutability::Var,
-    };
-    curios_wasm::SubType {
-        is_final: true,
-        super_types: Vec::new(),
-        comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from([
-            (
-                data.payload_field.clone(),
-                curios_wasm::FieldType {
-                    storage_type: curios_wasm::StorageType::Val(concrete_val(
-                        data.payload.clone(),
-                        false,
-                    )),
-                    mutability: curios_wasm::Mutability::Const,
-                },
-            ),
-            (data.head_field.clone(), word.clone()),
-            (data.count_field.clone(), word.clone()),
-            (data.closed_field.clone(), word),
-        ])),
     }
 }

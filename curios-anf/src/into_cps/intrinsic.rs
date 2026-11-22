@@ -2,7 +2,7 @@
 //!
 //! A total table, one arm per [`Operation`], plus the three small families the sequence operations fan out into by grain. Nothing here reduces or decides: the erased roster and the CPS roster are two spellings of the same set, and this is the translation between them, kept apart from the lowering so that adding an operation is an edit to a table rather than to a walk.
 
-use super::{CellOperation, Operation, SequenceGrain, SequenceOp};
+use super::{BoxOperation, CellOperation, Operation, SequenceGrain, SequenceOp};
 
 /// The CPS intrinsic of a scalar [`Operation`]. `Bool` operations run on the `0`/`1` `Nat` carrier (`BoolNeq` is xor on a single bit), the conjunction and the disjunction under operations of their own, which a first operand can decide (`curios_cps::Intrinsic::decided_by_first`), and `Byte` comparisons on the `Nat` carrier. The `Byte` conversions are handled before this table.
 pub fn operation_intrinsic(operation: Operation) -> curios_cps::Intrinsic {
@@ -108,6 +108,14 @@ pub fn cell_op(operation: CellOperation) -> curios_cps::CellOp {
         CellOperation::New => curios_cps::CellOp::Reserve,
         CellOperation::Poll { .. } => curios_cps::CellOp::Poll,
         CellOperation::Fill => curios_cps::CellOp::Fill,
+    }
+}
+
+pub fn box_op(operation: BoxOperation) -> curios_cps::BoxOp {
+    match operation {
+        BoxOperation::New => curios_cps::BoxOp::New,
+        BoxOperation::Held => curios_cps::BoxOp::Held,
+        BoxOperation::Set => curios_cps::BoxOp::Set,
     }
 }
 

@@ -67,11 +67,10 @@ pub use infix_op::{ArchivedInfixOp, InfixOp, InfixOpResolver};
 
 mod syntax;
 pub use syntax::{
-    ChannelSyntax, CharacterSyntax, ConceptField, Derivation, DerivationSyntax, EntailmentSyntax,
-    EqlDerivation, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
-    OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax,
-    ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry,
-    TestSyntax,
+    CharacterSyntax, ConceptField, Derivation, DerivationSyntax, EntailmentSyntax, EqlDerivation,
+    HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax, OperatorSyntax,
+    OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax, ReportSyntax,
+    ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
 };
 
 mod recurse;

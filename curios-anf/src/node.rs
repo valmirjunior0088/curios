@@ -78,9 +78,9 @@ pub enum Rhs {
         operation: CellOperation,
         operands: Vec<Atom>,
     },
-    /// A bounded guest channel operation. Outcome constructors retain their ordinary nominal identities until layout selection.
-    Channel {
-        operation: ChannelOperation,
+    /// A box operation (see [`BoxOperation`]). Its program point is observable, as a cell operation's is.
+    Box {
+        operation: BoxOperation,
         operands: Vec<Atom>,
     },
     /// A host-observable foreign call through the canonical row registered in the module (see [`super::Module::foreign`]). Binds one language value; the host-level result shape is reconstructed by the lowering.
@@ -101,14 +101,14 @@ pub enum Rhs {
 }
 
 impl Rhs {
-    /// Whether this right-hand side names the carrier of what it produces: an operation and a sequence operation by what they compute, a list element excepted, and a construction and a cell, channel, host, call-shaped or suspension operation by the shape it hands back. A call's result, a field read, a list element, an alias and a join name none, so only the bound value's type can say it holds a register's population: a binding states a carrier ([`RegisterShape`](crate::RegisterShape)) only where this does not hold, and the verifier refuses one where it does.
+    /// Whether this right-hand side names the carrier of what it produces: an operation and a sequence operation by what they compute, a list element excepted, and a construction and a cell, box, host, call-shaped or suspension operation by the shape it hands back. A call's result, a field read, a list element, an alias and a join name none, so only the bound value's type can say it holds a register's population: a binding states a carrier ([`RegisterShape`](crate::RegisterShape)) only where this does not hold, and the verifier refuses one where it does.
     pub fn names_its_carrier(&self) -> bool {
         match self {
             Self::Operation { .. }
             | Self::Product { .. }
             | Self::Construct { .. }
             | Self::Cell { .. }
-            | Self::Channel { .. }
+            | Self::Box { .. }
             | Self::Foreign { .. }
             | Self::Intrinsic { .. }
             | Self::Suspension { .. } => true,
@@ -218,38 +218,21 @@ impl CellOperation {
     }
 }
 
-/// A bounded channel operation. `New` takes the positive capacity, `Push` takes the channel then the item, and every other operation takes the channel alone. `Take`'s `item` holds the item taken where its row keeps a field for it, and nothing where the row keeps none, the item being a proof there.
+/// A box operation. `New` takes the value the box is made holding, `Held` takes the box, and `Set` takes the box then the value it holds from then on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[curios_archive::archived]
-pub enum ChannelOperation {
+pub enum BoxOperation {
     New,
-    Push {
-        taken: ConstructorId,
-        full: ConstructorId,
-        closed: ConstructorId,
-    },
-    Take {
-        item: ConstructorId,
-        empty: ConstructorId,
-        ended: ConstructorId,
-    },
-    Close,
-    Closed,
-    Count,
-    Capacity,
+    Held,
+    Set,
 }
 
-impl ChannelOperation {
+impl BoxOperation {
     /// The exact operand count of this operation.
     pub fn arity(self) -> usize {
         match self {
-            Self::Push { .. } => 2,
-            Self::New
-            | Self::Take { .. }
-            | Self::Close
-            | Self::Closed
-            | Self::Count
-            | Self::Capacity => 1,
+            Self::New | Self::Held => 1,
+            Self::Set => 2,
         }
     }
 }

@@ -471,7 +471,7 @@ fn the_proof_of_a_bound_is_not_run() {
     );
 }
 
-/// An operation that does not fold keeps the proof of its bound as it was written: the two folds that rebuild their node over a proof — a pointwise operation and a channel's creation — hand it on unreduced.
+/// An operation that does not fold keeps the proof of its bound as it was written: a pointwise operation, the fold that rebuilds its node over a proof, hands it on unreduced.
 #[test]
 fn an_operation_that_does_not_fold_keeps_its_proof_as_written() {
     let mut host = Host::new(100_000);
@@ -482,10 +482,10 @@ fn an_operation_that_does_not_fold_keeps_its_proof_as_written() {
             right: Term::free_var(&right),
             same_length: spinning(),
         },
-        Intrinsic::Channel {
-            element: nat_type(),
-            capacity: Term::free_var(&left),
-            positive: spinning(),
+        Intrinsic::BytesXor {
+            left: Term::free_var(&left),
+            right: Term::free_var(&right),
+            same_length: spinning(),
         },
     ];
 

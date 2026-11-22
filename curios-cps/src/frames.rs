@@ -839,7 +839,7 @@ impl Twin<'_> {
             }
             Node::Foreign { return_to, .. }
             | Node::Cell { return_to, .. }
-            | Node::Channel { return_to, .. }
+            | Node::Box { return_to, .. }
             | Node::Intrinsic { return_to, .. }
                 if !moved(return_to) =>
             {
@@ -856,7 +856,7 @@ impl Twin<'_> {
             Node::Cell { op, return_to, .. } => {
                 self.thin(id, node, return_to, op.result_arity(), &to)
             }
-            Node::Channel { op, return_to, .. } => {
+            Node::Box { op, return_to, .. } => {
                 self.thin(id, node, return_to, op.result_arity(), &to)
             }
             Node::Intrinsic { return_to, .. } => self.thin(id, node, return_to, 1, &to),
@@ -910,7 +910,7 @@ fn resumed(node: &Node) -> Vec<ContinuationId> {
         Node::ApplyFun { return_to, .. }
         | Node::Foreign { return_to, .. }
         | Node::Cell { return_to, .. }
-        | Node::Channel { return_to, .. }
+        | Node::Box { return_to, .. }
         | Node::Intrinsic { return_to, .. } => vec![*return_to],
         Node::Halt { .. }
         | Node::Panic(_)
@@ -940,7 +940,7 @@ fn resuming(node: Node, to: ContinuationId) -> Node {
             args,
             return_to: to,
         },
-        Node::Channel { op, args, .. } => Node::Channel {
+        Node::Box { op, args, .. } => Node::Box {
             op,
             args,
             return_to: to,

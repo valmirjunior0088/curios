@@ -433,7 +433,7 @@ fn the_restored_prelude_marks_binders_and_none_at_a_sort() {
     });
 }
 
-/// A `/sys` former is levelled by its one argument alone. `List`, `Io`, `Cell` and `Channel` each take `T: Type u` to `Type u`, and the level its body's binder is written at, bounded only by `u`, would be a second parameter every occurrence of the former mints. `UniverseSolver::identify_bounded_choices` identifies a chosen level bounded only by one other chosen level with it, so each takes one.
+/// A `/sys` former is levelled by its one argument alone. `List`, `Io`, `Cell` and `Box` each take `T: Type u` to `Type u`, and the level its body's binder is written at, bounded only by `u`, would be a second parameter every occurrence of the former mints. `UniverseSolver::identify_bounded_choices` identifies a chosen level bounded only by one other chosen level with it, so each takes one.
 #[test]
 fn every_sys_former_takes_one_universe_parameter() {
     with_prelude(|prelude| {
@@ -541,5 +541,5 @@ const SYS_FORMERS: [&str; 4] = [
     "/sys/List/List",
     "/sys/Io/Io",
     "/sys/Cell/Cell",
-    "/sys/Channel/Channel",
+    "/sys/Box/Box",
 ];

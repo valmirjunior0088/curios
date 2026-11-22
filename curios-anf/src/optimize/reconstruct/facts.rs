@@ -257,7 +257,7 @@ impl ValueFacts {
                 }
                 Rhs::Sequence { .. }
                 | Rhs::Cell { .. }
-                | Rhs::Channel { .. }
+                | Rhs::Box { .. }
                 | Rhs::Foreign { .. }
                 | Rhs::Intrinsic { .. }
                 | Rhs::Suspension { .. } => {

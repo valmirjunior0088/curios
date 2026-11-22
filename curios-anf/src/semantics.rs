@@ -9,7 +9,7 @@ mod tests;
 
 use {
     super::{
-        CellOperation, ChannelOperation, Constant, Intrinsic, Operation, Rhs, SequenceGrain,
+        BoxOperation, CellOperation, Constant, Intrinsic, Operation, Rhs, SequenceGrain,
         SequenceOp, SuspensionOperation, Terminator,
     },
     curios_num::{Binary, Floating, Integer, Natural, ScalarTrap},
@@ -217,7 +217,7 @@ impl Semantics {
             Rhs::Operation { operation, .. } => Self::operation(*operation),
             Rhs::Sequence { operation, .. } => Self::sequence(*operation),
             Rhs::Cell { operation, .. } => Self::cell(*operation),
-            Rhs::Channel { operation, .. } => Self::channel(*operation),
+            Rhs::Box { operation, .. } => Self::box_(*operation),
             Rhs::Foreign { .. } => LocalBehavior::host(),
             Rhs::Intrinsic { intrinsic, .. } => Self::intrinsic(*intrinsic),
             // A suspension is data: building one allocates an immutable value, and the test and the reads are total and allocation-free. `Later` applies its `again` twice, and `again` only makes the descriptions it answers, performing nothing.
@@ -350,16 +350,12 @@ impl Semantics {
         }
     }
 
-    /// The local behavior of a bounded guest channel operation.
-    pub fn channel(operation: ChannelOperation) -> LocalBehavior {
+    /// The behavior of a box operation, as a cell's: creation allocates a mutable identity, reading observes state, setting mutates it.
+    pub fn box_(operation: BoxOperation) -> LocalBehavior {
         match operation {
-            ChannelOperation::New => LocalBehavior::alloc(Allocation::Mutable),
-            ChannelOperation::Push { .. }
-            | ChannelOperation::Take { .. }
-            | ChannelOperation::Close => LocalBehavior::state_write(),
-            ChannelOperation::Closed | ChannelOperation::Count | ChannelOperation::Capacity => {
-                LocalBehavior::state_read()
-            }
+            BoxOperation::New => LocalBehavior::alloc(Allocation::Mutable),
+            BoxOperation::Held => LocalBehavior::state_read(),
+            BoxOperation::Set => LocalBehavior::state_write(),
         }
     }
 

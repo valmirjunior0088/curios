@@ -295,15 +295,8 @@ fn intrinsics_unreached_from_the_root() -> Vec<String> {
 }
 
 /// The declarations of `/sys` a report writes an intrinsic by and a reader at a program's root reaches by no name: `/std` calls each only inside a declaration of its own that does more than name it.
-const UNREACHED_INTRINSICS: [&str; 46] = [
-    "/sys/Channel/Channel",
-    "/sys/Channel/capacity",
-    "/sys/Channel/close",
-    "/sys/Channel/closed",
-    "/sys/Channel/count",
-    "/sys/Channel/new",
-    "/sys/Channel/push",
-    "/sys/Channel/take",
+const UNREACHED_INTRINSICS: [&str; 39] = [
+    "/sys/Box/set",
     "/sys/Flt/ties_to_away/add",
     "/sys/Flt/ties_to_away/div",
     "/sys/Flt/ties_to_away/fma",

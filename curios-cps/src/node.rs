@@ -122,33 +122,29 @@ impl CellOp {
     }
 }
 
-/// Bounded guest queue operations. Outcome codes belong to this lowering protocol, never to the host ABI or a nominal constructor's layout.
+/// Box storage, shared by guest state and compiler-generated knots: a box always holds one value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChannelOp {
+pub enum BoxOp {
+    /// Make a box holding the operand.
     New,
-    /// Return zero for accepted, one for full, or two for closed.
-    Push,
-    /// Return zero and an item, one and a filler for empty, or two and a filler for ended.
-    Take,
-    Close,
-    Closed,
-    Count,
-    Capacity,
+    /// Return the value the box holds.
+    Held,
+    /// Make the box hold the second operand from then on.
+    Set,
 }
 
-impl ChannelOp {
+impl BoxOp {
     pub fn operand_arity(self) -> usize {
         match self {
-            Self::Push => 2,
-            Self::New | Self::Take | Self::Close | Self::Closed | Self::Count | Self::Capacity => 1,
+            Self::New | Self::Held => 1,
+            Self::Set => 2,
         }
     }
 
     pub fn result_arity(self) -> usize {
         match self {
-            Self::Take => 2,
-            Self::Close => 0,
-            Self::New | Self::Push | Self::Closed | Self::Count | Self::Capacity => 1,
+            Self::New | Self::Held => 1,
+            Self::Set => 0,
         }
     }
 }
@@ -223,8 +219,8 @@ pub enum Node {
         args: Vec<Atom>,
         return_to: ContinuationId,
     },
-    Channel {
-        op: ChannelOp,
+    Box {
+        op: BoxOp,
         args: Vec<Atom>,
         return_to: ContinuationId,
     },
@@ -409,7 +405,7 @@ pub fn atoms(node: &Node) -> Vec<&Atom> {
         | Node::Foreign { args, .. }
         | Node::Halt { args, .. }
         | Node::Cell { args, .. }
-        | Node::Channel { args, .. }
+        | Node::Box { args, .. }
         | Node::Intrinsic { args, .. } => output.extend(args),
         Node::ApplyCont(edge) => output.extend(&edge.args),
         Node::Switch {
@@ -447,7 +443,7 @@ pub fn visit_atoms_mut(node: &mut Node, visitor: &mut impl FnMut(&mut Atom)) {
         | Node::Foreign { args, .. }
         | Node::Halt { args, .. }
         | Node::Cell { args, .. }
-        | Node::Channel { args, .. }
+        | Node::Box { args, .. }
         | Node::Intrinsic { args, .. } => args.iter_mut().for_each(visitor),
         Node::ApplyCont(edge) => edge.args.iter_mut().for_each(visitor),
         Node::Switch {

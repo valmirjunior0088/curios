@@ -21,7 +21,7 @@ impl Rhs {
             Self::Operation { operands, .. }
             | Self::Sequence { operands, .. }
             | Self::Cell { operands, .. }
-            | Self::Channel { operands, .. }
+            | Self::Box { operands, .. }
             | Self::Foreign { operands, .. }
             | Self::Intrinsic { operands, .. }
             | Self::Suspension { operands, .. } => operands.clone(),
@@ -45,7 +45,7 @@ impl Rhs {
             | Self::Construct { .. }
             | Self::Project { .. }
             | Self::Cell { .. }
-            | Self::Channel { .. }
+            | Self::Box { .. }
             | Self::Foreign { .. }
             | Self::Intrinsic { .. }
             | Self::Suspension { .. } => Vec::new(),

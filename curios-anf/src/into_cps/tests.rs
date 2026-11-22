@@ -1049,7 +1049,7 @@ fn a_top_level_value_that_computes_is_run_by_its_force_alone() {
     assert_eq!(
         calls_of(&cps, init),
         0,
-        "the initializer is run through its channel: {cps}"
+        "the initializer is run through its box: {cps}"
     );
     assert_eq!(calls_of(&cps, force), 2, "g and h each force x: {cps}");
 }
@@ -1369,7 +1369,7 @@ fn the_shared_carry_is_of_no_lineage() {
     assert_eq!(lineage("io/carry"), None, "{cps}");
 }
 
-// The knot protocol: publication before forcing, storage-only captures, and the cached and reentrant paths.
+// The knot protocol: every initializer set before forcing, storage-only captures, and the cached and reentrant paths.
 
 fn knot() -> curios_cps::Module {
     let mut builder = Builder::new();
@@ -1430,19 +1430,34 @@ fn resumed(module: &curios_cps::Module, id: curios_cps::ContinuationId) -> &curi
 }
 
 #[test]
-fn every_initializer_is_published_before_the_first_force() {
+fn every_initializer_is_set_before_the_first_force() {
     let module = knot();
+    let named = |id: curios_cps::FunctionId| {
+        module
+            .function(id)
+            .unwrap()
+            .debug_name
+            .clone()
+            .unwrap_or_default()
+    };
     let mut node = module.function(module.entry().unwrap()).unwrap().body;
     let mut cells = BTreeSet::new();
-    let mut channels = BTreeSet::new();
-    let mut published = BTreeSet::new();
+    let mut boxes = BTreeSet::new();
+    let mut set = BTreeSet::new();
+    let mut cycles_bound = false;
     let mut functions_bound = false;
     loop {
         match module.node(node).unwrap() {
             curios_cps::Node::LetValue { next, .. } => node = *next,
             curios_cps::Node::LetCont { body, .. } => node = *body,
+            curios_cps::Node::LetFun { functions, body } if !cycles_bound => {
+                assert!(functions.iter().all(|&f| named(f).ends_with("/cycle")));
+                assert!(cells.is_empty() && boxes.is_empty());
+                cycles_bound = true;
+                node = *body;
+            }
             curios_cps::Node::LetFun { body, .. } => {
-                assert_eq!((cells.len(), channels.len()), (2, 2));
+                assert_eq!((cells.len(), boxes.len()), (2, 2));
                 functions_bound = true;
                 node = *body;
             }
@@ -1451,42 +1466,43 @@ fn every_initializer_is_published_before_the_first_force() {
                 return_to,
                 ..
             } => {
-                assert!(!functions_bound);
+                assert!(cycles_bound && !functions_bound);
                 let continuation = module.continuation(*return_to).unwrap();
                 cells.insert(continuation.params[0]);
                 node = continuation.body;
             }
-            curios_cps::Node::Channel {
-                op: curios_cps::ChannelOp::New,
+            curios_cps::Node::Box {
+                op: curios_cps::BoxOp::New,
                 args,
                 return_to,
             } => {
-                assert!(!functions_bound);
-                assert_eq!(
-                    args,
-                    &[curios_cps::Atom::Literal(curios_cps::Literal::Nat(
-                        Natural::from(1u32)
-                    ))]
-                );
+                assert!(cycles_bound && !functions_bound);
+                let [curios_cps::Atom::Fun(cycle)] = args[..] else {
+                    panic!("a box made holding its cycle")
+                };
+                assert!(named(cycle).ends_with("/cycle"));
                 let continuation = module.continuation(*return_to).unwrap();
-                channels.insert(continuation.params[0]);
+                boxes.insert(continuation.params[0]);
                 node = continuation.body;
             }
-            curios_cps::Node::Channel {
-                op: curios_cps::ChannelOp::Push,
+            curios_cps::Node::Box {
+                op: curios_cps::BoxOp::Set,
                 args,
                 return_to,
             } => {
                 assert!(functions_bound);
-                let curios_cps::Atom::Value(channel) = args[0] else {
-                    panic!("channel handle")
+                let curios_cps::Atom::Value(held) = args[0] else {
+                    panic!("box handle")
                 };
-                assert!(channels.contains(&channel) && published.insert(channel));
-                assert!(matches!(args[1], curios_cps::Atom::Fun(_)));
+                assert!(boxes.contains(&held) && set.insert(held));
+                let curios_cps::Atom::Fun(initializer) = args[1] else {
+                    panic!("an initializer")
+                };
+                assert!(named(initializer).ends_with("/init"));
                 node = module.continuation(*return_to).unwrap().body;
             }
             curios_cps::Node::ApplyFun { .. } => {
-                assert_eq!(published, channels);
+                assert_eq!(set, boxes);
                 break;
             }
             other => panic!("unexpected initialization operation: {other:?}"),
@@ -1518,7 +1534,7 @@ fn a_cached_result_returns_without_touching_the_initializer() {
 }
 
 #[test]
-fn an_empty_initializer_is_a_cycle_and_a_taken_initializer_fills_the_result() {
+fn a_force_sets_the_cycle_before_it_runs_what_its_box_held_and_fills_the_result() {
     let module = knot();
     let function = force(&module);
     let curios_cps::Node::Cell {
@@ -1532,33 +1548,44 @@ fn an_empty_initializer_is_a_cycle_and_a_taken_initializer_fills_the_result() {
     let curios_cps::Node::Switch { cases, .. } = resumed(&module, *return_to) else {
         panic!("presence")
     };
-    let curios_cps::Node::Channel {
-        op: curios_cps::ChannelOp::Take,
+    let curios_cps::Node::Box {
+        op: curios_cps::BoxOp::Held,
+        args: held_args,
         return_to,
-        ..
     } = resumed(&module, cases[&0].target)
     else {
-        panic!("claim initializer")
+        panic!("read what the box holds")
     };
-    let taken = module.continuation(*return_to).unwrap();
-    let curios_cps::Node::Switch { cases, .. } = resumed(&module, *return_to) else {
-        panic!("take outcome")
+    let read = module.continuation(*return_to).unwrap();
+    let curios_cps::Node::Box {
+        op: curios_cps::BoxOp::Set,
+        args,
+        return_to,
+    } = resumed(&module, *return_to)
+    else {
+        panic!("set the cycle")
     };
+    let [curios_cps::Atom::Value(held), curios_cps::Atom::Fun(cycle)] = args[..] else {
+        panic!("the box and the cycle")
+    };
+    assert_eq!(held_args, &[curios_cps::Atom::Value(held)]);
+    let cycle = module.function(cycle).unwrap();
+    assert_eq!(cycle.debug_name.as_deref(), Some("left/cycle"));
     let curios_cps::Node::Panic(curios_cps::Panic::Cycle(Some(member))) =
-        resumed(&module, cases[&1].target)
+        executable(&module, cycle.body)
     else {
         panic!("a cycle naming its member")
     };
     assert_eq!(module.members()[member.index()], "left");
     let curios_cps::Node::ApplyFun {
-        callee: curios_cps::Callee::Closure(thunk),
+        callee: curios_cps::Callee::Closure(next),
         args,
         return_to,
-    } = resumed(&module, cases[&0].target)
+    } = resumed(&module, *return_to)
     else {
-        panic!("run claimed initializer")
+        panic!("run what the box held")
     };
-    assert_eq!(*thunk, taken.params[1]);
+    assert_eq!(*next, read.params[0]);
     assert!(args.is_empty());
     let produced = module.continuation(*return_to).unwrap().params[0];
     let curios_cps::Node::Cell {
@@ -1581,7 +1608,7 @@ fn an_empty_initializer_is_a_cycle_and_a_taken_initializer_fills_the_result() {
 }
 
 #[test]
-fn forcing_captures_only_the_cell_and_channel() {
+fn forcing_captures_only_the_cell_and_box() {
     let module = knot();
     let function = force(&module);
     let mut used = BTreeSet::new();
@@ -1595,7 +1622,11 @@ fn forcing_captures_only_the_cell_and_channel() {
                 curios_cps::Atom::Value(value) => {
                     used.insert(*value);
                 }
-                curios_cps::Atom::Fun(_) => panic!("a force must not capture a named initializer"),
+                curios_cps::Atom::Fun(id) => assert_eq!(
+                    module.function(*id).unwrap().debug_name.as_deref(),
+                    Some("left/cycle"),
+                    "a force names its member's cycle and no initializer"
+                ),
                 _ => {}
             }
         }
@@ -1611,7 +1642,7 @@ fn forcing_captures_only_the_cell_and_channel() {
                     work.push(continuation.body);
                 }
             }
-            curios_cps::Node::Cell { args, .. } | curios_cps::Node::Channel { args, .. } => {
+            curios_cps::Node::Cell { args, .. } | curios_cps::Node::Box { args, .. } => {
                 let curios_cps::Atom::Value(handle) = args[0] else {
                     panic!("storage handle")
                 };

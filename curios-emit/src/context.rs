@@ -963,7 +963,7 @@ impl<'a, 'b> Context<'a, 'b> {
             }) => self.call_heap_instrs(target, params, resume),
             EmissionTail::Host(host) => self.host_instrs(host),
             EmissionTail::Cell(cell) => self.cell_instrs(cell),
-            EmissionTail::Channel(channel) => self.channel_instrs(channel),
+            EmissionTail::Box(target) => self.box_instrs(target),
             EmissionTail::Frame(frame) => self.frame_instrs(frame),
             EmissionTail::Panic(panic) => self.table().refuse_instrs(*panic),
             // An arm the theory proved impossible, carried down as `curios_cps::Node::Unreachable`; reaching it is a compiler bug, which is what the refusal reports.

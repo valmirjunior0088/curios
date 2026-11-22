@@ -62,17 +62,6 @@ pub struct RopeData {
     pub offset_field: curios_wasm::FieldName,
 }
 
-/// The bounded channel's storage names. The payload array fixes capacity; mutable head, count, and closed fields describe its live window.
-#[derive(Debug, Clone)]
-pub struct ChannelData {
-    pub channel: curios_wasm::TypeName,
-    pub payload: curios_wasm::TypeName,
-    pub payload_field: curios_wasm::FieldName,
-    pub head_field: curios_wasm::FieldName,
-    pub count_field: curios_wasm::FieldName,
-    pub closed_field: curios_wasm::FieldName,
-}
-
 /// The name bundle for the boxed form a `Nat` or `Int` outside the i31 takes: the `$big` struct, the `$words` array holding its magnitude, and the struct's two fields — one handle for the big-number helpers and the literal materialization to share.
 #[derive(Debug, Clone)]
 pub struct BigData {
@@ -464,6 +453,7 @@ pub struct Table<'a> {
     list_rope_enter_or_null_type: curios_wasm::TypeName,
     rope_room_type: curios_wasm::TypeName,
     cell_type: curios_wasm::TypeName,
+    box_type: curios_wasm::TypeName,
 
     panic: OnceCell<curios_wasm::FuncName>,
     // The helper of each refusal the code reaches, minted lazily: a module declares the refusals its code can reach and no others, a cycle's once for each member it names.
@@ -595,6 +585,7 @@ impl<'a> Table<'a> {
             list_rope_enter_or_null_type: curios_wasm::TypeName::from("rope/list/enter_or_null"),
             rope_room_type: curios_wasm::TypeName::from("rope/room"),
             cell_type: curios_wasm::TypeName::from("cell"),
+            box_type: curios_wasm::TypeName::from("box"),
             panic: OnceCell::new(),
             refuse: Default::default(),
             members: module.members(),
@@ -969,19 +960,12 @@ impl<'a> Table<'a> {
         }
     }
 
-    pub fn channel(&self) -> ChannelData {
-        ChannelData {
-            channel: curios_wasm::TypeName::from("channel"),
-            payload: self.elems_type(),
-            payload_field: curios_wasm::FieldName::from("payload"),
-            head_field: curios_wasm::FieldName::from("head"),
-            count_field: curios_wasm::FieldName::from("count"),
-            closed_field: curios_wasm::FieldName::from("closed"),
-        }
-    }
-
     pub fn cell_type(&self) -> curios_wasm::TypeName {
         self.cell_type.clone()
+    }
+
+    pub fn box_type(&self) -> curios_wasm::TypeName {
+        self.box_type.clone()
     }
 
     /// The internal binding name of a store-described host function. First use during emission records the function as live; [`host_funcs`](Self::host_funcs) hands the recorded set to `emit_sys_imports`.

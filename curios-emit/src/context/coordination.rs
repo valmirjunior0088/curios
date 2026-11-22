@@ -1,11 +1,10 @@
-//! Guest coordination instructions. Every attempt finishes inline before its continuation runs; taking a channel item clears its array slot, so a drained channel retains no removed payloads. Scratch locals are assigned on every path that reads them, including when one call site is executed repeatedly in a loop.
+//! Guest coordination instructions. Every attempt finishes inline before its continuation runs. Scratch locals are assigned on every path that reads them, including when one call site is executed repeatedly in a loop.
 
 use {
     super::{Context, LoadAs},
     crate::{
-        BigHelper, EmissionBlockName, EmissionCellTarget, EmissionChannelTarget,
-        EmissionFrameTarget, Table, branch, call, concrete_val, either, field_get, field_set, get,
-        i32_const, set,
+        EmissionBlockName, EmissionBoxTarget, EmissionCellTarget, EmissionFrameTarget, either,
+        field_get, field_set, i32_const,
     },
 };
 
@@ -118,138 +117,28 @@ impl<'a> Context<'a, '_> {
         output
     }
 
-    pub(super) fn channel_instrs(
-        &mut self,
-        target: &'a EmissionChannelTarget,
-    ) -> Vec<curios_wasm::Instr> {
-        let data = self.table().channel();
-        let word = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
+    /// A box operation, inline: `New` makes the box holding its operand, `Held` answers what the box holds, and `Set` makes it hold its second operand, answering nothing. The field admits null, as every reference position does, so a filler stored in a box reads back as it was stored.
+    pub(super) fn box_instrs(&self, target: &'a EmissionBoxTarget) -> Vec<curios_wasm::Instr> {
+        let type_name = self.table().box_type();
+        let field = self.table().special_field();
         let mut output = Vec::new();
-        if target.op == curios_cps::ChannelOp::New {
-            output.extend(self.load_length_instrs(&target.args[0]));
-            output.push(curios_wasm::Instr::ArrayNewDefault {
-                type_name: data.payload,
-            });
-            output.extend([i32_const(0), i32_const(0), i32_const(0)]);
-            output.push(curios_wasm::Instr::StructNew {
-                type_name: data.channel,
-            });
-            self.coordination_resume(&mut output, &target.resume, 1);
-            return output;
-        }
-        let channel = self.push_local("channel", concrete_val(data.channel.clone(), true));
-        output.extend(
-            self.load_value_instrs(&target.args[0], LoadAs::Concrete(data.channel.clone())),
-        );
-        output.push(set(&channel));
-        let read = |field| vec![get(&channel), field_get(&data.channel, field)];
-        let capacity = || {
-            let mut instrs = read(&data.payload_field);
-            instrs.push(curios_wasm::Instr::ArrayLen);
-            instrs
-        };
         match target.op {
-            curios_cps::ChannelOp::New => unreachable!("creation was emitted above"),
-            curios_cps::ChannelOp::Close => {
-                output.extend([
-                    get(&channel),
-                    i32_const(1),
-                    field_set(&data.channel, &data.closed_field),
-                ]);
+            curios_cps::BoxOp::New => {
+                output.extend(self.load_value_instrs(&target.args[0], LoadAs::Null));
+                output.push(curios_wasm::Instr::StructNew { type_name });
             }
-            curios_cps::ChannelOp::Closed => {
-                output.extend(read(&data.closed_field));
-                output.push(curios_wasm::Instr::RefI31);
+            curios_cps::BoxOp::Held => {
+                output.extend(
+                    self.load_value_instrs(&target.args[0], LoadAs::Concrete(type_name.clone())),
+                );
+                output.push(field_get(&type_name, &field));
             }
-            curios_cps::ChannelOp::Count | curios_cps::ChannelOp::Capacity => {
-                output.extend(if target.op == curios_cps::ChannelOp::Count {
-                    read(&data.count_field)
-                } else {
-                    capacity()
-                });
-                output.push(curios_wasm::Instr::I64ExtendI32U);
-                output.push(call(&self.table().big_func(BigHelper::OfU64)));
-            }
-            curios_cps::ChannelOp::Push => {
-                let mut insert = read(&data.payload_field);
-                // Widen the index sum so a head near the array bound cannot wrap before the remainder.
-                insert.extend(read(&data.head_field));
-                insert.push(curios_wasm::Instr::I64ExtendI32U);
-                insert.extend(read(&data.count_field));
-                insert.extend([
-                    curios_wasm::Instr::I64ExtendI32U,
-                    curios_wasm::Instr::I64Add,
-                ]);
-                insert.extend(capacity());
-                insert.extend([
-                    curios_wasm::Instr::I64ExtendI32U,
-                    curios_wasm::Instr::I64RemU,
-                    curios_wasm::Instr::I32WrapI64,
-                ]);
-                insert.extend(self.load_value_instrs(&target.args[1], LoadAs::NonNull));
-                insert.push(curios_wasm::Instr::ArraySet {
-                    type_name: data.payload.clone(),
-                });
-                insert.push(get(&channel));
-                insert.extend(read(&data.count_field));
-                insert.extend([
-                    i32_const(1),
-                    curios_wasm::Instr::I32Add,
-                    field_set(&data.channel, &data.count_field),
-                    i32_const(0),
-                ]);
-                let mut open = read(&data.count_field);
-                open.extend(capacity());
-                open.push(curios_wasm::Instr::I32Eq);
-                open.push(either(word.clone(), vec![i32_const(1)], insert));
-                output.extend(read(&data.closed_field));
-                output.push(either(word, vec![i32_const(2)], open));
-                output.push(curios_wasm::Instr::RefI31);
-            }
-            curios_cps::ChannelOp::Take => {
-                let payload = self.push_local("channel_item", Table::top_type(true));
-                let status = self.push_local("channel_status", word.clone());
-                let mut take = read(&data.payload_field);
-                take.extend(read(&data.head_field));
-                take.push(curios_wasm::Instr::ArrayGet {
-                    type_name: data.payload.clone(),
-                });
-                take.push(set(&payload));
-                take.extend(read(&data.payload_field));
-                take.extend(read(&data.head_field));
-                take.push(curios_wasm::Instr::RefNull {
-                    heap_type: curios_wasm::HeapType::Abstract(curios_wasm::AbsHeapType::Any),
-                });
-                take.push(curios_wasm::Instr::ArraySet {
-                    type_name: data.payload.clone(),
-                });
-                take.push(get(&channel));
-                take.extend(read(&data.head_field));
-                take.extend([i32_const(1), curios_wasm::Instr::I32Add]);
-                take.extend(capacity());
-                take.push(curios_wasm::Instr::I32RemU);
-                take.push(field_set(&data.channel, &data.head_field));
-                take.push(get(&channel));
-                take.extend(read(&data.count_field));
-                take.extend([
-                    i32_const(1),
-                    curios_wasm::Instr::I32Sub,
-                    field_set(&data.channel, &data.count_field),
-                    i32_const(0),
-                    set(&status),
-                ]);
-                let mut empty = vec![
-                    curios_wasm::Instr::RefNull {
-                        heap_type: curios_wasm::HeapType::Abstract(curios_wasm::AbsHeapType::Any),
-                    },
-                    set(&payload),
-                ];
-                empty.extend(read(&data.closed_field));
-                empty.push(either(word, vec![i32_const(2)], vec![i32_const(1)]));
-                empty.push(set(&status));
-                output.extend(read(&data.count_field));
-                output.push(branch(take, empty));
-                output.extend([get(&status), curios_wasm::Instr::RefI31, get(&payload)]);
+            curios_cps::BoxOp::Set => {
+                output.extend(
+                    self.load_value_instrs(&target.args[0], LoadAs::Concrete(type_name.clone())),
+                );
+                output.extend(self.load_value_instrs(&target.args[1], LoadAs::Null));
+                output.push(field_set(&type_name, &field));
             }
         }
         self.coordination_resume(&mut output, &target.resume, target.op.result_arity());

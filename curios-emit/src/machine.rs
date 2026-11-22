@@ -114,13 +114,13 @@ pub enum MachineTerminator {
         op: curios_cps::CellOp,
         args: Vec<MachineOperand>,
     },
-    Channel {
-        op: curios_cps::ChannelOp,
+    Box {
+        op: curios_cps::BoxOp,
         args: Vec<MachineOperand>,
         resume: MachineBlockId,
     },
-    ChannelReturn {
-        op: curios_cps::ChannelOp,
+    BoxReturn {
+        op: curios_cps::BoxOp,
         args: Vec<MachineOperand>,
     },
     Intrinsic {
@@ -867,16 +867,16 @@ impl<'a> MachineFunctionLowerer<'a> {
                     }
                 }
             }
-            curios_cps::Node::Channel {
+            curios_cps::Node::Box {
                 op,
                 args,
                 return_to,
             } => {
                 let args = self.lower_atoms(args, instructions);
                 if *return_to == self.function.return_cont {
-                    MachineTerminator::ChannelReturn { op: *op, args }
+                    MachineTerminator::BoxReturn { op: *op, args }
                 } else {
-                    MachineTerminator::Channel {
+                    MachineTerminator::Box {
                         op: *op,
                         args,
                         resume: self.queue_continuation(*return_to),
@@ -1352,18 +1352,18 @@ impl MachineModule {
                 }
                 tail_returns(owner, function, op.result_arity())?;
             }
-            MachineTerminator::Channel { op, args, resume } => {
+            MachineTerminator::Box { op, args, resume } => {
                 if args.len() != op.operand_arity() {
                     return Err(MachineVerifyError(format!(
-                        "{owner} channel operation has the wrong operand count"
+                        "{owner} box operation has the wrong operand count"
                     )));
                 }
                 verify_block_resume(function, *resume, op.result_arity())?
             }
-            MachineTerminator::ChannelReturn { op, args } => {
+            MachineTerminator::BoxReturn { op, args } => {
                 if args.len() != op.operand_arity() {
                     return Err(MachineVerifyError(format!(
-                        "{owner} channel return has the wrong operand count"
+                        "{owner} box return has the wrong operand count"
                     )));
                 }
                 tail_returns(owner, function, op.result_arity())?;

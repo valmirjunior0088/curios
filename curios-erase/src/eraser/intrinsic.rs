@@ -94,7 +94,7 @@ impl Eraser<'_> {
         self.walk(context, term, &type_, None)
     }
 
-    /// Erase a value put into a cell or a channel as the slot it fills: against what the roster demands of it, a proof or a type held as its stand-in ([`kept_operand`](Self::kept_operand)).
+    /// Erase a value put into a cell or a box as the slot it fills: against what the roster demands of it, a proof or a type held as its stand-in ([`kept_operand`](Self::kept_operand)).
     fn kept(
         &mut self,
         context: &mut Reader,
@@ -209,7 +209,7 @@ impl Eraser<'_> {
             | curios_core::Intrinsic::ListType(_)
             | curios_core::Intrinsic::HandleType
             | curios_core::Intrinsic::CellType(_)
-            | curios_core::Intrinsic::ChannelType(_)
+            | curios_core::Intrinsic::BoxType(_)
             | curios_core::Intrinsic::IoType(_) => Ok(Outcome::Emitted(self.unit())),
 
             &curios_core::Intrinsic::Bool(value) => {
@@ -441,88 +441,42 @@ impl Eraser<'_> {
                     ))
                 })
             }
-            curios_core::Intrinsic::Channel { .. } => {
-                let [capacity] = places(computed(context, intrinsic));
-                let capacity = emitted!(self.demanded(context, &capacity)?);
-                self.thunk(hint.or(Some("io/channel_new")), move |lowering| {
-                    Ok(lowering.bind(
-                        None,
-                        curios_anf::Rhs::Channel {
-                            operation: curios_anf::ChannelOperation::New,
-                            operands: vec![capacity],
-                        },
-                    ))
-                })
-            }
-            curios_core::Intrinsic::ChannelPush { .. } => {
-                let [channel, value] = places(computed(context, intrinsic));
-                let channel = emitted!(self.demanded(context, &channel)?);
+            curios_core::Intrinsic::Box { .. } => {
+                let [value] = places(computed(context, intrinsic));
                 let value = emitted!(self.kept(context, &value)?);
-                let syntax = context.syntax().channel;
-                let push = (syntax.push, result_sorts(intrinsic));
-                let taken = self.outcome_constructor(context, push, syntax.taken)?;
-                let full = self.outcome_constructor(context, push, syntax.full)?;
-                let closed = self.outcome_constructor(context, push, syntax.closed)?;
-                self.thunk(hint.or(Some("io/channel_push")), move |lowering| {
+                self.thunk(hint.or(Some("io/box_new")), move |lowering| {
                     Ok(lowering.bind(
                         None,
-                        curios_anf::Rhs::Channel {
-                            operation: curios_anf::ChannelOperation::Push {
-                                taken,
-                                full,
-                                closed,
-                            },
-                            operands: vec![channel, value],
+                        curios_anf::Rhs::Box {
+                            operation: curios_anf::BoxOperation::New,
+                            operands: vec![value],
                         },
                     ))
                 })
             }
-            curios_core::Intrinsic::ChannelTake { .. } => {
-                let [channel] = places(computed(context, intrinsic));
-                let channel = emitted!(self.demanded(context, &channel)?);
-                let syntax = context.syntax().channel;
-                let take = (syntax.take, result_sorts(intrinsic));
-                let item = self.outcome_constructor(context, take, syntax.item)?;
-                let empty = self.outcome_constructor(context, take, syntax.empty)?;
-                let ended = self.outcome_constructor(context, take, syntax.ended)?;
-                self.thunk(hint.or(Some("io/channel_take")), move |lowering| {
+            curios_core::Intrinsic::BoxHeld { .. } => {
+                let [target] = places(computed(context, intrinsic));
+                let target = emitted!(self.demanded(context, &target)?);
+                self.thunk(hint.or(Some("io/box_held")), move |lowering| {
                     Ok(lowering.bind(
                         None,
-                        curios_anf::Rhs::Channel {
-                            operation: curios_anf::ChannelOperation::Take { item, empty, ended },
-                            operands: vec![channel],
+                        curios_anf::Rhs::Box {
+                            operation: curios_anf::BoxOperation::Held,
+                            operands: vec![target],
                         },
                     ))
                 })
             }
-            curios_core::Intrinsic::ChannelClose { .. }
-            | curios_core::Intrinsic::ChannelClosed { .. }
-            | curios_core::Intrinsic::ChannelCount { .. }
-            | curios_core::Intrinsic::ChannelCapacity { .. } => {
-                let [channel] = places(computed(context, intrinsic));
-                let channel = emitted!(self.demanded(context, &channel)?);
-                let (operation, name) = match intrinsic {
-                    curios_core::Intrinsic::ChannelClose { .. } => {
-                        (curios_anf::ChannelOperation::Close, "io/channel_close")
-                    }
-                    curios_core::Intrinsic::ChannelClosed { .. } => {
-                        (curios_anf::ChannelOperation::Closed, "io/channel_closed")
-                    }
-                    curios_core::Intrinsic::ChannelCount { .. } => {
-                        (curios_anf::ChannelOperation::Count, "io/channel_count")
-                    }
-                    curios_core::Intrinsic::ChannelCapacity { .. } => (
-                        curios_anf::ChannelOperation::Capacity,
-                        "io/channel_capacity",
-                    ),
-                    _ => unreachable!("channel query arm"),
-                };
-                self.thunk(hint.or(Some(name)), move |lowering| {
+            curios_core::Intrinsic::BoxSet { .. } => {
+                let [target, value] = places(computed(context, intrinsic));
+                let target = emitted!(self.demanded(context, &target)?);
+                let value = emitted!(self.kept(context, &value)?);
+                self.thunk(hint.or(Some("io/box_set")), move |lowering| {
                     Ok(lowering.bind(
                         None,
-                        curios_anf::Rhs::Channel {
-                            operation,
-                            operands: vec![channel],
+                        curios_anf::Rhs::Box {
+                            operation: curios_anf::BoxOperation::Set,
+                            operands: vec![target, value],
                         },
                     ))
                 })

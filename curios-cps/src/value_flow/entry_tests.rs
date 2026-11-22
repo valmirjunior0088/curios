@@ -401,27 +401,30 @@ fn tupled_suspension(module: &mut Module, row: RowId, next: NodeId) -> NodeId {
     })
 }
 
-/// A suspension built ahead of `next` and filled into `into`, a cell, or pushed onto it, a channel.
+/// A suspension built ahead of `next` and filled into `into`, a cell, or set in it, a box.
 fn stored_suspension(
     module: &mut Module,
     row: RowId,
     into: ValueId,
-    channel: bool,
+    boxed: bool,
     next: NodeId,
 ) -> NodeId {
     let suspension = module.add_value(None);
-    let outcome = module.add_value(None);
+    let params = match boxed {
+        true => Vec::new(),
+        false => vec![module.add_value(None)],
+    };
     let after = module.add_continuation(Continuation {
         lineage: None,
         debug_name: None,
-        params: vec![outcome],
+        params,
         body: next,
         terminates: false,
     });
     let args = vec![Atom::Value(into), Atom::Value(suspension)];
-    let store = match channel {
-        true => module.add_node(Node::Channel {
-            op: ChannelOp::Push,
+    let store = match boxed {
+        true => module.add_node(Node::Box {
+            op: BoxOp::Set,
             args,
             return_to: after,
         }),
@@ -442,7 +445,7 @@ fn stored_suspension(
     })
 }
 
-/// What the entry is handed may be any function some atom names, and any construction, cell or channel content of its kind the module builds or stores: read through a closure call, a field, a cell or a channel, it carries the turns where the module holds a suspension there, and none where it holds none.
+/// What the entry is handed may be any function some atom names, and any construction, cell or box content of its kind the module builds or stores: read through a closure call, a field, a cell or a box, it carries the turns where the module holds a suspension there, and none where it holds none.
 #[test]
 fn what_the_entry_is_handed_carries_the_turns_the_module_holds_where_it_is_read() {
     for boundary in 0..4 {
@@ -468,7 +471,7 @@ fn what_the_entry_is_handed_carries_the_turns_the_module_holds_where_it_is_read(
     }
 }
 
-/// The entry's answer read out of `handed` by a closure call, a field, a cell's poll or a channel's take, by `boundary`, returned directly or, where `tail`, by the read's own return.
+/// The entry's answer read out of `handed` by a closure call, a field, a cell's poll or a box's read, by `boundary`, returned directly or, where `tail`, by the read's own return.
 fn read_handed(
     module: &mut Module,
     boundary: usize,
@@ -479,7 +482,7 @@ fn read_handed(
     let result = module.add_value(None);
     let resume = module.reserve_continuation();
     let body = returning(module, ret, Atom::Value(result));
-    let params_of_resume = if boundary >= 2 {
+    let params_of_resume = if boundary == 2 {
         vec![module.add_value(None), result]
     } else {
         vec![result]
@@ -523,8 +526,8 @@ fn read_handed(
             args: vec![Atom::Value(handed)],
             return_to: resume,
         }),
-        _ => module.add_node(Node::Channel {
-            op: ChannelOp::Take,
+        _ => module.add_node(Node::Box {
+            op: BoxOp::Held,
             args: vec![Atom::Value(handed)],
             return_to: resume,
         }),
@@ -613,40 +616,35 @@ fn an_escaping_functions_parameters_take_what_every_call_hands() {
     }
 }
 
-/// A cell's or a channel's payload is what any fill or push stores, through a helper's tail return: none where nothing stores a suspension, and the turns where something does.
+/// A cell's or a box's payload is what any fill or set stores, through a helper's tail return: none where nothing stores a suspension, and the turns where something does.
 #[test]
-fn a_cells_or_a_channels_payload_is_what_any_fill_or_push_stores() {
-    for channel in [false, true] {
+fn what_a_cell_or_a_box_holds_is_what_any_fill_or_set_stores() {
+    for boxed in [false, true] {
         for stored in [false, true] {
             let module = entry_with(1, |module, params, ret| {
                 let row = module.suspension_row();
-                let read = poll_or_take(module, channel, params[0], ret);
+                let read = poll_or_read(module, boxed, params[0], ret);
                 match stored {
                     false => read,
-                    true => stored_suspension(module, row, params[0], channel, read),
+                    true => stored_suspension(module, row, params[0], boxed, read),
                 }
             });
             assert_eq!(
                 module.entry_suspension(),
                 module.suspension().filter(|_| stored),
-                "channel: {channel}, stored: {stored}"
+                "boxed: {boxed}, stored: {stored}"
             );
         }
     }
 }
 
-/// The entry's answer, the payload a helper polls out of the cell or takes off the channel `handed` and hands back by its tail return.
-fn poll_or_take(
-    module: &mut Module,
-    channel: bool,
-    handed: ValueId,
-    ret: ContinuationId,
-) -> NodeId {
+/// The entry's answer, the payload a helper polls out of the cell or reads out of the box `handed` and hands back by its tail return.
+fn poll_or_read(module: &mut Module, boxed: bool, handed: ValueId, ret: ContinuationId) -> NodeId {
     let worker = define(module, |module, sentinel| {
         let args = vec![Atom::Value(handed)];
-        match channel {
-            true => module.add_node(Node::Channel {
-                op: ChannelOp::Take,
+        match boxed {
+            true => module.add_node(Node::Box {
+                op: BoxOp::Held,
                 args,
                 return_to: sentinel,
             }),
@@ -657,8 +655,11 @@ fn poll_or_take(
             }),
         }
     });
-    let status = module.add_value(None);
     let payload = module.add_value(None);
+    let params = match boxed {
+        true => vec![payload],
+        false => vec![module.add_value(None), payload],
+    };
     let resume = module.reserve_continuation();
     let body = returning(module, ret, Atom::Value(payload));
     module.define_continuation(
@@ -666,7 +667,7 @@ fn poll_or_take(
         Continuation {
             lineage: None,
             debug_name: None,
-            params: vec![status, payload],
+            params,
             body,
             terminates: false,
         },

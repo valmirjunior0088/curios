@@ -26,9 +26,9 @@ mod tests;
 
 use {
     super::{
-        Analysis, Atom, Block, BlockId, CellOperation, Constant, ConstantId, ConstructorId,
-        FamilyId, FieldShape, Function, FunctionId, Module, Operation, ProductId, RecGroup,
-        RecGroupId, Rhs, SequenceGrain, SequenceOp, Statement, StatementId, Terminator,
+        Analysis, Atom, Block, BlockId, BoxOperation, CellOperation, Constant, ConstantId,
+        ConstructorId, FamilyId, FieldShape, Function, FunctionId, Module, Operation, ProductId,
+        RecGroup, RecGroupId, Rhs, SequenceGrain, SequenceOp, Statement, StatementId, Terminator,
         UnconsSequenceStep, ValueId, VariantArm,
     },
     curios_common::grown,

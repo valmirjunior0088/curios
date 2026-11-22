@@ -190,7 +190,7 @@ fn annotate_node(term: &Term, site: &Rc<ErasedSite>, positions: &mut Vec<Positio
         Subterm::Intrinsic(
             Intrinsic::ListType(type_)
             | Intrinsic::CellType(type_)
-            | Intrinsic::ChannelType(type_)
+            | Intrinsic::BoxType(type_)
             | Intrinsic::IoType(type_),
         ) => push(positions, site, type_),
 

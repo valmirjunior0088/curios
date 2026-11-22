@@ -19,10 +19,10 @@ mod tests;
 
 use {
     super::{
-        Atom, Block, BlockId, Case, CellOperation, ChannelOperation, Constructor, ConstructorId,
-        FamilyId, Function, FunctionId, Intrinsic, Keys, Module, ProductId, ProductSchema,
-        RecGroup, RecGroupId, Rhs, SequenceArity, Statement, StatementId, Terminator, ValueId,
-        VariantFamily, spell_function, spell_value,
+        Atom, Block, BlockId, Case, CellOperation, Constructor, ConstructorId, FamilyId, Function,
+        FunctionId, Intrinsic, Keys, Module, ProductId, ProductSchema, RecGroup, RecGroupId, Rhs,
+        SequenceArity, Statement, StatementId, Terminator, ValueId, VariantFamily, spell_function,
+        spell_value,
     },
     curios_abi::Namespace,
     curios_common::{grown, recurse},
@@ -133,7 +133,7 @@ pub enum StructuralRule {
     OperationArity,
     SequenceOperationArity,
     CellArity,
-    ChannelArity,
+    BoxArity,
     ForeignArity,
     IntrinsicArity,
     SuspensionArity,
@@ -692,30 +692,13 @@ impl<'m> Verifier<'m> {
                     self.check_atom(id, atom)?;
                 }
             }
-            Rhs::Channel {
+            Rhs::Box {
                 operation,
                 operands,
             } => {
-                match operation {
-                    ChannelOperation::Push {
-                        taken,
-                        full,
-                        closed,
-                    } => {
-                        for constructor in [taken, full, closed] {
-                            self.outcome(constructor, 0)?;
-                        }
-                    }
-                    ChannelOperation::Take { item, empty, ended } => {
-                        self.holding(item)?;
-                        self.outcome(empty, 0)?;
-                        self.outcome(ended, 0)?;
-                    }
-                    _ => {}
-                }
                 if operands.len() != operation.arity() {
                     return Err(fault(
-                        StructuralRule::ChannelArity,
+                        StructuralRule::BoxArity,
                         format!(
                             "statement {id} gives {operation:?} {} operands; its arity is {}",
                             operands.len(),

@@ -3,10 +3,10 @@ use {
         BigEmitter, BigHelper, ClsrData, Context, EmissionClosure, EmissionData, EmissionFunction,
         EmissionFunctionName, EmissionModule, EmissionValueName, ExprEmitter, FltEmitter,
         FltHelper, ImmediateLayout, RopeData, RopeEmitter, Table, TurnEmitter, answer_instrs,
-        big_sub_type, bytes_sub_type, cell_sub_type, channel_sub_type, concrete_val,
-        elems_sub_type, flt_sub_type, longs_sub_type, null, refusal_data_name, refusal_message,
-        rope_base_sub_type, rope_enter_sub_type, rope_leaf_sub_type, rope_node_sub_type,
-        rope_room_sub_type, rope_view_sub_type, words_sub_type,
+        big_sub_type, bytes_sub_type, concrete_val, elems_sub_type, flt_sub_type, holder_sub_type,
+        longs_sub_type, null, refusal_data_name, refusal_message, rope_base_sub_type,
+        rope_enter_sub_type, rope_leaf_sub_type, rope_node_sub_type, rope_room_sub_type,
+        rope_view_sub_type, words_sub_type,
     },
     curios_abi::{ENTRY, Namespace, PANIC, WireType},
     curios_num::Binary,
@@ -158,11 +158,12 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     fn emit_cell_type(&mut self) {
         self.module.add_type(
             self.table.cell_type(),
-            cell_sub_type(self.table.special_field(), Table::top_type(true)),
+            holder_sub_type(self.table.special_field(), Table::top_type(true)),
         );
-        let channel = self.table.channel();
-        self.module
-            .add_type(channel.channel.clone(), channel_sub_type(&channel));
+        self.module.add_type(
+            self.table.box_type(),
+            holder_sub_type(self.table.special_field(), Table::top_type(true)),
+        );
     }
 
     fn emit_tuple_types(&mut self) {

@@ -7,11 +7,10 @@
 use {
     crate::*,
     curios_common::{
-        ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
-        EqlDerivation, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
-        OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax,
-        ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry,
-        TestSyntax,
+        CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax, EqlDerivation,
+        HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax, OperatorSyntax,
+        OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax, ReportSyntax,
+        ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
     },
     curios_core::{Applications, Free, Global, InductDecl, Polarity, StructDecl, Term},
     std::{collections::BTreeMap, convert::Infallible},
@@ -38,16 +37,6 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         family: name(&["sys", "Result"]),
         success: name(&["sys", "Result", "success"]),
         failure: name(&["sys", "Result", "failure"]),
-    },
-    channel: ChannelSyntax {
-        push: name(&["sys", "Channel", "Push"]),
-        taken: name(&["sys", "Channel", "Push", "taken"]),
-        full: name(&["sys", "Channel", "Push", "full"]),
-        closed: name(&["sys", "Channel", "Push", "closed"]),
-        take: name(&["sys", "Channel", "Take"]),
-        item: name(&["sys", "Channel", "Take", "item"]),
-        empty: name(&["sys", "Channel", "Take", "empty"]),
-        ended: name(&["sys", "Channel", "Take", "ended"]),
     },
     monad: MonadSyntax {
         bind: field(&["std", "Monad"], "bind"),

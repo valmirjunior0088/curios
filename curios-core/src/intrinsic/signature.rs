@@ -12,7 +12,7 @@
 //!
 //! A narrowing carries its bound as an operand for the same reason, as [`Intrinsic::NatToByte`] and [`Intrinsic::IntToNat`] state: a bound stated only on `/sys`'s wrapper stops constraining anything the moment that wrapper unfolds, leaving a bare narrowing this table would type from its operand alone, and one that masked instead would change a value, which `documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md` forbids. The stated domain buys the inverse besides: `ByteToNat` reduces back through `NatToByte`, which is what lets a bound established in `Nat` survive a trip through `Byte`.
 //!
-//! Channel creation carries its positive-capacity evidence as an operand. Coordination outcomes are ordinary registered inductives: every `Produced::Fixed` result goes through the ordinary type-formation judgment in both checkers, and elaboration retains the resulting universe instance on `CellPoll` and `ChannelTake`. The registry supplies identities, not a separate declaration validator.
+//! A coordination outcome is an ordinary registered inductive: every `Produced::Fixed` result goes through the ordinary type-formation judgment in both checkers, and elaboration retains the resulting universe instance on `CellPoll`. The registry supplies identities, not a separate declaration validator.
 //!
 //! **These rows cover what a program writes, and nothing below erasure.** The lowerings emit sequence reads of their own, where a proposition cannot be stated at all — so what holds those is that they name no extent to get wrong rather than a bound anything re-checks; see [A lowering names the elimination it performs](../../../documentation/design/compilation/a-lowering-names-the-elimination-it-performs.md).
 //!
@@ -95,7 +95,7 @@ impl Intrinsic {
         let bytes_len = |bytes| Term::intrinsic(Intrinsic::BytesLen(bytes));
         let list_len = |element, list| Term::intrinsic(Intrinsic::ListLen { element, list });
         let cell_type = |element: Term| Term::intrinsic(Intrinsic::CellType(element));
-        let channel_type = |element: Term| Term::intrinsic(Intrinsic::ChannelType(element));
+        let box_type = |element: Term| Term::intrinsic(Intrinsic::BoxType(element));
         let nominal = |family: SyntaxName, universes: Universes, params: Vec<Term>| {
             Term::induct_type_at(
                 Global::Authored(family.qualifier()),
@@ -145,9 +145,7 @@ impl Intrinsic {
             | Self::FltType
             | Self::BytesType
             | Self::HandleType => nullary(Term::type_ground()),
-            Self::ListType(_) | Self::CellType(_) | Self::ChannelType(_) | Self::IoType(_) => {
-                former()
-            }
+            Self::ListType(_) | Self::CellType(_) | Self::BoxType(_) | Self::IoType(_) => former(),
 
             // Literals. A `Nat` successor is the one literal carrying a term: `Succ(3, x)` is `x + 3`, and its base is a `Nat` like any other.
             Self::Bool(_) => nullary(bool_type()),
@@ -496,55 +494,24 @@ impl Intrinsic {
                 ],
                 io_type(bool_type()),
             ),
-            Self::Channel {
-                element, capacity, ..
-            } => sig(
-                vec![
-                    Operand::IsType,
-                    Operand::At(nat_type()),
-                    Operand::At(holds(Self::NatLt(
-                        Term::intrinsic(Self::Nat(self::Nat::Zero)),
-                        capacity.clone(),
-                    ))),
-                ],
-                io_type(channel_type(element.clone())),
+            Self::Box { element, .. } => sig(
+                vec![Operand::IsType, Operand::At(element.clone())],
+                io_type(box_type(element.clone())),
             ),
-            Self::ChannelPush { element, .. } => sig(
+            Self::BoxHeld { element, .. } => sig(
+                vec![Operand::IsType, Operand::At(box_type(element.clone()))],
+                io_type(element.clone()),
+            ),
+            Self::BoxSet { element, .. } => sig(
                 vec![
                     Operand::IsType,
-                    Operand::At(channel_type(element.clone())),
+                    Operand::At(box_type(element.clone())),
                     Operand::At(element.clone()),
                 ],
-                io_type(nominal(
-                    syntax.channel.push,
-                    Universes::default(),
-                    Vec::new(),
-                )),
-            ),
-            Self::ChannelTake {
-                element, universes, ..
-            } => sig(
-                vec![Operand::IsType, Operand::At(channel_type(element.clone()))],
-                io_type(nominal(
-                    syntax.channel.take,
-                    universes.clone(),
-                    vec![element.clone()],
-                )),
-            ),
-            Self::ChannelClose { element, .. } => sig(
-                vec![Operand::IsType, Operand::At(channel_type(element.clone()))],
                 io_type(unit()),
             ),
-            Self::ChannelClosed { element, .. } => sig(
-                vec![Operand::IsType, Operand::At(channel_type(element.clone()))],
-                io_type(bool_type()),
-            ),
-            Self::ChannelCount { element, .. } | Self::ChannelCapacity { element, .. } => sig(
-                vec![Operand::IsType, Operand::At(channel_type(element.clone()))],
-                io_type(nat_type()),
-            ),
 
-            // The constructors of the opaque effect carrier — `IoPure`, `IoBind` and `IoSuspend` below, beside the cell and channel operations — and its one handler, `IoAdvance`, which answers an `Io` too. Nothing anywhere lowers an `Io(T)` to its `T`, which is what makes every term of non-`Io` type pure by typing.
+            // The constructors of the opaque effect carrier — `IoPure`, `IoBind` and `IoSuspend` below, beside the cell and box operations — and its one handler, `IoAdvance`, which answers an `Io` too. Nothing anywhere lowers an `Io(T)` to its `T`, which is what makes every term of non-`Io` type pure by typing.
             Self::IoPure { result, .. } => sig(
                 vec![Operand::IsType, Operand::At(result.clone())],
                 io_type(result.clone()),

@@ -17,8 +17,8 @@ mod tests;
 
 use {
     super::{
-        Analysis, Atom, BlockId, CellOperation, ChannelOperation, Constant, ConstructorId,
-        FamilyId, Field, FieldShape, ForeignId, FunctionId, Intrinsic, Keys, Module, Operation,
+        Analysis, Atom, BlockId, BoxOperation, CellOperation, Constant, ConstructorId, FamilyId,
+        Field, FieldShape, ForeignId, FunctionId, Intrinsic, Keys, Module, Operation,
         ProductFields, ProductId, RecValue, RegisterShape, Rhs, SequenceGrain, SequenceOp,
         Statement, StatementId, SuspensionOperation, Terminator, ValueId,
     },
@@ -151,25 +151,12 @@ impl Reach {
                     self.name_constructor(module, *none);
                 }
             }
-            Rhs::Channel { operation, .. } => {
-                let constructors = match operation {
-                    ChannelOperation::Push {
-                        taken,
-                        full,
-                        closed,
-                    } => vec![*taken, *full, *closed],
-                    ChannelOperation::Take { item, empty, ended } => vec![*item, *empty, *ended],
-                    _ => Vec::new(),
-                };
-                for constructor in constructors {
-                    self.name_constructor(module, constructor);
-                }
-            }
             Rhs::Foreign { foreign, .. } => {
                 self.foreigns.insert(*foreign);
             }
             Rhs::Alias(_)
             | Rhs::Apply { .. }
+            | Rhs::Box { .. }
             | Rhs::Operation { .. }
             | Rhs::Sequence { .. }
             | Rhs::SwitchBool { .. }
@@ -806,11 +793,11 @@ impl Printer<'_, '_, '_, '_> {
                     } => {
                         format!("{}({})", cell_name(*operation), self.atoms(operands))
                     }
-                    Rhs::Channel {
+                    Rhs::Box {
                         operation,
                         operands,
                     } => {
-                        format!("{}({})", channel_name(*operation), self.atoms(operands))
+                        format!("{}({})", box_name(*operation), self.atoms(operands))
                     }
                     Rhs::Foreign { foreign, operands } => {
                         let row = self.module.foreign(*foreign).expect("live foreign");
@@ -1259,14 +1246,10 @@ fn render_constant(constant: &Constant) -> String {
     }
 }
 
-fn channel_name(operation: ChannelOperation) -> &'static str {
+fn box_name(operation: BoxOperation) -> &'static str {
     match operation {
-        ChannelOperation::New => "Channel/new",
-        ChannelOperation::Push { .. } => "Channel/push",
-        ChannelOperation::Take { .. } => "Channel/take",
-        ChannelOperation::Close => "Channel/close",
-        ChannelOperation::Closed => "Channel/closed",
-        ChannelOperation::Count => "Channel/count",
-        ChannelOperation::Capacity => "Channel/capacity",
+        BoxOperation::New => "Box/new",
+        BoxOperation::Held => "Box/held",
+        BoxOperation::Set => "Box/set",
     }
 }

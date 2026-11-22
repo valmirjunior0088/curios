@@ -301,7 +301,7 @@ impl Scopes {
 
 /// The functions that hand their results back alike. A call whose return continuation is its function's own sentinel lowers to `return_call`, which requires the callee's results to match the caller's exactly, and agreement is symmetric: a function is decided together with everything it tail-calls and with everything that tail-calls it, however the edges point, so the classes are the undirected connected components of the tail-call graph.
 ///
-/// **A class whose results something else fixes is fixed.** A member ending in a tail call through a closure returns at the closure type's one uniform result; one ending in a tail foreign call, cell or channel operation or call-shaped intrinsic falls through to the return with what that operation produces; the entry answers the host, and is pinned explicitly because, having no call sites of its own, it would otherwise inherit a class's decision through a tail call; and an escaping member is reached by its closure wrapper's tail call at the shared `clsr/{arity}` type. Nothing deciding a result may re-key such a class.
+/// **A class whose results something else fixes is fixed.** A member ending in a tail call through a closure returns at the closure type's one uniform result; one ending in a tail foreign call, cell or box operation or call-shaped intrinsic falls through to the return with what that operation produces; the entry answers the host, and is pinned explicitly because, having no call sites of its own, it would otherwise inherit a class's decision through a tail call; and an escaping member is reached by its closure wrapper's tail call at the shared `clsr/{arity}` type. Nothing deciding a result may re-key such a class.
 pub struct TailClasses {
     /// Each class's members in `FunctionId` order, the classes in the order their first member is met.
     pub members: Vec<Vec<FunctionId>>,
@@ -341,7 +341,7 @@ impl TailClasses {
                     }
                     | Node::Foreign { return_to, .. }
                     | Node::Cell { return_to, .. }
-                    | Node::Channel { return_to, .. }
+                    | Node::Box { return_to, .. }
                     | Node::Intrinsic { return_to, .. }
                         if *return_to == sentinel =>
                     {
@@ -429,7 +429,7 @@ pub fn continuation_entries(module: &Module) -> BTreeMap<ContinuationId, Vec<Opt
             }
             Node::Foreign { return_to, .. }
             | Node::Cell { return_to, .. }
-            | Node::Channel { return_to, .. }
+            | Node::Box { return_to, .. }
             | Node::Intrinsic { return_to, .. } => {
                 output.entry(*return_to).or_default().push(None);
             }
@@ -500,7 +500,7 @@ fn successors(module: &Module, node_id: NodeId, work: &mut Vec<NodeId>) {
         | Node::Switch { .. }
         | Node::Foreign { .. }
         | Node::Cell { .. }
-        | Node::Channel { .. }
+        | Node::Box { .. }
         | Node::Intrinsic { .. }
         | Node::Halt { .. }
         | Node::Panic(_)
@@ -595,7 +595,7 @@ pub fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
             Node::ApplyFun { return_to, .. }
             | Node::Foreign { return_to, .. }
             | Node::Cell { return_to, .. }
-            | Node::Channel { return_to, .. }
+            | Node::Box { return_to, .. }
             | Node::Intrinsic { return_to, .. } => {
                 if let Some(inputs) = continuation_inputs.get_mut(return_to) {
                     merge_inputs(inputs, None);
@@ -633,7 +633,7 @@ pub fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
             Node::ApplyFun { return_to, .. }
             | Node::Foreign { return_to, .. }
             | Node::Cell { return_to, .. }
-            | Node::Channel { return_to, .. }
+            | Node::Box { return_to, .. }
             | Node::Intrinsic { return_to, .. } => {
                 if let Some(params) = continuation_params.get(return_to) {
                     transfers.push((*return_to, vec![Atom::Filler; params.len()]));

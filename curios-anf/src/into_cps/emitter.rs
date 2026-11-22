@@ -15,11 +15,12 @@ use {
     std::collections::BTreeMap,
 };
 
-/// One computed member: a write-once result cell, a capacity-one initializer channel, and its forcing function.
+/// One computed member: a write-once result cell, a box holding what forcing it does next, the cycle a force that reaches it again runs, and its forcing function.
 #[derive(Clone, Copy)]
 pub struct KnotMember {
     pub result: curios_cps::ValueId,
-    pub initializer: curios_cps::ValueId,
+    pub next: curios_cps::ValueId,
+    pub cycle: curios_cps::FunctionId,
     pub force: curios_cps::FunctionId,
 }
 
@@ -403,7 +404,28 @@ impl<'a> Emitter<'a> {
 
     // === Statements ======================================================
 
-    /// Force a member through the ordinary cell and channel operations. Before any force, every initializer has been queued. A filled result is cached; an empty result and a queued initializer is unforced; both empty means reentrant forcing. Taking the initializer releases the channel's reference before it runs, and this function captures only the storage, so completed knots do not retain initializer-only captures.
+    /// What runs where a force reaches the member it is forcing: a closed function of no parameters that reports `Cycle` naming the member. The member's box holds it before its initializer is set there and again once a force has begun.
+    pub fn define_cycle(&mut self, knot: KnotMember, hint: Option<String>) {
+        let return_cont = self.module.reserve_continuation();
+        let member = hint.clone().map(|name| self.module.add_member(name));
+        let body = self
+            .module
+            .add_node(curios_cps::Node::Panic(curios_cps::Panic::Cycle(member)));
+        self.module.define_function(
+            knot.cycle,
+            curios_cps::Function {
+                lineage: self.lineage,
+                debug_name: hint.map(|hint| format!("{hint}/cycle")),
+                params: Vec::new(),
+                return_cont,
+                body,
+                droppable: curios_cps::Droppable::Never,
+                terminates: false,
+            },
+        );
+    }
+
+    /// Force a member through its result cell and its box. A filled result is answered as it is. Otherwise the box holds what forcing does next — the initializer, set there before any force can run — and the force sets the member's cycle there before it runs what it read, so a force that reaches its own member again runs the cycle. Setting the cycle releases the box's hold on the initializer as it starts, and this function captures only the storage, so a completed knot retains no initializer-only captures.
     pub fn define_force(&mut self, knot: KnotMember, hint: Option<String>) {
         let return_cont = self.module.reserve_continuation();
         let produced = self.module.add_value(None);
@@ -443,9 +465,9 @@ impl<'a> Emitter<'a> {
                 terminates: false,
             },
         );
-        let thunk = self.module.add_value(None);
+        let next = self.module.add_value(None);
         let run = self.module.add_node(curios_cps::Node::ApplyFun {
-            callee: curios_cps::Callee::Closure(thunk),
+            callee: curios_cps::Callee::Closure(next),
             args: Vec::new(),
             return_to: receive,
         });
@@ -453,43 +475,50 @@ impl<'a> Emitter<'a> {
             continuations: vec![receive],
             body: run,
         });
-        let run = self.continuation_of(run);
-        let member = hint.clone().map(|name| self.module.add_member(name));
-        let cycle = self
-            .module
-            .add_node(curios_cps::Node::Panic(curios_cps::Panic::Cycle(member)));
-        let cycle = self.continuation_of(cycle);
-        let status = self.module.add_value(None);
-        let taken = self.module.add_node(curios_cps::Node::Switch {
-            scrutinee: curios_cps::Atom::Value(status),
-            cases: BTreeMap::from([(0, edge(run)), (1, edge(cycle))]),
-            default: None,
-        });
-        let taken = self.module.add_node(curios_cps::Node::LetCont {
-            continuations: vec![run, cycle],
-            body: taken,
-        });
-        let after_take = self.module.reserve_continuation();
+        let started = self.module.reserve_continuation();
         self.module.define_continuation(
-            after_take,
+            started,
             curios_cps::Continuation {
                 lineage: self.lineage,
-                debug_name: Some("knot/taken".into()),
-                params: vec![status, thunk],
-                body: taken,
+                debug_name: Some("knot/started".into()),
+                params: Vec::new(),
+                body: run,
                 terminates: false,
             },
         );
-        let take = self.module.add_node(curios_cps::Node::Channel {
-            op: curios_cps::ChannelOp::Take,
-            args: vec![curios_cps::Atom::Value(knot.initializer)],
-            return_to: after_take,
+        let start = self.module.add_node(curios_cps::Node::Box {
+            op: curios_cps::BoxOp::Set,
+            args: vec![
+                curios_cps::Atom::Value(knot.next),
+                curios_cps::Atom::Fun(knot.cycle),
+            ],
+            return_to: started,
         });
-        let take = self.module.add_node(curios_cps::Node::LetCont {
-            continuations: vec![after_take],
-            body: take,
+        let start = self.module.add_node(curios_cps::Node::LetCont {
+            continuations: vec![started],
+            body: start,
         });
-        let unforced = self.continuation_of(take);
+        let read = self.module.reserve_continuation();
+        self.module.define_continuation(
+            read,
+            curios_cps::Continuation {
+                lineage: self.lineage,
+                debug_name: Some("knot/next".into()),
+                params: vec![next],
+                body: start,
+                terminates: false,
+            },
+        );
+        let held = self.module.add_node(curios_cps::Node::Box {
+            op: curios_cps::BoxOp::Held,
+            args: vec![curios_cps::Atom::Value(knot.next)],
+            return_to: read,
+        });
+        let held = self.module.add_node(curios_cps::Node::LetCont {
+            continuations: vec![read],
+            body: held,
+        });
+        let unforced = self.continuation_of(held);
         let cached = self.module.add_value(None);
         let forced = self.jump(return_cont, vec![curios_cps::Atom::Value(cached)]);
         let forced = self.continuation_of(forced);

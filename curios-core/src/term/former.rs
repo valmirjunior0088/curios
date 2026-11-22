@@ -55,8 +55,8 @@ pub fn former_eta(telescope: &Telescope<Term>) -> Option<FormerEta> {
         Subterm::Intrinsic(Intrinsic::ListType(payload)) => {
             (FormerEta::Intrinsic("List"), vec![payload], vec![0])
         }
-        Subterm::Intrinsic(Intrinsic::ChannelType(payload)) => {
-            (FormerEta::Intrinsic("Channel"), vec![payload], vec![0])
+        Subterm::Intrinsic(Intrinsic::BoxType(payload)) => {
+            (FormerEta::Intrinsic("Box"), vec![payload], vec![0])
         }
         Subterm::Intrinsic(Intrinsic::CellType(payload)) => {
             (FormerEta::Intrinsic("Cell"), vec![payload], vec![0])

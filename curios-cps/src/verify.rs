@@ -519,7 +519,7 @@ impl Module {
                 Node::ApplyFun { return_to, .. }
                 | Node::Foreign { return_to, .. }
                 | Node::Cell { return_to, .. }
-                | Node::Channel { return_to, .. }
+                | Node::Box { return_to, .. }
                 | Node::Intrinsic { return_to, .. } => enter(*return_to, &mut work),
                 Node::ApplyCont(edge) => enter(edge.target, &mut work),
                 Node::Switch { cases, default, .. } => {
@@ -780,7 +780,7 @@ impl Module {
             | Node::Switch { .. }
             | Node::Foreign { .. }
             | Node::Cell { .. }
-            | Node::Channel { .. }
+            | Node::Box { .. }
             | Node::Intrinsic { .. }
             | Node::Halt { .. }
             | Node::Panic(_)
@@ -834,7 +834,7 @@ impl Module {
                         | Node::Switch { .. }
                         | Node::Foreign { .. }
                         | Node::Cell { .. }
-                        | Node::Channel { .. }
+                        | Node::Box { .. }
                         | Node::Intrinsic { .. }
                         | Node::Halt { .. }
                         | Node::Panic(_)
@@ -900,7 +900,7 @@ impl Module {
                 | Node::Switch { .. }
                 | Node::Foreign { .. }
                 | Node::Cell { .. }
-                | Node::Channel { .. }
+                | Node::Box { .. }
                 | Node::Intrinsic { .. }
                 | Node::Halt { .. }
                 | Node::Panic(_)
@@ -1059,14 +1059,14 @@ impl Module {
                     )));
                 }
             }
-            Node::Channel {
+            Node::Box {
                 op,
                 args,
                 return_to,
             } => {
                 if args.len() != op.operand_arity() {
                     return Err(VerifyError(format!(
-                        "{id} channel {op:?} expects {} operands, got {}",
+                        "{id} box {op:?} expects {} operands, got {}",
                         op.operand_arity(),
                         args.len()
                     )));
@@ -1080,7 +1080,7 @@ impl Module {
                 )? != op.result_arity()
                 {
                     return Err(VerifyError(format!(
-                        "{id} channel {op:?} continuation arity mismatch"
+                        "{id} box {op:?} continuation arity mismatch"
                     )));
                 }
             }

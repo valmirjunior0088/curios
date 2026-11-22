@@ -200,7 +200,7 @@ const HEAD_WORDS: &[(&str, HeadKey)] = &[
     ("Handle", HeadKey::Handle),
     ("List", HeadKey::List),
     ("Cell", HeadKey::Cell),
-    ("Channel", HeadKey::Channel),
+    ("Box", HeadKey::Box),
     ("Io", HeadKey::Io),
 ];
 

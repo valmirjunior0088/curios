@@ -2,7 +2,7 @@
 //!
 //! **A closure is abstracted by its function, an aggregate by its construction.** A row's or a tuple's slot is keyed by the construction that writes it, and a read takes the slot of every construction the value read may be, so the `Io` driver's surfaced suspension stays apart from the ones inside it, which share every slot of the suspension row. A key per row slot joins every instantiation of a family and every constructor of a carrier. Beside each construction's slot, its row's or its tuple arity's summary takes every store, which is what a read out of a value that may be any reads.
 //!
-//! **A container is one key.** A list's elements, a cell's contents and a channel's contents are a key each, what is stored into any being what any hands out: a list operation's result holds its operand's elements and a host's list reply is built by no node, so a key per construction would have to follow every list operation for what one key already answers.
+//! **A container is one key.** A list's elements, a cell's contents and a box's contents are a key each, what is stored into any being what any hands out: a list operation's result holds its operand's elements and a host's list reply is built by no node, so a key per construction would have to follow every list operation for what one key already answers.
 //!
 //! **Any is what the module does not see.** That is the entry's parameters, and what a heap call answers, which only a module [`bound_frames`](crate::bound_frames) rewrote holds. A host's reply is its wire values, no closure and no construction, and the advance enters only the descriptions the entry surfaced, which take no parameter, so every other parameter takes what the module's own calls hand it. A callee that may be any reaches every function some atom names that takes as many parameters, and a read out of a value that may be any reads the summary, since every aggregate is one the module builds.
 //!
@@ -28,8 +28,8 @@ mod row_tests;
 
 use {
     super::{
-        Atom, Callee, CellOp, ChannelOp, ContinuationId, FunctionId, Intrinsic, IntrinsicCall,
-        Lattice, Module, Node, NodeId, RowId, Rules, Solver, ValueExpr, ValueId,
+        Atom, BoxOp, Callee, CellOp, ContinuationId, FunctionId, Intrinsic, IntrinsicCall, Lattice,
+        Module, Node, NodeId, RowId, Rules, Solver, ValueExpr, ValueId,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -445,7 +445,7 @@ enum FlowKey {
     Field(usize),
     Element,
     Cell,
-    Channel,
+    Box,
 }
 
 /// What each value of a module may be, solved over the module as it stands.
@@ -963,25 +963,20 @@ fn solve(
                     }),
                     CellOp::Reserve => {}
                 },
-                Node::Channel {
+                Node::Box {
                     op,
                     args,
                     return_to,
                 } => match op {
-                    ChannelOp::Push => {
-                        rules.add(move |solver| flow(solver, source(&args[1]), FlowKey::Channel))
+                    BoxOp::New => {
+                        rules.add(move |solver| flow(solver, source(&args[0]), FlowKey::Box))
                     }
-                    ChannelOp::Take => rules.add(move |solver| {
-                        deliver(solver, *return_to, &|index| match index {
-                            1 => Source::Key(FlowKey::Channel),
-                            _ => Source::Fact(ValueFact::nothing()),
-                        });
+                    BoxOp::Set => {
+                        rules.add(move |solver| flow(solver, source(&args[1]), FlowKey::Box))
+                    }
+                    BoxOp::Held => rules.add(move |solver| {
+                        deliver(solver, *return_to, &|_| Source::Key(FlowKey::Box));
                     }),
-                    ChannelOp::New
-                    | ChannelOp::Close
-                    | ChannelOp::Closed
-                    | ChannelOp::Count
-                    | ChannelOp::Capacity => {}
                 },
                 Node::Intrinsic {
                     op,

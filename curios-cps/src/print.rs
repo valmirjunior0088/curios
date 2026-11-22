@@ -17,7 +17,7 @@ mod tests;
 
 use {
     super::{
-        Atom, Callee, CellOp, ChannelOp, ContinuationId, Edge, FieldGroup, FunctionId, Intrinsic,
+        Atom, BoxOp, Callee, CellOp, ContinuationId, Edge, FieldGroup, FunctionId, Intrinsic,
         IntrinsicCall, Literal, Module, Node, NodeId, Panic, Register, RowId, Slot, ValueExpr,
         ValueId,
     },
@@ -83,7 +83,7 @@ impl Reach {
                 | Node::Switch { .. }
                 | Node::Foreign { .. }
                 | Node::Cell { .. }
-                | Node::Channel { .. }
+                | Node::Box { .. }
                 | Node::Intrinsic { .. }
                 | Node::Halt { .. }
                 | Node::Panic(_)
@@ -633,12 +633,12 @@ impl Printer<'_, '_, '_, '_> {
                     let transfer = self.transfer(call, *return_to, ret, suffix);
                     return self.line(indent, transfer);
                 }
-                Node::Channel {
+                Node::Box {
                     op,
                     args,
                     return_to,
                 } => {
-                    let call = format!("{}({})", channel_name(*op), self.operands(args));
+                    let call = format!("{}({})", box_name(*op), self.operands(args));
                     let transfer = self.transfer(call, *return_to, ret, suffix);
                     return self.line(indent, transfer);
                 }
@@ -1094,14 +1094,10 @@ fn render_literal(literal: &Literal) -> String {
     }
 }
 
-fn channel_name(operation: ChannelOp) -> &'static str {
+fn box_name(operation: BoxOp) -> &'static str {
     match operation {
-        ChannelOp::New => "Channel/new",
-        ChannelOp::Push => "Channel/push",
-        ChannelOp::Take => "Channel/take",
-        ChannelOp::Close => "Channel/close",
-        ChannelOp::Closed => "Channel/closed",
-        ChannelOp::Count => "Channel/count",
-        ChannelOp::Capacity => "Channel/capacity",
+        BoxOp::New => "Box/new",
+        BoxOp::Held => "Box/held",
+        BoxOp::Set => "Box/set",
     }
 }

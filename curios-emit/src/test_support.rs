@@ -377,53 +377,51 @@ pub fn cell_roundtrip() -> curios_cps::Module {
     module
 }
 
-pub fn channel_roundtrip() -> curios_cps::Module {
+pub fn box_roundtrip() -> curios_cps::Module {
     let mut module = curios_cps::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
-    let channel = module.add_value(None);
-    let pushed = module.add_value(None);
-    let taken = module.add_value(None);
-    let payload = module.add_value(None);
-    let exit = module.add_node(halt(vec![curios_cps::Atom::Value(payload)]));
-    let after_take = module.add_continuation(curios_cps::Continuation {
+    let made = module.add_value(None);
+    let held = module.add_value(None);
+    let exit = module.add_node(halt(vec![curios_cps::Atom::Value(held)]));
+    let after_held = module.add_continuation(curios_cps::Continuation {
         lineage: None,
         debug_name: None,
-        params: vec![taken, payload],
+        params: vec![held],
         body: exit,
         terminates: false,
     });
-    let take = module.add_node(curios_cps::Node::Channel {
-        op: curios_cps::ChannelOp::Take,
-        args: vec![curios_cps::Atom::Value(channel)],
-        return_to: after_take,
+    let read = module.add_node(curios_cps::Node::Box {
+        op: curios_cps::BoxOp::Held,
+        args: vec![curios_cps::Atom::Value(made)],
+        return_to: after_held,
     });
-    let after_push = module.add_continuation(curios_cps::Continuation {
+    let after_set = module.add_continuation(curios_cps::Continuation {
         lineage: None,
         debug_name: None,
-        params: vec![pushed],
-        body: take,
+        params: vec![],
+        body: read,
         terminates: false,
     });
-    let push = module.add_node(curios_cps::Node::Channel {
-        op: curios_cps::ChannelOp::Push,
-        args: vec![curios_cps::Atom::Value(channel), nat(0)],
-        return_to: after_push,
+    let set = module.add_node(curios_cps::Node::Box {
+        op: curios_cps::BoxOp::Set,
+        args: vec![curios_cps::Atom::Value(made), nat(1)],
+        return_to: after_set,
     });
     let body = module.add_node(curios_cps::Node::LetCont {
-        continuations: vec![after_push, after_take],
-        body: push,
+        continuations: vec![after_set, after_held],
+        body: set,
     });
     let after_new = module.add_continuation(curios_cps::Continuation {
         lineage: None,
         debug_name: None,
-        params: vec![channel],
+        params: vec![made],
         body,
         terminates: false,
     });
-    let new = module.add_node(curios_cps::Node::Channel {
-        op: curios_cps::ChannelOp::New,
-        args: vec![nat(1)],
+    let new = module.add_node(curios_cps::Node::Box {
+        op: curios_cps::BoxOp::New,
+        args: vec![nat(0)],
         return_to: after_new,
     });
     let body = module.add_node(curios_cps::Node::LetCont {

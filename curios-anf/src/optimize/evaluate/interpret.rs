@@ -390,7 +390,7 @@ impl<'m> Evaluator<'m> {
                 Err(bail) => Outcome::Bail(bail),
             },
             // A cell operation's identity is its program point: never residualized, never folded.
-            Rhs::Cell { .. } | Rhs::Channel { .. } => Outcome::Bail(Bail::Effect),
+            Rhs::Cell { .. } | Rhs::Box { .. } => Outcome::Bail(Bail::Effect),
             // Building a suspension is a wait, which only run time performs; so no value held here is one, and every test answers no.
             Rhs::Suspension {
                 operation: SuspensionOperation::Is,

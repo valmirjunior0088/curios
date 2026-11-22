@@ -1,6 +1,6 @@
 //! Which constructions of a row may write into a value of that row dying beside them: the proof [`rebuild_in_place`](super::rebuild_in_place) spends ([A value costs when it is kept, not when it is named](../../documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md)).
 //!
-//! **Three facts, each on a path.** Whether a value is consumed or only read, and where it is used last: a function's body and each continuation's are blocks, a node has a place along one, and a switch's edge is a path of its own, so a value one arm hands on and another returns is used once. Whether a value is unique: the greatest fixpoint the shared solver reaches as the least one of its dual, *shared*, over values and function returns, with every boundary the module does not see whole shared — an escaping function's or the entry's parameters, what a closure, a host, a cell or a channel hands back, a value a nested function captures. A filler is null and a literal a number or bytes, neither a row a rebuild writes into, and constant data is kept from one by its tag, below, so none of the three makes what it is handed to shared: a parameter one call hands a constant and another a value nothing else holds is unique wherever it is no constant. A parameter is unique where every known call hands it a unique value dead after the call; a part read out of a unique value — a field, an element, what an accessor hands back — is unique where every path from the read that consumes that value before a run binds it again consumes it with the part dead and untouched: named no more there, and written by nothing between, no consumption of the part or of a field read off it and no construction a rebuild may become ([`Shape::part_kept_after`]), which is Perceus's rule read as One-Shot Bufferize reads a write in place, in conflict only between a value's definition and a later read of what it was, and what lets a path copy qualify; and where no run comes back to the read with that value still bound, each round's read naming the one object. The converse holds of the value: one consumed while a field read out of it is still live, or handed on beside such a read, is shared, since what it is handed to may take that field apart and rebuild it in place under the read. Past the block that binds a value its name is another round's value, so what a loop does to its parameter on a later round is done to another value than the one a read took a field of.
+//! **Three facts, each on a path.** Whether a value is consumed or only read, and where it is used last: a function's body and each continuation's are blocks, a node has a place along one, and a switch's edge is a path of its own, so a value one arm hands on and another returns is used once. Whether a value is unique: the greatest fixpoint the shared solver reaches as the least one of its dual, *shared*, over values and function returns, with every boundary the module does not see whole shared — an escaping function's or the entry's parameters, what a closure, a host, a cell or a box hands back, a value a nested function captures. A filler is null and a literal a number or bytes, neither a row a rebuild writes into, and constant data is kept from one by its tag, below, so none of the three makes what it is handed to shared: a parameter one call hands a constant and another a value nothing else holds is unique wherever it is no constant. A parameter is unique where every known call hands it a unique value dead after the call; a part read out of a unique value — a field, an element, what an accessor hands back — is unique where every path from the read that consumes that value before a run binds it again consumes it with the part dead and untouched: named no more there, and written by nothing between, no consumption of the part or of a field read off it and no construction a rebuild may become ([`Shape::part_kept_after`]), which is Perceus's rule read as One-Shot Bufferize reads a write in place, in conflict only between a value's definition and a later read of what it was, and what lets a path copy qualify; and where no run comes back to the read with that value still bound, each round's read naming the one object. The converse holds of the value: one consumed while a field read out of it is still live, or handed on beside such a read, is shared, since what it is handed to may take that field apart and rebuild it in place under the read. Past the block that binds a value its name is another round's value, so what a loop does to its parameter on a later round is done to another value than the one a read took a field of.
 //!
 //! **Payloads by slot.** A construction holding what something else holds is shared with it, since a read of the construction hands that out; only a row, a tuple or a list counts, a number holding nothing a write lands in. A slot whose reads nothing takes apart, wherever what they hand out flows, is a payload's and carries the fact itself: a shared value stored in it shares the slot and leaves the construction one nothing else holds, and a read of a slot so shared is shared. So a leaf built over a payload read back out of another map is a leaf nothing else holds, and every fork over it is rebuilt; a child's slot stays shared with the construction that holds it, so one tree something else holds says nothing of another. Which slots are payloads decides what the facts prove and never whether they hold, a slot's fact covering every store into it.
 //!
@@ -429,7 +429,7 @@ impl Lattice for Aggregate {
     }
 }
 
-/// The values that may be a row, a tuple or a list, which a read can take apart and a write land in: a construction of one, a list an operation answers, a read of a row's slot some construction of it stores one in, a read of a tuple's field its constructions store one in, a list's element, what a closure, a host, a cell, a channel or an intrinsic call hands back, a parameter of a function the module does not see every caller of, and what flows from any of them through calls, jumps and returns. A number, an immediate's payload, bytes and a closure are none, so a slot holding numbers is no aggregate whatever its carrier says.
+/// The values that may be a row, a tuple or a list, which a read can take apart and a write land in: a construction of one, a list an operation answers, a read of a row's slot some construction of it stores one in, a read of a tuple's field its constructions store one in, a list's element, what a closure, a host, a cell, a box or an intrinsic call hands back, a parameter of a function the module does not see every caller of, and what flows from any of them through calls, jumps and returns. A number, an immediate's payload, bytes and a closure are none, so a slot holding numbers is no aggregate whatever its carrier says.
 fn aggregates(module: &Module, shape: &Shape) -> BTreeSet<ValueId> {
     let arities = module.return_arities();
     let keys = shape
@@ -443,7 +443,7 @@ fn aggregates(module: &Module, shape: &Shape) -> BTreeSet<ValueId> {
             node,
             Some(
                 Node::Cell { .. }
-                    | Node::Channel { .. }
+                    | Node::Box { .. }
                     | Node::Foreign { .. }
                     | Node::Intrinsic { .. }
                     | Node::ApplyFun {
@@ -1047,7 +1047,7 @@ enum Site {
     Jump(ContinuationId, usize),
     /// Handed back to the function's caller.
     Return(usize),
-    /// Handed where nothing in the module follows it: a closure's argument, a host's, a cell's, a channel's, an operation's, or the value a rebuild writes into.
+    /// Handed where nothing in the module follows it: a closure's argument, a host's, a cell's, a box's, an operation's, or the value a rebuild writes into.
     Escape,
 }
 
@@ -1367,7 +1367,7 @@ impl Shape {
                                 }
                                 Node::Foreign { return_to, .. }
                                 | Node::Cell { return_to, .. }
-                                | Node::Channel { return_to, .. }
+                                | Node::Box { return_to, .. }
                                 | Node::Intrinsic { return_to, .. } => {
                                     match *return_to == definition.return_cont {
                                         true => shape.returns.entry(function).or_default().push(at),
@@ -2252,7 +2252,7 @@ fn node_sites(node: &Node, own_return: ContinuationId) -> Vec<(ValueId, Site, Ed
         Node::Foreign { args, .. }
         | Node::Halt { args, .. }
         | Node::Cell { args, .. }
-        | Node::Channel { args, .. }
+        | Node::Box { args, .. }
         | Node::Intrinsic { args, .. } => {
             args.iter().for_each(|atom| push(atom, Site::Escape, None))
         }

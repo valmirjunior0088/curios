@@ -14,7 +14,7 @@
 //!
 //! **A float register holds only what a float was handed.** A parameter has one type only where no type computes one. A variant's constructors share a payload slot, and scalar replacement makes that slot a parameter, `success`'s float and `failure`'s error in the one; and a value whose type is a match on another is a float on one edge and a string on the next. What its uses read under one tag or one branch says nothing of what arrives under another, and an edge coerces its argument to the parameter's carrier before anything is consulted, so a float register there casts the reference, and loses it where it does not trap. Only a type says which reference is a float, and erasure, the one walk holding it, states it on a binder whose producer names no carrier ([`Register`]): so a position is offered the float only when every argument reaching it is one already, a float literal, a filler, a definition producing a float, a reference stating a float, or another such position, which [`float_params`] decides beside the word. A stated reference feeds the register by one unbox on the edge or the call, and keeps its own storage: the statement is what lets it feed, never what decides how it is held.
 //!
-//! **A use can only take what the definition can give**, which is what [`Offer`] states. What arrives through a position no single party controls is a reference by declaration: an escaping function's parameters, which its closure wrapper passes at the shared `clsr/N` type, and the entry's, which the host passes; the results of a class whose results something else fixes; and what a cell, a channel, a call-shaped intrinsic or a host import hands back, a host's `Flt` aside. Coercing at the definition instead of excluding it was the alternative, and it buys nothing: the definition would coerce back to a register exactly what it had just been handed as a reference.
+//! **A use can only take what the definition can give**, which is what [`Offer`] states. What arrives through a position no single party controls is a reference by declaration: an escaping function's parameters, which its closure wrapper passes at the shared `clsr/N` type, and the entry's, which the host passes; the results of a class whose results something else fixes; and what a cell, a box, a call-shaped intrinsic or a host import hands back, a host's `Flt` aside. Coercing at the definition instead of excluding it was the alternative, and it buys nothing: the definition would coerce back to a register exactly what it had just been handed as a reference.
 //!
 //! **A captured value crosses at its own carrier.** A value free in a function's body is one value wherever it is read: lowering carries it in under its own name, lambda-lifted as a leading parameter of a directly called function or captured into a field of a closure's environment, and the emitter declares the parameter and the field at the carrier decided for the value. Its uses in every body it reaches demand of the one value, so the decision is the same wherever it stands; a closure's environment is a struct of its own, so declaring a field re-keys nothing shared.
 //!
@@ -274,7 +274,7 @@ fn offers(
 
             // What a cell operation or a call-shaped intrinsic returns is a reference too.
             Node::Cell { return_to, .. }
-            | Node::Channel { return_to, .. }
+            | Node::Box { return_to, .. }
             | Node::Intrinsic { return_to, .. } => {
                 withdraw_params(module, *return_to, &mut withdrawn)
             }
@@ -419,7 +419,7 @@ fn flows<'m>(module: &'m Module, boundaries: &Boundaries) -> Vec<(Source<'m>, Si
             | Node::LetValue { .. }
             | Node::ApplyFun { .. }
             | Node::Cell { .. }
-            | Node::Channel { .. }
+            | Node::Box { .. }
             | Node::Intrinsic { .. }
             | Node::Foreign { .. }
             | Node::LetFun { .. }
@@ -690,7 +690,7 @@ pub fn representation(module: &Module) -> Representation {
                 Node::ApplyCont(_)
                 | Node::ApplyFun { .. }
                 | Node::Cell { .. }
-                | Node::Channel { .. }
+                | Node::Box { .. }
                 | Node::Intrinsic { .. }
                 | Node::LetFun { .. }
                 | Node::LetCont { .. }

@@ -4,13 +4,13 @@ The Curios WebAssembly emission: `into_wasm` takes the CPS graph `curios-anf` bu
 
 ## Design
 
-### Cells and channels occupy the guest heap
+### Cells and boxes occupy the guest heap
 
-**Decision.** A write-once cell is one GC struct with a nullable payload field: null is empty, a successful fill stores a non-null value, and every later fill preserves it. A channel is a GC struct holding a preallocated nullable-reference array — its length is the capacity, checked at creation to fit the unsigned 32-bit length — a head index, a count and a closed flag. Push appends at `(head + count) % capacity`, take clears the consumed slot before advancing the head, and close preserves queued values for draining.
+**Decision.** A write-once cell and a box are each a GC struct of one mutable reference field, a type apiece. A cell's field starts null, which is empty, a successful fill stores a non-null value, and every later fill preserves it. A box is made holding its value, read whole and set whole; its field admits null as every reference position does, so a filler stored in it reads back as it was stored.
 
-**Rationale.** The ring bounds retained storage and releases removed references without retaining a message chain; creation allocates in proportion to capacity and every later attempt uses constant storage. Neither object allocates a host handle, and storing one transfers no ownership of its resource. Both complete inline without suspension, and ANF's lowering builds the ordinary `Option`, `Push` and `Take` layouts from the private operation results.
+**Rationale.** Neither object allocates a host handle, and storing one transfers no ownership of its resource. Both complete inline without suspension, and ANF's lowering builds the ordinary `Option` layout from a poll's private results. A bounded queue is `/std/Channel`'s own, a structure kept in a box, which releases each value as it is taken.
 
-**Rejected.** A linked queue rooted at freely copied old ends, which retains consumed messages; rewritable cells, a second mutation primitive.
+**Rejected.** A channel as a primitive of its own, a ring buffer of preallocated slots with a head, a count and a closed flag, which a queue kept in a box states in `/std` at an allocation a push.
 
 ### A closure carries its code as a table index
 

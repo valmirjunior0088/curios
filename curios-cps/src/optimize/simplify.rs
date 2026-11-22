@@ -115,7 +115,7 @@ pub fn forward_continuations(module: &mut Module) -> bool {
             Node::ApplyFun { return_to, .. }
             | Node::Foreign { return_to, .. }
             | Node::Cell { return_to, .. }
-            | Node::Channel { return_to, .. }
+            | Node::Box { return_to, .. }
             | Node::Intrinsic { return_to, .. } => {
                 retarget(return_to, &resolve_identity, &mut changed);
             }
@@ -799,7 +799,7 @@ pub fn eliminate_dead_loops(module: &mut Module) -> bool {
                 Node::ApplyFun { return_to, .. }
                 | Node::Foreign { return_to, .. }
                 | Node::Cell { return_to, .. }
-                | Node::Channel { return_to, .. }
+                | Node::Box { return_to, .. }
                 | Node::Intrinsic { return_to, .. } => entered_otherwise |= *return_to == id,
                 _ => {}
             }
@@ -825,7 +825,7 @@ pub fn eliminate_dead_loops(module: &mut Module) -> bool {
 
 /// A loop whose body observes nothing, as [`eliminate_dead_loops`] reads one: the one continuation every way out of it goes to, and the nodes of its body.
 ///
-/// The body is read node by node: a construction, any operation bound by a `let` — one partial in the language among them, its trap ruled out by the proof a total program holds for it and owed to no program that never runs it — a known call [`Module::may_drop_call`] admits, a jump within the loop or out to its exit, a switch, and nested definitions. A call through a closure, a foreign or host row, a cell, a channel, an effectful intrinsic call and a halt each observe. Every cycle the body's continuations make is closed by a back edge of one marked terminating, a transfer into it from itself or from a continuation its body nests: a loop inside it that is no total recursion's — a partial callee contification put there — may never end, though each of its rounds enter a total loop and resume at its exit, and its absence is what dropping the loop would observe.
+/// The body is read node by node: a construction, any operation bound by a `let` — one partial in the language among them, its trap ruled out by the proof a total program holds for it and owed to no program that never runs it — a known call [`Module::may_drop_call`] admits, a jump within the loop or out to its exit, a switch, and nested definitions. A call through a closure, a foreign or host row, a cell, a box, an effectful intrinsic call and a halt each observe. Every cycle the body's continuations make is closed by a back edge of one marked terminating, a transfer into it from itself or from a continuation its body nests: a loop inside it that is no total recursion's — a partial callee contification put there — may never end, though each of its rounds enter a total loop and resume at its exit, and its absence is what dropping the loop would observe.
 struct DeadLoop {
     exit: ContinuationId,
     region: BTreeSet<NodeId>,
@@ -890,7 +890,7 @@ impl DeadLoop {
                 }
                 | Node::Foreign { .. }
                 | Node::Cell { .. }
-                | Node::Channel { .. }
+                | Node::Box { .. }
                 | Node::Intrinsic { .. }
                 | Node::Halt { .. } => return None,
             }
@@ -1017,7 +1017,7 @@ fn splice_dead_nodes(module: &mut Module, redirect: &BTreeMap<NodeId, NodeId>) {
             | Node::Switch { .. }
             | Node::Foreign { .. }
             | Node::Cell { .. }
-            | Node::Channel { .. }
+            | Node::Box { .. }
             | Node::Intrinsic { .. }
             | Node::Halt { .. }
             | Node::Panic(_)
@@ -1060,7 +1060,7 @@ pub fn rewire_node(module: &mut Module, from: NodeId, to: NodeId) {
             | Node::Switch { .. }
             | Node::Foreign { .. }
             | Node::Cell { .. }
-            | Node::Channel { .. }
+            | Node::Box { .. }
             | Node::Intrinsic { .. }
             | Node::Halt { .. }
             | Node::Panic(_)

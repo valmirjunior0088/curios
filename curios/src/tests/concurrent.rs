@@ -563,20 +563,20 @@ fn a_closed_channel_drains_before_it_ends() {
     );
 }
 
-// The channel a program reaches is the one behind its two ends: the operations `/sys` declares over the bare channel are no part of `/std/Channel`, so no program holds a channel whose changes wake nothing.
+// A box is changed only by a function of what it holds: `/sys` sets a box whole, and `/std/Box` keeps that behind its own `change`, so no program sets a box to a value it read before a wait.
 #[test]
-fn the_bare_channel_operations_are_not_reachable() {
+fn a_program_changes_a_box_only_through_a_function_of_it() {
     let (system, _io) = MockHost::builder().build();
     let refusal = run_text(
         r#"
-        use /std/{Nat, Io, Channel};
+        use /std/{Nat, Io, Box};
         let entry() -> /std/Io({}) =
-            let c = Channel/Channel/new(@Nat, 1)!;
-            Io/pure(());
+            let b = Box/new(@Nat, 1)!;
+            Box/set(b, 2);
         entry()
         "#,
         system,
     )
-    .expect_err("the bare channel has no public constructor");
-    assert!(refusal.contains("Channel"), "{refusal}");
+    .expect_err("a box has no public set");
+    assert!(refusal.contains("set"), "{refusal}");
 }

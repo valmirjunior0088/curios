@@ -1,11 +1,10 @@
 //! The fixtures another crate's suites lower a source through: the registry of compiler-known names the lowering's suites declare as source, whose spellings are load-bearing where a suite writes the declarations they name — the lowering's `unused_declaration` among them.
 
 use curios_common::{
-    ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
-    EqlDerivation, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
-    OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax,
-    ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry,
-    TestSyntax,
+    CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax, EqlDerivation,
+    HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax, OperatorSyntax,
+    OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax, ReportSyntax,
+    ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
 };
 
 pub const fn registry_name(segments: &'static [&'static str]) -> SyntaxName {
@@ -32,16 +31,6 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         family: registry_name(&["sys", "Result"]),
         success: registry_name(&["sys", "Result", "success"]),
         failure: registry_name(&["sys", "Result", "failure"]),
-    },
-    channel: ChannelSyntax {
-        push: registry_name(&["sys", "Channel", "Push"]),
-        taken: registry_name(&["sys", "Channel", "Push", "taken"]),
-        full: registry_name(&["sys", "Channel", "Push", "full"]),
-        closed: registry_name(&["sys", "Channel", "Push", "closed"]),
-        take: registry_name(&["sys", "Channel", "Take"]),
-        item: registry_name(&["sys", "Channel", "Take", "item"]),
-        empty: registry_name(&["sys", "Channel", "Take", "empty"]),
-        ended: registry_name(&["sys", "Channel", "Take", "ended"]),
     },
     monad: MonadSyntax {
         bind: registry_field(&["std", "Monad"], "bind"),

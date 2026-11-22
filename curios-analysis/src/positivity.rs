@@ -1344,8 +1344,8 @@ impl<'a, 'd, D: Driver> Walk<'a, 'd, D> {
             // `List` is covariant: a list of `T`s is a finite product of `T`s, so a strict occurrence in the element stays strict. This is the rule that admits `Json/arr(List(Json))` and `Toml/arr(List(Toml))`.
             Intrinsic::ListType(element) => self.walk(element, polarity),
 
-            // A cell is read *and* written, so it is invariant in its element.
-            Intrinsic::CellType(element) | Intrinsic::ChannelType(element) => {
+            // A cell and a box are read *and* written, so each is invariant in its element.
+            Intrinsic::CellType(element) | Intrinsic::BoxType(element) => {
                 self.walk(element, Polarity::Mixed)
             }
 
@@ -1455,13 +1455,9 @@ impl<'a, 'd, D: Driver> Walk<'a, 'd, D> {
             | Intrinsic::Cell { .. }
             | Intrinsic::CellFill { .. }
             | Intrinsic::CellPoll { .. }
-            | Intrinsic::Channel { .. }
-            | Intrinsic::ChannelPush { .. }
-            | Intrinsic::ChannelTake { .. }
-            | Intrinsic::ChannelClose { .. }
-            | Intrinsic::ChannelClosed { .. }
-            | Intrinsic::ChannelCount { .. }
-            | Intrinsic::ChannelCapacity { .. }
+            | Intrinsic::Box { .. }
+            | Intrinsic::BoxHeld { .. }
+            | Intrinsic::BoxSet { .. }
             | Intrinsic::IoPure { .. }
             | Intrinsic::IoBind { .. }
             | Intrinsic::IoSuspend { .. }

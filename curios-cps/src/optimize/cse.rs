@@ -114,7 +114,7 @@ pub fn dedupe_intrinsics(module: &mut Module) -> bool {
                 | Node::Switch { .. }
                 | Node::Foreign { .. }
                 | Node::Cell { .. }
-                | Node::Channel { .. }
+                | Node::Box { .. }
                 | Node::Intrinsic { .. }
                 | Node::Halt { .. }
                 | Node::Panic(_)

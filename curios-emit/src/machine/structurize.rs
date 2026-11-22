@@ -8,7 +8,7 @@ use {
     },
     crate::{
         EmissionArg, EmissionBinder, EmissionBlock, EmissionBlockName, EmissionBody,
-        EmissionCallTarget, EmissionCellTarget, EmissionChannelTarget, EmissionClosure,
+        EmissionBoxTarget, EmissionCallTarget, EmissionCellTarget, EmissionClosure,
         EmissionClosureName, EmissionCode, EmissionData, EmissionFrameTarget, EmissionFunction,
         EmissionFunctionName, EmissionHostTarget, EmissionJumpTarget, EmissionMatchTarget,
         EmissionModule, EmissionTail, EmissionValue, EmissionValueName,
@@ -392,12 +392,12 @@ impl<'a> MachineFunctionBridge<'a> {
             MachineTerminator::CellReturn { op, args } => {
                 self.cell(*op, args, self.resume.clone(), values)
             }
-            MachineTerminator::Channel { op, args, resume } => {
+            MachineTerminator::Box { op, args, resume } => {
                 let resume = self.resume_target(*resume, &vec![None; op.result_arity()], blocks);
-                self.channel(*op, args, resume, values)
+                self.box_(*op, args, resume, values)
             }
-            MachineTerminator::ChannelReturn { op, args } => {
-                self.channel(*op, args, self.resume.clone(), values)
+            MachineTerminator::BoxReturn { op, args } => {
+                self.box_(*op, args, self.resume.clone(), values)
             }
             MachineTerminator::Intrinsic {
                 op: curios_cps::IntrinsicCall::ListMap,
@@ -534,14 +534,14 @@ impl<'a> MachineFunctionBridge<'a> {
         })
     }
 
-    fn channel(
+    fn box_(
         &mut self,
-        op: curios_cps::ChannelOp,
+        op: curios_cps::BoxOp,
         args: &[MachineOperand],
         resume: EmissionBlockName,
         values: &mut Vec<(EmissionValueName, EmissionValue)>,
     ) -> EmissionTail {
-        EmissionTail::Channel(EmissionChannelTarget {
+        EmissionTail::Box(EmissionBoxTarget {
             op,
             args: self.operands(args, values),
             resume,
@@ -768,9 +768,9 @@ fn block_operand_values(block: &MachineBlock) -> BTreeSet<MachineValueId> {
         | MachineTerminator::ForeignReturn { args, .. }
         | MachineTerminator::Halt { args, .. }
         | MachineTerminator::Cell { args, .. }
-        | MachineTerminator::Channel { args, .. }
+        | MachineTerminator::Box { args, .. }
         | MachineTerminator::CellReturn { args, .. }
-        | MachineTerminator::ChannelReturn { args, .. }
+        | MachineTerminator::BoxReturn { args, .. }
         | MachineTerminator::Intrinsic { args, .. }
         | MachineTerminator::IntrinsicReturn { args, .. } => args.iter().for_each(&mut insert),
         MachineTerminator::IndirectCall { closure, args, .. }
@@ -795,7 +795,7 @@ fn block_successors(terminator: &MachineTerminator) -> Vec<MachineBlockId> {
         | MachineTerminator::IndirectCall { resume, .. }
         | MachineTerminator::Foreign { resume, .. }
         | MachineTerminator::Cell { resume, .. }
-        | MachineTerminator::Channel { resume, .. }
+        | MachineTerminator::Box { resume, .. }
         | MachineTerminator::Intrinsic { resume, .. } => vec![*resume],
         _ => vec![],
     }

@@ -479,7 +479,7 @@ fn a_cell_holds_what_any_fill_stores() {
 }
 
 #[test]
-fn a_channel_holds_what_any_push_stores() {
+fn a_box_holds_what_any_set_stores() {
     let mut probe = None;
     let mut lambda = None;
     let module = program(0, |module, _| {
@@ -488,37 +488,37 @@ fn a_channel_holds_what_any_push_stores() {
         resumed(
             module,
             1,
-            |module, channel| {
-                let channel = channel[0];
+            |module, made| {
+                let made = made[0];
                 resumed(
                     module,
-                    1,
+                    0,
                     |module, _| {
                         resumed(
                             module,
-                            2,
-                            |module, taken| read(module, taken[1], &mut probe),
+                            1,
+                            |module, held| read(module, held[0], &mut probe),
                             |module, return_to| {
-                                module.add_node(Node::Channel {
-                                    op: ChannelOp::Take,
-                                    args: vec![Atom::Value(channel)],
+                                module.add_node(Node::Box {
+                                    op: BoxOp::Held,
+                                    args: vec![Atom::Value(made)],
                                     return_to,
                                 })
                             },
                         )
                     },
                     |module, return_to| {
-                        module.add_node(Node::Channel {
-                            op: ChannelOp::Push,
-                            args: vec![Atom::Value(channel), Atom::Fun(stored)],
+                        module.add_node(Node::Box {
+                            op: BoxOp::Set,
+                            args: vec![Atom::Value(made), Atom::Fun(stored)],
                             return_to,
                         })
                     },
                 )
             },
             |module, return_to| {
-                module.add_node(Node::Channel {
-                    op: ChannelOp::New,
+                module.add_node(Node::Box {
+                    op: BoxOp::New,
                     args: vec![Atom::Literal(Literal::Nat(Natural::from(1u32)))],
                     return_to,
                 })

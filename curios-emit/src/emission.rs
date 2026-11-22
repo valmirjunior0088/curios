@@ -149,10 +149,10 @@ pub struct EmissionFrameTarget {
     pub resume: EmissionBlockName,
 }
 
-/// A bounded guest channel operation, performed inline and delivering its results to `resume`.
+/// A box operation, performed inline and delivering its results to `resume`.
 #[derive(Debug, Clone)]
-pub struct EmissionChannelTarget {
-    pub op: curios_cps::ChannelOp,
+pub struct EmissionBoxTarget {
+    pub op: curios_cps::BoxOp,
     pub args: Vec<EmissionValueName>,
     pub resume: EmissionBlockName,
 }
@@ -165,7 +165,7 @@ pub enum EmissionTail {
     Call(EmissionCallTarget),
     Host(EmissionHostTarget),
     Cell(EmissionCellTarget),
-    Channel(EmissionChannelTarget),
+    Box(EmissionBoxTarget),
     Frame(EmissionFrameTarget),
     Panic(curios_cps::Panic),
     Unreachable,
@@ -190,7 +190,7 @@ impl EmissionTail {
             EmissionTail::Host(EmissionHostTarget::Foreign { resume, .. }) => vec![resume],
             EmissionTail::Host(EmissionHostTarget::Halt { .. }) => vec![],
             EmissionTail::Cell(cell) => vec![cell.resume()],
-            EmissionTail::Channel(channel) => vec![&channel.resume],
+            EmissionTail::Box(target) => vec![&target.resume],
             EmissionTail::Frame(frame) => vec![&frame.resume],
             EmissionTail::Panic(_) | EmissionTail::Unreachable => vec![],
         }
@@ -686,7 +686,7 @@ impl EmissionTail {
             EmissionTail::Call(_)
             | EmissionTail::Host(_)
             | EmissionTail::Cell(_)
-            | EmissionTail::Channel(_)
+            | EmissionTail::Box(_)
             | EmissionTail::Frame(_)
             | EmissionTail::Panic(_)
             | EmissionTail::Unreachable => assert!(
@@ -722,8 +722,8 @@ impl EmissionTail {
                 EmissionHostTarget::Foreign { operands, .. }
                 | EmissionHostTarget::Halt { operands, .. },
             ) => rename_names(operands, renames),
-            EmissionTail::Channel(channel) => {
-                for arg in &mut channel.args {
+            EmissionTail::Box(target) => {
+                for arg in &mut target.args {
                     rename_name(arg, renames);
                 }
             }

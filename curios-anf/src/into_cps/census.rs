@@ -266,7 +266,7 @@ fn rhs_atoms(rhs: &Rhs) -> Vec<&Atom> {
         Rhs::Operation { operands, .. }
         | Rhs::Sequence { operands, .. }
         | Rhs::Cell { operands, .. }
-        | Rhs::Channel { operands, .. }
+        | Rhs::Box { operands, .. }
         | Rhs::Foreign { operands, .. }
         | Rhs::Intrinsic { operands, .. }
         | Rhs::Suspension { operands, .. } => operands.iter().collect(),

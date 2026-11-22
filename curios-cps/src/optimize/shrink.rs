@@ -945,7 +945,7 @@ pub fn retarget_transfers(node: &mut Node, from: ContinuationId, to: Continuatio
         Node::ApplyFun { return_to, .. }
         | Node::Foreign { return_to, .. }
         | Node::Cell { return_to, .. }
-        | Node::Channel { return_to, .. }
+        | Node::Box { return_to, .. }
         | Node::Intrinsic { return_to, .. } => {
             if *return_to == from {
                 *return_to = to;

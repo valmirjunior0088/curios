@@ -552,60 +552,29 @@ pub fn intrinsic_written<D: Rendered>(intrinsic: Intrinsic, frame: Frame<'_, D>)
                 universes_value(&universes, frame),
             ],
         ),
-        Intrinsic::ChannelType(operand0) => {
-            called("ChannelType", vec![value(sub(operand0, frame))])
-        }
-        Intrinsic::Channel {
+        Intrinsic::BoxType(operand0) => called("BoxType", vec![value(sub(operand0, frame))]),
+        Intrinsic::Box {
             element,
-            capacity,
-            positive,
+            value: held,
         } => called(
-            "Channel",
+            "Box",
+            vec![value(sub(element, frame)), value(sub(held, frame))],
+        ),
+        Intrinsic::BoxHeld { element, target } => called(
+            "BoxHeld",
+            vec![value(sub(element, frame)), value(sub(target, frame))],
+        ),
+        Intrinsic::BoxSet {
+            element,
+            target,
+            value: held,
+        } => called(
+            "BoxSet",
             vec![
                 value(sub(element, frame)),
-                value(sub(capacity, frame)),
-                value(sub(positive, frame)),
+                value(sub(target, frame)),
+                value(sub(held, frame)),
             ],
-        ),
-        Intrinsic::ChannelPush {
-            element,
-            channel,
-            value: pushed,
-        } => called(
-            "ChannelPush",
-            vec![
-                value(sub(element, frame)),
-                value(sub(channel, frame)),
-                value(sub(pushed, frame)),
-            ],
-        ),
-        Intrinsic::ChannelTake {
-            element,
-            channel,
-            universes,
-        } => called(
-            "ChannelTake",
-            vec![
-                value(sub(element, frame)),
-                value(sub(channel, frame)),
-                universes_value(&universes, frame),
-            ],
-        ),
-        Intrinsic::ChannelClose { element, channel } => called(
-            "ChannelClose",
-            vec![value(sub(element, frame)), value(sub(channel, frame))],
-        ),
-        Intrinsic::ChannelClosed { element, channel } => called(
-            "ChannelClosed",
-            vec![value(sub(element, frame)), value(sub(channel, frame))],
-        ),
-        Intrinsic::ChannelCount { element, channel } => called(
-            "ChannelCount",
-            vec![value(sub(element, frame)), value(sub(channel, frame))],
-        ),
-        Intrinsic::ChannelCapacity { element, channel } => called(
-            "ChannelCapacity",
-            vec![value(sub(element, frame)), value(sub(channel, frame))],
         ),
         Intrinsic::IoType(operand0) => called("IoType", vec![value(sub(operand0, frame))]),
         Intrinsic::IoPure {
@@ -1315,60 +1284,30 @@ pub fn intrinsic_read(
                 universes: universes_read(universes)?,
             }
         }
-        "ChannelType" => {
+        "BoxType" => {
             let [operand0] = operands(intrinsic, span)?;
-            Intrinsic::ChannelType(term(operand0, reader)?)
+            Intrinsic::BoxType(term(operand0, reader)?)
         }
-        "Channel" => {
-            let [element, capacity, positive] = operands(intrinsic, span)?;
-            Intrinsic::Channel {
+        "Box" => {
+            let [element, value] = operands(intrinsic, span)?;
+            Intrinsic::Box {
                 element: term(element, reader)?,
-                capacity: term(capacity, reader)?,
-                positive: term(positive, reader)?,
-            }
-        }
-        "ChannelPush" => {
-            let [element, channel, value] = operands(intrinsic, span)?;
-            Intrinsic::ChannelPush {
-                element: term(element, reader)?,
-                channel: term(channel, reader)?,
                 value: term(value, reader)?,
             }
         }
-        "ChannelTake" => {
-            let [element, channel, universes] = operands(intrinsic, span)?;
-            Intrinsic::ChannelTake {
+        "BoxHeld" => {
+            let [element, target] = operands(intrinsic, span)?;
+            Intrinsic::BoxHeld {
                 element: term(element, reader)?,
-                channel: term(channel, reader)?,
-                universes: universes_read(universes)?,
+                target: term(target, reader)?,
             }
         }
-        "ChannelClose" => {
-            let [element, channel] = operands(intrinsic, span)?;
-            Intrinsic::ChannelClose {
+        "BoxSet" => {
+            let [element, target, value] = operands(intrinsic, span)?;
+            Intrinsic::BoxSet {
                 element: term(element, reader)?,
-                channel: term(channel, reader)?,
-            }
-        }
-        "ChannelClosed" => {
-            let [element, channel] = operands(intrinsic, span)?;
-            Intrinsic::ChannelClosed {
-                element: term(element, reader)?,
-                channel: term(channel, reader)?,
-            }
-        }
-        "ChannelCount" => {
-            let [element, channel] = operands(intrinsic, span)?;
-            Intrinsic::ChannelCount {
-                element: term(element, reader)?,
-                channel: term(channel, reader)?,
-            }
-        }
-        "ChannelCapacity" => {
-            let [element, channel] = operands(intrinsic, span)?;
-            Intrinsic::ChannelCapacity {
-                element: term(element, reader)?,
-                channel: term(channel, reader)?,
+                target: term(target, reader)?,
+                value: term(value, reader)?,
             }
         }
         "IoType" => {

@@ -483,7 +483,7 @@ impl Shapes {
                 9u8.hash(&mut hasher);
                 atoms(&mut hasher, args);
             }
-            Node::Channel { args, .. } => {
+            Node::Box { args, .. } => {
                 10u8.hash(&mut hasher);
                 atoms(&mut hasher, args);
             }
@@ -616,7 +616,7 @@ enum Token {
     Intrinsic(crate::Intrinsic),
     Call(crate::IntrinsicCall),
     Cell(crate::CellOp),
-    Channel(crate::ChannelOp),
+    Box(crate::BoxOp),
     Row(crate::RowId),
     Foreign(usize),
     Panic(crate::Panic),
@@ -887,12 +887,12 @@ impl Writer<'_> {
                     self.read(Bound::Continuation(*return_to));
                     return Some(());
                 }
-                Node::Channel {
+                Node::Box {
                     op,
                     args,
                     return_to,
                 } => {
-                    self.push(Token::Channel(*op));
+                    self.push(Token::Box(*op));
                     self.atoms(args);
                     self.read(Bound::Continuation(*return_to));
                     return Some(());
