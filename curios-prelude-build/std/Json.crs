@@ -6,14 +6,19 @@ pub use encode/{let encode};
 mod decode;
 pub use decode/{let decode};
 
-use /std/{Bool, Flt, Str, List};
+--- An exact decimal number, what a document's number is.
+pub mod Number;
+pub use Number/{let Number};
+
+use /std/{Bool, Str, List, Spell};
+use /std/ops/{Eql};
 
 pub induct Json: pub Type
 | null()
 --- `true` or `false`.
 | bool(Bool)
---- A number, which is finite: JSON spells no infinity and no NaN, so a float that is one has no `num`. A literal's proof discharges by reduction, and `Flt/finite` answers a computed float's.
-| num(value: Flt, @finite: Flt/Finite(value))
+--- A number, exactly as the document writes it.
+| num(Number)
 --- A string.
 | str(Str)
 --- An array, in order.
@@ -23,3 +28,11 @@ pub induct Json: pub Type
 end
 
 pub use Json/*;
+
+satisfy Eql(Json) {
+    ..
+}
+
+satisfy Spell(Json) {
+    ..
+}

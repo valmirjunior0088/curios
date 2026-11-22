@@ -1,5 +1,5 @@
 -- The JSON codec: escapes, the refusals the grammar names, the numbers RFC 8259 spells and the ones it does not, and that a number is finite.
-use /std/{Json, Str, Flt, Bool, List, Test};
+use /std/{Json, Str, Flt, Bool, List, Int, Option, Test};
 
 -- The document decoded and re-encoded, or the refusal that stopped it.
 let decoded(input: Str) -> Str =
@@ -88,25 +88,77 @@ let reads(input: Str) -> Bool =
     | failure(_) => false
     end;
 
--- A number is finite, so every number the encoder writes is a JSON number: a literal's proof discharges where it is written, a computed float passes `Flt/finite` or has no `Json/num`, and there is no `null` for the encoder to invent.
-test a_number_is_built_from_a_finite_float_alone =
+-- A float is a number by the shortest digits that read back as it, `-0.0` being zero, and an infinity or a NaN is no number.
+test a_float_is_a_number_by_its_shortest_digits =
     let of_flt(f: Flt) -> Str =
-        match Flt/finite(f)
-        | some(finite) => Json/encode(Json/num(f, @finite))
+        match Json/Number/of_flt(f)
+        | some(n) => Json/encode(Json/num(n))
         | none() => "no number"
         end;
-    let huge =
-        +100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0;
     Test/equal(
         Str/join("|", [
-            Json/encode(Json/num(+1.5)),
-            Json/encode(Json/arr([Json/num(+1.0), Json/num(-0.0)])),
-            of_flt(-1.5),
+            of_flt(+1.5),
+            of_flt(-0.0),
+            of_flt(+0.1),
+            of_flt(-1.0e21),
             of_flt(+inf.0),
             of_flt(-inf.0),
-            of_flt(+nan.0),
-            of_flt(huge * huge)]),
-        "1.5|[1,-0]|-1.5|no number|no number|no number|no number");
+            of_flt(+nan.0)]),
+        "1.5|0|0.1|-1e21|no number|no number|no number");
+
+-- A number is written as JavaScript lays its digits out: positional from `1e-6` up to below `1e21`, and past those one digit, a point before the rest and the exponent.
+test a_number_is_written_as_javascript_writes_it =
+    let written(m: Int, e: Int) -> Str = Json/encode(Json/num(Json/Number/of(m, e)));
+    Test/equal(
+        [
+            written(+15, -1),
+            written(+1, +2),
+            written(+1, -6),
+            written(+1, -7),
+            written(+15, -8),
+            written(+1, +20),
+            written(+1, +21),
+            written(-123, +30),
+            written(+0, +5)],
+        ["1.5", "100", "0.000001", "1e-7", "1.5e-7", "100000000000000000000", "1e21", "-1.23e32",
+            "0"]);
+
+-- A number is read exactly at any size: an integer past `2^53` and one past 64 bits are themselves, `0.1` is the decimal and not the float nearest it, `1e400` is read past binary64's range, and `1.0`, `10e-1` and `1` are one number.
+test a_number_is_read_exactly_at_any_size =
+    Test/equal(
+        Str/join("|", [
+            decoded("[9007199254740993, 12345678901234567891]"),
+            decoded("0.1"),
+            decoded("1e400"),
+            decoded("[1.0, 10e-1, 1]")]),
+        "[9007199254740993,12345678901234567891]|0.1|1e400|[1,1,1]");
+
+-- Two documents that write one number two ways are one value.
+test a_number_written_two_ways_is_one_value =
+    let parsed(input: Str) -> Json =
+        match Json/decode(input)
+        | success(v) => v
+        | failure(_) => Json/null()
+        end;
+    Test/equal(parsed("[1.0, {\"a\": 2.50}]"), parsed("[1, {\"a\": 25e-1}]"));
+
+-- `to_int` answers an integer exactly and refuses a fraction and one too long to multiply out, and `to_flt` answers the float nearest the number.
+test a_number_converts_to_an_integer_and_a_float =
+    let number(input: Str) -> Json/Number =
+        match Json/decode(input)
+        | success(num(n)) => n
+        | _ => Json/Number/of_int(+0)
+        end;
+    Test/all([
+        Test/equal(
+            Json/Number/to_int(number("12345678901234567891")),
+            Option/some(+12345678901234567891)),
+        Test/equal(Json/Number/to_int(number("1.5e3")), Option/some(+1500)),
+        Test/equal(Json/Number/to_int(number("2.5")), Option/none()),
+        Test/equal(Json/Number/to_int(number("1e1000000000")), Option/none()),
+        Test/assert(
+            "0.1 is the float nearest it",
+            Flt/identical(Json/Number/to_flt(number("0.1")), +0.1))]);
 
 -- RFC 8259 §6's number rule at its edges: an integer part is `0` or opens with another digit, a point owes a digit and so does an exponent, and no sign but a minus opens a number.
 test a_number_is_read_by_the_grammars_own_rule =
@@ -127,7 +179,7 @@ test a_number_is_read_by_the_grammars_own_rule =
             decoded("1e"),
             decoded("-")]),
         Str/flatten([
-            "0|-0|100|0.5|expected end of input|expected end of input|expected end of input|",
+            "0|0|100|0.5|expected end of input|expected end of input|expected end of input|",
             "expected digit|expected digit|expected value|expected number|expected value|",
             "expected digit|expected number"]));
 
@@ -211,8 +263,8 @@ test every_number_the_grammar_spells_is_read =
             ("simple_real", "[123.456789]")];
     Test/equal(List/map(List/filter(cases, (c) => Bool/not(reads(c.1))), (c) => c.0), []);
 
--- JSONTestSuite's `i_number_*` cases, which a parser is free to decide: a number past binary64's range is refused, one below it reads as zero of its sign, and an integer past `2^53` reads as the float nearest to it.
-test a_number_past_binary64_is_refused_and_one_below_it_is_zero =
+-- JSONTestSuite's `i_number_*` cases, which a parser is free to decide: every one is read exactly, past binary64's range or below it, and an integer past `2^53` as itself.
+test every_number_a_parser_may_decide_is_read_exactly =
     Test/equal(
         Str/join("|", [
             decoded("[123.456e-789]"),
@@ -229,6 +281,7 @@ test a_number_past_binary64_is_refused_and_one_below_it_is_zero =
             decoded("[100000000000000000000]"),
             Bool/to_str(reads("[-123123123123123123123123123123]")),
             Bool/to_str(reads("[-237462374673276894279832749832423479823246327846]"))]),
-        Str/flatten(["[0]|[0]|[-0]|number out of range|number out of range|number out of range|",
-            "number out of range|number out of range|number out of range|number out of range|",
+        Str/flatten(["[1.23456e-787]|[1.23e-9999998]|[-1e-400]|",
+            "[4e669999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999969999999005]|",
+            "[-1e9999]|[1.5e9999]|[-1.23123e100005]|[1.23123e100005]|1e400|-1e400|",
             "[100000000000000000000]|true|true"]));

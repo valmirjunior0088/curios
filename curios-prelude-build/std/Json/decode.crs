@@ -1,4 +1,4 @@
-use /std/{Str, Bool, Char, Flt, Nat, Int, Parse, Option, List, Result, Json};
+use /std/{Str, Bool, Char, Nat, Int, Parse, List, Result, Json};
 
 let null_value: Parse(Str, Json) =
     Parse/map(Parse/str/literal("null"), (()) => Json/null());
@@ -60,23 +60,15 @@ let exp_part() -> Parse(Str, Int) =
     | none() => Parse/pure(+0)
     end;
 
---- A number as RFC 8259 §6 writes one — `-? (0 | [1-9][0-9]*) (\.[0-9]+)? ([eE][+-]?[0-9]+)?` — converted once, through `Flt/of_decimal`. One past binary64's range is refused; one that rounds to zero is zero of its sign.
+--- A number as RFC 8259 §6 writes one — `-? (0 | [1-9][0-9]*) (\.[0-9]+)? ([eE][+-]?[0-9]+)?` — read exactly, at any size: `-0` is zero.
 let number() -> Parse(Str, Json) =
     let minus = Parse/optional(Parse/str/expect('-'))!;
     let whole = int_part()!;
     let fraction = frac_part()!;
     let exponent = exp_part()!;
-    let spelled = Str/concat(whole, fraction);
-    let value =
-        Flt/of_decimal(
-            Option/is_some(minus),
-            digits_value(spelled),
-            exponent - Nat/to_int(Str/len(fraction)),
-            Str/len(spelled));
-    match Flt/finite(value)
-    | some(finite) => Parse/pure(Json/num(value, @finite))
-    | none() => Parse/commit(Parse/fail("number out of range"))
-    end;
+    let magnitude = Nat/to_int(digits_value(Str/concat(whole, fraction)));
+    let mantissa = match minus | some(_) => +0 - magnitude | none() => magnitude end;
+    Parse/pure(Json/num(Json/Number/of(mantissa, exponent - Nat/to_int(Str/len(fraction)))));
 
 --- Whether `c` may stand in a string as written: any but the quote, the backslash and the control characters below `U+0020`, which the grammar has escaped.
 let is_unescaped(c: Char) -> Bool =
