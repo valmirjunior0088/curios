@@ -452,7 +452,7 @@ A structure pattern writes its fields where its literal would write them, and ma
 
 `Point { x, y }` is the positional form, its fields binders named after the fields. Parentheses group a pattern without changing it: `((x, y))` is `(x, y)`.
 
-A constructor pattern `tag(p, …)` holds its value to that one case, as a match's lone arm does: its payloads bind, an index the case solves refines what follows, and a value whose type has another case is refused as a match missing that arm is, naming the case. It is written where a match of one arm would be:
+A constructor pattern `tag(p, …)` holds its value to that one case, as a match's lone arm does: its payloads bind, an index the case solves refines what follows, and a value whose type has another case the facts in scope do not rule out is refused as a match missing that arm is, naming the case. It is written where a match of one arm would be:
 
 ```crs
 use /std/{Eq};
@@ -593,7 +593,7 @@ Embeddings never chain: an action of `Io` sequences in a `Sched` region only whe
 
 A `match` has a scrutinee, an arm `| pattern => body` for each case — or for several, written as [alternatives](#alternatives) — and a closing `end`. Its result is the type expected where it stands, and a match writes no result type of its own. Why: [An arm is checked in a context specialized by index inversion](design/theory/an-arm-is-checked-in-a-context-specialized-by-index-inversion.md).
 
-An arm may be left out where its constructor's indices cannot meet the scrutinee's: a match over a `Sized(T)(n + 1)` needs no `empty()` arm, and one over a type with no constructors, `match contradiction end`, writes no arm at all. Where the facts in scope contradict each other, `proved(@False)` is the contradiction to match on ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)).
+An arm may be left out where its constructor's indices cannot meet the scrutinee's: a match over a `Sized(T)(n + 1)` needs no `empty()` arm, and one over a type with no constructors, `match contradiction end`, writes no arm at all. An arm may also be left out where the facts in scope rule its case out, as they would prove a bound ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)): over `r: Vec(Nat, 3)`, `match r.list | [a, b, c] => a + b + c end` needs no arm for a list of any other length, and under `Holds(n < 3)`, `match n | 0 => … | 1 => … | 2 => … end` needs none for the naturals past `2`. Where the facts in scope contradict each other elsewhere, `proved(@False)` is the contradiction to match on.
 
 ### Inductive patterns
 
@@ -800,7 +800,7 @@ Arms have no priority: the order they are written in never changes what a match 
 
 - two arms that match one value, neither a case of the other: `(true, _)` and `(_, true)` meet at `(true, true)`;
 - an arm no value reaches: one written after an arm it is a case of, and a final `_` after arms that cover every case already;
-- a value no arm matches: `(some(_), none())`.
+- a value no arm matches, which the facts in scope do not rule out: `(some(_), none())`, beneath it the facts read where it stands.
 
 Why: [Patterns are compiled where their types are known](design/surface/patterns-are-compiled-where-their-types-are-known.md).
 
@@ -849,7 +849,7 @@ pub let size(value: Option(Nat)) -> Nat =
     end;
 ```
 
-Where a guard fails, the value goes on to the arms after it, in the order they are written, and a value only guarded arms reach is a value no arm matches. Guards never order patterns: two arms whose patterns meet are held to the rules of [Binders beside patterns](#binders-beside-patterns) as they would be with no guard.
+Where a guard fails, the value goes on to the arms after it, in the order they are written, and a value only guarded arms reach is a value no arm matches, unless the facts in scope, a lone condition's failure among them, rule it out. Guards never order patterns: two arms whose patterns meet are held to the rules of [Binders beside patterns](#binders-beside-patterns) as they would be with no guard.
 
 A bind guard whose pattern cannot fail is refused: a binding with no case to test is a `let`. A guard takes no [alternatives](#alternatives); the value they would test is written as the head. A guard's term is an operand, so a `let`, a lambda or a function type stands in one in parentheses.
 
@@ -1474,20 +1474,17 @@ pub let get(xs: List(Nat), i: Nat, m: Nat, p: Holds(i < m), q: Holds(m <= List/l
     List/get(xs, i);
 ```
 
-`proved`, imported loose from `/std` as `print` is, reaches the same proof where no bound asks for it. It states a fact a term needs, its proposition written or set by the expected type, and at `False` it is the contradiction a match with no arms takes apart, in an arm the facts rule out:
+`proved`, imported loose from `/std` as `print` is, reaches the same proof where no bound asks for it. It states a fact a term needs, its proposition written or set by the expected type, and at `False` it is the contradiction a match with no arms takes apart. A case of a match the facts rule out takes no arm at all: the same proof closes it where it stands.
 
 ```crs
-use /std/{Nat, proved};
-use /std/Bool/{False, Holds};
+use /std/{Nat};
+use /std/Bool/{Holds};
 
-pub let clamp(n: Nat, q: Holds(n <= 10)) -> Nat =
-    match n > 20
-    | true => match proved(@False) end
-    | false => n
-    end;
+pub let pick(n: Nat, q: Holds(n < 3)) -> Nat =
+    match n | 0 => 10 | 1 => 11 | 2 => 12 end;
 ```
 
-A bound the facts do not imply is refused, the report naming the facts it read and values under which they hold and the bound fails.
+A bound the facts do not imply is refused, the report naming the facts it read and values under which they hold and the bound fails, and so is a case of a match they do not rule out.
 
 ## Quick reference
 

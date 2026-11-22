@@ -483,3 +483,29 @@ fn a_proofs_payload_is_read_by_no_tuple_slot() {
     ])
     .by_elaborator_in("/get", |error| matches!(error, Error::NotATuple { .. }));
 }
+
+// A case the facts refute is closed by an arm the elaborator writes, and the guard counts that arm as the certifier does: under `n < 1` no case of `Le(n)` is left, so `match t end` writes both arms, which into data take a proposition of two constructors apart, refused here rather than by the certifier. The control's result is a proposition.
+#[test]
+fn an_arm_the_facts_close_is_an_arm_to_the_guard() {
+    control(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{Holds};
+
+        induct Le: (n: Nat) -> Prop
+        | one(): (1)
+        | more(k: Nat): (k + 2)
+        end
+
+        let read(n: Nat, t: Le(n), @q: Holds(n < 1)) -> Holds(n == 5) = match t end;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("-> Holds(n == 5) = match t end", "-> Nat = match t end")])
+    .by_elaborator_in(
+        "/read",
+        |error| matches!(error, Error::LargeElimOfProp { name } if *name == global("/Le")),
+    );
+}

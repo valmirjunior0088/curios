@@ -508,6 +508,11 @@ macro_rules! shown_terms {
             Self::MatrixStructHead { scrutinee, .. }
             | Self::MatrixTupleArity { scrutinee, .. }
             | Self::MatrixLiteralColumn { scrutinee, .. } => $visit(scrutinee),
+            Self::MatrixUncovered { refusal, .. } | Self::MatrixGuarded { refusal, .. } => {
+                for term in refusal.$terms() {
+                    $visit(term);
+                }
+            }
             Self::InformativePropStruct { field_type, .. } => $visit(field_type),
             Self::NotStrictlyPositive { site_type, .. } | Self::HoldsItself { site_type, .. } => {
                 $visit(site_type)
@@ -819,15 +824,17 @@ pub enum Error {
     MatrixDuplicateRow {
         covered: Option<String>,
     },
-    /// A value no arm matches, written as the pattern that matches it: the cases read on the way to it, and `_` wherever none was. `indexed` says the case left out is a constructor of an indexed family, which inversion excuses only where its indices clash with the scrutinee's.
+    /// A value no arm matches, written as the pattern that matches it: the cases read on the way to it, and `_` wherever none was. `indexed` says the case left out is a constructor of an indexed family, which inversion excuses only where its indices clash with the scrutinee's. `refusal` is what the procedure that proves a bound said of the facts in scope where the case stands, which refute nothing there.
     MatrixUncovered {
         value: String,
         indexed: bool,
+        refusal: Box<Refusal>,
     },
-    /// A value only a guarded arm reaches: where its guards fail, no arm takes it. `value` is the value as a pattern, and `guarded` the last arm that reaches it, as written.
+    /// A value only a guarded arm reaches: where its guards fail, no arm takes it. `value` is the value as a pattern, `guarded` the last arm that reaches it, as written, and `refusal` what the procedure that proves a bound said of the facts in scope where the guards fail.
     MatrixGuarded {
         value: String,
         guarded: String,
+        refusal: Box<Refusal>,
     },
     /// A guarded arm written before an arm that is a case of it. Guards order no pattern: with no guard the case would be reached by nothing, so a general arm stands after its exceptions, guarded or not. `general` and `case` are the two arms as written.
     MatrixGuardedBeforeCase {

@@ -1565,19 +1565,32 @@ impl Displayed<'_> {
                     }
                 }
             }
-            Error::MatrixUncovered { value, indexed } => {
+            // A case the facts in scope would have closed had they refuted it: what they were is said beneath the value, and nothing where none was read.
+            Error::MatrixUncovered {
+                value,
+                indexed,
+                refusal,
+            } => {
                 f.text("missing arm");
                 f.stating(format_args!("no arm matches `{value}`"));
                 if *indexed {
                     f.stating("its indices are not provably impossible at the scrutinee's");
+                }
+                refused(f, refusal, spelling);
+                if *indexed {
                     f.stating("write the arm");
                 }
             }
-            Error::MatrixGuarded { value, guarded } => {
+            Error::MatrixGuarded {
+                value,
+                guarded,
+                refusal,
+            } => {
                 f.text("missing arm");
                 f.stating(format_args!(
                     "no arm matches `{value}` where the guards of `{guarded}` fail"
                 ));
+                refused(f, refusal, spelling);
                 f.stating("a guarded arm takes nothing for itself");
                 f.stating("write an arm with no guard after it");
             }

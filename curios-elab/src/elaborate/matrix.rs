@@ -8,7 +8,7 @@
 //!
 //! **The row that cannot fail**, a final row that takes nothing apart and has no guard, after rows of which one takes the scrutinee apart, states no case, so it is read where the match stands and at the match's own type, once, after the rows before it: written in place where one leaf reaches it, and bound once as a function of no argument, called from each, where more do. Where no row takes the scrutinee apart there is one leaf, and every row is read there.
 //!
-//! **Arm order decides nothing between patterns.** The rows that reach a leaf are its candidates, and the first written is taken. Each of the others either has it as a case, a general arm standing after its exception, or is a case of it, which no value reaches there; two that are neither would mean one thing in one order and another in the other, and the match is refused. A case no row reaches is a value no arm matches, reported as its pattern, and a row no leaf takes is an arm no value reaches.
+//! **Arm order decides nothing between patterns.** The rows that reach a leaf are its candidates, and the first written is taken. Each of the others either has it as a case, a general arm standing after its exception, or is a case of it, which no value reaches there; two that are neither would mean one thing in one order and another in the other, and the match is refused. A case no row reaches is entered all the same and closed by the contradiction the facts in scope prove there, as an omitted bound at `False` is proved ([`Compiler::unreached`]); where they prove none it is a value no arm matches, reported as its pattern. A row no leaf takes is an arm no value reaches.
 //!
 //! **A row with guards takes nothing for itself** ([`Compiler::guarded`]). Where it is the first candidate, its guards run, and where one fails the candidates after it are what the value takes. A row whose one guard is a `Bool` is a `Bool` split at its leaf, its own body the true case and the candidates after it the false one, so they are read under the condition's failure; any other row with guards fails in more ways than one, so the candidates after it are read once, at the leaf, and stand wherever one of its guards fails.
 //!
@@ -17,11 +17,12 @@
 use {
     super::{
         BoolSplit, Expectation, Mode, NatSplit, NominalSplit, Scrutinee, Sequence, SequenceSplit,
-        SwitchSplit, elaborate, payload_fills, read_fields, realize, record_keyword,
+        SwitchSplit, absurd, elaborate, payload_fills, read_fields, realize, record_keyword,
+        reference,
     },
     crate::{
-        Context, Error, HeldFrames, PatternShape, Resolved, WrittenLiteral, check, expect_as,
-        pending, reduce_with, resolved_for_display, stuck_on_metavar,
+        Context, Entailed, Error, HeldFrames, PatternShape, Refusal, Resolved, WrittenLiteral,
+        check, entail, expect_as, pending, reduce_with, resolved_for_display, stuck_on_metavar,
     },
     curios_common::{Plicity, recurse},
     curios_core::{
@@ -731,7 +732,7 @@ impl<'m> Compiler<'m> {
         }
     }
 
-    /// The arm of one case: its rows over the columns left, read against the type the case is typed at. Guarded by [`recurse`]: a row is read a pattern at a time, so the depth is that of the patterns a reader wrote.
+    /// The arm of one case: its rows over the columns left, read against the type the case is typed at, and where no row reaches the case, the leaf no arm reaches ([`Compiler::unreached`]). Guarded by [`recurse`]: a row is read a pattern at a time, so the depth is that of the patterns a reader wrote.
     fn case(
         &mut self,
         context: &mut Context,
@@ -740,6 +741,15 @@ impl<'m> Compiler<'m> {
         expected: Term,
     ) -> Result<Term, Error> {
         let mode = Mode::Check(self.mode.at(expected));
+        if lines.is_empty() {
+            return self
+                .unreached(context, mode, |value, refusal| Error::MatrixUncovered {
+                    value,
+                    indexed: false,
+                    refusal,
+                })
+                .map(|(arm, _)| arm);
+        }
         recurse(|| self.columns(context, columns, lines, false, mode)).map(|(arm, _)| arm)
     }
 
@@ -794,13 +804,27 @@ impl<'m> Compiler<'m> {
         }
     }
 
-    /// The refusal of a match no arm of which matches a value of the case `missing` of the column at `column`: the value as a pattern, with `_` wherever no case was read. `indexed` says the case is a constructor of an indexed family.
-    fn uncovered(&mut self, column: &Column, missing: Seen, indexed: bool) -> Error {
-        self.seen[column.seen] = missing;
+    /// A leaf no row reaches, entered as an arm of its case is: the zero-arm match on the contradiction the facts in scope prove where it stands, the proof an omitted bound at `False` is given ([`crate::entail`]), read at `mode`. Where the facts prove none, `refused` is handed the value the leaf stands for, as a pattern with `_` wherever no case was read, and what the procedure said of the facts.
+    ///
+    /// Only a match that leaves a case to no arm reaches one, so a match that misses no arm asks nothing of the facts. The arm is written into the match and checked as one a reader wrote is: the certifier's rule for an arm left out stays inversion's.
+    fn unreached(
+        &mut self,
+        context: &mut Context,
+        mode: Mode,
+        refused: impl FnOnce(String, Box<Refusal>) -> Error,
+    ) -> Result<(Term, Term), Error> {
+        let value = self.value(0);
+        let empty = Global::Authored(context.syntax().proof.false_type.qualifier());
+        let (bound, _) = reference(context, empty, None)?
+            .ok_or_else(|| context.unbound_variable(Term::written(empty)))?;
+        let reduced = reduce_with(context, &bound)?;
 
-        Error::MatrixUncovered {
-            value: self.value(0),
-            indexed,
+        // The facts a refusal names are terms of the case's own frame, its binders among them, so it records the scope its reader stands in here, which a report writes them in.
+        match entail(context, &bound, &reduced)? {
+            Entailed::Proved(proof) => absurd(context, proof, reduced, mode, self.term),
+            Entailed::Refused(refusal) => {
+                Err(refused(value, Box::new(refusal)).in_scope(context.reader_scope()))
+            }
         }
     }
 
@@ -1019,7 +1043,7 @@ impl<'m> Compiler<'m> {
 
     /// The first candidate at a leaf when it has guards to run, and `rest`, the candidates after it: what a value there takes where one of its guards fails.
     ///
-    /// A row whose one guard is a `Bool`, typed at this leaf, is a `Bool` split on that condition: its body the true case and `rest` the false one, so each row of `rest` typed at this leaf is read where the condition is false. Any other fails in more ways than one: `rest` is read once, here, and the row is read as the function of it ([`Compiler::failing`]), applied where it stands — `rest` in place where the row has one guard, and a function of no argument, called at each failure, where it has more. A row typed once by its own walk is read so too, its walk the function. A row with guards and no candidate after it leaves what they refuse with no arm.
+    /// A row whose one guard is a `Bool`, typed at this leaf, is a `Bool` split on that condition: its body the true case and `rest` the false one, so each row of `rest` typed at this leaf is read where the condition is false. Any other fails in more ways than one: `rest` is read once, here, and the row is read as the function of it ([`Compiler::failing`]), applied where it stands — `rest` in place where the row has one guard, and a function of no argument, called at each failure, where it has more. A row typed once by its own walk is read so too, its walk the function. Where no candidate follows the row, what its guards refuse reaches no arm ([`Compiler::failed`]).
     fn guarded(
         &mut self,
         context: &mut Context,
@@ -1028,14 +1052,6 @@ impl<'m> Compiler<'m> {
         mode: Mode,
     ) -> Result<(Term, Term), Error> {
         let row = line.row;
-        if rest.is_empty() {
-            return Err(Error::MatrixGuarded {
-                value: self.value(0),
-                guarded: self.written(row),
-            }
-            .at_opt(self.row(row).body.extent()));
-        }
-
         if let [Guard::Holds(condition)] = self.row(row).guards.as_slice()
             && !self.strays[row]
         {
@@ -1048,7 +1064,7 @@ impl<'m> Compiler<'m> {
                 let split = Rc::new(BoolSplit::resolve(context, scrutinee, &goal, &mode)?);
                 let false_case = split.arm(context, false, |context, expected| {
                     let mode = Mode::Check(self.mode.at(expected));
-                    recurse(|| self.leaf(context, rest, mode)).map(|(arm, _)| arm)
+                    self.failed(context, row, rest, mode).map(|(arm, _)| arm)
                 })?;
                 let true_case = split.arm(context, true, |context, expected| {
                     let mode = Mode::Check(self.mode.at(expected));
@@ -1059,7 +1075,7 @@ impl<'m> Compiler<'m> {
             });
         }
 
-        let (rest, type_) = recurse(|| self.leaf(context, rest, mode))?;
+        let (rest, type_) = self.failed(context, row, rest, mode)?;
         let function = match self.strays[row] {
             true => self.walked(context, &line)?,
             false => {
@@ -1091,6 +1107,30 @@ impl<'m> Compiler<'m> {
         };
 
         Ok((taken, type_))
+    }
+
+    /// What a value takes where the guards of the row at `row` fail: `rest`, the candidates after it, and where there are none, the leaf no arm reaches ([`Compiler::unreached`]), whose refusal names the row.
+    fn failed(
+        &mut self,
+        context: &mut Context,
+        row: usize,
+        rest: Vec<Line<'m>>,
+        mode: Mode,
+    ) -> Result<(Term, Term), Error> {
+        if !rest.is_empty() {
+            return recurse(|| self.leaf(context, rest, mode));
+        }
+        let guarded = self.written(row);
+        let at = self.row(row).body.extent();
+
+        self.unreached(context, mode, |value, refusal| {
+            Error::MatrixGuarded {
+                value,
+                guarded,
+                refusal,
+            }
+            .at_opt(at)
+        })
     }
 
     /// The instance a leaf holds of a row its own walk elaborated: the walk's body with the leaf's binders in the places of the walk's.
@@ -1325,33 +1365,25 @@ impl<'m> Compiler<'m> {
                 .map(|&(row, places)| (row, places + usize::from(defaulted)))
                 .collect::<Vec<_>>();
             self.strayed(&reached);
-            let undecided = split.admit(context, groups.is_empty(), defaulted)?;
+            // Where a row writes a binder it takes every case no row names, so only the named ones are walked. A case no row names is left out where inversion rules it out, and is otherwise entered and closed by the facts in scope ([`Compiler::unnamed`]): an arm of the match all the same, which the large-elimination guard counts as the certifier does.
+            let cases = split.cases(context, tags.values(), !binders.is_empty());
+            let mut unnamed = BTreeSet::new();
+            for tag in &cases {
+                if !groups.contains_key(&tag.as_string()) && !split.ruled_out(context, tag)? {
+                    unnamed.insert(tag.as_string());
+                }
+            }
+            let undecided =
+                split.admit(context, groups.is_empty() && unnamed.is_empty(), defaulted)?;
             split.declared(context, tags.values())?;
 
-            // Where a row writes a binder it takes every case no row names, so only the named ones are walked.
-            let mut arms = Vec::with_capacity(groups.len());
-            for tag in split.cases(context, tags.values(), !binders.is_empty()) {
-                let tag = &tag;
-                let Some(group) = groups.remove(&tag.as_string()) else {
-                    // An arm may be left out where inversion rules the case out.
-                    if split.ruled_out(context, tag)? {
-                        continue;
-                    }
-
-                    let plain = split
-                        .payload(context, tag)?
-                        .marks()
-                        .iter()
-                        .filter(|mark| **mark == Plicity::Explicit)
-                        .count();
-                    let payloads = self.parts(plain);
-
-                    let missing = Seen::Variant(tag.as_string(), payloads);
-
-                    return Err(self.uncovered(&column, missing, split.indexed()));
-                };
-
-                arms.push(self.variant(context, &split, tag, group, &column, &rest)?);
+            let mut arms = Vec::with_capacity(cases.len());
+            for tag in &cases {
+                if let Some(group) = groups.remove(&tag.as_string()) {
+                    arms.push(self.variant(context, &split, tag, group, &column, &rest)?);
+                } else if unnamed.contains(&tag.as_string()) {
+                    arms.push(self.unnamed(context, &split, tag, &column)?);
+                }
             }
 
             let default = match defaulted {
@@ -1409,6 +1441,46 @@ impl<'m> Compiler<'m> {
         );
         let arm = split.arm(context, tag, payload, &binders, |context, expected| {
             self.case(context, columns, lines, expected)
+        });
+        self.seen[column.seen] = Seen::Any;
+
+        arm
+    }
+
+    /// The arm of `tag`'s case where no row names it and inversion leaves it possible: entered as an arm of it is, each payload bound by a binder of the compiler's, and closed where the facts in scope refute it ([`Compiler::unreached`]). Its refusal says whether the family is indexed, which inversion alone excuses a case of.
+    fn unnamed(
+        &mut self,
+        context: &mut Context,
+        split: &NominalSplit,
+        tag: &Atom,
+        column: &Column,
+    ) -> Result<(Atom, InductArm), Error> {
+        let payload = split.payload(context, tag)?;
+        let marks = payload.marks();
+        let places = self.parts(marks.len());
+        let binders = places
+            .iter()
+            .map(|_| context.fresh(None))
+            .collect::<Vec<_>>();
+        let indexed = split.indexed();
+
+        self.seen[column.seen] = Seen::Variant(
+            tag.as_string(),
+            places
+                .iter()
+                .zip(&marks)
+                .filter(|(_, mark)| **mark == Plicity::Explicit)
+                .map(|(place, _)| *place)
+                .collect(),
+        );
+        let arm = split.arm(context, tag, payload, &binders, |context, expected| {
+            let mode = Mode::Check(self.mode.at(expected));
+            self.unreached(context, mode, |value, refusal| Error::MatrixUncovered {
+                value,
+                indexed,
+                refusal,
+            })
+            .map(|(arm, _)| arm)
         });
         self.seen[column.seen] = Seen::Any;
 
@@ -1628,11 +1700,6 @@ impl<'m> Compiler<'m> {
                 }
             }
         }
-        for (value, lines) in [("false", &falses), ("true", &trues)] {
-            if lines.is_empty() {
-                return Err(self.uncovered(&column, Seen::Leaf(value.to_string()), false));
-            }
-        }
 
         let scrutinee = Scrutinee::read(context, &column.term)?;
         let goal = Term::hole(context.mint_metavar());
@@ -1801,13 +1868,8 @@ impl<'m> Compiler<'m> {
                 }
             }
         }
-        // Each case of the split is covered or the match is refused: a row that writes `0` alone leaves every successor to no arm, the least of them `1`.
-        if zeros.is_empty() {
-            return Err(self.uncovered(&column, Seen::Leaf("0".to_string()), false));
-        }
-        if successors.is_empty() {
-            return Err(self.uncovered(&column, Seen::Leaf("1".to_string()), false));
-        }
+        // A case no row reaches is closed by the facts or refused, a row that writes `0` alone leaving every successor to no arm, the least of them `1`, which its report names.
+        let unreached = successors.is_empty();
 
         let goal = Term::hole(context.mint_metavar());
 
@@ -1830,7 +1892,10 @@ impl<'m> Compiler<'m> {
             let (binders, mut columns, group) = self.case_parts(context, successors, &places);
             columns.extend(rest);
             let predecessor = binders[0];
-            self.seen[column.seen] = Seen::Successor(places[0]);
+            self.seen[column.seen] = match unreached {
+                true => Seen::Leaf("1".to_string()),
+                false => Seen::Successor(places[0]),
+            };
             let successor = split.successor(context, &predecessor, |context, expected| {
                 self.case(context, columns, group, expected)
             })?;
@@ -1914,16 +1979,6 @@ impl<'m> Compiler<'m> {
                 }
             }
         }
-        if empties.is_empty() {
-            return Err(self.uncovered(&column, Seen::Empty(sequence), false));
-        }
-        if conses.is_empty() {
-            let parts = self.parts(2);
-            let missing = Seen::Cons(sequence, parts[0], parts[1]);
-
-            return Err(self.uncovered(&column, missing, false));
-        }
-
         let scrutinee = match read {
             Some(scrutinee) => scrutinee,
             None => Scrutinee::read(context, &column.term)?,
@@ -2632,11 +2687,10 @@ impl<'m> Compiler<'m> {
                 }
             }
         }
-        if others.is_empty() {
-            let missing = K::missing(context, &scrutinee, |key| groups.contains_key(key));
-
-            return Err(self.uncovered(&column, missing, false));
-        }
+        // Where no row writes a binder, what any other value takes is a leaf no row reaches, which its report names by the value no row writes.
+        let unreached = others
+            .is_empty()
+            .then(|| K::missing(context, &scrutinee, |key| groups.contains_key(key)));
 
         let scrutinee = K::viewed(context, scrutinee);
         let goal = Term::hole(context.mint_metavar());
@@ -2665,7 +2719,7 @@ impl<'m> Compiler<'m> {
                 })?;
                 cases.push((value, arm));
             }
-            self.seen[column.seen] = Seen::Any;
+            self.seen[column.seen] = unreached.unwrap_or(Seen::Any);
             let keys = K::keys(
                 Keyed::new(cases)
                     .expect("a dispatch's keys are its groups', one at least, ascending"),
@@ -2673,6 +2727,7 @@ impl<'m> Compiler<'m> {
             let default = split.default(context, &keys, |context, expected| {
                 self.case(context, rest, others, expected)
             })?;
+            self.seen[column.seen] = Seen::Any;
             let (rebuilt, type_) = split.rebuild(keys, default);
 
             self.settled(context, top, rebuilt, type_)

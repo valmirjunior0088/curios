@@ -1,4 +1,4 @@
-//! A constructor written where a binder stands: held to its one case as a match's lone arm is, refining what follows, and refused where its value's type has another case.
+//! A constructor written where a binder stands: held to its one case as a match's lone arm is, refining what follows, and refused where its value's type has another case the facts in scope do not refute.
 
 use crate::tests::test_support::*;
 
@@ -21,7 +21,7 @@ fn a_constructor_pattern_binds_its_payloads_and_refines_what_follows() {
     assert_eq!(run(source), b"13");
 }
 
-// A constructor whose value's type has another case is refused as a match missing that arm is, naming the case.
+// A constructor whose value's type has another case the facts in scope do not refute is refused as a match missing that arm is, naming the case.
 #[test]
 fn a_constructor_pattern_whose_value_has_another_case_is_refused_naming_it() {
     let source = r#"
@@ -33,6 +33,20 @@ fn a_constructor_pattern_whose_value_has_another_case_is_refused_naming_it() {
         "#;
     let report = error(source);
     assert!(report.contains("no arm matches `none()`"), "{report}");
+}
+
+// A constructor pattern is a match's lone arm, so another case the facts in scope refute is closed as that match's would be: under `Holds(Option/is_some(o))`, `let some(x) = o;` binds. The refusal beside it is `a_constructor_pattern_whose_value_has_another_case_is_refused_naming_it`, where no fact refutes `none()`.
+#[test]
+fn a_constructor_pattern_whose_other_case_the_facts_refute_binds() {
+    let source = r#"
+        use /std/{Nat, Option};
+        use /std/Bool/{Holds};
+        let got(o: Option(Nat), @q: Holds(Option/is_some(o))) -> Nat =
+            let some(x) = o;
+            x;
+        /std/print(Nat/to_str(got(Option/some(1))))
+        "#;
+    assert_eq!(run(source), b"1");
 }
 
 // The `->` a function states its result with is what tells a local function from a constructor pattern: written, `one()` is a function; left out where its parameters are typed, the definition is refused for it, as before patterns took constructors.

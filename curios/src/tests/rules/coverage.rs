@@ -1,4 +1,4 @@
-//! Coverage: an elimination enumerates its constructors, and a clash is told from an index that may still meet.
+//! Coverage: an elimination enumerates its constructors, a clash is told from an index that may still meet, and a case the facts in scope refute is left unwritten.
 
 use {super::test_support::*, crate::tests::test_support::*, curios_elab::Error};
 
@@ -341,7 +341,7 @@ fn a_successor_no_arm_writes_is_refused() {
     .refused(&[("            | m + 1 => m\n", "")])
     .by_elaborator_in(
         "/f",
-        |error| matches!(error, Error::MatrixUncovered { value, indexed: false } if value == "1"),
+        |error| matches!(error, Error::MatrixUncovered { value, indexed: false, .. } if value == "1"),
     );
 }
 
@@ -441,4 +441,184 @@ fn a_default_named_as_a_constructor_is_refused() {
                 if binder == "none" && constructor == "none()"
         )
     });
+}
+
+// A case the facts in scope refute is left unwritten. Over a vector of three the list holds three elements, so the run of three is the match's one arm, and each leaf no arm reaches — the empty list, one element, two, and four or more — is closed by the contradiction the facts prove there, as `match proved(@False) end` written there would be. The refusal loosens the count, under which nothing refutes the empty list, and names the facts it read.
+#[test]
+fn a_run_the_facts_refute_is_left_unwritten() {
+    control(
+        r#"
+        use /std/{Nat, Vec};
+
+        let sum(r: Vec(Nat, 3)) -> Nat =
+            match r.list | [a, b, c] => a + b + c end;
+
+        /std/print(Nat/to_str(sum(Vec/of_list([1, 2, 3]))))
+        "#,
+        b"6",
+    )
+    .refused(&[("r: Vec(Nat, 3)", "@n: Nat, r: Vec(Nat, n)")])
+    .by_elaborator_in("/sum", |error| {
+        matches!(error, Error::MatrixUncovered { value, refusal, .. }
+            if value == "[]" && !refusal.considered().is_empty())
+    });
+}
+
+// A dispatch on the literals written takes any other value at a binder, and where no row writes one, the facts may refute every other value: under `n < 3` the arms for `0`, `1` and `2` cover `n`, the leaf past them closed under the failure of each key's test. The refusal loosens the bound, which leaves `3` to no arm.
+#[test]
+fn a_dispatch_whose_other_values_the_facts_refute_needs_no_binder() {
+    control(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{Holds};
+
+        let pick(n: Nat, @q: Holds(n < 3)) -> Nat =
+            match n
+            | 0 => 10
+            | 1 => 11
+            | 2 => 12
+            end;
+
+        /std/print(Nat/to_str(pick(2)))
+        "#,
+        b"12",
+    )
+    .refused(&[("Holds(n < 3)", "Holds(n < 4)")])
+    .by_elaborator_in("/pick", |error| {
+        matches!(error, Error::MatrixUncovered { value, refusal, .. }
+            if value == "3" && !refusal.considered().is_empty())
+    });
+}
+
+// A constructor no row names is entered as its arm would be, the scrutinee refined to it, so a fact about the scrutinee is read at the case: `Holds(Option/is_some(o))` is `False` at `none()`, which closes that case. The refusal drops the fact.
+#[test]
+fn a_constructor_the_facts_refute_is_left_unwritten() {
+    control(
+        r#"
+        use /std/{Nat, Option};
+        use /std/Bool/{Holds};
+
+        let unwrap(o: Option(Nat), @q: Holds(Option/is_some(o))) -> Nat =
+            match o | some(x) => x end;
+
+        /std/print(Nat/to_str(unwrap(Option/some(7))))
+        "#,
+        b"7",
+    )
+    .refused(&[(", @q: Holds(Option/is_some(o))", "")])
+    .by_elaborator_in("/unwrap", |error| {
+        matches!(error, Error::MatrixUncovered { value, indexed: false, .. } if value == "none()")
+    });
+}
+
+// A truth value no arm writes is a case like any other: under `n <= 10`, `n > 20` is never `true`, so the `false` arm is the whole match. The refusal loosens the bound to one `n > 20` can pass.
+#[test]
+fn a_truth_value_the_facts_refute_is_left_unwritten() {
+    control(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{Holds};
+
+        let clamp(n: Nat, @q: Holds(n <= 10)) -> Nat =
+            match n > 20
+            | false => n
+            end;
+
+        /std/print(Nat/to_str(clamp(4)))
+        "#,
+        b"4",
+    )
+    .refused(&[("Holds(n <= 10)", "Holds(n <= 30)")])
+    .by_elaborator_in("/clamp", |error| {
+        matches!(error, Error::MatrixUncovered { value, refusal, .. }
+            if value == "true" && !refusal.considered().is_empty())
+    });
+}
+
+// A natural's successor case is closed where the facts refute every successor: under `n == 0` the `0` arm is the whole match. The refusal loosens the fact to one a successor meets, and names `1`, the least of them.
+#[test]
+fn a_successor_the_facts_refute_is_left_unwritten() {
+    control(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{Holds};
+
+        let only(n: Nat, @q: Holds(n == 0)) -> Nat =
+            match n
+            | 0 => 7
+            end;
+
+        /std/print(Nat/to_str(only(0)))
+        "#,
+        b"7",
+    )
+    .refused(&[("Holds(n == 0)", "Holds(n <= 1)")])
+    .by_elaborator_in("/only", |error| {
+        matches!(error, Error::MatrixUncovered { value, refusal, .. }
+            if value == "1" && !refusal.considered().is_empty())
+    });
+}
+
+// A guarded arm with no arm after it leaves what its guard refuses to no arm, a leaf like any other: a lone condition's failure is a fact there, so under `n < 3` the failure of `k < 5` is refuted and the guarded arm is the whole match. The refusal loosens the bound past the guard's.
+#[test]
+fn a_guard_the_facts_decide_needs_no_arm_after_it() {
+    control(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{Holds};
+
+        let small(n: Nat, @q: Holds(n < 3)) -> Nat =
+            match n
+            | k, k < 5 => k
+            end;
+
+        /std/print(Nat/to_str(small(2)))
+        "#,
+        b"2",
+    )
+    .refused(&[("Holds(n < 3)", "Holds(n < 9)")])
+    .by_elaborator_in("/small", |error| {
+        matches!(error, Error::MatrixGuarded { refusal, .. } if !refusal.considered().is_empty())
+    });
+}
+
+// A missing case's report names the facts read where the case stands, beneath the value no arm matches, and reads as it did before facts were asked where none was read. The first program is `a_truth_value_the_facts_refute_is_left_unwritten`'s refusal, the second `an_elimination_must_enumerate_its_constructors`'.
+#[test]
+fn a_missing_case_reports_the_facts_it_read_and_none_where_it_read_none() {
+    let refuted = error(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{Holds};
+
+        let clamp(n: Nat, @q: Holds(n <= 30)) -> Nat =
+            match n > 20
+            | false => n
+            end;
+
+        /std/print(Nat/to_str(clamp(4)))
+        "#,
+    );
+    assert!(
+        refuted.contains("no arm matches `true`")
+            && refuted.contains("the facts in scope do not refute each other:")
+            && refuted.contains("n <= 30"),
+        "{refuted}"
+    );
+
+    let plain = error(
+        r#"
+        use /std/{Nat, Option};
+
+        let f(o: Option(Nat)) -> Nat =
+            match o
+            | some(x) => x
+            end;
+
+        /std/print(Nat/to_str(f(Option/some(5))))
+        "#,
+    );
+    assert!(
+        plain.contains("no arm matches `none()`") && !plain.contains("facts in scope"),
+        "{plain}"
+    );
 }

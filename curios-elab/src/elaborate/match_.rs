@@ -1401,6 +1401,32 @@ fn elaborate_induct_match(
     split.rebuild(context, cases_elaborated, default, undecided, term)
 }
 
+/// The zero-arm match on `proof`, a proof already elaborated at `empty`, a proposition with no constructor, read at `mode`: what a leaf of a match no arm reaches is closed with where the facts in scope refute it. `term` is that match, which a report of the elimination names.
+pub fn absurd(
+    context: &mut Context,
+    proof: Term,
+    empty: Term,
+    mode: Mode,
+    term: &Term,
+) -> Result<(Term, Term), Error> {
+    let goal = Term::hole(context.mint_metavar());
+
+    elaborate_induct_match(
+        context,
+        InductMatchInput {
+            scrutinee: Scrutinee {
+                term: proof,
+                type_: empty,
+            },
+            goal: &goal,
+            cases: &[],
+            default: None,
+            term,
+        },
+        mode,
+    )
+}
+
 /// The refusal of a match on the proposition `name` into `result_type`, which is no proposition: this elimination's. Where the result stands at a `Sort` the declaration wrote, it is a type's because an earlier term decided so, the reader having written neither sort, and the refusal is that the two terms decide it apart.
 fn eliminated_into_data(context: &mut Context, name: &Global, result_type: &Term) -> Error {
     match decided_sort_of(context, result_type) {
