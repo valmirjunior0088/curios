@@ -2,7 +2,7 @@
 
 use {super::test_support::*, crate::tests::test_support::*, curios_analysis::Erased};
 
-// The second route (T) cannot see, and the one that needs no `exit` at all. `forge` is an ordinary partial *value* at a `Type`-sorted carrier — nothing about `Box` or its type mentions a partial definition — and the certificate escapes through an arm binder, so `boom`'s body reaches `forge` without naming a partial type anywhere. The control's `Box` carries `True` and `forge` builds one at once.
+// The second route type totality cannot see, and the one that needs no `exit` at all. `forge` is an ordinary partial *value* at a `Type`-sorted carrier — nothing about `Box` or its type mentions a partial definition — and the certificate escapes through an arm binder, so `boom`'s body reaches `forge` without naming a partial type anywhere. The control's `Box` carries `True` and `forge` builds one at once.
 #[test]
 fn a_partial_carrier_releasing_a_proof_is_rejected() {
     control(
@@ -47,7 +47,7 @@ fn a_partial_carrier_releasing_a_proof_is_rejected() {
     });
 }
 
-// The tests below cover (V)'s *argument* rule: a proof handed to a `Prop`-declared parameter of a definition that is not itself a proof. Nothing above them catches these — the definition-level rule needs a `Prop`-sorted declared type, and every offender here sits inside a `Nat`-valued function, so no seed reaches it by name.
+// The tests below cover proof totality's *argument* rule: a proof handed to a `Prop`-declared parameter of a definition that is not itself a proof. Nothing above them catches these — the definition-level rule needs a `Prop`-sorted declared type, and every offender here sits inside a `Nat`-valued function, so no seed reaches it by name.
 //
 // Each is keyed to one shape of application *head*, because the rule can only fire where the head's type can be synthesized: it reads the parameter telescope off that type to learn which parameters are propositions. A head shape sort synthesis cannot answer for is a silent hole rather than a rejection, which is why the coverage is enumerated by shape and not by one representative program.
 
@@ -272,7 +272,7 @@ fn a_proof_at_a_concept_method_head_is_rejected() {
 
 // A call back into a group from inside another group's projected member. `Walk::walk` gives a *member reference* — a `rec` node whose tail selects one member — an arm above the general `rec` one, so that a self-reference cannot send the walk into the bodies it is already inside; `RecGroup::member_body` materializes each self-reference as a projection carrying the whole group, so descending would regenerate those bodies without end. That arm answers for a projection of *this* group alone: a projection of a different group falls to the general arm, because an inner group is classified on its own but its bodies may still call this group, and such a call is a real edge of this group's call graph.
 //
-// Answered by the member-reference arm instead, the call back into `f` from inside the projected `g` would be invisible, and so would `g`'s own call site inside `f`: each group would close to no call at all and be classified `Total` while `f(0)` diverges through `g`, a closed inhabitant of `False` — `f`'s declared type is a proposition, so (V) is the whole defence and it reads the engine's verdict. The same loop with the inner group removed, `rec f(n : Nat) -> False = f(n);`, is refused either way, which places the rule in the walk rather than in the obligation. Its own control states `True` and `g` answers at once.
+// Answered by the member-reference arm instead, the call back into `f` from inside the projected `g` would be invisible, and so would `g`'s own call site inside `f`: each group would close to no call at all and be classified `Total` while `f(0)` diverges through `g`, a closed inhabitant of `False` — `f`'s declared type is a proposition, so proof totality is the whole defence and it reads the engine's verdict. The same loop with the inner group removed, `rec f(n : Nat) -> False = f(n);`, is refused either way, which places the rule in the walk rather than in the obligation. Its own control states `True` and `g` answers at once.
 #[test]
 fn a_proof_looping_through_a_projected_inner_group_is_rejected() {
     control(
@@ -566,7 +566,7 @@ fn a_partial_scrutinee_under_an_erased_binding_is_still_reached() {
     });
 }
 
-// (V) is seeded where elaboration *settles* a term, so its coverage argument rests on every `Prop`-typed term in the accepted module having been settled. A metavariable solution is the one way a term reaches the module without that: witness resolution fills the slot rather than elaborating a written argument. Here the witness of a `Prop`-sorted concept — a proof — is partial, and it arrives entirely by resolution. If solutions were outside what the seeding sees, this program would compile. The control's method answers `qed`.
+// Proof totality is seeded where elaboration *settles* a term, so its coverage argument rests on every `Prop`-typed term in the accepted module having been settled. A metavariable solution is the one way a term reaches the module without that: witness resolution fills the slot rather than elaborating a written argument. Here the witness of a `Prop`-sorted concept — a proof — is partial, and it arrives entirely by resolution. If solutions were outside what the seeding sees, this program would compile. The control's method answers `qed`.
 #[test]
 fn a_partial_proof_cannot_arrive_through_witness_resolution() {
     control(
@@ -612,7 +612,7 @@ fn a_partial_proof_cannot_arrive_through_witness_resolution() {
     });
 }
 
-// (V) across the unit boundary, the proof-side twin of `a_type_reaching_a_partial_prelude_definition_is_rejected`. Every fixture above builds its partiality in-unit; this one reaches `/std/Json/decode`, whose `Partial` classification lives only in the archived record the user suffix reads back. `p`'s type is `True`, a proof position, and its body eliminates a partial parse, so the proof reaches `Json/decode`. A gate reading the archive's verdict as `Total` would accept `p`, and the parser's divergence would stand behind a proof erasure deletes — the identification (V) exists to prevent, here resting entirely on the prelude's own verdict being read. The control eliminates `Option/to_result`'s answer, which the prelude's walk found total.
+// Proof totality across the unit boundary, the proof-side twin of `a_type_reaching_a_partial_prelude_definition_is_rejected`. Every fixture above builds its partiality in-unit; this one reaches `/std/Json/decode`, whose `Partial` classification lives only in the archived record the user suffix reads back. `p`'s type is `True`, a proof position, and its body eliminates a partial parse, so the proof reaches `Json/decode`. A gate reading the archive's verdict as `Total` would accept `p`, and the parser's divergence would stand behind a proof erasure deletes — the identification proof totality exists to prevent, here resting entirely on the prelude's own verdict being read. The control eliminates `Option/to_result`'s answer, which the prelude's walk found total.
 #[test]
 fn a_proof_reaching_a_partial_prelude_definition_is_rejected() {
     control(

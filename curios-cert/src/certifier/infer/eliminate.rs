@@ -309,7 +309,7 @@ pub fn never_taken(
 ///
 /// Every scrutinee of an arm taken once gets its equation, because a term of non-`Io` type denotes one value: an `Io` is opaque and cannot be eliminated, so it never reaches a scrutinee position, and no inhabitant of an ordinary arrow performs an effect.
 ///
-/// Stated once because the three arm rules that need it — nominal, boolean-and-dispatch, and a free-monoid case split — were three chances to state it differently, and what a case teaches its arm is precisely what coverage and obligation (V) read back out.
+/// Stated once because the three arm rules that need it — nominal, boolean-and-dispatch, and a free-monoid case split — were three chances to state it differently, and what a case teaches its arm is precisely what coverage and proof totality read back out.
 ///
 /// Appends to `solutions` rather than replacing them, so [`check_arm`] can hand over the index equations it has already solved; `value` is substituted through those first, since a case value built from the constructor's payload may mention a binder they pinned. Must be called inside the arm's [`Certifier::scoped`] bracket — that bracket is what scopes the refinement to the arm.
 ///

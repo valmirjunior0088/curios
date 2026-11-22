@@ -4,7 +4,7 @@
 //!
 //! **Graded when recorded.** A call is graded by the shared [`grade`] once its arguments are typed, against the caller's parameters as the member's leading lambdas bound them, under a [`SizeContext`] the arms enclosing the call built: each arm's own case, where it scrutinizes a binder, its binders below the value it scrutinizes, where it scrutinizes an expression, and nothing its index inversion solved ([`Certifier::assume_arm`]) — its payload binders, the nonzero facts a boolean or switch arm establishes, and, where a lambda is applied on the spot, each of its binders standing for its argument. The context lives in the certifier's scope brackets: `Certifier::scoped` marks it and retracts it with the binders, so an arm's knowledge leaves with the arm on every path.
 //!
-//! **Closed per group.** When `check_group` has checked every body, the group's calls close to a verdict through the shared [`decide`] — the local gate's, and the one obligations (T) and (V) read for the group, an inline one included. A group the walk never typed has no verdict, and a reader takes that as `Partial`.
+//! **Closed per group.** When `check_group` has checked every body, the group's calls close to a verdict through the shared [`decide`] — the local gate's, and the one type totality and proof totality read for the group, an inline one included. A group the walk never typed has no verdict, and a reader takes that as `Partial`.
 
 #[cfg(test)]
 mod tests;

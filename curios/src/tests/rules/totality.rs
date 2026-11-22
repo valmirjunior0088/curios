@@ -154,7 +154,7 @@ fn a_recursion_written_inline_under_a_carrier_is_still_partial() {
     });
 }
 
-// Obligation (T) rather than (V): a *type* that reaches a definition not known to terminate. `spin` calling itself is legal — general recursion at a relevant type is the language's design — but a type mentioning it is not, because erasure deletes types too, and a type-level loop reties the negative knot strict positivity exists to forbid. The elaborator seeds this from written type positions; the certifier from its own typing, where the body of a definition whose type is a sort is checked against that sort. This row is the only coverage either seeding has for (T). The control's `spin` hands its argument back.
+// Type totality rather than proof totality: a *type* that reaches a definition not known to terminate. `spin` calling itself is legal — general recursion at a relevant type is the language's design — but a type mentioning it is not, because erasure deletes types too, and a type-level loop reties the negative knot strict positivity exists to forbid. The elaborator seeds this from written type positions; the certifier from its own typing, where the body of a definition whose type is a sort is checked against that sort. This row is the only coverage either seeding has for type totality. The control's `spin` hands its argument back.
 #[test]
 fn a_type_reaching_a_partial_definition_is_refused() {
     control(
@@ -559,7 +559,7 @@ fn a_call_passing_a_variable_an_arm_solved_is_graded_on_the_variable() {
     });
 }
 
-// The one way a proof reaches a type is the cast, and a recursion graded below the proof it casts along must still descend to stand at (T): `m` is below `p`, `S/mk(m)` is nothing below `p`, and `m` stands for `n` only by the arm's index solution, which refines for typing alone. `curios-cert`'s `recheck::recursion_tests` puts the module to the certifier under this name. The control recurses on `n` itself.
+// The one way a proof reaches a type is the cast, and a recursion graded below the proof it casts along must still descend to pass type totality: `m` is below `p`, `S/mk(m)` is nothing below `p`, and `m` stands for `n` only by the arm's index solution, which refines for typing alone. `curios-cert`'s `recheck::recursion_tests` puts the module to the certifier under this name. The control recurses on `n` itself.
 #[test]
 fn a_type_recursing_through_a_cast_on_the_index_it_reads_does_not_descend() {
     control(
@@ -645,7 +645,7 @@ fn an_accessibility_proof_built_by_self_reference_is_refused() {
     });
 }
 
-/// A proof standing on a partial term its elimination reads nothing of is refused too. `Pin(n + 1)` is a case every constructor's target clashes with, so the elimination enumerates no arm and reduction never takes the scrutinee apart — the shape where "a term left stuck admits nothing" has to be carried by obligation (V), since `spin(n + 1)` is a closed term of an uninhabited type no rule reduces. The control eliminates an argument of that type instead, the ex falso it is.
+/// A proof standing on a partial term its elimination reads nothing of is refused too. `Pin(n + 1)` is a case every constructor's target clashes with, so the elimination enumerates no arm and reduction never takes the scrutinee apart — the shape where "a term left stuck admits nothing" has to be carried by proof totality, since `spin(n + 1)` is a closed term of an uninhabited type no rule reduces. The control eliminates an argument of that type instead, the ex falso it is.
 #[test]
 fn a_partial_inhabitant_of_an_impossible_index_proves_nothing() {
     control(

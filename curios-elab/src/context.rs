@@ -263,14 +263,14 @@ impl<'s> Context<'s> {
         &self.underway.imports
     }
 
-    /// Record one settled term and the type it settled at — obligation (V)'s seed, collected where elaboration already knows the answer.
+    /// Record one settled term and the type it settled at — proof totality's seed, collected where elaboration already knows the answer.
     ///
     /// Sort-hood is *not* decided here. The type may still carry unsolved metavariables, and deciding would both reduce on the hot path and risk an answer a later solution invalidates; the gate classifies post-zonk, memoized per distinct type.
     pub(crate) fn record_checked(&mut self, term: &Term, type_: &Term) {
         self.underway.checked.record(term, type_);
     }
 
-    /// Name the definition whose body is elaborating, for (V)'s diagnostics. Returns the previous site so the caller can restore it.
+    /// Name the definition whose body is elaborating, for proof totality's diagnostics. Returns the previous site so the caller can restore it.
     pub(crate) fn set_checked_site(&mut self, site: Global) -> Option<Global> {
         self.underway.checked.set_site(Some(site))
     }
@@ -285,7 +285,7 @@ impl<'s> Context<'s> {
         self.underway.checked.site()
     }
 
-    /// Read the recorded terms without consuming them — obligation (T) reads them first, and (V) takes them afterwards.
+    /// Read the recorded terms without consuming them — type totality reads them first, and proof totality takes them afterwards.
     pub(crate) fn checked(&self) -> &[(Term, Term, Option<Global>)] {
         self.underway.checked.terms()
     }
@@ -635,7 +635,7 @@ impl<'s> Context<'s> {
         self.underway.needs.finish(names);
     }
 
-    /// Take the terms recorded since `mark`: a published declaration's, or the entry's, which (V) reads last. The bindings recorded since go with them.
+    /// Take the terms recorded since `mark`: a published declaration's, or the entry's, which proof totality reads last. The bindings recorded since go with them.
     pub(crate) fn split_checked(&mut self, mark: usize) -> Vec<(Term, Term, Option<Global>)> {
         self.underway.checked.drop_labels(mark);
         self.underway.checked.split_off(mark)

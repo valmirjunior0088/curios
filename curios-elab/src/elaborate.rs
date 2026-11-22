@@ -122,7 +122,7 @@ pub fn elaborate(context: &mut Context, term: &Term, mode: Mode) -> Result<(Term
             None => rebuilt,
         };
 
-        // Obligation (V)'s seed. Every settled node passes here with the type it settled at, which a walk over the finished term could only re-derive. Taken after the restamp so the recorded term is the one that reaches the module, outside the cache so a hit records too, and independent of `Mode` because `type_` is the term's type whether it was checked or inferred.
+        // Proof totality's seed. Every settled node passes here with the type it settled at, which a walk over the finished term could only re-derive. Taken after the restamp so the recorded term is the one that reaches the module, outside the cache so a hit records too, and independent of `Mode` because `type_` is the term's type whether it was checked or inferred.
         context.record_checked(&rebuilt, &type_);
 
         Ok((rebuilt, type_))

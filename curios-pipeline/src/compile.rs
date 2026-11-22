@@ -1485,7 +1485,7 @@ pub fn judged(
 /// What each checker said of a program the elaborator built.
 #[derive(Debug)]
 pub struct Examined {
-    /// The (T) and (V) obligations the elaborator decided over the program, reported rather than raised.
+    /// Type totality and proof totality as the elaborator decided them over the program, reported rather than raised.
     pub obligations: Vec<Obligation>,
     /// Every refusal the certifier reached over the same program.
     pub verdicts: Vec<Refuted>,

@@ -158,7 +158,7 @@ let /gone : #NatType = 0;
 /matched(#{node = Foreign} /gone(@#{node = InductType} /std/Bool/False()))
 "#;
 
-// `Io` has no eliminator: its scrutinee is no family's occurrence and no `Bool`, so each case form refuses it as unclassified, and a projection finds no components in it. The closing term, which types through `matched`'s stated type, is refused all the same, by (V), the row that does not return standing in a proof with no definition to blame. `curios`'s `tests::rules::effect` puts the program to the elaborator under this name.
+// `Io` has no eliminator: its scrutinee is no family's occurrence and no `Bool`, so each case form refuses it as unclassified, and a projection finds no components in it. The closing term, which types through `matched`'s stated type, is refused all the same, by proof totality, the row that does not return standing in a proof with no definition to blame. `curios`'s `tests::rules::effect` puts the program to the elaborator under this name.
 //
 // Mutation-checked at `check_cases`: with a `Bool` case form no longer held to a `Bool` scrutinee, `split` types and is not refused.
 #[test]

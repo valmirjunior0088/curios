@@ -24,7 +24,7 @@
 **Rejected.**
 
 - **The trusted base as prose**, which cannot be checked or falsified and cannot tell an attacked rule from an assumed one.
-- **A passing corpus as evidence of coverage.** A defect is found by counting or probing, not by the corpus failing: the corpus passes whether or not a rule fires at its sites, and passes obligation (V) inert at argument positions ([Totality of the erased program](totality-of-the-erased-program.md)). An inert rule admits nothing, but the corpus is then no evidence about it, and a fixture reaching it has to be constructed.
+- **A passing corpus as evidence of coverage.** A defect is found by counting or probing, not by the corpus failing: the corpus passes whether or not a rule fires at its sites, and passes proof totality inert at argument positions ([Totality of the erased program](totality-of-the-erased-program.md)). An inert rule admits nothing, but the corpus is then no evidence about it, and a fixture reaching it has to be constructed.
 - **A witness limited to what the elaborator or a walk produces**, which tests the certifier only on input a producer vouches for, where the claim is that it needs no producer's word.
 - **An entry per rule, stating what the rule assumes and grading its evidence**: a second statement of each rule beside its decision, and an inventory of tests nothing held to the tree. A flaw is a ticket the board runs, an attack that held is a test, and a rule is its decision's.
 - **A held attack as a test of the crate it attacked**: an attack on the certifier written as a program needs the prelude and the pipeline, which the certifier's crate cannot reach, and one written as a module built in Rust constructors rots with the representation it spells.

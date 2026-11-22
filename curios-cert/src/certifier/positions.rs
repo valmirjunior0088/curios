@@ -1,4 +1,4 @@
-//! The erased positions one item's check recorded — the seed obligations (T) and (V) run on.
+//! The erased positions one item's check recorded — the seed type totality and proof totality run on.
 //!
 //! This is the certifier's *output*, not an input: nothing here is consulted to decide whether a term is well-typed. It is collected during the typing walk because that is the only place the answer is available, and drained per item by `Certifier::take_checked`.
 //!

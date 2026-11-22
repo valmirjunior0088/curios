@@ -5,7 +5,7 @@ use {
     curios_analysis::Erased,
 };
 
-// The control: the same call through a function that is *not* a constructor payload. `again` is a parameter, so nothing relates `again(n)` to anything smaller, the group does not descend, and (V) refuses the proof position. A rule that read every application of a binder as a decrease would accept this, a proof that never reaches its base. Its own control descends on the predecessor where the refusal calls `again(n)`.
+// The control: the same call through a function that is *not* a constructor payload. `again` is a parameter, so nothing relates `again(n)` to anything smaller, the group does not descend, and proof totality refuses the proof position. A rule that read every application of a binder as a decrease would accept this, a proof that never reaches its base. Its own control descends on the predecessor where the refusal calls `again(n)`.
 #[test]
 fn a_call_through_a_parameter_bound_function_does_not_descend() {
     control(
@@ -50,7 +50,7 @@ fn the_library_recursion_on_a_bound_serves_a_proof() {
     assert_eq!(run(source), b"b");
 }
 
-// The same recursion at a family that is a type depending on its argument: `pick(n)` has type `Shape(n)`, the unit type at zero and `Nat` above it. Written in a type, `pick(5)` puts `recurse` and its local loop under obligation (T), and the checkers reduce it on the bound to `4` with no proof read; the running program computes the same value with the bound's proofs erased.
+// The same recursion at a family that is a type depending on its argument: `pick(n)` has type `Shape(n)`, the unit type at zero and `Nat` above it. Written in a type, `pick(5)` puts `recurse` and its local loop under type totality, and the checkers reduce it on the bound to `4` with no proof read; the running program computes the same value with the bound's proofs erased.
 #[test]
 fn the_library_recursion_on_a_bound_computes_at_a_dependent_family() {
     let source = r#"

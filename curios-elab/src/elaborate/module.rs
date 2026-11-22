@@ -267,7 +267,7 @@ fn elaborate_struct(
         return Ok(());
     };
 
-    // Obligation (T)'s early net, on the one written type position that rides on no definition's type and that elaboration forces: a field, a concept's method among them as its record's. A parameter rides on the type former's own type, and a family's payload is typed without being forced, which leaves it to the gate over the registry entry (`totality::reach`). Without this the field type below would be elaborated with nothing having looked at it — a productive `Shape(inf)` would unfold without end.
+    // Type totality's early net, on the one written type position that rides on no definition's type and that elaboration forces: a field, a concept's method among them as its record's. A parameter rides on the type former's own type, and a family's payload is typed without being forced, which leaves it to the gate over the registry entry (`totality::reach`). Without this the field type below would be elaborated with nothing having looked at it — a productive `Shape(inf)` would unfold without end.
     //
     // Read off the *lowered* telescope, before `check_telescope_entries` touches it, which is the whole point of an early net. Entries stay closed under the binders before them; only globals matter here, so nothing needs opening.
     let mut written = &struct_decl.arity;
@@ -707,7 +707,7 @@ fn spelled(context: &Context, name: &Global, island: Qualifier) -> Made {
     Made::former(*name, island, &entry)
 }
 
-/// Obligation (T)'s early net over a nominal entry's telescope as it was lowered, before any of it is elaborated: its parameters, and a family's indices. A record's fields take theirs where they elaborate ([`elaborate_struct`]). Entries stay closed under the binders before them, and only the globals they name matter here, so nothing is opened.
+/// Type totality's early net over a nominal entry's telescope as it was lowered, before any of it is elaborated: its parameters, and a family's indices. A record's fields take theirs where they elaborate ([`elaborate_struct`]). Entries stay closed under the binders before them, and only the globals they name matter here, so nothing is opened.
 fn check_entry_totality(context: &mut Context, name: &Global) -> Result<(), Error> {
     // A record's arity ends in its fields, a family's in its indices.
     let (arity, indexed) = match registered(context, name) {
@@ -1487,7 +1487,7 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborate
     })
 }
 
-/// Decide what a published declaration's cells hold beyond its terms, and hand back the erasure obligations it breaks: the polarity vector of each entry it declares, written on the entry; that the variance vector each carries claims no irrelevance its final telescopes deny; each definition's totality, recorded for the unit to file; and obligations (T) and (V) over the item's positions and the terms recorded since `recorded`, which are taken.
+/// Decide what a published declaration's cells hold beyond its terms, and hand back the erasure obligations it breaks: the polarity vector of each entry it declares, written on the entry; that the variance vector each carries claims no irrelevance its final telescopes deny; each definition's totality, recorded for the unit to file; and type totality and proof totality over the item's positions and the terms recorded since `recorded`, which are taken.
 ///
 /// **Here, and nowhere after.** Each of these is a cell of the declaration, written once, by it, before any other declaration reads it (`documentation/design/compilation/a-declaration-is-a-function-of-what-it-reads.md`): every declaration it reads has finished, so what the analyses meet outside it is final, and nothing that finishes later can mention it into a different answer. A pass over the unit would decide them a second time, on a budget every declaration of the unit shares.
 ///
@@ -1800,7 +1800,7 @@ fn elaborate_entry(
 struct Finalized {
     definitions: Definitions,
     entry: Option<Entrypoint>,
-    /// The (T) and (V) obligations, reported rather than raised. Empty when the module and its entry carry none.
+    /// Type totality and proof totality, reported rather than raised. Empty when the module and its entry carry none.
     obligations: Vec<Error>,
     /// The order the module's items were put in ([`Definitions::in_order`]).
     order: Order,
@@ -1811,7 +1811,7 @@ pub struct FinalizedProgram {
     pub definitions: Definitions,
     /// The entry the program closes with, stating the type it was judged at. `None` only where it was withheld for reaching an item the lowering could not read — see [`elaborate_and_zonk_program`].
     pub entry: Option<Entrypoint>,
-    /// The (T) and (V) obligations, reported rather than raised. Empty when the program carries none.
+    /// Type totality and proof totality, reported rather than raised. Empty when the program carries none.
     pub obligations: Vec<Error>,
 }
 
@@ -2036,7 +2036,7 @@ pub fn elaborate_and_zonk_entry<'s>(
 
 /// [`elaborate_and_zonk_program`] with the erasure obligations *reported* rather than raised.
 ///
-/// Elaboration is no less checked: everything that decides whether the program is well-typed still short-circuits. What is handed back instead of thrown is the pair of obligations `curios-cert` also decides — (T) and (V) — and the reason is that a fixture this checker refuses must still be able to reach the certifier. Raising leaves no program, so whether the certifier would have refused the same program is unobservable, and that is precisely the disagreement worth seeing: an obligation only this side enforces is the trusted base resting on an elaborator-only analysis. The two-checker fixture harness in `curios` is the caller; every other caller wants [`elaborate_and_zonk_program`].
+/// Elaboration is no less checked: everything that decides whether the program is well-typed still short-circuits. What is handed back instead of thrown is the pair of obligations `curios-cert` also decides — type totality and proof totality — and the reason is that a fixture this checker refuses must still be able to reach the certifier. Raising leaves no program, so whether the certifier would have refused the same program is unobservable, and that is precisely the disagreement worth seeing: an obligation only this side enforces is the trusted base resting on an elaborator-only analysis. The two-checker fixture harness in `curios` is the caller; every other caller wants [`elaborate_and_zonk_program`].
 pub fn elaborate_and_zonk_program_reporting<'s>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,

@@ -19,14 +19,14 @@ pub struct CheckedTerms {
 }
 
 impl CheckedTerms {
-    /// Record one settled term and the type it settled at — obligation (V)'s seed, collected where elaboration already knows the answer.
+    /// Record one settled term and the type it settled at — proof totality's seed, collected where elaboration already knows the answer.
     ///
     /// Sort-hood is *not* decided here. The type may still carry unsolved metavariables, and deciding would both reduce on the hot path and risk an answer a later solution invalidates; the gate classifies post-zonk, memoized per distinct type.
     pub fn record(&mut self, term: &Term, type_: &Term) {
         self.terms.push((term.clone(), type_.clone(), self.site));
     }
 
-    /// Name the definition whose body is elaborating, for (V)'s diagnostics, answering the site that stood: the two halves of the bracket around a body.
+    /// Name the definition whose body is elaborating, for proof totality's diagnostics, answering the site that stood: the two halves of the bracket around a body.
     pub fn set_site(&mut self, site: Option<Global>) -> Option<Global> {
         mem::replace(&mut self.site, site)
     }
@@ -36,7 +36,7 @@ impl CheckedTerms {
         self.site
     }
 
-    /// The recorded terms, unconsumed — obligation (T) reads them first, and (V) takes them afterwards.
+    /// The recorded terms, unconsumed — type totality reads them first, and proof totality takes them afterwards.
     pub fn terms(&self) -> &[(Term, Term, Option<Global>)] {
         &self.terms
     }
@@ -82,7 +82,7 @@ impl CheckedTerms {
         self.labels.retain(|(at, ..)| *at < mark);
     }
 
-    /// Take the terms recorded since `mark`: a published declaration's, or the entry's, which (V) reads last.
+    /// Take the terms recorded since `mark`: a published declaration's, or the entry's, which proof totality reads last.
     pub fn split_off(&mut self, mark: usize) -> Vec<(Term, Term, Option<Global>)> {
         self.terms.split_off(mark)
     }

@@ -29,7 +29,7 @@ fn bad_does_not_descend(verdicts: &[Refusal]) -> bool {
 ///
 /// A selection with a node of its own — carrying its own copy of the group, well-formed standing alone and so gated by no scope — would need an arm of its own, and one answering `group.member_type(index)` outright would check nothing. The second module below is the sharper case: its group never recurses at all, so no totality rule is in play, and what would go unchecked is simply whether the body inhabits the type the group claims for it. `Absurd` is a proposition with no constructors, so either module would be a closed inhabitant of one.
 ///
-/// (V) seeds from the certifier's own typing, and one node for both spellings is one node for that walk to recognize as a recursion, where a second node would present its member scopes as a bound variable.
+/// Proof totality seeds from the certifier's own typing, and one node for both spellings is one node for that walk to recognize as a recursion, where a second node would present its member scopes as a bound variable.
 ///
 /// Reachable from no surface program — `curios-elab` builds a checked node — which is why this belongs here rather than in `curios/src/tests`, and why nothing in the corpus could have found it.
 ///
@@ -775,7 +775,7 @@ let /X : (
 /std/Bool/True/qed()
 "#;
 
-// The one way a proof reaches a type is the cast, and a recursion graded below the proof it casts along must still descend to be put at (T): `m` is below `p`, `S/mk(m)` is nothing below `p`, and `m` stands for `n` only by the arm's index solution, which refines for typing alone. `curios`'s `tests::rules::totality` puts the program to the elaborator under this name.
+// The one way a proof reaches a type is the cast, and a recursion graded below the proof it casts along must still descend to pass type totality: `m` is below `p`, `S/mk(m)` is nothing below `p`, and `m` stands for `n` only by the arm's index solution, which refines for typing alone. `curios`'s `tests::rules::totality` puts the program to the elaborator under this name.
 #[test]
 fn a_type_recursing_through_a_cast_on_the_index_it_reads_does_not_descend() {
     let verdicts = core_text_refusals(&fill!(

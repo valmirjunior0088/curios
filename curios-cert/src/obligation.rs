@@ -1,4 +1,4 @@
-//! Obligations (T) and (V): everything the erased half of a program reaches must be total, decided here from the module alone.
+//! Type totality and proof totality: everything the erased half of a program reaches must be total, decided here from the module alone.
 //!
 //! Erasure deletes proofs and types. A proof that may not terminate therefore proves anything, and a type that may not terminate reties the negative knot strict positivity exists to forbid — so both halves carry a termination obligation that the halves the machine actually runs do not.
 //!
@@ -53,7 +53,7 @@ fn calls_a_diverging_row(term: &Term, memo: &mut HashMap<Term, bool>) -> bool {
 ///
 /// What an environment already answers for is read rather than recomputed: a name of a unit in scope is classified as the certifier's record of that unit classifies it, asked where a judgment reaches the name, and of a module's items only the judged ones are classified — the walk's own answer to which are new, the rest being the environment's own. That is what keeps a compile from re-analyzing the standard library, and from copying its classification.
 ///
-/// **Reading the environment is load-bearing rather than an optimization.** A definition is partial where anything it *mentions* is, and the already-judged items are not carried inside the module, so nothing else in a walk knows that a partial definition, a parser of `/std/Json/decode`, is partial. A user proof reaching it would then be read against a set the name is absent from and pass as total, which is exactly the identification (T) and (V) exist to prevent.
+/// **Reading the environment is load-bearing rather than an optimization.** A definition is partial where anything it *mentions* is, and the already-judged items are not carried inside the module, so nothing else in a walk knows that a partial definition, a parser of `/std/Json/decode`, is partial. A user proof reaching it would then be read against a set the name is absent from and pass as total, which is exactly the identification type totality and proof totality exist to prevent.
 pub struct Totals<'g> {
     /// The units in scope, whose records answer for their own definitions.
     scope: &'g Globals<'g>,
@@ -147,7 +147,7 @@ impl<'g> Totals<'g> {
     }
 }
 
-/// Obligations (T) and (V) over the positions one item's check recorded: each must reach nothing partial, and must not be partial in itself — enclose no group that does not descend, as the walk noted where it typed one, and call no host row that diverges.
+/// Type totality and proof totality over the positions one item's check recorded: each must reach nothing partial, and must not be partial in itself — enclose no group that does not descend, as the walk noted where it typed one, and call no host row that diverges.
 /// What [`calls_a_diverging_row`] found of each node of the positions a walk records, carried across the whole walk and keyed by the positions' canonical nodes: a position's term is recorded where it was typed, built there, so a type recorded at every level of a nesting is a copy at each, and two copies are compared node by node at every probe that finds one.
 #[derive(Default)]
 pub struct PositionVerdicts {

@@ -248,7 +248,7 @@ impl<'s> Globals<'s> {
 
     /// Whether `name` is a definition in scope here that is *not* known to terminate, closed transitively already, as the certifier's record of the unit that holds it classifies it.
     ///
-    /// Obligations (T) and (V) close over what an erased position reaches, and what it reaches runs out of this environment as readily as out of the module being walked.
+    /// Type totality and proof totality close over what an erased position reaches, and what it reaches runs out of this environment as readily as out of the module being walked.
     ///
     /// It is read off [`Certification`](curios_core::Certification), which only this crate's walk makes, and never off anything elaboration concluded, which no [`Definition`](curios_core::Definition) carries: a verdict arriving here is one this crate reached about those exact terms. A record answers for the unit it was filed with, every name of it, and for no name beside it.
     pub(crate) fn partial(&self, name: &Global) -> bool {

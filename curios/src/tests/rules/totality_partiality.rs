@@ -104,7 +104,7 @@ fn a_partial_type_behind_a_projection_is_still_a_type() {
     });
 }
 
-// Why (T) has to be the aggressive reading. Nothing here is a partial type former: `Shape` is structurally recursive and total, and `inf` is an ordinary partial *value* of an ordinary data type. The dangerous type exists only because a total function was applied to a bottom argument, so a rule that looks at what a type-level eliminator scrutinizes does not see it. The control applies `Shape` to a total value.
+// Why type totality has to be the aggressive reading. Nothing here is a partial type former: `Shape` is structurally recursive and total, and `inf` is an ordinary partial *value* of an ordinary data type. The dangerous type exists only because a total function was applied to a bottom argument, so a rule that looks at what a type-level eliminator scrutinizes does not see it. The control applies `Shape` to a total value.
 #[test]
 fn a_total_type_function_applied_to_a_partial_value_is_rejected() {
     control(
@@ -239,11 +239,11 @@ fn a_partial_definition_stays_usable_in_a_program() {
     assert_eq!(run(source), b"8");
 }
 
-// (T) is seeded two ways, because neither reaches what the other does. The walk finds types where they are *written* — annotations, goals, telescopes, and the body of any definition whose type ends in a sort. It has no case for an application's arguments, so a type handed to a function is written nowhere it looks. The settle records find those, because a term whose own type is a sort is a type wherever it appears.
+// Type totality is seeded two ways, because neither reaches what the other does. The walk finds types where they are *written* — annotations, goals, telescopes, and the body of any definition whose type ends in a sort. It has no case for an application's arguments, so a type handed to a function is written nowhere it looks. The settle records find those, because a term whose own type is a sort is a type wherever it appears.
 //
 // The argument form is the one that reaches this gate at all. Written as an annotation, `Shape(inf)` is *forced* while the binder elaborates and the step budget stops it there — fail-closed, but before any whole-module pass runs. Passed as a type argument it is never forced, so elaboration succeeds and only the gate is left, which the settle records are what reach.
 //
-// Nothing here is `Prop`-typed, so (V) cannot fire and (T) is on its own: `Shape` is total, descending structurally on `F`, and `inf` is an ordinary partial value of a data type. The whole-module gate runs post-zonk — after elaboration has already done the type-level reduction (T) exists to make safe. A type that reaches a partial definition and happens to be *productive* survives elaboration and the gate rejects it. One that is not productive would spin until the step budget dies and be refused for running out of a resource no amount of which would help. Refusing the written type up front is what makes both shapes report the same thing, which is the thing that is actually wrong.
+// Nothing here is `Prop`-typed, so proof totality cannot fire and type totality is on its own: `Shape` is total, descending structurally on `F`, and `inf` is an ordinary partial value of a data type. The whole-module gate runs post-zonk — after elaboration has already done the type-level reduction type totality exists to make safe. A type that reaches a partial definition and happens to be *productive* survives elaboration and the gate rejects it. One that is not productive would spin until the step budget dies and be refused for running out of a resource no amount of which would help. Refusing the written type up front is what makes both shapes report the same thing, which is the thing that is actually wrong.
 //
 // `Shape(inf)` here reduces to itself with no progress; the productive sibling is `a_total_type_function_applied_to_a_partial_value_is_rejected`. The control applies `Shape` to a total value.
 #[test]
@@ -283,9 +283,9 @@ fn a_non_productive_type_level_loop_is_diagnosed_not_exhausted() {
     });
 }
 
-// A struct *field* is the written type position obligation (T)'s early net reaches on its own, and the two fixtures below are its two halves, each derived from a control at a total application.
+// A struct *field* is the written type position type totality's early net reaches on its own, and the two fixtures below are its two halves, each derived from a control at a total application.
 //
-// The net exists so a type reaching a partial definition is refused by name before elaboration forces it — the post-zonk gate runs after the reduction (T) exists to make safe, so by then a productive type has already spun. It is applied to a *definition's* written type, and a parameter rides on one: an `induct` or `struct` parameter on the type former's own type. An `induct` payload is typed without being forced, so the gate over the registry entry reaches it by its payload. A struct field rides on nothing and is forced, a `concept` method being its record's field, so the net reads a field's written type itself.
+// The net exists so a type reaching a partial definition is refused by name before elaboration forces it — the post-zonk gate runs after the reduction type totality exists to make safe, so by then a productive type has already spun. It is applied to a *definition's* written type, and a parameter rides on one: an `induct` or `struct` parameter on the type former's own type. An `induct` payload is typed without being forced, so the gate over the registry entry reaches it by its payload. A struct field rides on nothing and is forced, a `concept` method being its record's field, so the net reads a field's written type itself.
 //
 // Neither half is a route to `False`; both fail closed, which is why this is coverage rather than a forgery. What they hold at a field is the claim `a_type_level_rec_through_an_arrow_is_diagnosed_not_aborted` makes for its own shape — that the compiler answers instead of dying — and the claim `a_non_productive_type_level_loop_is_diagnosed_not_exhausted` makes for its twin, that both shapes report the same thing.
 //
@@ -380,7 +380,7 @@ fn the_prelude_shapes_a_user_program_leans_on_still_elaborate() {
     assert_eq!(run(source), b"100000000-3");
 }
 
-// The payload-child rule at a type-level recursion: `Bad` recurses on `g(0)`, an application of the constructor payload `g`, which the size order reads as a child of the `c(g)` it was projected from — so `Bad` is graded total. Its soundness rests entirely on (T): the only way `g(0)` can re-produce a `c(...)` that keeps `Bad` unfolding is for `g` to feed itself, which makes `g` non-descending, and a type reaching `g` is then refused. `loop` is exactly such a `g`, and the type of `held` reaches it; nothing in the totality grading refuses this — (T) does. `F` has a base case so that a total function can stand where `loop` does, which is the control.
+// The payload-child rule at a type-level recursion: `Bad` recurses on `g(0)`, an application of the constructor payload `g`, which the size order reads as a child of the `c(g)` it was projected from — so `Bad` is graded total. Its soundness rests entirely on type totality: the only way `g(0)` can re-produce a `c(...)` that keeps `Bad` unfolding is for `g` to feed itself, which makes `g` non-descending, and a type reaching `g` is then refused. `loop` is exactly such a `g`, and the type of `held` reaches it; nothing in the totality grading refuses this — type totality does. `F` has a base case so that a total function can stand where `loop` does, which is the control.
 #[test]
 fn a_payload_application_that_reaches_a_partial_function_is_a_partial_type() {
     control(
@@ -418,7 +418,7 @@ fn a_payload_application_that_reaches_a_partial_function_is_a_partial_type() {
     });
 }
 
-// The (V)-side mirror of `a_payload_application_that_reaches_a_partial_function_is_a_partial_type`: here the payload-child rule grades a *proof*-returning group total, and (V) — not the grading — is what keeps it from proving `False`. `drop` recurses on `f(0)`, an application of the constructor payload `f`, which the size order reads as a child of the `node(f)` it was projected from, so `drop` descends and is accepted at `(Fam) -> False`. That acceptance is sound only because every total `Fam` is a finite tree: the one inhabitant that would make `drop` loop is an infinite one, which no total definition builds. `grow` is that inhabitant, and it is non-descending — its self-call sits under a payload lambda, graded `Unknown` — so the proof `drop(grow(0))` is a proof position reaching `grow`, and (V) refuses it there. A grading that refused `drop` would be rejecting the well-founded recursion `a_call_through_a_constructor_payload_descends` turns on; the obligation, not the grade, carries this. The control declares the same three and applies none.
+// The proof-side mirror of `a_payload_application_that_reaches_a_partial_function_is_a_partial_type`: here the payload-child rule grades a *proof*-returning group total, and proof totality — not the grading — is what keeps it from proving `False`. `drop` recurses on `f(0)`, an application of the constructor payload `f`, which the size order reads as a child of the `node(f)` it was projected from, so `drop` descends and is accepted at `(Fam) -> False`. That acceptance is sound only because every total `Fam` is a finite tree: the one inhabitant that would make `drop` loop is an infinite one, which no total definition builds. `grow` is that inhabitant, and it is non-descending — its self-call sits under a payload lambda, graded `Unknown` — so the proof `drop(grow(0))` is a proof position reaching `grow`, and proof totality refuses it there. A grading that refused `drop` would be rejecting the well-founded recursion `a_call_through_a_constructor_payload_descends` turns on; the obligation, not the grade, carries this. The control declares the same three and applies none.
 #[test]
 fn a_payload_descent_is_sound_only_because_a_partial_producer_is_refused_as_a_proof() {
     let refusals = control(
@@ -452,7 +452,7 @@ fn a_payload_descent_is_sound_only_because_a_partial_producer_is_refused_as_a_pr
     });
 }
 
-// (T) across the unit boundary: a partial definition in one unit is partial to every unit that mounts it. Every (T) fixture above builds its partiality in-unit, so none exercises the replay path's load-bearing half — that a definition the prelude's own walk classified `Partial` is read back as partial by a user suffix that only mentions it. `Json/decode` is that definition: a parser no size-change checker can show terminates, whose `Partial` verdict lives in the archived record alone. `Bad(s)` is a type that computes through that parse, so its body is a type position reaching `Json/decode`; a gate that read the archive's verdict as `Total`, or did not consult it, would form `Bad` over a diverging type and satisfy (T) by a classification it never read. The control computes through `Option/to_result`, which the prelude's walk found total.
+// Type totality across the unit boundary: a partial definition in one unit is partial to every unit that mounts it. Every type totality fixture above builds its partiality in-unit, so none exercises the replay path's load-bearing half — that a definition the prelude's own walk classified `Partial` is read back as partial by a user suffix that only mentions it. `Json/decode` is that definition: a parser no size-change checker can show terminates, whose `Partial` verdict lives in the archived record alone. `Bad(s)` is a type that computes through that parse, so its body is a type position reaching `Json/decode`; a gate that read the archive's verdict as `Total`, or did not consult it, would form `Bad` over a diverging type and satisfy type totality by a classification it never read. The control computes through `Option/to_result`, which the prelude's walk found total.
 #[test]
 fn a_type_reaching_a_partial_prelude_definition_is_rejected() {
     control(
@@ -647,7 +647,7 @@ fn a_ruled_out_arm_a_closed_match_takes_is_reached_only_through_a_partial_call()
     });
 }
 
-// A family's index types are positions of a type, read off its entry: `F`'s index is typed `Eq()(fine(0), 0)`, and the refusal turns `fine` into `spin`, which never descends, so (T) refuses it where it stands, as an index of `F`.
+// A family's index types are positions of a type, read off its entry: `F`'s index is typed `Eq()(fine(0), 0)`, and the refusal turns `fine` into `spin`, which never descends, so type totality refuses it where it stands, as an index of `F`.
 #[test]
 fn a_partial_index_type_is_refused_as_an_index_of_its_family() {
     control(

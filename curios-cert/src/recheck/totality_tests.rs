@@ -112,9 +112,9 @@ fn a_carried_units_totality_is_read_from_the_certifiers_record() {
     );
 }
 
-/// Obligation (V) fires at an argument position, where the corpus never reaches it.
+/// Proof totality fires at an argument position, where the corpus never reaches it.
 ///
-/// [The soundness board](../../../documentation/design/soundness/the-soundness-board.md)'s *Rejected* paragraph says the corpus "passes obligation (V) inert at argument positions", so a fixture reaching it has to be constructed. This is one: `held : Nat = ((p : Vouched) => 0)(proof)`, whose only recorded position naming `reaches` is the argument — `held`'s type and body sit at `Nat`, which the classification records nothing for. The control is the same term with `Vouched/qed(())` in the argument's place, which names nothing partial and must stay accepted.
+/// [The soundness board](../../../documentation/design/soundness/the-soundness-board.md)'s *Rejected* paragraph says the corpus "passes proof totality inert at argument positions", so a fixture reaching it has to be constructed. This is one: `held : Nat = ((p : Vouched) => 0)(proof)`, whose only recorded position naming `reaches` is the argument — `held`'s type and body sit at `Nat`, which the classification records nothing for. The control is the same term with `Vouched/qed(())` in the argument's place, which names nothing partial and must stay accepted.
 #[test]
 fn a_proof_at_an_argument_position_reaching_a_partial_definition_is_refused() {
     let at_an_argument = |proof: &str| {

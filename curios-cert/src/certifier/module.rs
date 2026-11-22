@@ -191,7 +191,7 @@ pub fn define_as_stated(
 ///
 /// Member *signatures* are checked at that opaque spelling too, and bodies at the folded one. See the note in the body for what each phase needs and what goes wrong when either takes the other's.
 ///
-/// The group's calls are the ones this check types in its bodies, recorded and graded as they are typed and closed to a verdict once every body is checked (see `certifier::calls`) — which is the verdict obligations (T) and (V) read for the group afterwards. It is not a demand: `rec` is general recursion by design, and the obligation that keeps it sound is positional and whole-module — see `documentation/design/soundness/totality-of-the-erased-program.md`. What *is* decided here is the local gate: a member that erasure deletes must descend, or assuming it at its declared type certifies `rec f : False = f`.
+/// The group's calls are the ones this check types in its bodies, recorded and graded as they are typed and closed to a verdict once every body is checked (see `certifier::calls`) — which is the verdict type totality and proof totality read for the group afterwards. It is not a demand: `rec` is general recursion by design, and the obligation that keeps it sound is positional and whole-module — see `documentation/design/soundness/totality-of-the-erased-program.md`. What *is* decided here is the local gate: a member that erasure deletes must descend, or assuming it at its declared type certifies `rec f : False = f`.
 pub fn check_group<R>(
     certifier: &mut Certifier,
     group: &RecGroup,
@@ -228,7 +228,7 @@ pub fn check_group<R>(
             certifier.assume(name, type_);
         }
 
-        // Whether each member's signature or body encloses a group of its own that does not descend — what obligations (T) and (V) read the member by, since a group is typed here with its enclosing binders opened and the member's term holds it closed.
+        // Whether each member's signature or body encloses a group of its own that does not descend — what type totality and proof totality read the member by, since a group is typed here with its enclosing binders opened and the member's term holds it closed.
         let mut enclosing = vec![false; group.length()];
 
         let mut proofs = Vec::with_capacity(group.length());

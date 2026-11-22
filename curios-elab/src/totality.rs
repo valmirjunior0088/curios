@@ -1,6 +1,6 @@
 //! The elaborator's driver for the shared size-change totality analysis.
 //!
-//! The analysis itself lives in `curios-analysis/src/totality.rs` (see that module for the size-change principle and its rationale) and is run by both checkers; what belongs here is the driving, a declaration at a time as each is published: classifying its definitions against the group verdicts, with diverging host calls and the partiality of what they mention folded in, and seeding the two erased-half obligations — (T) from its written type positions, (V) from the proof positions its elaboration recorded.
+//! The analysis itself lives in `curios-analysis/src/totality.rs` (see that module for the size-change principle and its rationale) and is run by both checkers; what belongs here is the driving, a declaration at a time as each is published: classifying its definitions against the group verdicts, with diverging host calls and the partiality of what they mention folded in, and seeding the two erased-half obligations — type totality from its written type positions, proof totality from the proof positions its elaboration recorded.
 //!
 //! Rejection is a **classification, not an error**. `/std/Json/decode`'s parsers are nullary and productive; none passes this check and none needs to. They stay usable everywhere erasure keeps them. Only [`crate::check_type_totality`] and [`crate::check_proof_totality`] turn a `Partial` classification into a rejection, and only for the positions that erase.
 
@@ -104,7 +104,7 @@ pub fn exhausted_bound(
     }
 }
 
-/// Obligation (T), at the one point a non-productive type-level loop can still be diagnosed: before the type is reduced.
+/// Type totality, at the one point a non-productive type-level loop can still be diagnosed: before the type is reduced.
 ///
 /// The whole-module gate runs post-zonk, which is after elaboration has already performed the type-level reduction it exists to make safe. A type that reaches a partial definition and *is productive* survives elaboration and the gate rejects it; one that is not productive spins until the step budget dies, and the program is refused for apparently running out of a resource no amount of which would have helped. This refuses it first, by name, for the reason it is actually wrong.
 ///
@@ -203,7 +203,7 @@ fn faults(
         .collect::<Vec<_>>();
 
     let mut faults = Vec::new();
-    // One cache across every position: (V) seeds a literal's derivation once per link, and those links share their tails. It is keyed by the positions' canonical nodes, so a type zonked apart from an equal one is that one's key and is found by identity.
+    // One cache across every position: proof totality seeds a literal's derivation once per link, and those links share their tails. It is keyed by the positions' canonical nodes, so a type zonked apart from an equal one is that one's key and is found by identity.
     let keys = Sharing::new();
     let mut memo = LocalMemo::new();
     for position in positions {
@@ -232,7 +232,7 @@ fn faults(
 
 /// Every term either erased-half obligation has zonked, shared across both of them and across both the types they test and the terms they keep.
 ///
-/// Not an optimization detail but a contract. (T) and (V) are seeded from the *same* [`Context::record_checked`](crate::Context) entries, and each needs the zonked type of every entry plus the zonked term of every entry it keeps — so a cache local to either does the same work twice, and hash-consing collapses the recorded entries to far fewer distinct types and terms.
+/// Not an optimization detail but a contract. Type totality and proof totality are seeded from the *same* [`Context::record_checked`](crate::Context) entries, and each needs the zonked type of every entry plus the zonked term of every entry it keeps — so a cache local to either does the same work twice, and hash-consing collapses the recorded entries to far fewer distinct types and terms.
 ///
 /// One map serves types and terms alike because zonk is a *function of its argument*: a term appearing in both populations has one zonked form, and sharing the entry is correct rather than merely convenient. Sound to share across the two obligations of one declaration, or of the entry, for the reason either could memoize alone — the solution set is final once what they read has been published, or the module zonked.
 ///
@@ -261,7 +261,7 @@ fn zonked(context: &Context, cache: &mut Zonked, term: &Term) -> Result<Term, Er
     Ok(done)
 }
 
-/// Obligation **(T)**: everything a type position reaches must be total.
+/// **Type totality**: everything a type position reaches must be total.
 ///
 /// A divergent type breaks type formation, and — through `rec Bad : Type = Sink(Bad)` — ties the negative knot strict positivity exists to forbid without ever writing an `induct`. Decided for one declaration as it is published, over `module` holding its item and the entries it declares, and for the entry once the module is zonked; either way after [`classify_totality`], whose verdicts it reads, and over the terms recorded since `mark`.
 pub fn check_type_totality(
@@ -295,7 +295,7 @@ fn checked_type_positions(
     curios_common::sample!("totality::checked_entries", settled.len());
 
     for (term, type_, site) in settled {
-        // Once per distinct recorded type rather than once per recorded term — see `checked_proof_positions`, which memoizes the same call for the same reason. This walk reads `checked` rather than draining it, because (V)'s seeding still needs it.
+        // Once per distinct recorded type rather than once per recorded term — see `checked_proof_positions`, which memoizes the same call for the same reason. This walk reads `checked` rather than draining it, because proof totality's seeding still needs it.
         let type_ = zonked(context, cache, &type_)?;
         // The term *is* a type exactly when its own type is a sort. An instance head is a variable or a projection, never a sort, so a wrapped type is not one.
         let sort = reduces_to_a_sort(context, cache, &type_);
@@ -340,7 +340,7 @@ fn by_value(term: &Term, labels: &[(Free, Term)]) -> Term {
     }
 }
 
-/// Obligation **(V)**: everything a `Prop`-checked term reaches must be total.
+/// **Proof totality**: everything a `Prop`-checked term reaches must be total.
 ///
 /// A divergent proof proves anything, and erasure deletes it — so an `exit` behind a proposition never fires and the program continues with a forged invariant. Independent of [`check_type_totality`]: neither obligation subsumes the other. Decided where that one is, over the terms recorded since `mark`, which it takes.
 pub fn check_proof_totality(
@@ -353,9 +353,9 @@ pub fn check_proof_totality(
     report(context, &positions, Erased::Proof)
 }
 
-/// Obligation (V)'s seed: every term elaboration settled at a `Prop`-sorted type.
+/// Proof totality's seed: every term elaboration settled at a `Prop`-sorted type.
 ///
-/// Takes what [`Context::record_checked`] collected since `mark` and keeps the propositions. This is the whole of (V)'s seeding. There is no walk, because there is nothing to look for — elaboration already decided, for every term in the program, what type that term has, and the only thing a later pass can do with that question is re-derive it, incompletely.
+/// Takes what [`Context::record_checked`] collected since `mark` and keeps the propositions. This is the whole of proof totality's seeding. There is no walk, because there is nothing to look for — elaboration already decided, for every term in the program, what type that term has, and the only thing a later pass can do with that question is re-derive it, incompletely.
 ///
 /// Two properties follow from the seed rather than from care. **Coverage** is a consequence of elaboration being a typechecker: a position it never settles is a position the program was never typed at. And the **prelude boundary** is a consequence of replay — the archived prefix is defined into the context rather than elaborated, so it settles nothing and seeds nothing, and its verdicts arrive in what its unit filed of them instead ([`classify_totality`]).
 ///
@@ -444,7 +444,7 @@ fn report(context: &mut Context, positions: &[Position], erased: Erased) -> Resu
 
 /// A recursive group's members as its signatures and bodies read them, a turn at a time, as `curios-cert`'s `check_group` takes them: a member's name is defined as its slot, which reads through once the member's turn finds it known to terminate (`curios_analysis::known_to_terminate`) and stands for nothing until then ([`Context::is_withheld_rec_slot`]). A signature or a body reads a member written after it by waiting on the slot, and no reduction unfolds a member that may not terminate.
 ///
-/// Obligation (T) is asked here too, in the one place it cannot wait for the post-zonk pass: a group with a member withheld may not have a sort in an *extractable* position of a member's type, its codomain after peeling arrows or any component reachable by projection. Parameter positions are exempt, so an ordinary partial polymorphic program keeping `@A : Type` is untouched. It exists because `let Bad: Type = (Bad) -> False;` unfolds without end where its first *use* reads it, long before any whole-module gate runs, and without it the compiler reports a spent budget where it should name the definition. The closure form is what makes the language sound; this is what makes it answer.
+/// Type totality is asked here too, in the one place it cannot wait for the post-zonk pass: a group with a member withheld may not have a sort in an *extractable* position of a member's type, its codomain after peeling arrows or any component reachable by projection. Parameter positions are exempt, so an ordinary partial polymorphic program keeping `@A : Type` is untouched. It exists because `let Bad: Type = (Bad) -> False;` unfolds without end where its first *use* reads it, long before any whole-module gate runs, and without it the compiler reports a spent budget where it should name the definition. The closure form is what makes the language sound; this is what makes it answer.
 pub struct Turns {
     /// Each member's name, a local group's label or a top-level member's local, defined as its slot.
     names: Vec<Free>,
@@ -576,7 +576,7 @@ type LocalMemo = HashMap<Term, bool>;
 
 /// Whether `term` contains a call to a diverging host row or a `rec` group that does not descend — the "is this term partial on its own account" test both obligations apply one level below a definition.
 ///
-/// **Iterative and memoized, and both are load-bearing.** (V) seeds one position per link of a `Str` literal's UTF-8 derivation, and those links share their tails, so a native per-node recursion would cost one stack frame per byte *and* re-walk the shared tail once per position — quadratic in the literal's length. Depth is not steps, so the reduction budget cannot bound either one.
+/// **Iterative and memoized, and both are load-bearing.** Proof totality seeds one position per link of a `Str` literal's UTF-8 derivation, and those links share their tails, so a native per-node recursion would cost one stack frame per byte *and* re-walk the shared tail once per position — quadratic in the literal's length. Depth is not steps, so the reduction budget cannot bound either one.
 ///
 /// The memo is what makes the sharing pay: hash-consing gives the tails one node, so each distinct node is classified once however many positions reach it. Per-position answers are unchanged — the cache records each node's own verdict, not whether some earlier position already reported it.
 fn locally_partial(

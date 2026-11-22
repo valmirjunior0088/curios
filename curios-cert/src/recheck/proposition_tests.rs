@@ -104,11 +104,11 @@ fn bad_refused_with_no_definition_to_blame(verdicts: &[Refusal]) -> bool {
     })
 }
 
-/// (V) has two routes to a refusal, and no program reaches the second. `check_positions` first asks whether a recorded position *reaches a definition known partial* — the named route, which blames a global — and failing that asks whether the position is partial in itself, which blames nothing: whether it encloses a `rec` group the walk typed and found not to descend, or calls a host row that diverges.
+/// Proof totality has two routes to a refusal, and no program reaches the second. `check_positions` first asks whether a recorded position *reaches a definition known partial* — the named route, which blames a global — and failing that asks whether the position is partial in itself, which blames nothing: whether it encloses a `rec` group the walk typed and found not to descend, or calls a host row that diverges.
 ///
 /// Across a certifier walk of the whole prelude and every program in `curios`'s test corpus the anonymous route refuses nothing: every surface spelling that would reach it is refused during elaboration, so no module carries it here — `rec b : False = b; b`, the shape `curios`'s `tests::rules` totality fixtures use, never arrives.
 ///
-/// A call to `/std/Proc/exit` is the trigger that isolates this route rather than merely reaching it. A non-descending `rec` at a proof type is refused by `check_group`'s own local gate before the position walk runs, so it demonstrates that gate instead; an exit meets no gate of its own. `exit` here yields `Io({})`, the type `qed` holds, and `Held/qed(exit(@{}, 0))` is therefore well typed at a proposition while carrying a computation that does not terminate. That is (V)'s whole subject: erasure deletes the proof, the exit never fires, and the program continues holding a certificate for something no total term established.
+/// A call to `/std/Proc/exit` is the trigger that isolates this route rather than merely reaching it. A non-descending `rec` at a proof type is refused by `check_group`'s own local gate before the position walk runs, so it demonstrates that gate instead; an exit meets no gate of its own. `exit` here yields `Io({})`, the type `qed` holds, and `Held/qed(exit(@{}, 0))` is therefore well typed at a proposition while carrying a computation that does not terminate. That is proof totality's whole subject: erasure deletes the proof, the exit never fires, and the program continues holding a certificate for something no total term established.
 ///
 /// The control is the same module with `Io/pure(())` in place of the exit, which must stay accepted — a rule refusing every `Prop`-typed constructor application would satisfy the assertion above and nothing else here would notice.
 #[test]
@@ -796,7 +796,7 @@ let /d: (g: (x: #NatType) -> #BoolType, n: #NatType) -> #NatType =
         end;
 "#;
 
-// A position's erased half is remembered by its one door (`erased_half`) under the equations in force where it was classified, and goes where they do: the `true` arm classifies `T(g(n))` again, as a sort, and its term, a type reaching `/loop`, is refused by obligation (T), with the memos on as off. Answered from the `false` arm, the term would be classified relevant and pass unconstrained.
+// A position's erased half is remembered by its one door (`erased_half`) under the equations in force where it was classified, and goes where they do: the `true` arm classifies `T(g(n))` again, as a sort, and its term, a type reaching `/loop`, is refused by type totality, with the memos on as off. Answered from the `false` arm, the term would be classified relevant and pass unconstrained.
 #[test]
 fn an_erased_half_read_under_one_arm_answers_nothing_under_its_sibling() {
     let definitions = core_text_module(AN_ERASED_HALF_UNDER_EACH_ARM);

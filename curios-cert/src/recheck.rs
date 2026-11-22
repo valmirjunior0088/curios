@@ -1145,7 +1145,7 @@ pub fn verdicts_visiting<'s>(
             }
         }
 
-        // Obligations (T) and (V) over every position the item's judgment recorded, its entries' typings among them, so each is refused under the item that declares it rather than under the next one judged. An entry's positions reach only names declared before it, each classified by now.
+        // Type totality and proof totality over every position the item's judgment recorded, its entries' typings among them, so each is refused under the item that declares it rather than under the next one judged. An entry's positions reach only names declared before it, each classified by now.
         let (drained, failure) = certifier.take_checked();
         if let Some(error) = failure {
             verdicts.push(Refusal {

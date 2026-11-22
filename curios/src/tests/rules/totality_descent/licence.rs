@@ -7,7 +7,7 @@ use {
 
 // The arithmetic decrease is licensed by the *arm*, not by the operator. `n - 1` is smaller than `n` only where `n` is known nonzero — `Nat` subtraction saturates, so `0 - 1` is `0` and the "decrease" is a fixed point — and the arm a `Nat` match falls to past its literals establishes nonzero exactly when `0` is one of them: the successor's arm where `0` is the only literal, a dispatch's default otherwise. This fixture omits `0`, so nothing rules it out and the call may not be graded as descending.
 //
-// Read the wrong way the cost is a non-terminating *type*, which is the negative knot `a_type_level_rec_cannot_tie_the_negative_knot` above spells out in full: `Down(0)` would unfold to `Down(0)` forever while the classifier reported the group total, type formation would rest on a family that never forms, and (T) — whose whole job is that nothing reachable from a type position is partial — would have been satisfied by a false premise rather than by a fact.
+// Read the wrong way the cost is a non-terminating *type*, which is the negative knot `a_type_level_rec_cannot_tie_the_negative_knot` above spells out in full: `Down(0)` would unfold to `Down(0)` forever while the classifier reported the group total, type formation would rest on a family that never forms, and type totality — whose whole job is that nothing reachable from a type position is partial — would have been satisfied by a false premise rather than by a fact.
 //
 // This side condition carries more weight than its size suggests. Across the corpus, the enclosing arms' refinements change thousands of call grades, and every change is an upgrade away from `Unknown` — to `Less` or `Same`, never a downgrade. The arm facts are what make the corpus's recursion provable at all, so the conditions under which an arm may establish one are the accepting direction throughout.
 //
@@ -46,7 +46,7 @@ fn a_dispatch_that_does_not_enumerate_zero_licenses_no_decrease() {
 //
 // Three spellings reach the same reader and all three must refuse, because each exercises a different piece of it. `n < 10` is already an intrinsic after elaboration, so it tests the relation table alone. `10 > n` arrives with its operands the other way round and is only readable once flipped, so it tests the flip — a flip that turned `n < 10` into `n > 10` would report nonzero for an arm that admits zero. `guard(n)` is an ordinary definition, so it is readable only through the same bounded weak-head unfolding the shape reader uses, and an unfolding that lost track of which arm it was in would do the same. In every one the true arm gives `n < 10`, which admits zero, so `n - 1` is a fixed point at zero and the group does not descend.
 //
-// Read the wrong way the cost is the same as for the dispatch route and is spelled out there: a non-terminating type, type formation resting on a family that never forms, and (T) satisfied by a false premise.
+// Read the wrong way the cost is the same as for the dispatch route and is spelled out there: a non-terminating type, type formation resting on a family that never forms, and type totality satisfied by a false premise.
 //
 // Probed rather than closed: each asserts the diagnostic so none can pass on an unrelated failure. Each is derived from a control whose guard excludes zero in the same spelling, `n > 0`, `0 < n` or a `guard(n)` that is `n > 0`, which must keep compiling — refusing them would take `/std/Nat/to_str` with it, and the flipped one pins the flip in the accepting direction as well as the refusing one.
 #[test]
@@ -133,7 +133,7 @@ fn a_boolean_guard_that_does_not_exclude_zero_licenses_no_decrease() {
     });
 }
 
-// The nonzero fact is only half of what licenses an arithmetic decrease; the other half is that the *right* operand must be a literal, and it must be at or above the smallest value that makes the operation strictly decreasing — `2` for division, because `n / 1` is `n`, and `1` for subtraction, because `n - 0` is `n`. Read the wrong way each is a fixed point graded as a descent, at which point the cost is the one `a_dispatch_that_does_not_enumerate_zero_licenses_no_decrease` spells out in full: a non-terminating type, type formation resting on a family that never forms, and (T) satisfied by a false premise.
+// The nonzero fact is only half of what licenses an arithmetic decrease; the other half is that the *right* operand must be a literal, and it must be at or above the smallest value that makes the operation strictly decreasing — `2` for division, because `n / 1` is `n`, and `1` for subtraction, because `n - 0` is `n`. Read the wrong way each is a fixed point graded as a descent, at which point the cost is the one `a_dispatch_that_does_not_enumerate_zero_licenses_no_decrease` spells out in full: a non-terminating type, type formation resting on a family that never forms, and type totality satisfied by a false premise.
 //
 // Two spellings, because the clause has two halves and each fails independently. `n / 1` sits under the dispatch that *does* enumerate zero, so the nonzero condition is satisfied and only the magnitude bound stands between this program and acceptance — and `Nat/div` folds only when both operands are literals, so with a symbolic `n` the term really does reach the reader as a division by one rather than as `n` itself. `n / k` names a parameter instead of a literal, which is the half that must hold whatever `k` turns out to be, since nothing here rules out `1`.
 //
@@ -304,7 +304,7 @@ fn a_sort_reached_through_an_alias_still_needs_descent() {
     });
 }
 
-// The accessibility shape, which is the one well-founded recursion in a proof needs: the recursive call descends through `below(m, lt)`, an application of a function-typed constructor payload, rather than through a syntactically smaller subterm. A function-typed payload is a branching node whose children are its applications, so the application grades below the constructor for the reason the payload does, and the group descends on `acc`. The result is `Prop`-sorted, so this is (V) reading the verdict, and it is the shape every well-founded fixpoint takes.
+// The accessibility shape, which is the one well-founded recursion in a proof needs: the recursive call descends through `below(m, lt)`, an application of a function-typed constructor payload, rather than through a syntactically smaller subterm. A function-typed payload is a branching node whose children are its applications, so the application grades below the constructor for the reason the payload does, and the group descends on `acc`. The result is `Prop`-sorted, so this is proof totality reading the verdict, and it is the shape every well-founded fixpoint takes.
 #[test]
 fn a_call_through_a_constructor_payload_descends() {
     let source = r#"
@@ -330,7 +330,7 @@ fn a_call_through_a_constructor_payload_descends() {
     assert_eq!(run(source), b"ok");
 }
 
-// A walk that halves a span descends on no list, so `List/balanced` descends on the span's length, every call on its quotient by two, which the termination check reads with no count beside it. What that buys is (T) for everything built on it: `Str/repeat` may stand in a type, which the equations state at the values the walk reaches. Each single carries the proof that its index is below `n`, and a join reads its parts through it, first and last included.
+// A walk that halves a span descends on no list, so `List/balanced` descends on the span's length, every call on its quotient by two, which the termination check reads with no count beside it. What that buys is type totality for everything built on it: `Str/repeat` may stand in a type, which the equations state at the values the walk reaches. Each single carries the proof that its index is below `n`, and a join reads its parts through it, first and last included.
 #[test]
 fn a_halving_walk_descends_on_its_span_halved_and_stands_in_a_type() {
     let source = r#"

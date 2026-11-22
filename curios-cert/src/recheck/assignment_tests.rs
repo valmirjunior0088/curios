@@ -526,7 +526,7 @@ fn a_sort_no_declaration_binds_is_refused_at_every_route_before_any_judgment() {
 
 /// A group inside a term binds no sort of its own, and is read at each assignment with the declaration that holds it: at `Prop` its member is a proof's recursion, which owes the descent it does not make. `curios`'s `tests::rules::totality_partiality` puts the same declaration to both checkers under this name. Rename both or neither.
 ///
-/// Mutation-check: cut `at_every_sort` to its last assignment, the one stating `Type`, and `/spin` is refused at no assignment; obligation (V) still refuses the closing term, which reaches a definition enclosing a group that does not descend.
+/// Mutation-check: cut `at_every_sort` to its last assignment, the one stating `Type`, and `/spin` is refused at no assignment; proof totality still refuses the closing term, which reaches a definition enclosing a group that does not descend.
 #[test]
 fn a_group_inside_a_term_is_judged_at_every_assignment_of_its_declarations_sorts() {
     let verdicts = refusals(A_GROUP_INSIDE_A_TERM);

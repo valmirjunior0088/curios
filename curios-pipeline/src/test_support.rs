@@ -51,7 +51,7 @@ pub fn recheck(
 #[derive(Debug)]
 pub struct Typechecked {
     pub program: Program,
-    /// The (T) and (V) obligations the elaborator decided over the program, reported rather than raised. Empty when it carries none.
+    /// Type totality and proof totality as the elaborator decided them over the program, reported rather than raised. Empty when it carries none.
     pub obligations: Vec<Obligation>,
     /// What the heaviest declaration consumed: the units and peak depth `DEFAULT_BUDGET` is set against, and the only figures that say whether a program's cost is depth or work. A measurement's, which nothing in the compiler reads.
     pub consumption: Consumption,
@@ -59,7 +59,7 @@ pub struct Typechecked {
 
 /// Lower and type-check `entrypoint` as a compilation does, stopping short of the certifier, with the erasure obligations reported rather than raised.
 ///
-/// The elaborated program comes back even when this stage's own (T)/(V) verdicts refuse it, which is what lets one program be put to *both* checkers: `curios-cert` decides the same two obligations independently, and a program only this side refuses would otherwise yield no module for the certifier to judge — leaving the most consequential disagreement, the trusted base resting on an elaborator-only analysis, unobservable. What the program's tail is checked against is the compile path's, the entry's `Io({})` contract, which both read off `stated`; what differs is that the program is elaborated whole here, its declarations and its final term as one module, where a compilation takes the declarations as the unit they are.
+/// The elaborated program comes back even when this stage's own type and proof totality refuse it, which is what lets one program be put to *both* checkers: `curios-cert` decides the same two obligations independently, and a program only this side refuses would otherwise yield no module for the certifier to judge — leaving the most consequential disagreement, the trusted base resting on an elaborator-only analysis, unobservable. What the program's tail is checked against is the compile path's, the entry's `Io({})` contract, which both read off `stated`; what differs is that the program is elaborated whole here, its declarations and its final term as one module, where a compilation takes the declarations as the unit they are.
 ///
 /// Each refusal carries the elaborator's error as it raised it beside the diagnostic a compilation prints, since rendering is where a consumer that matches the error's variant would lose it. A caller that wants the certifier's opinion on the result puts it to [`recheck`], which supplies the same environment `compile_entrypoint` does rather than re-walking the standard library.
 pub fn typecheck_entrypoint(
