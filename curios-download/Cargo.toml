@@ -1,0 +1,14 @@
+[package]
+name = "curios-download"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "A file a build script pins by its SHA-256: read where a hand placed it or an earlier build kept it, else downloaded, and checked either way"
+
+[lints]
+workspace = true
+
+[dependencies]
+sha2 = { workspace = true }
+# The one crate that names the HTTP client, which only build scripts reach through it, so its version is stated here (`documentation/design/one-crate-is-the-authority-for-one-external-concern.md`).
+ureq = { version = "3.3.0", default-features = false, features = ["rustls"] }

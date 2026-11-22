@@ -12,7 +12,6 @@ workspace = true
 # The conformance cases of `GraphemeBreakTest.txt`, for the tests of a crate that segments text by these tables in another language: `curios-prelude`'s, whose segmentation is Curios.
 test-support = []
 
-# The pinned files are fetched and checked as `curios-binaryen` fetches and checks its source.
+# The pinned files are fetched, checked and kept as every build script that fetches does.
 [build-dependencies]
-ureq = { workspace = true }
-sha2 = { workspace = true }
+curios-download = { workspace = true }

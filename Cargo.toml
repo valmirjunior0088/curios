@@ -4,6 +4,7 @@ members = [
     "curios-abi",
     "curios-archive",
     "curios-archive-derive",
+    "curios-download",
     "curios-unicode",
     "curios-common",
     "curios-num",
@@ -69,6 +70,7 @@ curios-abi = { path = "curios-abi" }
 curios-archive = { path = "curios-archive" }
 curios-archive-derive = { path = "curios-archive-derive" }
 curios-profile = { path = "curios-profile" }
+curios-download = { path = "curios-download" }
 curios-unicode = { path = "curios-unicode" }
 curios-common = { path = "curios-common" }
 curios-num = { path = "curios-num" }
@@ -114,7 +116,6 @@ toml = { version = "1.1.8", default-features = false, features = ["parse", "serd
 toml_edit = { version = "0.25.15" }
 # No `attributes` feature: a site instruments through `curios-common`'s macros, never the procedural macro, which would write code inside the checkers.
 tracing = { version = "0.1.44", default-features = false, features = ["std"] }
-ureq = { version = "3.3.0", default-features = false, features = ["rustls"] }
 
 [profile.dev]
 opt-level = 3

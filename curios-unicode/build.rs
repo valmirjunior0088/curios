@@ -1,19 +1,18 @@
 //! Downloads, verifies and reads the pinned files of the Unicode Character Database, and writes the tables `src/lib.rs` includes.
 //!
-//! The files are fetched once and kept in `.artifacts/<version>/` beside this crate — outside Cargo's target tree, so `cargo clean` leaves them — and each is checked against its pinned SHA-256 in memory, whether it was downloaded or placed there by hand for an offline build.
+//! The files are fetched once and kept in `.artifacts/<version>/` beside this crate — outside Cargo's target tree, so `cargo clean` leaves them — and each is checked against its pinned SHA-256 in memory, whether it was downloaded or placed there by hand for an offline build, as `curios-download` obtains every pinned file.
 //!
 //! **The library's enums are the classes.** A run of one class is written as the variant it is, named from the database's own spelling (`Regional_Indicator` is `RegionalIndicator`, `CR` is `Cr`), so a class the database names and an enum lacks is refused where the library compiles, and this script holds no list of classes. The class a scalar no line names is the one the file's `@missing` line gives the whole range, and its runs are left out.
 //!
 //! **A mapping is written as records.** Each scalar a mapping changes is read off the database's rows, and the scalars are gathered in order into records, each covering scalars a step of one or two apart that become the same scalars moved as far, as `README.md` decides.
 
 use {
-    sha2::{Digest, Sha256},
+    curios_download::Download,
     std::{
         collections::BTreeMap,
         env,
         fmt::Write,
         fs,
-        io::Read,
         path::{Path, PathBuf},
     },
 };
@@ -64,15 +63,6 @@ const FILES: [(&str, &str); 9] = [
 /// One past the last scalar value.
 const SCALARS: usize = 0x11_0000;
 
-fn sha256_hex(bytes: &[u8]) -> String {
-    Sha256::digest(bytes)
-        .iter()
-        .fold(String::new(), |mut hex, byte| {
-            let _ = write!(hex, "{byte:02x}");
-            hex
-        })
-}
-
 fn url(path: &str) -> String {
     format!("https://www.unicode.org/Public/{VERSION}/ucd/{path}")
 }
@@ -87,65 +77,17 @@ fn kept(path: &str) -> PathBuf {
         .join(name)
 }
 
-fn download(url: &str) -> Result<Vec<u8>, String> {
-    let response = ureq::get(url)
-        .call()
-        .map_err(|error| format!("GET {url} failed: {error}"))?;
-    let mut bytes = Vec::new();
-    response
-        .into_body()
-        .into_reader()
-        .read_to_end(&mut bytes)
-        .map_err(|error| format!("reading the response from {url} failed: {error}"))?;
-
-    Ok(bytes)
-}
-
-fn instructions_on_failure(path: &str, kept: &Path, sha256: &str, cause: &str) -> ! {
-    panic!(
-        "\n\ncould not obtain a file of the Unicode Character Database curios-unicode is built from:\n  {cause}\n\n\
-        To build offline, download this file by hand:\n  {}\n\
-        verify it has sha256:\n  {sha256}\n\
-        and place it at:\n  {}\n\
-        then re-run the build.\n\n",
-        url(path),
-        kept.display(),
-    );
-}
-
 /// The text of one pinned file, checked against its hash: the copy an earlier build kept or a hand placed, or else a download, kept once it is checked.
 fn text(path: &str, sha256: &str) -> String {
-    let kept = kept(path);
-    let (bytes, fetched) = match fs::read(&kept) {
-        Ok(bytes) => (bytes, false),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => (
-            download(&url(path))
-                .unwrap_or_else(|error| instructions_on_failure(path, &kept, sha256, &error)),
-            true,
-        ),
-        Err(error) => panic!("read {}: {error}", kept.display()),
-    };
-
-    let actual = sha256_hex(&bytes);
-    if actual != sha256 {
-        instructions_on_failure(
-            path,
-            &kept,
-            sha256,
-            &format!("sha256 mismatch: expected {sha256}, got {actual}"),
-        );
+    let url = url(path);
+    let place = kept(path);
+    let bytes = Download {
+        what: "a file of the Unicode Character Database curios-unicode is built from",
+        url: &url,
+        sha256,
+        place: &place,
     }
-
-    if fetched {
-        let directory = kept.parent().expect("a kept file has a directory");
-        fs::create_dir_all(directory)
-            .unwrap_or_else(|error| panic!("create {}: {error}", directory.display()));
-        let partial = kept.with_extension("partial");
-        fs::write(&partial, &bytes)
-            .unwrap_or_else(|error| panic!("write {}: {error}", partial.display()));
-        fs::rename(&partial, &kept)
-            .unwrap_or_else(|error| panic!("keep {}: {error}", kept.display()));
-    }
+    .kept();
 
     String::from_utf8(bytes).unwrap_or_else(|error| panic!("{path} is not UTF-8: {error}"))
 }

@@ -657,10 +657,9 @@ name = "curios-binaryen"
 version = "0.16.25"
 dependencies = [
  "cmake",
+ "curios-download",
  "flate2",
- "sha2 0.11.1",
  "tar",
- "ureq",
 ]
 
 [[package]]
@@ -740,6 +739,14 @@ dependencies = [
  "askama",
  "curios-archive",
  "curios-common",
+]
+
+[[package]]
+name = "curios-download"
+version = "0.16.25"
+dependencies = [
+ "sha2 0.11.1",
+ "ureq",
 ]
 
 [[package]]
@@ -965,8 +972,7 @@ dependencies = [
 name = "curios-unicode"
 version = "0.16.25"
 dependencies = [
- "sha2 0.11.1",
- "ureq",
+ "curios-download",
 ]
 
 [[package]]

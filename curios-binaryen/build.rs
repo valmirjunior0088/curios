@@ -3,12 +3,11 @@
 //! Cargo gives distinct build-script fingerprints their own `OUT_DIR`, so that directory cannot cache an expensive C++ build shared by ordinary builds, tests, and Clippy. This script builds in `OUT_DIR`, then keeps only the static library in one locked cache per compilation target in `.artifacts/` beside this crate — outside Cargo's target tree, so `cargo clean` does not take a build measured in minutes with it — and empties `OUT_DIR` again. A cache entry is complete only once its library is in place and the script writes its versioned `done` marker.
 
 use {
+    curios_download::{Download, sha256_hex},
     flate2::read::GzDecoder,
-    sha2::{Digest, Sha256},
     std::{
         env,
         fs::{self, File, OpenOptions},
-        io::Read,
         path::{Path, PathBuf},
         process::Command,
     },
@@ -26,16 +25,6 @@ const BINARYEN_SOURCE_SHA256: &str =
 
 fn source_url() -> String {
     format!("https://github.com/WebAssembly/binaryen/archive/refs/tags/{BINARYEN_VERSION}.tar.gz")
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    hasher
-        .finalize()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
 }
 
 /// This script's own bytes, hashed — the build *recipe*, as distinct from the source it builds.
@@ -118,51 +107,17 @@ fn fresh(directory: &Path) {
         .unwrap_or_else(|error| panic!("create {}: {error}", directory.display()));
 }
 
-fn download(url: &str) -> Result<Vec<u8>, String> {
-    let response = ureq::get(url)
-        .call()
-        .map_err(|error| format!("GET {url} failed: {error}"))?;
-    let mut bytes = Vec::new();
-    response
-        .into_body()
-        .into_reader()
-        .read_to_end(&mut bytes)
-        .map_err(|error| format!("reading response body from {url} failed: {error}"))?;
-    Ok(bytes)
-}
-
-fn instructions_on_failure(archive_path: &Path, cause: &str) -> ! {
-    panic!(
-        "\n\ncould not obtain the Binaryen source needed to build curios-binaryen:\n  {cause}\n\n\
-        To build offline, download this file by hand:\n  {}\n\
-        verify it has sha256:\n  {BINARYEN_SOURCE_SHA256}\n\
-        and place it at:\n  {}\n\
-        then re-run the build.\n\n",
-        source_url(),
-        archive_path.display(),
-    );
-}
-
 /// The source archive, checked against its pinned hash in memory and never stored: one placed in the cache entry by hand, for an offline build, or else a download.
 fn source(entry: &Path) -> Vec<u8> {
+    let url = source_url();
     let placed = entry.join(format!("{BINARYEN_VERSION}.tar.gz"));
-    let bytes = match fs::read(&placed) {
-        Ok(bytes) => bytes,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            download(&source_url()).unwrap_or_else(|error| instructions_on_failure(&placed, &error))
-        }
-        Err(error) => panic!("read Binaryen archive {}: {error}", placed.display()),
-    };
-
-    let actual = sha256_hex(&bytes);
-    if actual != BINARYEN_SOURCE_SHA256 {
-        instructions_on_failure(
-            &placed,
-            &format!("sha256 mismatch: expected {BINARYEN_SOURCE_SHA256}, got {actual}"),
-        );
+    Download {
+        what: "the Binaryen source needed to build curios-binaryen",
+        url: &url,
+        sha256: BINARYEN_SOURCE_SHA256,
+        place: &placed,
     }
-
-    bytes
+    .bytes()
 }
 
 /// Fill the cache `entry` unless its marker already names this build: unpack the source into `out`, build and install it there, keep the static library alone in the entry's `lib/`, and empty `out` again.
