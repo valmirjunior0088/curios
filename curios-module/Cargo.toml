@@ -15,7 +15,6 @@ test-support = []
 [dependencies]
 curios-archive = { workspace = true }
 curios-document = { workspace = true }
-curios-profile = { workspace = true }
 curios-abi = { workspace = true }
 # The Unicode tables `/sys/unicode` bakes.
 curios-common = { workspace = true }

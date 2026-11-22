@@ -34,7 +34,6 @@ curios-pipeline = { workspace = true }
 # For the prefixes the prelude's roots claim, read off their names with none restored: a name resolved under one is painted as the library the compiler was built with (`defaultLibrary`).
 curios-prelude = { workspace = true }
 curios-package = { workspace = true }
-curios-profile = { workspace = true }
 curios-verdict = { workspace = true }
 lsp-server = "0.10.0"
 lsp-types = "0.97.0"

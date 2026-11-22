@@ -614,7 +614,7 @@ impl Reading {
 
     /// What the file asked about writes in the subject `text` is the lowering of, compiled against `scope`, with the term its program closes with where it is one: each of its texts with the names and terms it writes, and what each declaration they name is answered with, made once whatever the number of its occurrences — its type spelled for each text's reader where a unit in scope declares it.
     pub fn read(&self, scope: &[&Unit], text: &PreparedText, entry: Option<&Entrypoint>) -> Placed {
-        curios_profile::profile!("placed");
+        curios_common::profile!("placed");
         let saying = Saying::over(scope, text);
         let mut declarations = BTreeMap::new();
         // Whether a lowered item declares each name met, and the unit in scope declaring it, each asked once.

@@ -373,7 +373,7 @@ pub fn elaborate_apply(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    curios_profile::profile!("apply::elaborate_apply");
+    curios_common::profile!("apply::elaborate_apply");
     let Apply { head, arguments } = apply;
 
     // Insertion provenance: name the applied function in the uninferred-implicit report.

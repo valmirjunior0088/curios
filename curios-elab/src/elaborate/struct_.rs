@@ -179,7 +179,7 @@ pub fn check_dependent_fields(
     origin: &Term,
     elaborated: &mut Vec<Term>,
 ) -> Result<(), Error> {
-    curios_profile::profile!("struct::check_dependent_fields");
+    curios_common::profile!("struct::check_dependent_fields");
     // One walk, each field type opened once at every field before it: reopening the rest after each field would rewrite every later type, whose metavariable spines name every earlier field, and make a long literal cubic.
     let (fields, ()) = tele.walk_producing(|index, _, ty| match &sources[index] {
         FieldSource::Written(field, site) => check_as(

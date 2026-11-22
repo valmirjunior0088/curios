@@ -1069,7 +1069,7 @@ fn canonical(
         Some(Carrier::Integer) => int_normalize(reducer, term.clone())?,
         _ => term.clone(),
     };
-    curios_profile::sample!("classify::canonized", 1);
+    curios_common::sample!("classify::canonized", 1);
     classes.stuck.insert(normal.clone(), false);
     classes.canonical.insert(term.clone(), normal.clone());
     Ok(normal)
@@ -1396,7 +1396,7 @@ impl<'r, 'c, R: Reducer> Walk<'r, 'c, R> {
         let bucket = bucket(classes, kind, &node);
         let mut earlier = classes.nodes.get(&bucket).cloned().unwrap_or_default();
         // What holding a node asks: a reading against each earlier node of its bucket, until one agrees.
-        curios_profile::sample!("classify::held", earlier.len());
+        curios_common::sample!("classify::held", earlier.len());
         let mut first = None;
         for (_, earlier) in earlier.iter() {
             if agree_spines(self.reducer, classes, earlier, &node)? {

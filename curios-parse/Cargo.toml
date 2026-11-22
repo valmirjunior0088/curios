@@ -9,7 +9,6 @@ description = "The Curios parser combinator DSL: freely backtracking ordered cho
 workspace = true
 
 [dependencies]
-curios-profile = { workspace = true }
 # The characters the database calls default-ignorable, which `unseen` reads as printing as nothing.
 curios-unicode = { workspace = true }
 curios-common = { workspace = true }

@@ -19,7 +19,7 @@ pub fn decide_polarities(context: &mut Context, published: &Published) -> Result
         return Ok(());
     }
 
-    curios_profile::profile!("check_positivity");
+    curios_common::profile!("check_positivity");
     let inducts = published
         .induct_decls
         .iter()

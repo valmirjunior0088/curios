@@ -29,7 +29,7 @@ pub fn evaluate(
     if !erased.module().computes() || erased.environment().declares_rows() {
         return None;
     }
-    curios_profile::profile!("evaluate_item");
+    curios_common::profile!("evaluate_item");
 
     let units: Vec<&ErasedUnit> = scope.units().iter().copied().chain([unit]).collect();
     let reached = reached(&units, [erased].into_iter());
@@ -53,7 +53,7 @@ pub fn evaluate(
             *name
         })
         .collect::<Vec<_>>();
-    curios_profile::sample!(
+    curios_common::sample!(
         "evaluate::item::linked",
         reached
             .items()
@@ -70,7 +70,7 @@ pub fn evaluate(
         .evaluate_since(&mark)
         .then(|| linking.taken(&units, &mark, erased, &landed))
         .flatten();
-    curios_profile::sample!("evaluate::item::finished", erased.is_some() as usize);
+    curios_common::sample!("evaluate::item::finished", erased.is_some() as usize);
 
     Some(Evaluation { erased, ran })
 }

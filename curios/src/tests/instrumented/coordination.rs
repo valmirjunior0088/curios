@@ -89,9 +89,9 @@ fn coordination_measurements() {
             let path = directory.join(format!("{workload}-{sample}.trace"));
             let sink = BufWriter::new(File::create(&path).expect("capture file"));
             trace(Destination::Stream(Box::new(sink)), || {
-                let compiled = curios_profile::profile!("coordination_compile" => compile(source))
+                let compiled = curios_common::profile!("coordination_compile" => compile(source))
                     .expect("workload compiles");
-                let status = curios_profile::profile!("coordination_run" => compiled.run(host, ForeignBindings::empty()))
+                let status = curios_common::profile!("coordination_run" => compiled.run(host, ForeignBindings::empty()))
                     .expect("workload runs");
                 assert_eq!(status, 0);
             })

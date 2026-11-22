@@ -66,7 +66,7 @@ impl LookupReaders {
         uses: &Table<Vec<Consulted>>,
         keyed: &Sorted<curios_core::Global, Rc<Vec<curios_core::Global>>>,
     ) -> Self {
-        curios_profile::profile!("lookup_readers::of", declarations = declarations.len());
+        curios_common::profile!("lookup_readers::of", declarations = declarations.len());
         // Gathered whole first, so each binding's list is built once.
         let mut gathered = BTreeMap::<Consulted, Vec<Key>>::new();
         for (_, declaration) in declarations.iter() {

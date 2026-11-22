@@ -108,7 +108,7 @@ pub fn connectives_convert(
 
 /// Which of `atoms` are one: each compared at `Type` with the representative of every class opened before it, inside the pairs of the goal the pair belongs to, as an operand of the congruence is. A comparison that fails leaves nothing behind, a pair being released where the comparison of its unfoldings returns.
 fn classes(certifier: &mut ByValue, pairs: &mut Pairs, atoms: &[Term]) -> Result<Classes, Error> {
-    curios_profile::profile!("convert::classes");
+    curios_common::profile!("convert::classes");
     Classes::of(atoms, |this, that| ground(certifier, pairs, this, that))
 }
 

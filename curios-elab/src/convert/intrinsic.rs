@@ -121,7 +121,7 @@ pub fn connectives_convert(
 
 /// Which of `atoms` are one, as far as the elaborator can say without deciding anything else: two atoms are one where they convert with no solution and no universe constraint committed. Each comparison runs in the bracket a witness probe uses and is rolled back whatever it found, so a pair that would need a metavariable solved stays two atoms, and classing commits nothing.
 fn classes(context: &mut Context, pairs: &Pairs, atoms: &[Term]) -> Result<Classes, ReduceError> {
-    curios_profile::profile!("convert::classes");
+    curios_common::profile!("convert::classes");
     classing(context, atoms, |context, this, that| {
         same_uncommitted_inside(context, pairs, this, that)
     })

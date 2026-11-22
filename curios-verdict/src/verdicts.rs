@@ -508,7 +508,7 @@ impl Verdicts {
 
     /// The unit whose index the object at `address` holds as `index`, each blob it names found among its packs, restored for `source`: each source of its stored texts holds the file its name resolves to where `source`'s packages stand. `None` where one of the blobs is not found there, or the index holds no unit.
     fn restored(&self, address: &str, index: &[u8], source: &UnitSource<'_>) -> Option<Unit> {
-        curios_profile::profile!("verdicts::restored");
+        curios_common::profile!("verdicts::restored");
         let packs = self.packs(address)?;
 
         Unit::restored(index, |digest| packs.find(digest))
@@ -518,7 +518,7 @@ impl Verdicts {
 
     /// File the blobs of `stored` the packs at `address` do not hold, in one pack: what an object naming them is renamed into place after.
     fn file_blobs(&self, address: &str, stored: &Indexed) -> io::Result<()> {
-        curios_profile::profile!("verdicts::file_blobs");
+        curios_common::profile!("verdicts::file_blobs");
         let packs = self
             .packs(address)
             .ok_or_else(|| io::Error::other("a cabinet files blobs"))?;
@@ -598,7 +598,7 @@ impl Verdicts {
     ///
     /// **Either record of the object answers.** The newer is the one the last filing wrote, and the older the one it replaced, which an edit undone brings back and which another compiler's filing pushed aside: each is verified as a hit is, so whichever agrees is believed on the evidence the other would be.
     fn hit(&self, source: &UnitSource<'_>, overlay: Option<&Overlay>) -> Option<Unit> {
-        curios_profile::profile!("verdicts::hit");
+        curios_common::profile!("verdicts::hit");
         let address = self.address(source)?;
 
         // A record is judged before its artifact is read: one that disagrees is not worth reading past.
@@ -676,7 +676,7 @@ impl Verdicts {
     ///
     /// A unit this refuses has no place, and neither has a unit that could have read it: a record would vouch for a unit nothing here can produce again.
     fn placement(&self, source: &UnitSource<'_>, unit: &Unit) -> Option<Placement> {
-        curios_profile::profile!("verdicts::placement");
+        curios_common::profile!("verdicts::placement");
         let cabinet = self.cabinet.as_ref()?;
         let address = self.address(source)?;
         let after = {
@@ -785,7 +785,7 @@ impl Cache for Verdicts {
 
     /// Filed, and taken into the fold with what its object holds: [`Verdicts::payload_put`] files a payload under what every unit of the fold was filed as.
     fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
-        curios_profile::profile!("verdicts::put");
+        curios_common::profile!("verdicts::put");
         // What the certifier records of each judgment is completed where the unit is filed, by the certifier, so a later walk at this address finds each verdict by the item it judged.
         if self.address(source).is_some() {
             complete_records(unit);

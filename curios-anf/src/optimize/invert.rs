@@ -28,7 +28,7 @@ use {
 
 /// Invert every recognized recursion into a loop, module-wide.
 pub fn invert_structural_recursion(module: &mut Module) {
-    curios_profile::profile!("invert_structural_recursion");
+    curios_common::profile!("invert_structural_recursion");
     // Targets: functions bound alone by a `Functions` statement, anywhere. An inversion rewrites its own function's body and nothing else, so one snapshot serves every target: what it still says of a function already inverted, that it recurses, only makes a later target's reading more cautious.
     let targets: Vec<FunctionId> = module
         .statements()

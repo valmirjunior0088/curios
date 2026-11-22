@@ -152,7 +152,7 @@ fn writable_paths(
     public: &Table<PublicInterface>,
     audiences: &Audiences,
 ) -> curios_core::Paths {
-    curios_profile::profile!("writable_paths");
+    curios_common::profile!("writable_paths");
     let mut paths: BTreeMap<curios_core::Global, Vec<curios_core::WritablePath>> = BTreeMap::new();
     let mut record = |target: &Qualifier, path: Qualifier, audience: Vec<Qualifier>| {
         paths
@@ -1292,7 +1292,7 @@ impl<'a> Resolved<'a> {
         own: &[Mount],
         carried: Option<&Table<ModuleInfo>>,
     ) -> Result<Self, Error> {
-        curios_profile::profile!("resolved::of");
+        curios_common::profile!("resolved::of");
         let mut resolved = Resolved {
             modules: HashMap::new(),
             mod_spans: HashMap::new(),
@@ -1727,7 +1727,7 @@ fn process_items(
                 continue;
             }
             Head::Use(use_item) => {
-                curios_profile::profile!("resolve_use");
+                curios_common::profile!("resolve_use");
                 // What a body whose scope stands reads is the baseline's record of it, carried where the body ends.
                 let standing = lowered
                     .baseline
@@ -2109,7 +2109,7 @@ fn lower_unit(
     syntax: &SyntaxRegistry,
     baseline: Option<(&PreparedText, bool)>,
 ) -> Result<(PreparedText, Option<curios_core::Entrypoint>), Error> {
-    curios_profile::profile!("into_core_unit");
+    curios_common::profile!("into_core_unit");
     grown(|| into_core_unit_within(source, predecessors, syntax, baseline))
 }
 
@@ -2162,7 +2162,7 @@ fn into_core_unit_within(
         .unwrap_or_default();
     // What the baseline kept of each file. A baseline restored from a cabinet holds its half as bytes until this, the lowering's first read of it.
     let baseline_scans =
-        curios_profile::profile!("into_core_unit::baseline" => baseline.map(PreparedText::scans));
+        curios_common::profile!("into_core_unit::baseline" => baseline.map(PreparedText::scans));
 
     let Resolved {
         mut table,
@@ -2293,7 +2293,7 @@ fn into_core_unit_within(
 
     // The compilation root's own items — the entry's, and none for a unit with no entrypoint — then one pass per prefix this unit claims. Exactly one of the two does any work, because owning the empty prefix is what makes a unit the entry.
     if let Some(entrypoint) = source.entrypoint() {
-        curios_profile::profile!("process_items" => process_items(
+        curios_common::profile!("process_items" => process_items(
             &root,
             Body::Items(&entrypoint.module.items),
             &mut context,
@@ -2312,7 +2312,7 @@ fn into_core_unit_within(
 
         let mut nested = context.nested(mount.prefix.head());
 
-        curios_profile::profile!("process_items" => process_items(
+        curios_common::profile!("process_items" => process_items(
             &content.heads,
             Body::File(content),
             &mut nested,
@@ -2385,7 +2385,7 @@ fn into_core_unit_within(
 
     // Every item is lowered, so every definition a witness's signature may name is at hand: whole, every one; over a baseline, the items lowered now, and the baseline's for every other.
     let (renames, keyed) = {
-        curios_profile::profile!("name_witnesses");
+        curios_common::profile!("name_witnesses");
         let lowered_now = flat_items
             .iter()
             .enumerate()

@@ -108,36 +108,36 @@ enum Kind {
 ///
 /// While a recorder listens, each round samples its ledger — the closed candidates found, the bails by reason, the replacements installed and the residual calls among them — so a round's cost reads beside its yield. A residual call is the one replacement that leaves an `Apply` behind for the next round to find again, which is why it is counted apart.
 pub fn evaluate_closed_terms(module: &mut Module) -> bool {
-    curios_profile::profile!("evaluate_closed_terms");
+    curios_common::profile!("evaluate_closed_terms");
     let plans = plan(module, every_statement(module).into_iter());
-    curios_profile::sample!("evaluate::candidates", plans.len());
-    curios_profile::sample!("evaluate::bail::effect", bailed(&plans, Bail::Effect));
-    curios_profile::sample!("evaluate::bail::fuel", bailed(&plans, Bail::Fuel));
-    curios_profile::sample!("evaluate::bail::depth", bailed(&plans, Bail::Depth));
-    curios_profile::sample!("evaluate::bail::trap", bailed(&plans, Bail::Trap));
-    curios_profile::sample!("evaluate::bail::unknown", bailed(&plans, Bail::Unknown));
-    curios_profile::sample!("evaluate::bail::arity", bailed(&plans, Bail::Arity));
-    curios_profile::sample!("evaluate::bail::too_big", bailed(&plans, Bail::TooBig));
-    curios_profile::sample!("evaluate::bail::cycle", bailed(&plans, Bail::Cycle));
-    curios_profile::sample!(
+    curios_common::sample!("evaluate::candidates", plans.len());
+    curios_common::sample!("evaluate::bail::effect", bailed(&plans, Bail::Effect));
+    curios_common::sample!("evaluate::bail::fuel", bailed(&plans, Bail::Fuel));
+    curios_common::sample!("evaluate::bail::depth", bailed(&plans, Bail::Depth));
+    curios_common::sample!("evaluate::bail::trap", bailed(&plans, Bail::Trap));
+    curios_common::sample!("evaluate::bail::unknown", bailed(&plans, Bail::Unknown));
+    curios_common::sample!("evaluate::bail::arity", bailed(&plans, Bail::Arity));
+    curios_common::sample!("evaluate::bail::too_big", bailed(&plans, Bail::TooBig));
+    curios_common::sample!("evaluate::bail::cycle", bailed(&plans, Bail::Cycle));
+    curios_common::sample!(
         "evaluate::bail::unsupported",
         bailed(&plans, Bail::Unsupported)
     );
     let installed = apply(module, plans);
-    curios_profile::sample!("evaluate::installed", installed.0);
-    curios_profile::sample!("evaluate::residual_calls", installed.1);
+    curios_common::sample!("evaluate::installed", installed.0);
+    curios_common::sample!("evaluate::residual_calls", installed.1);
     installed.0 > 0
 }
 
 /// [`evaluate_closed_terms`] over the top-level items at `from` and after, and no other statement: one round of [`evaluate_since`](crate::evaluate_since).
 pub fn evaluate_closed_items(module: &mut Module, from: usize) -> bool {
-    curios_profile::profile!("evaluate_closed_items");
+    curios_common::profile!("evaluate_closed_items");
     let candidates = module.items()[from..]
         .iter()
         .map(|&item| (item, Owner::Items));
     let plans = plan(module, candidates);
-    curios_profile::sample!("evaluate::item::candidates", plans.len());
-    curios_profile::sample!(
+    curios_common::sample!("evaluate::item::candidates", plans.len());
+    curios_common::sample!(
         "evaluate::item::bailed",
         plans.iter().filter(|plan| plan.is_err()).count()
     );

@@ -19,7 +19,7 @@ use {
 ///
 /// Sound and deliberately incomplete, in the certifier's stated direction: a refusal is a visible disagreement, an over-eager acceptance is silent. Every step of the derivation is valid over the naturals — a left maximum is bounded exactly when each of its parts is, a hypothesis may be shifted up and never down, and a parameter carries its offset whatever it is assigned. What it cannot see is a consequence of the naturals being *totally* ordered: `u + 1 ≤ max(u, v)` forces `u + 1 ≤ v` in every instance, and no clause says so.
 pub fn entails(assumed: &[UniverseConstraint], lower: &Level, upper: &Level) -> bool {
-    curios_profile::profile!("entails");
+    curios_common::profile!("entails");
     let mut model = LevelModel::of(upper);
 
     // The model `upper` states on its own is exactly `Level::structurally_leq`'s, so the fast path is the first answer rather than a second predicate beside this one.

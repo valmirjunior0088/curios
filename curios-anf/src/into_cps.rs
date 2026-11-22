@@ -38,7 +38,7 @@ use {
 ///
 /// The walk recurses once per statement and once per block nesting, inside [`recurse`](curios_common::recurse), and the stage takes its first segment with [`grown`]: a folded parser is a chain of thousands of statements, which would overflow the default test-thread stack at about 1 900 levels.
 pub fn lower_to_cps(source: &Module) -> curios_cps::Module {
-    curios_profile::profile!("lower_to_cps");
+    curios_common::profile!("lower_to_cps");
     grown(|| lower_to_cps_within(source))
 }
 

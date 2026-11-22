@@ -9,7 +9,6 @@ description = "The Curios WebAssembly emission: lowering an optimized continuati
 workspace = true
 
 [dependencies]
-curios-profile = { workspace = true }
 curios-abi = { workspace = true }
 curios-common = { workspace = true }
 curios-num = { workspace = true }

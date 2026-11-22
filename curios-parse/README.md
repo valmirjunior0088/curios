@@ -60,6 +60,6 @@ The parser combinator DSL behind both the `.crs` surface grammar (`curios-surfac
 
 ### Reading control flow is temporary instrumentation
 
-**Decision.** What this crate carries permanently is one span per parse. A question about which alternative ran, or where a commitment went, is answered by adding `curios_profile::note!` to `or`, `commit` and `uncommit` — the site from `Location::caller()` under `#[track_caller]`, and the error's offset and message — capturing with `curios_profile::trace`, and removing the notes again.
+**Decision.** What this crate carries permanently is one span per parse. A question about which alternative ran, or where a commitment went, is answered by adding `curios_common::note!` to `or`, `commit` and `uncommit` — the site from `Location::caller()` under `#[track_caller]`, and the error's offset and message — capturing with `curios_profile::trace`, and removing the notes again.
 
 **Rationale.** A commitment that escapes reads as a `commit` row with no `uncommit` after it, an alternative that never ran as the short-circuit that skipped it. The notes cost about five rows per byte of input, against eleven rows for a whole 52 KB module through the permanent spans, so leaving them in would make every profile mostly parser chatter.

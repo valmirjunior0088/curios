@@ -101,7 +101,7 @@ fn into_wasm_within(
     turns: Option<curios_cps::RowId>,
     answer: Option<&WireType>,
 ) -> (curios_wasm::Module, ForeignStore) {
-    curios_profile::profile!("into_wasm");
+    curios_common::profile!("into_wasm");
     let representation = curios_cps::representation(module);
     let mut raw = raw_locals(&representation);
     let closures = closure_locals(&representation);

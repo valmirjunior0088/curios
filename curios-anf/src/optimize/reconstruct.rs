@@ -215,7 +215,7 @@ impl<'m> Reconstruction<'m> {
 
 /// Shrink all reconstruction identities, including identities exposed by another one, and say whether any were found. Verification follows the driver's prune: removed arms still own arena slots until then.
 pub fn eliminate_reconstruction(module: &mut Module) -> bool {
-    curios_profile::profile!("eliminate_reconstruction");
+    curios_common::profile!("eliminate_reconstruction");
     let mut snapshot = Reconstruction::new(module);
     let mut users = BTreeMap::<ValueId, BTreeSet<StatementId>>::new();
     let mut owners = BTreeMap::<BlockId, StatementId>::new();

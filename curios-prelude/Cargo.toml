@@ -13,7 +13,6 @@ workspace = true
 curios-archive = { workspace = true }
 curios-common = { workspace = true }
 curios-document = { workspace = true }
-curios-profile = { workspace = true }
 curios-unit = { workspace = true }
 
 # The prelude's one build: `/sys` and `/std` lowered, elaborated, certified and erased by `curios-prelude-build`, each root imaged as the certified unit the crate restores. `curios-package` names the manifest beside `/std`, which the script watches.

@@ -28,7 +28,7 @@ pub struct Declarations<'a> {
 
 /// Every `unused-declaration` lint of the unit, in item order.
 pub fn unused_declarations(declarations: &Declarations<'_>) -> Vec<curios_core::Lint> {
-    curios_profile::profile!("unused_declarations");
+    curios_common::profile!("unused_declarations");
     let Declarations {
         items,
         facts,

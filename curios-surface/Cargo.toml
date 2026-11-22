@@ -16,7 +16,6 @@ curios-core = { workspace = true }
 curios-num = { workspace = true }
 curios-parse = { workspace = true }
 curios-print = { workspace = true }
-curios-profile = { workspace = true }
 
 [dev-dependencies]
 # The editors' grammars and their node types, which a test holds to the language's words.

@@ -163,7 +163,7 @@ fn same_uncommitted_inside(
     context.rollback_solutions(mark);
     context.end_solutions(mark);
     // How many pairs were asked about, and how many of them a solution or a level constraint stood between: an answer of the second kind can change once the solver moves, so whatever reduction is in progress remembers nothing taken across it.
-    curios_profile::sample!("convert::same_uncommitted", u64::from(committed));
+    curios_common::sample!("convert::same_uncommitted", u64::from(committed));
     // An answer other than yes reached past a withheld level equation can change the same way; a yes reached past one holds at every level.
     if committed || (withheld && !matches!(converts, Ok(true))) {
         context.note_declined();
@@ -258,7 +258,7 @@ pub fn problem_outcome(
     extent: Option<Extent>,
     site: Option<&ArgumentSite>,
 ) -> Result<Outcome, ReduceError> {
-    curios_profile::profile!("convert::outcome");
+    curios_common::profile!("convert::outcome");
     Convert::new(problem, extent, site.cloned()).outcome(context)
 }
 
@@ -1777,7 +1777,7 @@ impl Convert {
         metavar: &Metavar,
         t: &Term,
     ) -> Result<Solved, ReduceError> {
-        curios_profile::profile!("convert::solve");
+        curios_common::profile!("convert::solve");
         let id = metavar.id;
         // No unknown of conversion's: a recursive group fills its slot and a parked problem its placeholder, and a problem that meets either waits for it.
         if context.owner_fills(id) {
@@ -1795,7 +1795,7 @@ impl Convert {
 
         // Occurs check: a candidate mentioning `id` itself is an infinite solution.
         if metavars.contains(&id) {
-            curios_profile::note!(target: "curios_elab::solve", meta = id.0, "failed: occurs check");
+            curios_common::note!(target: "curios_elab::solve", meta = id.0, "failed: occurs check");
             return Ok(Solved::Failed);
         }
 
@@ -1856,7 +1856,7 @@ impl Convert {
                     .collect(),
             );
 
-            curios_profile::note!(
+            curios_common::note!(
                 target: "curios_elab::solve",
                 meta = id.0,
                 blockers = %metavars
@@ -1878,7 +1878,7 @@ impl Convert {
 
         let Some(entry) = context.metavar_entry(id) else {
             // No birth record (e.g. a synthesis-position hole that never reached a checking site): nothing to validate against, cannot solve.
-            curios_profile::note!(target: "curios_elab::solve", meta = id.0, "failed: no birth record");
+            curios_common::note!(target: "curios_elab::solve", meta = id.0, "failed: no birth record");
             return Ok(Solved::Failed);
         };
         let telescope = entry.telescope().clone();
@@ -1899,7 +1899,7 @@ impl Convert {
                 if context.stands_for(name, |local| born.binds_locally(local)) {
                     continue;
                 }
-                curios_profile::note!(
+                curios_common::note!(
                     target: "curios_elab::solve",
                     meta = id.0,
                     name = ?name,
@@ -1992,7 +1992,7 @@ impl Convert {
                 }
                 let mentioned =
                     entries.is_empty() || entries.iter().any(|entry| entry.mentions_name(name));
-                curios_profile::note!(
+                curios_common::note!(
                     target: "curios_elab::solve",
                     meta = id.0,
                     name = ?name,
@@ -2025,7 +2025,7 @@ impl Convert {
                 let refs = entries.iter().collect::<Vec<_>>();
                 let resolved = inverted.capture(&binders).release(&refs);
                 if resolved != *t && !convert(context, &Term::type_ground(), &resolved, t)? {
-                    curios_profile::note!(
+                    curios_common::note!(
                         target: "curios_elab::solve",
                         meta = id.0,
                         "postponed: inversion round-trip disagreed",
@@ -2052,7 +2052,7 @@ impl Convert {
                     if let Some(refusal) = error.refusal() {
                         return Err(refusal.clone());
                     }
-                    curios_profile::note!(
+                    curios_common::note!(
                         target: "curios_elab::solve",
                         meta = id.0,
                         error = %error,
@@ -2084,7 +2084,7 @@ impl Convert {
                 return Ok(Solved::Done);
             }
             Revalidated::Undecided => {
-                curios_profile::note!(
+                curios_common::note!(
                     target: "curios_elab::solve",
                     meta = id.0,
                     against = %result.faithful(),
@@ -2093,7 +2093,7 @@ impl Convert {
                 Solved::Postponed
             }
             Revalidated::Refused(error) => {
-                curios_profile::note!(
+                curios_common::note!(
                     target: "curios_elab::solve",
                     meta = id.0,
                     against = %result.faithful(),
@@ -2710,7 +2710,7 @@ impl Convert {
 
     /// Drain `pending` once. Returns `Ok(false)` on a hard mismatch; `Ok(true)` when the queue empties (possibly leaving `blocked` constraints).
     fn drain(&mut self, context: &mut Context) -> Result<bool, ReduceError> {
-        curios_profile::profile!("convert::drain");
+        curios_common::profile!("convert::drain");
         while let Some(Problem {
             type_,
             this,

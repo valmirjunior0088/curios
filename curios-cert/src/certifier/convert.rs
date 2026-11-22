@@ -359,7 +359,7 @@ fn looked_up(certifier: &mut ByValue, term: &Term) -> Result<Option<Term>, Error
 ///
 /// A field's type is judged under the fields before it, opened at binders, so one that computes from an earlier field counts only where it reduces whatever that field is. A type no sort judgment classifies, and an occurrence its declaration refuses, answer no.
 fn one_inhabitant(certifier: &mut ByValue, type_: &Term) -> Result<bool, Error> {
-    curios_profile::profile!("convert::one_inhabitant");
+    curios_common::profile!("convert::one_inhabitant");
     inhabited_once(certifier, type_, &mut Vec::new())
 }
 
@@ -1155,7 +1155,7 @@ fn unfolded_retry(
     this: &Term,
     that: &Term,
 ) -> Result<bool, Error> {
-    curios_profile::profile!("convert::unfolded_retry");
+    curios_common::profile!("convert::unfolded_retry");
     if rec_instances(certifier, this.call_root(), that.call_root()) == Some(false) {
         return Ok(false);
     }
@@ -1767,7 +1767,7 @@ impl ByValue<'_, '_> {
         key: &Term,
         value: &Term,
     ) -> Result<bool, ReduceError> {
-        curios_profile::profile!("certifier::asked_scrutinee");
+        curios_common::profile!("certifier::asked_scrutinee");
         let height = self.refinement_height();
         self.plainly(|certifier| {
             certifier.settling(index, height, |certifier| match holds_no_type(value) {
@@ -1782,13 +1782,13 @@ impl ByValue<'_, '_> {
 
 /// Which of `atoms` are one, as reduction asks of a stuck form beside an equation's scrutinee: each compared with the representative of every class opened before it, by plain reduction ([`ByValue::plainly`]).
 pub fn asked_classes(certifier: &mut ByValue, atoms: &[Term]) -> Result<Classes, ReduceError> {
-    curios_profile::profile!("convert::asked_classes");
+    curios_common::profile!("convert::asked_classes");
     certifier.plainly(|certifier| Classes::of(atoms, |this, that| grounded(certifier, this, that)))
 }
 
 /// The atoms a stuck fold still has to class, classed among what its operands' classifications kept, as [`asked_classes`] classes a stuck fold's atoms.
 pub fn asked_within(certifier: &mut ByValue, within: &mut Within) -> Result<(), ReduceError> {
-    curios_profile::profile!("convert::asked_classes");
+    curios_common::profile!("convert::asked_classes");
     certifier.plainly(|certifier| within.class(|this, that| grounded(certifier, this, that)))
 }
 

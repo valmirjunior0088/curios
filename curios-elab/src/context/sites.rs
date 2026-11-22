@@ -110,7 +110,7 @@ impl Context<'_> {
             .map(|(_, type_)| zonk_solved_term_metas(self, &type_));
         self.rollback_solutions(mark);
         self.end_solutions(mark);
-        curios_profile::sample!("sites::column", self.typing.spend.consumed().units());
+        curios_common::sample!("sites::column", self.typing.spend.consumed().units());
         self.typing.spend = budget;
         if let Ok(type_) = typed {
             self.open_site(Some(place), &type_, Binding::Slot);
@@ -330,7 +330,7 @@ impl Context<'_> {
         let class = self.classify(&type_, region.as_ref(), STRUCT_DEPTH);
         self.rollback_solutions(mark);
         self.end_solutions(mark);
-        curios_profile::sample!("sites::classify", self.typing.spend.consumed().units());
+        curios_common::sample!("sites::classify", self.typing.spend.consumed().units());
         self.typing.spend = budget;
 
         class

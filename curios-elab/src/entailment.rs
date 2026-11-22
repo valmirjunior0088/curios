@@ -101,7 +101,7 @@ fn decision_of(context: &mut Context, reduced: &Term) -> Result<Option<Term>, Er
 ///
 /// An exhausted budget propagates: running out is not evidence the bound is false, and collapsing it into a refusal would report the author's fault at the argument for what is the resource limit.
 pub fn entail(context: &mut Context, bound: &Term, reduced: &Term) -> Result<Entailed, Error> {
-    curios_profile::profile!("entailment::entail");
+    curios_common::profile!("entailment::entail");
     if context.entailing() {
         return Ok(Entailed::Refused(Refusal::default()));
     }
@@ -154,7 +154,7 @@ pub fn entail(context: &mut Context, bound: &Term, reduced: &Term) -> Result<Ent
 
 /// The facts in scope a report names beside a bound that holds, each with where it came from: what the procedure reads of the hypotheses, their proof fields and the live guards, as a refusal names the facts it considered ([`considered`]).
 pub fn facts_in_scope(context: &mut Context) -> Result<Vec<(Origin, Term)>, Error> {
-    curios_profile::profile!("entailment::facts_in_scope");
+    curios_common::profile!("entailment::facts_in_scope");
     let facts = context.with_entailing(|context| {
         let mut views = LinearViews::default();
         let mut classes = Classes::default();
@@ -172,7 +172,7 @@ pub fn facts_in_scope(context: &mut Context) -> Result<Vec<(Origin, Term)>, Erro
 ///
 /// **Any proposition.** The bound need be nothing the search reads: a proposition is proof-irrelevant, so the fact that states it is as good a proof as any, and which fact is taken decides nothing.
 fn stated_by_a_fact(context: &mut Context, bound: &Term) -> Result<Option<Term>, Error> {
-    curios_profile::profile!("entailment::stated_by_a_fact");
+    curios_common::profile!("entailment::stated_by_a_fact");
     for (name, type_) in binders(context) {
         for (statement, proof, _) in statements(context, &name, &type_)? {
             let states = same_uncommitted(context, &statement, bound).map_err(|error| {
@@ -344,7 +344,7 @@ fn linear(
         }
     };
     // What the cap is set against: the rows one bound's stages derived, products and cases included.
-    curios_profile::sample!("entailment::derived", derived);
+    curios_common::sample!("entailment::derived", derived);
     // A counterexample's atoms named in one pass through every spelling the report has, so an outer reduct is replaced before one inside it whichever reading found either: the operands as stated, and the operands written beneath them, which are asked only now the search is over. A bound that is a metavariable elaboration has solved, as the statement `proved()` leaves implicit is, opens to no `Holds`: the search read its reduct, and what the solution states is read here, for the report alone, since the proof is written over what the search read and one written over the solution does not check. A reading that runs out leaves its spellings out.
     let refused = |context: &mut Context, views: &LinearViews, outcome: SearchOutcome| {
         let refuted = refuted(context, views, &outcome);
@@ -392,7 +392,7 @@ fn linear(
         Written::Unwritten => return refused(context, &views, SearchOutcome::Unwritten),
     };
     // What a written proof costs its checkers grows with its size: the nodes of each proof, as written and before either checks it.
-    curios_profile::sample!("entailment::written", {
+    curios_common::sample!("entailment::written", {
         let mut nodes = 0usize;
         candidate.walk(
             &mut nodes,
@@ -475,7 +475,7 @@ fn arms_of(facts: &Facts) -> Vec<Arms> {
 ///
 /// Inside the oracle package: parking is suppressed, so a candidate that would wait on a metavariable is a mismatch rather than a leak, and representation privacy is not re-adjudicated for the operands a candidate carries over from the bound and the facts, which elaboration already judged. The fields a fact projects are read only where the item may open them ([`Reader`]).
 fn check(context: &mut Context, candidate: &Term, bound: &Term) -> Result<Option<Term>, Error> {
-    curios_profile::profile!("entailment::check");
+    curios_common::profile!("entailment::check");
     let mark = context.solution_mark();
     let result = context.with_oracle(|context| {
         elaborate(

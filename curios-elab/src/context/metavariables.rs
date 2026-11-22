@@ -625,7 +625,7 @@ impl<'s> Context<'s> {
             Some(extent) => stand_in.with_extent(extent),
             None => stand_in,
         };
-        curios_profile::note!(
+        curios_common::note!(
             target: "curios_elab::solve",
             meta = inner.0,
             stand_in = %stand_in.faithful(),

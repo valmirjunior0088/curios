@@ -131,7 +131,7 @@ pub fn check_written_type_totality(
 ///
 /// Runs as the item is published, where its terms are final and meta-free, so no metavariable can be solved to a partial term after the fact. Everything the item mentions outside itself has finished, a declaration elaborating after what it reads, so its verdict is recorded and is a closure already, and the walk stops there: at a predecessor unit's definition, which is why the standard library is not analyzed again on every compilation, and at an earlier declaration's of this unit alike. Among the members of one group the closure is iterated, since each may mention the others. A name with no verdict is treated as total: every `Global` a published item mentions is defined by a finished declaration or by the item itself, so that case is unreachable rather than an approximation.
 pub fn classify_totality(context: &mut Context, item: &Item) -> Result<(), Error> {
-    curios_profile::profile!("record_totality");
+    curios_common::profile!("record_totality");
     // A group that does not descend makes every member partial, whatever each body looks like on its own.
     let rejected = match item {
         Item::Let(_) | Item::Nominal(_) => false,
@@ -192,7 +192,7 @@ fn faults(
     context: &mut Context,
     positions: &[Position],
 ) -> Result<Vec<(ErasedSite, Fault, Option<Extent>)>, Error> {
-    curios_profile::sample!("totality::faults_positions", positions.len());
+    curios_common::sample!("totality::faults_positions", positions.len());
     let named = seeds(positions)
         .into_iter()
         .filter(|name| {
@@ -271,7 +271,7 @@ pub fn check_type_totality(
     mark: usize,
     cache: &mut Zonked,
 ) -> Result<(), Error> {
-    curios_profile::profile!("check_type_totality");
+    curios_common::profile!("check_type_totality");
     let mut positions = type_positions(definitions, entry);
     positions.extend(checked_type_positions(context, mark, cache)?);
     report(context, &positions, Erased::Type)
@@ -292,7 +292,7 @@ fn checked_type_positions(
     // One site per definition, not per position: many recorded terms were settled in one.
     let mut sites: HashMap<Option<Global>, Rc<ErasedSite>> = HashMap::new();
     let mut positions = Vec::new();
-    curios_profile::sample!("totality::checked_entries", settled.len());
+    curios_common::sample!("totality::checked_entries", settled.len());
 
     for (term, type_, site) in settled {
         // Once per distinct recorded type rather than once per recorded term — see `checked_proof_positions`, which memoizes the same call for the same reason. This walk reads `checked` rather than draining it, because (V)'s seeding still needs it.
@@ -312,9 +312,9 @@ fn checked_type_positions(
         }
     }
 
-    curios_profile::sample!("totality::type_distinct_raw", cache.done.len());
-    curios_profile::sample!("totality::type_sites", sites.len());
-    curios_profile::sample!("totality::checked_type_positions", positions.len());
+    curios_common::sample!("totality::type_distinct_raw", cache.done.len());
+    curios_common::sample!("totality::type_sites", sites.len());
+    curios_common::sample!("totality::checked_type_positions", positions.len());
     Ok(positions)
 }
 
@@ -348,7 +348,7 @@ pub fn check_proof_totality(
     mark: usize,
     cache: &mut Zonked,
 ) -> Result<(), Error> {
-    curios_profile::profile!("check_proof_totality");
+    curios_common::profile!("check_proof_totality");
     let positions = checked_proof_positions(context, mark, cache)?;
     report(context, &positions, Erased::Proof)
 }
@@ -401,7 +401,7 @@ fn checked_proof_positions(
         let held = match memo.get(&type_) {
             Some(held) => *held,
             None => {
-                let held = curios_profile::profile!("totality::proof_position" => proof_position(context, &type_))?;
+                let held = curios_common::profile!("totality::proof_position" => proof_position(context, &type_))?;
                 memo.insert(type_, held);
                 held
             }
@@ -419,10 +419,10 @@ fn checked_proof_positions(
         }
     }
 
-    curios_profile::sample!("totality::proof_distinct_raw", cache.done.len());
-    curios_profile::sample!("totality::proof_distinct_zonked", memo.len());
-    curios_profile::sample!("totality::proof_sites", sites.len());
-    curios_profile::sample!("totality::checked_proof_positions", positions.len());
+    curios_common::sample!("totality::proof_distinct_raw", cache.done.len());
+    curios_common::sample!("totality::proof_distinct_zonked", memo.len());
+    curios_common::sample!("totality::proof_sites", sites.len());
+    curios_common::sample!("totality::checked_proof_positions", positions.len());
     context.keep_settled(settled);
     Ok(positions)
 }

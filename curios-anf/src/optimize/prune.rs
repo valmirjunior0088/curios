@@ -40,7 +40,7 @@ impl Subtree {
 
 /// Drop the items the program does not reach, a recursive group with its web among them.
 pub fn prune_unreachable(module: &mut Module) {
-    curios_profile::profile!("prune_unreachable");
+    curios_common::profile!("prune_unreachable");
     let Some(entry) = module.entry() else { return };
     let items = module.items().to_vec();
 
@@ -85,10 +85,10 @@ pub fn prune_unreachable(module: &mut Module) {
 
         kept
     };
-    curios_profile::sample!("prune::items", items.len());
+    curios_common::sample!("prune::items", items.len());
 
     let kept = closed(binders(&entry_subtree));
-    curios_profile::sample!("prune::kept", kept.len());
+    curios_common::sample!("prune::kept", kept.len());
 
     // Retain the kept items in order and everything they (or the entry block's own region) own; tombstone the rest.
     let mut keep_functions = entry_subtree.bound_functions.clone();

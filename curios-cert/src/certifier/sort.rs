@@ -97,7 +97,7 @@ impl ByValue<'_, '_> {
     ///
     /// Remembered per type, and probed here at every field and domain the rules below ask about: a type is a graph, and a record of two fields at one type asks one question where a walk per path asks two at every level. `Memos` states how long an answer stands.
     pub(crate) fn sort_of(&mut self, type_: &Term) -> Result<Sort, Error> {
-        curios_profile::profile!("Sort::of");
+        curios_common::profile!("Sort::of");
         if let Some(sort) = self.sort_hit(type_) {
             return Ok(sort);
         }

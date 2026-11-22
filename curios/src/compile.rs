@@ -47,14 +47,12 @@ pub fn optimize(module: &curios_wasm::Module) -> Vec<u8> {
 pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, Box<Report>> {
     let bytes = optimize(module);
 
-    curios_profile::profile!("precompile" => curios_cranelift::precompile(&bytes)).map_err(
-        |error| {
-            fault(
-                "the emitted module could not be compiled to machine code",
-                error,
-            )
-        },
-    )
+    curios_common::profile!("precompile" => curios_cranelift::precompile(&bytes)).map_err(|error| {
+        fault(
+            "the emitted module could not be compiled to machine code",
+            error,
+        )
+    })
 }
 
 /// A fault of the compiler's own, about the program it was building: `what` failed, in the `words` of whatever refused it. Nothing a program wrote earns one, which is why it names no place in the program.

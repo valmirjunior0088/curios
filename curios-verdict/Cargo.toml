@@ -24,7 +24,6 @@ test-support = [
 # can belong to neither — see the crate rustdoc. Nothing below here reaches Binaryen or Wasmtime;
 # the engine a payload address carries is handed in by the crate that owns the runtime.
 [dependencies]
-curios-profile = { workspace = true }
 curios-archive = { workspace = true }
 curios-common = { workspace = true }
 curios-core = { workspace = true }

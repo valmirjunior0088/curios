@@ -256,7 +256,7 @@ pub fn grade<D: Driver>(
     callee_arity: usize,
     arguments: &[Term],
 ) -> Result<Call, D::Error> {
-    curios_profile::profile!("grade");
+    curios_common::profile!("grade");
     let mut grader = Grader::new(driver, context);
     let mut matrix = CallMatrix::unknown(params.len(), callee_arity);
 

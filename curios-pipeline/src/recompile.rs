@@ -37,7 +37,7 @@ pub fn compile_unit_over(
     told: &dyn Fn(&PreparedText),
     telling: Telling<'_>,
 ) -> Result<Unit, CompileError> {
-    curios_profile::profile!("compile_unit_over");
+    curios_common::profile!("compile_unit_over");
     // A unit read from Core text holds no lowering to lower over, so a program over one is compiled whole.
     let Some(written) = over.baseline.text() else {
         return compile_unit(budget, predecessors, syntax, source, told, telling);

@@ -26,7 +26,6 @@ curios-common = { workspace = true, features = ["test-support"] }
 # The reader of Core text, behind `test-support` alone: what a suite's candidate is written in, read where `test_support` puts it. The product reads Core text through `curios-pipeline`'s door, above this crate, so the trusted base `cargo tree -p curios-cert --edges normal` enumerates does not reach the reader.
 curios-surface = { workspace = true, optional = true }
 curios-archive = { workspace = true }
-curios-profile = { workspace = true }
 curios-analysis = { workspace = true }
 curios-common = { workspace = true }
 curios-core = { workspace = true }

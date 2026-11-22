@@ -128,7 +128,7 @@ pub fn document(
     checked: &Checked<'_>,
     description: Option<String>,
 ) -> Documentation {
-    curios_profile::profile!("document");
+    curios_common::profile!("document");
     let adopted = adopted_mounts(mounts, prefix);
     for (root, _) in &adopted {
         assert!(
@@ -783,7 +783,7 @@ impl Reader<'_> {
         source: Option<&Arc<Source>>,
         mut head: Printer,
     ) -> Signature {
-        curios_profile::profile!("document::signature");
+        curios_common::profile!("document::signature");
         let mut referents = Vec::new();
         each_named(&mut head, |text, written| {
             let referent = match written {

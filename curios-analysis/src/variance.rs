@@ -45,7 +45,7 @@ pub fn variance_vectors<D: Driver>(
     driver: &mut D,
     declarations: Declarations<'_>,
 ) -> VarianceVectors<D::Error> {
-    curios_profile::profile!("variance_vectors");
+    curios_common::profile!("variance_vectors");
     if declarations.is_empty() {
         return VarianceVectors {
             vectors: BTreeMap::new(),
@@ -229,7 +229,7 @@ impl<E> HeldLevels<E> {
 ///
 /// It forces what it reads, so it is for a term read once, a definition's body where its levels close. What a term holds as it is written, with nothing reduced, is `curios-core`'s `Term::level_differences` to say.
 pub fn held_levels<D: Driver>(driver: &mut D, parts: &[Term]) -> HeldLevels<D::Error> {
-    curios_profile::profile!("held_levels");
+    curios_common::profile!("held_levels");
     let vectors = Vectors {
         computed: BTreeMap::new(),
     };
@@ -285,7 +285,7 @@ pub fn held_pairs<D: Driver>(
 ///
 /// One sweep, since nothing iterates: a family whose levels are open takes no parameter, and an occurrence of it inside its own group carries no instance. Every other family answers from the driver's registry.
 pub fn held_by<D: Driver>(driver: &mut D, declarations: Declarations<'_>) -> HeldLevels<D::Error> {
-    curios_profile::profile!("held_by");
+    curios_common::profile!("held_by");
     let mut vectors = Vectors {
         computed: BTreeMap::new(),
     };
@@ -354,7 +354,7 @@ pub fn group_held<D: Driver>(driver: &mut D, group: &RecGroup) -> Option<HeldLev
 
 /// [`group_held`] inside a reading: the least fixpoint over `group`'s members from none, climbed with `climbs` holding the climbs around it.
 fn climb<D: Driver>(driver: &mut D, climbs: &mut Climbs, group: &RecGroup) -> Climbed<D::Error> {
-    curios_profile::profile!("group_held");
+    curios_common::profile!("group_held");
     match read_by_unfolding(driver, group) {
         Ok(true) => {}
         Ok(false) => {

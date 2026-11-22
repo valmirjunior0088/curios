@@ -109,7 +109,7 @@ pub fn read_scrutinee(
 ) -> Result<ScrutineeRead, ReduceError> {
     match cases {
         Cases::Bool { .. } if is_bool_connective(forced) => {
-            curios_profile::profile!("read_scrutinee");
+            curios_common::profile!("read_scrutinee");
             if let Some(value) = bool_value(reducer, forced)? {
                 return Ok(ScrutineeRead::Value(Term::intrinsic(Intrinsic::Bool(
                     value,
@@ -129,7 +129,7 @@ pub fn read_scrutinee(
         Cases::FreeMonoid {
             carrier: curios_core::Carrier::Nat { .. },
         } if Nat::decompose(forced).0.is_zero() && Nat::has_stuck_product(forced) => {
-            curios_profile::profile!("read_scrutinee");
+            curios_common::profile!("read_scrutinee");
             let distributed = Nat::normalize(reducer, forced.clone())?;
             Ok(match Nat::decompose(&distributed).0.is_zero() {
                 true => ScrutineeRead::Silent,

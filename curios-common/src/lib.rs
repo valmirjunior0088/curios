@@ -1,10 +1,14 @@
-//! Foundational utilities shared across every Curios pipeline stage: source spans, the fresh-name `Entropy`/`Mint` supply, the `name!` and `id!` newtype macros, the typed identity-addressed [`Arena`], the [`Persistent`], [`Ordered`] and [`Sorted`] maps a state extended a step at a time is kept in, the SHA-256 content [`digest()`] and the [`Fingerprint`] every cabinet key, record and tree hash is spelled with, the resolved-module-path `Qualifier` identity, the language's words ([`Keyword`]) and the classes code is painted in ([`Class`]), the value types the surface (`curios-module`) and core (`curios-core`) `Term` representations share verbatim (`Plicity`, `InfixOp`), and the [`SyntaxRegistry`] shape those two stages read their emitted vocabulary from. Compiler-known names themselves belong to `curios-module`, alongside the source declarations they name: this crate states the slots, never the spellings.
+//! Foundational utilities shared across every Curios pipeline stage: source spans, the fresh-name `Entropy`/`Mint` supply, the `name!` and `id!` newtype macros, the `profile!`, `sample!` and `note!` macros a site instruments with, the typed identity-addressed [`Arena`], the [`Persistent`], [`Ordered`] and [`Sorted`] maps a state extended a step at a time is kept in, the SHA-256 content [`digest()`] and the [`Fingerprint`] every cabinet key, record and tree hash is spelled with, the resolved-module-path `Qualifier` identity, the language's words ([`Keyword`]) and the classes code is painted in ([`Class`]), the value types the surface (`curios-module`) and core (`curios-core`) `Term` representations share verbatim (`Plicity`, `InfixOp`), and the [`SyntaxRegistry`] shape those two stages read their emitted vocabulary from. Compiler-known names themselves belong to `curios-module`, alongside the source declarations they name: this crate states the slots, never the spellings.
 //!
-//! Why names are never ordered, why every identity space has one source, why qualifiers and symbols are interned once per process, why a segment's legality is decided here, why a mount is a prefix, why the syntax registry states slots and never spellings, and why depth is bought with stack are `README.md`'s decisions.
+//! Why names are never ordered, why every identity space has one source, why qualifiers and symbols are interned once per process, why a segment's legality is decided here, why a mount is a prefix, why the syntax registry states slots and never spellings, why depth is bought with stack, and why a span is this crate's macro rather than `tracing::instrument` are `README.md`'s decisions.
 //!
 //! Two neighbours hold the rest of the shared foundations. The numeric half of the shared vocabulary — `Natural`, `Integer`, `Flt`, and the erased carriers' scalar semantics — is `curios-num`, the one crate that names `num-bigint`. The two combinator DSLs are `curios-parse` and `curios-print`, two crates as `curios-print/README.md` decides.
 
 mod macros;
+
+mod profile;
+// The path `profile!`, `sample!` and `note!` expand through, so a site that instruments names no `tracing` of its own.
+pub use tracing;
 
 mod arena;
 pub use arena::{ArchivedArena, Arena, ArenaId};

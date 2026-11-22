@@ -199,7 +199,7 @@ struct Level {
 
 /// Search `forms`, each read `form <= 0`, spending at most `budget` derived rows and leaving what is left of it.
 pub fn refute(forms: &[LinearForm], budget: &mut usize) -> Search {
-    curios_profile::profile!("entailment::refute");
+    curios_common::profile!("entailment::refute");
     let width = forms.len();
     let mut rows = forms
         .iter()

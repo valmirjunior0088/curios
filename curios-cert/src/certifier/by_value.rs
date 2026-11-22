@@ -107,7 +107,7 @@ pub fn convert(
     this: &Term,
     that: &Term,
 ) -> Result<bool, Error> {
-    curios_profile::profile!("convert");
+    curios_common::profile!("convert");
     certifier.read_by_value([type_, this, that], |certifier, [type_, this, that]| {
         certifier.convert(&type_, &this, &that)
     })

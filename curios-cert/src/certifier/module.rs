@@ -450,7 +450,7 @@ pub fn state_rec_group(
 ///
 /// Call after *both* registries are seeded: a signature may name any declaration, its own family included.
 pub fn check_induct_decl(certifier: &mut Certifier, declaration: &InductDecl) -> Result<(), Error> {
-    curios_profile::profile!("check_induct_decl");
+    curios_common::profile!("check_induct_decl");
     check_case_counts(declaration)?;
     check_declared_sort(declaration.result_sort())?;
 
@@ -600,7 +600,7 @@ fn check_constructed(
 ///
 /// One that leaves a sort to its caller is read as [`check_induct_decl`] reads an `induct`'s: its own sort off the entry as stated, and its telescopes at every assignment.
 pub fn check_struct_decl(certifier: &mut Certifier, declaration: &StructDecl) -> Result<(), Error> {
-    curios_profile::profile!("check_struct_decl");
+    curios_common::profile!("check_struct_decl");
     check_declared_sort(&declaration.result_sort)?;
 
     at_every_sort(
@@ -721,7 +721,7 @@ fn check_signature<B: Bound + Clone>(
 
 /// Check a term that closes the program — an entrypoint body, with no name to export — against the type its entry states: the program contract a compile supplies, or whatever the builder of the entry stated instead, so the certifier holds a program to its contract itself rather than taking elaboration's word that it was.
 pub fn check_entrypoint(certifier: &mut Certifier, body: &Term, type_: &Term) -> Result<(), Error> {
-    curios_profile::profile!("check_entrypoint");
+    curios_common::profile!("check_entrypoint");
     certifier.restore_budget();
     certifier.assume_universes(&UniverseContext::empty());
 

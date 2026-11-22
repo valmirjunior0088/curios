@@ -860,7 +860,7 @@ impl<'a> Demand<'a> {
     fn reached(&mut self, context: &mut Context, declaration: usize) -> Result<(), Cycle> {
         let definitions = self.definitions;
         let dependencies = {
-            curios_profile::profile!("demand::reached");
+            curios_common::profile!("demand::reached");
             let reached = self
                 .declarations
                 .items(declaration)
@@ -1087,7 +1087,7 @@ impl<'a> Demand<'a> {
         {
             return false;
         }
-        curios_profile::profile!("demand::candidates");
+        curios_common::profile!("demand::candidates");
         let Ok(inputs) = positions
             .iter()
             .map(|position| lowered_digest(definitions, *position))
@@ -1116,7 +1116,7 @@ impl<'a> Demand<'a> {
                 continue;
             }
 
-            curios_profile::sample!("demand::adopted", record.len());
+            curios_common::sample!("demand::adopted", record.len());
             for (position, item) in positions.iter().zip(items) {
                 context.publish_adopted(&item, &record.concluded().classified);
                 self.compare(context, &item);
@@ -1234,7 +1234,7 @@ impl<'a> Demand<'a> {
             && let Some(trace) = self.recorded(context, declaration)
             && self.stands(context, declaration, &trace)?
         {
-            curios_profile::sample!("demand::kept", trace.len());
+            curios_common::sample!("demand::kept", trace.len());
             self.keep(context, declaration);
             return Ok(());
         }
@@ -1303,7 +1303,7 @@ impl<'a> Demand<'a> {
                 let resolved = context.take_resolved();
                 // What the attempt that stands asked of the declarations around it is its declaration's.
                 let trace = context.take_trace();
-                curios_profile::sample!("demand::asked", trace.len());
+                curios_common::sample!("demand::asked", trace.len());
                 // What elaboration concluded of each definition an item that stands made, filed with the record that keeps it.
                 let classified = outcomes
                     .iter()
@@ -1348,7 +1348,7 @@ impl<'a> Demand<'a> {
                 return Ok(());
             }
 
-            curios_profile::sample!("demand::void", needs.len());
+            curios_common::sample!("demand::void", needs.len());
             mark.void(context, definitions, &names);
             let dependencies = self.owners(needs, declaration);
             assert!(

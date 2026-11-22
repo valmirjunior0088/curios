@@ -21,7 +21,6 @@ curios-archive = { workspace = true }
 curios-cert = { workspace = true }
 curios-core = { workspace = true }
 curios-num = { workspace = true }
-curios-profile = { workspace = true }
 curios-common = { workspace = true }
 # The printer an erasure refusal spells its terms by.
 curios-surface = { workspace = true }

@@ -436,7 +436,7 @@ impl Certification {
     /// Who read what of this record, read backwards the first time it is asked. See [`ReadBy`].
     pub fn read_by(&self) -> &ReadBy {
         self.read_by.get_or_init(|| {
-            curios_profile::profile!("read_by::of", definitions = self.read().by.len());
+            curios_common::profile!("read_by::of", definitions = self.read().by.len());
             ReadBy::of(&self.read().by)
         })
     }

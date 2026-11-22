@@ -20,7 +20,7 @@ pub fn one_inhabitant(
     binders: &Binders,
     type_: &Term,
 ) -> Result<bool, ReduceError> {
-    curios_profile::profile!("convert::one_inhabitant");
+    curios_common::profile!("convert::one_inhabitant");
     inhabited_once(
         context,
         binders,

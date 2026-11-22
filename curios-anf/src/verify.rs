@@ -176,7 +176,7 @@ fn repeated_key<K: Eq + Hash>(cases: &[Case<K>]) -> Option<&K> {
 impl Module {
     /// Check the module against the representation contract and the recursion rules a program is held to. A broken structural rule is a malformed module — a fault in whatever produced it — and panics; a broken recursion rule is the refusal handed back. Deterministic: the same module always reports the same.
     pub fn verify(&self) -> Result<(), VerifyError> {
-        curios_profile::profile!("verify_module");
+        curios_common::profile!("verify_module");
         self.assert_structure(Entry::Required);
         // A member only its own initializer reads is read by nothing in a whole program, so it is never forced.
         self.check_recursion().map(|_| ())
@@ -188,7 +188,7 @@ impl Module {
     ///
     /// What it costs is the `verify_fragment` rows of the profile the prelude's build files, one for each item: `cargo xtask profile prelude`.
     pub fn verify_fragment(&self) -> Result<(), VerifyError> {
-        curios_profile::profile!("verify_fragment");
+        curios_common::profile!("verify_fragment");
         self.assert_structure(Entry::Absent);
         self.check_recursion().map(|_| ())
     }

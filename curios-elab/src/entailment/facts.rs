@@ -380,7 +380,7 @@ impl<'a> Reader<'a> {
         context: &mut Context,
         target: Option<&Target>,
     ) -> Result<Facts, Error> {
-        curios_profile::profile!("entailment::collect");
+        curios_common::profile!("entailment::collect");
         for (name, type_) in binders(context) {
             for (statement, proof, origin) in statements(context, &name, &type_)? {
                 self.proposition(context, &statement, proof, origin)?;
@@ -1671,7 +1671,7 @@ impl<'a> Reader<'a> {
     ///
     /// The view pairs atoms by identity, and which atoms are one is conversion's to say (`documentation/design/arithmetic/a-term-is-one-where-conversion-says-so.md`): a call whose argument one statement writes as a sum and another reads as the successor an arm refined a variable to is one number, and reduction opens neither inside the stuck call. So the atoms of every operand are classed among those read before it, and the operand is handed to the view one spelling to a class, as the conversion chain hands a pair's to its readers. The substitution comes first, as the chain prepares a pair: an operator's witness stands in a signature as the metavariable its resolution solved and in a bound as the witness itself, and a recursive member's slot stands where its name does, which is a spelling and no question. A comparison with no value at the type level is that the two are not known to be one.
     fn reading(&mut self, context: &mut Context, term: &Term) -> Result<Term, Error> {
-        curios_profile::profile!("entailment::reading");
+        curios_common::profile!("entailment::reading");
         let solved = solved(context, term)?;
         let classes = &mut *self.classes;
         let classed = atoms_in(context, &solved)

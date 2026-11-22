@@ -1006,7 +1006,7 @@ impl UniverseSolver {
     ///
     /// **A join puts nothing between two levels the declaration holds.** `held` are the levels that stand where conversion compares them, and a pair is kept only where the store then says of them, one against another and each against zero, what it said before ([`Self::held_relations`]). A weak equation is met at a position nothing reads, so it has no standing to decide a level something does. Two arms answering a `Result` at their own constructors' levels would otherwise make those two levels one through the declared `Result`'s, which no caller could then tell apart, and a small action sequenced into a region would hold the region's payload to the action's level, zero. The occurrence it leaves unjoined settles from its own bounds, at the join of the held levels below it.
     fn join_weak_equations(&mut self, held: &BTreeSet<UniverseMetaId>) {
-        curios_profile::profile!("universe::join_weak_equations");
+        curios_common::profile!("universe::join_weak_equations");
         let pairs = std::mem::take(&mut self.weak)
             .into_iter()
             .filter_map(|(left, right)| {
@@ -1019,8 +1019,8 @@ impl UniverseSolver {
         if pairs.is_empty() {
             return;
         }
-        curios_profile::sample!("universe::weak_equations", pairs.len());
-        curios_profile::sample!("universe::held_levels", held.len());
+        curios_common::sample!("universe::weak_equations", pairs.len());
+        curios_common::sample!("universe::held_levels", held.len());
 
         let before = self.held_relations(held);
         self.join_run(&pairs, held, &before);
@@ -1035,7 +1035,7 @@ impl UniverseSolver {
         held: &BTreeSet<UniverseMetaId>,
         before: &[Option<u32>],
     ) {
-        curios_profile::sample!("universe::weak_run", pairs.len());
+        curios_common::sample!("universe::weak_run", pairs.len());
         let mark = self.mark();
         let joined = pairs.iter().all(|(left, right)| {
             self.add_eq(
@@ -1059,7 +1059,7 @@ impl UniverseSolver {
             self.join_run(first, held, before);
             self.join_run(rest, held, before);
         } else {
-            curios_profile::note!(
+            curios_common::note!(
                 target: "curios_elab::universe",
                 left = %pairs[0].0.faithful(),
                 right = %pairs[0].1.faithful(),
@@ -1082,7 +1082,7 @@ impl UniverseSolver {
         if held.is_empty() {
             return true;
         }
-        curios_profile::profile!("universe::relations_stand");
+        curios_common::profile!("universe::relations_stand");
         let levels = Self::held_levels(held);
         let mut relation = before.iter();
         for (below, lower) in levels.iter().enumerate() {
@@ -1114,7 +1114,7 @@ impl UniverseSolver {
         if held.is_empty() {
             return Vec::new();
         }
-        curios_profile::profile!("universe::held_relations");
+        curios_common::profile!("universe::held_relations");
         let levels = Self::held_levels(held);
         let mut relations = Vec::with_capacity(levels.len() * (levels.len() - 1));
         for (below, lower) in levels.iter().enumerate() {
@@ -1398,7 +1398,7 @@ impl UniverseSolver {
     ///
     /// Solving is worklist-driven: a level is revisited only when one of the levels its bounds mention has just been solved. Rescanning every constraint for every level after every assignment would make this quadratic in the size of a declaration's universe closure.
     fn solve_flexible_in(&mut self, metas: &BTreeSet<UniverseMetaId>) -> Result<(), UniverseError> {
-        curios_profile::profile!("universe::solve_flexible_in");
+        curios_common::profile!("universe::solve_flexible_in");
         self.merge_forced_equalities(metas)?;
 
         let mut queue = metas.iter().copied().collect::<VecDeque<_>>();
@@ -1537,7 +1537,7 @@ impl UniverseSolver {
         &mut self,
         metas: &BTreeSet<UniverseMetaId>,
     ) -> Result<(), UniverseError> {
-        curios_profile::profile!("universe::merge_forced_equalities");
+        curios_common::profile!("universe::merge_forced_equalities");
         loop {
             let mut assignments = Vec::new();
             {
@@ -1650,7 +1650,7 @@ impl UniverseSolver {
     ///
     /// Substituting here rather than re-zonking at every read is what keeps the store's normalization invariant: the work is proportional to the solved level's degree, and every later reader sees a settled inequality. A second assignment to one meta is ignored, so a solution is committed at most once and the journal stays a faithful inverse.
     fn assign(&mut self, meta: UniverseMetaId, level: Level) -> Result<(), UniverseError> {
-        curios_profile::profile!("universe::assign");
+        curios_common::profile!("universe::assign");
         let entry = self
             .metas
             .get_mut(meta.0)
@@ -1822,7 +1822,7 @@ impl UniverseSolver {
         metas: &BTreeSet<UniverseMetaId>,
         scope: &BTreeSet<UniverseMetaId>,
     ) -> Result<(), UniverseError> {
-        curios_profile::profile!("universe::minimize");
+        curios_common::profile!("universe::minimize");
         let roles = metas
             .iter()
             .map(|meta| {
@@ -1871,7 +1871,7 @@ impl UniverseSolver {
     ///
     /// A level with a principal lower bound takes it, and one nothing bounds from below takes zero. One whose only lower bounds are disjunctive stays, for the reason [`Self::close_stalled_components`] declines a disjunction, and so does one a lower bound of which still names an open level. A round commits every settlement it finds and checks consistency once, since a check after an assignment rebuilds the difference graph; a round the check refuses is retaken one level at a time, keeping each settlement that stays consistent.
     fn settle(&mut self, metas: &BTreeSet<UniverseMetaId>) -> Result<(), UniverseError> {
-        curios_profile::profile!("universe::settle");
+        curios_common::profile!("universe::settle");
         loop {
             let mark = self.mark();
             let settled = self.settle_round(metas, false)?;
@@ -1994,7 +1994,7 @@ impl UniverseSolver {
         internal: impl IntoIterator<Item = UniverseMetaId>,
         compared: impl IntoIterator<Item = UniverseMetaId>,
     ) -> Result<UniverseContext, UniverseError> {
-        curios_profile::profile!("universe::finalize");
+        curios_common::profile!("universe::finalize");
         // A held level is no classifier to minimize, whatever wrote it: a `Type` written in a result is an occurrence's from here on, which keeps it its class's representative over an invented one. Read first, while every level elaboration left open is still open, since the join that follows is told which levels it may not decide.
         let held = self.hold(compared);
         // A weak equation joins two open levels, and what follows settles the classes that leaves.
@@ -2012,11 +2012,11 @@ impl UniverseSolver {
         let relevant = self.connected_metas(interface.iter().chain(&internal).copied());
 
         // The per-declaration magnitudes of the solver's work, recorded only when a profile is listening: the metas a declaration's interface names, the ones its body alone names, the connected component finalization must consider, and the constraint store it minimizes over. These are magnitudes rather than call counts, which is why the profile stream keeps them.
-        curios_profile::sample!("universe::finalize_interface_metas", interface.len());
-        curios_profile::sample!("universe::finalize_internal_metas", internal.len());
-        curios_profile::sample!("universe::finalize_connected_metas", relevant.len());
-        curios_profile::sample!("universe::finalize_store_len", self.constraints.len());
-        curios_profile::sample!("universe::finalize_held_metas", held.len());
+        curios_common::sample!("universe::finalize_interface_metas", interface.len());
+        curios_common::sample!("universe::finalize_internal_metas", internal.len());
+        curios_common::sample!("universe::finalize_connected_metas", relevant.len());
+        curios_common::sample!("universe::finalize_store_len", self.constraints.len());
+        curios_common::sample!("universe::finalize_held_metas", held.len());
         self.minimize(&internal, &relevant)?;
         // Minimizing solves body-only levels after the determined ones were merged, and a solution can determine another: `a ≤ b` with `b ≤ max(a, c)` becomes mutual once `c` is zero. So the merge is asked once more of what minimizing left.
         self.merge_forced_equalities(&relevant)?;
@@ -2163,7 +2163,7 @@ impl UniverseSolver {
     }
 
     fn check_consistent(&mut self) -> Result<(), UniverseError> {
-        curios_profile::profile!("universe::check_consistent");
+        curios_common::profile!("universe::check_consistent");
         if let Some(mut cache) = self.consistency.take() {
             if cache.constraint_len == self.constraints.len() {
                 self.consistency = Some(cache);
@@ -2230,7 +2230,7 @@ impl UniverseSolver {
 
     /// Decide consistency from scratch, branching on genuine right-hand maxima, and hand back what a consistent store was decided from. Reads the store directly: every stored constraint is already normalized, so there is no separate zonked copy to drift from.
     fn check_consistent_full(&self) -> Result<ConsistencyCache, UniverseError> {
-        curios_profile::profile!("universe::check_consistent_full");
+        curios_common::profile!("universe::check_consistent_full");
         let constraints = &self.constraints;
 
         // A maximum on the left is conjunctive. A maximum on the right is a finite disjunction: under any satisfying valuation, each left atom is dominated by at least one right atom. Enumerating those symbolic choices and checking their difference graphs decides consistency without searching numeric universe assignments.
@@ -2303,7 +2303,7 @@ impl UniverseSolver {
         branches.sort_by_key(|(_, choices)| choices.len());
 
         let mut budget = SEARCH_BUDGET;
-        let consistency = curios_profile::profile!(
+        let consistency = curios_common::profile!(
             "universe::choose" => choose(&branches, 0, &mut search, &mut budget)
         );
 

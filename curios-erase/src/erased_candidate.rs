@@ -39,7 +39,7 @@ impl ErasedUnit {
         items: &HashMap<usize, Digest>,
         forms: &HashMap<usize, Digest>,
     ) {
-        curios_profile::profile!("erasures::complete");
+        curios_common::profile!("erasures::complete");
         let unit = curios_cert::Filed {
             definitions,
             places,

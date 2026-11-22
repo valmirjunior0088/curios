@@ -876,7 +876,7 @@ fn elaborate_lowered<O>(
 where
     O: FnMut(Stage<'_>),
 {
-    curios_profile::profile!("elaborate_and_zonk");
+    curios_common::profile!("elaborate_and_zonk");
 
     // Taken before the entry elaborates, which consumes its lowering, and gathered once it has, when every proof it writes is written and every binder lint decided.
     let decided = std::mem::take(&mut lowered.lints);
@@ -1277,7 +1277,7 @@ where
                 }
                 // Handed over where its declarations are judged and erased, whatever is then said of the term that closes the program.
                 if let Some(cache) = cache {
-                    curios_profile::profile!("cache::put" => cache.put(source, &unit));
+                    curios_common::profile!("cache::put" => cache.put(source, &unit));
                 }
 
                 (unit, None, entry.expect(WITHHELD_ONLY_WHEN_BROKEN))
@@ -1345,7 +1345,7 @@ fn close_over(
     lowered: &PreparedText,
     closing: Tail<'_>,
 ) -> Result<curios_core::Entrypoint, CompileError> {
-    curios_profile::profile!("elaborate_and_zonk");
+    curios_common::profile!("elaborate_and_zonk");
     let units = predecessors
         .units()
         .iter()
@@ -1422,7 +1422,7 @@ pub fn judged(
     // The independent certifier's second opinion: each unit was walked when it was built and arrives here as environment, so only the term that closes the program is judged.
     let globals = globals(scope);
     let (rechecked, mut certifier) = {
-        curios_profile::profile!("recheck");
+        curios_common::profile!("recheck");
         certify_program(&program, budget, &globals, *syntax)
     };
     // The program as the certifier stated it, the one it is erased from: it refused nothing of it, so it accepted it.
@@ -1516,7 +1516,7 @@ pub fn examine_entrypoint(
 
     // The independent certifier's second opinion: each predecessor was walked when it was built and arrives here as environment, so only what it does not already answer for is judged.
     let rechecked = {
-        curios_profile::profile!("recheck");
+        curios_common::profile!("recheck");
         certify_program(&program, budget, &globals(predecessors), *syntax).0
     };
 
@@ -1555,7 +1555,7 @@ pub fn lower_from_anf<O>(
 where
     O: FnMut(Stage<'_>),
 {
-    curios_profile::profile!("lower_from_anf");
+    curios_common::profile!("lower_from_anf");
     observe(Stage::Anf(&anf_module));
 
     // Shrink before lowering: drop the items the program neither reaches nor runs for effect, so CPS's whole-module fixpoint sees only the live slice (see `curios_anf::optimize`). Verified rather than verifying: erasure sealed this very module through `finalize`, which verified it.
@@ -1597,7 +1597,7 @@ pub fn compile_unit(
     told: &dyn Fn(&PreparedText),
     telling: Telling<'_>,
 ) -> Result<Unit, CompileError> {
-    curios_profile::profile!("compile_unit");
+    curios_common::profile!("compile_unit");
     let lowered = into_core_unit(source, &predecessors.text(), syntax)
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
     told(&lowered);
@@ -1931,7 +1931,7 @@ where
         // Announced on its own: what a cache does with a unit is no part of compiling it, and it is where a large unit's record is made.
         if let Some(cache) = cache {
             progress(Progress::Filing { unit: &prefix });
-            curios_profile::profile!("cache::put" => cache.put(source, &unit));
+            curios_common::profile!("cache::put" => cache.put(source, &unit));
             progress(Progress::Filed { unit: &prefix });
         }
 
@@ -1948,10 +1948,10 @@ fn held(
     offered: Option<&Unit>,
     cache: Option<&dyn Cache>,
 ) -> (Option<Unit>, Option<Earlier>) {
-    let hit = curios_profile::profile!("cache::get" => cache.and_then(|cache| cache.get(source)));
+    let hit = curios_common::profile!("cache::get" => cache.and_then(|cache| cache.get(source)));
     let baseline = match hit {
         Some(_) => None,
-        None => curios_profile::profile!(
+        None => curios_common::profile!(
             "cache::baseline" => cache.and_then(|cache| cache.baseline(source, offered))
         ),
     };
@@ -2178,7 +2178,7 @@ pub fn compile_entrypoint<O>(
 where
     O: FnMut(Stage<'_>),
 {
-    curios_profile::profile!("compile_entrypoint");
+    curios_common::profile!("compile_entrypoint");
     let Told {
         observe,
         read,

@@ -115,7 +115,7 @@ pub fn finalize_definition(
     type_: Term,
     body: Term,
 ) -> Result<(UniverseContext, Term, Term), Error> {
-    curios_profile::profile!("finalize_definition");
+    curios_common::profile!("finalize_definition");
     let type_ = zonk_solved_term_metas(context, &type_);
     let body = zonk_solved_term_metas(context, &body);
 

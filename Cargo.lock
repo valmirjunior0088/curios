@@ -627,7 +627,6 @@ dependencies = [
  "curios-common",
  "curios-core",
  "curios-num",
- "curios-profile",
 ]
 
 [[package]]
@@ -639,7 +638,6 @@ dependencies = [
  "curios-common",
  "curios-cps",
  "curios-num",
- "curios-profile",
 ]
 
 [[package]]
@@ -693,7 +691,6 @@ dependencies = [
  "curios-common",
  "curios-core",
  "curios-num",
- "curios-profile",
  "curios-surface",
 ]
 
@@ -705,6 +702,7 @@ dependencies = [
  "curios-unicode",
  "sha2 0.11.1",
  "stacker",
+ "tracing",
 ]
 
 [[package]]
@@ -716,7 +714,6 @@ dependencies = [
  "curios-archive",
  "curios-common",
  "curios-num",
- "curios-profile",
 ]
 
 [[package]]
@@ -726,7 +723,6 @@ dependencies = [
  "curios-abi",
  "curios-common",
  "curios-num",
- "curios-profile",
 ]
 
 [[package]]
@@ -758,7 +754,6 @@ dependencies = [
  "curios-common",
  "curios-core",
  "curios-num",
- "curios-profile",
  "curios-surface",
 ]
 
@@ -770,7 +765,6 @@ dependencies = [
  "curios-common",
  "curios-cps",
  "curios-num",
- "curios-profile",
  "curios-wasm",
 ]
 
@@ -787,7 +781,6 @@ dependencies = [
  "curios-core",
  "curios-elab",
  "curios-num",
- "curios-profile",
  "curios-surface",
 ]
 
@@ -819,7 +812,6 @@ dependencies = [
  "curios-num",
  "curios-parse",
  "curios-print",
- "curios-profile",
  "curios-surface",
 ]
 
@@ -870,7 +862,6 @@ name = "curios-parse"
 version = "0.16.25"
 dependencies = [
  "curios-common",
- "curios-profile",
  "curios-unicode",
 ]
 
@@ -892,7 +883,6 @@ dependencies = [
  "curios-module",
  "curios-prelude",
  "curios-prelude-build",
- "curios-profile",
  "curios-surface",
  "curios-unit",
  "curios-wasm",
@@ -916,7 +906,6 @@ dependencies = [
  "curios-package",
  "curios-pipeline",
  "curios-prelude-build",
- "curios-profile",
  "curios-surface",
  "curios-unicode",
  "curios-unit",
@@ -970,7 +959,6 @@ dependencies = [
  "curios-num",
  "curios-parse",
  "curios-print",
- "curios-profile",
  "serde_json",
 ]
 
@@ -1011,7 +999,6 @@ dependencies = [
  "curios-package",
  "curios-pipeline",
  "curios-prelude",
- "curios-profile",
  "curios-surface",
  "curios-unit",
  "curios-wasm",
@@ -1041,7 +1028,6 @@ dependencies = [
  "curios-package",
  "curios-pipeline",
  "curios-prelude",
- "curios-profile",
  "curios-surface",
  "curios-unit",
  "curios-verdict",

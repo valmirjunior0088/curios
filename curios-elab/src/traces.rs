@@ -568,7 +568,7 @@ impl Keyed {
 impl Readers {
     /// Who asked what, of `traces`.
     pub fn of(traces: &Traces) -> Self {
-        curios_profile::profile!("readers::of", declarations = traces.declarations.len());
+        curios_common::profile!("readers::of", declarations = traces.declarations.len());
         // Gathered whole first, so each name's list is built once and not copied at every reader a persistent insert would add.
         let mut parts = BTreeMap::<Global, Vec<(Global, Parts)>>::new();
         let mut keys = BTreeMap::<(Global, WitnessKey), Keyed>::new();

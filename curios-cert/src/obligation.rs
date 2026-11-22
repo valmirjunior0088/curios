@@ -161,7 +161,7 @@ pub fn check_positions(
     totals: &Totals<'_>,
     memo: &mut PositionVerdicts,
 ) -> Result<(), Error> {
-    curios_profile::profile!("check_positions");
+    curios_common::profile!("check_positions");
     for position in positions {
         if let Some(reached) = position
             .term

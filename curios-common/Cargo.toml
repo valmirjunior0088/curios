@@ -3,7 +3,7 @@ name = "curios-common"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Foundational utilities shared across every Curios stage and tool: spans, names, entropy, the typed arena, persistent maps, and a file written whole"
+description = "Foundational utilities shared across every Curios stage and tool: spans, names, entropy, the typed arena, persistent maps, a file written whole, and the macros a site instruments with"
 
 [lints]
 workspace = true
@@ -19,3 +19,5 @@ curios-archive = { workspace = true }
 curios-unicode = { workspace = true }
 stacker = { version = "0.1.25" }
 sha2 = { workspace = true }
+# What `profile!`, `sample!` and `note!` expand to; `curios-profile` names it too, for the subscriber it implements.
+tracing = { workspace = true }

@@ -1,6 +1,6 @@
 # curios-profile
 
-Programmatic profiling for the workspace: the `profile!`, `sample!` and `note!` macros every instrumenting crate uses, and `trace` and `install`, the two scopings of the subscriber that writes one tab-separated row per span and event as it happens; `fold`, which recomputes timings, allocation figures and magnitude distributions from those rows; the counting allocator this crate installs; and the instruction count a measurement reads. It is the workspace's only `tracing` and `libc` dependency ([One crate is the authority for one external concern](../documentation/design/one-crate-is-the-authority-for-one-external-concern.md)): every crate that instruments depends on it, and its macros expand to `$crate::tracing::…`, asking nothing of the caller. What each macro expands to, what a row holds and what a fold returns belong to the crate rustdoc.
+Programmatic profiling for the workspace: the recorder of what [`curios-common`](../curios-common/README.md#a-span-is-this-crates-macro-not-tracinginstrument)'s `profile!`, `sample!` and `note!` instrument. `trace` and `install` are the two scopings of the subscriber that writes one tab-separated row per span and event as it happens; `fold` recomputes timings, allocation figures and magnitude distributions from those rows; and beside them stand the counting allocator this crate installs and the instruction count a measurement reads. It is the authority for `libc` and for `tracing`'s subscriber ([One crate is the authority for one external concern](../documentation/design/one-crate-is-the-authority-for-one-external-concern.md)), and no crate that instruments depends on it, so the trusted base reaches none of it. What a row holds and what a fold returns belong to the crate rustdoc.
 
 ## Taking a profile
 
@@ -87,9 +87,3 @@ One build repeats to 0.02%, and two builds of one source differ by up to 0.8% fo
 **Rationale.** A `GlobalAlloc` cannot allocate the thread-local state per-thread attribution needs, and the profiled pipelines are single-threaded, so process-wide is precise where it is used. A binary that had to opt in could forget, and its columns would read zero — absent evidence rather than a failure — and the opt-in was four copies of one static. This crate's own test binary counts too, so a test can hold a boundary row's readings to the allocation made inside it. Counting is four atomic read-modify-writes an allocation, each a locked instruction on x86; behind one relaxed load, a run nobody records pays the load alone, as [Every build carries the instrumentation](#every-build-carries-the-instrumentation) counts.
 
 **Rejected.** Each binary opting in, a place to forget. Counting every allocation of every run, which every compile would pay for a count nobody reads.
-
-### A span is this crate's macro, not `tracing::instrument`
-
-**Decision.** `profile!`, written as a function's first statement, times the function, and its `=>` form times one expression; this crate's macros expand to `$crate::tracing::…`, asking nothing of the caller.
-
-**Rationale.** `tracing::instrument`'s expansion requires a crate literally named `tracing` in the invoking crate's extern prelude, so it cannot be re-exported, and every instrumenting crate would name `tracing` itself.

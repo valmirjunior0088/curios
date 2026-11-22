@@ -33,7 +33,7 @@ const SPILL: &str = "spill";
 
 /// Spill every shape of `module` past `envelope`. See the module documentation.
 pub fn spill_wide_shapes(module: &mut curios_wasm::Module, envelope: Envelope) {
-    curios_profile::profile!("spill_wide_shapes");
+    curios_common::profile!("spill_wide_shapes");
     let signatures = spill_signatures(module.types_mut(), envelope);
     let wides = spill_structs(module.types_mut(), envelope);
     if signatures.is_empty() && wides.is_empty() {

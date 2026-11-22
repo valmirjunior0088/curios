@@ -63,7 +63,7 @@ use {
 ///
 /// This is the whole of size-change termination as the elaborator applies it: collect one matrix per call site, close them under composition, and demand a decrease on the diagonal of every idempotent result — [`decide`]. A group with no recursive call at all closes to nothing and is accepted, which is how the prelude's call-free `; ih` folds pass — their recursion is the intrinsic eliminator's, already structural by construction.
 pub fn group_totality<D: Driver>(driver: &mut D, group: &RecGroup) -> Result<Totality, D::Error> {
-    curios_profile::profile!("group_totality");
+    curios_common::profile!("group_totality");
     let parts = open_parts(driver, group);
     let shapes = parts
         .iter()
@@ -103,7 +103,7 @@ pub fn group_applications<D: Driver>(
     driver: &mut D,
     group: &RecGroup,
 ) -> Result<Vec<Applications>, D::Error> {
-    curios_profile::profile!("group_applications");
+    curios_common::profile!("group_applications");
     let parts = open_parts(driver, group);
     summaries(driver, Some(group), parts, group.length())
 }
@@ -113,7 +113,7 @@ pub fn definition_applications<D: Driver>(
     driver: &mut D,
     body: &Term,
 ) -> Result<Option<Applications>, D::Error> {
-    curios_profile::profile!("definition_applications");
+    curios_common::profile!("definition_applications");
     let Some(parts) = open_definition(driver, body)? else {
         return Ok(None);
     };
@@ -311,7 +311,7 @@ fn field_application(steps: &[Segment]) -> Option<(Vec<usize>, Vec<Term>)> {
 ///
 /// The closure and the verdict are shared by every walk that finds a group's calls, whichever walk met them.
 pub fn decide(calls: Vec<Call>) -> Totality {
-    curios_profile::profile!("decide");
+    curios_common::profile!("decide");
     match close(calls) {
         // A call from a part to itself whose matrix is not square was graded over other than the part's parameters, so it claims nothing, as a closure that cannot compose it does.
         Some(closed) => match closed.iter().all(|call| {

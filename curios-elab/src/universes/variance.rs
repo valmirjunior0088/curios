@@ -83,7 +83,7 @@ impl Families for EveryPosition {
 ///
 /// Every earlier family's vector answers from the registry. A solved metavariable is spliced in first; one still unsolved is read as mentioning every level, its solution being free to. A reduction the budget refuses reads the same way, and the group is refused for the budget: the vector it leaves claims less than the families' own, and on record it would refuse two instances a later item compares, with no word of the budget.
 pub fn record_variances(context: &mut Context, names: &[Global]) -> Result<(), Error> {
-    curios_profile::profile!("record_variances");
+    curios_common::profile!("record_variances");
     let (inducts, structs) = spliced(context, names);
 
     let VarianceVectors { vectors, exhausted } =
@@ -112,7 +112,7 @@ pub fn record_variances(context: &mut Context, names: &[Global]) -> Result<(), E
 ///
 /// A level it reports is one two instances would be told apart by, so it is the family's parameter. A level of a telescope it does not report is one no instance holds. A reduction the budget refuses reads its term as holding every level it carries, and is no error here: what is reported claims less.
 pub fn family_levels(context: &mut Context, names: &[Global]) -> Option<BTreeSet<UniverseMetaId>> {
-    curios_profile::profile!("family_levels");
+    curios_common::profile!("family_levels");
     let (inducts, structs) = spliced(context, names);
     let found = held_by(context, Declarations::of(&inducts, &structs));
     if found.every {
@@ -174,7 +174,7 @@ pub fn definition_variances(
     if parameters == 0 {
         return Ok(Vec::new());
     }
-    curios_profile::profile!("definition_variances");
+    curios_common::profile!("definition_variances");
 
     let outer = match &**type_ {
         Subterm::FuncType(FuncType { telescope, .. }) => Some(telescope),
@@ -341,7 +341,7 @@ pub fn parameter_field(type_: &Term, body: &Term) -> Option<ParameterField> {
 ///
 /// A terminal sort is unread, cumulativity lifting it, and every other part is read as it is written ([`compared_in`]). Where a part may hold any level, every level the signature mentions is held.
 pub fn compared_levels(context: &mut Context, type_: &Term) -> BTreeSet<UniverseMetaId> {
-    curios_profile::profile!("compared_levels");
+    curios_common::profile!("compared_levels");
     let type_ = &zonk_solved_term_metas(context, type_);
     let mut parts = Vec::new();
     let mut terminal = type_.clone();
@@ -407,7 +407,7 @@ pub fn body_levels(
     if !answers_a_type(type_) {
         return BTreeSet::new();
     }
-    curios_profile::profile!("body_levels");
+    curios_common::profile!("body_levels");
     let body = zonk_solved_term_metas(context, body);
     let held = compared_in(context, slice::from_ref(&body))
         .unwrap_or_else(|| context.universe_metas_in(&body));
@@ -439,7 +439,7 @@ pub fn hold_variances(context: &mut Context, published: &Published) -> Result<()
         return Ok(());
     }
 
-    curios_profile::profile!("check_variance");
+    curios_common::profile!("check_variance");
     let inducts = published
         .induct_decls
         .iter()
@@ -481,7 +481,7 @@ pub fn hold_variances(context: &mut Context, published: &Published) -> Result<()
             });
         }
     }
-    curios_profile::sample!(
+    curios_common::sample!(
         "variance::read_short_at_finalization",
         vectors
             .iter()
