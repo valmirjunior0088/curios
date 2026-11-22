@@ -19,7 +19,7 @@ let counted(live: Live, by: (Nat) -> Nat) -> Io({}) =
 -- One child of `live` ended.
 let ended(live: Live) -> Io({}) =
     let () = counted(live, (n) => match n | 0 => 0 | m + 1 => m end)!;
-    let _ = Channel/try_send(live.ended, ())!;
+    let _ = Channel/try_push(live.ended, ())!;
     Io/pure(());
 
 -- `Task` is declared here and not in its module, so that `spawn` builds it and nothing outside this subtree does.
@@ -47,7 +47,7 @@ pub let join_all(s: Scope) -> Io({}) =
     match n
     | 0 => Io/pure(())
     | _ =>
-        let _ = Channel/receive(s.live.ended)!;
+        let _ = Channel/take(s.live.ended)!;
         join_all(s)
     end;
 

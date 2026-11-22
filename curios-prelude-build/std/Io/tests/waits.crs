@@ -1,16 +1,16 @@
--- Waiting in `Io`: what a wait holds of the branch beside it, what a scope tells its releases, and what a fulfilment, a send, a selection, a notification and a cancellation wake.
+-- Waiting in `Io`: what a wait holds of the branch beside it, what a scope tells its releases, and what a fulfilment, a push, a selection, a notification and a cancellation wake.
 use /std/{Bool, Cell, Io, Nat, Option, Test, Channel};
 use /std/Io/{Future};
 use /std/time/{Duration};
 
 -- A finalizer that leaves how its body ended where a take finds it.
 let told(c: Channel(Io/Scope/Ended), ended: Io/Scope/Ended) -> Io({}) =
-    let _ = Channel/try_send(c, ended)!;
+    let _ = Channel/try_push(c, ended)!;
     Io/pure(());
 
 -- Whether the next take is `finished`, where `finished` says so, or `cancelled` otherwise.
 let heard(c: Channel(Io/Scope/Ended), finished: Bool) -> Io(Bool) =
-    let taken = Channel/try_receive(c)!;
+    let taken = Channel/try_take(c)!;
     Io/pure(
         match taken
         | item(ended) =>
@@ -66,73 +66,71 @@ test a_fulfilment_answers_a_selection_once_across_actions_waiting_on_it =
             let f = Future/new(@Nat)!;
             let waiter() -> Io(Nat) =
                 let n = Io/select([Future/wait(f), Future/wait(f)])!;
-                let _ = Channel/try_send(wakes, 1)!;
+                let _ = Channel/try_push(wakes, 1)!;
                 Io/pure(n);
             let task = Io/Scope/spawn(s, waiter())!;
             let () = Io/yield()!;
             let () = Future/fill(f, 7)!;
             Io/Scope/Task/join(task))!;
-    let first = Channel/try_receive(wakes)!;
-    let second = Channel/try_receive(wakes)!;
+    let first = Channel/try_take(wakes)!;
+    let second = Channel/try_take(wakes)!;
     Test/all([
         Test/equal(n, 7),
         Test/equal([found(first), found(second)], [Option/some(1), Option/none()])]);
 
--- A send wakes every receiver waiting on the channel, and the one that does not take waits again: the second send reaches it.
-test two_woken_receivers_retry_after_only_one_can_take =
+-- A push wakes every taker waiting on the channel, and the one that does not get the value waits again: the second push reaches it.
+test two_woken_takers_retry_after_only_one_can_take =
     let (x, y) =
         Io/scope((s) =>
             let c = Channel/new(@Nat, 1)!;
             let first = Future/new(@{})!;
-            let receive() -> Io(Nat) =
-                let got = Channel/receive(c)!;
+            let taker() -> Io(Nat) =
+                let got = Channel/take(c)!;
                 let () = Future/fill(first, ())!;
                 Io/pure(Option/unwrap_or(got, 0));
-            let a = Io/Scope/spawn(s, receive())!;
-            let b = Io/Scope/spawn(s, receive())!;
+            let a = Io/Scope/spawn(s, taker())!;
+            let b = Io/Scope/spawn(s, taker())!;
             let () = Io/yield()!;
-            let _ = Channel/send(c, 1)!;
+            let _ = Channel/push(c, 1)!;
             let () = Future/wait(first)!;
-            let _ = Channel/send(c, 2)!;
+            let _ = Channel/push(c, 2)!;
             let x = Io/Scope/Task/join(a)!;
             let y = Io/Scope/Task/join(b)!;
             Io/pure((x, y)))!;
     Test/equal([x, y], [1, 2]);
 
--- A receive that loses a selection has taken nothing and waits on nothing after it: a message sent once the selection has answered stays in its channel, unacknowledged, for the next receive.
-test a_losing_receive_neither_takes_a_later_message_nor_acknowledges_it =
+-- A take that loses a selection has taken nothing and waits on nothing after it: a message pushed once the selection has answered stays in its channel, unacknowledged, for the next take.
+test a_losing_take_neither_takes_a_later_message_nor_acknowledges_it =
     let (acknowledged, n) =
         Io/scope((s) =>
             let messages = Channel/new(@{Nat, Cell({})}, 1)!;
             let other = Channel/new(@Nat, 1)!;
             let select_one() -> Io({}) =
                 Io/select([
-                    Io/bind(Channel/receive(messages), (_) => Io/pure(())),
-                    Io/bind(Channel/receive(other), (_) => Io/pure(()))]);
+                    Io/bind(Channel/take(messages), (_) => Io/pure(())),
+                    Io/bind(Channel/take(other), (_) => Io/pure(()))]);
             let selecting = Io/Scope/spawn(s, select_one())!;
             let () = Io/yield()!;
-            let _ = Channel/send(other, 1)!;
+            let _ = Channel/push(other, 1)!;
             let () = Io/Scope/Task/join(selecting)!;
             let ack = Cell/new(@{})!;
-            let _ = Channel/send(messages, (7, ack))!;
+            let _ = Channel/push(messages, (7, ack))!;
             let () = Io/yield()!;
             let polled = Cell/poll(ack)!;
-            let got = Channel/receive(messages)!;
+            let got = Channel/take(messages)!;
             let acknowledged = match polled | none() => false | some(()) => true end;
             Io/pure((acknowledged, Option/map(got, (message: {Nat, Cell({})}) => message.0))))!;
     Test/all([
-        Test/assert(
-            "the message the losing receive left is not acknowledged",
-            Bool/not(acknowledged)),
+        Test/assert("the message the losing take left is not acknowledged", Bool/not(acknowledged)),
         Test/equal(n, Option/some(7))]);
 
 -- Notifications a capacity-one channel has not been read for coalesce into one, and a future keeps the first answer it was filled with.
 test notifications_coalesce_and_futures_preserve_their_first_answer =
     let s = Channel/new(@{}, 1)!;
-    let _ = Channel/try_send(s, ())!;
-    let _ = Channel/try_send(s, ())!;
-    let _ = Channel/receive(s)!;
-    let again = Channel/try_receive(s)!;
+    let _ = Channel/try_push(s, ())!;
+    let _ = Channel/try_push(s, ())!;
+    let _ = Channel/take(s)!;
+    let again = Channel/try_take(s)!;
     let coalesced = match again | empty() => true | _ => false end;
     let f = Future/new(@Nat)!;
     let () = Future/fill(f, 7)!;
@@ -147,13 +145,13 @@ test a_waiter_cancelled_on_a_future_is_released_once =
     let releases = Channel/new(@Nat, 2)!;
     let c = Future/new(@{})!;
     let release(_: Io/Scope/Ended) -> Io({}) =
-        let _ = Channel/try_send(releases, 1)!;
+        let _ = Channel/try_push(releases, 1)!;
         Io/pure(());
     let waiting =
         Io/scope((scope) => Io/bind(Io/Scope/defer(scope, release), (()) => Future/wait(c)));
     let () = Io/select([waiting, Io/pure(())])!;
     let () = Future/fill(c, ())!;
     let () = Future/wait(c)!;
-    let first = Channel/try_receive(releases)!;
-    let second = Channel/try_receive(releases)!;
+    let first = Channel/try_take(releases)!;
+    let second = Channel/try_take(releases)!;
     Test/equal([found(first), found(second)], [Option/some(1), Option/none()]);

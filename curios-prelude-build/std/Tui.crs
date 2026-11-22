@@ -189,7 +189,7 @@ let running(
         let _ =
             Io/Scope/spawn(
                 children,
-                Io/bind(Io/Scope/Task/join(task), (e) => Channel/send(answers, e)))!;
+                Io/bind(Io/Scope/Task/join(task), (e) => Channel/push(answers, e)))!;
         Io/pure(task);
     -- Each of `rs` run with the terminal given back, in order, its answer queued for the loop.
     let released(rs: List(Io(E))) -> Try(Io, Io/Error, {}) =
@@ -197,7 +197,7 @@ let running(
         | [] => Try/pure(())
         | [r, ..more] =>
             let e = Session/release(s, r)!;
-            let _ = Channel/send(answers, e)!;
+            let _ = Channel/push(answers, e)!;
             released(more)
         end;
     -- What `d` asks for done: its work started, what it runs with the terminal given back run now, and the screen forgotten where it asks for a whole frame. Answers the work it started and whether it quits.
@@ -233,7 +233,7 @@ let running(
         end;
     -- Every answer already waiting, so a burst draws once.
     let waiting(acc: List(Event(E))) -> Io(List(Event(E))) =
-        let more = Channel/try_receive(answers)!;
+        let more = Channel/try_take(answers)!;
         match more
         | item(e) => waiting([..acc, Event/custom(e)])
         | _ => Io/pure(acc)
@@ -279,7 +279,7 @@ let running(
             end;
         let answer =
             Io/bind(
-                Channel/receive(answers),
+                Channel/take(answers),
                 (got) => match got | some(e) => Io/pure(Wake/answer(e)) | none() => never end);
         let tick =
             match due

@@ -9,29 +9,51 @@ let found(@A: Type, taken: Channel/Take(A)) -> Option(A) =
 let drained(@A: Type, taken: Channel/Take(A)) -> Bool =
     match taken | ended() => true | _ => false end;
 
--- The length follows each send and receive, and the capacity is the one the channel was made with.
+-- Whether a push found the channel at capacity while it was still open.
+let full(outcome: Channel/Push) -> Bool =
+    match outcome | full() => true | _ => false end;
+
+-- The length follows each push and take, and the capacity is the one the channel was made with: a push past it finds the channel full.
 test a_channel_counts_what_it_holds_against_what_it_was_made_with =
     let c = Channel/new(@Nat, 2)!;
     let empty = Channel/len(c)!;
-    let _ = Channel/try_send(c, 1)!;
+    let _ = Channel/try_push(c, 1)!;
     let one = Channel/len(c)!;
-    let _ = Channel/try_send(c, 2)!;
-    let full = Channel/len(c)!;
-    let _ = Channel/try_receive(c)!;
+    let _ = Channel/try_push(c, 2)!;
+    let at_capacity = Channel/len(c)!;
+    let refused = Channel/try_push(c, 3)!;
+    let _ = Channel/try_take(c)!;
     let after = Channel/len(c)!;
     let made = Channel/capacity(c)!;
-    Test/equal([empty, one, full, after, made], [0, 1, 2, 1, 2]);
+    Test/all([
+        Test/equal([empty, one, at_capacity, after, made], [0, 1, 2, 1, 2]),
+        Test/assert("a push past the capacity finds the channel full", full(refused))]);
 
--- A finish is seen at once, while what was queued before it is still received, and then the channel answers ended.
+-- A take between two pushes takes the older value, and the values pushed after it follow in order.
+test values_come_out_in_the_order_they_went_in_whatever_falls_between =
+    let c = Channel/new(@Nat, 3)!;
+    let _ = Channel/try_push(c, 1)!;
+    let _ = Channel/try_push(c, 2)!;
+    let first = Channel/try_take(c)!;
+    let _ = Channel/try_push(c, 3)!;
+    let _ = Channel/try_push(c, 4)!;
+    let second = Channel/try_take(c)!;
+    let third = Channel/try_take(c)!;
+    let fourth = Channel/try_take(c)!;
+    Test/equal(
+        [found(first), found(second), found(third), found(fourth)],
+        [Option/some(1), Option/some(2), Option/some(3), Option/some(4)]);
+
+-- A finish is seen at once, while what was queued before it is still taken, and then the channel answers ended.
 test a_finished_channel_says_so_while_it_still_holds_values =
     let c = Channel/new(@Nat, 2)!;
     let open = Channel/finished(c)!;
-    let _ = Channel/try_send(c, 7)!;
+    let _ = Channel/try_push(c, 7)!;
     let () = Channel/finish(c)!;
     let finished = Channel/finished(c)!;
     let held = Channel/len(c)!;
-    let first = Channel/try_receive(c)!;
-    let then = Channel/try_receive(c)!;
+    let first = Channel/try_take(c)!;
+    let then = Channel/try_take(c)!;
     Test/all([
         Test/assert("an open channel is not finished", Bool/not(open)),
         Test/assert("a finish is seen at once", finished),

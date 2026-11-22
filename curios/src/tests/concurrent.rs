@@ -180,13 +180,13 @@ fn a_scope_cancels_a_child_still_waiting_when_its_body_answers() {
         use /std/{Str, Io, Channel};
         use /std/time/{Duration};
         let child(started: Channel({})) -> Io({}) =
-            let _ = Channel/try_send(started, ())!;
+            let _ = Channel/try_push(started, ())!;
             let _ = Io/sleep(Duration/of_secs(1000))!;
             /std/print("child;");
         let body(s: Io/Scope) -> Io({}) =
             let started = Channel/new(@{}, 1)!;
             let _ = Io/Scope/spawn(s, Io/scope((scope) => Io/bind(Io/Scope/defer(scope, (_) => /std/print("released;")), (_) => child(started))))!;
-            let _ = Channel/receive(started)!;
+            let _ = Channel/take(started)!;
             /std/print("root;");
         let entry() -> /std/Io({}) =
             let _ = Io/scope(body)!;
@@ -432,16 +432,16 @@ fn a_notification_wakes_its_waiter_and_one_sent_before_anyone_waits_is_kept() {
         let notifier(s: Channel({})) -> Io({}) =
             let _ = Io/sleep(Duration/of_secs(1))!;
             let _ = /std/print("notify ")!;
-            let _ = Channel/try_send(s, ())!;
+            let _ = Channel/try_push(s, ())!;
             Io/pure(());
         let body(scope: Io/Scope) -> Io({}) =
             let s = Channel/new(@{}, 1)!;
             let _ = Io/Scope/spawn(scope, notifier(s))!;
             let _ = /std/print("wait ")!;
-            let _ = Channel/receive(s)!;
+            let _ = Channel/take(s)!;
             let _ = /std/print("woken ")!;
-            let _ = Channel/try_send(s, ())!;
-            let _ = Channel/receive(s)!;
+            let _ = Channel/try_push(s, ())!;
+            let _ = Channel/take(s)!;
             /std/print("again");
         Io/scope(body)
         "#,
@@ -451,9 +451,9 @@ fn a_notification_wakes_its_waiter_and_one_sent_before_anyone_waits_is_kept() {
     assert_eq!(io.output(), b"wait notify woken again");
 }
 
-// A selection takes nothing out of a source that does not win it. Both channels hold a value and both receives could answer, so the losing receive is what proves it: a selection that ran both to their ends would have taken from both.
+// A selection takes nothing out of a source that does not win it. Both channels hold a value and both takes could answer, so the losing take is what proves it: a selection that ran both to their ends would have taken from both.
 #[test]
-fn a_selection_keeps_the_value_of_the_receive_it_did_not_take() {
+fn a_selection_keeps_the_value_of_the_take_it_did_not_choose() {
     assert_eq!(
         run(r#"
         use /std/{Str, Nat, Option, Io, Channel};
@@ -464,13 +464,13 @@ fn a_selection_keeps_the_value_of_the_receive_it_did_not_take() {
         let program() -> Io({}) =
             let a = Channel/new(@Nat, 4)!;
             let b = Channel/new(@Nat, 4)!;
-            let _ = Channel/send(a, 10)!;
-            let _ = Channel/send(b, 20)!;
+            let _ = Channel/push(a, 10)!;
+            let _ = Channel/push(b, 20)!;
             let w = Io/select([
-                Io/bind(Channel/receive(a), (o) => Io/pure(("a", o))),
-                Io/bind(Channel/receive(b), (o) => Io/pure(("b", o)))])!;
-            let rest_a = Channel/try_receive(a)!;
-            let rest_b = Channel/try_receive(b)!;
+                Io/bind(Channel/take(a), (o) => Io/pure(("a", o))),
+                Io/bind(Channel/take(b), (o) => Io/pure(("b", o)))])!;
+            let rest_a = Channel/try_take(a)!;
+            let rest_b = Channel/try_take(b)!;
             /std/print(
                 Str/flatten(
                     [w.0, " ", shown(w.1), " ", left(rest_a), " ", left(rest_b)]));
@@ -480,7 +480,7 @@ fn a_selection_keeps_the_value_of_the_receive_it_did_not_take() {
     );
 }
 
-// Enqueueing is complete before receipt. A reply future makes the acknowledgement explicit, and joining the feeder keeps the body alive until it observes that fill. The body runs on to its receive before the child it spawned starts, so the receiving comes first.
+// Enqueueing is complete before receipt. A reply future makes the acknowledgement explicit, and joining the feeder keeps the body alive until it observes that fill. The body runs on to its take before the child it spawned starts, so the receiving comes first.
 #[test]
 fn a_sender_waits_for_acknowledgement_after_its_message_is_taken() {
     assert_eq!(
@@ -489,7 +489,7 @@ fn a_sender_waits_for_acknowledgement_after_its_message_is_taken() {
         use /std/Io/{Future};
         let feeder(s: Channel({Nat, Future({})})) -> Io({}) =
             let ack = Future/new()!;
-            let _ = Channel/send(s, (7, ack))!;
+            let _ = Channel/push(s, (7, ack))!;
             let _ = print("queued ")!;
             let _ = Future/wait(ack)!;
             print("acknowledged");
@@ -497,7 +497,7 @@ fn a_sender_waits_for_acknowledgement_after_its_message_is_taken() {
             let c = Channel/new(@{Nat, Future({})}, 1)!;
             let task = Io/Scope/spawn(scope, feeder(c))!;
             let _ = print("receiving ")!;
-            let got = Channel/receive(c)!;
+            let got = Channel/take(c)!;
             let _ = match got
                 | some((n, ack)) =>
                     let _ = print(Nat/to_str(n))!;
@@ -512,7 +512,7 @@ fn a_sender_waits_for_acknowledgement_after_its_message_is_taken() {
     );
 }
 
-// Closing hands back what is already queued before it ends the stream, so a reader drains rather than losing the tail. Beside it, each attempt that does not wait answers its own outcome: a send at capacity is `full` and one after the close `closed`, and a take from an open channel with nothing queued is `empty` where one from a closed and drained channel is `ended`.
+// Closing hands back what is already queued before it ends the stream, so a reader drains rather than losing the tail. Beside it, each attempt that does not wait answers its own outcome: a push at capacity is `full` and one after the close `closed`, and a take from an open channel with nothing queued is `empty` where one from a closed and drained channel is `ended`.
 #[test]
 fn a_closed_channel_drains_before_it_ends() {
     assert_eq!(
@@ -528,17 +528,17 @@ fn a_closed_channel_drains_before_it_ends() {
             match t | item(n) => Nat/to_str(n) | empty() => "empty" | ended() => "ended" end;
         let program() -> Io({}) =
             let c = Channel/new(@Nat, 2)!;
-            let nothing_yet = Channel/try_receive(c)!;
-            let _ = Channel/send(c, 1)!;
-            let _ = Channel/send(c, 2)!;
-            let full = Channel/try_send(c, 3)!;
+            let nothing_yet = Channel/try_take(c)!;
+            let _ = Channel/push(c, 1)!;
+            let _ = Channel/push(c, 2)!;
+            let full = Channel/try_push(c, 3)!;
             let _ = Channel/finish(c)!;
-            let refused = Channel/try_send(c, 3)!;
-            let first = Channel/receive(c)!;
-            let second = Channel/receive(c)!;
-            let ended = Channel/receive(c)!;
-            let drained = Channel/try_receive(c)!;
-            let after = Channel/send(c, 4)!;
+            let refused = Channel/try_push(c, 3)!;
+            let first = Channel/take(c)!;
+            let second = Channel/take(c)!;
+            let ended = Channel/take(c)!;
+            let drained = Channel/try_take(c)!;
+            let after = Channel/push(c, 4)!;
             /std/print(
                 Str/flatten(
                     [

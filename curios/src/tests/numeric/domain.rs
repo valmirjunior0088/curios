@@ -171,7 +171,7 @@ fn every_bounded_operation_is_refused_one_past_the_edge_of_its_domain() {
     }
 }
 
-// A channel's capacity is bounded by `/sys/Channel/new`'s row too, which a program reaches only through the wrapper `/std` puts in front of it; the wrapper restates the bound to hand its proof on, so the refusal names the wrapper.
+// A channel's capacity is bounded by `/std/Channel/new`'s own signature, since a channel that can hold nothing would never take a push.
 #[test]
 fn a_channel_of_no_capacity_is_refused_and_one_of_capacity_one_compiles() {
     let program = |capacity: u32| {

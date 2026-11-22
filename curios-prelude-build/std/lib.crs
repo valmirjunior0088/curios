@@ -139,7 +139,7 @@ pub use Io/{let Io};
 pub mod Cell;
 pub use Cell/{let Cell};
 
---- A bounded queue: a send waits while it is full, and a receive while it is empty.
+--- A bounded queue: a push waits while it is full, and a take while it is empty.
 pub mod Channel;
 pub use Channel/{let Channel};
 

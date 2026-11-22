@@ -3,7 +3,7 @@ use /std/{Nat, Bool, Io, Try, Test, Program, Channel};
 
 -- A description that yields nothing and leaves `n` where a take finds it.
 let leave(c: Channel(Nat), n: Nat) -> Io({}) =
-    let _ = Channel/try_send(c, n)!;
+    let _ = Channel/try_push(c, n)!;
     Io/pure(());
 
 -- The same description, as one that may fail and does not.
@@ -12,7 +12,7 @@ let leave_or_fail(c: Channel(Nat), n: Nat) -> Try(Io, Io/Error, {}) =
 
 -- Whether the next take is `n`.
 let left(c: Channel(Nat), n: Nat) -> Io(Bool) =
-    let taken = Channel/try_receive(c)!;
+    let taken = Channel/try_take(c)!;
     Io/pure(match taken | item(m) => m == n | _ => false end);
 
 test a_description_that_yields_nothing_is_executed_as_itself =

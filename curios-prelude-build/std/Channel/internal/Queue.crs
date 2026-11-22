@@ -1,0 +1,46 @@
+use /std/{Nat, Option};
+
+-- Values newest on top. Taking the top leaves the queue no reference to it, where the rest of a `List` is a window that keeps the whole payload it was cut from.
+induct Stack(A: Type): Type
+| bottom()
+| on(A, Stack(A))
+end
+
+-- The front holds the oldest value on top and the back the newest, so a push and a take each touch one top, and the back is turned over onto the front only once the front runs out: each value moves once, so a take costs a constant on average.
+--- Values taken in the order they were put in, each released as it is taken.
+pub struct Queue(A: Type): Type {
+    front: Stack(A),
+    back: Stack(A),
+    len: Nat,
+}
+
+--- A queue holding nothing.
+pub let empty(@A: Type) -> Queue(A) =
+    Queue { front = Stack/bottom(), back = Stack/bottom(), len = 0 };
+
+--- `q` with `a` put in last.
+pub let push(@A: Type, q: Queue(A), a: A) -> Queue(A) =
+    Queue { ..q, back = Stack/on(a, q.back), len = q.len + 1 };
+
+--- The oldest value `q` holds, beside `q` without it; `none` where `q` holds nothing.
+pub let take(@A: Type, q: Queue(A)) -> Option({A, Queue(A)}) =
+    match q.front
+    | on(a, rest) => Option/some((a, Queue { ..q, front = rest, len = q.len - 1 }))
+    | bottom() =>
+        match turned(q.back, Stack/bottom())
+        | on(a, rest) =>
+            Option/some((a, Queue { front = rest, back = Stack/bottom(), len = q.len - 1 }))
+        | bottom() => Option/none()
+        end
+    end;
+
+--- How many values `q` holds.
+pub let len(@A: Type, q: Queue(A)) -> Nat =
+    q.len;
+
+-- `s` turned over onto `onto`, so its top ends deepest.
+let turned(@A: Type, s: Stack(A), onto: Stack(A)) -> Stack(A) =
+    match s
+    | bottom() => onto
+    | on(a, rest) => turned(rest, Stack/on(a, onto))
+    end;

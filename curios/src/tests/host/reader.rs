@@ -42,7 +42,7 @@ const WIRE: &str = r#"
     use /std/time/{Duration};
     struct Wire: Type { Channel(Bytes) }
     let next(w: Wire) -> Try(Io, Io/Error, Io/Chunk) =
-        let got = Channel/receive(w.0)!;
+        let got = Channel/take(w.0)!;
         match got
         | none() => Try/pure(Io/Chunk/ended())
         | some(bytes) =>
@@ -101,12 +101,12 @@ fn a_line_a_deadline_abandons_is_read_whole_by_the_next_read() {
         let program() -> Io({}) =
             let sent = Channel/new(@Bytes, 4)!;
             let input = Io/Reader/new(Wire { sent })!;
-            let _ = Channel/try_send(sent, Str/to_bytes("ab"))!;
+            let _ = Channel/try_push(sent, Str/to_bytes("ab"))!;
             let hurried = Io/timeout(Duration/of_secs(2), Try/run(Io/Reader/line(input)))!;
             let _ = print(match hurried | some(read) => line(read) | none() => "<deadline>" end)!;
             let held = Io/Reader/held(input)!;
             let _ = print(Str/concat("|", text(held)))!;
-            let _ = Channel/try_send(sent, Str/to_bytes("cd\nef"))!;
+            let _ = Channel/try_push(sent, Str/to_bytes("cd\nef"))!;
             let patient = Try/run(Io/Reader/line(input))!;
             print(Str/concat("|", line(patient)));
         program()
@@ -158,11 +158,11 @@ fn two_branches_on_one_reader_each_get_a_whole_line() {
         let both_read(s: Io/Scope) -> Io({}) =
             let sent = Channel/new(@Bytes, 4)!;
             let input = Io/Reader/new(Wire { sent })!;
-            let _ = Channel/try_send(sent, Str/to_bytes("aaaaaa"))!;
+            let _ = Channel/try_push(sent, Str/to_bytes("aaaaaa"))!;
             let first = Io/Scope/spawn(s, reading(input))!;
             let second = Io/Scope/spawn(s, reading(input))!;
             let _ = Io/yield()!;
-            let _ = Channel/try_send(sent, Str/to_bytes("\nb\n"))!;
+            let _ = Channel/try_push(sent, Str/to_bytes("\nb\n"))!;
             let _ = Channel/finish(sent)!;
             let _ = Io/Scope/Task/join(first)!;
             Io/Scope/Task/join(second);

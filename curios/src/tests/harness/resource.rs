@@ -82,13 +82,13 @@ fn a_scope_cancels_a_started_child_before_propagating_the_tests_failure() {
         let child(started: Channel({})) -> Io({}) =
             let waiting() -> Io({}) =
                 let _ = print("child-started|")!;
-                let _ = Channel/try_send(started, ())!;
+                let _ = Channel/try_push(started, ())!;
                 Io/select(@{}, []);
             Io/scope((scope) => Io/bind(Io/Scope/defer(scope, (_) => print("child-cancelled|")), (_) => waiting()));
         let body(s: Io/Scope) -> Test({}) =
             let started = Channel/new(@{}, 1)!;
             let _ = Io/Scope/spawn(s, child(started))!;
-            let _ = Channel/receive(started)!;
+            let _ = Channel/take(started)!;
             Test/assert("the scoped test fails", false);
         test scoped = Test/scope(body);
         ()
