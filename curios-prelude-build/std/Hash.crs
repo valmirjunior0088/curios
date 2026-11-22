@@ -10,9 +10,8 @@ pub concept Hash(T: Type): pub Type {
 
 pub use Hash/*;
 
+-- Trailing rather than leading, and that is not a preference. `Bytes/of_nat` writes its least significant byte first, so a zero byte *after* the run is a higher place worth nothing, while one before it would multiply the value by 256: padding `5` and `1280` on the wrong side gives both `x[0,0,0,5]`, and two distinct numbers sharing an encoding is exactly what every user of this function exists to prevent. `Key`'s law would refuse its own case at the witness; `framed`, `tagged` and `digest` carry no law and would collide in silence.
 --- `b` ahead of enough zero bytes to reach `width`, or `b` itself when it is already that long.
----
---- Trailing rather than leading, and that is not a preference. `Bytes/of_nat` writes its least significant byte first, so a zero byte *after* the run is a higher place worth nothing, while one before it would multiply the value by 256: padding `5` and `1280` on the wrong side gives both `x[0,0,0,5]`, and two distinct numbers sharing an encoding is exactly what every user of this function exists to prevent. `Key`'s law would refuse its own case at the witness; `framed`, `tagged` and `digest` carry no law and would collide in silence.
 let padded(b: Bytes, width: Nat) -> Bytes =
     Bytes/flatten([b, Bytes/replicate(width - Bytes/len(b), 0x0)]);
 
@@ -28,17 +27,15 @@ pub let framed(b: Bytes) -> Bytes =
 pub let tagged(tag: Nat, parts: List(Bytes)) -> Bytes =
     Bytes/flatten([framed(Bytes/of_nat(tag)), Bytes/flatten(List/map(parts, framed))]);
 
+-- The modulus is a parameter, so the evidence that it is positive is this telescope's `ok`, which `%`'s bound is proved from.
 --- One polynomial lane: `acc · base + byte + 1` reduced modulo `prime`, folded over `b`.
----
---- The modulus is a parameter, so the evidence that it is positive is this telescope's `ok`, which `%`'s bound is proved from.
 let lane(b: Bytes, base: Nat, prime: Nat, @ok: Bool/Holds(0 < prime)) -> Nat =
     Bytes/fold(b, 1, (byte, acc) => (acc * base + Byte/to_nat(byte) + 1) % prime);
 
+-- Every intermediate stays below `2^30`, so a lane never leaves the range a `Nat` is held unboxed in: an accumulator is below its prime, so a step is below `prime · base + 257`, and each pair below is chosen to keep it there. `Nat` has no wrapping arithmetic, so the modulus is what bounds a lane.
 --- Eight bytes summarizing `b`.
 ---
 --- **Not stable across compiler versions: do not persist or transmit one.** Three polynomial lanes at distinct primes, which is enough for dedup, cache keys and bloom filters and is not adversarially resistant — anyone who chooses the input can collide it. Encode with `Hash/hash` where the bytes must keep meaning.
----
---- Every intermediate stays below `2^30`, so a lane never leaves the range a `Nat` is held unboxed in: an accumulator is below its prime, so a step is below `prime · base + 257`, and each pair below is chosen to keep it there. `Nat` has no wrapping arithmetic, so the modulus is what bounds a lane.
 pub let digest(b: Bytes) -> Bytes =
     Bytes/flatten([
         padded(Bytes/of_nat(lane(b, 127, 8388593)), 3),

@@ -40,9 +40,8 @@ pub let mul(@d: Nat, @a: Nat, p: Divides(d, a), c: Nat) -> Divides(d, a * c) =
     | intro(k, e) => Divides/intro(k * c, Eq/subst((x: Nat) => Eq()(a * c, x * c), e, Eq/refl()))
     end;
 
+-- With `a + b` as `k` copies of `d` and `a` as `m` of them, `b` is the `k - m` left, where `m <= k`. Where it is not, `d` is zero: one copy more than `k` would already pass the sum, so the copies weigh nothing and `b` is zero, which everything divides.
 --- A divisor of a sum and of one of its summands divides the other.
----
---- With `a + b` as `k` copies of `d` and `a` as `m` of them, `b` is the `k - m` left, where `m <= k`. Where it is not, `d` is zero: one copy more than `k` would already pass the sum, so the copies weigh nothing and `b` is zero, which everything divides.
 pub let sub(@d: Nat, @a: Nat, @b: Nat, p: Divides(d, a + b), q: Divides(d, a)) -> Divides(d, b) =
     match p
     | intro(k, e) =>
@@ -112,9 +111,8 @@ pub let exact(n: Nat, d: Nat, @ok: Bool/Holds(0 < d), p: Divides(d, n)) -> Eq()(
         Eq/subst((x: Nat) => Eq()(n, x * d), Nat/DivMod/unique(n, d, k, 0, e, proved()).quotient, e)
     end;
 
+-- The dividend is the divisor's multiple and the remainder, by Euclid's identity, and a divisor of the first two divides the third by [`sub`]: the step Euclid's algorithm takes.
 --- A common divisor of a dividend and its divisor divides the remainder.
----
---- The dividend is the divisor's multiple and the remainder, by Euclid's identity, and a divisor of the first two divides the third by [`sub`]: the step Euclid's algorithm takes.
 pub let rem(
     @d: Nat,
     a: Nat,

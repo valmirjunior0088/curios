@@ -12,15 +12,13 @@ pub struct DivMod(n: Nat, d: Nat): pub Type {
     bounded: Bool/Holds(remainder < d),
 }
 
+-- Both proofs are the reducer's own: Euclid's identity recombines the quotient and remainder into `n`, and a remainder sits below its divisor by definition.
 --- Division with remainder, certified: the quotient and remainder `/` and `%` compute, with their equation and bound.
----
---- Both proofs are the reducer's own: Euclid's identity recombines the quotient and remainder into `n`, and a remainder sits below its divisor by definition.
 pub let of(n: Nat, d: Nat, @ok: Bool/Holds(0 < d)) -> DivMod(n, d) =
     DivMod { quotient = n / d, remainder = n % d, joined = Eq/refl(), bounded = Bool/True/qed() };
 
+-- A quotient below `m` would put `n` under `(n / d + 1) * d`, which the quotient's own bound puts above `n` — a product of the negated bound with `0 <= d`, which the elaborator proves from the facts in scope.
 --- `m * d <= n` gives `m <= n / d`: the quotient is the largest multiplier that fits.
----
---- A quotient below `m` would put `n` under `(n / d + 1) * d`, which the quotient's own bound puts above `n` — a product of the negated bound with `0 <= d`, which the elaborator proves from the facts in scope.
 pub let le_div_of_mul_le(
     m: Nat,
     n: Nat,
@@ -40,9 +38,10 @@ pub let div_lt_of_lt_mul(
 ) -> Bool/Holds(n / d < m) =
     proved();
 
+-- The quotient is pinned from both sides by its own bounds, each a product the elaborator proves from the facts in scope, and the remainder is what Euclid's identity leaves once the two quotients are one.
 --- A quotient and a remainder are the ones `/` and `%` compute: a `q` and an `r` with `n = q * d + r` and `r < d` are `n / d` and `n % d`.
 ---
---- What a Euclidean argument ends in: a multiple's quotient is its multiplier, and its remainder zero. The quotient is pinned from both sides by its own bounds, each a product the elaborator proves from the facts in scope, and the remainder is what Euclid's identity leaves once the two quotients are one.
+--- What a Euclidean argument ends in: a multiple's quotient is its multiplier, and its remainder zero.
 pub let unique(
     n: Nat,
     d: Nat,

@@ -57,9 +57,10 @@ pub let eql(a: Char, b: Char) -> Bool =
 pub let ord(a: Char, b: Char) -> Ordering =
     Nat/ord(a.code, b.code);
 
+-- Read through `ord` it would be a stuck match on an `Ordering`, which no law relates to another.
 --- Whether `a` is below `b` in code-point order.
 ---
---- Stated on the code points directly, as `Byte`'s order is on its values, so that a comparison of characters is a comparison of naturals once unfolded and reduces as one — its negation is its dual, and swapping its operands is the mirrored comparison. Read through `ord` it would be a stuck match on an `Ordering`, which no law relates to another.
+--- Stated on the code points directly, as `Byte`'s order is on its values, so that a comparison of characters is a comparison of naturals once unfolded and reduces as one — its negation is its dual, and swapping its operands is the mirrored comparison.
 pub let lt(a: Char, b: Char) -> Bool =
     a.code < b.code;
 
@@ -167,7 +168,8 @@ pub let is_cased(c: Char) -> Bool =
 pub let is_case_ignorable(c: Char) -> Bool =
     unicode/held(/sys/unicode/case_ignorable, c);
 
---- The lowercase hexadecimal digit for `nibble` modulo sixteen. Both codes are scalar values by reduction, since a remainder sits below its divisor.
+-- Both codes are scalar values by reduction, since a remainder sits below its divisor.
+--- The lowercase hexadecimal digit for `nibble` modulo sixteen.
 pub let hex_digit(nibble: Nat) -> Char =
     match nibble % 0x10 < 10
     | true => Char { code = nibble % 0x10 + '0' }
@@ -197,9 +199,8 @@ pub let to_ascii(c: Char) -> Option(Byte) =
     | false => Option/none()
     end;
 
+-- Each byte is built under the bound it is proved to satisfy, and none is masked. A continuation byte's six bits are below `0x40` by the remainder that selects them, which reduction decides. A lead byte's payload is below its family's width because the code point is below the family's end: the guard says so for the first three families, and for the fourth, which has no guard, `c.valid` does — a scalar value is at most `U+10FFFF`, so its lead byte is at most `F4`.
 --- The UTF-8 encoding, one to four bytes: `/std/Str/Valid/encoded` proves them well-formed.
----
---- Each byte is built under the bound it is proved to satisfy, and none is masked. A continuation byte's six bits are below `0x40` by the remainder that selects them, which reduction decides. A lead byte's payload is below its family's width because the code point is below the family's end: the guard says so for the first three families, and for the fourth, which has no guard, `c.valid` does — a scalar value is at most `U+10FFFF`, so its lead byte is at most `F4`.
 pub let to_utf8(c: Char) -> Bytes =
     let code = c.code;
     match

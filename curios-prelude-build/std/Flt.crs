@@ -410,15 +410,13 @@ pub let total_key(f: Flt) -> Nat =
     | false => bits + top
     end;
 
+-- [`to_le_bytes`] is injective because `of_le_bytes` undoes it, which is what makes the bytes a float's identity: the two zeros and every NaN pattern are apart, as their encodings are.
 --- A float is its bytes: two floats with one encoding are one float.
----
---- [`to_le_bytes`] is injective because `of_le_bytes` undoes it, which is what makes the bytes a float's identity: the two zeros and every NaN pattern are apart, as their encodings are.
 pub let eq_of_le_bytes(a: Flt, b: Flt, same: Eq()(to_le_bytes(a), to_le_bytes(b))) -> Eq()(a, b) =
     Option/some_injective(Eq/cong(try_of_le_bytes, same));
 
+-- So the order `Nat/ord` reads through the key is a total order that answers `eq` exactly at an equation, by `Nat/ord`'s own laws. A key at or above `2^63` is a pattern with its sign clear, lifted, and one below it a pattern with its sign set, complemented, and neither map folds two patterns into one below `2^64`, where eight bytes keep every pattern.
 --- Two floats with one [`total_key`] are one float: the key tells every pattern apart.
----
---- So the order `Nat/ord` reads through the key is a total order that answers `eq` exactly at an equation, by `Nat/ord`'s own laws. A key at or above `2^63` is a pattern with its sign clear, lifted, and one below it a pattern with its sign set, complemented, and neither map folds two patterns into one below `2^64`, where eight bytes keep every pattern.
 pub let total_key_injective(a: Flt, b: Flt, e: Eq()(total_key(a), total_key(b))) -> Eq()(a, b) =
     let la: Bool/Holds(Bytes/to_nat(to_le_bytes(a)) < 18446744073709551616) =
         Bytes/to_nat/below(to_le_bytes(a));

@@ -2,14 +2,16 @@ pub use /sys/Bool/{and};
 
 use /std/{Bool};
 
---- Two decisions that hold, as one: `a && b` holds where `a` does and `b` does. By cases on `a`, since `&&` reduces at each.
+-- By cases on `a`, since `&&` reduces at each.
+--- Two decisions that hold, as one: `a && b` holds where `a` does and `b` does.
 pub let both(a: Bool, b: Bool, p: Bool/Holds(a), q: Bool/Holds(b)) -> Bool/Holds(a && b) =
     match a
     | true => q
     | false => match p end
     end;
 
---- The first of two decisions that hold as one: `a` holds where `a && b` does. By cases on `a`, as [`both`] is.
+-- By cases on `a`, as [`both`] is.
+--- The first of two decisions that hold as one: `a` holds where `a && b` does.
 pub let first(a: Bool, b: Bool, p: Bool/Holds(a && b)) -> Bool/Holds(a) =
     match a | true => Bool/True/qed() | false => p end;
 

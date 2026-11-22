@@ -63,9 +63,8 @@ pub struct Str: pub Type {
 pub let to_bytes(s: Str) -> Bytes =
     s.bytes;
 
+-- Each byte is put to `scan_from` by itself rather than to `step`: only bytes that are not text are read here, and a second caller of `step` would keep it from being folded into the scan every `of_bytes` runs.
 --- How many bytes of what a scan has read are text once it has read `rest` from `sc`: `last`, where it last stood between characters, when it meets a byte the encoding does not admit or ends inside a character. `read` is how many bytes lie before `rest`.
----
---- Each byte is put to `scan_from` by itself rather than to `step`: only bytes that are not text are read here, and a second caller of `step` would keep it from being folded into the scan every `of_bytes` runs.
 let text_before(sc: Scan, rest: Bytes, read: Nat, last: Nat) -> Nat =
     match rest
     | x[] => last
@@ -222,9 +221,8 @@ pub let repeat(s: Str, n: Nat) -> Str =
         match n % 2 | 0 => doubled | _ => concat(doubled, s) end
     end;
 
+-- A character is read whole at its lead byte, its continuation bytes in a line rather than a turn each, so no bits of one are carried from a turn to the next. The walk carries the string's validity between characters, and each byte it reads steps it as the scan does: a byte the encoding does not admit is a contradiction rather than an arm, and the proof that a character in flight can only end at a scalar value goes from byte to byte with it, so every character it hands `f` is built with its proof. Both proofs erase.
 --- Left to right over the characters with `f(char, acc)`.
----
---- A character is read whole at its lead byte, its continuation bytes in a line rather than a turn each, so no bits of one are carried from a turn to the next. The walk carries the string's validity between characters, and each byte it reads steps it as the scan does: a byte the encoding does not admit is a contradiction rather than an arm, and the proof that a character in flight can only end at a scalar value goes from byte to byte with it, so every character it hands `f` is built with its proof. Both proofs erase.
 pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
     let go(b: Bytes, v: Valid(b), acc: A) -> A =
         match b
@@ -567,7 +565,7 @@ let leading(
 pub let to_list(s: Str) -> List(Char) =
     fold(s, [], (c, acc) => [..acc, c]);
 
---- `count_scalars` splits at the seam of a concatenation whose first half reads to the end, from whatever state the reading starts in — the strengthening `len/concat` needs to descend a byte, where the state has moved.
+-- `count_scalars` splits at the seam of a concatenation whose first half reads to the end, from whatever state the reading starts in — the strengthening `len/concat` needs to descend a byte, where the state has moved.
 let count_concat(
     a: Bytes,
     b: Bytes,
@@ -631,9 +629,8 @@ let split_at(
         end
     end;
 
+-- Compared as bytes, UTF-8 encoding each character one way: valid text that holds a valid piece's bytes at a boundary holds its characters, and goes on past them as valid text, so the position past it is a boundary with no character decoded.
 --- Where `piece` follows `from` in `s`: the position past it, which is not before `from`, or `none` when `s` does not hold it there.
----
---- Compared as bytes, UTF-8 encoding each character one way: valid text that holds a valid piece's bytes at a boundary holds its characters, and goes on past them as valid text, so the position past it is a boundary with no character decoded.
 pub let follows(
     s: Str,
     from: At(s),

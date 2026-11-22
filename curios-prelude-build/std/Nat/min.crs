@@ -2,9 +2,10 @@ pub use /sys/Nat/{min};
 
 use /std/{Nat, Eq, Bool};
 
+-- With `b` read as `a + (b - a)`, which [`Nat/le/add_sub_cancel`] states under `p`, the greater operand is dropped.
 --- `min(a, b)` is `a` where `a <= b`.
 ---
---- Conversion decides it where it decides the comparison of the two operands as terms, and reads no hypothesis: this is the step a proof takes under one. With `b` read as `a + (b - a)`, which [`Nat/le/add_sub_cancel`] states under `p`, the greater operand is dropped.
+--- Conversion decides it where it decides the comparison of the two operands as terms, and reads no hypothesis: this is the step a proof takes under one.
 pub let of_le(a: Nat, b: Nat, p: Bool/Holds(a <= b)) -> Eq()(min(a, b), a) =
     Eq/sym(Eq/cong((x) => min(a, x), Nat/le/add_sub_cancel(a, b, p)));
 

@@ -22,7 +22,7 @@ test a_page_renders_escaped =
             "<link rel=\"stylesheet\" href=\"a.css\"/></head><body>",
             "<p class=\"x\" hidden>1 &lt; 2 &amp; &quot;q&quot;<br/><!--note--></p></body></html>"]));
 
--- What `render` writes, `of_str` reads back as the same tree.
+-- What `encode` writes, `decode` reads back as the same tree.
 test a_rendered_page_reads_back =
     Test/equal(Html/decode(Html/encode(page)), Result/success(page));
 

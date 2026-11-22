@@ -58,7 +58,8 @@ let turned(read: Fmt, rest: Fmt) -> Fmt =
     | spell(before) => turned(before, Fmt/spell(rest))
     end;
 
---- The format `s` spells: `%` is a place an argument is shown at and `#` one it is spelled at; `\%` and `\#` are the literal characters, and a backslash before anything else is itself. A fold over the characters, so every piece is text because every character it is built from is, and the walk ends where the string does.
+-- A fold over the characters, so every piece is text because every character it is built from is, and the walk ends where the string does.
+--- The format `s` spells: `%` is a place an argument is shown at and `#` one it is spelled at; `\%` and `\#` are the literal characters, and a backslash before anything else is itself.
 pub let parse(s: Str) -> Fmt =
     let start: Walk = (Fmt/nil(), "", false);
     let (read, run, escaped) = Str/fold(s, start, step);

@@ -30,9 +30,8 @@ pub let refl(a: Bytes) -> Eq()(ord(a, a), Ordering/eq()) =
 pub let past(p: Bytes, a: Bytes, b: Bytes) -> Eq()(ord(x[..p, ..a], x[..p, ..b]), ord(a, b)) =
     match p | x[] => Eq/refl() | x[_, ..t] => past(t, a, b) end;
 
+-- A recursion over both runs: where the two heads differ the answer is theirs, which `Nat/ord/flips` flips, and where they tie it is the tails'.
 --- `ord` answers the flipped answer with its operands swapped.
----
---- A recursion over both runs: where the two heads differ the answer is theirs, which `Nat/ord/flips` flips, and where they tie it is the tails'.
 pub let flips: Ord/Flips(ord) =
     (a, b) =>
         match a
@@ -92,9 +91,8 @@ let after(o: Ordering, t: Bytes, r: Bytes) -> Bool =
         | gt() => Ordering/gt()
         end);
 
+-- A recursion over the three runs: the heads' answers are `Nat/ord`'s, which carries across the middle head, and where all three heads tie the answer is the tails'.
 --- `ord` as a relation carries across a middle run.
----
---- A recursion over the three runs: the heads' answers are `Nat/ord`'s, which carries across the middle head, and where all three heads tie the answer is the tails'.
 pub let transitive: Ord/Transitive(Ord/le(ord)) =
     (a, b, c, p, q) =>
         match a

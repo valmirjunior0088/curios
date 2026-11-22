@@ -4,9 +4,8 @@ pub use /sys/{let Nat};
 pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, gt, ge, and, or, xor, shr, to_int,
     to_flt, to_byte};
 
+-- Proved by recursion on the numbers rather than on evidence: one more on each side of a decided comparison cancels, so the hypothesis about `a + 1` and `b + 1` already is the one about `a` and `b`.
 --- The laws of `a < b`, and its crossings with `a <= b`.
----
---- Proved by recursion on the numbers rather than on evidence: one more on each side of a decided comparison cancels, so the hypothesis about `a + 1` and `b + 1` already is the one about `a` and `b`.
 pub mod lt;
 pub use lt/{let lt};
 
@@ -81,7 +80,7 @@ pub use Scale/{let Scale};
 use /std/{Str, Option, Char, Bool, Show, Spell, Ord, Hash, Map, Eq};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
---- That `n` is not zero, decided — what `/` and `%` on `Nat` ask of a divisor. It is the proposition `Bool/Holds(0 < n)` is: a natural is not zero exactly where zero is below it, which conversion decides.
+--- That `n` is not zero, decided — what `/` and `%` on `Nat` ask of a divisor. It is `Bool/Holds(0 < n)`: a natural is not zero exactly where zero is below it, which conversion decides.
 pub let NonZero(n: Nat) -> Prop =
     Bool/Holds(n != 0);
 

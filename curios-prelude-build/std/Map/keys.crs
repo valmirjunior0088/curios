@@ -7,9 +7,8 @@ use /std/Map/internal/{Node};
 pub let keys(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> List(K) =
     Node/collect(m.root, []);
 
+-- A map's trie is sound, so a key under a branch's twig is before every key under the twigs after it as `Bytes/ord` reads their encodings, and `Key/monotone` makes that the keys' own order. It asks nothing beyond the map's `Key(K)`.
 --- The keys of a map are in strict order by their type's own order, each before every one after it.
----
---- A map's trie is sound, so a key under a branch's twig is before every key under the twigs after it as `Bytes/ord` reads their encodings, and `Key/monotone` makes that the keys' own order. It asks nothing beyond the map's `Key(K)`.
 pub let pairwise(
     @K: Type,
     use Key(K),

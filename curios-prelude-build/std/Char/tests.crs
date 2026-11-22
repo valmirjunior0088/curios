@@ -1,4 +1,4 @@
--- The `Char` surface past its scalar boundaries: the ASCII case conversions and the hexadecimal digit, each of which builds its character with the proof that its code is a scalar value.
+-- The `Char` surface past its scalar boundaries: the case conversions, ASCII's and the database's full mappings, the case predicates and the hexadecimal digit, each of which builds its character with the proof that its code is a scalar value.
 use /std/{Str, Char, List, Bool, Test};
 
 -- Each conversion flips a letter at either end of the alphabet, and leaves the characters just outside it, the other case and a letter past ASCII as they are.

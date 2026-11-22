@@ -57,9 +57,8 @@ pub let count_scalars(s: Scan, b: Bytes) -> Nat =
         end
     end;
 
+-- The range is stated once over the bytes owed past the next: each shifts what came before by six bits, a power of `0x40`, and leaves its own six bits free. No count past three begins a character, so those are refused along with zero.
 --- Whether a character in flight can only end at a scalar value: `rem` continuation bytes still owed, the next between `lo` and `hi` and any after it between `0x80` and `0xBF`, over the bits `partial` has gathered so far.
----
---- The range is stated once over the bytes owed past the next: each shifts what came before by six bits, a power of `0x40`, and leaves its own six bits free. No count past three begins a character, so those are refused along with zero.
 pub let pending(rem: Nat, lo: Nat, hi: Nat, partial: Nat) -> Bool =
     match rem
     | 0 => false

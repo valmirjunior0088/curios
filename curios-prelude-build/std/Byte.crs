@@ -40,30 +40,26 @@ pub let or(a: Byte, b: Byte) -> Byte =
 pub let xor(a: Byte, b: Byte) -> Byte =
     Nat/to_byte(Nat/xor(to_nat(a), to_nat(b)));
 
+-- Spelled as a subtraction from the all-ones byte rather than as a complement, because `Nat` is unbounded and has no complement to take: what a width-8 `not` means is the distance to that width's largest value.
 --- Every bit of the byte flipped.
----
---- Spelled as a subtraction from the all-ones byte rather than as a complement, because `Nat` is unbounded and has no complement to take: what a width-8 `not` means is the distance to that width's largest value.
 pub let not(a: Byte) -> Byte =
     Nat/to_byte(255 - to_nat(a));
 
+-- `count` is guarded rather than masked. `Nat` is unbounded, so the shift builds its whole product before the conjunction narrows it — a number as wide as the count, on the way to an answer that is `0`. The guard computes that answer instead of the number.
 --- The byte shifted left by `count`, the bits carried past the width discarded.
----
---- `count` is guarded rather than masked. `Nat` is unbounded, so the shift builds its whole product before the conjunction narrows it — a number as wide as the count, on the way to an answer that is `0`. The guard computes that answer instead of the number.
 pub let shl(a: Byte, count: Nat) -> Byte =
     match count < 8
     | true => Nat/to_byte(Nat/and(Nat/shl(to_nat(a), count), 0xFF))
     | false => 0
     end;
 
+-- No guard and no mask: a right shift only ever discards bits, so the result is under the byte's own bound at every count, and the oracle reads that off the operand.
 --- The byte shifted right by `count`, the bits carried past zero discarded.
----
---- No guard and no mask: a right shift only ever discards bits, so the result is under the byte's own bound at every count, and the oracle reads that off the operand.
 pub let shr(a: Byte, count: Nat) -> Byte =
     Nat/to_byte(Nat/shr(to_nat(a), count));
 
+-- The count is taken modulo the width, which is what makes this total without a guard: the remainder carries its own bound in the term, so the shift below can never reach far enough to leave the envelope.
 --- The byte rotated left by `count`, the bits carried past the width re-entering at the bottom.
----
---- The count is taken modulo the width, which is what makes this total without a guard: the remainder carries its own bound in the term, so the shift below can never reach far enough to leave the envelope.
 pub let rotl(a: Byte, count: Nat) -> Byte =
     let places = count % 8;
     Nat/to_byte(Nat/and(Nat/or(Nat/shl(to_nat(a), places), Nat/shr(to_nat(a), 8 - places)), 0xFF));
@@ -113,9 +109,8 @@ satisfy Ord(Byte) {
     ord = ord,
 }
 
+-- Spelled as the byte rather than routed through `Bytes/of_nat` and padded back to one byte, which is the same encoding for all 256 values and says it the long way round: `of_nat` answers the empty run at zero, so the padding existed only to undo that. Written directly, `/std/Map`'s `Key(Byte)` reads the byte back with the index that put it there instead of proving its way through a minimal encoding.
 --- The one byte itself.
----
---- Spelled as the byte rather than routed through `Bytes/of_nat` and padded back to one byte, which is the same encoding for all 256 values and says it the long way round: `of_nat` answers the empty run at zero, so the padding existed only to undo that. Written directly, `/std/Map`'s `Key(Byte)` reads the byte back with the index that put it there instead of proving its way through a minimal encoding.
 satisfy Hash(Byte) {
     hash(b) = x[b],
 }

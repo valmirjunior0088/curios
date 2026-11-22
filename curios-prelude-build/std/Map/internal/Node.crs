@@ -1276,9 +1276,8 @@ pub induct Inserted(K: Type, use Key(K), V: Type, t: Node(K, V), k: Bytes, v: V)
     @small_d: Bool/Holds(d < 16))
 end
 
+-- One descent: a branch reads the twig at `k`'s digit, inserts under it, and updates its twigs at that digit with what comes back, which writes the twigs in place where nothing else holds them. A twig that held nothing takes the key's leaf where the key agrees with the branch's first key below the branch's position, and the branch parts from the key above it otherwise; the node comes back through the answer where its leaf is still to be wedged, so no caller holds it across the call.
 --- `key` under the sound node `t` at `v`, where `k` is `key`'s encoding, computed once by the caller; a leaf's is derived here, where it is compared.
----
---- One descent: a branch reads the twig at `k`'s digit, inserts under it, and updates its twigs at that digit with what comes back, which writes the twigs in place where nothing else holds them. A twig that held nothing takes the key's leaf where the key agrees with the branch's first key below the branch's position, and the branch parts from the key above it otherwise; the node comes back through the answer where its leaf is still to be wedged, so no caller holds it across the call.
 pub let insert(
     @K: Type,
     use Key(K),
@@ -1948,9 +1947,8 @@ pub let branch_emptied(
                                         j,
                                         proved()))) } };
 
+-- One descent, as [`insert`]'s: a branch reads the twig at `k`'s digit, removes under it, and updates its twigs at that digit with what is left. A branch left with one twig that holds anything stands as that twig.
 --- The sound node `t` without the key whose encoding is `k`.
----
---- One descent, as [`insert`]'s: a branch reads the twig at `k`'s digit, removes under it, and updates its twigs at that digit with what is left. A branch left with one twig that holds anything stands as that twig.
 pub let remove(
     @K: Type,
     use Key(K),
@@ -3275,9 +3273,8 @@ let carried_find(
 ) -> Bool/Holds(Option/is_some(find(b, Hash/hash(x)))) =
     Eq/subst((o: Option(V)) => Bool/Holds(Option/is_some(o)), same, f);
 
+-- A sound branch's position is the first its keys differ at, which the keys alone decide, so two such branches stand at one position, and a key's twig there finds what the branch does; an empty node finds nothing, a leaf one key, and a branch two keys at least.
 --- Two sound nodes that find alike at every key's encoding are one node.
----
---- A sound branch's position is the first its keys differ at, which the keys alone decide, so two such branches stand at one position, and a key's twig there finds what the branch does; an empty node finds nothing, a leaf one key, and a branch two keys at least.
 pub let canonical(
     @K: Type,
     use Key(K),

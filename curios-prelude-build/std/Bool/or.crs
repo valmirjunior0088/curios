@@ -2,7 +2,8 @@ pub use /sys/Bool/{or};
 
 use /std/{Bool};
 
---- A disjunction from its first decision: `a || b` holds where `a` does. By cases on `a`, since `||` reduces at each.
+-- By cases on `a`, since `||` reduces at each.
+--- A disjunction from its first decision: `a || b` holds where `a` does.
 pub let of_first(a: Bool, b: Bool, p: Bool/Holds(a)) -> Bool/Holds(a || b) =
     match a
     | true => Bool/True/qed()

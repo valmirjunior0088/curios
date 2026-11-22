@@ -264,7 +264,7 @@ let _no_key_is_past_a_maps_ends(
 ) -> {Map/least/Below(Map/least(m), x), Map/greatest/Above(Map/greatest(m), x)} =
     (Map/least/below(m, x, i), Map/greatest/above(m, x, i));
 
--- Setting an existing key goes down the `replace` path: same size, new value, no duplicate leaf.
+-- Setting an existing key goes down the `replaced` path: same size, new value, no duplicate leaf.
 test insert_replaces_without_growing =
     let m: Map(Str, Nat) = Map/insert(Map/insert(Map/empty(), "k", 1), "k", 2);
     Test/equal(m, Map/of_list([("k", 2)]));

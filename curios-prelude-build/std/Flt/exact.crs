@@ -77,7 +77,8 @@ let encode(mode: Mode, negative: Bool, m: Nat, e: Int) -> Flt =
     | _ => of_bits(sign_bit(negative) + Nat/shl(Int/abs(field), 52) + (m - pow2(52)))
     end;
 
---- The float `(-1)^negative · (m + ε) · 2^e` rounds to in `mode`, `ε` in `(0, 1)` when `sticky` and zero when not — `curios_num::Floating`'s `round`, line for line, so the rounding a type reasons about is the one every primitive folds by.
+-- It is `curios_num::Floating`'s `round`, line for line, so the rounding a type reasons about is the one every primitive folds by.
+--- The float `(-1)^negative · (m + ε) · 2^e` rounds to in `mode`, `ε` in `(0, 1)` when `sticky` and zero when not.
 pub let round_in(mode: Mode, negative: Bool, m: Nat, e: Int, sticky: Bool) -> Flt =
     let width = Nat/to_int(bit_len(m));
     let grid = -1074 - e;

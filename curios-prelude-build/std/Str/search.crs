@@ -41,9 +41,8 @@ let starts_concat(
     | x[_, .._] => at
     end;
 
+-- Searched as bytes, one walk over what follows `from`: a valid needle begins with a byte no character continues, so where its bytes stand they stand where a character begins, and valid text that holds them goes on past them as valid text. No character is decoded.
 --- The first occurrence at or after `from` of the needle whose first character `first` reads, or `none`.
----
---- Searched as bytes, one walk over what follows `from`: a valid needle begins with a byte no character continues, so where its bytes stand they stand where a character begins, and valid text that holds them goes on past them as valid text. No character is decoded.
 pub let occurrence(
     s: Str,
     from: At(s),

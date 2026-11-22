@@ -10,9 +10,9 @@ pub struct File: Type {
 pub induct Mode: pub Type
 --- Opened to read.
 | read()
---- Opened to write from the start.
+--- Opened to write, created if absent and emptied if present.
 | write()
---- Opened to write after what is there.
+--- Opened to write after what is there, created if absent.
 | append()
 --- Opened to read and to write where it stands, neither created nor truncated.
 | read_write()

@@ -1,4 +1,4 @@
--- `Nat` and `Int` past every machine width: the arithmetic `/std/BigNat` and `/std/BigInt` stood in for until the carriers themselves became unbounded. Each expectation is written as the decimal it stands for.
+-- `Nat` and `Int` past every machine width. Each expectation is written as the decimal it stands for.
 use /std/{Nat, Int, Option, Ordering, Test};
 
 -- Carry and borrow across the edge of the i31 a small value rides in, of a 32-bit limb, and of two.

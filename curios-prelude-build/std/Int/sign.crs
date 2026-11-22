@@ -2,9 +2,10 @@ pub use /sys/Int/{sign};
 
 use /std/{Nat, Int, Eq, Bool};
 
+-- Each is by [`Int/view`], whose arms are the forms a sign is computed of.
 --- `sign(a)` is `+1` where `a` is above zero.
 ---
---- Conversion decides a sign where the comparison decides the operand's as a term, and reads no hypothesis: under one these laws are the step. Each is by [`Int/view`], whose arms are the forms a sign is computed of.
+--- Conversion decides a sign where the comparison decides the operand's as a term, and reads no hypothesis: under one these laws are the step.
 pub let of_pos(a: Int, p: Bool/Holds(+0 < a)) -> Eq()(sign(a), +1) =
     match Int/view(a)
     | nonneg(0) => match p end

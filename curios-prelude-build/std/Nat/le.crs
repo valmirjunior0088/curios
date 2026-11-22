@@ -21,9 +21,8 @@ pub let of_lt(a: Nat, b: Nat, p: Bool/Holds(a < b)) -> Bool/Holds(a <= b) =
         end
     end;
 
+-- How a proof the elaborator writes from the facts in scope reads an equation: as this bound and the one [`Eq/sym`] turns it into.
 --- An equation's bound: `a = b` gives `a <= b`.
----
---- How a proof the elaborator writes from the facts in scope reads an equation: as this bound and the one [`Eq/sym`] turns it into.
 pub let of_eq(@a: Nat, @b: Nat, e: Eq()(a, b)) -> Bool/Holds(a <= b) =
     Eq/subst((x: Nat) => Bool/Holds(a <= x), e, refl(a));
 
@@ -52,9 +51,8 @@ pub let trans(
 pub let add_mono_l(n: Nat, @a: Nat, @b: Nat, p: Bool/Holds(a <= b)) -> Bool/Holds(n + a <= n + b) =
     p;
 
+-- The step a proof the elaborator writes from the facts in scope is summed with, one fact at a time. It is [`trans`] alone, because `a + c <= b + c` cancels to `a <= b` and `b + c <= b + d` to `c <= d`.
 --- `a <= b` and `c <= d` give `a + c <= b + d`: two bounds added side by side.
----
---- The step a proof the elaborator writes from the facts in scope is summed with, one fact at a time. It is [`trans`] alone, because `a + c <= b + c` cancels to `a <= b` and `b + c <= b + d` to `c <= d`.
 pub let add(
     @a: Nat,
     @b: Nat,
@@ -65,9 +63,8 @@ pub let add(
 ) -> Bool/Holds(a + c <= b + d) =
     trans(@a + c, @b + c, @b + d, p, q);
 
+-- The successor case is one application of [`add_mono_l`]: `(a + 1) * k` is `k + a * k`, which is what that step has to produce.
 --- `a <= b` gives `a * k <= b * k`.
----
---- The successor case is one application of [`add_mono_l`]: `(a + 1) * k` is `k + a * k`, which is what that step has to produce.
 pub let mul_mono_r(@a: Nat, @b: Nat, k: Nat, p: Bool/Holds(a <= b)) -> Bool/Holds(a * k <= b * k) =
     match a
     | 0 => Bool/True/qed()
@@ -136,9 +133,8 @@ pub let add_sub_cancel(a: Nat, b: Nat, p: Bool/Holds(a <= b)) -> Eq()(a + (b - a
         end
     end;
 
+-- The step a proof the elaborator writes multiplies two facts by, where a multiplier is no literal. With `d` read as `c + (d - c)`, which [`add_sub_cancel`] states under `q`, it is [`mul_mono_r`] by `d - c`, once conversion distributes the products.
 --- `a <= b` and `c <= d` give `a * d + b * c <= a * c + b * d`: the product of two bounds' differences is not negative.
----
---- The step a proof the elaborator writes multiplies two facts by, where a multiplier is no literal. With `d` read as `c + (d - c)`, which [`add_sub_cancel`] states under `q`, it is [`mul_mono_r`] by `d - c`, once conversion distributes the products.
 pub let mul(
     @a: Nat,
     @b: Nat,

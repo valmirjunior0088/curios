@@ -240,9 +240,8 @@ let of_root(
         (_) => Eq/refl())(
         b.sound);
 
+-- A map's trie is a function of its entries: the position a sound branch forks at is the first its keys differ at, and which twig holds a key is that key's digit there. So a proof about a map binds to what it holds, and two maps built in different orders, or by different operations, are equal where they agree at every key.
 --- Two maps with the same value at every key are one map.
----
---- A map's trie is a function of its entries: the position a sound branch forks at is the first its keys differ at, and which twig holds a key is that key's digit there. So a proof about a map binds to what it holds, and two maps built in different orders, or by different operations, are equal where they agree at every key.
 pub let injective(
     @K: Type,
     use Key(K),

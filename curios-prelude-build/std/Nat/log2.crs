@@ -4,9 +4,8 @@ use /std/{Nat, Eq, proved, Bool};
 pub let log2(n: Nat) -> Nat =
     match n < 2 | true => 0 | false => log2(n / 2) + 1 end;
 
+-- By the recursion `log2` takes: halving `n` lowers both powers by one factor of two, and a quotient by two is within one of half.
 --- A positive `n` lies between the power of two at `log2(n)` and the next: `pow(2, log2(n)) <= n < 2 * pow(2, log2(n))`, so `log2(n) + 1` is `n`'s length in bits.
----
---- By the recursion `log2` takes: halving `n` lowers both powers by one factor of two, and a quotient by two is within one of half.
 pub let bounds(
     n: Nat,
     @ok: Bool/Holds(0 < n),

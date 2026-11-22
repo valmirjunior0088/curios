@@ -11,9 +11,8 @@ pub let split(
 ) -> Eq()(shl(x, i), shl(shl(x, i - j), j)) =
     Eq/cong((count: Nat) => shl(x, count), Eq/sym(Nat/le/add_sub_cancel(j, i, fits)));
 
+-- The signed scale, carried from [`Nat/Scale/unique`] through the sign: a shift's magnitude is its operand's shifted and its sign its operand's, which conversion decides, so the magnitudes are one odd part at one count, the signs are one, and an integer is its sign times its magnitude.
 --- One value has one odd mantissa at one count: two integers of odd magnitude shifted to one value are one integer, shifted by one count.
----
---- The signed scale, carried from [`Nat/Scale/unique`] through the sign: a shift's magnitude is its operand's shifted and its sign its operand's, which conversion decides, so the magnitudes are one odd part at one count, the signs are one, and an integer is its sign times its magnitude.
 pub let unique(
     m: Int,
     k: Nat,

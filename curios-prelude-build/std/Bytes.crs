@@ -22,9 +22,8 @@ pub let try_get(b: Bytes, i: Nat) -> Option(Byte) =
     | false => Option/none()
     end;
 
+-- A direct cons, which is the shape `x[h, ..t]` builds and the shape `to_nat` folds back, so taking one apart is the eliminator's own seam rather than the window at the far one a big-endian snoc would need.
 --- The minimal encoding of `n`, least-significant byte first as the carrier reads: empty for zero, no trailing zero otherwise, so distinct numbers encode distinctly.
----
---- A direct cons, which is the shape `x[h, ..t]` builds and the shape `to_nat` folds back, so taking one apart is the eliminator's own seam rather than the window at the far one a big-endian snoc would need.
 pub let of_nat(n: Nat) -> Bytes =
     match n == 0
     | true => x[]
@@ -35,9 +34,10 @@ pub let of_nat(n: Nat) -> Bytes =
 let no_cons(k: Byte, p: Bytes, e: Eq()(0, len(x[k, ..p]))) -> Bool/False =
     Eq/subst((m: Nat) => Bool/Holds(0 == m), e, Bool/True/qed());
 
+-- By induction on both runs: the tails' numbers are the quotients by `256` and the heads the remainders, each of which conversion reads off a byte beside a multiple.
 --- Two runs of one length that denote one number are one run: [`to_nat`] is injective at a fixed width.
 ---
---- Across lengths it is not, a trailing zero byte adding nothing, which is why [`of_nat`] is the minimal encoding. By induction on both runs: the tails' numbers are the quotients by `256` and the heads the remainders, each of which conversion reads off a byte beside a multiple.
+--- Across lengths it is not, a trailing zero byte adding nothing, which is why [`of_nat`] is the minimal encoding.
 pub let to_nat_injective(
     a: Bytes,
     b: Bytes,
@@ -70,9 +70,8 @@ let high_below(n: Nat, positive: Bool/Holds(0 < n)) -> Bool/Holds(n / 256 < n) =
 let uncons(z: Bytes) -> Option({Byte, Bytes}) =
     match z | x[] => Option/none() | x[k, ..p] => Option/some((k, p)) end;
 
+-- Read through the cons taken apart above — what lets an encoding built by consing be taken apart again. `/std/Map`'s `Key` witnesses are where that is needed, which is outside this module's subtree.
 --- A cons is injective in its head.
----
---- Read through the cons taken apart above — what lets an encoding built by consing be taken apart again. `/std/Map`'s `Key` witnesses are where that is needed, which is outside this module's subtree.
 pub let cons_injective_head(
     @k1: Byte,
     @p1: Bytes,
@@ -92,7 +91,8 @@ pub let cons_injective_tail(
 ) -> Eq()(p1, p2) =
     Eq/cong((halves: {Byte, Bytes}) => halves.1, Option/some_injective(Eq/cong(uncons, e)));
 
---- A decided equality is an equation: `a == b` gives `Eq()(a, b)`. By recursion on both runs, since the comparison of two conses is their heads' and their tails', and of a cons and no bytes is `false`.
+-- By recursion on both runs, since the comparison of two conses is their heads' and their tails', and of a cons and no bytes is `false`.
+--- A decided equality is an equation: `a == b` gives `Eq()(a, b)`.
 pub let eq_of_eql(a: Bytes, b: Bytes, h: Bool/Holds(a == b)) -> Eq()(a, b) =
     match a
     | x[] =>
@@ -118,9 +118,8 @@ pub let eq_of_eql(a: Bytes, b: Bytes, h: Bool/Holds(a == b)) -> Eq()(a, b) =
 let no_empty(k: Byte, p: Bytes, e: Eq()(x[], x[k, ..p])) -> Bool/False =
     Eq/subst((m) => Bool/Holds(0 == m), Eq/cong(len, e), Bool/True/qed());
 
+-- Course-of-values induction, because the recursion divides rather than decrements. Each step takes the encoding apart at its first byte, the digit and the rest by the cons's two injections, recovers the two numbers' high parts from the induction hypothesis and their low digits from the byte round trip, and rejoins both by Euclid's recombination.
 --- Distinct numbers encode distinctly.
----
---- Course-of-values induction, because the recursion divides rather than decrements. Each step takes the encoding apart at its first byte, the digit and the rest by the cons's two injections, recovers the two numbers' high parts from the induction hypothesis and their low digits from the byte round trip, and rejoins both by Euclid's recombination.
 pub let of_nat_injective(a: Nat, b: Nat, same: Eq()(of_nat(a), of_nat(b))) -> Eq()(a, b) =
     Nat/descend(
         (m: Nat) => m,
@@ -179,9 +178,8 @@ pub let of_nat_injective(a: Nat, b: Nat, same: Eq()(of_nat(a), of_nat(b))) -> Eq
 pub let drop(b: Bytes, k: Nat, @ok: Bool/Holds(k <= len(b))) -> Bytes =
     slice(b, k, len(b) - k);
 
+-- An `xor` against a run of all-ones bytes as long as this one, so the width is a fact about the operand rather than a number written here. `Bytes/len` reduces a fill to its own count, so the equal-length bound the `xor` states discharges without a guard.
 --- Every bit of every byte flipped.
----
---- An `xor` against a run of all-ones bytes as long as this one, so the width is a fact about the operand rather than a number written here. `Bytes/len` reduces a fill to its own count, so the equal-length bound the `xor` states discharges without a guard.
 pub let not(b: Bytes) -> Bytes =
     xor(b, replicate(len(b), 0xFF));
 
@@ -203,9 +201,8 @@ pub let shr(b: Bytes, count: Nat) -> Bytes =
     | false => replicate(len(b), 0x00)
     end;
 
---- `b` rotated `count` bytes toward the high end, what passes the top re-entering at the bottom.
----
---- The count is taken modulo the width, which is what makes this total without a guard on the count itself; the empty run is the one case with no width to take it modulo, and rotating it is the identity.
+-- The count is taken modulo the width, which is what makes this total without a guard on the count itself; the empty run is the one case with no width to take it modulo.
+--- `b` rotated `count` bytes toward the high end, what passes the top re-entering at the bottom; rotating the empty run is the identity.
 pub let rotl(b: Bytes, count: Nat) -> Bytes =
     match 0 < len(b)
     | true =>

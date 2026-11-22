@@ -11,7 +11,8 @@ let class_continues(k: Class) -> Bool =
     | bad() => true
     end;
 
---- Every lead `classify` reports asks its continuation bytes for a range inside `0x80..=0xBF`. Walked by `classify`'s own guards, each of which fixes the range it reports.
+-- Walked by `classify`'s own guards, each of which fixes the range it reports.
+--- Every lead `classify` reports asks its continuation bytes for a range inside `0x80..=0xBF`.
 let classify_continues(c: Byte) -> Bool/Holds(class_continues(classify(c))) =
     let n = Byte/to_nat(c);
     match
@@ -253,9 +254,8 @@ pub let begins(@b: Bytes, v: Valid(b)) -> Bool/Holds(Str/At/starts(b)) =
         end
     end;
 
+-- Each byte steps the evidence as the scan does, specialized by its guard, so a byte out of range is the bad state that valid bytes never reach, and a character cut short is a scan left inside it at the end.
 --- The rest of a character owed `rem` continuation bytes, the first between `lo` and `hi`, over the bits `partial` has gathered: read off the bytes the evidence says follow, in a line rather than a call each, and ended at a scalar value because it can only end at one.
----
---- Each byte steps the evidence as the scan does, specialized by its guard, so a byte out of range is the bad state that valid bytes never reach, and a character cut short is a scan left inside it at the end.
 let finish(
     rem: Nat,
     lo: Nat,
@@ -348,9 +348,8 @@ pub let decode_head(c: Byte, @t: Bytes, w: from(Scan/lead(), x[c, ..t])) -> Char
     | bad() => match from_bad(@t, w) end
     end;
 
+-- Walked by the guards `Char/to_utf8` chose its family by, so each arm's goal reduces to that family's bytes read through `classify`. What reduction cannot see is where a lead byte narrows its first continuation's range, and each such edge is one arm: `E0` floors it at `A0`, so a three-byte form cannot spell what two bytes hold; `ED` caps it at `9F`, which excludes the surrogates; `F0` floors it at `90`, lifting a four-byte value past `U+FFFF`; and `F4` caps it at `8F`, at `U+10FFFF`. The code point's own bounds settle each — its guards, and `c.valid` where the ceiling is the scalar values' — and every other byte's range reduction decides.
 --- A character's UTF-8 encoding is well-formed.
----
---- Walked by the guards `Char/to_utf8` chose its family by, so each arm's goal reduces to that family's bytes read through `classify`. What reduction cannot see is where a lead byte narrows its first continuation's range, and each such edge is one arm: `E0` floors it at `A0`, so a three-byte form cannot spell what two bytes hold; `ED` caps it at `9F`, which excludes the surrogates; `F0` floors it at `90`, lifting a four-byte value past `U+FFFF`; and `F4` caps it at `8F`, at `U+10FFFF`. The code point's own bounds settle each — its guards, and `c.valid` where the ceiling is the scalar values' — and every other byte's range reduction decides.
 pub let encoded(c: Char) -> Valid(Char/to_utf8(c)) =
     match
     | c.code < 0x80 => Bool/True/qed()

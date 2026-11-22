@@ -15,9 +15,8 @@ pub struct Gcd(a: Nat, b: Nat): pub Type {
     greatest: (d: Nat, p: Divides(d, a), q: Divides(d, b)) -> Divides(d, value),
 }
 
+-- It divides `a` as the divisor's multiple and the remainder, which is `a` by Euclid's identity, and a common divisor of `a` and `b` divides the remainder by [`Divides/rem`].
 --- One step of Euclid's algorithm: a greatest common divisor of `b` and `a % b` is one of `a` and `b`.
----
---- It divides `a` as the divisor's multiple and the remainder, which is `a` by Euclid's identity, and a common divisor of `a` and `b` divides the remainder by [`Divides/rem`].
 pub let step(a: Nat, b: Nat, @ok: Bool/Holds(0 < b), below: Gcd(b, a % b)) -> Gcd(a, b) =
     Gcd {
         value = below.value,
@@ -112,9 +111,10 @@ let scale(@d: Nat, @a: Nat, p: Divides(d, a), c: Nat) -> Divides(d * c, a * c) =
     | intro(k, e) => Divides/intro(k, Eq/cong((x: Nat) => x * c, e))
     end;
 
+-- Each side divides the other: the scaled divisor is a common divisor of the scaled operands, and every common divisor of them divides it.
 --- `gcd(a * c, b * c)` is `gcd(a, b) * c`: a common factor leaves the greatest common divisor as a factor.
 ---
---- What Euclid's lemma stands on. Each side divides the other: the scaled divisor is a common divisor of the scaled operands, and every common divisor of them divides it.
+--- What Euclid's lemma stands on.
 pub let scaled(a: Nat, b: Nat, c: Nat) -> Eq()(Nat/gcd(a * c, b * c), Nat/gcd(a, b) * c) =
     Divides/antisym(
         common(c, Nat/gcd(a * c, b * c), a, b, of(a * c, b * c).left, of(a * c, b * c).right),

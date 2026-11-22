@@ -57,9 +57,8 @@ pub let to_offset(@s: Str, at: At(s)) -> Nat =
 pub let of_after(s: Str, at: At(s), p: At(Str/after(s, at))) -> At(s) =
     At { offset = at.offset + p.offset };
 
+-- The boundary is `p`'s own once the offset is read back: the text after `at`, dropped by `p.offset - at.offset`, is `s` dropped by `at.offset + (p.offset - at.offset)`, which is `p.offset` because `at` comes first.
 --- A position at or after `at` as the position in the text after `at` it is: [`of_after`] read backwards.
----
---- The boundary is `p`'s own once the offset is read back: the text after `at`, dropped by `p.offset - at.offset`, is `s` dropped by `at.offset + (p.offset - at.offset)`, which is `p.offset` because `at` comes first.
 pub let to_after(
     s: Str,
     at: At(s),

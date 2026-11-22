@@ -157,9 +157,8 @@ let year_of(n: Int) -> Int =
     let y = Nat/to_int(yoe) + (n + 719468) / 146097 * 400;
     match (5 * doy + 2) / 153 < 10 | true => y | false => y + 1 end;
 
+-- Hinnant's algorithm gives the year, and is read only as where to start: the days from that year's first of January are walked forward a year at a time while a year fits, or back while they are below zero, and then through the months. The guards are the proof — the first year whose length exceeds the days left and the first month whose length does — so nothing is clipped or invented, and since the year is exact no year is walked.
 --- The date `n` days after 1970-01-01, or before it where `n` is below zero.
----
---- Hinnant's algorithm gives the year, and is read only as where to start: the days from that year's first of January are walked forward a year at a time while a year fits, or back while they are below zero, and then through the months. The guards are the proof — the first year whose length exceeds the days left and the first month whose length does — so nothing is clipped or invented, and since the year is exact no year is walked.
 pub let of_days(n: Int) -> Date =
     let y = year_of(n);
     match Int/view(n - first_of_january(y))
@@ -167,7 +166,8 @@ pub let of_days(n: Int) -> Date =
     | neg(k) => backward(Behind { year = y, short = k + 1 })
     end;
 
---- The days from 1970-01-01 to `d`, below zero before it: Hinnant's `days_from_civil`, over floored division, in eras of 400 years of 146 097 days.
+-- Hinnant's `days_from_civil`, over floored division, in eras of 400 years of 146 097 days.
+--- The days from 1970-01-01 to `d`, below zero before it.
 pub let to_days(d: Date) -> Int =
     let m = Month/to_nat(d.month);
     let y = match m <= 2 | true => d.year - 1 | false => d.year end;

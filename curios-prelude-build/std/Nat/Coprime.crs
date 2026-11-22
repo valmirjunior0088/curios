@@ -37,9 +37,8 @@ pub let of_common(
 ) -> Coprime(a, b) =
     only(Nat/gcd(a, b), Gcd/of(a, b).left, Gcd/of(a, b).right);
 
+-- The operands are their quotients scaled by the divisor, so by [`Gcd/scaled`] the divisor is the quotients' own scaled by itself, and a positive number that is its multiple by `x` has `x` as one.
 --- Two numbers divided by their greatest common divisor are coprime: what a fraction in lowest terms is made of.
----
---- The operands are their quotients scaled by the divisor, so by [`Gcd/scaled`] the divisor is the quotients' own scaled by itself, and a positive number that is its multiple by `x` has `x` as one.
 pub let quotients(
     a: Nat,
     b: Nat,
@@ -58,9 +57,8 @@ pub let quotients(
             Eq/subst((t: Nat) => Eq()(Nat/gcd(x * g, t), Nat/gcd(x, y) * g), Eq/sym(right), whole));
     Nat/le/antisym(Nat/gcd(x, y), 1, proved(), proved());
 
+-- It divides `a * k` and `b * k`, so it divides their greatest common divisor, which is `gcd(a, b) * k` by [`Gcd/scaled`] and so `k`.
 --- Euclid's lemma: a number coprime to `b` that divides `b * k` divides `k`.
----
---- It divides `a * k` and `b * k`, so it divides their greatest common divisor, which is `gcd(a, b) * k` by [`Gcd/scaled`] and so `k`.
 pub let cancel(@a: Nat, @b: Nat, k: Nat, c: Coprime(a, b), p: Divides(a, b * k)) -> Divides(a, k) =
     let both: Divides(a, Nat/gcd(a * k, b * k)) =
         Gcd/of(a * k, b * k).greatest(a, Divides/intro(k, Eq/refl()), p);
@@ -69,9 +67,8 @@ pub let cancel(@a: Nat, @b: Nat, k: Nat, c: Coprime(a, b), p: Divides(a, b * k))
         c,
         Eq/subst((t: Nat) => Divides(a, t), Gcd/scaled(a, b, k), both));
 
+-- Each numerator divides the other's multiple by its own denominator, to which it is coprime, so by [`cancel`] it divides the other numerator, and two numbers that divide each other are one; the denominators the same way.
 --- Two fractions in lowest terms with equal cross products are one fraction: equal numerators and equal denominators.
----
---- Each numerator divides the other's multiple by its own denominator, to which it is coprime, so by [`cancel`] it divides the other numerator, and two numbers that divide each other are one; the denominators the same way.
 pub let unique(
     @a: Nat,
     @b: Nat,

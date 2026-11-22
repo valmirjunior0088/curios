@@ -88,9 +88,8 @@ pub let of_le(a: Nat, b: Nat, p: Bool/Holds(a <= b)) -> Bool/Holds(Ordering/is_l
         match proved(@Bool/False) end
     end;
 
+-- By the two guards `ord` reads, taken on each side. The arms no two numbers reach are refuted from the guards, and the two a failed `==` leaves are closed by the equation the other guards give, carried into the comparison that failed.
 --- `ord` answers the flipped answer with its operands swapped.
----
---- By the two guards `ord` reads, taken on each side. The arms no two numbers reach are refuted from the guards, and the two a failed `==` leaves are closed by the equation the other guards give, carried into the comparison that failed.
 pub let flips: Ord/Flips(ord) =
     (a, b) =>
         match

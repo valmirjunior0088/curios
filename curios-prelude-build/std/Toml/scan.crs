@@ -14,7 +14,6 @@ let is_comment_char(c: Char) -> Bool =
     let n = Char/to_nat(c);
     n == '\t' || Nat/in_range(n, ' ', '~') || n >= 0x80;
 
---- The value of the hexadecimal digit at code point `n`, or `none` where `n` is not one.
 --- Spaces and tabs, as many as there are.
 pub let ws: Parse(Str, {}) =
     Parse/map(Parse/str/take_while(is_ws_char), (_) => ());

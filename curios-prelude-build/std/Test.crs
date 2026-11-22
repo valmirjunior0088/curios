@@ -14,8 +14,8 @@ satisfy Spell(Failure) {
     ..
 }
 
+-- Its private representation keeps interpretation inside the test runner and resource combinators.
 --- A computation that succeeds with an `A` or ends the current test with what it found: the checks that failed, one at least.
---- Its private representation keeps interpretation inside the test runner and resource combinators.
 pub induct Test(A: Type): Type
 | success(A)
 | failed(List(Failure))
@@ -86,7 +86,7 @@ pub let equal(@A: Type, use Eql(A), use Spell(A), actual: A, expected: A) -> Tes
             ("expected", Spell/spell(expected))])
     end;
 
---- Flatten a fallible thunk returning a test, reporting its error when it fails.
+--- The test `thunk` builds, where it builds one; where it fails, its error is the test's failure.
 pub let try(@E: Type, @A: Type, use Show(E), thunk: () -> Try(Io, E, Test(A))) -> Test(A) =
     bind(Monad/lift(thunk()), (inner) => inner);
 

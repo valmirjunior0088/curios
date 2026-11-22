@@ -3,7 +3,7 @@ use /std/ops/{Eql};
 
 --- Why a message is not read. Each is a reason a peer can be told: a server answers a refused request with the reply `Response/of_refusal` makes of it, and a client raises a refused reply as `http/Error/refused`, the refusal with it.
 pub induct Refusal: pub Type
---- The message is not one HTTP's grammar or its framing admits; what was wrong.
+--- The message is not one HTTP's grammar or its framing admits, the payload saying what was wrong.
 | malformed(Str)
 --- The stream ended before the message did.
 | incomplete()
@@ -13,7 +13,7 @@ pub induct Refusal: pub Type
 | head_too_large()
 --- The content is larger than the reader takes.
 | content_too_large()
---- A method or a transfer coding the library does not implement; which.
+--- A method or a transfer coding the library does not implement, the payload saying which.
 | not_implemented(Str)
 --- A major version other than 1.
 | version_not_supported()

@@ -32,7 +32,8 @@ pub let of_str(s: Str) -> Option(Bool) =
 pub let false_neq_true(p: Eq()(false, true)) -> False =
     Eq/subst((b: Bool) => match b | true => False | false => True end, p, True/qed());
 
---- The decision as an equation: `Holds(b)` says `b` is `true`, and this says it the way `Eq/subst` rewrites with. By cases on `b`, since `Holds` reduces at each.
+-- By cases on `b`, since `Holds` reduces at each.
+--- The decision as an equation: `Holds(b)` says `b` is `true`, and this says it the way `Eq/subst` rewrites with.
 pub let eq_of_holds(b: Bool, h: Holds(b)) -> Eq()(b, true) =
     match b
     | true => Eq/refl()
