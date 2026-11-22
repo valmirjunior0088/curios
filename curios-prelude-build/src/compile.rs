@@ -371,7 +371,10 @@ fn write_documentation(directory: &Path, records: &Vec<Documentation>) {
     assert_eq!(&*first, &*second, "the documentation is not deterministic");
 
     let path = directory.join("documentation.rkyv");
-    println!("/sys and /std documentation archived to {} bytes", first.len());
+    println!(
+        "/sys and /std documentation archived to {} bytes",
+        first.len()
+    );
     fs::write(&path, &first)
         .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
 }
