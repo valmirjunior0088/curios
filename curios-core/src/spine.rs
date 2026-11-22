@@ -5,8 +5,8 @@
 use {
     super::{
         Atoms, Bytes, Declaration, Element, Extremum, Intrinsic, Nat, Operands, Sequence, Subterm,
-        Term, Words, int_cancellation, int_monomial, int_rebuild_cancelled, is_bytes_word,
-        list_element, same_atom,
+        Term, Words, int_cancellation, int_monomial, int_negate, int_preimage,
+        int_rebuild_cancelled, is_bytes_word, list_element, same_atom,
     },
     curios_algebra::{
         Carrier, Conclusion, Deduction, Operation, Packed, Run, Segment, Stripped, Word,
@@ -28,8 +28,8 @@ pub fn peel_intrinsic(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
     }
 }
 
-/// The peels at [`Deduction`]'s strength, in the order they are asked: `Nat` the free commutative monoid on its summands, `Int` the group, `Bytes` and `List` the free monoids on their bytes and elements, `&&` and `||` the semilattices on their leaves, a symmetric operation's two orders, and two reads of one position. Each answers `None` for a pair that is not its shape, so the seven are one set of alternatives.
-const PEELS: [fn(&Intrinsic, &Intrinsic) -> Option<Verdict>; 8] = [
+/// The peels at [`Deduction`]'s strength, in the order they are asked: `Nat` the free commutative monoid on its summands, `Int` the group, `Bytes` and `List` the free monoids on their bytes and elements, `&&` and `||` the semilattices on their leaves, a symmetric operation's two orders, two reads of one position, and a widened natural's division against the natural's own. Each answers `None` for a pair that is not its shape, so the nine are one set of alternatives.
+const PEELS: [fn(&Intrinsic, &Intrinsic) -> Option<Verdict>; 9] = [
     peel_nat_pair,
     peel_int_pair,
     peel_bytes,
@@ -38,11 +38,12 @@ const PEELS: [fn(&Intrinsic, &Intrinsic) -> Option<Verdict>; 8] = [
     peel_lattice,
     peel_symmetric,
     peel_position,
+    peel_widened_division,
 ];
 
 /// What the first of `PEELS` to answer concludes of a pair, or `None` where the pair is no peel's shape: the one statement of the list, which inversion reads through [`peel_intrinsic`] and conversion between its own sufficient pairings.
 ///
-/// **The order decides what an answer costs, never what it is.** Every peel here is exact, so two that answer one pair cannot honestly part. One concluding the pair equal where another concludes it impossible is a peel that is wrong; and one concluding more than the peel asked before it is a peel shadowed by its place — a pair left undecided, or handed on as a residual, by where a rule stands in a list. A debug build asks all seven of every pair and holds the first answer to the rest, so the suite and both halves of the prelude's build put the question to every pair conversion and inversion meet. A release build stops at the first.
+/// **The order decides what an answer costs, never what it is.** Every peel here is exact, so two that answer one pair cannot honestly part. One concluding the pair equal where another concludes it impossible is a peel that is wrong; and one concluding more than the peel asked before it is a peel shadowed by its place — a pair left undecided, or handed on as a residual, by where a rule stands in a list. A debug build asks every peel of every pair and holds the first answer to the rest, so the suite and both halves of the prelude's build put the question to every pair conversion and inversion meet. A release build stops at the first.
 pub fn peel_spine(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
     let first = PEELS.iter().find_map(|peel| peel(left, right));
 
@@ -397,6 +398,52 @@ pub fn peel_position(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
     })
 }
 
+/// A widened natural's `Int` remainder or quotient against the natural's own: Euclid's division of a dividend that is no negative number is the natural's, so `Int/rem(Nat/to_int(a), d)` is `a % |d|` at every nonzero `d`, and `Nat/to_int(a) / d` is `Nat/to_int(a / d)` at every positive one. `Equal` where the `Int` dividend is the image of the natural one ([`int_preimage`]) and the divisors one magnitude — a literal and its absolute value, or `Nat/to_int(k)` and `k` — read as numbers ([`Nat::same`]); `Undecided` for any other pair of the two shapes, and never `Impossible`, since two unlike spellings may still hold one value; `None` for a pair of no such shape.
+///
+/// Decided here, as a comparison, because reduction cannot take it: each division carries a proof that its divisor is nonzero, `Int`'s stating `d != 0` and `Nat`'s `0 < |d|`, so a fold of one into the other would owe a proof no term in hand is (`documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md`). Comparing builds no term, so it owes no proof, as [`peel_position`] owes none. A quotient by a negative divisor is the negation of the natural's, a sum no single atom faces, and is left to the comparisons that read sums.
+pub fn peel_widened_division(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
+    let paired = |left: &Intrinsic, right: &Intrinsic| match (left, right) {
+        (
+            Intrinsic::IntRem {
+                dividend, divisor, ..
+            },
+            Intrinsic::NatRem {
+                dividend: natural,
+                divisor: by,
+                ..
+            },
+        ) => Some(
+            widened(dividend, natural)
+                && (widened(divisor, by) || widened(&int_negate(divisor), by)),
+        ),
+        (
+            Intrinsic::IntDiv {
+                dividend, divisor, ..
+            },
+            Intrinsic::NatToInt(quotient),
+        ) => match &**quotient {
+            Subterm::Intrinsic(Intrinsic::NatDiv {
+                dividend: natural,
+                divisor: by,
+                ..
+            }) => Some(widened(dividend, natural) && widened(divisor, by)),
+            _ => None,
+        },
+        _ => None,
+    };
+    let same = paired(left, right).or_else(|| paired(right, left))?;
+
+    Some(match same {
+        true => Deduction::Equal,
+        false => Deduction::Undecided,
+    })
+}
+
+/// Whether the reduced `Int` term `int` is the image of the reduced `Nat` term `nat`, read as numbers.
+fn widened(int: &Term, nat: &Term) -> bool {
+    int_preimage(int).is_some_and(|preimage| Nat::same(&preimage, nat))
+}
+
 /// `Bytes` is the free monoid on its bytes: two values reduce by stripping their longest common prefix — `curios-algebra`'s `Word::strip_common_prefix` over the words `crate::words` reads — and the residual tails ride back on `Equivalent`, so the inverter can solve a flex binder forced to equal a leftover suffix and conversion can enqueue the rest. A definite element disagreement, or a residual with a positive segment facing the empty value, is `Impossible`; a chunk or window facing an unlike one is `Undecided`, and so is a residual of nothing but those facing the empty value, whose lengths are unknown. `None` means the pair is not two `Bytes` values, so the caller keeps its own handling.
 ///
 /// Prefix-only: a common *suffix* (`x ++ x[0x01] ~ y ++ x[0x01]`) is sound to cancel but not yet attempted. Chunks and single elements are matched as written, so two convertible-but-unequal elements (`append(x[], h1)` against `append(x[], h2)`) are left to the caller's structural comparison, and they reach it *flat*: see `regroup`.
@@ -564,3 +611,5 @@ mod nat_tests;
 mod position_tests;
 #[cfg(test)]
 pub mod test_support;
+#[cfg(test)]
+mod widened_tests;

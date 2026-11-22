@@ -927,6 +927,27 @@ const CARRIERS: &[Carrier] = &[
         ],
     },
     Carrier {
+        // A widened natural divides at `Int` as it does at `Nat`, Euclid's division of a dividend that is no negative number being the natural's: the remainder at either sign of the divisor, the quotient at a positive one, by a literal and by a widened natural, over a widened sum, and inside a sum.
+        name: "Int's division of a widened natural",
+        binders: "i: Int, n: Nat, k: Nat, m: Nat, q: Holds(0 < m)",
+        held: &[
+            "Eq()(Nat/to_int(n) % +3, Nat/to_int(n % 3))",
+            "Eq()(Nat/to_int(n) % -3, Nat/to_int(n % 3))",
+            "Eq()(Nat/to_int(n) / +3, Nat/to_int(n / 3))",
+            "Eq()(Nat/to_int(n + 1) % +3, Nat/to_int((n + 1) % 3))",
+            "Eq()(Nat/to_int(n) % Nat/to_int(m), Nat/to_int(n % m))",
+            "Eq()(Nat/to_int(n) / Nat/to_int(m), Nat/to_int(n / m))",
+            "Eq()(i + Nat/to_int(n) / +3, i + Nat/to_int(n / 3))",
+        ],
+        refused: &[
+            // Controls, and none is a law: another divisor (`n = 3`); a quotient by a negative divisor, the natural's negated (`n = 3`); another dividend (`n = 3, k = 0`); and a dividend that is no image of a natural, whose remainder is `2` where the natural's is `0` (`n = 0`).
+            "Eq()(Nat/to_int(n) % +3, Nat/to_int(n % 4))",
+            "Eq()(Nat/to_int(n) / -3, Nat/to_int(n / 3))",
+            "Eq()(Nat/to_int(n) / +3, Nat/to_int(k / 3))",
+            "Eq()((Nat/to_int(n) - 1) % +3, Nat/to_int((n - 1) % 3))",
+        ],
+    },
+    Carrier {
         name: "Bool",
         binders: "b: Bool, c: Bool, d: Bool, x: Nat, y: Nat, p: (Nat) -> Bool",
         held: &[
