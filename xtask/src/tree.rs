@@ -5,7 +5,7 @@
 //! **A name is the path to where it is declared, written from the top with a leading `.`, and it names one thing.** Each segment is a key, read from the top one projection at a time: a step or a group is its tables, `.workspace.lint.clippy`; a variable sits under its file's `variables`, `.workspace.variables.edition`; and a produced file under its step's `produces`, `.launcher.build.produces.binary`. So a name reads the same wherever it is written, and says where to find what it names. `requires` names steps and groups, `consumes` produced files, and the braces in a command a variable or a produced file, or, with a `!` where the `.` stands, a value the runner fills ([`BUILT_INS`]). Each resolves as the tree is read, so a name that names nothing, one written without its `.`, or one naming the wrong kind of thing, is refused before anything runs, and so is a command that reads a file its step does not consume, which would run without the edge that orders it.
 
 use {
-    crate::root,
+    crate::{launched, root},
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt, fs,
@@ -632,9 +632,17 @@ impl Tree {
                                 "an instruction is a command, a list of words, or a write, `{ write = path, contents = text }`".to_string(),
                             )
                         })?;
-                    run.push(Instruction::Command(
-                        words.iter().map(&word).collect::<Result<_, _>>()?,
-                    ));
+                    let words = words.iter().map(&word).collect::<Result<Vec<_>, _>>()?;
+                    // A run asks its programs their versions before anything is filled, so the word naming one is read as written.
+                    if let Some((at, _)) = launched(&words)
+                        && words[at].fills().next().is_some()
+                    {
+                        return Err(file.refuse(
+                            instruction.span(),
+                            "a command names its program as written, which a value in braces is not".to_string(),
+                        ));
+                    }
+                    run.push(Instruction::Command(words));
                 }
             }
 

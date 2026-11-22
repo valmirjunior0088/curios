@@ -133,3 +133,31 @@ fn a_produced_file_is_its_path_from_the_root() {
         ]
     );
 }
+
+/// A variable's command is launched as a step's is, so a program it names that is not there is refused as missing, with the version the files pin.
+#[test]
+fn a_variables_command_naming_a_missing_program_is_refused_as_missing() {
+    let tree = Tree::parse(&[
+        (
+            "xtask/tasks.toml",
+            "description = \"The top\"\nprograms.no-such-lister = \"2\"\n",
+        ),
+        (
+            "xtask/tasks/a.toml",
+            "description = \"A\"\nvariables.listed.run = [\"no-such-lister\"]\n[s]\ndescription = \"S\"\nrun = [[\"echo\", \"{.a.variables.listed}\"]]\n",
+        ),
+    ])
+    .unwrap();
+    let Instruction::Command(command) = &tree.steps[0].run[0] else {
+        panic!("the step runs a command");
+    };
+
+    let refusal = Values::new(&tree, &Given::new())
+        .command(command)
+        .unwrap_err();
+    assert!(
+        refusal
+            .contains("no-such-lister is needed, and it is not installed: the task files pin 2."),
+        "{refusal}"
+    );
+}

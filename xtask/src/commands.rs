@@ -126,6 +126,21 @@ pub fn launch_in(directory: &Path, launched: Launch, pin: Option<&Pin>) -> Resul
         })
 }
 
+/// What `launched` prints, asked from the root as [`ask`] asks, a program the system cannot find refused with `pin` as [`launch_in`] refuses it, and one that ran and failed with what happened.
+pub fn ask_launched(launched: Launch, pin: Option<&Pin>) -> Result<String, String> {
+    let Launch {
+        program,
+        command,
+        arguments,
+    } = launched;
+    let arguments = arguments.iter().map(String::as_str).collect::<Vec<_>>();
+
+    execute(root(), command, &arguments, Output::Captured).map_err(|failure| match failure {
+        Failure::Missing(_) => missing(&program, pin),
+        Failure::Failed(message) => message,
+    })
+}
+
 /// What a command printed, for a caller that is asking rather than doing.
 ///
 /// A question's answer is the program's to read, so nothing is echoed and nothing reaches the terminal unless the command writes to stderr — which a failing one does, in its own words. The step verbs above are the other half: their output is the user's, and streaming it live is the whole point of them.

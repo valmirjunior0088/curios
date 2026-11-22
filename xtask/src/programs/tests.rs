@@ -1,6 +1,6 @@
 //! What a command's words launch, and what a refusal says of a program that is not installed.
 
-use super::*;
+use {super::*, crate::*};
 
 fn words(text: &str) -> Vec<String> {
     text.split(' ').map(str::to_string).collect()
@@ -52,6 +52,19 @@ fn nextest_is_launched_through_its_own_executable() {
     assert_eq!(launch.command.get_program(), "cargo-nextest");
     assert_eq!(launch.command.get_args().collect::<Vec<_>>(), ["nextest"]);
     assert_eq!(launch.arguments, words("run"));
+}
+
+/// A program that is there and cannot say its version is refused with what happened, not as missing: here a file that is no executable.
+#[test]
+fn a_program_that_cannot_say_its_version_is_refused_with_what_happened() {
+    let unrunnable = root().join("xtask/Cargo.toml");
+    let refusal =
+        check_version(&unrunnable.to_string_lossy(), &Pin::Exact("1".to_string())).unwrap_err();
+
+    assert!(
+        refusal.contains("cannot run") && !refusal.contains("not installed"),
+        "{refusal}"
+    );
 }
 
 /// A missing program the task files pin is refused with the version they need of it, exact or a minimum, and one they do not pin is named alone.

@@ -2,10 +2,10 @@
 //!
 //! **A command is the words a person would type.** Leading `NAME=value` words set the environment, as a shell reads them, and the next word names the program. `cargo` is the cargo that launched this run: `cargo xtask` is `cargo run`, and cargo sets `CARGO` to the binary performing the build — the toolchain's own, the rustup shim already out of the picture — so a step cannot resolve a second time and land somewhere else. `cargo nextest` is launched as the program `nextest`, through its own executable, `cargo-nextest nextest`, as cargo itself launches it, so an absent one fails to spawn as every other program does.
 //!
-//! **A program is asked about where the files pin it, and nowhere else.** The task files' `programs` say what version a run needs of each program that is no part of the Rust toolchain, exact, or a minimum for one a contributor's system provides. The first time a step launches a pinned program in a run, [`check_version`] reads what it prints for `--version`; a program no step launches is never asked, so what a step needs is what it runs as it was asked. Where a program is not there, the launch is refused with the version the files pin.
+//! **A program is asked about where the files pin it, and nowhere else.** The task files' `programs` say what version a run needs of each program that is no part of the Rust toolchain, exact, or a minimum for one a contributor's system provides. Before a run's first step, [`check_version`] reads what each pinned program the scheduled steps launch prints for `--version`, the program read off the words as written by [`launched`]; a program no scheduled step launches is never asked, so what a run needs is what it runs as it was asked. Where a program is not there, it is refused with the version the files pin, and where it is there and fails, with what happened.
 
 use {
-    crate::{Pin, ask},
+    crate::{Piece, Pin, Word, ask_launched},
     std::{env, process::Command},
 };
 
@@ -30,21 +30,28 @@ fn is_assignment(word: &str) -> bool {
     })
 }
 
+/// Where the words `written` part: how many lead as assignments, the program the next names, and where its arguments start — `cargo nextest` naming nextest, its arguments after both words.
+fn parted<'a>(written: &[&'a str]) -> Option<(usize, &'a str, usize)> {
+    let assignments = written
+        .iter()
+        .take_while(|word| is_assignment(word))
+        .count();
+    match &written[assignments..] {
+        ["cargo", "nextest", ..] => Some((assignments, "nextest", assignments + 2)),
+        [program, ..] => Some((assignments, program, assignments + 1)),
+        [] => None,
+    }
+}
+
 /// What `words` launch: the environment their leading assignments set, and the program the first other word names, with the rest its arguments.
 pub fn launch(words: &[String]) -> Result<Launch, String> {
-    let assignments = words.iter().take_while(|word| is_assignment(word)).count();
-    let (environment, words) = words.split_at(assignments);
-    let (program, arguments) = words
-        .split_first()
+    let written = words.iter().map(String::as_str).collect::<Vec<_>>();
+    let (assignments, program, start) = parted(&written)
         .ok_or_else(|| "a command sets its environment and names no program".to_string())?;
 
-    let (program, arguments) = match (program.as_str(), arguments) {
-        ("cargo", [nextest, rest @ ..]) if nextest == "nextest" => ("nextest", rest),
-        (program, rest) => (program, rest),
-    };
     let mut command = command_of(program);
-    let arguments = arguments.to_vec();
-    for assignment in environment {
+    let arguments = words[start..].to_vec();
+    for assignment in &words[..assignments] {
         let (name, value) = assignment
             .split_once('=')
             .expect("an assignment holds an equals sign");
@@ -56,6 +63,26 @@ pub fn launch(words: &[String]) -> Result<Launch, String> {
         command,
         arguments,
     })
+}
+
+/// The program a command's `words` launch and the index of the word naming it, read before anything is filled, each value as its braces: the reader holds that word to text, so the name is the one [`launch`] reads off the filled words.
+pub fn launched(words: &[Word]) -> Option<(usize, String)> {
+    let written = words
+        .iter()
+        .map(|word| {
+            word.0
+                .iter()
+                .map(|piece| match piece {
+                    Piece::Text(text) => text.as_str(),
+                    Piece::Value(_) => "{}",
+                })
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>();
+    let (assignments, program, _) =
+        parted(&written.iter().map(String::as_str).collect::<Vec<_>>())?;
+
+    Some((assignments, program.to_string()))
 }
 
 /// The command that runs `program` as a step launches it, before the step's own arguments: nextest's is its executable, `cargo-nextest nextest`, and cargo's the one that launched this run.
@@ -100,10 +127,12 @@ pub fn meets(installed: &[u64], pin: &Pin) -> bool {
     }
 }
 
-/// Refuse `program` where the version it prints does not meet `pin`.
+/// Refuse `program` where the version it prints does not meet `pin`: missing, or failing to say, as what happened says.
 pub fn check_version(program: &str, pin: &Pin) -> Result<(), String> {
-    let printed =
-        ask(command_of(program), &["--version"]).map_err(|_| missing(program, Some(pin)))?;
+    let printed = ask_launched(
+        launch(&[program.to_string(), "--version".to_string()])?,
+        Some(pin),
+    )?;
     let installed = version_in(&printed)
         .ok_or_else(|| format!("{program} printed no version for `--version`: {printed}"))?;
     if meets(&installed, pin) {

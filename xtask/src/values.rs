@@ -4,8 +4,8 @@
 
 use {
     crate::{
-        Fill, HOST_TRIPLE, Name, Piece, Tree, Variable, Word, ask, cargo_home, from_top, root,
-        target_directory,
+        Fill, HOST_TRIPLE, Name, Piece, Tree, Variable, Word, ask, ask_launched, cargo_home,
+        from_top, launch, root, target_directory,
     },
     std::{
         cell::{OnceCell, RefCell},
@@ -139,26 +139,24 @@ impl<'a> Values<'a> {
         Ok(self.sysroot.get_or_init(|| printed.trim().to_string()))
     }
 
-    /// What `command` prints, a word to a line, asked once a run.
+    /// What `command` prints, a word to a line, asked once a run, launched as a step's command is.
     fn printed(&self, name: &Name, command: &[String]) -> Result<Vec<String>, String> {
         if let Some(printed) = self.printed.borrow().get(name) {
             return Ok(printed.clone());
         }
 
-        let (program, arguments) = command
-            .split_first()
-            .expect("the reader refuses a command of no words");
-        let output = ask(
-            Command::new(program),
-            &arguments.iter().map(String::as_str).collect::<Vec<_>>(),
-        )
-        .map_err(|error| {
-            format!(
-                "`{}` is what `{}` prints: {error}",
-                from_top(name),
-                command.join(" ")
-            )
-        })?;
+        let output = launch(command)
+            .and_then(|launched| {
+                let pin = self.tree.programs.get(&launched.program);
+                ask_launched(launched, pin)
+            })
+            .map_err(|error| {
+                format!(
+                    "`{}` is what `{}` prints: {error}",
+                    from_top(name),
+                    command.join(" ")
+                )
+            })?;
         let printed = output
             .lines()
             .filter(|line| !line.is_empty())
