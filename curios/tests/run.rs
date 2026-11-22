@@ -172,7 +172,8 @@ use /std/{Str, Try, Io, Proc};
 let entry() -> Io({}) =
     let _ = Try/run(Io/write(Proc/stdout, Str/to_bytes("before\n")))!;
     let _ = Try/run(Io/finish(Proc/stdout))!;
-    let _ = Try/run(Io/read_all(Proc/stdin))!;
+    let input = Io/Reader/new(Proc/stdin)!;
+    let _ = Try/run(Io/Reader/rest(input))!;
     Io/pure(());
 entry()
 "#;

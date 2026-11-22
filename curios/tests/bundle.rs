@@ -548,7 +548,8 @@ let ticks(n: Nat) -> Io({}) =
         ticks(m)
     end;
 let reading() -> Io({}) =
-    let read = Try/run(Io/read_all(Proc/stdin))!;
+    let input = Io/Reader/new(Proc/stdin)!;
+    let read = Try/run(Io/Reader/rest(input))!;
     match read
     | success(bytes) => /std/print(Str/concat("read ", Nat/to_str(Bytes/len(bytes))))
     | failure(_) => /std/print("failed")

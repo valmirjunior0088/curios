@@ -178,19 +178,6 @@ pub concept Close(S: Type): pub Type {
 
 pub use Close/*;
 
--- Everything `read` yields up to the end of the stream; a failure before the end drops what was read. Every chunk holds a byte, so every read short of the end is progress.
-let drain(
-    read: (n: Nat, @positive: Bool/Holds(0 < n)) -> Try(Io, Error, Chunk),
-) -> Try(Io, Error, Bytes) =
-    let go(acc: Bytes) -> Try(Io, Error, Bytes) =
-        let r = read(4096)!;
-        match r | bytes(b) => go(x[..acc, ..b]) | ended() => Try/pure(acc) end;
-    go(x[]);
-
---- Everything up to the end of the stream; a failure before the end drops what was read, and so does a cancel where it waits.
-pub let read_all(@S: Type, use Read(S), s: S) -> Try(Io, Error, Bytes) =
-    drain((n, @positive) => Read/read(@S, s, n, @positive));
-
 --- Every chunk of `from` written to `to` until `from` ends; the first failure on either side is the answer. A chunk read is taken by the write before anything waits, so a copy cancelled where it waits has moved whole chunks and lost none.
 pub let copy(@S: Type, @T: Type, use Read(S), use Write(T), from: S, to: T) -> Try(Io, Error, {}) =
     let go() -> Try(Io, Error, {}) =
@@ -381,7 +368,7 @@ pub let all(@A: Type, actions: List(Io(A))) -> Io(List(A)) =
 
 --- The answer of the first of `actions` to finish; every other one is cancelled where it waits. They are stepped in list order, so of two that can answer at once the earlier wins: `select([a, Io/pure(d)])` tries `a` and answers `d` rather than wait, and in a loop an action that is always ready starves the ones after it. Which action answered is its answer's to say. With no action, nothing answers.
 ---
---- An action cancelled where it waits has taken nothing, unless it took something and then waited again. A take, a read, a join, a `Future`'s wait, a sleep, a `write` and a `copy` can be dropped and run again without loss — a write takes its whole message before it waits, so a dropped one leaves it whole for the stream to hand on — and `read_all` loses what it had read. Keep what must not be lost as the last step of its action, and do what follows after `select` answers. An action of your own that holds something across a wait of its own keeps it where a drop cannot lose it: in a `Box` before it waits, as `Io/Reader` keeps the bytes it read ahead, or in a release deferred to its scope, which is told the scope was `cancelled`.
+--- Every action of `/std` cancelled where it waits has lost nothing: what it took before it waited is answered already or kept where the drop cannot reach it, so a take, a read, a join, a `Future`'s wait, a sleep, a `write`, a `copy` and a `Reader`'s reads can be dropped and run again without loss. A write takes its whole message before it waits, which the stream then holds and hands on whole; a reader keeps what it read ahead in itself. Keep what must not be lost as the last step of its action, and do what follows after `select` answers. An action of your own that holds something across a wait of its own keeps it where a drop cannot lose it: in a `Box` before it waits, as `Io/Reader` keeps the bytes it read ahead, or in a release deferred to its scope, which is told the scope was `cancelled`.
 pub let select(@A: Type, actions: List(Io(A))) -> Io(A) =
     let won: Future(A) = Future/new()!;
     let () = drive(List/map(actions, (a: Io(A)) => into(a, won)), nothing_more, answered(won))!;

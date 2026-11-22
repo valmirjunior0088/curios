@@ -287,7 +287,7 @@ fn a_scope_releases_its_child_and_kills_nothing_that_has_ended() {
     assert!(io.kills().is_empty(), "an ended child is not signaled");
 }
 
-// A child's pipes are streams: `spawn` with piped output hands back a `Proc/Input` that `Io/read_all` drains through the `Read` witness, and `wait` reaps the child afterwards.
+// A child's pipes are streams: `spawn` with piped output hands back a `Proc/Input` that a reader's `rest` drains through the `Read` witness, and `wait` reaps the child afterwards.
 #[test]
 fn a_piped_output_is_read_through_the_stream_witness() {
     let source = child_program(
@@ -295,7 +295,7 @@ fn a_piped_output_is_read_through_the_stream_witness() {
             let child = Proc/Child/spawn(scope, Proc { ..Proc/new("greet", []), stdout = Proc/Stdio/piped() })!;
             let read =
                 match Proc/Child/stdout(child)
-                | some(p) => /std/Io/read_all(p)
+                | some(p) => Try/bind(/std/Io/Reader/new(p), /std/Io/Reader/rest)
                 | none() => Try/pure(x[])
                 end;
             let bytes = read!;

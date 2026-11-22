@@ -86,8 +86,3 @@ pub let connect(s: Io/Scope, host: Str, port: Nat) -> Try(Io, Io/Error, Socket) 
 pub let connect_tls(s: Io/Scope, host: Str, port: Nat) -> Try(Io, Io/Error, Socket) =
     let addr = resolve(host, port)!;
     connect_addr(s, host, addr, true);
-
---- `request` written whole and the reply read to its end: one exchange with a peer that closes when it has answered.
-pub let call(c: Socket, request: Bytes) -> Try(Io, Io/Error, Bytes) =
-    let () = Io/write(c, request)!;
-    Io/read_all(c);

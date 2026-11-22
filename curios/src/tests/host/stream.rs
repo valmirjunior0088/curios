@@ -70,9 +70,9 @@ fn io_read_short_reads_and_eof() {
     assert_eq!(io.output(), b"abc\n1");
 }
 
-// `read_all` takes the end of the stream as its only orderly terminator. The load-bearing script is bytes-then-failure: the accumulated prefix must not be passed off as complete content, so the verdict is a failure and the prefix's length leaks nowhere. Bytes-then-end is the control that accumulation itself still works.
+// A reader's `rest` takes the end of the stream as its only orderly terminator. The load-bearing script is bytes-then-failure: the accumulated prefix must not be passed off as complete content, so the verdict is a failure and the prefix's length leaks nowhere. Bytes-then-end is the control that accumulation itself still works.
 #[test]
-fn read_all_surfaces_a_read_failure_instead_of_a_partial_prefix() {
+fn a_rest_surfaces_a_read_failure_instead_of_a_partial_prefix() {
     let source = r#"
         use /std/{Nat, Bytes, Bool, Result, Cell, Str, Try, Io, print};
         let show(r : Result(Io/Error, Bytes)) -> Str =
@@ -100,14 +100,17 @@ fn read_all_surfaces_a_read_failure_instead_of_a_partial_prefix() {
         let twice(fails: Bool) -> Io(Twice) =
             let calls = Cell/new(@{})!;
             Io/pure(Twice { calls = calls, fails = fails });
+        let rest(@S: Type, use Io/Read(S), s: S) -> Io(Result(Io/Error, Bytes)) =
+            let r = Io/Reader/new(s)!;
+            Try/run(Io/Reader/rest(r));
         let entry() -> /std/Io({}) =
-            let _ = print(show(Try/run(Io/read_all(Failing { code = 247 }))!))!;
+            let _ = print(show(rest(Failing { code = 247 })!))!;
             let _ = print(" / ")!;
             let failing = twice(true)!;
-            let _ = print(show(Try/run(Io/read_all(failing))!))!;
+            let _ = print(show(rest(failing)!))!;
             let _ = print(" / ")!;
             let ending = twice(false)!;
-            print(show(Try/run(Io/read_all(ending))!));
+            print(show(rest(ending)!));
         entry()
         "#;
 

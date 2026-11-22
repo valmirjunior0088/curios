@@ -1,5 +1,5 @@
 use /std/{Bytes, Str, Path, Try, Io};
-use /std/internal/{Handle};
+use /std/internal/{Handle, read_to_end};
 
 --- An open file.
 pub struct File: Type {
@@ -38,12 +38,6 @@ satisfy Io/Write(File) {
     write(f, b) = Io/write(f.0, b),
     flush(f) = Io/flush(f.0),
 }
-
-let read_to_end(f: File) -> Try(Io, Io/Error, Bytes) =
-    let go(acc: Bytes) -> Try(Io, Io/Error, Bytes) =
-        let c = Io/read(f, 4096)!;
-        match c | bytes(b) => go(x[..acc, ..b]) | ended() => Try/pure(acc) end;
-    go(x[]);
 
 --- The whole file at `path`.
 pub let read_all(path: Path) -> Try(Io, Io/Error, Bytes) =

@@ -161,3 +161,23 @@ fn a_drain_that_fails_after_a_cut_write_is_answered_by_the_next_flush() {
 
     assert_eq!(String::from_utf8_lossy(&written), "cut|broken_pipe");
 }
+
+// A reader's `rest` a timeout cuts between two arrivals keeps what it read in the reader, so run again it answers both. A read to the end that held what it read at the wait, as `read_all` did, lost the first arrival and answered the second alone.
+#[test]
+fn a_rest_a_timeout_cuts_loses_nothing() {
+    let written = reported(
+        "rest-cut",
+        r#"
+        let program() -> Try(Io, Io/Error, {}) =
+            Try/scope((s) =>
+                let c = started(s, "printf abc; sleep 0.3; printf def", Proc/Stdio/null(), Proc/Stdio/piped())!;
+                let out = output(c)!;
+                let r = Io/Reader/new(out)!;
+                let timed = Io/timeout(Duration/of_millis(100), Try/run(Io/Reader/rest(r)))!;
+                let read = Io/Reader/rest(r)!;
+                File/write_all(Path/of_str("${path}"), x[..Str/to_bytes(cut(timed)), ..Str/to_bytes("|"), ..read]));
+        "#,
+    );
+
+    assert_eq!(String::from_utf8_lossy(&written), "cut|abcdef");
+}

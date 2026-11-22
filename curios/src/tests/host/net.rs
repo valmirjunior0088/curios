@@ -12,12 +12,16 @@ use {
     curios_surface::Entrypoint,
 };
 
-/// One `call` to `example.com:80`, its reply written out or its failure printed by name.
-const CALL: &str = r#"
-    use /std/{Str, Show, Try, Io, Proc};
+/// One exchange with `example.com:80` — a request written whole and the reply read to its end through a reader — its reply written out or its failure printed by name.
+const EXCHANGE: &str = r#"
+    use /std/{Str, Bytes, Show, Try, Io, Proc};
     use /std/tcp/{Socket};
+    let exchange(c: Socket) -> Try(Io, Io/Error, Bytes) =
+        let () = Io/write(c, Str/to_bytes("GET /\r\n\r\n"))!;
+        let r = Io/Reader/new(c)!;
+        Io/Reader/rest(r);
     let program() -> Io({}) =
-        let r = Try/run(Try/scope((s) => Try/bind(Socket/connect(s, "example.com", 80), (c) => Socket/call(c, Str/to_bytes("GET /\r\n\r\n")))))!;
+        let r = Try/run(Try/scope((s) => Try/bind(Socket/connect(s, "example.com", 80), exchange)))!;
         match r
         | success(response) => Io/bind(Try/run(Io/write(Proc/stdout, response)), (_) => Io/pure(()))
         | failure(e) => /std/print(Show/show(e))
@@ -26,18 +30,18 @@ const CALL: &str = r#"
     "#;
 
 #[test]
-fn call_round_trips_a_scripted_endpoint() {
+fn an_exchange_round_trips_a_scripted_endpoint() {
     let (system, io) = MockHost::builder()
         .net([("example.com:80", "HTTP/1.0 200 OK\r\n\r\nhello")])
         .build();
-    run_text(CALL, system).expect("expected result");
+    run_text(EXCHANGE, system).expect("expected result");
     assert_eq!(io.output(), b"HTTP/1.0 200 OK\r\n\r\nhello");
 }
 
 // Connecting to an endpoint that was never scripted is refused, and the status decodes to `connection_refused()`.
 #[test]
-fn call_to_an_unscripted_endpoint_is_refused() {
-    assert_eq!(run(CALL), b"connection_refused");
+fn an_exchange_with_an_unscripted_endpoint_is_refused() {
+    assert_eq!(run(EXCHANGE), b"connection_refused");
 }
 
 // A connect to a remote peer goes pending: the connect suspends on a watch of the socket's writability, `finish_connect` reads the outcome once the host's wait has reported it, and only then is the request sent. A refusal arrives the same way, deferred to the settle, and decodes to `connection_refused()` as a synchronous one does.
@@ -47,11 +51,11 @@ fn a_pending_connect_is_awaited_before_the_request_is_sent() {
         .net([("example.com:80", "pong")])
         .connect_pending()
         .build();
-    run_text(CALL, system).expect("expected result");
+    run_text(EXCHANGE, system).expect("expected result");
     assert_eq!(io.output(), b"pong");
 
     let (system, io) = MockHost::builder().connect_pending().build();
-    run_text(CALL, system).expect("expected result");
+    run_text(EXCHANGE, system).expect("expected result");
     assert_eq!(io.output(), b"connection_refused");
 }
 
@@ -90,7 +94,7 @@ fn with_finishes_its_socket_before_it_closes_it() {
             .net([("example.com:80", "pong")])
             .pending_finishes(waits)
             .build();
-        run_text(CALL, system).expect("expected result");
+        run_text(EXCHANGE, system).expect("expected result");
         assert_eq!(io.output(), b"pong");
         assert_eq!(
             io.socket_events(),
@@ -110,7 +114,7 @@ fn a_peer_that_resets_reads_as_connection_reset() {
     let (system, io) = MockHost::builder()
         .net_reset([("example.com:80", vec!["par"])])
         .build();
-    run_text(CALL, system).expect("expected result");
+    run_text(EXCHANGE, system).expect("expected result");
     assert_eq!(io.output(), b"connection_reset");
 }
 

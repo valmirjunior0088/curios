@@ -15,10 +15,14 @@ fn a_read_waits_and_resumes_across_a_chunk_boundary() {
         .build();
     run_text(
         r#"
-        use /std/{Str, Show, Try, Io, Proc};
+        use /std/{Str, Bytes, Show, Try, Io, Proc};
         use /std/tcp/{Socket};
+        let exchange(c: Socket) -> Try(Io, Io/Error, Bytes) =
+            let () = Io/write(c, Str/to_bytes("GET /\r\n\r\n"))!;
+            let r = Io/Reader/new(c)!;
+            Io/Reader/rest(r);
         let program() -> Io({}) =
-            let r = Try/run(Try/scope((s) => Try/bind(Socket/connect(s, "example.com", 80), (c) => Socket/call(c, Str/to_bytes("GET /\r\n\r\n")))))!;
+            let r = Try/run(Try/scope((s) => Try/bind(Socket/connect(s, "example.com", 80), exchange)))!;
             match r
             | success(response) => Io/bind(Try/run(Io/write(Proc/stdout, response)), (_) => Io/pure(()))
             | failure(e) => /std/print(Show/show(e))

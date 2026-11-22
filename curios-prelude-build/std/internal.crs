@@ -6,7 +6,7 @@ pub use Handle/{let Handle};
 pub mod Status;
 pub use Status/{let Status};
 
-use /std/{List, Option, Cell, Io};
+use /std/{Bytes, List, Option, Cell, Io, Try};
 
 --- An argument refused before any host call, by the errno `/sys/errno` names for it.
 pub let invalid: Io/Error =
@@ -41,3 +41,10 @@ pub let until(@A: Type, attempt: Io(Option(A)), wait: Io(Waiting)) -> Io(A) =
         let () = suspend_on(w)!;
         until(attempt, wait)
     end;
+
+--- Everything `s` yields up to the end of the stream, for a caller whose stream no one else reads, so what a cancel or a failure drops is lost to no one: a stream another may read on is read through `/std/Io/Reader/rest`, which keeps what it read in its reader. Every chunk holds a byte, so every read short of the end is progress.
+pub let read_to_end(@S: Type, use Io/Read(S), s: S) -> Try(Io, Io/Error, Bytes) =
+    let go(acc: Bytes) -> Try(Io, Io/Error, Bytes) =
+        let c = Io/read(@S, s, 4096)!;
+        match c | bytes(b) => go(x[..acc, ..b]) | ended() => Try/pure(acc) end;
+    go(x[]);

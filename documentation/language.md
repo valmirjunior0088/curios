@@ -545,11 +545,13 @@ Every operation that touches the host — writing to a handle, reading a clock, 
 
 ```crs
 use /std/{File, Path, Bytes, Try, Io};
+use /std/Io/{Reader};
 
 pub let contents() -> Try(Io, Io/Error, Bytes) =
     Try/scope((s) =>
         let f = File/open(s, Path/of_str("notes.txt"), File/Mode/read())!;
-        let text = Io/read_all(f)!;
+        let r = Reader/new(f)!;
+        let text = Reader/rest(r)!;
         let () = Io/close(f)!;
         Try/pure(text));
 ```
