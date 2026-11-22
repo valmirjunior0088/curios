@@ -8,7 +8,7 @@ description = "The fixed prelude's build: /std as authored, the /sys roster, and
 [lints]
 workspace = true
 
-# What the work and its program, `profile`, need: this crate is `curios-prelude`'s build-dependency alone, so none of it reaches a crate above the prelude.
+# What the work needs: this crate is `curios-prelude`'s build-dependency alone, so none of it reaches a crate above the prelude, and no recorder reaches the prelude's image key.
 [dependencies]
 curios-abi = { workspace = true }
 curios-num = { workspace = true }
@@ -21,7 +21,6 @@ curios-elab = { workspace = true }
 curios-erase = { workspace = true }
 curios-package = { workspace = true }
 curios-module = { workspace = true }
-curios-profile = { workspace = true }
 curios-surface = { workspace = true }
 curios-unit = { workspace = true }
 curios-common = { workspace = true }

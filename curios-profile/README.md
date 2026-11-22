@@ -18,13 +18,13 @@ Nothing waits for the end: each row is on disk before the step after it runs, so
 awk -F'\t' '$1 == "V"' curios/.artifacts/profile.tsv
 ```
 
-The prelude is built by a build script, the compiler run over the standard library, and a build script takes no flag, so it records nothing. Its work is a crate's, `curios-prelude-build`, whose program runs the work again under the recorder and files the stream beside that crate, at `curios-prelude-build/.artifacts/profile.tsv`, and its fold beside the stream, at `profile.folded.tsv`. `cargo xtask profile prelude` runs it, and prints the fold:
+The prelude is built by a build script, the compiler run over the standard library, and a build script takes no flag, so it records nothing. Its work is a crate's, `curios-prelude-build`, which a measurement among `curios`'s profile tests runs again under the recorder, filing the stream at `curios/.artifacts/prelude.tsv` and its fold beside the stream, at `prelude.folded.tsv`. `cargo xtask profile prelude` runs it, and prints the fold:
 
 ```sh
 cargo xtask profile prelude
 ```
 
-The program is `curios-prelude-build`'s `profile`, and its stream holds each root's elaboration, certification and erasure.
+The measurement is `curios/tests/profile.rs`'s `prelude_build_profile`, and its stream holds each root's elaboration, certification and erasure. It is a test of `curios` rather than a program of the build's crate because the prelude's image key reads every crate that crate's tables reach, and a recorder among them would elaborate `/std` again at every edit to it.
 
 ## Design
 
@@ -80,10 +80,10 @@ One build repeats to 0.02%, and two builds of one source differ by up to 0.8% fo
 
 **Rejected.** Rotating a stream at a size, to bound what an endless run writes. Every row is flushed as it is written, so a run that hangs has filed all it did with no rotation, and what the bound cost was the head of every finished stream past it, dropped with nothing said: a count read from such a file was its tail's.
 
-### The allocator counts process-wide while someone reads, and this crate installs it
+### The allocator counts process-wide while someone reads, and a program installs it
 
-**Decision.** The counting allocator maintains process-wide live, cumulative, high-water and count figures, and this crate installs it as the `#[global_allocator]` of every binary it is linked into; no binary names it. It counts only while someone reads the counts — a recorder, `install`'s for the rest of the process and `trace`'s for its closure, or a measurement that asked with `count_allocations` — so its live bytes are counted from where counting began, and fall below zero where more was returned since than taken.
+**Decision.** The counting allocator, `CountingAllocator`, maintains process-wide live, cumulative, high-water and count figures, and a program that reads them installs it as its `#[global_allocator]`: `curios`'s binary, which records under `--profile`, the test binaries whose measurements read memory — `curios`'s suite and its `profile` tests — and this crate's own suite, so a test can hold a boundary row's readings to the allocation made inside it. It counts only while someone reads the counts — a recorder, `install`'s for the rest of the process and `trace`'s for its closure, or a measurement that asked with `count_allocations` — so its live bytes are counted from where counting began, and fall below zero where more was returned since than taken.
 
-**Rationale.** A `GlobalAlloc` cannot allocate the thread-local state per-thread attribution needs, and the profiled pipelines are single-threaded, so process-wide is precise where it is used. A binary that had to opt in could forget, and its columns would read zero — absent evidence rather than a failure — and the opt-in was four copies of one static. This crate's own test binary counts too, so a test can hold a boundary row's readings to the allocation made inside it. Counting is four atomic read-modify-writes an allocation, each a locked instruction on x86; behind one relaxed load, a run nobody records pays the load alone, as [Every build carries the instrumentation](#every-build-carries-the-instrumentation) counts.
+**Rationale.** A `GlobalAlloc` cannot allocate the thread-local state per-thread attribution needs, and the profiled pipelines are single-threaded, so process-wide is precise where it is used. A library that installs it puts it in every binary the library is linked into, the certifier's and the browser bundle's among them, where nothing reads a count; a program names the one static it reads. Counting is four atomic read-modify-writes an allocation, each a locked instruction on x86; behind one relaxed load, a run nobody records pays the load alone, as [Every build carries the instrumentation](#every-build-carries-the-instrumentation) counts.
 
-**Rejected.** Each binary opting in, a place to forget. Counting every allocation of every run, which every compile would pay for a count nobody reads.
+**Rejected.** This crate installing it in every binary it is linked into, which put it wherever the compiler is linked. Counting every allocation of every run, which every compile would pay for a count nobody reads.

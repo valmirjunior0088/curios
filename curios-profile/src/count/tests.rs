@@ -8,6 +8,10 @@ use {
     std::{hint::black_box, io, panic},
 };
 
+// A program installs the allocator, and this crate's suite is one: these tests and the recorder's read what it counts.
+#[global_allocator]
+static ALLOCATOR: CountingAllocator = CountingAllocator;
+
 const HELD: usize = 1 << 20;
 
 /// A block of `HELD` bytes, taken and returned.

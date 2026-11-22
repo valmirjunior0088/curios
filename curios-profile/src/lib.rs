@@ -4,14 +4,14 @@
 //!
 //! - [`trace()`] and [`install`] are the two scopings of the subscriber that writes one row per span and event as it happens. `trace` runs one closure under it and leaves the process-global default alone; `install` *is* that default, for a binary whose scope is the whole invocation because it has no closure to wrap. Both take the destination from their caller, and they are the only producers.
 //! - [`fold()`] recomputes timings, allocation figures and distributions from those rows. A question the summaries do not answer is asked of the file.
-//! - The counting allocator adds the memory half of a report: this crate installs it as the `#[global_allocator]` of every binary it is linked into, and it counts only while a recorder listens — `install`'s for the rest of the process, `trace`'s for its closure — or a measurement has asked with [`count_allocations`], so a boundary row carries what the process took and returned while counting, no binary has to opt in, and none pays for a count nobody reads.
+//! - The counting allocator, [`CountingAllocator`], adds the memory half of a report: a program that reads memory installs it as its `#[global_allocator]`, and it counts only while a recorder listens — `install`'s for the rest of the process, `trace`'s for its closure — or a measurement has asked with [`count_allocations`], so a boundary row carries what the process took and returned while counting, and no run pays for a count nobody reads.
 //! - [`Instructions`] counts what a measurement's thread and the threads it starts retire, which neither a look nor a byte sees of a walk that allocates nothing or of code that is not Rust.
 //!
-//! Why profiling is configured in code and never from the environment, why every build carries it, why a third instrument measures magnitude beside time and bytes and a fourth counts instructions, why the allocator counts process-wide and is installed by this crate, and why the library emits records rather than summaries are `README.md`'s decisions.
+//! Why profiling is configured in code and never from the environment, why every build carries it, why a third instrument measures magnitude beside time and bytes and a fourth counts instructions, why the allocator counts process-wide and a program installs it, and why the library emits records rather than summaries are `README.md`'s decisions.
 
 mod count;
 use count::*;
-pub use count::{allocated_bytes, allocation_count, count_allocations};
+pub use count::{CountingAllocator, allocated_bytes, allocation_count, count_allocations};
 
 mod instructions;
 pub use instructions::Instructions;

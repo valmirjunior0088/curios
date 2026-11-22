@@ -39,7 +39,7 @@ use {
         pin, scaffold,
     },
     curios_pipeline::CompileError,
-    curios_profile::{Destination, fold_at, install},
+    curios_profile::{CountingAllocator, Destination, fold_at, install},
     curios_surface::Formatted,
     curios_wonder::{
         Linted, Scope, Staged, answer, lint, serve, std_documentation, wonder_at, wonder_classes,
@@ -57,6 +57,10 @@ use {
         process::ExitCode,
     },
 };
+
+// The counting allocator, which counts only while `--profile` records: this binary is the program that reads what it counts.
+#[global_allocator]
+static ALLOCATOR: CountingAllocator = CountingAllocator;
 
 /// File every span and event this invocation makes at `path`.
 ///

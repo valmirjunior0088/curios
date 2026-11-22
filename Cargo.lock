@@ -928,7 +928,6 @@ dependencies = [
  "curios-module",
  "curios-num",
  "curios-package",
- "curios-profile",
  "curios-surface",
  "curios-unicode",
  "curios-unit",

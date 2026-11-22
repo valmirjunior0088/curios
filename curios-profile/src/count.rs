@@ -1,6 +1,6 @@
 //! Allocation accounting for [`trace`](crate::trace()): a `GlobalAlloc` wrapper maintaining process-wide live, cumulative, and high-water byte counters, which the recorder reads at each span boundary.
 //!
-//! This crate installs `CountingAllocator` as the `#[global_allocator]` of every binary it is linked into, so every build carries it and no binary has to remember to opt in — one that forgot would read zero in every memory column, which is absent evidence rather than a failure.
+//! A program that reads the counts installs [`CountingAllocator`] as its `#[global_allocator]`; a library that installed it would put it in every binary linked to the compiler, the certifier's and the browser bundle's among them, where nothing reads a count.
 //!
 //! **It counts only while someone reads the counts**: a recorder, [`install`](crate::install)'s for the rest of the process and [`trace`](crate::trace())'s for its closure, or a measurement that asked with [`count_allocations`]. Otherwise a trip through it costs one relaxed load: counting is four atomic read-modify-writes, each a locked instruction on x86, which every compile would pay for a count nobody reads. So the live bytes are counted from where counting began, and a block taken before it and returned since lowers them, below zero where more was returned than taken.
 //!
@@ -21,11 +21,13 @@ static ALLOCATED: AtomicUsize = AtomicUsize::new(0);
 static ALLOCATIONS: AtomicUsize = AtomicUsize::new(0);
 static PEAK: AtomicIsize = AtomicIsize::new(0);
 
-/// A `GlobalAlloc` forwarding every request to the system allocator and counting the bytes that pass through it while anyone reads them. Installed below, by this crate, in every binary it is linked into.
-struct CountingAllocator;
-
-#[global_allocator]
-static ALLOCATOR: CountingAllocator = CountingAllocator;
+/// A `GlobalAlloc` forwarding every request to the system allocator and counting the bytes that pass through it while anyone reads them. A program that reads the counts installs it:
+///
+/// ```text
+/// #[global_allocator]
+/// static ALLOCATOR: CountingAllocator = CountingAllocator;
+/// ```
+pub struct CountingAllocator;
 
 impl CountingAllocator {
     /// Whether anyone reads the counts: the one load every trip through the allocator pays.

@@ -10,3 +10,9 @@ mod host_boundary;
 mod runaways;
 mod test_support;
 mod towers;
+
+use curios_profile::CountingAllocator;
+
+// A program installs the counting allocator, and the suite these measurements run in is one: what they read of memory is what it counts.
+#[global_allocator]
+static ALLOCATOR: CountingAllocator = CountingAllocator;
