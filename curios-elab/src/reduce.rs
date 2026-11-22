@@ -1546,7 +1546,7 @@ fn settle_at(
     start: &Term,
     height: Height,
 ) -> Result<(), ReduceError> {
-    // The term reduced and its frame are what a hunt for repeated settlements needs: the same pair recurring at an entry's own height is the entry settled anew, and the costliest calls name the keys that pay. The height tells one settled again under an arm from one settled anew. The term is written as Core text, which names every global in full and reads back as the term, and a trace writes a key's text once however often it is settled.
+    // The term reduced and its frame are what a hunt for repeated settlements needs: the same pair recurring at an entry's own height is the entry settled anew, and its slowest slices, ordered by a query of the trace, name the keys that pay. The height tells one settled again under an arm from one settled anew. The term is written as Core text, which names every global in full and reads back as the term, and a trace writes a key's text once however often it is settled.
     curios_common::profile!(
         "reduce::settle",
         key = %start.spelled(&Rc::new(Spelling::core_text())),

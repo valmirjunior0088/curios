@@ -4,12 +4,11 @@
 
 ## What is wrong today
 
-- **The summary answers as no other command does.** `curios profile` prints up to five tab-separated tables, each under a header row, with the run's peak and each table's name in header cells. A field with nothing in it is left blank. Memory is in mebibytes to a tenth, so a span's five allocations read `0.0`. The stack a killed run stopped inside is the last table. [A command narrates on one transcript and reports in blocks](../../design/tools/a-command-narrates-on-one-transcript-and-reports-in-blocks.md) gives every other answer a block, then one listing of rows with no header, `-` where a field has nothing, each row splitting alike.
 - **No step reads a stream by SQL.** A question past the summary is asked in Perfetto's hosted UI by hand; no step of the task files runs `trace_processor` over a stream, so no check holds the summary's totals to what Perfetto reads of the same file.
 
 ## Goal
 
-- Every report of a stream is a reading of that file: `curios profile`'s answer, read in process and drawn as every answer of the command line is, a block of what the stream states of its run and then one view's rows; a query through `trace_processor`, pinned beside the compiler or in Perfetto's UI; and a timeline in Perfetto's UI.
+- Every report of a stream is a reading of that file: `curios profile`'s summary, read in process; a query through `trace_processor`, pinned beside the compiler or in Perfetto's UI; and a timeline in Perfetto's UI.
 
 ## Settled
 
@@ -21,10 +20,8 @@
 
 ## Stages
 
-**1. The summary is an answer.** `curios profile <PATH>` answers with a block on the path asked. Its facts: whether the run returned or stopped, and whether the allocator counted; the peak; and the rows each other view holds, where it holds any, with a `try;` entry naming the command that lists them. For a run that stopped, each span it stopped inside is an entry, each thread's stack in turn and innermost last, with when it was entered. The block closes on `[trace]` and the path, a kind the decision gains. After a blank line comes one listing: the spans by default, or `--slowest`, `--samples` or `--within`, one at most. Its rows have no header and `-` where a field has nothing; their fields are named in `usage.md`, times in milliseconds and memory in bytes. The measurements that file a fold beside their stream file the default answer. Check: a stopped run's stack reads as its entries; each view's rows split into as many fields as every other row of it; `usage.md`, the decision and the READMEs that quote the summary restated.
-
-**2. The reader beside the compiler.** `trace_processor_shell` pinned among `xtask/tasks.toml`'s `programs` by a minimum version, as Node is, since Perfetto publishes it a platform at a time, Linux's and macOS's alike: launched from the path, refused where it is absent, and fetched by no step; `cargo xtask profile query <STREAM> <SQL>`; and `curios-profile`'s *Taking a profile* naming the step and where Perfetto publishes each platform's binary. Check: the query step answers a total the summary states, alike, over the prelude's stream; and what `trace_processor` makes of a stream cut inside a packet, stated there.
+**1. The reader beside the compiler.** `trace_processor_shell` pinned among `xtask/tasks.toml`'s `programs` by a minimum version, as Node is, since Perfetto publishes it a platform at a time, Linux's and macOS's alike: launched from the path, refused where it is absent, and fetched by no step; `cargo xtask profile query <STREAM> <SQL>`; and `curios-profile`'s *Taking a profile* naming the step and where Perfetto publishes each platform's binary. Check: the query step answers a total the summary states, alike, over the prelude's stream; and what `trace_processor` makes of a stream cut inside a packet, stated there.
 
 ## Verification and retirement
 
-Each stage's check, then `cargo xtask workspace lint`, the suite and `cargo xtask docs build`, and the measurements that read a stream run by name. Once stage 2 lands, the decisions named above are restated, this file is deleted, and [A measurement files a record its figures are read from](../100-a-measurement-files-a-record-its-figures-are-read-from.md), which reads this trace, is released.
+Each stage's check, then `cargo xtask workspace lint`, the suite and `cargo xtask docs build`, and the measurements that read a stream run by name. Once stage 1 lands, the decisions named above are restated, this file is deleted, and [A measurement files a record its figures are read from](../100-a-measurement-files-a-record-its-figures-are-read-from.md), which reads this trace, is released.

@@ -3,7 +3,7 @@
 //! Every build carries the instrumentation, and nothing records unless a caller installs a recorder: a measurement point no recorder listens to costs one relaxed load. This crate names `tracing` for the subscriber it implements, and is what reads its stream back:
 //!
 //! - [`trace()`] and [`install`] are the two scopings of the subscriber that writes one packet per span boundary and event as it happens, a packet sequence and a track for each thread that records. `trace` runs one closure under it and leaves the process-global default alone; `install` *is* that default, for a binary whose scope is the whole invocation because it has no closure to wrap. Both take the destination from their caller, and they are the only producers.
-//! - [`fold()`] recomputes timings, allocation figures and distributions from those packets. A question the summaries do not answer is asked of the file, by `trace_processor` or Perfetto's UI.
+//! - [`fold()`] recomputes timings, allocation figures and distributions from those packets into a [`Profile`], which draws `curios profile`'s answer, one block summarizing the run. A question the summaries do not answer is asked of the file, by `trace_processor` or Perfetto's UI.
 //! - The counting allocator, [`CountingAllocator`], adds the memory half of a report: a program that reads memory installs it as its `#[global_allocator]`, and it counts only while a recorder listens — `install`'s for the rest of the process, `trace`'s for its closure — or a measurement has asked with [`count_allocations`], so a slice carries what its thread took and what the process held while counting, and no run pays for a count nobody reads.
 //! - [`Instructions`] counts what a measurement's thread and the threads it starts retire, which neither a look nor a byte sees of a walk that allocates nothing or of code that is not Rust.
 //!
@@ -19,9 +19,7 @@ pub use instructions::Instructions;
 mod perfetto;
 
 mod fold;
-pub use fold::{
-    Memory, OpenSpan, Report, SampleSummary, SpanInstance, Summary, Within, fold, fold_at,
-};
+pub use fold::{Memory, OpenSpan, Profile, SampleSummary, Summary, fold, fold_at};
 
 mod trace;
 use trace::*;

@@ -1,12 +1,12 @@
-//! Aggregation, as one consumer of the record stream rather than as what the library produces: [`fold`] reads the packets [`trace`](crate::trace()) wrote and recomputes timings, allocation figures and magnitude distributions from them.
+//! Aggregation, as one consumer of the record stream rather than as what the library produces: [`fold`] reads the packets [`trace`](crate::trace()) wrote and recomputes timings, allocation figures and magnitude distributions from them, and [`Profile::answer`] summarizes them as `curios profile` answers.
 //!
-//! Every statistic here is derived, which is the point. A duration is a slice's end differenced against its beginning, a retained byte count the same subtraction over the allocator's readings, and a sample distribution a pass over the instants that carry a `value` — so a question the columns below do not answer is asked of the file directly, by `trace_processor` or Perfetto's UI, rather than by changing what a capture keeps.
+//! Every statistic here is derived, which is the point. A duration is a slice's end differenced against its beginning, a retained byte count the same subtraction over the allocator's readings, and a sample distribution a pass over the instants that carry a `value` — so a question the summary does not answer is asked of the file directly, by `trace_processor` or Perfetto's UI, rather than by changing what a capture keeps.
 //!
 //! **A packet is read with what its sequence stated before it.** Each packet sequence keeps its own state: the names and strings interned on it, its defaults — the track its slices are on and the counter tracks its readings are of — and its incremental clock, each timestamp on it a step from the one before. A counter written as steps is added to where its sequence last left it. A packet that clears its sequence's state starts all of it over.
 //!
-//! **A track is a thread, and each keeps a stack.** A slice begins and ends on its thread's track, and the slices of one track nest, so self time is each slice's extent less what the slices begun directly inside it on its track took, and what ran inside a span is what its track entered while it was entered. A call is a slice: a span entered twice is two. A slice's bytes and allocations are its own thread's, and what it retained is the process's.
+//! **A track is a thread, and each keeps a stack.** A slice begins and ends on its thread's track, and the slices of one track nest, so self time is each slice's extent less what the slices begun directly inside it on its track took. A call is a slice: a span entered twice is two. A slice's bytes and allocations are its own thread's, and what it retained is the process's.
 //!
-//! **A stream cut short reads up to its last whole packet.** A killed run's file, and one whose writer stopped at a failed write, end on a whole packet or inside one, and the packet cut short is dropped; the slices begun and never ended are reported in [`Report::open`], which is what a killed run was inside.
+//! **A stream cut short reads up to its last whole packet.** A killed run's file, and one whose writer stopped at a failed write, end on a whole packet or inside one, and the packet cut short is dropped; the slices begun and never ended are reported in [`Profile::open`], which is what a killed run was inside.
 //!
 //! **A packet that names what was never defined is refused.** An interned id, a track, a counter or a clock a packet uses before a packet of the stream defined it is a stream that is not this recorder's, or not whole from its first packet, and reading it as one would invent names; `trace_processor` rests on the same order.
 //!
@@ -20,8 +20,10 @@ use {
             debug_annotation, trace_packet, track_descriptor, track_event,
         },
     },
+    curios_common::{About, Kind, Report, Said, Style},
     prost::Message,
     std::{
+        cmp::Reverse,
         collections::{BTreeMap, HashMap},
         fmt,
         fs::File,
@@ -33,38 +35,19 @@ use {
 
 /// Timings, allocation figures and magnitude samples recomputed from one record stream.
 #[derive(Debug, Default)]
-pub struct Report {
+pub struct Profile {
     /// Timings ordered from greatest to least total duration.
     pub summaries: Vec<Summary>,
     /// Sampled magnitudes ordered from greatest to least total, one entry per `curios_common::sample!` site that fired.
     pub samples: Vec<SampleSummary>,
     /// The greatest peak any slice carried: the high-water mark of what the process held while counting, up to the last packet the file holds; `None` where the allocator did not count.
     pub peak: Option<usize>,
-    /// What ran inside each span name on its track: every other span name entered while one of it was entered, outer name first and costliest first beneath it.
-    pub within: Vec<Within>,
-    /// The spans still entered when the packets ran out, outermost first.
+    /// How many threads recorded, a track each.
+    pub threads: usize,
+    /// The spans still entered when the packets ran out: each thread's in turn, in the order the threads first recorded, and outermost first within each.
     ///
     /// Empty for a stream whose operation returned. Non-empty is the useful case: it is the stack a compilation was inside when it was killed, and the reason a record stream is worth keeping over an aggregate that only exists once everything has closed.
     pub open: Vec<OpenSpan>,
-}
-
-/// The spans of one name entered while a span of another name was entered on one track: how many entries, and for how long in all.
-///
-/// **What a row per span cannot say.** A span's row counts every call wherever it was made, so it cannot say how many of them one stage made — how many of the questions reduction put to conversion were erasure's (`erase_unit`) and how many elaboration's. Each exit is credited once to every distinct name entered above it on its track, so nesting two spans of one outer name counts an inner call once, and a span entered within its own name is not counted inside itself.
-#[derive(Debug)]
-pub struct Within {
-    /// The tracing target of the span that was entered around it.
-    pub outer_target: String,
-    /// The name of the span that was entered around it.
-    pub outer_name: String,
-    /// The tracing target of the span entered inside.
-    pub target: String,
-    /// The name of the span entered inside.
-    pub name: String,
-    /// How many entries of the inner name exited while the outer one was entered.
-    pub entries: u64,
-    /// Their time, inclusive, summed over those entries.
-    pub total: Duration,
 }
 
 /// A span that was entered and never left before the packets ended.
@@ -76,8 +59,8 @@ pub struct OpenSpan {
     pub name: String,
     /// The group the span declared, for one carrying a `group` field.
     pub group: Option<String>,
-    /// How many spans of its name its track held open at it and around it — above one for a span re-entered within itself.
-    pub depth: usize,
+    /// The thread it was entered on, by the name its track gives it.
+    pub thread: String,
     /// When it was entered, as nanoseconds since the stream opened.
     pub entered: u128,
 }
@@ -136,10 +119,6 @@ pub struct Summary {
     pub max: Duration,
     /// What the allocator counted while the spans were entered, `None` where it did not count: a stream recorded by a program that installed no `CountingAllocator` reads no memory, never nought.
     pub memory: Option<Memory>,
-    /// The costliest slices of this row, costliest first and at most `SLOWEST_KEPT` of them, each with the fields its span was created with — for a span that declared fields beyond `group`, and empty for every other.
-    ///
-    /// **What an aggregate cannot say, the instances can.** A row answers how long a span took in all; it cannot say *which* call was slow or what it was handed, and that is the question a hunt for a pathological input asks. A span that declares its inputs as fields — `profile!("entails", assumed = assumed.len(), lower = ?lower)` — is answered here by the calls that cost the most, with their inputs beside them. Formatting a field costs at every span creation, so a field that is there to be read this way belongs on a span added to isolate one investigation, and leaves with it.
-    pub slowest: Vec<SpanInstance>,
 }
 
 /// What the allocator counted over a row's spans: differences of the readings their slices carried.
@@ -155,24 +134,10 @@ pub struct Memory {
     pub allocations: u64,
 }
 
-/// One slice, as [`Summary::slowest`] keeps it.
-#[derive(Debug, Clone)]
-pub struct SpanInstance {
-    /// How long it was entered.
-    pub total: Duration,
-    /// The part of [`total`](Self::total) no span entered inside it accounts for.
-    pub self_total: Duration,
-    /// Its span's fields other than `group`, in the order the call site wrote them.
-    pub fields: Vec<(String, String)>,
-}
-
-/// How many of its costliest instances a row keeps. Enough to tell one pathological call from a family of them, and bounded so that keeping them costs a fold a constant per span name.
-pub const SLOWEST_KEPT: usize = 10;
-
 /// Recompute a report from the bytes of one record stream.
 ///
 /// The error is the reader's, or a stream's that is not this recorder's: a packet that is not `Trace`'s, or that names what no packet before it defined. A packet cut short at the end is the normal ending of a killed run or of a writer that stopped, and is dropped.
-pub fn fold(mut stream: impl Read) -> io::Result<Report> {
+pub fn fold(mut stream: impl Read) -> io::Result<Profile> {
     let mut bytes = Vec::new();
     stream.read_to_end(&mut bytes)?;
     let mut state = Fold::default();
@@ -186,142 +151,219 @@ pub fn fold(mut stream: impl Read) -> io::Result<Report> {
 /// Recompute a report from the stream filed at `path`.
 ///
 /// The mirror of [`Destination::File`](crate::Destination::File): that destination took a path, and reading its stream back takes the same one.
-pub fn fold_at(path: &Path) -> io::Result<Report> {
+pub fn fold_at(path: &Path) -> io::Result<Profile> {
     fold(File::open(path)?)
 }
 
-impl Report {
-    /// The report as tab-separated tables: the spans, the magnitude sites beneath them, what ran inside each span, and — for a stream whose run never returned — the stack it was inside. A memory column reads `-` where the allocator did not count.
+/// How many span names a summary lists: the ones that took the most time themselves, as many as a reader takes in at a glance.
+const SUMMARIZED: usize = 10;
+
+/// One span name with every group of it folded in, as a summary ranks it: its time, its own share of the time in spans, its calls and what it took, and the costliest of its groups where it declared any.
+struct Ranked<'a> {
+    target: &'a str,
+    name: &'a str,
+    total: Duration,
+    self_total: Duration,
+    calls: u64,
+    taken: Option<u64>,
+    costliest: Option<(&'a str, Duration)>,
+}
+
+impl Profile {
+    /// `curios profile`'s answer for the stream at `stream`, drawn for `style`: one block summarizing the run, closed on the stream.
     ///
-    /// The one renderer, so no two readers of a report print different columns of it.
-    pub fn render(&self) -> String {
-        let peak = self.peak.map_or("-".to_string(), |peak| {
-            format!("{:.1} MiB", mebibytes(peak as f64))
-        });
-        let mut rendered = format!(
-            "total_ms\tself_ms\tcalls\tmin_ms\tmax_ms\tretained_mb\tallocated_mb\tself_allocated_mb\tallocs\ttarget\tname\tgroup\t(peak {peak})\n",
-        );
-        for summary in &self.summaries {
-            let memory = summary.memory.map_or("-\t-\t-\t-".to_string(), |memory| {
-                format!(
-                    "{:.1}\t{:.1}\t{:.1}\t{}",
-                    mebibytes(memory.retained as f64),
-                    mebibytes(memory.allocated as f64),
-                    mebibytes(memory.self_allocated as f64),
-                    memory.allocations,
-                )
-            });
-            rendered.push_str(&format!(
-                "{:.3}\t{:.3}\t{}\t{:.3}\t{:.3}\t{memory}\t{}\t{}\t{}\n",
-                milliseconds(summary.total),
-                milliseconds(summary.self_total),
-                summary.calls,
-                milliseconds(summary.min),
-                milliseconds(summary.max),
-                summary.target,
-                summary.name,
-                summary.group.as_deref().unwrap_or(""),
-            ));
-        }
-
-        if self
-            .summaries
+    /// Its facts say whether every span closed or how many were still open, whether the allocator counted, the time spent in spans and the threads that spent it with the bytes they took, the peak, and how many span names the stream holds; a stopped run's open stacks follow, a fact a thread. Its entries are the `SUMMARIZED` span names that took the most time themselves, each with its share of the time in spans and the share so far: self time partitions what the spans cover, so the shares add up. Every other question is the trace's, asked in Perfetto's UI or by `trace_processor`.
+    pub fn answer(&self, stream: &Path, style: &Style) -> String {
+        let ranked = self.ranked();
+        let spent = ranked
             .iter()
-            .any(|summary| !summary.slowest.is_empty())
-        {
-            rendered.push_str("\ntotal_ms\tself_ms\ttarget\tname\tgroup\tfields\t(slowest)\n");
-            for summary in &self.summaries {
-                for instance in &summary.slowest {
-                    let fields = instance
-                        .fields
-                        .iter()
-                        .map(|(name, value)| format!("{}={}", escape(name), escape(value)))
-                        .collect::<Vec<_>>()
-                        .join(" ");
-                    rendered.push_str(&format!(
-                        "{:.3}\t{:.3}\t{}\t{}\t{}\t{}\n",
-                        milliseconds(instance.total),
-                        milliseconds(instance.self_total),
-                        summary.target,
-                        summary.name,
-                        summary.group.as_deref().unwrap_or(""),
-                        fields,
-                    ));
-                }
+            .map(|ranked| ranked.self_total)
+            .sum::<Duration>();
+        let mut so_far = Duration::ZERO;
+        let entries = ranked
+            .iter()
+            .take(SUMMARIZED)
+            .map(|ranked| {
+                so_far += ranked.self_total;
+                ranked.entry(spent, so_far)
+            })
+            .collect::<Vec<_>>();
+
+        format!(
+            "{}\n",
+            self.block(stream, &ranked, spent)
+                .listing(Kind::Trace, style, &entries)
+        )
+    }
+
+    /// Every span name with its groups folded in, by the time it took itself, costliest first.
+    fn ranked(&self) -> Vec<Ranked<'_>> {
+        let mut named = BTreeMap::<(&str, &str), Ranked<'_>>::new();
+        for summary in &self.summaries {
+            let ranked = named
+                .entry((summary.target.as_str(), summary.name.as_str()))
+                .or_insert_with(|| Ranked {
+                    target: &summary.target,
+                    name: &summary.name,
+                    total: Duration::ZERO,
+                    self_total: Duration::ZERO,
+                    calls: 0,
+                    taken: None,
+                    costliest: None,
+                });
+            ranked.total += summary.total;
+            ranked.self_total += summary.self_total;
+            ranked.calls += summary.calls;
+            if let Some(memory) = summary.memory {
+                *ranked.taken.get_or_insert(0) += memory.self_allocated;
+            }
+            if let Some(group) = &summary.group
+                && ranked
+                    .costliest
+                    .is_none_or(|(_, costliest)| summary.total > costliest)
+            {
+                ranked.costliest = Some((group.as_str(), summary.total));
+            }
+        }
+        let mut ranked = named.into_values().collect::<Vec<_>>();
+        ranked.sort_by_key(|ranked| Reverse(ranked.self_total));
+
+        ranked
+    }
+
+    /// The block's facts, closed on `stream`.
+    fn block(&self, stream: &Path, ranked: &[Ranked<'_>], spent: Duration) -> Report {
+        let closed = match self.open.len() {
+            0 => "every span closed".to_string(),
+            1 => "1 span open".to_string(),
+            open => format!("{open} spans open"),
+        };
+        let counted = match self.peak {
+            Some(_) => "allocations counted",
+            None => "allocations not counted",
+        };
+        let threads = match self.threads {
+            1 => "1 thread".to_string(),
+            threads => format!("{threads} threads"),
+        };
+        let taken = match ranked.iter().filter_map(|ranked| ranked.taken).sum::<u64>() {
+            _ if self.peak.is_none() => String::new(),
+            taken => format!(", {} taken", bytes(taken, 1)),
+        };
+
+        let mut said = Said::line(stream.display().to_string());
+        said.stating(format!("{closed}, {counted}"));
+        if !spent.is_zero() {
+            said.stating(format!("in spans: {} on {threads}{taken}", time(spent, 1)));
+        }
+        if let Some(peak) = self.peak {
+            said.stating(format!("peak: {}", bytes(peak as u64, 1)));
+        }
+        match ranked.len() {
+            0 => {}
+            names if names <= SUMMARIZED => {
+                said.stating(format!("spans: {names} names, each below"));
+            }
+            names => said.stating(format!(
+                "spans: {names} names, the {SUMMARIZED} that took the most time themselves below"
+            )),
+        }
+        for (thread, open) in self.stacks() {
+            let spans = open
+                .iter()
+                .map(|span| {
+                    let group = match &span.group {
+                        Some(group) => format!(", group {group}"),
+                        None => String::new(),
+                    };
+                    format!(
+                        "\n  {} in {}{group}, entered at {}",
+                        span.name,
+                        span.target,
+                        time(Duration::from_nanos(span.entered as u64), 2)
+                    )
+                })
+                .collect::<String>();
+            said.stating(format!("open on {thread}:{spans}"));
+        }
+
+        Report::about(About::Path(stream.to_path_buf()), said)
+    }
+
+    /// Each thread's open spans, the threads in the order they first recorded.
+    fn stacks(&self) -> Vec<(&str, Vec<&OpenSpan>)> {
+        let mut stacks = Vec::<(&str, Vec<&OpenSpan>)>::new();
+        for span in &self.open {
+            match stacks.last_mut() {
+                Some((thread, open)) if *thread == span.thread => open.push(span),
+                _ => stacks.push((&span.thread, vec![span])),
             }
         }
 
-        if !self.samples.is_empty() {
-            rendered.push_str("\ncount\ttotal\tmin\tmean\tmax\ttarget\tname\n");
-            for sample in &self.samples {
-                rendered.push_str(&format!(
-                    "{}\t{}\t{}\t{:.1}\t{}\t{}\t{}\n",
-                    sample.count,
-                    sample.total,
-                    sample.min,
-                    sample.mean(),
-                    sample.max,
-                    sample.target,
-                    sample.name,
-                ));
-            }
-        }
-
-        if !self.within.is_empty() {
-            rendered.push_str("\nentries\ttotal_ms\touter_target\touter\ttarget\tname\t(within)\n");
-            for within in &self.within {
-                rendered.push_str(&format!(
-                    "{}\t{:.3}\t{}\t{}\t{}\t{}\n",
-                    within.entries,
-                    milliseconds(within.total),
-                    within.outer_target,
-                    within.outer_name,
-                    within.target,
-                    within.name,
-                ));
-            }
-        }
-
-        if !self.open.is_empty() {
-            rendered.push_str("\nentered_ms\tdepth\ttarget\tname\tgroup\t(still open)\n");
-            for span in &self.open {
-                rendered.push_str(&format!(
-                    "{:.3}\t{}\t{}\t{}\t{}\n",
-                    span.entered as f64 / 1_000_000.0,
-                    span.depth,
-                    span.target,
-                    span.name,
-                    span.group.as_deref().unwrap_or(""),
-                ));
-            }
-        }
-
-        rendered
+        stacks
     }
 }
 
-fn milliseconds(duration: Duration) -> f64 {
-    duration.as_secs_f64() * 1_000.0
-}
-
-fn mebibytes(bytes: f64) -> f64 {
-    bytes / (1024.0 * 1024.0)
-}
-
-/// The four characters a tab-separated column cannot hold bare, as the rendered report escapes a field's name and value.
-fn escape(value: &str) -> String {
-    let mut escaped = String::with_capacity(value.len());
-    for character in value.chars() {
-        match character {
-            '\\' => escaped.push_str("\\\\"),
-            '\t' => escaped.push_str("\\t"),
-            '\n' => escaped.push_str("\\n"),
-            '\r' => escaped.push_str("\\r"),
-            _ => escaped.push(character),
+impl Ranked<'_> {
+    /// The span name as an entry of the summary: its name and target, then its figures, its share of `spent` and the share of the names ranked above it and it, `so_far`; and its costliest group where it declared any.
+    fn entry(&self, spent: Duration, so_far: Duration) -> String {
+        let share = |part: Duration| {
+            100.0 * part.as_secs_f64() / spent.as_secs_f64().max(f64::MIN_POSITIVE)
+        };
+        let taken = match self.taken {
+            Some(taken) => format!("; taken: {}", bytes(taken, 2)),
+            None => String::new(),
+        };
+        let mut lines = vec![
+            format!("{} in {}", self.name, self.target),
+            format!(
+                "self: {}, {:.1}%, {:.1}% so far; in all: {}; calls: {}{taken}",
+                time(self.self_total, 2),
+                share(self.self_total),
+                share(so_far),
+                time(self.total, 2),
+                thousands(self.calls)
+            ),
+        ];
+        if let Some((group, total)) = self.costliest {
+            lines.push(format!("costliest group: {group}, {}", time(total, 2)));
         }
+
+        lines.join("\n")
+    }
+}
+
+/// `duration` in the largest of seconds, milliseconds and microseconds it reaches, to `decimals` places.
+fn time(duration: Duration, decimals: usize) -> String {
+    let seconds = duration.as_secs_f64();
+    match seconds {
+        _ if seconds >= 1.0 => format!("{seconds:.decimals$} s"),
+        _ if seconds >= 1e-3 => format!("{:.decimals$} ms", seconds * 1e3),
+        _ => format!("{:.decimals$} µs", seconds * 1e6),
+    }
+}
+
+/// `count` bytes in the largest binary unit it reaches, to `decimals` places, or whole below a kibibyte.
+fn bytes(count: u64, decimals: usize) -> String {
+    let units = [("GiB", 1_u64 << 30), ("MiB", 1 << 20), ("KiB", 1 << 10)];
+    match units.into_iter().find(|(_, size)| count >= *size) {
+        Some((unit, size)) => format!("{:.decimals$} {unit}", count as f64 / size as f64),
+        None => format!("{count} B"),
+    }
+}
+
+/// `count` with a comma between each three digits.
+fn thousands(count: u64) -> String {
+    let digits = count.to_string();
+    let mut grouped = String::with_capacity(digits.len() + digits.len() / 3);
+    for (at, digit) in digits.chars().enumerate() {
+        if at > 0 && (digits.len() - at).is_multiple_of(3) {
+            grouped.push(',');
+        }
+        grouped.push(digit);
     }
 
-    escaped
+    grouped
 }
 
 /// The field number and wire type of `Trace.packet`, which frames every packet of a stream.
@@ -373,12 +415,11 @@ fn defined<'a>(table: &'a HashMap<u64, String>, id: u64, what: &str) -> io::Resu
         .ok_or_else(|| refused(format_args!("{what} {id}, used before it was defined")))
 }
 
-/// A slice begun and not yet ended: its span's identity and fields, the readings it began with, and what the slices begun directly inside it took — the part of its extent that is not its own.
+/// A slice begun and not yet ended: its span's identity, the readings it began with, and what the slices begun directly inside it took — the part of its extent that is not its own.
 struct Open {
     target: String,
     name: String,
     group: Option<String>,
-    fields: Vec<(String, String)>,
     at: u64,
     readings: Option<Readings>,
     nested: u64,
@@ -395,11 +436,10 @@ struct Readings {
     peak: u64,
 }
 
-/// A thread's track: the slices open on it, innermost last, and how many of each name, so an end finds the distinct names entered above it without walking the stack.
-#[derive(Default)]
+/// A thread's track: the thread's name, and the slices open on it, innermost last.
 struct Track {
+    thread: String,
     stack: Vec<Open>,
-    on_stack: BTreeMap<Named, u32>,
 }
 
 #[derive(Default)]
@@ -410,7 +450,6 @@ struct Aggregate {
     min: Option<u128>,
     max: u128,
     memory: Option<Memory>,
-    slowest: Vec<SpanInstance>,
 }
 
 #[derive(Default)]
@@ -449,15 +488,8 @@ impl fmt::Display for Annotated {
     }
 }
 
-/// A span or a magnitude site as a report names it: the target that owns it, and its name.
+/// A magnitude site as a report names it: the target that owns it, and its name.
 type Named = (String, String);
-
-/// The slices of one name that ended inside another name on their track: how many, and their time in all.
-#[derive(Default)]
-struct Credit {
-    entries: u64,
-    total: u128,
-}
 
 /// What a packet sequence stated for the packets after it: the names and strings interned on it, its defaults, its incremental clock, and each counter it writes as steps as it last stood.
 #[derive(Default)]
@@ -535,11 +567,10 @@ struct Described {
 #[derive(Default)]
 struct Fold {
     sequences: HashMap<u32, Sequence>,
-    tracks: HashMap<u64, Track>,
+    tracks: BTreeMap<u64, Track>,
     counters: HashMap<u64, Described>,
     spans: BTreeMap<(String, String, Option<String>), Aggregate>,
     samples: BTreeMap<Named, Distribution>,
-    within: BTreeMap<(Named, Named), Credit>,
     peak: Option<u64>,
 }
 
@@ -604,8 +635,15 @@ impl Fold {
 
     /// A track described: a thread's, which keeps a stack, or a counter's, known by its name.
     fn described(&mut self, track: TrackDescriptor) -> io::Result<()> {
-        if track.thread.is_some() {
-            self.tracks.entry(track.uuid()).or_default();
+        if let Some(thread) = &track.thread {
+            let named = match &thread.thread_name {
+                Some(name) => name.clone(),
+                None => format!("thread {}", thread.tid()),
+            };
+            self.tracks.entry(track.uuid()).or_insert_with(|| Track {
+                thread: named,
+                stack: Vec::new(),
+            });
         } else if let Some(counter) = &track.counter {
             let name = match &track.static_or_dynamic_name {
                 Some(track_descriptor::StaticOrDynamicName::Name(name)) => name.as_str(),
@@ -758,27 +796,18 @@ impl Fold {
         annotations: Vec<(String, Annotated)>,
         readings: Option<Readings>,
     ) {
-        let mut group = None;
-        let mut fields = Vec::new();
-        for (field, value) in annotations {
-            match field.as_str() {
-                "group" => group = Some(value.to_string()),
-                _ => fields.push((field, value.to_string())),
-            }
-        }
+        let group = annotations
+            .into_iter()
+            .find(|(field, _)| field == "group")
+            .map(|(_, value)| value.to_string());
         let track = self
             .tracks
             .get_mut(&track)
             .expect("an event's track is described");
-        *track
-            .on_stack
-            .entry((target.clone(), name.clone()))
-            .or_default() += 1;
         track.stack.push(Open {
             target,
             name,
             group,
-            fields,
             at,
             readings,
             nested: 0,
@@ -786,7 +815,7 @@ impl Fold {
         });
     }
 
-    /// The innermost slice of `track` ended: its extent and readings differenced, credited to the slice it was begun inside and to every distinct name entered above it, and aggregated under its row.
+    /// The innermost slice of `track` ended: its extent and readings differenced, credited to the slice it was begun inside, and aggregated under its row.
     fn end(&mut self, track: u64, at: u64, readings: Option<Readings>) {
         let track = self
             .tracks
@@ -796,13 +825,6 @@ impl Fold {
         let Some(slice) = track.stack.pop() else {
             return;
         };
-        let key = (slice.target.clone(), slice.name.clone());
-        if let Some(count) = track.on_stack.get_mut(&key) {
-            *count -= 1;
-            if *count == 0 {
-                track.on_stack.remove(&key);
-            }
-        }
 
         let elapsed = at.saturating_sub(slice.at);
         let own = elapsed.saturating_sub(slice.nested);
@@ -818,17 +840,6 @@ impl Fold {
         if let Some(parent) = track.stack.last_mut() {
             parent.nested += elapsed;
             parent.nested_allocated += memory.map_or(0, |memory| memory.allocated);
-        }
-        let outers = track
-            .on_stack
-            .keys()
-            .filter(|outer| **outer != key)
-            .cloned()
-            .collect::<Vec<_>>();
-        for outer in outers {
-            let credit = self.within.entry((outer, key.clone())).or_default();
-            credit.entries += 1;
-            credit.total += u128::from(elapsed);
         }
 
         let aggregate = self
@@ -847,22 +858,6 @@ impl Fold {
             sum.allocated = sum.allocated.saturating_add(memory.allocated);
             sum.self_allocated = sum.self_allocated.saturating_add(memory.self_allocated);
             sum.allocations = sum.allocations.saturating_add(memory.allocations);
-        }
-
-        if !slice.fields.is_empty() {
-            let instance = SpanInstance {
-                total: nanos(elapsed),
-                self_total: nanos(u128::from(own)),
-                fields: slice.fields,
-            };
-            // Costliest first, and the earlier of two equal instances first, so the kept set is the same however the slices were interleaved.
-            let position = aggregate
-                .slowest
-                .partition_point(|kept| kept.total >= instance.total);
-            if position < SLOWEST_KEPT {
-                aggregate.slowest.insert(position, instance);
-                aggregate.slowest.truncate(SLOWEST_KEPT);
-            }
         }
     }
 
@@ -883,7 +878,7 @@ impl Fold {
         distribution.max = distribution.max.max(value);
     }
 
-    fn finish(self) -> Report {
+    fn finish(self) -> Profile {
         let mut summaries = self
             .spans
             .into_iter()
@@ -897,7 +892,6 @@ impl Fold {
                 min: nanos(aggregate.min.unwrap_or_default()),
                 max: nanos(aggregate.max),
                 memory: aggregate.memory,
-                slowest: aggregate.slowest,
             })
             .collect::<Vec<_>>();
         summaries.sort_by(|left, right| {
@@ -929,52 +923,28 @@ impl Fold {
                 .then_with(|| left.name.cmp(&right.name))
         });
 
-        let mut open = Vec::new();
-        for track in self.tracks.into_values() {
-            let mut depths = BTreeMap::<Named, usize>::new();
-            for slice in track.stack {
-                let depth = depths
-                    .entry((slice.target.clone(), slice.name.clone()))
-                    .or_default();
-                *depth += 1;
-                open.push(OpenSpan {
+        // The tracks in the order their threads first recorded, which is the order the writer numbered them in; each stack outermost first, so it reads as the path down to what its thread could not finish.
+        let threads = self.tracks.len();
+        let open = self
+            .tracks
+            .into_values()
+            .flat_map(|track| {
+                let thread = track.thread;
+                track.stack.into_iter().map(move |slice| OpenSpan {
                     target: slice.target,
                     name: slice.name,
                     group: slice.group,
-                    depth: *depth,
+                    thread: thread.clone(),
                     entered: u128::from(slice.at),
-                });
-            }
-        }
-        // Outermost first: the span entered earliest is the one the others are nested inside.
-        open.sort_by_key(|span| span.entered);
-
-        let mut within = self
-            .within
-            .into_iter()
-            .map(|((outer, inner), credit)| Within {
-                outer_target: outer.0,
-                outer_name: outer.1,
-                target: inner.0,
-                name: inner.1,
-                entries: credit.entries,
-                total: nanos(credit.total),
+                })
             })
-            .collect::<Vec<_>>();
-        within.sort_by(|left, right| {
-            left.outer_target
-                .cmp(&right.outer_target)
-                .then_with(|| left.outer_name.cmp(&right.outer_name))
-                .then_with(|| right.total.cmp(&left.total))
-                .then_with(|| left.target.cmp(&right.target))
-                .then_with(|| left.name.cmp(&right.name))
-        });
+            .collect();
 
-        Report {
+        Profile {
             summaries,
             samples,
             peak: self.peak.map(|peak| peak as usize),
-            within,
+            threads,
             open,
         }
     }

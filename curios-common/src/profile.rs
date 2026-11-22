@@ -32,7 +32,7 @@
 ///
 /// **One row per distinct group value**, so a group is for a bounded set — top-level declarations, stages, passes — and never for a span that runs per node. The value is also formatted at *every* span creation rather than once per distinct value, so a group on a span that runs per node would pay a formatting per node.
 ///
-/// Any other field is kept with the call it describes: a fold keeps a row's costliest calls with the fields each was created with, which is how a span answers *which call* was slow and *what it was handed*. That is an investigation's question, and a field formatted at every call is an investigation's price, so such a span is added to isolate one question and removed once it is answered.
+/// Any other field is written with the call it describes, an argument of its slice, which is how a span answers *which call* was slow and *what it was handed*: a query of the trace, in Perfetto's UI or by `trace_processor`, orders a span's slices by duration beside their arguments. That is an investigation's question, and a field formatted at every call is an investigation's price, so such a span is added to isolate one question and removed once it is answered.
 ///
 /// ```text
 /// curios_common::profile!("entails", assumed = assumed.len(), lower = ?lower, upper = ?upper);

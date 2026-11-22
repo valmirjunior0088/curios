@@ -26,7 +26,7 @@ paths:
 - A crate-private item lands in the commit of its first caller: the workspace denies warnings, so a provider alone is dead code and fails the build. A `pub` item of a library crate is exempt.
 - A value that only makes sense relative to another is computed from the source constant, imported by name, never restated.
 - State that lives across requests says what bounds it and is keyed by the identity of what it caches, so a change replaces the entry rather than stranding it.
-- Investigate cost with `curios-common`'s `profile!` spans carrying their inputs as fields, `sample!` and `note!`, read back by `curios-profile` — never `eprintln!` or a hand-rolled timer; when it falls short, extend it.
+- Investigate cost with `curios-common`'s `profile!` spans carrying their inputs as fields, `sample!` and `note!`, read back by `curios profile`'s summary and, past it, by a query of the trace — never `eprintln!` or a hand-rolled timer; when it falls short, extend it.
 - Per-carrier helpers, fields and emitted functions are named type-first, operation-last: `bytes_force`, `list_slice`.
 - `//!` states a module's purpose and invariants, `///` an API's contract. One line per paragraph, never hardwrapped. A comment states a non-obvious why — an invariant, a rejected alternative, a trade-off — in the present tense, never what the code already says. An absolute Curios path leads with its slash: `/std/Str`.
 - A note for whoever works on the code is one concise regular comment, `//` — `--` in Curios, directly above the declaration's `---` block — never a doc comment, which renders as the item's contract. No doctest runs here: an example in a `///` or `//!` block is a ```` ```text ```` block.

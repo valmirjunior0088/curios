@@ -953,14 +953,14 @@ fn dispatch() -> Result<(), Failure> {
         }
         // The path is taken as it was given: `--profile` spells no default, so the only path that exists is the one a caller chose, and reading it back means naming that one rather than deriving a second.
         Mode::Profile { stream } => {
-            let report = fold_at(&stream).map_err(|error| {
+            let profile = fold_at(&stream).map_err(|error| {
                 Refused::of("unreadable file")
                     .stating(OsError(&error))
                     .about_path(&stream)
             })?;
 
             settle();
-            answer(report.render());
+            answer(profile.answer(&stream, &answered));
         }
     }
 

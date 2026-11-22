@@ -4,7 +4,7 @@ use {
     crate::tests::{Runaway, runaway},
     curios_module::RootSource,
     curios_pipeline::compile_with_prelude,
-    curios_profile::{Destination, Report, fold_at, trace},
+    curios_profile::{Destination, Profile, fold_at, trace},
     curios_surface::Entrypoint,
     std::{
         fs::create_dir_all,
@@ -21,7 +21,7 @@ struct Heaviest {
 
 impl Heaviest {
     /// The largest observation of each of the two samples a checker files where it restores its budget, or `None` where it filed neither: it judged nothing of the program.
-    fn of(report: &Report, checker: &str) -> Option<Self> {
+    fn of(report: &Profile, checker: &str) -> Option<Self> {
         let largest = |name: &str| {
             report
                 .samples

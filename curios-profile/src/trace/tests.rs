@@ -26,7 +26,7 @@ impl Buffer {
         Destination::Stream(Box::new(self.clone()))
     }
 
-    fn folded(&self) -> crate::Report {
+    fn folded(&self) -> crate::Profile {
         crate::fold(self.0.lock().expect("buffer lock").as_slice()).expect("the stream folds")
     }
 }

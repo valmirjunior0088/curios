@@ -59,7 +59,7 @@ impl Stream {
                 .packets
                 .push(described(1, counter_track(uuid, counter, false)));
         }
-        for (id, track) in [(2, THREAD), (3, OTHER)] {
+        for (id, track, name) in [(2, THREAD, "main"), (3, OTHER, "other")] {
             stream.packets.push(TracePacket {
                 timestamp: Some(0),
                 timestamp_clock_id: Some(STREAM_CLOCK),
@@ -94,7 +94,10 @@ impl Stream {
                 id,
                 TrackDescriptor {
                     uuid: Some(track),
-                    thread: Some(ThreadDescriptor::default()),
+                    thread: Some(ThreadDescriptor {
+                        thread_name: Some(name.to_string()),
+                        ..ThreadDescriptor::default()
+                    }),
                     ..TrackDescriptor::default()
                 },
             ));
@@ -204,7 +207,7 @@ impl Stream {
         .encode_to_vec()
     }
 
-    fn folded(&self) -> Report {
+    fn folded(&self) -> Profile {
         fold(self.bytes().as_slice()).expect("the stream folds")
     }
 }
@@ -270,7 +273,12 @@ fn counter_track(uuid: u64, counter: Counter, stepped: bool) -> TrackDescriptor 
     }
 }
 
-fn row<'a>(report: &'a Report, name: &str) -> &'a Summary {
+/// The summary `curios profile` gives of `report`'s stream, filed at `stream.pftrace`, drawn plain.
+fn answered(report: &Profile) -> String {
+    report.answer(Path::new("stream.pftrace"), &Style::plain())
+}
+
+fn row<'a>(report: &'a Profile, name: &str) -> &'a Summary {
     report
         .summaries
         .iter()
@@ -420,19 +428,19 @@ fn a_span_returning_more_than_counting_saw_taken_retains_below_zero() {
     assert_eq!(report.summaries[0].memory.expect("readings").retained, -200);
 }
 
-// A stream whose recorder's allocator did not count carries no readings, and its rows read no memory — rendered as `-` — rather than memory of nought.
+// A stream whose recorder's allocator did not count carries no readings, and its rows read no memory rather than memory of nought, which its summary says: no bytes taken, no peak.
 #[test]
 fn a_stream_with_no_readings_has_no_memory_figures() {
     let report = Stream::new().slice(0, 500, "uncounted").folded();
 
     assert!(report.summaries[0].memory.is_none());
     assert_eq!(report.peak, None);
+    let answer = answered(&report);
     assert!(
-        report
-            .render()
-            .contains("\t-\t-\t-\t-\tcurios_test\tuncounted"),
-        "{}",
-        report.render()
+        answer.contains("allocations not counted\n")
+            && !answer.contains("taken")
+            && !answer.contains("peak:"),
+        "{answer}"
     );
 }
 
@@ -502,7 +510,6 @@ fn the_spans_a_killed_run_left_open_are_reported_outermost_first() {
         ]
     );
     assert_eq!(report.open[1].group.as_deref(), Some("Nat/add"));
-    assert_eq!(report.open[2].depth, 1);
 }
 
 // A span re-entered within itself is measured over each extent, a slice each: the inner extent is 100 and the outer 400, and both are counted, which is the same nesting rule an outer stage's row already follows.
@@ -586,43 +593,6 @@ fn self_time_excludes_the_spans_entered_directly_inside() {
     assert_eq!(bytes(convert), (400, 400));
 }
 
-// What one stage made of a judgment every stage makes: a span is counted inside each distinct name entered above it on its track, once however many spans of that name are, never inside its own name, and not at all where nothing encloses it.
-#[test]
-fn a_span_counts_once_within_each_name_entered_above_it() {
-    let report = Stream::new()
-        .begin(0, "erase_unit")
-        .begin(10, "reduce")
-        .begin(20, "reduce")
-        .slice(30, 40, "reduce::asked_classes")
-        .end(80, "reduce")
-        .end(90, "reduce")
-        .end(100, "erase_unit")
-        .slice(200, 50, "reduce::asked_classes")
-        .folded();
-
-    let within = |outer: &str, inner: &str| {
-        report
-            .within
-            .iter()
-            .find(|within| within.outer_name == outer && within.name == inner)
-            .map(|within| (within.entries, within.total))
-    };
-    assert_eq!(
-        within("erase_unit", "reduce::asked_classes"),
-        Some((1, Duration::from_nanos(40)))
-    );
-    assert_eq!(
-        within("reduce", "reduce::asked_classes"),
-        Some((1, Duration::from_nanos(40)))
-    );
-    assert_eq!(
-        within("erase_unit", "reduce"),
-        Some((2, Duration::from_nanos(140)))
-    );
-    assert_eq!(within("reduce", "reduce"), None);
-    assert!(report.render().contains("(within)"));
-}
-
 // The case inclusive time cannot serve: a span entered within itself counts the inner extent in both slices' totals, and once in their self times, so a recursive judgment's self row is the time it actually took.
 #[test]
 fn a_span_re_entered_within_itself_counts_each_nanosecond_once_in_its_self_time() {
@@ -656,7 +626,6 @@ fn two_threads_read_as_two_tracks_each_with_its_own_stack() {
 
     assert_eq!(row(&report, "first").self_total, Duration::from_nanos(300));
     assert_eq!(row(&report, "second").self_total, Duration::from_nanos(400));
-    assert!(report.within.is_empty(), "{:?}", report.within);
 }
 
 // A slice is charged what its own thread took, each thread's counters read as steps on its own sequence, and what the process retained meanwhile, whichever thread took it: the other thread's 5,000 bytes, taken while the first slice was entered, are the second slice's and not the first's.
@@ -706,122 +675,148 @@ fn a_slice_is_charged_its_own_thread_s_allocations() {
     assert_eq!(report.peak, Some(5000));
 }
 
-/// `count` slices of `name`, the `n`th entered for `durations(n)` and carrying the field `input=n`.
-fn instances(name: &str, count: u64, durations: impl Fn(u64) -> u64) -> Stream {
-    let mut stream = Stream::new();
-    let mut at = 0;
-    for n in 0..count {
-        let end = at + durations(n);
-        stream = stream
-            .event(
-                THREAD,
-                at,
-                track_event::Type::SliceBegin,
-                name,
-                &[("input", Field::Number(n))],
-                None,
-            )
-            .event(THREAD, end, track_event::Type::SliceEnd, name, &[], None);
-        at = end;
-    }
-
-    stream
-}
-
-// What an aggregate cannot say: which call was slow, and what it was handed. A span that declares its inputs keeps its costliest calls with them, costliest first.
+// The summary ranks span names by the time each took itself, every group of a name folded into it: self time partitions what the spans cover, so each name's share and the share so far add up to the whole, and a name that declared groups names its costliest.
 #[test]
-fn a_span_s_costliest_instances_keep_the_fields_it_was_created_with() {
-    let report = instances("entails", 3, |n| [100, 300, 200][n as usize]).folded();
-
-    let kept = report.summaries[0]
-        .slowest
-        .iter()
-        .map(|instance| (instance.total.as_nanos(), instance.fields.clone()))
-        .collect::<Vec<_>>();
-    assert_eq!(
-        kept,
-        vec![
-            (300, vec![("input".to_owned(), "1".to_owned())]),
-            (200, vec![("input".to_owned(), "2".to_owned())]),
-            (100, vec![("input".to_owned(), "0".to_owned())]),
-        ]
-    );
-}
-
-// The instances are bounded, so keeping them costs a fold a constant per span name however many calls the stream holds, and the ones kept are the costliest.
-#[test]
-fn a_row_keeps_its_costliest_instances_and_no_more_than_the_bound() {
-    let count = SLOWEST_KEPT as u64 + 5;
-    let report = instances("entails", count, |n| 100 + n).folded();
-
-    let slowest = &report.summaries[0].slowest;
-    assert_eq!(slowest.len(), SLOWEST_KEPT);
-    assert_eq!(
-        slowest[0].fields,
-        vec![("input".to_owned(), (count - 1).to_string())]
-    );
-    assert_eq!(
-        slowest[SLOWEST_KEPT - 1].total,
-        Duration::from_nanos(100 + count - SLOWEST_KEPT as u64)
-    );
-}
-
-// A span that declared nothing but its group has no instance worth telling apart — its row's maximum already names its slowest call — so it keeps none, and a report of permanent spans gains no table.
-#[test]
-fn a_span_declaring_nothing_beyond_its_group_keeps_no_instances() {
+fn the_summary_ranks_span_names_by_their_own_time_with_their_groups_folded_in() {
     let report = Stream::new()
         .event(
             THREAD,
             0,
             track_event::Type::SliceBegin,
-            "certify_declaration",
+            "outer",
+            &[],
+            Some([0, 0, 0, 0]),
+        )
+        .event(
+            THREAD,
+            100,
+            track_event::Type::SliceBegin,
+            "inner",
+            &[],
+            Some([0, 100, 1, 100]),
+        )
+        .event(
+            THREAD,
+            700,
+            track_event::Type::SliceEnd,
+            "inner",
+            &[],
+            Some([50, 400, 3, 400]),
+        )
+        .event(
+            THREAD,
+            1000,
+            track_event::Type::SliceEnd,
+            "outer",
+            &[],
+            Some([20, 500, 4, 400]),
+        )
+        .event(
+            THREAD,
+            1000,
+            track_event::Type::SliceBegin,
+            "grouped",
             &[("group", Field::Text("Nat/add"))],
             None,
         )
         .event(
             THREAD,
-            100,
+            1200,
             track_event::Type::SliceEnd,
-            "certify_declaration",
+            "grouped",
+            &[],
+            None,
+        )
+        .event(
+            THREAD,
+            1200,
+            track_event::Type::SliceBegin,
+            "grouped",
+            &[("group", Field::Text("Nat/mul"))],
+            None,
+        )
+        .event(
+            THREAD,
+            1500,
+            track_event::Type::SliceEnd,
+            "grouped",
             &[],
             None,
         )
         .folded();
 
-    assert!(report.summaries[0].slowest.is_empty());
-    assert!(!report.render().contains("(slowest)"));
+    let expected = [
+        "stream.pftrace",
+        "│  every span closed, allocations counted",
+        "│  in spans: 1.5 µs on 2 threads, 500 B taken",
+        "│  peak: 400 B",
+        "│  spans: 3 names, each below",
+        "├─ inner in curios_test",
+        "│  self: 0.60 µs, 40.0%, 40.0% so far; in all: 0.60 µs; calls: 1; taken: 300 B",
+        "├─ grouped in curios_test",
+        "│  self: 0.50 µs, 33.3%, 73.3% so far; in all: 0.50 µs; calls: 2",
+        "│  costliest group: Nat/mul, 0.30 µs",
+        "├─ outer in curios_test",
+        "│  self: 0.40 µs, 26.7%, 100.0% so far; in all: 1.00 µs; calls: 1; taken: 200 B",
+        "└─ [trace] stream.pftrace",
+    ]
+    .join("\n");
+    assert_eq!(answered(&report), format!("{expected}\n"));
 }
 
-// The report lists the kept instances beside the rows, with their fields escaped as the rendered table needs, so a field holding a tab still reads as one column.
+// A summary lists the names that took the most time themselves and no more than ten, saying how many the stream holds, so a run of thousands of spans answers in a screenful.
 #[test]
-fn the_report_lists_the_slowest_instances_with_their_fields() {
+fn a_summary_lists_the_ten_names_that_took_the_most_time() {
+    let mut stream = Stream::new();
+    for n in 0..12 {
+        stream = stream.slice(n * 100, 10 + n, &format!("span{n}"));
+    }
+    let answer = answered(&stream.folded());
+
+    assert!(
+        answer.contains("│  spans: 12 names, the 10 that took the most time themselves below\n"),
+        "{answer}"
+    );
+    let listed = answer
+        .lines()
+        .filter_map(|line| line.strip_prefix("├─ "))
+        .collect::<Vec<_>>();
+    assert_eq!(listed.len(), SUMMARIZED, "{answer}");
+    assert_eq!(listed[0], "span11 in curios_test");
+    assert!(
+        !answer.contains("span0 in") && !answer.contains("span1 in"),
+        "{answer}"
+    );
+}
+
+// A stopped run's summary says how many spans it was still inside and, a fact a thread, each thread's open stack, outermost first, with what each span declared and when it was entered: what a killed run was doing, which is what its stream is kept for.
+#[test]
+fn a_stopped_run_s_summary_states_each_thread_s_open_stack() {
     let report = Stream::new()
+        .begin(10, "compile_entrypoint")
+        .event(OTHER, 20, track_event::Type::SliceBegin, "serve", &[], None)
         .event(
             THREAD,
-            0,
+            30,
             track_event::Type::SliceBegin,
-            "entails",
-            &[
-                ("lower", Field::Text("u\t+\t1")),
-                ("assumed", Field::Number(12)),
-            ],
-            None,
-        )
-        .event(
-            THREAD,
-            2_000_000,
-            track_event::Type::SliceEnd,
-            "entails",
-            &[],
+            "elaborate_module_item",
+            &[("group", Field::Text("Nat/add"))],
             None,
         )
         .folded();
 
-    let rendered = report.render();
-    assert!(
-        rendered.contains("2.000\t2.000\tcurios_test\tentails\t\tlower=u\\t+\\t1 assumed=12\n"),
-        "{rendered}"
-    );
+    let expected = [
+        "stream.pftrace",
+        "│  3 spans open, allocations not counted",
+        "│  open on main:",
+        "│    compile_entrypoint in curios_test, entered at 0.01 µs",
+        "│    elaborate_module_item in curios_test, group Nat/add, entered at 0.03 µs",
+        "│  open on other:",
+        "│    serve in curios_test, entered at 0.02 µs",
+        "└─ [trace] stream.pftrace",
+    ]
+    .join("\n");
+    assert_eq!(answered(&report), format!("{expected}\n"));
 }
 
 // A packet cut short by a kill, or by a writer that stopped, is the normal ending of a stream, not a corruption: it is dropped, and everything before it still folds.

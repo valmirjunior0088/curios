@@ -28,6 +28,8 @@ pub enum Kind {
     Refused,
     /// A term put at `False` that every checker it met admitted: a proof of `False`, a flaw in the checkers.
     Admitted,
+    /// A trace a run filed, asked about by its path: a summary of the run it records.
+    Trace,
 }
 
 impl Kind {
@@ -44,6 +46,7 @@ impl Kind {
             Kind::Field => "field",
             Kind::Refused => "refused",
             Kind::Admitted => "admitted",
+            Kind::Trace => "trace",
         }
     }
 

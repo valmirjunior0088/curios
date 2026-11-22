@@ -590,9 +590,19 @@ The rungs end at the module the compiler emits. What Binaryen makes of it is the
 curios profile .curios/profile.pftrace
 ```
 
-Reads back a trace [`--profile`](#flags) filed and writes its summary to stdout: the spans by total time, each thread's on its own, the magnitude sites beneath them, and — for a run that never returned — the stack it was inside when it stopped. A memory column reads `-` where the allocator did not count.
+Reads back a trace [`--profile`](#flags) filed and summarizes the run on stdout, as one block ([What a command reports](#what-a-command-reports)) opening on the path and closing on `[trace]` and the path. Its facts say:
 
-`PATH` is spelled as it was to `--profile`. Reading is a pass of its own, not the profiled run's last step ([`curios-profile`](../curios-profile/README.md#the-library-emits-records-and-aggregation-is-one-of-its-consumers)). The file is Perfetto's trace, so [Perfetto's UI](https://ui.perfetto.dev) opens it as a timeline and answers SQL over it, and `trace_processor` reads it too.
+- whether every span closed, or how many were still open, and whether the allocator counted;
+- the time spent in spans, the threads that spent it and the bytes they took;
+- the peak the process held;
+- how many span names the stream holds;
+- for a run that stopped, each thread's open stack, outermost first, with each span's group and when it was entered.
+
+Its entries are the ten span names that took the most time themselves, every group of a name folded into it, costliest first. Each states its self time, its share of the time in spans and the share so far, its time in all, its calls and the bytes its thread took, and, for a span that declares groups, its costliest group. Self time is what no span entered inside took, so the shares add up to the whole.
+
+Anything past the summary — a timeline, one call's arguments, what ran inside what — is asked of the file itself: it is Perfetto's trace, which [Perfetto's UI](https://ui.perfetto.dev) opens as a timeline and answers SQL over, and `trace_processor` reads too.
+
+`PATH` is spelled as it was to `--profile`. Reading is a pass of its own, not the profiled run's last step ([`curios-profile`](../curios-profile/README.md#the-library-emits-records-and-aggregation-is-one-of-its-consumers)).
 
 ## The manifest
 

@@ -2,7 +2,7 @@
 
 use {
     curios::CABINET,
-    curios_common::test_support::*,
+    curios_common::{Style, test_support::*},
     curios_prelude_build::compile,
     curios_profile::{CountingAllocator, Destination, fold_at, trace},
     std::{
@@ -57,6 +57,7 @@ fn a_profiled_run_files_a_stream_its_compiler_folds() {
     assert!(folded.status.success(), "{folded:?}");
     let summary = String::from_utf8(folded.stdout).unwrap();
     assert!(summary.contains("compile_entrypoint"), "{summary}");
+    assert!(summary.contains("└─ [trace] "), "{summary}");
 }
 
 // The map the engine writes under `--profile` names the guest's emitted functions, which a sampler attributes its samples by.
@@ -88,17 +89,15 @@ fn a_run_unasked_writes_no_map() {
     assert!(!unasked, "{} was written unasked", map.display());
 }
 
-/// The prelude's build under a recorder: [`compile`] does what `curios-prelude`'s build script does, every root lowered, elaborated, erased and certified, its stream filed at `.artifacts/prelude.pftrace` beside this crate's manifest and its fold beside the stream, at `.artifacts/prelude.folded.tsv`, and printed. `cargo xtask profile prelude` runs it.
+/// The prelude's build under a recorder: [`compile`] does what `curios-prelude`'s build script does, every root lowered, elaborated, erased and certified, its stream filed at `.artifacts/prelude.pftrace` beside this crate's manifest, and `curios profile`'s answer for it printed, which `curios profile` gives again, with any view, from the stream alone. `cargo xtask profile prelude` runs it.
 ///
 /// **A measurement is asked, and no build is.** A build script takes no argument, so nothing can ask one for a stream, and one that recorded for carrying its instrumentation would record every build; and a program of the build's own crate would put the recorder in the prelude's image key. The images it builds go to a directory of its own, removed when it is done: the ones the compiler embeds are the build script's.
 #[test]
-#[ignore = "measurement, mixed: files the prelude's build's stream and prints its fold"]
+#[ignore = "measurement, mixed: files the prelude's build's stream and prints its summary"]
 fn prelude_build_profile() {
-    let artifacts = Path::new(env!("CARGO_MANIFEST_DIR")).join(".artifacts");
-    let (stream, folded) = (
-        artifacts.join("prelude.pftrace"),
-        artifacts.join("prelude.folded.tsv"),
-    );
+    let stream = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(".artifacts")
+        .join("prelude.pftrace");
     let out = Temporary::new("profile", "prelude");
     fs::create_dir_all(&out).unwrap();
 
@@ -107,14 +106,10 @@ fn prelude_build_profile() {
     })
     .unwrap_or_else(|error| panic!("{}: {error}", stream.display()));
 
-    let report = fold_at(&stream)
-        .unwrap_or_else(|error| panic!("{}: {error}", stream.display()))
-        .render();
-    fs::write(&folded, &report).unwrap_or_else(|error| panic!("{}: {error}", folded.display()));
-    print!("{report}");
-    println!(
-        "\nstream: {}\nfolded: {}",
-        stream.display(),
-        folded.display()
+    print!(
+        "{}",
+        fold_at(&stream)
+            .unwrap_or_else(|error| panic!("{}: {error}", stream.display()))
+            .answer(&stream, &Style::plain())
     );
 }

@@ -6,7 +6,7 @@ use {
     curios_native::{ForeignBindings, test_support::*},
     curios_profile::{Destination, fold, trace},
     std::{
-        fs::{File, create_dir_all, write},
+        fs::{File, create_dir_all},
         io::{BufReader, BufWriter},
         path::Path,
         time::{SystemTime, UNIX_EPOCH},
@@ -28,7 +28,7 @@ use {
 /// - **`monad_suspend`:** the existing `programs/monad_suspend.crs` corpus program, with the argument `10000`, requiring stdout `30000\n` and no stderr. This measures a suspension's path through the driver every combinator is written over, one a step, not contention among branches.
 /// - **`tui`:** the existing bordered listing fixture in `curios/src/tests/tui.rs`, driven by 100 down/up pairs followed by `q`, the keys pausing twice between two whole keys so the session's size ticker runs once at each pause. The first down escape sequence arrives in two chunks; each remaining key has its own chunk. Terminal-size queries answer 12×5, 16×6, then 12×5 forever. Monotonic-clock queries advance by 1 ms, starting at zero, with 100,000 scripted readings. The mock host releases the next input chunk when polled and does not sleep in real time. Assertions require terminal entry and restoration, raw mode on then off, selection `one`, a titled border, exactly three screen clears (initial frame and two resizes), no stderr, and a successful exit.
 ///
-/// `curios_profile::trace` listens during compilation and execution, writing one stream per sample into a timestamped directory under `curios/.artifacts/coordination/`. Each stream has a folded `.tsv` beside it. The `coordination_compile` span includes parsing, all compiler stages, Binaryen and Cranelift precompilation. The `coordination_run` span includes deserialization, instantiation and execution. Host setup, output assertions and folding are outside those spans. All span boundaries must close. The allocator counts while the trace listens, so each boundary of a stream carries what its thread had taken there and what the whole test process held, since counting began: a span is charged its own thread's allocations, and none of Wasmtime's, Binaryen's or Cranelift's threads'.
+/// `curios_profile::trace` listens during compilation and execution, writing one stream per sample into a timestamped directory under `curios/.artifacts/coordination/`. Each stream is read with `curios profile`. The `coordination_compile` span includes parsing, all compiler stages, Binaryen and Cranelift precompilation. The `coordination_run` span includes deserialization, instantiation and execution. Host setup, output assertions and folding are outside those spans. All span boundaries must close. The allocator counts while the trace listens, so each boundary of a stream carries what its thread had taken there and what the whole test process held, since counting began: a span is charged its own thread's allocations, and none of Wasmtime's, Binaryen's or Cranelift's threads'.
 ///
 /// These are wall-clock timings under built-in tracing, with its overhead included. The process is not CPU-pinned; its CPU governor and boost settings are recorded with the reading. One warmup does not eliminate machine noise; retain the individual samples, use the same workload and profiling configuration for the comparison, and investigate changes before drawing conclusions. The Tui workload has synthetic time and no physical terminal latency.
 ///
@@ -105,7 +105,6 @@ fn coordination_measurements() {
 
             let report = fold(BufReader::new(File::open(&path).unwrap())).expect("capture folds");
             assert!(report.open.is_empty(), "every span closed");
-            write(path.with_extension("tsv"), report.render()).expect("folded capture");
             let millis = |name| {
                 let summary = report
                     .summaries
