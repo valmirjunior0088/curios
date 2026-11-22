@@ -152,7 +152,7 @@ pub struct Field: pub Type {
     --- The other long names it answers to.
     aliases: List(Str),
     help: Str,
-    --- The environment variable read where the command line does not give the option.
+    --- The environment variable read where the command line does not give the option, by the reader the line's text for it takes: a flag's and a toggle's as one of `y`, `yes`, `t`, `true`, `on`, `1` or `n`, `no`, `f`, `false`, `off`, `0`, in any case. An empty variable is unset, and one its reader refuses is refused by its name, `$NAME`.
     env: Option(Str),
     --- Whether help leaves it out.
     hidden: Bool,
@@ -406,17 +406,22 @@ and variables_of(commands: List(Command)) -> List(Str) =
     | [c, ..more] => [..variables(c), ..variables_of(more)]
     end;
 
-let environment(names: List(Str)) -> Io(Map(Str, Str)) =
+-- The variables of `names` the host sets, each as text, or the first whose value is not text.
+let environment(names: List(Str)) -> Io(Result(Str, Map(Str, Str))) =
     match names
-    | [] => Io/pure(Map/empty())
+    | [] => Io/pure(Result/success(Map/empty()))
     | [n, ..more] =>
-        let held = environment(more)!;
         let value = Proc/env(n)!;
-        Io/pure(
-            match Option/bind(value, (b) => Result/to_option(Str/of_bytes(b)))
-            | some(text) => Map/insert(held, n, text)
-            | none() => held
-            end)
+        match value
+        | none() => environment(more)
+        | some(b) =>
+            match Str/of_bytes(b)
+            | failure(_) => Io/pure(Result/failure(n))
+            | success(text) =>
+                let held = environment(more)!;
+                Io/pure(Result/map(held, (m) => Map/insert(m, n, text)))
+            end
+        end
     end;
 
 let refuse(text: Str) -> Io({}) =
@@ -435,12 +440,21 @@ pub let main(cli: Cli, run: (Parsed(cli.command)) -> Io({})) -> Io({}) =
                 at + 1)(
                 usage(cli, [name(cli.command)])))
     | success(argv) =>
-        let env = environment(variables(cli.command))!;
-        match parse(cli, argv, env)
-        | parsed(p) => run(p)
-        | help(path) => print(help(cli, path))
-        | version(text) => print(Str/concat(text, "\n"))
-        | refused(path, f) => refuse(report(cli, path, f))
+        let read = environment(variables(cli.command))!;
+        match read
+        | failure(n) =>
+            refuse(
+                report(
+                    cli,
+                    [name(cli.command)],
+                    Failure/bad_value(Str/concat("$", n), "not valid UTF-8")))
+        | success(env) =>
+            match parse(cli, argv, env)
+            | parsed(p) => run(p)
+            | help(path) => print(help(cli, path))
+            | version(text) => print(Str/concat(text, "\n"))
+            | refused(path, f) => refuse(report(cli, path, f))
+            end
         end
     end;
 

@@ -12,21 +12,34 @@ let tool: Cli =
             "tool",
             "Exercise every kind",
             [
-                Cli/Field { ..Cli/flag("verbose", "Log more"), short = Option/some('v') },
+                Cli/Field {
+                    ..Cli/flag("verbose", "Log more"),
+                    short = Option/some('v'),
+                    env = Option/some("VERBOSE") },
                 Cli/Field { ..Cli/count("quiet", "Log less"), short = Option/some('q') },
-                Cli/toggle("color", true, "Color the output"),
+                Cli/Field {
+                    ..Cli/toggle("color", true, "Color the output"),
+                    env = Option/some("COLOR") },
                 Cli/Field {
                     ..Cli/default("port", Cli/nat, 8080, "Port"),
                     env = Option/some("PORT") },
                 Cli/optional("tag", Cli/str, "A tag"),
                 Cli/many("header", Cli/str, "Repeatable"),
-                Cli/choice(
-                    "format",
-                    [
-                        Cli/Alternative { long = "json", help = "As JSON", value = Format/json() },
-                        Cli/Alternative { long = "text", help = "As text", value = Format/text() }],
-                    Cli/Presence/default(Format/text()),
-                    "How to write it")],
+                Cli/Field {
+                    ..Cli/choice(
+                        "format",
+                        [
+                            Cli/Alternative {
+                                long = "json",
+                                help = "As JSON",
+                                value = Format/json() },
+                            Cli/Alternative {
+                                long = "text",
+                                help = "As text",
+                                value = Format/text() }],
+                        Cli/Presence/default(Format/text()),
+                        "How to write it"),
+                    env = Option/some("FORMAT") }],
             Cli/Positionals {
                 required = [Cli/positional("root", Cli/str, "Where")],
                 optional = [Cli/positional("shift", Cli/int, "By how much")],
@@ -60,6 +73,7 @@ let read(argv: List(Str), env: Map(Str, Str)) -> Str =
     | refused(_, f) =>
         match f
         | conflict(names) => Str/concat("conflict ", Str/join(" ", names))
+        | bad_value(name, _) => Str/concat("bad ", name)
         | _ => "refused"
         end
     | _ => "asked"
@@ -87,6 +101,27 @@ test a_variable_stands_for_an_option_the_line_leaves_out =
         Test/equal(
             read(["--port", "1", "/srv"], Map/of_list([("PORT", "7070")])),
             "false 0 true 1 - - text /srv - -")]);
+
+-- A variable is read by the reader the line's text for its option takes: a flag's and a toggle's by the twelve boolean words in any case, a choice's by its alternatives' names, an option's by its value; and an empty variable is unset.
+test a_variable_is_read_as_the_line_reads_its_option =
+    Test/all([
+        Test/equal(
+            read(["/srv"], Map/of_list([("VERBOSE", "no"), ("COLOR", "OFF")])),
+            "false 0 false 8080 - - text /srv - -"),
+        Test/equal(
+            read(["/srv"], Map/of_list([("VERBOSE", "Yes"), ("COLOR", "1"), ("FORMAT", "json")])),
+            "true 0 true 8080 - - json /srv - -"),
+        Test/equal(
+            read(["/srv"], Map/of_list([("VERBOSE", ""), ("PORT", "")])),
+            "false 0 true 8080 - - text /srv - -")]);
+
+-- A variable its option's reader refuses is refused by its name, where the line's text would be refused by the option's.
+test a_variable_its_reader_refuses_is_refused_by_its_name =
+    Test/all([
+        Test/equal(read(["/srv"], Map/of_list([("VERBOSE", "maybe")])), "bad $VERBOSE"),
+        Test/equal(read(["/srv"], Map/of_list([("COLOR", "false!")])), "bad $COLOR"),
+        Test/equal(read(["/srv"], Map/of_list([("FORMAT", "yaml")])), "bad $FORMAT"),
+        Test/equal(read(["/srv"], Map/of_list([("PORT", "x")])), "bad $PORT")]);
 
 -- Two alternatives of one choice are refused together, by their names.
 test alternatives_of_one_choice_are_refused_together =

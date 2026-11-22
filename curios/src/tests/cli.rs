@@ -254,6 +254,23 @@ fn a_non_utf8_argument_is_refused_by_its_position() {
     );
 }
 
+/// A declared variable the host hands over as bytes that are not text is refused by its name, as an argument that is not text is by its position, rather than read as unset.
+#[test]
+fn a_non_utf8_variable_is_refused_by_its_name() {
+    let (system, io) = MockHost::builder()
+        .args(["serve", "/srv"])
+        .env([(b"PORT".as_slice(), b"\xff".as_slice())])
+        .build();
+
+    assert_eq!(serve().run(system, ForeignBindings::empty()), Ok(2));
+    assert!(
+        String::from_utf8_lossy(&io.errors())
+            .contains("invalid value for '$PORT': not valid UTF-8"),
+        "the refusal names the variable:\n{}",
+        String::from_utf8_lossy(&io.errors())
+    );
+}
+
 /// A command line of groups, read by a program that reaches a command two groups down through `command`.
 fn deps() -> Compiled {
     compile(

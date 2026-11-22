@@ -1,4 +1,4 @@
-use /std/{Str, Nat, Bool, List, Option, Result, Map};
+use /std/{Str, Nat, Bool, List, Option, Result, Map, Fmt};
 use /std/Cli/{Value, nat, Field, Presence, Positional, Positionals, Command, Failure, Reading,
     Carrier, Values, Parsed, Chosen, option_slots, slots, scan};
 use /std/Cli/Parsed/{presented, required_slots, optional_slots, rest_slots, appended};
@@ -27,9 +27,29 @@ let readings(v: Value, name: Str, texts: List(Str)) -> Result(Failure, List(v.A)
         Result/success([a, ..rest])
     end;
 
--- What an environment variable says of a flag: anything but nothing, `0` and `false` sets it.
-let truthy(text: Str) -> Bool =
-    match text | "" | "0" | "false" => false | _ => true end;
+-- The variable `f` declares, as a refusal names it, and its text, where the environment sets it: an empty variable is unset, as a shell reads one.
+let variable(f: Field, env: Map(Str, Str)) -> Option({Str, Str}) =
+    match f.env
+    | some(name) =>
+        match Map/try_get(env, name)
+        | some(text), Bool/not(Str/is_empty(text)) => Option/some((Str/concat("$", name), text))
+        | _ => Option/none()
+        end
+    | none() => Option/none()
+    end;
+
+-- A flag's or a toggle's variable, read as clap reads one: these twelve words in any case, and anything else refused.
+let switch(name: Str, text: Str) -> Result(Failure, Bool) =
+    match Str/to_lower(text)
+    | "y" | "yes" | "t" | "true" | "on" | "1" => Result/success(true)
+    | "n" | "no" | "f" | "false" | "off" | "0" => Result/success(false)
+    | _ =>
+        Result/failure(
+            Failure/bad_value(
+                name,
+                Fmt/render("expected true or false, yes or no, on or off, or 1 or 0, found '%'")(
+                    text)))
+    end;
 
 let given(seen: List(Seen)) -> Nat =
     List/len(List/filter(seen, (s) => match s | given() => true | _ => false end));
@@ -72,17 +92,25 @@ let absent(@A: Type, presence: Presence(A), name: Str) -> Result(Failure, presen
     | default(a) => Result/success(a)
     end;
 
+-- A variable stands for its option where the line leaves the option out, and is read by the reader the line's text for that option takes, a refusal naming the variable.
 let read_field(f: Field, seen: List(Seen), env: Map(Str, Str)) -> Result(Failure, Carrier(f.kind)) =
     let name = Str/concat("--", f.long);
-    let set = Option/bind(f.env, (variable) => Map/try_get(env, variable));
+    let set = variable(f, env);
     match f.kind
     | flag() =>
-        Result/success(given(seen) > 0 || match set | some(t) => truthy(t) | none() => false end)
+        match given(seen) > 0
+        | true => Result/success(true)
+        | false =>
+            match set
+            | some((var, text)) => switch(var, text)
+            | none() => Result/success(false)
+            end
+        end
     | count() =>
         match given(seen) == 0
         | true =>
             match set
-            | some(t) => reading(nat, name, t)
+            | some((var, text)) => reading(nat, var, text)
             | none() => Result/success(0)
             end
         | false => Result/success(given(seen))
@@ -90,18 +118,26 @@ let read_field(f: Field, seen: List(Seen), env: Map(Str, Str)) -> Result(Failure
     | toggle(fallback) =>
         match switched(seen)
         | some(b) => Result/success(b)
-        | none() => Result/success(match set | some(t) => truthy(t) | none() => fallback end)
+        | none() =>
+            match set
+            | some((var, text)) => switch(var, text)
+            | none() => Result/success(fallback)
+            end
         end
     | option(v, presence) =>
-        match Option/or(List/last(texts(seen)), set)
+        match List/last(texts(seen))
         | some(t) => Result/map(reading(v, name, t), (a) => present(presence, a))
-        | none() => absent(presence, name)
+        | none() =>
+            match set
+            | some((var, text)) => Result/map(reading(v, var, text), (a) => present(presence, a))
+            | none() => absent(presence, name)
+            end
         end
     | many(v) =>
         match texts(seen)
         | [] =>
             match set
-            | some(t) => readings(v, name, [t])
+            | some((var, text)) => readings(v, var, [text])
             | none() => Result/success([])
             end
         | _ => readings(v, name, texts(seen))
@@ -110,8 +146,18 @@ let read_field(f: Field, seen: List(Seen), env: Map(Str, Str)) -> Result(Failure
         let spelled = List/map(alternatives, (a) => Str/concat("--", a.long));
         match picks(seen)
         | [] =>
-            match Option/bind(set, (t) => List/find(alternatives, (a) => a.long == t))
-            | some(a) => Result/success(present(presence, a.value))
+            match set
+            | some((var, text)) =>
+                match List/find(alternatives, (a) => a.long == text)
+                | some(a) => Result/success(present(presence, a.value))
+                | none() =>
+                    Result/failure(
+                        Failure/bad_value(
+                            var,
+                            Fmt/render("expected one of %, found '%'")(
+                                Str/join(", ", List/map(alternatives, (a) => a.long)))(
+                                text)))
+                end
             | none() => absent(presence, Str/join(" | ", spelled))
             end
         | [k] =>
