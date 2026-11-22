@@ -1,28 +1,164 @@
-//! What a fold recomputes from rows: the per-span aggregates, the distributions beside them, the two things only a stream can say — what a stream cut short still yields, and what a killed run was inside — and a filed stream read back from its path.
+//! What a fold recomputes from packets: the per-span aggregates, the distributions beside them, the two things only a stream can say — what a stream cut short still yields, and what a killed run was inside — each thread's track kept apart, a stream that is not the recorder's refused, and a filed stream read back from its path.
 
-use {super::*, curios_common::test_support::*, std::fs};
+use {
+    super::*,
+    crate::perfetto::{
+        CounterDescriptor, DebugAnnotation, DebugAnnotationName, EventCategory, EventName,
+        InternedData, InternedString, ThreadDescriptor, Trace, TrackDescriptor,
+    },
+    curios_common::test_support::*,
+    std::fs,
+};
 
-fn folded(rows: &str) -> Report {
-    fold(rows.as_bytes()).expect("rows fold")
+/// The track a synthetic stream's first thread records on, and a second thread's.
+const THREAD: u64 = 16;
+const OTHER: u64 = 17;
+
+/// A field a synthetic slice carries.
+enum Field<'a> {
+    Text(&'a str),
+    Number(u64),
 }
 
-/// One closed span named `name`, as a file that stands on its own: the callsite table restated at the head, then the span's whole life.
-fn standalone(name: &str, elapsed: u64) -> String {
-    format!(
-        "D\t0\tcurios_core\t{name}\n\
-         S\t1\t0\t0\n\
-         E\t1\t0\t0\t0\t0\t0\t0\n\
-         X\t1\t0\t{elapsed}\t0\t0\t0\t0\n\
-         C\t1\t0\t{elapsed}\n"
-    )
+/// A stream written packet by packet as the recorder writes one: two threads' tracks and the allocator's counters described, and each name and string interned where it is first used, so a test states its slices' times and readings exactly.
+#[derive(Default)]
+struct Stream {
+    packets: Vec<TracePacket>,
+    interned: HashMap<(u8, String), u64>,
 }
 
-fn names(report: &Report) -> Vec<&str> {
+impl Stream {
+    fn new() -> Self {
+        let mut stream = Self::default();
+        for uuid in [THREAD, OTHER] {
+            stream.describe(TrackDescriptor {
+                uuid: Some(uuid),
+                thread: Some(ThreadDescriptor::default()),
+                ..TrackDescriptor::default()
+            });
+        }
+        for uuid in COUNTER_TRACKS {
+            stream.describe(TrackDescriptor {
+                uuid: Some(uuid),
+                counter: Some(CounterDescriptor::default()),
+                ..TrackDescriptor::default()
+            });
+        }
+        stream
+    }
+
+    fn describe(&mut self, track: TrackDescriptor) {
+        self.packets.push(TracePacket {
+            data: Some(trace_packet::Data::TrackDescriptor(track)),
+            ..TracePacket::default()
+        });
+    }
+
+    /// The id of `text` among the strings of `kind` — an event name, a category, an annotation name, a string value — interned in a packet of its own the first time.
+    fn iid(&mut self, kind: u8, text: &str) -> u64 {
+        if let Some(&iid) = self.interned.get(&(kind, text.to_string())) {
+            return iid;
+        }
+        let iid = self.interned.len() as u64 + 1;
+        self.interned.insert((kind, text.to_string()), iid);
+        let mut interned = InternedData::default();
+        match kind {
+            0 => interned.event_names.push(EventName {
+                iid: Some(iid),
+                name: Some(text.to_string()),
+            }),
+            1 => interned.event_categories.push(EventCategory {
+                iid: Some(iid),
+                name: Some(text.to_string()),
+            }),
+            2 => interned.debug_annotation_names.push(DebugAnnotationName {
+                iid: Some(iid),
+                name: Some(text.to_string()),
+            }),
+            _ => interned
+                .debug_annotation_string_values
+                .push(InternedString {
+                    iid: Some(iid),
+                    str: Some(text.as_bytes().to_vec()),
+                }),
+        }
+        self.packets.push(TracePacket {
+            interned_data: Some(interned),
+            ..TracePacket::default()
+        });
+
+        iid
+    }
+
+    fn event(
+        mut self,
+        track: u64,
+        at: u64,
+        kind: track_event::Type,
+        name: &str,
+        fields: &[(&str, Field<'_>)],
+        readings: Option<[i64; 4]>,
+    ) -> Self {
+        let name = self.iid(0, name);
+        let category = self.iid(1, "curios_test");
+        let debug_annotations = fields
+            .iter()
+            .map(|(field, value)| DebugAnnotation {
+                name_field: Some(debug_annotation::NameField::NameIid(self.iid(2, field))),
+                value: Some(match value {
+                    Field::Text(text) => debug_annotation::Value::StringValueIid(self.iid(3, text)),
+                    Field::Number(number) => debug_annotation::Value::UintValue(*number),
+                }),
+            })
+            .collect();
+        let event = TrackEvent {
+            r#type: Some(kind as i32),
+            track_uuid: Some(track),
+            name_field: Some(track_event::NameField::NameIid(name)),
+            category_iids: vec![category],
+            debug_annotations,
+            extra_counter_track_uuids: readings.map_or(Vec::new(), |_| COUNTER_TRACKS.to_vec()),
+            extra_counter_values: readings.map_or(Vec::new(), |readings| readings.to_vec()),
+        };
+        self.packets.push(TracePacket {
+            timestamp: Some(at),
+            data: Some(trace_packet::Data::TrackEvent(event)),
+            ..TracePacket::default()
+        });
+        self
+    }
+
+    fn begin(self, at: u64, name: &str) -> Self {
+        self.event(THREAD, at, track_event::Type::SliceBegin, name, &[], None)
+    }
+
+    fn end(self, at: u64, name: &str) -> Self {
+        self.event(THREAD, at, track_event::Type::SliceEnd, name, &[], None)
+    }
+
+    /// One slice of `name` on the first thread, from `at` to `at + elapsed`.
+    fn slice(self, at: u64, elapsed: u64, name: &str) -> Self {
+        self.begin(at, name).end(at + elapsed, name)
+    }
+
+    fn bytes(&self) -> Vec<u8> {
+        Trace {
+            packet: self.packets.clone(),
+        }
+        .encode_to_vec()
+    }
+
+    fn folded(&self) -> Report {
+        fold(self.bytes().as_slice()).expect("the stream folds")
+    }
+}
+
+fn row<'a>(report: &'a Report, name: &str) -> &'a Summary {
     report
         .summaries
         .iter()
-        .map(|summary| summary.name.as_str())
-        .collect()
+        .find(|summary| summary.name == name)
+        .unwrap_or_else(|| panic!("the span {name} folds"))
 }
 
 // The round trip the whole design rests on: a stream written by `trace` folds back into per-span summaries, an outer span's extent covering the inner spans within it.
@@ -38,23 +174,15 @@ fn a_written_stream_folds_back_into_its_summaries() {
     })
     .expect("a stream destination opens");
 
-    let rows = String::from_utf8(buffer.lock().expect("buffer lock").clone()).expect("utf-8");
-    let report = folded(&rows);
+    let bytes = buffer.lock().expect("buffer lock").clone();
+    let report = fold(bytes.as_slice()).expect("the stream folds");
 
-    let outer = report
-        .summaries
-        .iter()
-        .find(|summary| summary.name == "outer")
-        .expect("the outer span");
-    let inner = report
-        .summaries
-        .iter()
-        .find(|summary| summary.name == "inner")
-        .expect("the inner spans");
-
+    let outer = row(&report, "outer");
+    let inner = row(&report, "inner");
     assert_eq!(outer.calls, 1);
     assert_eq!(inner.calls, 2);
     assert!(outer.total >= inner.total, "{outer:?} {inner:?}");
+    assert!(outer.memory.is_some(), "the suite's allocator counts");
 }
 
 struct Sink(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
@@ -71,21 +199,43 @@ impl std::io::Write for Sink {
     }
 }
 
-// A span's group is what its rows aggregate under, so two spans of one callsite with different groups are two rows rather than an average that hides which item cost the time.
+// A span's group is what its slices aggregate under, so two spans of one name with different groups are two rows rather than an average that hides which item cost the time.
 #[test]
-fn spans_of_one_callsite_aggregate_under_their_group() {
-    let report = folded(
-        "H\t1\t0\n\
-         D\t0\tcurios_elab\tdeclaration\n\
-         S\t1\t0\t0\tgroup=Nat/add\n\
-         E\t1\t0\t0\t0\t0\t0\t0\n\
-         X\t1\t0\t100\t0\t0\t0\t0\n\
-         C\t1\t0\t100\n\
-         S\t2\t0\t100\tgroup=Nat/mul\n\
-         E\t2\t0\t100\t0\t0\t0\t0\n\
-         X\t2\t0\t900\t0\t0\t0\t0\n\
-         C\t2\t0\t900\n",
-    );
+fn spans_of_one_name_aggregate_under_their_group() {
+    let report = Stream::new()
+        .event(
+            THREAD,
+            0,
+            track_event::Type::SliceBegin,
+            "declaration",
+            &[("group", Field::Text("Nat/add"))],
+            None,
+        )
+        .event(
+            THREAD,
+            100,
+            track_event::Type::SliceEnd,
+            "declaration",
+            &[],
+            None,
+        )
+        .event(
+            THREAD,
+            100,
+            track_event::Type::SliceBegin,
+            "declaration",
+            &[("group", Field::Text("Nat/mul"))],
+            None,
+        )
+        .event(
+            THREAD,
+            900,
+            track_event::Type::SliceEnd,
+            "declaration",
+            &[],
+            None,
+        )
+        .folded();
 
     assert_eq!(report.summaries.len(), 2);
     assert_eq!(
@@ -97,47 +247,93 @@ fn spans_of_one_callsite_aggregate_under_their_group() {
     assert_eq!(report.summaries[1].total, Duration::from_nanos(100));
 }
 
-// The readings a boundary carries are differenced, so what a span retained is what it still held at its exit and what it allocated is everything it took while entered.
+// The readings a slice carries are differenced, so what a span retained is what it still held at its end and what it allocated is everything it took while entered.
 #[test]
-fn the_boundary_readings_are_differenced_into_bytes() {
-    let report = folded(
-        "D\t0\tcurios_core\theld\n\
-         S\t1\t0\t0\n\
-         E\t1\t0\t0\t1000\t5000\t10\t1000\n\
-         X\t1\t0\t500\t1400\t6000\t18\t2048\n\
-         C\t1\t0\t500\n",
-    );
+fn the_readings_a_slice_carries_are_differenced_into_bytes() {
+    let report = Stream::new()
+        .event(
+            THREAD,
+            0,
+            track_event::Type::SliceBegin,
+            "held",
+            &[],
+            Some([1000, 5000, 10, 1000]),
+        )
+        .event(
+            THREAD,
+            500,
+            track_event::Type::SliceEnd,
+            "held",
+            &[],
+            Some([1400, 6000, 18, 2048]),
+        )
+        .folded();
 
-    let summary = &report.summaries[0];
-    assert_eq!(summary.retained, 400);
-    assert_eq!(summary.allocated, 1000);
-    assert_eq!(summary.allocations, 8);
-    assert_eq!(report.peak, 2048);
+    let memory = report.summaries[0]
+        .memory
+        .expect("the slice carries readings");
+    assert_eq!(memory.retained, 400);
+    assert_eq!(memory.allocated, 1000);
+    assert_eq!(memory.allocations, 8);
+    assert_eq!(report.peak, Some(2048));
 }
 
 // Live bytes count from where counting began, so a span that returns blocks taken before it reads them below zero, and retains less than nothing.
 #[test]
 fn a_span_returning_more_than_counting_saw_taken_retains_below_zero() {
-    let report = folded(
-        "D\t0\tcurios_core\treturns\n\
-         S\t1\t0\t0\n\
-         E\t1\t0\t0\t-100\t0\t0\t0\n\
-         X\t1\t0\t500\t-300\t0\t0\t0\n\
-         C\t1\t0\t500\n",
-    );
+    let report = Stream::new()
+        .event(
+            THREAD,
+            0,
+            track_event::Type::SliceBegin,
+            "returns",
+            &[],
+            Some([-100, 0, 0, 0]),
+        )
+        .event(
+            THREAD,
+            500,
+            track_event::Type::SliceEnd,
+            "returns",
+            &[],
+            Some([-300, 0, 0, 0]),
+        )
+        .folded();
 
-    assert_eq!(report.summaries[0].retained, -200);
+    assert_eq!(report.summaries[0].memory.expect("readings").retained, -200);
+}
+
+// A stream whose recorder's allocator did not count carries no readings, and its rows read no memory — rendered as `-` — rather than memory of nought.
+#[test]
+fn a_stream_with_no_readings_has_no_memory_figures() {
+    let report = Stream::new().slice(0, 500, "uncounted").folded();
+
+    assert!(report.summaries[0].memory.is_none());
+    assert_eq!(report.peak, None);
+    assert!(
+        report
+            .render()
+            .contains("\t-\t-\t-\t-\tcurios_test\tuncounted"),
+        "{}",
+        report.render()
+    );
 }
 
 // A magnitude site's distribution, which is the whole reason `sample!` exists beside a span: the count says how often and the spread says what it was handed.
 #[test]
-fn an_event_site_folds_into_its_distribution() {
-    let report = folded(
-        "D\t0\tcurios_elab\tuniverse::finalize_store_len\n\
-         V\t0\t0\tvalue=3\n\
-         V\t0\t1\tvalue=11\n\
-         V\t0\t2\tvalue=1\n",
-    );
+fn an_instant_carrying_a_value_folds_into_its_distribution() {
+    let mut stream = Stream::new();
+    for (at, value) in [(0, 3), (1, 11), (2, 1)] {
+        stream = stream.event(
+            THREAD,
+            at,
+            track_event::Type::Instant,
+            "universe::finalize_store_len",
+            &[("value", Field::Number(value))],
+            None,
+        );
+    }
+    let report = stream.folded();
 
     let sample = &report.samples[0];
     assert_eq!((sample.count, sample.total), (3, 15));
@@ -145,41 +341,36 @@ fn an_event_site_folds_into_its_distribution() {
     assert_eq!(sample.mean(), 5.0);
 }
 
-// A reader handed part of a stream meets one that opens in the middle of a span's life. Nothing is invented: an exit with no entry contributes no duration, and a span whose creation is not among the rows is still named by the callsite its id carries.
+// An end a track holds no beginning for ends a slice the stream does not hold, and nothing is invented for it: the slices it does hold keep their own time, and the end credits no one.
 #[test]
-fn a_stream_that_opens_mid_life_folds_what_it_can() {
-    let report = folded(
-        "H\t1\t0\n\
-         D\t0\tcurios_cert\tconvert::enter\n\
-         X\t7\t0\t500\t0\t0\t0\t0\n\
-         E\t9\t0\t600\t0\t0\t0\t0\n\
-         X\t9\t0\t900\t0\t0\t0\t0\n\
-         C\t9\t0\t900\n",
-    );
+fn an_end_with_nothing_begun_on_its_track_is_read_as_nothing() {
+    let report = Stream::new()
+        .slice(100, 200, "certifier::convert")
+        .end(900, "certifier::convert")
+        .folded();
 
-    assert_eq!(report.summaries.len(), 1);
     let summary = &report.summaries[0];
-    assert_eq!(summary.name, "convert::enter");
     assert_eq!(summary.calls, 1);
-    assert_eq!(summary.total, Duration::from_nanos(300));
+    assert_eq!(summary.self_total, Duration::from_nanos(200));
 }
 
-// The case the record stream exists for. A killed run leaves its spans open, and what they name is the stack it was inside — reported outermost first, which reads as the path down to whatever it could not finish.
+// The case the record stream exists for. A killed run leaves its slices open, and what they name is the stack it was inside — reported outermost first, which reads as the path down to whatever it could not finish.
 #[test]
 fn the_spans_a_killed_run_left_open_are_reported_outermost_first() {
-    let report = folded(
-        "D\t0\tcurios_pipeline\tcompile_entrypoint\n\
-         D\t1\tcurios_elab\telaborate_module_item\n\
-         D\t2\tcurios_elab\tuniverse::finalize\n\
-         S\t1\t0\t0\n\
-         E\t1\t0\t10\t0\t0\t0\t0\n\
-         S\t2\t1\t20\tgroup=Nat/add\n\
-         E\t2\t1\t30\t0\t0\t0\t0\n\
-         S\t3\t2\t40\n\
-         E\t3\t2\t50\t0\t0\t0\t0\n",
-    );
+    let report = Stream::new()
+        .begin(10, "compile_entrypoint")
+        .event(
+            THREAD,
+            30,
+            track_event::Type::SliceBegin,
+            "elaborate_module_item",
+            &[("group", Field::Text("Nat/add"))],
+            None,
+        )
+        .begin(50, "universe::finalize")
+        .folded();
 
-    assert!(report.summaries.is_empty(), "nothing closed");
+    assert!(report.summaries.is_empty(), "nothing ended");
     let open = report
         .open
         .iter()
@@ -197,92 +388,100 @@ fn the_spans_a_killed_run_left_open_are_reported_outermost_first() {
     assert_eq!(report.open[2].depth, 1);
 }
 
-// A span re-entered within itself is measured over each extent rather than the outermost, which is why an entry is a stack and not a single reading.
+// A span re-entered within itself is measured over each extent, a slice each: the inner extent is 100 and the outer 400, and both are counted, which is the same nesting rule an outer stage's row already follows.
 #[test]
 fn a_span_re_entered_within_itself_measures_each_extent() {
-    let report = folded(
-        "D\t0\tcurios_core\tnat::sum\n\
-         S\t1\t0\t0\n\
-         E\t1\t0\t0\t0\t0\t0\t0\n\
-         E\t1\t0\t100\t0\t0\t0\t0\n\
-         X\t1\t0\t200\t0\t0\t0\t0\n\
-         X\t1\t0\t400\t0\t0\t0\t0\n\
-         C\t1\t0\t400\n",
-    );
+    let report = Stream::new()
+        .begin(0, "nat::sum")
+        .slice(100, 100, "nat::sum")
+        .end(400, "nat::sum")
+        .folded();
 
-    // The inner extent is 100 and the outer 400; both are counted, which is the same nesting rule an outer stage's row already follows.
+    assert_eq!(report.summaries[0].calls, 2);
     assert_eq!(report.summaries[0].total, Duration::from_nanos(500));
 }
 
-// Self time is what a row per judgment can be added up by: each span keeps only the part of its extent no span entered directly inside it took, in time and in bytes alike.
+// Self time is what a row per judgment can be added up by: each span keeps only the part of its extent no span begun directly inside it on its track took, in time and in bytes alike.
 #[test]
 fn self_time_excludes_the_spans_entered_directly_inside() {
-    let report = folded(
-        "D\t0\tcurios_cert\tcertify_declaration\n\
-         D\t1\tcurios_cert\tcertifier::convert\n\
-         S\t1\t0\t0\n\
-         E\t1\t0\t0\t0\t0\t0\t0\n\
-         S\t2\t1\t100\n\
-         E\t2\t1\t100\t0\t100\t0\t0\n\
-         X\t2\t1\t400\t0\t400\t0\t0\n\
-         C\t2\t1\t400\n\
-         S\t3\t1\t500\n\
-         E\t3\t1\t500\t0\t500\t0\t0\n\
-         X\t3\t1\t700\t0\t600\t0\t0\n\
-         C\t3\t1\t700\n\
-         X\t1\t0\t1000\t0\t1000\t0\t0\n\
-         C\t1\t0\t1000\n",
-    );
+    let report = Stream::new()
+        .event(
+            THREAD,
+            0,
+            track_event::Type::SliceBegin,
+            "certify_declaration",
+            &[],
+            Some([0, 0, 0, 0]),
+        )
+        .event(
+            THREAD,
+            100,
+            track_event::Type::SliceBegin,
+            "certifier::convert",
+            &[],
+            Some([0, 100, 0, 0]),
+        )
+        .event(
+            THREAD,
+            400,
+            track_event::Type::SliceEnd,
+            "certifier::convert",
+            &[],
+            Some([0, 400, 0, 0]),
+        )
+        .event(
+            THREAD,
+            500,
+            track_event::Type::SliceBegin,
+            "certifier::convert",
+            &[],
+            Some([0, 500, 0, 0]),
+        )
+        .event(
+            THREAD,
+            700,
+            track_event::Type::SliceEnd,
+            "certifier::convert",
+            &[],
+            Some([0, 600, 0, 0]),
+        )
+        .event(
+            THREAD,
+            1000,
+            track_event::Type::SliceEnd,
+            "certify_declaration",
+            &[],
+            Some([0, 1000, 0, 0]),
+        )
+        .folded();
 
-    let row = |name: &str| {
-        report
-            .summaries
-            .iter()
-            .find(|summary| summary.name == name)
-            .expect("the span folds")
+    let declaration = row(&report, "certify_declaration");
+    let convert = row(&report, "certifier::convert");
+    let bytes = |summary: &Summary| {
+        let memory = summary.memory.expect("readings");
+        (memory.allocated, memory.self_allocated)
     };
-    let declaration = row("certify_declaration");
-    let convert = row("certifier::convert");
-
     assert_eq!(declaration.total, Duration::from_nanos(1000));
     assert_eq!(declaration.self_total, Duration::from_nanos(500));
-    assert_eq!(
-        (declaration.allocated, declaration.self_allocated),
-        (1000, 600)
-    );
+    assert_eq!(bytes(declaration), (1000, 600));
     assert_eq!(convert.total, Duration::from_nanos(500));
     assert_eq!(convert.self_total, Duration::from_nanos(500));
-    assert_eq!((convert.allocated, convert.self_allocated), (400, 400));
+    assert_eq!(bytes(convert), (400, 400));
 }
 
-// What one stage made of a judgment every stage makes: a span is counted inside each distinct name entered above it, once however many spans of that name are, never inside its own name, and not at all where nothing encloses it.
+// What one stage made of a judgment every stage makes: a span is counted inside each distinct name entered above it on its track, once however many spans of that name are, never inside its own name, and not at all where nothing encloses it.
 #[test]
 fn a_span_counts_once_within_each_name_entered_above_it() {
-    let report = folded(
-        "D\t0\tcurios_elab\terase_unit\n\
-         D\t1\tcurios_elab\treduce\n\
-         D\t2\tcurios_elab\treduce::asked_classes\n\
-         S\t1\t0\t0\n\
-         E\t1\t0\t0\t0\t0\t0\t0\n\
-         S\t2\t1\t10\n\
-         E\t2\t1\t10\t0\t0\t0\t0\n\
-         S\t3\t1\t20\n\
-         E\t3\t1\t20\t0\t0\t0\t0\n\
-         S\t4\t2\t30\n\
-         E\t4\t2\t30\t0\t0\t0\t0\n\
-         X\t4\t2\t70\t0\t0\t0\t0\n\
-         C\t4\t2\t70\n\
-         X\t3\t1\t80\t0\t0\t0\t0\n\
-         C\t3\t1\t80\n\
-         X\t2\t1\t90\t0\t0\t0\t0\n\
-         C\t2\t1\t90\n\
-         X\t1\t0\t100\t0\t0\t0\t0\n\
-         C\t1\t0\t100\n\
-         S\t5\t2\t200\n\
-         E\t5\t2\t200\t0\t0\t0\t0\n\
-         X\t5\t2\t250\t0\t0\t0\t0\n\
-         C\t5\t2\t250\n",
-    );
+    let report = Stream::new()
+        .begin(0, "erase_unit")
+        .begin(10, "reduce")
+        .begin(20, "reduce")
+        .slice(30, 40, "reduce::asked_classes")
+        .end(80, "reduce")
+        .end(90, "reduce")
+        .end(100, "erase_unit")
+        .slice(200, 50, "reduce::asked_classes")
+        .folded();
 
     let within = |outer: &str, inner: &str| {
         report
@@ -307,79 +506,71 @@ fn a_span_counts_once_within_each_name_entered_above_it() {
     assert!(report.render().contains("(within)"));
 }
 
-// The case inclusive time cannot serve: a span entered within itself counts the inner extent in both entries' totals, and once in their self times, so a recursive judgment's self row is the time it actually took.
+// The case inclusive time cannot serve: a span entered within itself counts the inner extent in both slices' totals, and once in their self times, so a recursive judgment's self row is the time it actually took.
 #[test]
 fn a_span_re_entered_within_itself_counts_each_nanosecond_once_in_its_self_time() {
-    let report = folded(
-        "D\t0\tcurios_cert\tcertifier::convert\n\
-         S\t1\t0\t0\n\
-         E\t1\t0\t0\t0\t0\t0\t0\n\
-         S\t2\t0\t200\n\
-         E\t2\t0\t200\t0\t0\t0\t0\n\
-         X\t2\t0\t600\t0\t0\t0\t0\n\
-         C\t2\t0\t600\n\
-         X\t1\t0\t1000\t0\t0\t0\t0\n\
-         C\t1\t0\t1000\n",
-    );
+    let report = Stream::new()
+        .begin(0, "certifier::convert")
+        .slice(200, 400, "certifier::convert")
+        .end(1000, "certifier::convert")
+        .folded();
 
     let summary = &report.summaries[0];
     assert_eq!(summary.total, Duration::from_nanos(1400));
     assert_eq!(summary.self_total, Duration::from_nanos(1000));
 }
 
-// Spans that do not nest cannot be told apart from a stream that interleaved threads, so an exit from below the innermost entry keeps its whole extent as its own and credits no parent, rather than handing its time to whichever span happens to be innermost.
+// Two threads' spans are slices on two tracks, each its own stack: spans that overlap in time without nesting keep their own extents, and neither is credited to the other.
 #[test]
-fn an_exit_that_is_not_the_innermost_entry_credits_no_parent() {
-    let report = folded(
-        "D\t0\tcurios_core\tfirst\n\
-         D\t1\tcurios_core\tsecond\n\
-         S\t1\t0\t0\n\
-         E\t1\t0\t0\t0\t0\t0\t0\n\
-         S\t2\t1\t100\n\
-         E\t2\t1\t100\t0\t0\t0\t0\n\
-         X\t1\t0\t300\t0\t0\t0\t0\n\
-         C\t1\t0\t300\n\
-         X\t2\t1\t500\t0\t0\t0\t0\n\
-         C\t2\t1\t500\n",
-    );
+fn two_threads_read_as_two_tracks_each_with_its_own_stack() {
+    let report = Stream::new()
+        .event(THREAD, 0, track_event::Type::SliceBegin, "first", &[], None)
+        .event(
+            OTHER,
+            100,
+            track_event::Type::SliceBegin,
+            "second",
+            &[],
+            None,
+        )
+        .event(THREAD, 300, track_event::Type::SliceEnd, "first", &[], None)
+        .event(OTHER, 500, track_event::Type::SliceEnd, "second", &[], None)
+        .folded();
 
-    let row = |name: &str| {
-        report
-            .summaries
-            .iter()
-            .find(|summary| summary.name == name)
-            .expect("the span folds")
-    };
-    assert_eq!(row("first").self_total, Duration::from_nanos(300));
-    assert_eq!(row("second").self_total, Duration::from_nanos(400));
+    assert_eq!(row(&report, "first").self_total, Duration::from_nanos(300));
+    assert_eq!(row(&report, "second").self_total, Duration::from_nanos(400));
+    assert!(report.within.is_empty(), "{:?}", report.within);
 }
 
-/// `count` closed spans of one callsite named `name`, the `n`th entered for `durations(n)` and created with the field `input=n`.
-fn instances(name: &str, count: u64, durations: impl Fn(u64) -> u64) -> String {
-    let mut rows = format!("D\t0\tcurios_cert\t{name}\n");
+/// `count` slices of `name`, the `n`th entered for `durations(n)` and carrying the field `input=n`.
+fn instances(name: &str, count: u64, durations: impl Fn(u64) -> u64) -> Stream {
+    let mut stream = Stream::new();
     let mut at = 0;
     for n in 0..count {
-        let id = n + 1;
         let end = at + durations(n);
-        rows.push_str(&format!(
-            "S\t{id}\t0\t{at}\tinput={n}\n\
-             E\t{id}\t0\t{at}\t0\t0\t0\t0\n\
-             X\t{id}\t0\t{end}\t0\t0\t0\t0\n\
-             C\t{id}\t0\t{end}\n"
-        ));
+        stream = stream
+            .event(
+                THREAD,
+                at,
+                track_event::Type::SliceBegin,
+                name,
+                &[("input", Field::Number(n))],
+                None,
+            )
+            .event(THREAD, end, track_event::Type::SliceEnd, name, &[], None);
         at = end;
     }
 
-    rows
+    stream
 }
 
 // What an aggregate cannot say: which call was slow, and what it was handed. A span that declares its inputs keeps its costliest calls with them, costliest first.
 #[test]
 fn a_span_s_costliest_instances_keep_the_fields_it_was_created_with() {
-    let report = folded(&instances("entails", 3, |n| [100, 300, 200][n as usize]));
+    let report = instances("entails", 3, |n| [100, 300, 200][n as usize]).folded();
 
-    let slowest = &report.summaries[0].slowest;
-    let kept = slowest
+    let kept = report.summaries[0]
+        .slowest
         .iter()
         .map(|instance| (instance.total.as_nanos(), instance.fields.clone()))
         .collect::<Vec<_>>();
@@ -397,7 +588,7 @@ fn a_span_s_costliest_instances_keep_the_fields_it_was_created_with() {
 #[test]
 fn a_row_keeps_its_costliest_instances_and_no_more_than_the_bound() {
     let count = SLOWEST_KEPT as u64 + 5;
-    let report = folded(&instances("entails", count, |n| 100 + n));
+    let report = instances("entails", count, |n| 100 + n).folded();
 
     let slowest = &report.summaries[0].slowest;
     assert_eq!(slowest.len(), SLOWEST_KEPT);
@@ -414,80 +605,98 @@ fn a_row_keeps_its_costliest_instances_and_no_more_than_the_bound() {
 // A span that declared nothing but its group has no instance worth telling apart — its row's maximum already names its slowest call — so it keeps none, and a report of permanent spans gains no table.
 #[test]
 fn a_span_declaring_nothing_beyond_its_group_keeps_no_instances() {
-    let report = folded(
-        "D\t0\tcurios_cert\tcertify_declaration\n\
-         S\t1\t0\t0\tgroup=Nat/add\n\
-         E\t1\t0\t0\t0\t0\t0\t0\n\
-         X\t1\t0\t100\t0\t0\t0\t0\n\
-         C\t1\t0\t100\n",
-    );
+    let report = Stream::new()
+        .event(
+            THREAD,
+            0,
+            track_event::Type::SliceBegin,
+            "certify_declaration",
+            &[("group", Field::Text("Nat/add"))],
+            None,
+        )
+        .event(
+            THREAD,
+            100,
+            track_event::Type::SliceEnd,
+            "certify_declaration",
+            &[],
+            None,
+        )
+        .folded();
 
     assert!(report.summaries[0].slowest.is_empty());
     assert!(!report.render().contains("(slowest)"));
 }
 
-// The report lists the kept instances beside the rows, with their fields escaped as the stream writes them, so a field holding a tab still reads as one column.
+// The report lists the kept instances beside the rows, with their fields escaped as the rendered table needs, so a field holding a tab still reads as one column.
 #[test]
 fn the_report_lists_the_slowest_instances_with_their_fields() {
-    let report = folded(
-        "D\t0\tcurios_cert\tentails\n\
-         S\t1\t0\t0\tlower=u\\t+\\t1\tassumed=12\n\
-         E\t1\t0\t0\t0\t0\t0\t0\n\
-         X\t1\t0\t2000000\t0\t0\t0\t0\n\
-         C\t1\t0\t2000000\n",
-    );
+    let report = Stream::new()
+        .event(
+            THREAD,
+            0,
+            track_event::Type::SliceBegin,
+            "entails",
+            &[
+                ("lower", Field::Text("u\t+\t1")),
+                ("assumed", Field::Number(12)),
+            ],
+            None,
+        )
+        .event(
+            THREAD,
+            2_000_000,
+            track_event::Type::SliceEnd,
+            "entails",
+            &[],
+            None,
+        )
+        .folded();
 
     let rendered = report.render();
     assert!(
-        rendered.contains("2.000\t2.000\tcurios_cert\tentails\t\tlower=u\\t+\\t1 assumed=12\n"),
+        rendered.contains("2.000\t2.000\tcurios_test\tentails\t\tlower=u\\t+\\t1 assumed=12\n"),
         "{rendered}"
     );
 }
 
-// The rows a reader holds can lack the entry of a span whose children they hold, and nothing is invented for it: the children keep their own time, and the exit the stream never saw entered credits no one.
+// A packet cut short by a kill, or by a writer that stopped, is the normal ending of a stream, not a corruption: it is dropped, and everything before it still folds.
 #[test]
-fn a_span_whose_parent_entered_before_the_stream_opened_keeps_its_own_time() {
-    let report = folded(
-        "D\t0\tcurios_cert\tcertifier::convert\n\
-         E\t5\t0\t100\t0\t0\t0\t0\n\
-         X\t5\t0\t300\t0\t0\t0\t0\n\
-         C\t5\t0\t300\n\
-         X\t4\t0\t900\t0\t0\t0\t0\n",
+fn a_packet_cut_short_is_dropped() {
+    let stream = Stream::new().slice(0, 900, "nat::sum").event(
+        THREAD,
+        900,
+        track_event::Type::Instant,
+        "cut",
+        &[("value", Field::Number(9))],
+        None,
     );
+    let mut bytes = stream.bytes();
+    bytes.truncate(bytes.len() - 1);
 
-    let summary = &report.summaries[0];
-    assert_eq!(summary.calls, 1);
-    assert_eq!(summary.self_total, Duration::from_nanos(200));
-}
-
-// A row cut short by a kill is the normal ending of a stream, not a corruption, so a partial last line is skipped and everything before it still folds.
-#[test]
-fn a_row_cut_short_by_a_kill_is_skipped() {
-    let report = folded(
-        "D\t0\tcurios_core\tnat::sum\n\
-         S\t1\t0\t0\n\
-         E\t1\t0\t0\t0\t0\t0\t0\n\
-         X\t1\t0\t900\t0\t0\t0\t0\n\
-         C\t1\t0\t900\n\
-         V\t0\t9",
-    );
-
+    let report = fold(bytes.as_slice()).expect("the stream folds up to its last whole packet");
     assert_eq!(report.summaries[0].calls, 1);
     assert!(report.samples.is_empty());
 }
 
-// The writer's escaping is undone, so a group holding a tab reads back as the string the call site passed rather than as extra columns.
+// A packet that names what no packet before it defined is from a stream that is not this recorder's, or not whole from its first packet, and is refused rather than read with an invented name.
 #[test]
-fn an_escaped_field_reads_back_as_it_was_written() {
-    let report = folded(
-        "D\t0\tcurios_elab\tdeclaration\n\
-         S\t1\t0\t0\tgroup=a\\tb\\nc\\\\d\n\
-         E\t1\t0\t0\t0\t0\t0\t0\n\
-         X\t1\t0\t1\t0\t0\t0\t0\n\
-         C\t1\t0\t1\n",
-    );
+fn a_name_used_before_it_was_defined_is_refused() {
+    let mut stream = Stream::new().slice(0, 100, "defined");
+    stream.packets.push(TracePacket {
+        timestamp: Some(200),
+        data: Some(trace_packet::Data::TrackEvent(TrackEvent {
+            r#type: Some(track_event::Type::SliceBegin as i32),
+            track_uuid: Some(THREAD),
+            name_field: Some(track_event::NameField::NameIid(99)),
+            ..TrackEvent::default()
+        })),
+        ..TracePacket::default()
+    });
 
-    assert_eq!(report.summaries[0].group.as_deref(), Some("a\tb\nc\\d"));
+    let refusal = fold(stream.bytes().as_slice()).expect_err("an undefined name is refused");
+    assert_eq!(refusal.kind(), io::ErrorKind::InvalidData);
+    assert!(refusal.to_string().contains("event name 99"), "{refusal}");
 }
 
 // A filed stream is read back from the path it was filed at: the one file is the whole of it.
@@ -495,11 +704,17 @@ fn an_escaped_field_reads_back_as_it_was_written() {
 fn a_filed_stream_folds_from_its_path() {
     let directory = Temporary::new("profile", "filed");
     fs::create_dir_all(&directory).expect("the directory is created");
-    let path = directory.join("profile.tsv");
+    let path = directory.join("profile.pftrace");
 
-    fs::write(&path, standalone("only", 700)).expect("the stream is filed");
+    fs::write(&path, Stream::new().slice(0, 700, "only").bytes()).expect("the stream is filed");
 
     let report = fold_at(&path).expect("the file folds");
-
-    assert_eq!(names(&report), ["only"]);
+    assert_eq!(
+        report
+            .summaries
+            .iter()
+            .map(|summary| summary.name.as_str())
+            .collect::<Vec<_>>(),
+        ["only"]
+    );
 }

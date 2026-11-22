@@ -587,12 +587,12 @@ The rungs end at the module the compiler emits. What Binaryen makes of it is the
 ## `profile`
 
 ```sh
-curios profile .curios/profile.tsv
+curios profile .curios/profile.pftrace
 ```
 
-Reads back a stream [`--profile`](#flags) filed and writes its summary to stdout: the spans by total time, the magnitude sites beneath them, and — for a run that never returned — the stack it was inside when it stopped.
+Reads back a trace [`--profile`](#flags) filed and writes its summary to stdout: the spans by total time, each thread's on its own, the magnitude sites beneath them, and — for a run that never returned — the stack it was inside when it stopped. A memory column reads `-` where the allocator did not count.
 
-`PATH` is spelled as it was to `--profile`. Reading is a pass of its own, not the profiled run's last step ([`curios-profile`](../curios-profile/README.md#the-library-emits-records-and-aggregation-is-one-of-its-consumers)).
+`PATH` is spelled as it was to `--profile`. Reading is a pass of its own, not the profiled run's last step ([`curios-profile`](../curios-profile/README.md#the-library-emits-records-and-aggregation-is-one-of-its-consumers)). The file is Perfetto's trace, so [Perfetto's UI](https://ui.perfetto.dev) opens it as a timeline and answers SQL over it, and `trace_processor` reads it too.
 
 ## The manifest
 
@@ -736,7 +736,7 @@ The tri-state describes a command line that parsed. One that did not — an unkn
 | `--progress <DRAWING>` | every command, on either side of it | draw what the command does on standard error as `plain` lines or a `live` tree, over `CURIOS_PROGRESS` and what standard error is ([What a command reports](#what-a-command-reports)) |
 | `-h`/`--help` | `curios` and every command | what that command takes, with the default each flag was built with |
 | `-V`/`--version` | `curios` itself | the build's version |
-| `--profile <PATH>` | every command, on either side of it | write one record per span and event to `PATH`, and, for a program `run` hosts, `/tmp/perf-<pid>.map`, the map a sampling profiler names its functions by; nothing is recorded without it. [`profile`](#profile) reads the stream back |
+| `--profile <PATH>` | every command, on either side of it | write a Perfetto trace of every span and event to `PATH`, a track for each thread, and, for a program `run` hosts, `/tmp/perf-<pid>.map`, the map a sampling profiler names its functions by; nothing is recorded without it. [`profile`](#profile) reads the stream back |
 
 The budget is restored at every declaration boundary, so it bounds the heaviest declaration rather than the compilation; `--help` prints the default this build carries.
 

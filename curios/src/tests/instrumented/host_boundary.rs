@@ -128,7 +128,7 @@ fn host_boundary_measurements() {
                 "stream_copy" => stream_host(),
                 _ => listing_host(),
             };
-            let path = directory.join(format!("{workload}-{sample}.trace"));
+            let path = directory.join(format!("{workload}-{sample}.pftrace"));
             let sink = BufWriter::new(File::create(&path).expect("capture file"));
             trace(Destination::Stream(Box::new(sink)), || {
                 let compiled = curios_common::profile!("host_boundary_compile" => compile(source))

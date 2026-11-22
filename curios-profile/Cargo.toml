@@ -3,7 +3,7 @@ name = "curios-profile"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Programmatic profiling for the Curios workspace: the subscriber that streams one row per span and event of what curios-common's macros instrument, and the fold that reads a stream back"
+description = "Programmatic profiling for the Curios workspace: the subscriber that writes what curios-common's macros instrument as Perfetto's trace, and the fold that reads a trace back"
 
 [lints]
 workspace = true
@@ -11,10 +11,19 @@ workspace = true
 [dependencies]
 # The subscriber's side of `tracing`, which `curios-common`'s macros write to.
 tracing = { workspace = true }
+# The codec of the messages the build script generates from Perfetto's schema; this crate alone takes it, so its pin is here.
+prost = { version = "0.14.6" }
 
 # The one place in the workspace `libc` is named, for the one system call the instruction count makes, `perf_event_open`, which only Linux has.
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = { version = "0.2.186", default-features = false }
+
+# Perfetto's schema fetched and checked as every pinned file is, parsed without a `protoc`, and the messages the recorder uses generated from it.
+[build-dependencies]
+curios-download = { workspace = true }
+prost-build = { version = "0.14.6" }
+prost-types = { version = "0.14.6" }
+protox = { version = "0.9.1" }
 
 [dev-dependencies]
 # The directory of its own every suite here works in, canonical and removed however the test ends, and the macros whose reading the recorder holds.

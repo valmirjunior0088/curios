@@ -103,6 +103,14 @@ pub fn end_counting() {
     LISTENERS.fetch_sub(1, Ordering::Relaxed);
 }
 
+/// Whether this process's allocator counts, asked while someone reads the counts: whether a block taken now is counted, which it is only where a program installed [`CountingAllocator`]. A recorder asks it once, so a stream of a program that installed none carries no memory readings, rather than readings of nought.
+pub fn allocator_counts() -> bool {
+    let before = ALLOCATIONS.load(Ordering::Relaxed);
+    std::hint::black_box(Box::new(0_u8));
+
+    ALLOCATIONS.load(Ordering::Relaxed) != before
+}
+
 /// Count every allocation from here to the end of the process, for a measurement that reads [`allocation_count`] and [`allocated_bytes`] with no recorder listening. Nothing ends it, so a process that asks pays the count for the rest of its life, which a measurement, run alone in its process, does.
 pub fn count_allocations() {
     begin_counting();

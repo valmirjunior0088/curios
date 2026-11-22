@@ -1,6 +1,6 @@
 //! A file a build script pins by its SHA-256: read where a hand placed it or an earlier build kept it, else downloaded, and checked against its digest either way, the build failing with how to place it by hand where it cannot be had.
 //!
-//! The build scripts that take something from the network — `curios-unicode`'s database and `curios-binaryen`'s source archive — take it through [`Download`], so how a pinned file is obtained, checked and kept, and what an offline build is told, is written once. Why this is a crate of its own is `README.md`'s decision.
+//! The build scripts that take something from the network — `curios-unicode`'s database, `curios-binaryen`'s source archive and `curios-profile`'s trace schema — take it through [`Download`], so how a pinned file is obtained, checked and kept, and what an offline build is told, is written once. Why this is a crate of its own is `README.md`'s decision.
 
 use {
     sha2::{Digest, Sha256},

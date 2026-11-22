@@ -86,7 +86,7 @@ fn coordination_measurements() {
             } else {
                 MockHost::builder().args(["monad_suspend", "10000"]).build()
             };
-            let path = directory.join(format!("{workload}-{sample}.trace"));
+            let path = directory.join(format!("{workload}-{sample}.pftrace"));
             let sink = BufWriter::new(File::create(&path).expect("capture file"));
             trace(Destination::Stream(Box::new(sink)), || {
                 let compiled = curios_common::profile!("coordination_compile" => compile(source))

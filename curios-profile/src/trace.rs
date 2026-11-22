@@ -1,28 +1,25 @@
-//! The record stream: [`trace`] runs a closure under a subscriber that writes one tab-separated row per span and event as it happens, so a run that never returns, or dies, still leaves everything it did on disk.
+//! The record stream: [`trace`] runs a closure under a subscriber that writes Perfetto's trace as it happens, one packet a span boundary and an event, so a run that never returns, or dies, still leaves a whole prefix of what it did on disk.
 //!
-//! Nothing is aggregated here. A row is what the callback had in hand — an identity, a timestamp, and the allocator's readings — and every statistic is [`fold`](crate::fold())'s to recompute from the file. `README.md` states why the library emits records and leaves aggregation to a consumer; what follows is what a reader of the file needs to know.
+//! Nothing is aggregated here. A packet is what the callback had in hand — a track, a timestamp, the names it interns, a span's fields and the allocator's readings — and every statistic is [`fold`](crate::fold())'s to recompute from the file. `README.md` states why the library emits records and leaves aggregation to a consumer; what follows is what a reader of the file needs to know.
 //!
-//! **The row shapes.** The first column is the kind, so `awk '$1 == "V"'` is a whole analysis:
+//! **One sequence, a track a thread.** Every packet is on one packet sequence, written behind one lock, so a name or a string interned once is referred to by its id from any thread after it. The first packet clears the sequence's state and describes the process; each thread is described as a track of its own the first time it records, and its spans are slices on it, begun where the span is entered and ended where it is exited, which nest because a thread's spans do.
 //!
-//! ```text
-//! H  version  unix_nanos                                    the stream opens
-//! D  cs       target  name                                  a callsite, named once
-//! S  id       cs      ns  [k=v …]                           a span is created
-//! E  id       cs      ns  live  allocated  allocations  peak    entered
-//! X  id       cs      ns  live  allocated  allocations  peak    exited
-//! R  id       cs      ns  [k=v …]                           a value recorded after creation
-//! C  id       cs      ns                                    closed; the id retires
-//! V  cs       ns      [k=v …]                               an event
-//! ```
+//! **The allocator's readings ride each slice.** Where the counting allocator counts (`CountingAllocator`), four counter tracks under the process — live and allocated bytes, allocations and the peak — are described once, and each slice's beginning and end carries their readings as extra counter values, so a reader differences them as it differences the timestamps. Where it does not count, no counter track is described and no reading carried.
 //!
-//! **A span carries no state.** The callsite index is packed into the span id, so `enter` recovers a span's identity from the id alone and this subscriber keeps nothing per span — no registry, no extensions, no map. That is why `D` rows exist: the name is stated once and referred to by index thereafter.
-//!
-//! **A stream is one file, whole.** Every row is flushed as it is written, so a run that is killed has filed all it did up to the kill, and nothing a run wrote is discarded while it goes on: a stream grows for as long as its run records, and what bounds it is whoever asked for it.
+//! **A stream is a whole prefix of its run.** Each packet is flushed as it is written, so a run that is killed has filed all it did up to its last whole packet; and the first write that fails ends the stream, the run going on, so a disk that filled leaves a file read the same way, never one with packets missing from its middle.
 
 use {
     crate::{
-        allocated_bytes, allocation_count, begin_counting, end_counting, live_bytes, peak_bytes,
+        allocated_bytes, allocation_count, allocator_counts, begin_counting, end_counting,
+        live_bytes, peak_bytes,
+        perfetto::{
+            CounterDescriptor, DebugAnnotation, DebugAnnotationName, EventCategory, EventName,
+            InternedData, InternedString, ProcessDescriptor, ThreadDescriptor, Trace, TracePacket,
+            TrackDescriptor, TrackEvent, counter_descriptor, debug_annotation, trace_packet,
+            track_descriptor, track_event,
+        },
     },
+    prost::Message,
     std::{
         collections::HashMap,
         fmt,
@@ -30,11 +27,13 @@ use {
         io::{self, Write},
         panic::{self, AssertUnwindSafe},
         path::PathBuf,
+        process,
         sync::{
             Mutex,
             atomic::{AtomicU64, Ordering},
         },
-        time::{Instant, SystemTime, UNIX_EPOCH},
+        thread::{self, ThreadId},
+        time::Instant,
     },
     tracing::{
         Event, Metadata, Subscriber,
@@ -44,15 +43,17 @@ use {
     },
 };
 
-/// The row shapes this module writes, so a reader can refuse a file it does not understand.
-const VERSION: u32 = 1;
+/// The one packet sequence every packet of a stream is written on.
+const SEQUENCE: u32 = 1;
 
-/// Bits of a span id reserved for the callsite index, leaving the rest a sequence number.
-const CALLSITE_BITS: u32 = 24;
+/// The process's track, which every other track hangs from.
+const PROCESS_TRACK: u64 = 1;
 
-const SEQUENCE_BITS: u32 = u64::BITS - CALLSITE_BITS;
+/// The allocator's four counter tracks, in the order a slice carries their readings: live bytes, allocated bytes, allocations, the peak.
+pub const COUNTER_TRACKS: [u64; 4] = [2, 3, 4, 5];
 
-const SEQUENCE_MASK: u64 = (1 << SEQUENCE_BITS) - 1;
+/// The first id a thread's track is given; the threads that record take the ones after it in the order they first record.
+const FIRST_THREAD_TRACK: u64 = 16;
 
 /// Where a trace is written.
 pub enum Destination {
@@ -62,14 +63,20 @@ pub enum Destination {
     File(PathBuf),
 }
 
-/// Run `operation` with a record-writing subscriber on the current thread.
+/// Run `operation` with a trace-writing subscriber on the current thread.
 ///
-/// The error is the destination's: a file that cannot be opened is worth refusing, because a caller asked for a trace and would otherwise get a silent compile. A write that fails *after* that is dropped rather than raised — a span callback has no caller to return to, and taking a compilation down because a disk filled would be a worse failure than losing the tail of a measurement.
+/// The error is the destination's: a file that cannot be opened is worth refusing, because a caller asked for a trace and would otherwise get a silent compile. A write that fails *after* that ends the stream rather than raising — a span callback has no caller to return to, and taking a compilation down because a disk filled would be a worse failure than losing the rest of a measurement.
 ///
 /// The allocator counts for as long as `operation` runs, and stops however it ends: a panic passes on through, once counting has stopped.
 pub fn trace<T>(destination: Destination, operation: impl FnOnce() -> T) -> io::Result<T> {
-    let recorder = Recorder::new(destination)?;
     begin_counting();
+    let recorder = match Recorder::new(destination, allocator_counts()) {
+        Ok(recorder) => recorder,
+        Err(error) => {
+            end_counting();
+            return Err(error);
+        }
+    };
     let ended = panic::catch_unwind(AssertUnwindSafe(|| {
         tracing::subscriber::with_default(recorder, operation)
     }));
@@ -89,73 +96,30 @@ pub fn trace<T>(destination: Destination, operation: impl FnOnce() -> T) -> io::
 ///
 /// Configuration is still in code: the caller's argument decides that this is called at all, and the [`Destination`] it names decides where it writes. Neither is readable from the environment, so there is no second specification to disagree with the first. Once it is installed, the allocator counts for the rest of the process.
 pub fn install(destination: Destination) -> io::Result<()> {
-    let recorder = Recorder::new(destination)?;
-    tracing::subscriber::set_global_default(recorder).map_err(io::Error::other)?;
     begin_counting();
-
-    Ok(())
-}
-
-/// What a span's identity is, once the file has named it: an index into the callsite table.
-type Callsite = u32;
-
-/// A span id carries its callsite in its high bits, so [`Subscriber::enter`] — which is handed an id and nothing else — can name the span without this subscriber storing anything per span.
-///
-/// The sequence is masked into the low bits and starts at one, so no id is ever zero, which `tracing` forbids. Wrapping would need 2^40 spans in one capture; the prelude's elaboration emits about three million (counted at `374325495`: the `S` rows its elaboration adds to the stream `cargo xtask profile prelude` files).
-fn pack(callsite: Callsite, sequence: u64) -> u64 {
-    ((callsite as u64) << SEQUENCE_BITS) | (sequence & SEQUENCE_MASK).max(1)
-}
-
-fn callsite_of(id: &span::Id) -> Callsite {
-    (id.into_u64() >> SEQUENCE_BITS) as Callsite
+    let recorder =
+        Recorder::new(destination, allocator_counts()).inspect_err(|_| end_counting())?;
+    tracing::subscriber::set_global_default(recorder).map_err(io::Error::other)
 }
 
 struct Recorder {
     sink: Mutex<Sink>,
-    /// Callsite indices, assigned on first sight. Read on every span creation and every event; never on enter or exit, which take the index out of the id.
-    callsites: Mutex<HashMap<tracing::callsite::Identifier, Callsite>>,
-    /// Spans someone cloned a handle to. Empty for every span the workspace's own macros create, which is why the common path never touches it: a span closes on its first `try_close` unless it appears here.
+    /// Spans someone cloned a handle to. Empty for every span the workspace's macros create, which is why the common path never touches it: a span closes on its first `try_close` unless it appears here.
     shared: Mutex<HashMap<u64, usize>>,
     sequence: AtomicU64,
-    opened: Instant,
 }
 
 impl Recorder {
-    fn new(destination: Destination) -> io::Result<Self> {
-        let opened = Instant::now();
-
+    fn new(destination: Destination, counted: bool) -> io::Result<Self> {
         Ok(Self {
-            sink: Mutex::new(Sink::new(destination)?),
-            callsites: Mutex::new(HashMap::new()),
+            sink: Mutex::new(Sink::new(destination, counted)?),
             shared: Mutex::new(HashMap::new()),
             sequence: AtomicU64::new(1),
-            opened,
         })
     }
 
-    fn elapsed(&self) -> u128 {
-        self.opened.elapsed().as_nanos()
-    }
-
-    /// The index this metadata is named by, defining it in the file the first time it is seen.
-    fn callsite(&self, metadata: &'static Metadata<'static>) -> Callsite {
-        let mut callsites = self.callsites.lock().expect("profiling callsite lock");
-        let next = callsites.len() as Callsite;
-
-        match callsites.entry(metadata.callsite()) {
-            std::collections::hash_map::Entry::Occupied(entry) => *entry.get(),
-            std::collections::hash_map::Entry::Vacant(entry) => {
-                entry.insert(next);
-                self.write(|sink| sink.define(next, metadata.target(), metadata.name()));
-
-                next
-            }
-        }
-    }
-
-    fn write(&self, row: impl FnOnce(&mut Sink)) {
-        let mut sink = self.sink.lock().expect("profiling sink lock");
-        row(&mut sink);
+    fn sink(&self) -> std::sync::MutexGuard<'_, Sink> {
+        self.sink.lock().expect("profiling sink lock")
     }
 }
 
@@ -174,47 +138,37 @@ impl Subscriber for Recorder {
     }
 
     fn new_span(&self, attributes: &span::Attributes<'_>) -> span::Id {
-        let callsite = self.callsite(attributes.metadata());
-        let sequence = self.sequence.fetch_add(1, Ordering::Relaxed);
-        let id = pack(callsite, sequence);
-        let at = self.elapsed();
-
+        let id = self.sequence.fetch_add(1, Ordering::Relaxed);
         let mut fields = Fields::default();
         attributes.record(&mut fields);
-        self.write(|sink| sink.span(b'S', id, callsite, at, &fields.0));
+        self.sink().created(id, attributes.metadata(), fields.0);
 
         span::Id::from_u64(id)
     }
 
     fn record(&self, span: &span::Id, values: &span::Record<'_>) {
-        let at = self.elapsed();
         let mut fields = Fields::default();
         values.record(&mut fields);
-        let (id, callsite) = (span.into_u64(), callsite_of(span));
-        self.write(|sink| sink.span(b'R', id, callsite, at, &fields.0));
+        self.sink().recorded(span.into_u64(), fields.0);
     }
 
     // A causal edge between spans is not a cost, and nothing downstream reads one.
     fn record_follows_from(&self, _: &span::Id, _: &span::Id) {}
 
     fn event(&self, event: &Event<'_>) {
-        let callsite = self.callsite(event.metadata());
-        let at = self.elapsed();
         let mut fields = Fields::default();
         event.record(&mut fields);
-        self.write(|sink| sink.event(callsite, at, &fields.0));
+        self.sink().event(event.metadata(), fields.0);
     }
 
     fn enter(&self, span: &span::Id) {
-        let at = self.elapsed();
-        let (id, callsite) = (span.into_u64(), callsite_of(span));
-        self.write(|sink| sink.boundary(b'E', id, callsite, at));
+        self.sink()
+            .boundary(span.into_u64(), track_event::Type::SliceBegin);
     }
 
     fn exit(&self, span: &span::Id) {
-        let at = self.elapsed();
-        let (id, callsite) = (span.into_u64(), callsite_of(span));
-        self.write(|sink| sink.boundary(b'X', id, callsite, at));
+        self.sink()
+            .boundary(span.into_u64(), track_event::Type::SliceEnd);
     }
 
     fn clone_span(&self, span: &span::Id) -> span::Id {
@@ -238,22 +192,35 @@ impl Subscriber for Recorder {
             shared.remove(&span.into_u64());
         }
         drop(shared);
-
-        let at = self.elapsed();
-        let (id, callsite) = (span.into_u64(), callsite_of(&span));
-        self.write(|sink| sink.closed(id, callsite, at));
+        self.sink().closed(span.into_u64());
 
         true
     }
 }
 
-/// The open stream.
+/// What a span was created with, kept until it closes: its name's and target's interned ids and its fields, written on each slice it is entered as.
+struct Created {
+    name: u64,
+    category: u64,
+    fields: Vec<Value>,
+}
+
+/// The open stream, and everything a packet refers to by an id the stream gave it.
 struct Sink {
-    writer: Box<dyn Write + Send>,
+    /// Where packets go, and `None` once a write to it failed: nothing is written after the first write that fails.
+    writer: Option<Box<dyn Write + Send>>,
+    opened: Instant,
+    counted: bool,
+    names: Interned,
+    categories: Interned,
+    annotation_names: Interned,
+    strings: Interned,
+    threads: HashMap<ThreadId, u64>,
+    spans: HashMap<u64, Created>,
 }
 
 impl Sink {
-    fn new(destination: Destination) -> io::Result<Self> {
+    fn new(destination: Destination, counted: bool) -> io::Result<Self> {
         let writer: Box<dyn Write + Send> = match destination {
             Destination::Stream(writer) => writer,
             Destination::File(path) => {
@@ -266,119 +233,356 @@ impl Sink {
             }
         };
 
-        let mut sink = Self { writer };
-        sink.header();
+        let mut sink = Self {
+            writer: Some(writer),
+            opened: Instant::now(),
+            counted,
+            names: Interned::default(),
+            categories: Interned::default(),
+            annotation_names: Interned::default(),
+            strings: Interned::default(),
+            threads: HashMap::new(),
+            spans: HashMap::new(),
+        };
+        sink.opening();
 
         Ok(sink)
     }
 
-    /// Every row is flushed as it is written. A buffer is lost to anything that ends the process without unwinding — a stack overflow, an abort, a `SIGKILL` — and those are the runs whose last rows are worth the most, so a row reaches the file before the step after it runs. A failed write is dropped; [`trace`] says why it is not raised.
-    fn put(&mut self, row: &str) {
-        let _ = self.writer.write_all(row.as_bytes());
-        let _ = self.writer.flush();
+    /// Nanoseconds since the stream opened: the timestamp of what is written now, taken behind the lock so a sequence's packets are in time order.
+    fn now(&self) -> u64 {
+        self.opened.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64
     }
 
-    fn header(&mut self) {
-        let wall = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos();
-        let row = format!("H\t{VERSION}\t{wall}\n");
-        self.put(&row);
+    /// The first packet, which clears the sequence's state and describes the process, then the allocator's counter tracks where it counts.
+    fn opening(&mut self) {
+        let process = TrackDescriptor {
+            uuid: Some(PROCESS_TRACK),
+            process: Some(ProcessDescriptor {
+                pid: Some(process::id() as i32),
+                process_name: None,
+            }),
+            ..TrackDescriptor::default()
+        };
+        self.put(TracePacket {
+            first_packet_on_sequence: Some(true),
+            sequence_flags: Some(trace_packet::SequenceFlags::SeqIncrementalStateCleared as u32),
+            data: Some(trace_packet::Data::TrackDescriptor(process)),
+            ..self.packet()
+        });
+
+        if self.counted {
+            let counters = [
+                ("live bytes", counter_descriptor::Unit::SizeBytes),
+                ("allocated bytes", counter_descriptor::Unit::SizeBytes),
+                ("allocations", counter_descriptor::Unit::Count),
+                ("peak bytes", counter_descriptor::Unit::SizeBytes),
+            ];
+            for (uuid, (name, unit)) in COUNTER_TRACKS.into_iter().zip(counters) {
+                let counter = TrackDescriptor {
+                    uuid: Some(uuid),
+                    parent_uuid: Some(PROCESS_TRACK),
+                    static_or_dynamic_name: Some(track_descriptor::StaticOrDynamicName::Name(
+                        name.to_string(),
+                    )),
+                    counter: Some(CounterDescriptor {
+                        unit: Some(unit as i32),
+                    }),
+                    ..TrackDescriptor::default()
+                };
+                self.put(TracePacket {
+                    data: Some(trace_packet::Data::TrackDescriptor(counter)),
+                    ..self.packet()
+                });
+            }
+        }
     }
 
-    fn define(&mut self, callsite: Callsite, target: &str, name: &str) {
-        let row = format!("D\t{callsite}\t{}\t{}\n", escape(target), escape(name));
-        self.put(&row);
+    /// A packet of this stream's sequence, stamped now, which reads the state the sequence has interned.
+    fn packet(&self) -> TracePacket {
+        TracePacket {
+            timestamp: Some(self.now()),
+            optional_trusted_packet_sequence_id: Some(
+                trace_packet::OptionalTrustedPacketSequenceId::TrustedPacketSequenceId(SEQUENCE),
+            ),
+            sequence_flags: Some(trace_packet::SequenceFlags::SeqNeedsIncrementalState as u32),
+            ..TracePacket::default()
+        }
     }
 
-    fn span(&mut self, kind: u8, id: u64, callsite: Callsite, at: u128, fields: &str) {
-        let row = format!("{}\t{id}\t{callsite}\t{at}{fields}\n", kind as char);
-        self.put(&row);
+    /// The track of the thread recording now, described the first time it records.
+    fn track(&mut self) -> u64 {
+        let current = thread::current();
+        if let Some(&uuid) = self.threads.get(&current.id()) {
+            return uuid;
+        }
+
+        let uuid = FIRST_THREAD_TRACK + self.threads.len() as u64;
+        self.threads.insert(current.id(), uuid);
+        let described = TrackDescriptor {
+            uuid: Some(uuid),
+            parent_uuid: Some(PROCESS_TRACK),
+            thread: Some(ThreadDescriptor {
+                pid: Some(process::id() as i32),
+                // Numbered by the recorder rather than asked of the system, which names a thread differently on each: a track needs a number no other thread of the stream has.
+                tid: Some((uuid - FIRST_THREAD_TRACK + 1) as i64),
+                thread_name: current.name().map(str::to_string),
+            }),
+            ..TrackDescriptor::default()
+        };
+        self.put(TracePacket {
+            data: Some(trace_packet::Data::TrackDescriptor(described)),
+            ..self.packet()
+        });
+
+        uuid
     }
 
-    fn event(&mut self, callsite: Callsite, at: u128, fields: &str) {
-        let row = format!("V\t{callsite}\t{at}{fields}\n");
-        self.put(&row);
-    }
-
-    /// An entry or an exit, with the four readings a fold differences into what the span retained, took and reached.
-    fn boundary(&mut self, kind: u8, id: u64, callsite: Callsite, at: u128) {
-        let row = format!(
-            "{}\t{id}\t{callsite}\t{at}\t{}\t{}\t{}\t{}\n",
-            kind as char,
-            live_bytes(),
-            allocated_bytes(),
-            allocation_count(),
-            peak_bytes(),
+    fn created(&mut self, id: u64, metadata: &'static Metadata<'static>, fields: Vec<Value>) {
+        let mut interned = InternedData::default();
+        let name = self.names.id(metadata.name(), |iid, name| {
+            interned.event_names.push(EventName {
+                iid: Some(iid),
+                name: Some(name.to_string()),
+            });
+        });
+        let category = self.categories.id(metadata.target(), |iid, name| {
+            interned.event_categories.push(EventCategory {
+                iid: Some(iid),
+                name: Some(name.to_string()),
+            });
+        });
+        self.intern(interned);
+        self.spans.insert(
+            id,
+            Created {
+                name,
+                category,
+                fields,
+            },
         );
-        self.put(&row);
     }
 
-    /// A close, which carries no readings: nothing happens between a span's last exit and its close.
-    fn closed(&mut self, id: u64, callsite: Callsite, at: u128) {
-        let row = format!("C\t{id}\t{callsite}\t{at}\n");
-        self.put(&row);
+    /// A value recorded onto a live span after its creation, written on every slice it is entered as from here on.
+    fn recorded(&mut self, id: u64, fields: Vec<Value>) {
+        if let Some(span) = self.spans.get_mut(&id) {
+            span.fields.extend(fields);
+        }
+    }
+
+    fn closed(&mut self, id: u64) {
+        self.spans.remove(&id);
+    }
+
+    /// A span entered or exited: a slice begun or ended on the thread's track, the allocator's readings beside it where it counts.
+    fn boundary(&mut self, id: u64, kind: track_event::Type) {
+        let track = self.track();
+        let Some(span) = self.spans.get(&id) else {
+            return;
+        };
+        let (name, category) = (span.name, span.category);
+        let annotations = match kind {
+            track_event::Type::SliceBegin => {
+                let fields = span.fields.clone();
+                self.annotations(&fields)
+            }
+            _ => Vec::new(),
+        };
+        let (extra_counter_track_uuids, extra_counter_values) = match self.counted {
+            true => (
+                COUNTER_TRACKS.to_vec(),
+                vec![
+                    live_bytes() as i64,
+                    allocated_bytes() as i64,
+                    allocation_count() as i64,
+                    peak_bytes() as i64,
+                ],
+            ),
+            false => (Vec::new(), Vec::new()),
+        };
+        let event = TrackEvent {
+            r#type: Some(kind as i32),
+            track_uuid: Some(track),
+            name_field: Some(track_event::NameField::NameIid(name)),
+            category_iids: vec![category],
+            debug_annotations: annotations,
+            extra_counter_track_uuids,
+            extra_counter_values,
+        };
+        self.put(TracePacket {
+            data: Some(trace_packet::Data::TrackEvent(event)),
+            ..self.packet()
+        });
+    }
+
+    /// An event: an instant on the thread's track, its fields as annotations. One carrying a `value` is a magnitude, `curios_common::sample!`'s.
+    fn event(&mut self, metadata: &'static Metadata<'static>, fields: Vec<Value>) {
+        let track = self.track();
+        let mut interned = InternedData::default();
+        let name = self.names.id(metadata.name(), |iid, name| {
+            interned.event_names.push(EventName {
+                iid: Some(iid),
+                name: Some(name.to_string()),
+            });
+        });
+        let category = self.categories.id(metadata.target(), |iid, name| {
+            interned.event_categories.push(EventCategory {
+                iid: Some(iid),
+                name: Some(name.to_string()),
+            });
+        });
+        self.intern(interned);
+        let annotations = self.annotations(&fields);
+        let event = TrackEvent {
+            r#type: Some(track_event::Type::Instant as i32),
+            track_uuid: Some(track),
+            name_field: Some(track_event::NameField::NameIid(name)),
+            category_iids: vec![category],
+            debug_annotations: annotations,
+            ..TrackEvent::default()
+        };
+        self.put(TracePacket {
+            data: Some(trace_packet::Data::TrackEvent(event)),
+            ..self.packet()
+        });
+    }
+
+    /// `fields` as annotations, each name and string value interned, what is interned for the first time written ahead of them.
+    fn annotations(&mut self, fields: &[Value]) -> Vec<DebugAnnotation> {
+        let mut interned = InternedData::default();
+        let annotations = fields
+            .iter()
+            .map(|field| {
+                let name = self.annotation_names.id(field.name, |iid, name| {
+                    interned.debug_annotation_names.push(DebugAnnotationName {
+                        iid: Some(iid),
+                        name: Some(name.to_string()),
+                    });
+                });
+                let value = match &field.reading {
+                    Reading::Bool(value) => debug_annotation::Value::BoolValue(*value),
+                    Reading::Unsigned(value) => debug_annotation::Value::UintValue(*value),
+                    Reading::Signed(value) => debug_annotation::Value::IntValue(*value),
+                    Reading::Text(text) => debug_annotation::Value::StringValueIid(
+                        self.strings.id(text, |iid, text| {
+                            interned
+                                .debug_annotation_string_values
+                                .push(InternedString {
+                                    iid: Some(iid),
+                                    str: Some(text.as_bytes().to_vec()),
+                                });
+                        }),
+                    ),
+                };
+
+                DebugAnnotation {
+                    name_field: Some(debug_annotation::NameField::NameIid(name)),
+                    value: Some(value),
+                }
+            })
+            .collect();
+        self.intern(interned);
+
+        annotations
+    }
+
+    /// Write what was interned for the first time, in a packet ahead of the one that refers to it.
+    fn intern(&mut self, interned: InternedData) {
+        if interned != InternedData::default() {
+            self.put(TracePacket {
+                interned_data: Some(interned),
+                ..self.packet()
+            });
+        }
+    }
+
+    /// One packet, written as a `Trace` of that packet alone, which a stream of them concatenates into one `Trace`, and flushed before the step after it runs, since a buffer is lost to anything that ends the process without unwinding — a stack overflow, an abort, a `SIGKILL` — and those are the runs whose last packets are worth the most. The first write that fails drops the writer, and nothing is written after it.
+    fn put(&mut self, packet: TracePacket) {
+        let Some(writer) = &mut self.writer else {
+            return;
+        };
+        let bytes = Trace {
+            packet: vec![packet],
+        }
+        .encode_to_vec();
+        if writer
+            .write_all(&bytes)
+            .and_then(|()| writer.flush())
+            .is_err()
+        {
+            self.writer = None;
+        }
     }
 }
 
-impl Drop for Sink {
-    fn drop(&mut self) {
-        let _ = self.writer.flush();
+/// Ids a stream gave the strings it interned of one kind, from one, each written once.
+#[derive(Default)]
+struct Interned(HashMap<String, u64>);
+
+impl Interned {
+    /// The id of `text`, given and handed to `first` the first time it is seen.
+    fn id(&mut self, text: &str, first: impl FnOnce(u64, &str)) -> u64 {
+        if let Some(&iid) = self.0.get(text) {
+            return iid;
+        }
+        let iid = self.0.len() as u64 + 1;
+        self.0.insert(text.to_string(), iid);
+        first(iid, text);
+
+        iid
     }
 }
 
-/// Every field a span or an event carries, rendered as tab-separated `name=value` pairs.
+/// One field a span or an event carries.
+#[derive(Clone)]
+struct Value {
+    name: &'static str,
+    reading: Reading,
+}
+
+#[derive(Clone)]
+enum Reading {
+    Bool(bool),
+    Unsigned(u64),
+    Signed(i64),
+    Text(String),
+}
+
+/// Every field a span or an event carries, whatever its type.
 ///
 /// **Generic on purpose.** A visitor that kept only the fields it knew would silently discard one added at a call site; writing whatever arrives means a field is either in the file or it is not, and a reader can see which.
 #[derive(Default)]
-struct Fields(String);
+struct Fields(Vec<Value>);
 
 impl Fields {
-    fn put(&mut self, field: &Field, value: fmt::Arguments<'_>) {
-        self.0.push('\t');
-        self.0.push_str(&escape(field.name()));
-        self.0.push('=');
-        self.0.push_str(&escape(&value.to_string()));
+    fn put(&mut self, field: &Field, reading: Reading) {
+        self.0.push(Value {
+            name: field.name(),
+            reading,
+        });
     }
 }
 
 impl Visit for Fields {
     fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
-        self.put(field, format_args!("{value:?}"));
+        self.put(field, Reading::Text(format!("{value:?}")));
     }
 
     fn record_str(&mut self, field: &Field, value: &str) {
-        self.put(field, format_args!("{value}"));
+        self.put(field, Reading::Text(value.to_string()));
     }
 
     fn record_u64(&mut self, field: &Field, value: u64) {
-        self.put(field, format_args!("{value}"));
+        self.put(field, Reading::Unsigned(value));
     }
 
     fn record_i64(&mut self, field: &Field, value: i64) {
-        self.put(field, format_args!("{value}"));
+        self.put(field, Reading::Signed(value));
     }
 
     fn record_bool(&mut self, field: &Field, value: bool) {
-        self.put(field, format_args!("{value}"));
+        self.put(field, Reading::Bool(value));
     }
-}
-
-/// The four characters a tab-separated row cannot hold bare. A value reaches here through `Debug`, so this is about what a field *can* contain rather than what the workspace's fields do.
-pub fn escape(value: &str) -> String {
-    let mut escaped = String::with_capacity(value.len());
-    for character in value.chars() {
-        match character {
-            '\\' => escaped.push_str("\\\\"),
-            '\t' => escaped.push_str("\\t"),
-            '\n' => escaped.push_str("\\n"),
-            '\r' => escaped.push_str("\\r"),
-            _ => escaped.push(character),
-        }
-    }
-
-    escaped
 }
 
 #[cfg(test)]

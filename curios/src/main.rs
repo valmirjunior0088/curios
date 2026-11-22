@@ -68,7 +68,7 @@ static ALLOCATOR: CountingAllocator = CountingAllocator;
 ///
 /// **The path is the caller's, and there is no default.** A compiler that chose one would spell a location the reader then has to spell again to read it back, and two derivations of one path are two things that can disagree. This way the reader chooses and the compiler obeys.
 ///
-/// The stream is filed rather than piped because a hung run is the case profiling exists for, and a pipe dies with the interrupt that ends one. Standard output is also the *product* of most subcommands — a program's own output under `run`, an answer under `wonder` — so rows on it would corrupt the thing being profiled.
+/// The stream is filed rather than piped because a hung run is the case profiling exists for, and a pipe dies with the interrupt that ends one. Standard output is also the *product* of most subcommands — a program's own output under `run`, an answer under `wonder` — so a trace on it would corrupt the thing being profiled.
 ///
 /// A failure to open is reported and the invocation proceeds. The alternative is refusing to compile because a measurement could not be filed, which inverts which of the two the caller asked for. Success says nothing: the caller named the path, so it has nothing to be told.
 fn install_profiling(path: PathBuf) {

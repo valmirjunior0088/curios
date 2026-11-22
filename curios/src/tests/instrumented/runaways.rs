@@ -162,8 +162,10 @@ fn runaway_measurements() {
     );
     for (label, shape, budget) in rows {
         for budget in [budget, 2 * budget] {
-            let stream =
-                directory.join(format!("{}-{budget}.trace", label.replace([' ', ','], "")));
+            let stream = directory.join(format!(
+                "{}-{budget}.pftrace",
+                label.replace([' ', ','], "")
+            ));
             let Cost {
                 verdict,
                 elaborator,

@@ -1,6 +1,6 @@
 description = "A run under a recorder, and the fold of what it filed"
 # The one place the stream's location is spelled: the compiler takes it as an argument and keeps no default, so what is written and what is read back cannot drift.
-variables.stream = "curios/.artifacts/profile.tsv"
+variables.stream = "curios/.artifacts/profile.pftrace"
 variables.program.argument = "PATH"
 variables.program.else = "programs/hello_world.crs"
 variables.program.help = "The .crs entry file to run"

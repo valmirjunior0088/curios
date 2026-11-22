@@ -44,7 +44,7 @@ fn run(root: &Path, before: &[&str]) -> (Output, PathBuf) {
 #[test]
 fn a_profiled_run_files_a_stream_its_compiler_folds() {
     let root = Temporary::new("profile", "stream");
-    let stream = root.join("stream.tsv");
+    let stream = root.join("stream.pftrace");
     let (output, map) = run(&root, &["--profile", stream.to_str().unwrap()]);
     let _ = fs::remove_file(&map);
     assert!(output.status.success(), "{output:?}");
@@ -63,7 +63,7 @@ fn a_profiled_run_files_a_stream_its_compiler_folds() {
 #[test]
 fn a_profiled_run_maps_the_guest_s_functions() {
     let root = Temporary::new("profile", "mapped");
-    let stream = root.join("stream.tsv");
+    let stream = root.join("stream.pftrace");
     let (output, map) = run(&root, &["--profile", stream.to_str().unwrap()]);
     let written = fs::read_to_string(&map);
     let _ = fs::remove_file(&map);
@@ -88,7 +88,7 @@ fn a_run_unasked_writes_no_map() {
     assert!(!unasked, "{} was written unasked", map.display());
 }
 
-/// The prelude's build under a recorder: [`compile`] does what `curios-prelude`'s build script does, every root lowered, elaborated, erased and certified, its stream filed at `.artifacts/prelude.tsv` beside this crate's manifest and its fold beside the stream, at `.artifacts/prelude.folded.tsv`, and printed. `cargo xtask profile prelude` runs it.
+/// The prelude's build under a recorder: [`compile`] does what `curios-prelude`'s build script does, every root lowered, elaborated, erased and certified, its stream filed at `.artifacts/prelude.pftrace` beside this crate's manifest and its fold beside the stream, at `.artifacts/prelude.folded.tsv`, and printed. `cargo xtask profile prelude` runs it.
 ///
 /// **A measurement is asked, and no build is.** A build script takes no argument, so nothing can ask one for a stream, and one that recorded for carrying its instrumentation would record every build; and a program of the build's own crate would put the recorder in the prelude's image key. The images it builds go to a directory of its own, removed when it is done: the ones the compiler embeds are the build script's.
 #[test]
@@ -96,7 +96,7 @@ fn a_run_unasked_writes_no_map() {
 fn prelude_build_profile() {
     let artifacts = Path::new(env!("CARGO_MANIFEST_DIR")).join(".artifacts");
     let (stream, folded) = (
-        artifacts.join("prelude.tsv"),
+        artifacts.join("prelude.pftrace"),
         artifacts.join("prelude.folded.tsv"),
     );
     let out = Temporary::new("profile", "prelude");

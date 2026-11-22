@@ -28,7 +28,7 @@ use {
 fn classification_allowance_measurements() {
     let directory = workspace().join("curios/.artifacts/allowance");
     create_dir_all(&directory).expect("capture directory");
-    let stream = directory.join("stream.tsv");
+    let stream = directory.join("stream.pftrace");
 
     let reference = read_to_string(workspace().join("documentation/language.md"))
         .expect("the reference is readable");

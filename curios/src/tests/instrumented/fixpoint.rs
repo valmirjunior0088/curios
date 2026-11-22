@@ -13,17 +13,17 @@ use {
 
 /// The stream, kept in memory so the fold reads it back without a file.
 #[derive(Clone, Default)]
-struct Rows(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+struct Stream(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
 
-impl Rows {
-    fn rows(&self) -> Vec<u8> {
-        self.0.lock().expect("rows lock").clone()
+impl Stream {
+    fn bytes(&self) -> Vec<u8> {
+        self.0.lock().expect("stream lock").clone()
     }
 }
 
-impl std::io::Write for Rows {
+impl std::io::Write for Stream {
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-        self.0.lock().expect("rows lock").extend_from_slice(bytes);
+        self.0.lock().expect("stream lock").extend_from_slice(bytes);
 
         Ok(bytes.len())
     }
@@ -93,14 +93,14 @@ impl std::io::Write for Rows {
 #[ignore = "measurement, mixed: reports pass costs and counts"]
 fn fixpoint_pass_measurements() {
     let entrypoint = TOML_DRIVER.parse::<Entrypoint>().expect("driver parses");
-    // The stream goes to a buffer and is folded back here: this test wants the aggregate, which is one consumer of the rows.
-    let rows = Rows::default();
-    let outcome = trace(Destination::Stream(Box::new(rows.clone())), || {
+    // The stream goes to a buffer and is folded back here: this test wants the aggregate, which is one consumer of the stream.
+    let stream = Stream::default();
+    let outcome = trace(Destination::Stream(Box::new(stream.clone())), || {
         compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
     })
     .expect("a stream destination opens");
     outcome.expect("driver compiles");
-    let report = fold(rows.rows().as_slice()).expect("the rows fold");
+    let report = fold(stream.bytes().as_slice()).expect("the stream folds");
     assert!(report.open.is_empty(), "every span closed");
 
     println!(
@@ -110,14 +110,17 @@ fn fixpoint_pass_measurements() {
     for summary in report.summaries.iter().filter(|summary| {
         summary.name == "compile_entrypoint" || summary.target.starts_with("curios_cps")
     }) {
+        let memory = summary
+            .memory
+            .expect("the suite installs the counting allocator");
         println!(
             "{:>10.3} {:>6} {:>9.3} {:>9.3} {:>15} {:>12}  {}",
             summary.total.as_secs_f64() * 1_000.0,
             summary.calls,
             summary.min.as_secs_f64() * 1_000.0,
             summary.max.as_secs_f64() * 1_000.0,
-            summary.allocated,
-            summary.allocations,
+            memory.allocated,
+            memory.allocations,
             summary.name,
         );
     }
