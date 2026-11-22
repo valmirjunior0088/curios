@@ -54,6 +54,15 @@ test a_scope_tells_its_release_a_body_was_dropped_while_it_waited =
     let cancelled = heard(endings, false)!;
     Test/assert("the release was told the body was dropped", cancelled);
 
+-- Two branches of a body each wait for the scope's children: the child's end wakes both, where a wake one of them took would leave the other waiting for good.
+test every_join_of_a_scope_answers_once_its_children_have_ended =
+    let joined =
+        Io/scope((scope) =>
+            let _ = Io/Scope/spawn(scope, Io/yield())!;
+            let _ = Io/both(Io/Scope/join_all(scope), Io/Scope/join_all(scope))!;
+            Io/pure(true))!;
+    Test/assert("both joins answered", joined);
+
 -- The value a take found, where it found one.
 let found(@A: Type, taken: Channel/Take(A)) -> Option(A) =
     match taken | item(a) => Option/some(a) | _ => Option/none() end;

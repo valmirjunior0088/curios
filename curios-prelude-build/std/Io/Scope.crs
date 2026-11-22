@@ -1,8 +1,9 @@
 --- Waiting for a task's answer.
 pub mod Task;
 
-use /std/{Nat, List, Option, Channel, Box, Io};
+use /std/{List, Option, Cell, Box, Io};
 use /std/Io/{let Scope, Live, Future};
+use /std/internal/{Waiting, on_filled, until};
 
 --- How a scope ended, as each release deferred to it is told.
 pub induct Ended: pub Type
@@ -12,15 +13,46 @@ pub induct Ended: pub Type
 | cancelled()
 end
 
--- `by` applied to the count of `live`.
-let counted(live: Live, by: (Nat) -> Nat) -> Io({}) =
-    Box/change(live.count, (n: Nat) => (by(n), ()));
+-- One more child of `live`.
+let started(live: Box(Live)) -> Io({}) =
+    Box/change(live, (l: Live) => (Live { ..l, count = l.count + 1 }, ()));
 
--- One child of `live` ended.
-let ended(live: Live) -> Io({}) =
-    let () = counted(live, (n) => match n | 0 => 0 | m + 1 => m end)!;
-    let _ = Channel/try_push(live.ended, ())!;
-    Io/pure(());
+-- One child of `live` ended: the count lowered, and every join waiting woken where none is left.
+let ended(live: Box(Live)) -> Io({}) =
+    let idle =
+        Box/change(live, (l: Live) =>
+            match l.count
+            | m + 2 => (Live { ..l, count = m + 1 }, Option/none())
+            | _ => (Live { count = 0, idle = Option/none() }, l.idle)
+            end)!;
+    match idle
+    | some(cell) => Io/bind(Cell/fill(cell, ()), (_) => Io/pure(()))
+    | none() => Io/pure(())
+    end;
+
+-- A join's attempt: done where no child of `live` is left.
+let none_left(live: Box(Live)) -> Io(Option({})) =
+    let l = Box/held(live)!;
+    Io/pure(match l.count | 0 => Option/some(()) | _ => Option/none() end);
+
+-- The cell a join waits on while children are left: the one there, or a fresh one left there. The cell is made before the change that leaves it, since a change cannot make one, and only where none is there.
+let idle_cell(live: Box(Live)) -> Io(Cell({})) =
+    let there = Box/held(live)!;
+    match there.idle
+    | some(cell) => Io/pure(cell)
+    | none() =>
+        let fresh = Cell/new()!;
+        Box/change(live, (l: Live) =>
+            match l.idle
+            | some(cell) => (l, cell)
+            | none() => (Live { ..l, idle = Option/some(fresh) }, fresh)
+            end)
+    end;
+
+-- What a join suspends on.
+let idled(live: Box(Live)) -> Io(Waiting) =
+    let cell = idle_cell(live)!;
+    Io/pure(on_filled([cell]));
 
 -- `Task` is declared here and not in its module, so that `spawn` builds it and nothing outside this subtree does.
 --- A child a scope runs: its answer once it has one.
@@ -31,7 +63,7 @@ pub struct Task(A: Type): Type {
 --- `child` run beside the body of the scope `s`, answering at once with the task `Task/join` waits on. A child still running when the body of its scope answers is cancelled where it waits, and one spawned once the scope has answered never runs. What it answers, a failure as much as a value, is read only by a join: a child nobody joins fails without anyone hearing it.
 pub let spawn(@A: Type, s: Scope, child: Io(A)) -> Io(Task(A)) =
     let f = Future/new()!;
-    let () = counted(s.live, (n) => n + 1)!;
+    let () = started(s.live)!;
     let finished = Io/bind(child, (a) => Io/bind(Future/fill(f, a), (()) => ended(s.live)));
     let () =
         Box/change(s.children, (held: Option(List(Io({})))) =>
@@ -43,13 +75,7 @@ pub let spawn(@A: Type, s: Scope, child: Io(A)) -> Io(Task(A)) =
 
 --- Until every child spawned into `s` has ended, those spawned meanwhile among them: what a body that needs all of its children finished asks before it answers.
 pub let join_all(s: Scope) -> Io({}) =
-    let n = Box/held(s.live.count)!;
-    match n
-    | 0 => Io/pure(())
-    | _ =>
-        let _ = Channel/take(s.live.ended)!;
-        join_all(s)
-    end;
+    until(none_left(s.live), idled(s.live));
 
 --- `release` run when `s` ends, told how it ended: after its children are cancelled, and before every release deferred to it earlier. What a scope's resources are closed by, so nothing opened into a scope outlives it.
 pub let defer(s: Scope, release: (Ended) -> Io({})) -> Io({}) =
