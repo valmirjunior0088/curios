@@ -43,10 +43,11 @@ use {
         DocumentSymbol, DocumentSymbolParams, DocumentSymbolResponse, FileSystemWatcher,
         FoldingRange, FoldingRangeParams, FoldingRangeProviderCapability, GlobPattern,
         GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
-        HoverProviderCapability, ImplementationProviderCapability, InitializeParams, Location,
-        MarkupContent, MarkupKind, NumberOrString, OneOf, Position, ProgressParams,
-        ProgressParamsValue, PublishDiagnosticsParams, Range, Registration, RegistrationParams,
-        SelectionRange, SelectionRangeParams, SelectionRangeProviderCapability, SemanticToken,
+        HoverProviderCapability, ImplementationProviderCapability, InitializeParams, InlayHint,
+        InlayHintKind, InlayHintLabel, InlayHintParams, Location, MarkupContent, MarkupKind,
+        NumberOrString, OneOf, Position, ProgressParams, ProgressParamsValue,
+        PublishDiagnosticsParams, Range, Registration, RegistrationParams, SelectionRange,
+        SelectionRangeParams, SelectionRangeProviderCapability, SemanticToken,
         SemanticTokenModifier, SemanticTokenType, SemanticTokens, SemanticTokensFullOptions,
         SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams, SemanticTokensResult,
         ServerCapabilities, SymbolKind, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit,
@@ -59,8 +60,8 @@ use {
         request::{
             DocumentLinkRequest, DocumentSymbolRequest, FoldingRangeRequest, Formatting,
             GotoDefinition, GotoImplementation, GotoImplementationParams, HoverRequest,
-            RegisterCapability, Request, SelectionRangeRequest, SemanticTokensFullRequest,
-            SemanticTokensRefresh, WorkDoneProgressCreate,
+            InlayHintRequest, RegisterCapability, Request, SelectionRangeRequest,
+            SemanticTokensFullRequest, SemanticTokensRefresh, WorkDoneProgressCreate,
         },
     },
     std::{
@@ -98,6 +99,7 @@ pub fn serve(budget: u64, manifest: Option<&Path>, cabinet: Option<&Path>) -> Re
         selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
         folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
         implementation_provider: Some(ImplementationProviderCapability::Simple(true)),
+        inlay_hint_provider: Some(OneOf::Left(true)),
         document_link_provider: Some(DocumentLinkOptions {
             resolve_provider: Some(false),
             work_done_progress_options: Default::default(),
@@ -406,6 +408,12 @@ impl Server {
                         serde_json::from_value::<DocumentLinkParams>(params)
                             .map(|params| valued(serde_json::to_value(self.links(&params)))),
                     ),
+                    InlayHintRequest::METHOD => respond(
+                        connection,
+                        id,
+                        serde_json::from_value::<InlayHintParams>(params)
+                            .map(|params| valued(serde_json::to_value(self.hints(&params)))),
+                    ),
                     SemanticTokensFullRequest::METHOD => respond(
                         connection,
                         id,
@@ -650,6 +658,13 @@ impl Server {
             .unwrap_or_default()
     }
 
+    /// The type beside each binder over the range asked that states none where it could ([`hinted`]): none for a document nothing has checked yet.
+    fn hints(&self, params: &InlayHintParams) -> Vec<InlayHint> {
+        self.held(&params.text_document.uri)
+            .map(|(buffer, checked)| hinted(buffer, &checked, params.range))
+            .unwrap_or_default()
+    }
+
     /// Each segment of a document's paths that reaches a module, linked to the line of its `mod` line that names it ([`linked`]), the line written into the link as `#L` and its number, which an editor opens a file at: none for a document nothing has checked yet.
     fn links(&self, params: &DocumentLinkParams) -> Vec<DocumentLink> {
         let Some((buffer, checked)) = self.held(&params.text_document.uri) else {
@@ -859,6 +874,39 @@ fn folded(buffer: &str, checked: &Placed) -> Vec<FoldingRange> {
                 end_character: Some(end.character),
                 kind: None,
                 collapsed_text: None,
+            })
+        })
+        .collect()
+}
+
+/// A hint after each written binder of `buffer` within `range` that states no type where its form takes one ([`crate::Written::untyped`]): `: ` and the type it was opened at, as a reader standing there writes it ([`crate::Written::binders`]), read off `checked`, the document's last check. Nothing for a declaration edited since, whose binders that check holds at other places, and for a binder no type was settled for.
+fn hinted(buffer: &str, checked: &Placed, range: Range) -> Vec<InlayHint> {
+    let Some(first) = checked.texts.first() else {
+        return Vec::new();
+    };
+    let standing = Standing::of(first.text.source.text(), buffer);
+    let (start, end) = (offset_of(buffer, range.start), offset_of(buffer, range.end));
+
+    checked
+        .texts
+        .iter()
+        .filter_map(|written| Some((written, standing.moved(&written.text)?)))
+        .flat_map(|(written, moved)| {
+            written.untyped.iter().filter_map(move |binder| {
+                let (at, _) = written.bound.get(binder)?;
+                let type_ = written.binders.get(binder)?;
+                let after = at.end.checked_add_signed(moved)?;
+
+                (start <= after && after <= end).then(|| InlayHint {
+                    position: position_of(buffer, after),
+                    label: InlayHintLabel::String(format!(": {type_}")),
+                    kind: Some(InlayHintKind::TYPE),
+                    text_edits: None,
+                    tooltip: None,
+                    padding_left: None,
+                    padding_right: None,
+                    data: None,
+                })
             })
         })
         .collect()

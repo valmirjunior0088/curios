@@ -11,7 +11,7 @@ use {
 /// What version of the unit family's layout an address names.
 ///
 /// In the address rather than in a file beside it, so an entry written by an older layout is not found rather than found and misread. Bump it whenever what an object holds, or what a hit is verified against, changes.
-const OBJECT_SCHEMA: &str = "u117";
+const OBJECT_SCHEMA: &str = "u118";
 
 /// The same, for the payload family — its own tag, because the two families version independently and neither should invalidate the other by moving.
 const PAYLOAD_SCHEMA: &str = "p14";

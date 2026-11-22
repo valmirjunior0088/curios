@@ -412,6 +412,14 @@ impl Text<'_> {
             .collect()
     }
 
+    /// The written binders of the declarations written here that state no type where their form takes one ([`curios_core::Mints::untyped`]).
+    pub fn untyped(&self) -> Vec<curios_core::WrittenBinder> {
+        self.mints()
+            .into_iter()
+            .flat_map(|mints| mints.untyped.iter().copied())
+            .collect()
+    }
+
     /// What this text names, where it is a `use` or a `mod` line: of what its body's lines name, the names placed in this one.
     fn lines(&self) -> Vec<&curios_core::LineName> {
         let lines = match self.key.0.anchored() {

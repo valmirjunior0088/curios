@@ -129,6 +129,8 @@ pub struct Written {
     pub bound: BTreeMap<WrittenBinder, (Span, Binds)>,
     /// The type each written binder was opened at, spelled for a reader standing in the text.
     pub binders: BTreeMap<WrittenBinder, String>,
+    /// The written binders of the text that state no type where their form takes one: a lambda's parameter or a `let`'s binder written as a name alone, where a type hint stands ([`curios_core::Mints::untyped`]).
+    pub untyped: BTreeSet<WrittenBinder>,
     /// The type each term settled at, by where it stands, spelled for a reader standing in the text: none for a declaration elaboration settled nothing of, and none of the term a program closes with.
     pub settled: BTreeMap<(usize, usize), String>,
     /// Each label of a structure's field the text writes, in no order, as elaboration resolved it ([`Placed::establish`]).
@@ -685,6 +687,7 @@ impl Reading {
                     locals,
                     bound,
                     binders: BTreeMap::new(),
+                    untyped: passage.untyped().into_iter().collect(),
                     settled: BTreeMap::new(),
                     fields: Vec::new(),
                     modules: passage.modules(),

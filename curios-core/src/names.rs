@@ -187,6 +187,8 @@ pub struct Mints {
     pub unread: Vec<Unread>,
     /// Where each written binder of the declaration stands, read or not, and what it binds ([`Binds`]): what a place answers it is bound at, and answers it as. Held here, as `unread` is, because a written binder's place means something within its declaration alone.
     pub written: Vec<(WrittenBinder, Extent, Binds)>,
+    /// Each written binder of the declaration that states no type where its form takes one: a lambda's parameter or a `let`'s binder written as a name with no annotation. What a type hint stands beside, where a reader could write the type the binder was opened at. Held here, as `written` is.
+    pub untyped: Vec<WrittenBinder>,
     /// Every use of a written binder that hides what the module's scope binds under its name ([`Hiding`]): what a mismatch at the use names beside its report. Held here, as `written` is.
     pub hides: Vec<Hiding>,
     /// Where each bare name of the declaration is written that the module's scope resolved, whatever binds it there: what a place's answer at the name states the `use` line of, where one brought the binding ([`Imports::bringing`]). Held here, as `hides` is: the name's place and never the line's, so a declaration kept while a line above it is edited holds what a whole lowering of it holds, and every bare name the scope answered, so a lowering is a function of its text and the names it resolved.
@@ -214,6 +216,11 @@ impl Mints {
                 .written
                 .iter()
                 .map(|(binder, at, binds)| (binder.renamed(name, renamed), *at, *binds))
+                .collect(),
+            untyped: self
+                .untyped
+                .iter()
+                .map(|binder| binder.renamed(name, renamed))
                 .collect(),
             ..self.clone()
         }
@@ -257,6 +264,7 @@ impl Minted {
             qualities: Vec::new(),
             unread: Vec::new(),
             written: Vec::new(),
+            untyped: Vec::new(),
             hides: Vec::new(),
             bare: Vec::new(),
             named: Vec::new(),

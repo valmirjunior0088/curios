@@ -629,6 +629,40 @@ fn a_path_through_a_module_links_to_where_its_mod_line_names_it() {
     );
 }
 
+/// A `let`'s binder and a lambda's parameter written as a name with no type are hinted with the type they were opened at, after the name, and a `let` and a parameter that state theirs, or a match arm's binder, whose form takes none, are not. Mutation-checked: with every written binder noted as stating no type, the stated ones and the arm's are hinted too.
+#[test]
+fn a_binder_that_states_no_type_where_it_could_is_hinted_with_its_type() {
+    let program = "use /std/{Nat, List, Option};\n\npub let total(n: Nat, o: Option(Nat)) -> Nat =\n    let sum = n + 1;\n    let stated: Nat = sum;\n    let held = match o | some(v) => v | none() => 0 end;\n    List/fold([1, 2], stated + held, (x, acc: Nat) => x + acc);\n\n/std/print(\"ok\")\n";
+    let whole = Range {
+        start: Position::new(0, 0),
+        end: position_of(program, program.len()),
+    };
+    let hints = hinted(program, &checked(program), whole)
+        .into_iter()
+        .map(|hint| {
+            let before = &program[..offset_of(program, hint.position)];
+            let binder = before
+                .rsplit(|character: char| !character.is_alphanumeric())
+                .next()
+                .expect("a hint follows a name");
+            let InlayHintLabel::String(label) = hint.label else {
+                panic!("a hint is written as one label");
+            };
+
+            (binder.to_string(), label)
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        hints,
+        [
+            ("sum".to_string(), ": Nat".to_string()),
+            ("held".to_string(), ": Nat".to_string()),
+            ("x".to_string(), ": Nat".to_string()),
+        ]
+    );
+}
+
 /// A concept's and a type's witnesses are where they are written, read off the name at either, and a method's name, which is neither, answers none. Mutation-checked: answering where the declaration itself is written, as definition does, the concept's name answers the concept.
 #[test]
 fn a_concept_and_a_type_answer_the_witnesses_they_take_part_in() {

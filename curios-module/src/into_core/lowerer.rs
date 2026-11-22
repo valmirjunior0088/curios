@@ -184,6 +184,8 @@ struct Candidate {
     linted: bool,
     /// What it binds, which a place answers it as.
     binds: curios_core::Binds,
+    /// Whether it is written as a name that states no type where its form takes one: a lambda's parameter or a `let`'s binder with no annotation ([`curios_core::Mints::untyped`]).
+    untyped: bool,
 }
 
 /// One `let` whose value runs no action: what its pattern names where it is one binder with a name, where the pattern was written, and the places of the binders it writes among the declaration's candidates.
@@ -297,6 +299,14 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     ))
                 }),
         );
+        // Where a type hint stands: every written binder that states no type where its form takes one, a declaration holding a goal's among them.
+        self.context.untyped(
+            candidates
+                .iter()
+                .enumerate()
+                .filter(|(_, candidate)| candidate.untyped)
+                .map(|(place, _)| binder(&place)),
+        );
         if self.saw_goal.get() {
             return;
         }
@@ -403,6 +413,18 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
+    /// Note that `binder`, written as a name where its form takes a type, states none: a lambda's parameter or a `let`'s binder with no annotation. Nothing for a binder no candidate holds.
+    fn unstated(&self, binder: curios_core::Free) {
+        if let Some(candidate) = self
+            .candidates
+            .borrow_mut()
+            .iter_mut()
+            .find(|candidate| candidate.ids.contains(&binder))
+        {
+            candidate.untyped = true;
+        }
+    }
+
     /// [`Self::mint_written`] for a telescope's binders, which no lint reads ([`Candidate::linted`]), each binding what `binds` says: each is kept where it stands, so it is answered where it is bound and read, as a written binder is.
     pub fn mint_placed(
         &self,
@@ -442,6 +464,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                             span,
                             linted,
                             binds,
+                            untyped: false,
                         });
                         candidates.len() - 1
                     }
@@ -454,9 +477,24 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             .collect()
     }
 
-    /// The binders of a written lambda's parameters.
+    /// The binders of a written lambda's parameters, each written as a name with no annotation noted as stating no type.
     fn mint_params(&self, params: &[FuncParam]) -> Vec<Binder> {
-        self.mint_written(param_labels(params), curios_core::Binds::Parameter)
+        let binders = self.mint_written(param_labels(params), curios_core::Binds::Parameter);
+        let mut leaves = binders.iter();
+        for param in params {
+            let own = leaves
+                .by_ref()
+                .take(pattern_labels(&param.pattern).len())
+                .collect::<Vec<_>>();
+            if let (Pattern::Binder(_), None, [(_, binder)]) =
+                (&param.pattern, &param.annotation, own.as_slice())
+                && param.plicity != Plicity::Witness
+            {
+                self.unstated(*binder);
+            }
+        }
+
+        binders
     }
 
     /// Lower `body` with already-minted `binders` in scope, then restore the previous scope.
@@ -976,6 +1014,18 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 .flat_map(|member| pattern_labels(&member.binder)),
             curios_core::Binds::Local,
         );
+        let mut leaves = binders.iter();
+        for member in &group.members {
+            let own = leaves
+                .by_ref()
+                .take(pattern_labels(&member.binder).len())
+                .collect::<Vec<_>>();
+            if let (Pattern::Binder(_), LetSignature::Name { type_: None, .. }, [(_, binder)]) =
+                (&member.binder, &member.signature, own.as_slice())
+            {
+                self.unstated(*binder);
+            }
+        }
         let (types, values, contexts) = self.context.with_sorts(SortSite::Local, || {
             self.bound(&binders, || {
                 let mut types = Vec::with_capacity(group.members.len());
@@ -1306,6 +1356,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     span,
                     linted: true,
                     binds: curios_core::Binds::Local,
+                    untyped: false,
                 });
                 candidates.len() - 1
             }

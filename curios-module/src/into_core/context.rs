@@ -658,6 +658,8 @@ pub struct Declaring {
             curios_core::Binds,
         )>,
     >,
+    // Every written binder of the declaration being lowered that states no type where its form takes one. The declaration's, as its written binders are.
+    untyped: RefCell<Vec<curios_core::WrittenBinder>>,
     // Every use of a written binder of the declaration being lowered that hides what the module's scope binds under its name. The declaration's, as its written binders are.
     hides: RefCell<Vec<curios_core::Hiding>>,
     // Where each bare name of the declaration being lowered is written that the module's scope resolved. The declaration's, as its hiding uses are.
@@ -685,6 +687,7 @@ impl Declaring {
             unbound,
             unread,
             written,
+            untyped,
             hides,
             bare,
             named,
@@ -702,6 +705,7 @@ impl Declaring {
         unbound.borrow_mut().clear();
         unread.borrow_mut().clear();
         written.borrow_mut().clear();
+        untyped.borrow_mut().clear();
         hides.borrow_mut().clear();
         bare.borrow_mut().clear();
         named.borrow_mut().clear();
@@ -725,6 +729,7 @@ impl Shared {
                 unbound: RefCell::default(),
                 unread: RefCell::default(),
                 written: RefCell::default(),
+                untyped: RefCell::default(),
                 hides: RefCell::default(),
                 bare: RefCell::default(),
                 named: RefCell::default(),
@@ -876,6 +881,11 @@ impl<'a> Context<'a> {
         >,
     ) {
         self.shared.declaring.written.borrow_mut().extend(binders);
+    }
+
+    /// Record `binders`, written binders of the declaration being lowered, as ones that state no type where their form takes one, beside what it minted.
+    pub fn untyped(&self, binders: impl IntoIterator<Item = curios_core::WrittenBinder>) {
+        self.shared.declaring.untyped.borrow_mut().extend(binders);
     }
 
     /// Record where `word`, a contextual word that opened a member of the declaration being lowered, was read, beside what it minted, once however often its text is lowered — an arm's body is lowered once for each of its alternatives: nothing for one that lies in no text of it.
@@ -1107,6 +1117,7 @@ impl<'a> Context<'a> {
             qualities: self.shared.declaring.sorts.seeds.borrow().clone(),
             unread: self.shared.declaring.unread.borrow().clone(),
             written: self.shared.declaring.written.borrow().clone(),
+            untyped: self.shared.declaring.untyped.borrow().clone(),
             hides: self.shared.declaring.hides.borrow().clone(),
             bare: self.shared.declaring.bare.borrow().clone(),
             named: self.shared.declaring.named.borrow().clone(),
