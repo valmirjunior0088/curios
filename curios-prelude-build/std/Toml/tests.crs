@@ -1,5 +1,5 @@
 -- The TOML codec: documents decoded and re-encoded, the refusals pinned to their reasons and their places, and floats pinned to their bits.
-use /std/{Toml, Str, Map, Flt, Bool, Bytes, Byte, Char, Nat, Result, Test};
+use /std/{Toml, Str, Map, Flt, Bool, Bytes, Byte, Char, Nat, Result, Spell, Test};
 
 -- `ch` repeated `k` times: a digit run too long for a reader to count.
 let run_of(ch: Str, k: Nat) -> Str =
@@ -278,3 +278,24 @@ test a_float_lexeme_rounds_once_to_the_nearest_binary64 =
 -- The encoder on a map built by hand rather than decoded, which is the one path no test above reaches: a key is a string, so every table has a spelling, and a key that is no bare key is quoted.
 test encode_spells_a_map_built_by_hand =
     Test/equal(Toml/encode(Map/insert(Map/empty(), "a key", Toml/int(+1))), "\"a key\" = 1\n");
+
+-- Two decodings of one document are one value, a float is told apart by its bits — a `nan` equals itself, and `+0.0` stands apart from `-0.0` — and an array by its length and a table by its keys.
+test a_value_is_equal_to_what_its_document_decodes_to_again =
+    let document = "a = 1\nb = [nan, 2.5, -0.0]\n[t]\nc = 1979-05-27T07:32:00Z\n";
+    let value(input: Str) -> Toml =
+        match Toml/decode(input)
+        | success(root) => Toml/table(root)
+        | failure(_) => Toml/str("refused")
+        end;
+    Test/all([
+        Test/equal(value(document), value(document)),
+        Test/equal(Toml/flt(+nan.0) == Toml/flt(+nan.0), true),
+        Test/equal(Toml/flt(+0.0) == Toml/flt(-0.0), false),
+        Test/equal(Toml/arr([Toml/int(+1)]) == Toml/arr([Toml/int(+1), Toml/int(+2)]), false),
+        Test/equal(
+            Toml/table(Map/of_list([("a", Toml/int(+1))]))
+                == Toml/table(Map/of_list([("b", Toml/int(+1))])),
+            false),
+        Test/equal(
+            Spell/spell(Toml/arr([Toml/int(+1), Toml/bool(true)])),
+            "Toml/arr([Toml/int(+1), Toml/bool(true)])")]);
