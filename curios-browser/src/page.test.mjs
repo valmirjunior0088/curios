@@ -392,12 +392,12 @@ test("a test page served by the command answers its word through its gateway, an
     replies.length > 0
       ? Promise.resolve(replies.shift())
       : new Promise((resolve) => waiting.push(resolve));
-  // The run so far ends on the node of the step it hands over, opened as the step is: the test in hand is the one whose line stands open.
+  // The run so far ends on the step it hands over, begun: the test in hand is the one whose ending is yet to be said while its page runs.
   const opening = await replied();
   assert.ok(
     Buffer.from(opening.written, "base64")
       .toString()
-      .endsWith(`serve; ${base}/\n/app\n├─ /app/doubling`),
+      .endsWith(`Serving ${base}/\nTesting \`/app/doubling\`\n`),
   );
   assert.deepEqual(opening.next, { subject: 0, test: 0 });
 
@@ -435,7 +435,7 @@ test("a test page served by the command answers its word through its gateway, an
   assert.equal(reply.next, null);
   assert.match(
     Buffer.from(reply.written, "base64").toString(),
-    /^; ✓ passed in \d+\.\ds\n└─ 1 passed, 0 failed; \d+\.\ds\n1 passed, 0 failed; \d+\.\ds\n$/,
+    /^Tested `\/app\/doubling`: passed in \d+\.\ds\nTested `\/app`: 1 passed, 0 failed in \d+\.\ds\n1 passed, 0 failed; \d+\.\ds\n$/,
   );
 
   // A test that held wrote nothing, and the report is standard error's.
