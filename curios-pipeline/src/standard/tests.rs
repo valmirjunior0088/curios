@@ -6,7 +6,7 @@ use {
     curios_anf::FieldShape,
     curios_common::{Qualifier, RootKind, digest, test_support::*},
     curios_core::{
-        Certification, DefinitionKind, Definitions, Global, Item, Places, Sharing, Term,
+        Certification, Definition, DefinitionKind, Definitions, Global, Item, Places, Sharing, Term,
     },
     curios_elab::{
         Context, DEFAULT_BUDGET, Error, Established, Reading, Recompile, Recompiled, Traces,
@@ -25,7 +25,6 @@ use {
     curios_unit::{Pack, Predecessors, Unit, apart_parts, halves, packed, test_support::*},
     std::{
         cell::RefCell,
-        cmp::Reverse,
         collections::{BTreeMap, BTreeSet},
         fs,
         path::{Path, PathBuf},
@@ -1315,7 +1314,7 @@ const UNPROVED: [&str; 0] = [];
 /// The `let`s of the library whose printed form or whose proof elaboration accepts and the certifier refuses: none.
 const UNCERTIFIED: [&str; 0] = [];
 
-/// One `#[test]` per part the library is read back in, and the number of parts [`parts_of`] deals its files into, declared from one list so the two cannot disagree.
+/// One `#[test]` per part the library is read back in, and the number of parts [`lets_in_runs`] cuts the library's `let`s into, declared from one list so the two cannot disagree.
 macro_rules! read_back_in_parts {
     ($($part:ident),* $(,)?) => {
         const PARTS: &[&str] = &[$(stringify!($part)),*];
@@ -1343,40 +1342,60 @@ read_back_in_parts! {
     the_sixth_part_of_the_library_reads_back,
     the_seventh_part_of_the_library_reads_back,
     the_eighth_part_of_the_library_reads_back,
+    the_ninth_part_of_the_library_reads_back,
+    the_tenth_part_of_the_library_reads_back,
+    the_eleventh_part_of_the_library_reads_back,
+    the_twelfth_part_of_the_library_reads_back,
+    the_thirteenth_part_of_the_library_reads_back,
+    the_fourteenth_part_of_the_library_reads_back,
+    the_fifteenth_part_of_the_library_reads_back,
+    the_sixteenth_part_of_the_library_reads_back,
 }
 
-/// The part each of `files` is read back in: the largest file first, each to the part holding the fewest bytes so far. Every file is in exactly one part by construction, so there is no roster to hold to the tree, and the parts stay level as the library grows.
-fn parts_of(files: &[(PathBuf, Qualifier, String)]) -> Vec<usize> {
-    let mut order = (0..files.len()).collect::<Vec<_>>();
-    order.sort_by_key(|&index| (Reverse(files[index].2.len()), index));
-
-    let mut held = vec![0usize; PARTS.len()];
-    let mut parts = vec![0; files.len()];
-    for index in order {
-        let lightest = (0..held.len())
-            .min_by_key(|&part| (held[part], part))
-            .expect("the library is read back in at least one part");
-        held[lightest] += files[index].2.len();
-        parts[index] = lightest;
+/// Each `let` of `trees` under the part it is read back in: the library's `let`s in the order of their files and of each file's items, cut into as many runs as there are parts, each as heavy as another to within one `let`. A `let` weighs what the read-back does with it, printing its elaborated type and body and elaborating them again, so it weighs the distinct nodes of those two, where a file's bytes say little of it: `/std/Map/internal/Node` is a tenth of the library's text and the most of its proofs. A run of neighbouring `let`s holds few files, so a part lowers, elaborates and walks over the archive little more than the files it writes beside; and the cut is made from the library as it stands, so the parts stay level as it grows.
+fn lets_in_runs(
+    trees: &[(&PathBuf, &Qualifier, curios_surface::Module)],
+    definitions: &BTreeMap<Global, Definition>,
+) -> BTreeMap<Global, usize> {
+    let mut weighed = Vec::new();
+    for (_, module, tree) in trees {
+        add_beside_each_let(&mut tree.items.clone(), module, &mut |module, member| {
+            let name = Global::Authored(module.with(member.label.as_str()));
+            let weight = definitions.get(&name).map_or(1, |definition| {
+                definition.type_.distinct_nodes() + definition.body.distinct_nodes()
+            });
+            weighed.push((name, weight));
+            Vec::new()
+        });
     }
+    let total = weighed
+        .iter()
+        .map(|(_, weight)| weight)
+        .sum::<usize>()
+        .max(1);
+    let mut before = 0;
 
-    parts
+    weighed
+        .into_iter()
+        .map(|(name, weight)| {
+            let part = ((before + weight / 2) * PARTS.len() / total).min(PARTS.len() - 1);
+            before += weight;
+            (name, part)
+        })
+        .collect()
 }
 
 /// **A report's term reads back.** Beside every `let` of the library two declarations are written: its type and its body as a report raised in it prints them, and a proof by `Eq/refl()` that what those declare is the `let`. The files are lowered and elaborated as the library, over the archive, and the certifier walks what comes of it. So each printed term is accepted where its reader stands, and is the term it was printed from by the conversion of each checker, at the universe levels that checker is handed: a printed term states none, and elaboration solves for them. A `let` not known to terminate is named by no type, so what is written for one is that it has its printed type.
 ///
 /// A `let` the translation declines, one naming what its module cannot among them, has nothing written beside it, and each is listed ([`DECLINED`]). One refused as printed, or whose proof is, is found by leaving it out and compiling again, so every `let` that does not read back is named, and not the first alone ([`REFUSED`], [`UNPROVED`]); and the proofs the certifier refuses are listed with the `let`s they are of ([`UNCERTIFIED`]).
 ///
-/// **In parts, and once.** Read back whole the library is one test several times the length of any other, so it is read back a part at a time, a `#[test]` each ([`read_back_in_parts`]), and the parts run side by side; what a part writes beside the `let`s of its files is elaborated over the archive, which keeps every declaration the source wrote. And a `let` listed as refused or as unproved is left out before the first compile, so a library nothing has changed in is elaborated once: the listed ones are then written alone, where what is refused of them is what is still to be listed.
+/// **In parts, and once.** Read back whole the library is one test several times the length of any other, so it is read back a part at a time, its `let`s cut into runs of equal weight ([`lets_in_runs`]), a `#[test]` each ([`read_back_in_parts`]), and the parts run side by side; what a part writes beside its `let`s is elaborated over the archive, which keeps every declaration the source wrote. And a `let` listed as refused or as unproved is left out before the first compile, so a library nothing has changed in is elaborated once: the listed ones are then written alone, where what is refused of them is what is still to be listed.
 fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
     let files = library_files();
-    let parts = parts_of(&files);
-    // This part's files, parsed once: a round writes beside the `let`s of a copy.
-    let trees = files
+    // Every file of the library, parsed once: a round writes beside the `let`s of a copy.
+    let every = files
         .iter()
-        .zip(&parts)
-        .filter(|(_, at)| **at == part)
-        .map(|((path, module, text), _)| {
+        .map(|(path, module, text)| {
             let tree = text
                 .parse::<curios_surface::Module>()
                 .unwrap_or_else(|error| panic!("{} parses: {error:?}", path.display()));
@@ -1384,13 +1403,6 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
             (path, module, tree)
         })
         .collect::<Vec<_>>();
-    let mut own = BTreeSet::<Global>::new();
-    for (_, module, tree) in &trees {
-        add_beside_each_let(&mut tree.items.clone(), module, &mut |module, member| {
-            own.insert(Global::Authored(module.with(member.label.as_str())));
-            Vec::new()
-        });
-    }
 
     with_prelude(|prelude| {
         let [sys, std] = prelude else {
@@ -1422,6 +1434,24 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
             .flat_map(Item::definitions)
             .map(|definition| (definition.name, definition))
             .collect::<BTreeMap<_, _>>();
+        let own = lets_in_runs(&every, &definitions)
+            .into_iter()
+            .filter(|(_, at)| *at == part)
+            .map(|(name, _)| name)
+            .collect::<BTreeSet<Global>>();
+        // This part's files: those holding a `let` of its own.
+        let trees = every
+            .iter()
+            .filter(|(_, module, tree)| {
+                let mut holds = false;
+                add_beside_each_let(&mut tree.items.clone(), module, &mut |module, member| {
+                    holds |= own.contains(&Global::Authored(module.with(member.label.as_str())));
+                    Vec::new()
+                });
+                holds
+            })
+            .cloned()
+            .collect::<Vec<_>>();
 
         let parsed = |text: &str, owner: Global| {
             text.parse::<curios_surface::Term>()
@@ -1488,7 +1518,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
                                 name.faithful()
                             )
                         });
-                        if !taken(&name) {
+                        if !own.contains(&name) || !taken(&name) {
                             return Vec::new();
                         }
                         let (Some(type_), Some(body)) = (
