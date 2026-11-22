@@ -172,3 +172,19 @@ fn an_image_made_otherwise_than_the_entry_of_its_key_holds_is_refused() {
 
     assert!(images.compare("state", &out).is_err());
 }
+
+#[test]
+fn images_made_while_a_source_moved_are_neither_compared_nor_filed() {
+    let root = Temporary::new("prelude-images", "moved");
+    let (images, out) = filled(&root);
+    written(&root, "out/std.rkyv", "otherwise");
+
+    assert!(images.settle("state", "state", &out, &[], true).is_err());
+    assert_eq!(
+        images.settle("state", "moved", &out, &[], true),
+        Ok(Settled::Moved)
+    );
+    let taken = taken(&root);
+    images.reuse("state", &taken);
+    assert_eq!(fs::read(taken.join("std.rkyv")).unwrap(), b"std");
+}

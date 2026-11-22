@@ -4,7 +4,7 @@
 
 use {
     curios_package::MANIFEST,
-    curios_prelude_build::{Images, compile, key, std_directory},
+    curios_prelude_build::{Images, Settled, compile, key, std_directory},
     std::{
         env,
         path::{Path, PathBuf},
@@ -80,23 +80,21 @@ fn main() {
                 );
             }
             let reads = made(&out);
-            let held = asked == Asked::Compare
-                && kept
-                    .compare(&state, &out)
-                    .unwrap_or_else(|difference| panic!("{difference}"));
-            if held {
-                println!(
+            let again = key(workspace, &prelude, &rustc);
+            match kept
+                .settle(&state, &again, &out, &reads, asked == Asked::Compare)
+                .unwrap_or_else(|difference| panic!("{difference}"))
+            {
+                Settled::Same => println!(
                     "the prelude's images made again, the same as {} holds",
                     images.display()
-                );
-            } else if key(workspace, &prelude, &rustc) == state {
-                kept.fill(&state, &out, &reads);
-                println!("the prelude's images filed in {}", images.display());
-            } else {
-                // A source read after the work began may be in the images or not, so they are filed under no key, which only a run that read it whole could name.
-                println!(
-                    "cargo:warning=a source the prelude's build links changed while it ran, so its images are not filed for reuse"
-                );
+                ),
+                Settled::Filed => {
+                    println!("the prelude's images filed in {}", images.display())
+                }
+                Settled::Moved => println!(
+                    "cargo:warning=a source the prelude's build links changed while it ran, so its images are neither compared nor filed"
+                ),
             }
             reads
         }

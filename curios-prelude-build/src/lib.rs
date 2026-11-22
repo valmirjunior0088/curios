@@ -6,7 +6,7 @@ mod compile;
 pub use compile::compile;
 
 mod images;
-pub use images::{Images, key};
+pub use images::{Images, Settled, key};
 
 mod std_module;
 pub use std_module::{std_directory, std_source};

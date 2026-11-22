@@ -161,6 +161,17 @@ pub struct Images {
     _lock: File,
 }
 
+/// What a run that made its images did with them ([`Images::settle`]).
+#[derive(Debug, PartialEq, Eq)]
+pub enum Settled {
+    /// Compared with the kept images of their state, and the same.
+    Same,
+    /// Filed as their state's images.
+    Filed,
+    /// Neither compared nor filed: a source the build links changed while it ran.
+    Moved,
+}
+
 /// What the images' marker names.
 #[derive(Default)]
 struct Marker {
@@ -213,8 +224,28 @@ impl Images {
         Some(marker.reads)
     }
 
+    /// What a run does with the images it made in `out` of the state `key` names, `again` being the key read once the work was done and `reads` the files the lowering read: nothing, where `again` names another state, since a source read after the work began may be in the images or not; else, asked to `compare`, the kept images held to the ones made where they are this state's, and a refusal where an image differs; and otherwise the ones made filed. A difference is laid to the key or the build only where the sources held still, so an edit made while the build ran is never read as either.
+    pub fn settle(
+        &self,
+        key: &str,
+        again: &str,
+        out: &Path,
+        reads: &[PathBuf],
+        compare: bool,
+    ) -> Result<Settled, String> {
+        if again != key {
+            return Ok(Settled::Moved);
+        }
+        if compare && self.compare(key, out)? {
+            return Ok(Settled::Same);
+        }
+        self.fill(key, out, reads);
+
+        Ok(Settled::Filed)
+    }
+
     /// File every file of `out` as `key`'s images, with `reads`, the files the lowering read, named under `std/`: the marker is removed first and written last.
-    pub fn fill(&self, key: &str, out: &Path, reads: &[PathBuf]) {
+    fn fill(&self, key: &str, out: &Path, reads: &[PathBuf]) {
         let marker = self.directory.join(MARKER);
         if marker.exists() {
             fs::remove_file(&marker)
@@ -240,7 +271,7 @@ impl Images {
     }
 
     /// Whether `out` holds the images these hold for `key`, by the digests its marker names: `false` where it names another key or none, and a refusal where an image differs. A run asked to compare, which makes its images again, answers so of the run that filed them, since the same sources made both.
-    pub fn compare(&self, key: &str, out: &Path) -> Result<bool, String> {
+    fn compare(&self, key: &str, out: &Path) -> Result<bool, String> {
         let Some(marker) = self.marker().filter(|marker| marker.key == key) else {
             return Ok(false);
         };
