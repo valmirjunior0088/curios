@@ -622,6 +622,49 @@ fn a_region_holds_a_third_of_the_terminal_and_counts_the_rest() {
     );
 }
 
+/// A running check shows behind `·` how far it has come, drawn at the clock's next tick rather than at each declaration; neither drawing writes any of it for good.
+#[test]
+fn a_running_check_shows_how_far_it_has_come_at_the_next_tick() {
+    let start = Instant::now();
+    let mut live = Live::new(start);
+    let mut screen = Screen::default();
+    let mut kept = String::new();
+    let unit = Opened::minted();
+    let walked = || Event::Walked {
+        tree: unit,
+        done: 1_416,
+        of: 2_040,
+        on: Some("/app/insert".to_string()),
+    };
+    for event in [
+        Event::Named {
+            tree: unit,
+            subject: "/app".to_string(),
+            manifest: None,
+        },
+        Event::Began {
+            tree: unit,
+            node: Node::Step(Step::Check { tested: false }),
+            last: false,
+        },
+    ] {
+        let frame = live.draw(event, start, TERMINAL);
+        screen.write(&frame.shown);
+        kept.push_str(&frame.above.plain);
+    }
+
+    let told = live.draw(walked(), at(start, 3), TERMINAL);
+    assert_eq!(told.shown, "", "a walk's event waits for the clock");
+    screen.write(&live.tick(at(start, 3), TERMINAL));
+    assert_eq!(
+        screen.shown(),
+        "/app\n├─ check; 0.3s · 1,416 of 2,040 · `/app/insert`\n"
+    );
+    assert_eq!(kept, "/app\n");
+    assert_eq!(Lines::default().draw(walked()).plain, "");
+    assert_eq!(Trees::default().draw(walked()).plain, "");
+}
+
 /// A row wider than the terminal is cut at its end, `…` in its last column.
 #[test]
 fn a_row_wider_than_the_terminal_ends_in_an_ellipsis() {

@@ -27,7 +27,7 @@ fn recompile_from(source: &str, baseline: &Unit, cabinet: &Cabinet) -> Unit {
                 candidates: Some(cabinet),
             },
             &|_| {},
-            None,
+            Telling::default(),
         )
     })
     .map_err(String::from)

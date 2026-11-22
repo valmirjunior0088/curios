@@ -11,6 +11,8 @@
 //! **A declaration to be made is first looked for in a cabinet.** Where the walk is handed what a cabinet holds of declarations elaborated before ([`Over::candidates`]), a declaration it would elaborate is taken from a record filed for what its items were lowered to, where every answer the record's elaboration was given is the walk's now and every part it read digests as it did ([`found`]); it is elaborated otherwise.
 //!
 //! **A cycle is refused by its members.** A declaration asked for while it is being asked for closes a cycle, through a name it wrote or a witness a goal of its resolves to alike. Every member is refused, the report is raised once, at the first member in source order, naming them all, and what reaches a member is withheld as a dependent of any refusal is.
+//!
+//! **Whoever listens is told how far the walk has come** ([`Context::tell_walked`]): as each declaration is asked for and as each finishes, how many of the declarations the walk holds are finished and the one it is asking for. A declaration finishes once, however many of its attempts were voided, so the count only grows.
 
 use {
     super::{
@@ -19,9 +21,9 @@ use {
     },
     crate::{
         Answered, Classified, Concluded, Context, Error, Established, Foreign, GoalSite, HeldTrace,
-        Made, Parts, Question, Read, Readers, Same, TraceRecord, Traces, bytes_of, concepts_alike,
-        declaration_input, entries_alike, found, inducts_alike, item_part_digest, items_of,
-        lowered_digest, part_digest, structs_alike,
+        Made, Parts, Question, Read, Readers, Same, TraceRecord, Traces, Walked, bytes_of,
+        concepts_alike, declaration_input, entries_alike, found, inducts_alike, item_part_digest,
+        items_of, lowered_digest, part_digest, structs_alike,
     },
     curios_common::{Candidates, Facet, recurse},
     curios_core::{Declarations, Definitions, Global, Item, Nominal, Place, Places, Trace},
@@ -118,6 +120,8 @@ pub struct Demand<'a> {
     held: BTreeMap<usize, Held>,
     /// The declarations being asked for, outermost first.
     demanded: Vec<usize>,
+    /// How many of the declarations the walk holds are finished: what it tells whoever listens ([`Context::tell_walked`]).
+    done: usize,
     poison: Poison,
     survivors: Survivors,
     /// What each declaration's standing attempt asked of the declarations around it, and what each kept declaration's did where the baseline elaborated it: over a baseline, the baseline's traces with each declaration made filed in place of the one it replaces, and each the unit no longer declares taken out.
@@ -181,6 +185,7 @@ impl<'a> Demand<'a> {
             declarations,
             held,
             demanded: Vec::new(),
+            done: 0,
             poison,
             survivors,
             traces: over.map(|over| over.traces.clone()).unwrap_or_default(),
@@ -748,6 +753,7 @@ impl<'a> Demand<'a> {
 
         self.held_mut(declaration).standing = Standing::Demanded;
         self.demanded.push(declaration);
+        self.tell(context);
         let settled = recurse(|| self.settle(context, declaration));
         self.demanded.pop();
 
@@ -793,10 +799,26 @@ impl<'a> Demand<'a> {
             }
         };
         self.held_mut(declaration).standing = Standing::Finished;
+        self.done += 1;
         context.finish(&self.names(declaration));
         self.propagated(declaration);
+        self.tell(context);
 
         outcome
+    }
+
+    /// Tell whoever listens how far the walk has come: how many of the declarations it holds are finished, and the one it is asking for, the innermost, by its first name. A voided attempt finishes nothing, so a declaration is counted once, when the attempt that stands ends.
+    fn tell(&self, context: &mut Context) {
+        let on = self.demanded.last().map(|declaration| {
+            let item = self.declarations.items(*declaration)[0];
+            self.definitions.items[item].declared_names()[0]
+        });
+
+        context.tell_walked(Walked {
+            done: self.done,
+            of: self.held.len(),
+            on: on.as_ref(),
+        });
     }
 
     /// The declarations being asked for from `declaration`'s demand on: the cycle a second demand of it closes.

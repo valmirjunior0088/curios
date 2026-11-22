@@ -81,6 +81,8 @@ fn folded_offered(
             cache,
             |progress| {
                 events.push(match progress {
+                    // What a unit's walk tells is the walk's own sequence, pinned by its own tests.
+                    Progress::Walked { .. } => return,
                     Progress::Planned { units } => format!("planned {units}"),
                     Progress::Compiling { unit: prefix, .. } => {
                         format!("compiling {}", prefix.join())

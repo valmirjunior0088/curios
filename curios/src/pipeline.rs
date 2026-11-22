@@ -333,6 +333,18 @@ impl Steps {
             }
             // What the cabinet held is not narrated, and is settled.
             Progress::Reused(_) => settled(),
+            // How far a check has come is the open check's own: a mounted unit's, or the program's, whose declarations the entry's empty prefix tells of.
+            Progress::Walked { unit, done, of, on } => {
+                let tree = match unit.is_root() {
+                    true => self.program.as_mut(),
+                    false => self.tree_of(unit),
+                };
+                if let Some(tree) = tree
+                    && tree.is_open()
+                {
+                    tree.walked(done, of, on.map(|name| name.faithful().to_string()));
+                }
+            }
             // A unit's check ends with the fold's step, which settles it; the entry's has ended already, where its lowering began.
             Progress::Compiled { unit } => {
                 if let Some(tree) = self.tree_of(unit)

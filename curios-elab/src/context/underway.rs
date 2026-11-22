@@ -25,6 +25,27 @@ impl fmt::Debug for Reader<'_> {
     }
 }
 
+/// How far a unit's walk over its declarations has come: `done` of the `of` declarations it holds are finished, and `on` is the one it is asking for, where it is asking for one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Walked<'a> {
+    pub done: usize,
+    pub of: usize,
+    pub on: Option<&'a Global>,
+}
+
+/// Whoever is told how far the walk has come ([`Walked`]), installed by a driver that reports it: told as each declaration is asked for and as each finishes.
+pub type WalkListener<'s> = Box<dyn FnMut(Walked<'_>) + 's>;
+
+/// Whoever the walk tells how far it has come, where a driver installed one ([`WalkListener`]).
+#[derive(Default)]
+pub struct Listening<'s>(pub Option<WalkListener<'s>>);
+
+impl fmt::Debug for Listening<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_struct("Listening").finish_non_exhaustive()
+    }
+}
+
 /// The half of a context that exists because a unit is being elaborated.
 #[derive(Debug)]
 pub struct Underway<'s> {
@@ -70,6 +91,8 @@ pub struct Underway<'s> {
     pub imports: Imports,
     /// What the unit's reader writes, the driver's answer installed before elaboration ([`Reader`]). Asked where a report's side is reduced for display alone, of a declaration `/sys` writes an operation by.
     pub reader: Reader<'s>,
+    /// Whoever is told how far the walk over the unit's declarations has come, where a driver reports it ([`Listening`]).
+    pub listening: Listening<'s>,
 }
 
 impl Default for Underway<'_> {
@@ -97,6 +120,7 @@ impl Default for Underway<'_> {
             group: Vec::new(),
             imports: Imports::default(),
             reader: Reader::default(),
+            listening: Listening::default(),
         }
     }
 }

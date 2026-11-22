@@ -174,6 +174,13 @@ pub enum Event {
     },
     /// `tree` is left as it stands.
     Left { tree: Opened },
+    /// The check open on `tree` has come this far: `done` of the `of` declarations it walks are finished, and it is on `on`, where it is on one. The running node shows it; nothing of it is written for good.
+    Walked {
+        tree: Opened,
+        done: usize,
+        of: usize,
+        on: Option<String>,
+    },
     /// A step taken for no one subject: `serve; http://…`.
     Alone { step: Step, outcome: Piece },
     /// What the whole invocation came to, its last line.
@@ -201,7 +208,8 @@ impl Event {
             | Event::Stood { tree, .. }
             | Event::Tested { tree, .. }
             | Event::Summed { tree, .. }
-            | Event::Left { tree } => Some(*tree),
+            | Event::Left { tree }
+            | Event::Walked { tree, .. } => Some(*tree),
             Event::Alone { .. }
             | Event::Total { .. }
             | Event::Apart

@@ -356,6 +356,16 @@ impl Tree {
         self.began.is_some()
     }
 
+    /// The open node, a check, has come this far: `done` of the `of` declarations it walks are finished, and it is on `on`, where it is on one. Only a live region shows it.
+    pub fn walked(&self, done: usize, of: usize, on: Option<String>) {
+        tell(Event::Walked {
+            tree: self.opened,
+            done,
+            of,
+            on,
+        });
+    }
+
     /// Close the open node with what its work took: `; 1.4s`.
     pub fn done(&mut self) {
         let taken = self.taken();

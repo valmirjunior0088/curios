@@ -17,8 +17,8 @@ use {
     },
     curios_elab::{
         Context, Established, FinalizedProgram, Observed, ReaderWrites, Reading, Tail, Traces,
-        elaborate_and_zonk_entry, elaborate_and_zonk_program, elaborate_and_zonk_program_reporting,
-        elaborate_and_zonk_unit, validate_entry_universes,
+        Walked, elaborate_and_zonk_entry, elaborate_and_zonk_program,
+        elaborate_and_zonk_program_reporting, elaborate_and_zonk_unit, validate_entry_universes,
     },
     curios_emit::into_wasm,
     curios_erase::{Erasures, erase_program, erase_unit},
@@ -1062,6 +1062,23 @@ pub struct Closing<'a> {
 /// Told a unit's lowering, with the binder lints its elaboration held, where the unit is refused: what a question reads the unit's findings off whatever the verdict, a program's or a library's ([`Findings::of_text`]).
 pub type OnRefusal<'a> = &'a mut dyn FnMut(&PreparedText, &Observed);
 
+/// Told how far a unit's walk over its declarations has come as it elaborates ([`Walked`]): what a caller reporting a check as it runs installs.
+pub type OnWalk<'a> = &'a mut dyn FnMut(Walked<'_>);
+
+/// What a unit's compile tells its caller as it goes, beside what it hands back: how far its walk has come ([`OnWalk`]), and its lowering with what its elaboration held where it is refused ([`OnRefusal`]). Each where the caller listens.
+#[derive(Default)]
+pub struct Telling<'a> {
+    pub walked: Option<OnWalk<'a>>,
+    pub refused: Option<OnRefusal<'a>>,
+}
+
+/// `context` listened to by `walked`, where a caller listens: the context [`elaborating`] hands its walk. The listener outlives the context and no more is asked of it: a context lives inside the borrows of what it elaborates, which the caller's listener outlasts.
+pub fn listened<'s, 'w: 's>(context: &mut Context<'s>, walked: Option<OnWalk<'w>>) {
+    if let Some(listener) = walked {
+        context.listen(Box::new(listener));
+    }
+}
+
 /// What erasing an entered program came to: the module it links to, or what erasing it refused it for.
 type Erasure = Result<curios_anf::Module, CompileError>;
 
@@ -1201,6 +1218,15 @@ where
                 tail: closing,
                 elaborated: &mut elaborated,
             });
+            // The program's own declarations are told of by the empty prefix the entry owns.
+            let mut walked = |walked: Walked<'_>| {
+                progress(Progress::Walked {
+                    unit: &Qualifier::empty(),
+                    done: walked.done,
+                    of: walked.of,
+                    on: walked.on,
+                });
+            };
             let compiled = match &earlier {
                 Some(Earlier {
                     unit: baseline,
@@ -1221,7 +1247,10 @@ where
                         candidates: candidates.as_deref(),
                     },
                     closing,
-                    Some(&mut refused),
+                    Telling {
+                        walked: Some(&mut walked),
+                        refused: Some(&mut refused),
+                    },
                 ),
                 None => compile_lowered(
                     budget,
@@ -1229,7 +1258,10 @@ where
                     syntax,
                     lowered,
                     closing,
-                    Some(&mut refused),
+                    Telling {
+                        walked: Some(&mut walked),
+                        refused: Some(&mut refused),
+                    },
                 ),
             };
 
@@ -1554,7 +1586,7 @@ where
     (wasm_module, imported)
 }
 
-/// Compile one unit against `predecessors`: lower, elaborate, judge, erase, `told` the unit's lowering as soon as it is made, whatever its compile goes on to conclude, and `refused` its lowering with what its elaboration held where it is refused ([`OnRefusal`]).
+/// Compile one unit against `predecessors`: lower, elaborate, judge, erase, `told` the unit's lowering as soon as it is made, whatever its compile goes on to conclude, and `telling` how far its elaboration has come as it goes and its lowering where it is refused ([`Telling`]).
 ///
 /// **The judgment sits between elaboration and erasure and that ordering is the point.** A module the certifier refuses never reaches erasure's budget, and a refusal reads as a refusal rather than as whatever erasure made of an ill-typed term. It is also why this is a fold step rather than one operation: the producer of a stored unit runs the same sequence *without* the judge, because the crate that writes an image deliberately cannot reach the certifier.
 pub fn compile_unit(
@@ -1563,14 +1595,14 @@ pub fn compile_unit(
     syntax: &SyntaxRegistry,
     source: &UnitSource<'_>,
     told: &dyn Fn(&PreparedText),
-    refused: Option<OnRefusal<'_>>,
+    telling: Telling<'_>,
 ) -> Result<Unit, CompileError> {
     curios_profile::profile!("compile_unit");
     let lowered = into_core_unit(source, &predecessors.text(), syntax)
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
     told(&lowered);
 
-    compile_lowered(budget, predecessors, syntax, lowered, None, refused).map(|(unit, _)| unit)
+    compile_lowered(budget, predecessors, syntax, lowered, None, telling).map(|(unit, _)| unit)
 }
 
 /// [`compile_unit`] from the unit's lowering on: elaborate, judge, erase. With `closing`, the unit is a program's declarations and the term that closes the program is elaborated in their walk and handed back beside the unit ([`Closing`]).
@@ -1580,7 +1612,10 @@ pub fn compile_lowered(
     syntax: &SyntaxRegistry,
     lowered: PreparedText,
     closing: Option<Closing<'_>>,
-    mut refused: Option<OnRefusal<'_>>,
+    Telling {
+        walked: listening,
+        mut refused,
+    }: Telling<'_>,
 ) -> Result<(Unit, Option<curios_core::Entrypoint>), CompileError> {
     let cores = predecessors.cores();
     let (tail, mut elaborated) = match closing {
@@ -1590,31 +1625,27 @@ pub fn compile_lowered(
 
     let fixed = predecessors.fixed();
     let established = Established::placed(&predecessors.placed()).fixed(&fixed);
-    let (walked, mut observed) =
-        elaborating(
-            budget,
-            syntax,
-            &lowered,
-            predecessors,
-            |context| match tail {
-                Some(tail) => elaborate_and_zonk_entry(
-                    context,
-                    &established,
-                    lowered.core(),
-                    lowered.mounts(),
-                    lowered.minted(),
-                    tail,
-                ),
-                None => elaborate_and_zonk_unit(
-                    context,
-                    &established,
-                    lowered.core(),
-                    lowered.mounts(),
-                    lowered.minted(),
-                )
-                .map(|(core, traces)| (core, None, traces)),
-            },
-        );
+    let (walked, mut observed) = elaborating(budget, syntax, &lowered, predecessors, |context| {
+        listened(context, listening);
+        match tail {
+            Some(tail) => elaborate_and_zonk_entry(
+                context,
+                &established,
+                lowered.core(),
+                lowered.mounts(),
+                lowered.minted(),
+                tail,
+            ),
+            None => elaborate_and_zonk_unit(
+                context,
+                &established,
+                lowered.core(),
+                lowered.mounts(),
+                lowered.minted(),
+            )
+            .map(|(core, traces)| (core, None, traces)),
+        }
+    });
     let walked = with_broken(
         lowered.broken(),
         walked.map_err(|error| {
@@ -1830,6 +1861,14 @@ where
                 tell(&predecessors, text, elaborated, traces, None);
             }
         };
+        let mut walked = |walked: Walked<'_>| {
+            progress(Progress::Walked {
+                unit: &prefix,
+                done: walked.done,
+                of: walked.of,
+                on: walked.on,
+            });
+        };
         let compiled = match &baseline {
             Some(Earlier {
                 unit: baseline,
@@ -1849,7 +1888,10 @@ where
                     candidates: candidates.as_deref(),
                 },
                 &told,
-                Some(&mut refused),
+                Telling {
+                    walked: Some(&mut walked),
+                    refused: Some(&mut refused),
+                },
             ),
             None => compile_unit(
                 budget,
@@ -1857,7 +1899,10 @@ where
                 syntax,
                 source,
                 &told,
-                Some(&mut refused),
+                Telling {
+                    walked: Some(&mut walked),
+                    refused: Some(&mut refused),
+                },
             ),
         };
         let unit = match compiled {
@@ -2070,6 +2115,13 @@ pub enum Progress<'a> {
     Entry { held: bool },
     /// A mounted unit came from the cabinet instead; nothing is compiled for it, and no [`Progress::Compiled`] follows.
     Reused(&'a Qualifier),
+    /// `unit`'s check has come this far: `done` of the `of` declarations its walk holds are finished, and it is asking for `on`, where it is asking for one ([`Walked`]). Told as each declaration is asked for and as each finishes; a mounted unit by its prefix, the entry program by the empty prefix it owns.
+    Walked {
+        unit: &'a Qualifier,
+        done: usize,
+        of: usize,
+        on: Option<&'a Global>,
+    },
     /// `unit` finished compiling: a mounted unit by its prefix, the entry program by the empty prefix it owns.
     Compiled { unit: &'a Qualifier },
     /// `unit`, just compiled, is about to be handed to the cache, which records what it compiled to and what each of its items read. Sent only where the fold has a cache, and followed by [`Progress::Filed`].

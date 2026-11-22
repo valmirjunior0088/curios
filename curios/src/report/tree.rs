@@ -339,8 +339,8 @@ impl Trees {
             Event::Total { text, taken: None } => self.parted(text.then("\n")),
             Event::Apart => Piece::from("\n"),
             Event::Said { text } => text.then("\n"),
-            // What a fold plans and settles is counted where a region is drawn, and written nowhere.
-            Event::Planned { .. } | Event::Settled => Piece::default(),
+            // What a fold plans and settles, and how far a check has come, is shown where a region is drawn, and written nowhere.
+            Event::Planned { .. } | Event::Settled | Event::Walked { .. } => Piece::default(),
         }
     }
 

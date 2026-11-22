@@ -58,8 +58,8 @@ mod typing;
 use typing::*;
 
 mod underway;
-pub use underway::ReaderWrites;
 use underway::*;
+pub use underway::{ReaderWrites, WalkListener, Walked};
 
 mod scope;
 
@@ -235,6 +235,18 @@ impl<'s> Context<'s> {
     /// Install what the unit's reader writes ([`ReaderWrites`]): the driver's answer, made of the tables a report spells a name by, which the driver holds once the unit is lowered and a report reads only after its sides are reduced.
     pub fn set_reader(&mut self, writes: ReaderWrites<'s>) {
         self.underway.reader = Reader(Some(writes));
+    }
+
+    /// Install whoever is told how far the walk over the unit's declarations has come ([`WalkListener`]): a driver that reports a check as it runs.
+    pub fn listen(&mut self, listener: WalkListener<'s>) {
+        self.underway.listening = Listening(Some(listener));
+    }
+
+    /// Tell whoever listens how far the walk has come, where anyone does.
+    pub fn tell_walked(&mut self, walked: Walked<'_>) {
+        if let Some(listener) = &mut self.underway.listening.0 {
+            listener(walked);
+        }
     }
 
     /// Whether the reader of the declaration being elaborated writes `declaration` by some name, standing in the module its item stands in. True where no driver said what its reader writes, and where no item's module stands, as the display it is asked for then reduces as it did before a reader was known.

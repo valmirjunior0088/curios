@@ -6,8 +6,8 @@
 
 use {
     crate::{
-        Closing, CompileError, OnRefusal, anchors_of, certifier_refusal, compile_unit, elaborating,
-        erasure_refusal, globals_after, lowering_refusal, with_broken,
+        Closing, CompileError, Telling, anchors_of, certifier_refusal, compile_unit, elaborating,
+        erasure_refusal, globals_after, listened, lowering_refusal, with_broken,
     },
     curios_cert::{Certifier, Globals, Rechecked, certify_definitions_over},
     curios_common::{Candidates, SyntaxRegistry},
@@ -21,7 +21,7 @@ use {
     curios_unit::{Predecessors, Unit},
 };
 
-/// Compile one unit against `predecessors` over `over`'s baseline: lower whole, then elaborate, judge and erase what does not stand, `told` the unit's lowering as soon as it is made, whatever its compile goes on to conclude, and `refused` its lowering with what its elaboration held where it is refused.
+/// Compile one unit against `predecessors` over `over`'s baseline: lower whole, then elaborate, judge and erase what does not stand, `told` the unit's lowering as soon as it is made, whatever its compile goes on to conclude, and `telling` how far its elaboration has come as it goes and its lowering where it is refused.
 ///
 /// The result is a unit like [`compile_unit`]'s — the same lowering, a core module holding every item in the order a module is stored in, an erased form for each — differing in which items were elaborated, judged and erased now and which were taken from the baseline. An item's erased form is its own, in identities of its own, so one taken from the baseline is the one a whole compile makes.
 ///
@@ -35,12 +35,12 @@ pub fn compile_unit_over(
     source: &UnitSource<'_>,
     over: Over<'_>,
     told: &dyn Fn(&PreparedText),
-    refused: Option<OnRefusal<'_>>,
+    telling: Telling<'_>,
 ) -> Result<Unit, CompileError> {
     curios_profile::profile!("compile_unit_over");
     // A unit read from Core text holds no lowering to lower over, so a program over one is compiled whole.
     let Some(written) = over.baseline.text() else {
-        return compile_unit(budget, predecessors, syntax, source, told, refused);
+        return compile_unit(budget, predecessors, syntax, source, told, telling);
     };
     let lowered = into_core_unit_over(
         source,
@@ -52,7 +52,7 @@ pub fn compile_unit_over(
     .map_err(|error| CompileError::Failure(vec![error.report()]))?;
     told(&lowered);
 
-    compile_lowered_over(budget, predecessors, syntax, lowered, over, None, refused)
+    compile_lowered_over(budget, predecessors, syntax, lowered, over, None, telling)
         .map(|(unit, _)| unit)
 }
 
@@ -76,7 +76,10 @@ pub fn compile_lowered_over(
         candidates,
     }: Over<'_>,
     closing: Option<Closing<'_>>,
-    mut refused: Option<OnRefusal<'_>>,
+    Telling {
+        walked: listening,
+        mut refused,
+    }: Telling<'_>,
 ) -> Result<(Unit, Option<Entrypoint>), CompileError> {
     let cores = predecessors.cores();
     let (tail, mut elaborated) = match closing {
@@ -113,33 +116,29 @@ pub fn compile_lowered_over(
         dropped: &dropped,
         candidates,
     };
-    let (walked, mut observed) =
-        elaborating(
-            budget,
-            syntax,
-            &lowered,
-            predecessors,
-            |context| match tail {
-                Some(tail) => elaborate_and_zonk_entry_over(
-                    context,
-                    &established,
-                    recompile,
-                    lowered.core(),
-                    lowered.mounts(),
-                    lowered.minted(),
-                    tail,
-                ),
-                None => elaborate_and_zonk_unit_over(
-                    context,
-                    &established,
-                    recompile,
-                    lowered.core(),
-                    lowered.mounts(),
-                    lowered.minted(),
-                )
-                .map(|recompiled| (recompiled, None)),
-            },
-        );
+    let (walked, mut observed) = elaborating(budget, syntax, &lowered, predecessors, |context| {
+        listened(context, listening);
+        match tail {
+            Some(tail) => elaborate_and_zonk_entry_over(
+                context,
+                &established,
+                recompile,
+                lowered.core(),
+                lowered.mounts(),
+                lowered.minted(),
+                tail,
+            ),
+            None => elaborate_and_zonk_unit_over(
+                context,
+                &established,
+                recompile,
+                lowered.core(),
+                lowered.mounts(),
+                lowered.minted(),
+            )
+            .map(|recompiled| (recompiled, None)),
+        }
+    });
     let walked = with_broken(
         lowered.broken(),
         walked.map_err(|error| {

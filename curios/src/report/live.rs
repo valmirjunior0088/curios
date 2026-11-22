@@ -2,14 +2,14 @@
 //!
 //! **Above, for good, the oldest open subject streams as the tree drawing writes it**: its line, each node once it closes, what its tests write quoted beneath their nodes. A subject that begins while an older one is open is held, shown in the region, until every subject opened before it has ended; then what it holds is written and it streams in turn. So the scrollback is the tree drawing's bytes in the order subjects opened, and with one subject open at a time it is the tree drawing's bytes exactly.
 //!
-//! **Beneath, a region redrawn**: the streaming subject's running node, then each held subject's tree so far, capped at a third of the terminal's rows with `+ N more`, then what is done, `2 of 7 units; 2.4s`. A running node reads as it will when it closes, its time after `;`. Every row is cut at the terminal's width, `…` where cut, and drawn dim: the region is what is not settled yet.
+//! **Beneath, a region redrawn**: the streaming subject's running node, then each held subject's tree so far, capped at a third of the terminal's rows with `+ N more`, then what is done, `2 of 7 units; 2.4s`. A running node reads as it will when it closes, its time after `;`, and a check behind `·` how far it has come, `├─ check; 2.4s · 416 of 1,040 · `/std/Map/insert``, which the clock alone draws. Every row is cut at the terminal's width, `…` where cut, and drawn dim: the region is what is not settled yet.
 //!
 //! **Nothing to restore.** A frame is a carriage return, a cursor up over the rows the region took, an erase to the end of the screen, what is written above, and the region again: no alternate screen, no raw mode, no hidden cursor. An interrupted command leaves its last frame; a finished one leaves none ([`Live::finish`]).
 //!
 //! **Time and the terminal are handed in**: every frame is drawn for a moment and a size the caller reads, so a frame is a function of what the drawing was told and when.
 
 use {
-    super::{Event, Opened, Trees, seconds},
+    super::{Event, Opened, Trees, grouped, seconds},
     crate::{Piece, reader},
     curios_common::clusters,
     std::{collections::BTreeMap, mem, time::Instant},
@@ -23,6 +23,38 @@ struct Running {
     /// The node's connector and label, as the tree draws them: `├─ check`.
     label: String,
     began: Instant,
+    /// How far the check it is has come, where it is a check that said: shown behind `·`.
+    walked: Option<Walk>,
+}
+
+/// How far a check has come: `done` of the `of` declarations it walks, and the one it is on, where it is on one.
+struct Walk {
+    done: usize,
+    of: usize,
+    on: Option<String>,
+}
+
+impl Running {
+    /// The node's row at `now`, as it will read when it closes, its time after `;`, then how far its check has come: `├─ check; 2.4s · 416 of 1,040 · `/std/Map/insert``.
+    fn row(&self, now: Instant) -> String {
+        let mut row = format!(
+            "{}; {}",
+            self.label,
+            seconds(now.saturating_duration_since(self.began))
+        );
+        if let Some(walk) = &self.walked {
+            row.push_str(&format!(
+                " · {} of {}",
+                grouped(walk.done as u64),
+                grouped(walk.of as u64)
+            ));
+            if let Some(on) = &walk.on {
+                row.push_str(&format!(" · `{on}`"));
+            }
+        }
+
+        row
+    }
 }
 
 /// What the drawing holds of one open subject.
@@ -83,6 +115,17 @@ impl Live {
 
     /// The frame `event`, told at `now`, is drawn as on a terminal of `size`, its columns and rows.
     pub fn draw(&mut self, event: Event, now: Instant, size: (u16, u16)) -> Frame {
+        // How far a check has come moves its running node alone, which the clock draws at its next tick: told for each declaration, it would otherwise redraw the region as often.
+        if let Event::Walked { tree, done, of, on } = event {
+            if let Some(running) = self
+                .open
+                .get_mut(&tree)
+                .and_then(|open| open.running.as_mut())
+            {
+                running.walked = Some(Walk { done, of, on });
+            }
+            return Frame::default();
+        }
         match &event {
             Event::Planned { units } => self.planned += units,
             Event::Settled => self.settled += 1,
@@ -116,6 +159,7 @@ impl Live {
         open.running = opening.map(|_| Running {
             label: split(&open.held).1.plain,
             began: now,
+            walked: None,
         });
         if let Some(last) = opening {
             open.last = last;
@@ -248,11 +292,7 @@ impl Live {
                     .collect(),
             };
             if let Some(running) = &open.running {
-                block.push(format!(
-                    "{}; {}",
-                    running.label,
-                    seconds(now.saturating_duration_since(running.began))
-                ));
+                block.push(running.row(now));
             }
             if shown > 0 && region.len() + block.len() > room {
                 break;

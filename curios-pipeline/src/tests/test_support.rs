@@ -467,7 +467,7 @@ pub fn unit_after(prefix: &str, source: &str, units: &[&Unit]) -> Unit {
             &SYNTAX,
             &UnitSource::mounted(&modules),
             &|_| {},
-            None,
+            Telling::default(),
         )
     })
     .map_err(String::from)
@@ -503,7 +503,7 @@ pub fn recompile_after(
                 candidates: None,
             },
             &|_| {},
-            None,
+            Telling::default(),
         )
     })
     .map_err(String::from)
@@ -565,7 +565,7 @@ pub fn recompile_modules(modules: &RootSource, baseline: &Unit) -> Result<Unit, 
                 candidates: None,
             },
             &|_| {},
-            None,
+            Telling::default(),
         )
     })
     .map_err(String::from)
