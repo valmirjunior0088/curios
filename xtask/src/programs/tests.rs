@@ -54,22 +54,20 @@ fn nextest_is_launched_through_its_own_executable() {
     assert_eq!(launch.arguments, words("run"));
 }
 
+/// A missing program the task files pin is refused with the version they need of it, exact or a minimum, and one they do not pin is named alone.
 #[test]
-fn a_refusal_puts_the_fix_on_a_line_of_its_own() {
+fn a_missing_program_is_refused_with_the_version_its_pin_needs() {
     assert_eq!(
-        missing(
-            "nextest",
-            Some("cargo install cargo-nextest --locked --version 0.9.149")
-        ),
-        "nextest is needed, and it is not installed. Install it with:\n\n    cargo install cargo-nextest --locked --version 0.9.149"
+        missing("nextest", Some(&Pin::Exact("0.9.149".to_string()))),
+        "nextest is needed, and it is not installed: the task files pin 0.9.149."
     );
-}
-
-#[test]
-fn a_program_no_one_command_installs_is_named_alone() {
     assert_eq!(
-        missing("node", None),
-        "node is needed, and it is not installed."
+        missing("node", Some(&Pin::Minimum("22".to_string()))),
+        "node is needed, and it is not installed: the task files need 22 or later."
+    );
+    assert_eq!(
+        missing("git", None),
+        "git is needed, and it is not installed."
     );
 }
 

@@ -3,7 +3,7 @@
 //! **A verb names how a program is reached.** [`launch_in`] runs a command's words from a directory, refused with what installs its program where it is not there, and is how the runner performs a step's commands; [`cargo`] is the toolchain's cargo at the workspace root, for the commands outside the task files; anything else is a [`Command`] handed to [`run`], which defaults to the root. Every one of them echoes its command line before it runs, so the terminal reads as a transcript of the work.
 
 use {
-    crate::{Launch, launch, missing, root},
+    crate::{Launch, Pin, launch, missing, root},
     std::{
         io::ErrorKind,
         path::Path,
@@ -109,8 +109,8 @@ pub fn run_in(directory: &Path, command: Command, arguments: &[&str]) -> Result<
         .map_err(Failure::message)
 }
 
-/// Run what `launched` names from `directory` as [`run_in`] does, what its leading assignments set beside what it inherits. A program the system cannot find is refused with `install`, what the task files say installs it.
-pub fn launch_in(directory: &Path, launched: Launch, install: Option<&str>) -> Result<(), String> {
+/// Run what `launched` names from `directory` as [`run_in`] does, what its leading assignments set beside what it inherits. A program the system cannot find is refused with `pin`, the version the task files need of it.
+pub fn launch_in(directory: &Path, launched: Launch, pin: Option<&Pin>) -> Result<(), String> {
     let Launch {
         program,
         command,
@@ -121,7 +121,7 @@ pub fn launch_in(directory: &Path, launched: Launch, install: Option<&str>) -> R
     execute(directory, command, &arguments, Output::Streamed)
         .map(drop)
         .map_err(|failure| match failure {
-            Failure::Missing(_) => missing(&program, install),
+            Failure::Missing(_) => missing(&program, pin),
             Failure::Failed(message) => message,
         })
 }

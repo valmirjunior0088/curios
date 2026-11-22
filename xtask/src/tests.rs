@@ -182,8 +182,8 @@ fn the_bindings_generator_is_pinned_at_the_lock_s_version() {
         .unwrap();
 
     assert_eq!(
-        tree().programs["wasm-bindgen"].pin,
-        Some(Pin::Exact(locked.to_string()))
+        tree().programs["wasm-bindgen"],
+        Pin::Exact(locked.to_string())
     );
 }
 
@@ -192,9 +192,8 @@ fn the_bindings_generator_is_pinned_at_the_lock_s_version() {
 fn every_pin_a_job_installs_at_is_read_from_the_task_files_first() {
     let pinned = tree()
         .programs
-        .iter()
-        .filter(|(_, program)| program.pin.is_some())
-        .map(|(name, _)| name.to_uppercase().replace('-', "_"))
+        .keys()
+        .map(|name| name.to_uppercase().replace('-', "_"))
         .collect::<BTreeSet<_>>();
 
     for workflow in [WORKFLOW, RELEASE_WORKFLOW] {

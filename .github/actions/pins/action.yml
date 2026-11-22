@@ -10,7 +10,5 @@ runs:
         with open("xtask/tasks.toml", "rb") as file:
             programs = tomllib.load(file)["programs"]
         with open(os.environ["GITHUB_ENV"], "a") as environment:
-            for name, program in programs.items():
-                pin = program.get("version")
-                if pin is not None:
-                    environment.write(f"{name.upper().replace('-', '_')}={pin.removeprefix('>=').strip()}\n")
+            for name, pin in programs.items():
+                environment.write(f"{name.upper().replace('-', '_')}={pin.removeprefix('>=').strip()}\n")

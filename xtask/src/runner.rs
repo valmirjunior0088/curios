@@ -97,18 +97,14 @@ fn run(
             continue;
         };
         let launched = launch(&words)?;
-        let declared = tree.programs.get(&launched.program);
-        if let Some(program) = declared
+        let pin = tree.programs.get(&launched.program);
+        if let Some(pin) = pin
             && !checked.contains(&launched.program)
         {
-            check_version(&launched.program, program)?;
+            check_version(&launched.program, pin)?;
             checked.insert(launched.program.clone());
         }
-        launch_in(
-            &directory,
-            launched,
-            declared.and_then(|program| program.install.as_deref()),
-        )?;
+        launch_in(&directory, launched, pin)?;
     }
 
     for produced in &step.produces {

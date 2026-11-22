@@ -71,7 +71,7 @@ pub struct Tree {
     pub variables: BTreeMap<Name, Variable>,
     pub produced: BTreeMap<Name, Produced>,
     /// What the steps' commands launch, by the program's name, where the files say what version a run needs or what installs it.
-    pub programs: BTreeMap<String, Program>,
+    pub programs: BTreeMap<String, Pin>,
 }
 
 #[derive(Debug)]
@@ -130,15 +130,7 @@ pub struct Produced {
     pub producer: usize,
 }
 
-/// A program the steps launch, as the files declare it.
-#[derive(Debug, PartialEq, Eq)]
-pub struct Program {
-    pub pin: Option<Pin>,
-    /// What installs it, at its pin where it has one.
-    pub install: Option<String>,
-}
-
-/// The version of a program a run needs.
+/// The version of a program a run needs, as `programs` pins it by the name a step launches it as.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Pin {
     /// This version and no other: `version = "2.6.2"`.
@@ -420,7 +412,7 @@ impl Tree {
                         let table = item.as_table_like().ok_or_else(|| {
                             file.refuse(
                                 item.span(),
-                                "`programs` is a table of programs by name".to_string(),
+                                "`programs` is a table of pins by program".to_string(),
                             )
                         })?;
                         for (name, value) in table.iter() {
@@ -962,62 +954,32 @@ fn words_of(file: &File<'_>, list: &Array) -> Result<Vec<String>, Refusal> {
         .collect()
 }
 
-/// The program `item` declares: the `version` it must be, or reach where `>=` leads it, and the command that installs it, `{version}` in it the version's numbers.
-fn program_of(file: &File<'_>, item: &Item) -> Result<Program, Refusal> {
-    let table = item.as_table_like().ok_or_else(|| {
+/// The pin `item` declares: the version a program must be, or reach where `>=` leads it.
+fn program_of(file: &File<'_>, item: &Item) -> Result<Pin, Refusal> {
+    let written = item.as_str().ok_or_else(|| {
         file.refuse(
             item.span(),
-            "a program is a table of its `version` and its `install`".to_string(),
+            "a program is pinned at its version, a string".to_string(),
         )
     })?;
-    if let Some((key, _)) = table
-        .iter()
-        .find(|(key, _)| !["version", "install"].contains(key))
-    {
-        return Err(file.refuse(
-            table.key(key).and_then(|key| key.span()),
-            format!("`{key}` is no key of a program"),
-        ));
-    }
-    let text = |key: &str| -> Result<Option<String>, Refusal> {
-        table
-            .get(key)
-            .map(|item| text_of(file, item, key))
-            .transpose()
+    let pin = match written.strip_prefix(">=") {
+        Some(minimum) => Pin::Minimum(minimum.trim_start().to_string()),
+        None => Pin::Exact(written.to_string()),
     };
-
-    let written = text("version")?;
-    let pin = written
-        .as_deref()
-        .map(|version| match version.strip_prefix(">=") {
-            Some(minimum) => Pin::Minimum(minimum.trim_start().to_string()),
-            None => Pin::Exact(version.to_string()),
-        });
-    if let Some(pin) = &pin
-        && !pin.version().split('.').all(|part| {
-            !part.is_empty() && part.chars().all(|character| character.is_ascii_digit())
-        })
+    if !pin
+        .version()
+        .split('.')
+        .all(|part| !part.is_empty() && part.chars().all(|character| character.is_ascii_digit()))
     {
         return Err(file.refuse(
             item.span(),
             format!(
-                "a version is numbers between dots, after `>=` for a minimum, and `{}` is not",
-                written.unwrap_or_default()
+                "a version is numbers between dots, after `>=` for a minimum, and `{written}` is not"
             ),
         ));
     }
-    let install = match (text("install")?, &pin) {
-        (Some(install), Some(pin)) => Some(install.replace("{version}", pin.version())),
-        (Some(install), None) if install.contains("{version}") => {
-            return Err(file.refuse(
-                item.span(),
-                "`{version}` is filled from a pin, and this program has none".to_string(),
-            ));
-        }
-        (install, _) => install,
-    };
 
-    Ok(Program { pin, install })
+    Ok(pin)
 }
 
 /// The variable `item` declares.

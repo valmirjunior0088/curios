@@ -2,10 +2,10 @@
 //!
 //! **A command is the words a person would type.** Leading `NAME=value` words set the environment, as a shell reads them, and the next word names the program. `cargo` is the cargo that launched this run: `cargo xtask` is `cargo run`, and cargo sets `CARGO` to the binary performing the build — the toolchain's own, the rustup shim already out of the picture — so a step cannot resolve a second time and land somewhere else. `cargo nextest` is launched as the program `nextest`, through its own executable, `cargo-nextest nextest`, as cargo itself launches it, so an absent one fails to spawn as every other program does.
 //!
-//! **A program is asked about where the files pin it, and nowhere else.** The task files' `programs` say what version a run needs of each program that is no part of the Rust toolchain, exact, or a minimum where no command the files state installs it, and what installs it. The first time a step launches a pinned program in a run, [`check_version`] reads what it prints for `--version`; a program no step launches is never asked, so what a step needs is what it runs as it was asked. Where a program is not there, the launch is refused with what installs it.
+//! **A program is asked about where the files pin it, and nowhere else.** The task files' `programs` say what version a run needs of each program that is no part of the Rust toolchain, exact, or a minimum for one a contributor's system provides. The first time a step launches a pinned program in a run, [`check_version`] reads what it prints for `--version`; a program no step launches is never asked, so what a step needs is what it runs as it was asked. Where a program is not there, the launch is refused with the version the files pin.
 
 use {
-    crate::{Pin, Program, ask},
+    crate::{Pin, ask},
     std::{env, process::Command},
 };
 
@@ -100,18 +100,10 @@ pub fn meets(installed: &[u64], pin: &Pin) -> bool {
     }
 }
 
-/// Refuse `program` where `declared` pins it and the version it prints does not meet the pin.
-pub fn check_version(program: &str, declared: &Program) -> Result<(), String> {
-    let Some(pin) = &declared.pin else {
-        return Ok(());
-    };
-    let advice = |said: String| match &declared.install {
-        Some(install) => format!("{said} Install it with:\n\n    {install}"),
-        None => said,
-    };
-
-    let printed = ask(command_of(program), &["--version"])
-        .map_err(|_| missing(program, declared.install.as_deref()))?;
+/// Refuse `program` where the version it prints does not meet `pin`.
+pub fn check_version(program: &str, pin: &Pin) -> Result<(), String> {
+    let printed =
+        ask(command_of(program), &["--version"]).map_err(|_| missing(program, Some(pin)))?;
     let installed = version_in(&printed)
         .ok_or_else(|| format!("{program} printed no version for `--version`: {printed}"))?;
     if meets(&installed, pin) {
@@ -123,24 +115,27 @@ pub fn check_version(program: &str, declared: &Program) -> Result<(), String> {
         .map(u64::to_string)
         .collect::<Vec<_>>()
         .join(".");
-    Err(advice(match pin {
-        Pin::Exact(version) => {
-            format!("{program} {installed} is installed, and the task files pin {version}.")
-        }
-        Pin::Minimum(version) => format!(
-            "{program} {installed} is installed, and the task files need {version} or later."
-        ),
-    }))
+    Err(format!(
+        "{program} {installed} is installed, and {}.",
+        needed(pin)
+    ))
 }
 
-/// That a step cannot run without `program`, and, where the task files say what installs it, that command — on a line of its own, indented, because it is there to be selected and pasted rather than read, as the installer's advice is.
-pub fn missing(program: &str, install: Option<&str>) -> String {
-    match install {
-        Some(install) => {
-            format!(
-                "{program} is needed, and it is not installed. Install it with:\n\n    {install}"
-            )
-        }
+/// What the task files need of a program, as a refusal says it.
+fn needed(pin: &Pin) -> String {
+    match pin {
+        Pin::Exact(version) => format!("the task files pin {version}"),
+        Pin::Minimum(version) => format!("the task files need {version} or later"),
+    }
+}
+
+/// That a step cannot run without `program`, and, where the task files pin it, the version they need.
+pub fn missing(program: &str, pin: Option<&Pin>) -> String {
+    match pin {
+        Some(pin) => format!(
+            "{program} is needed, and it is not installed: {}.",
+            needed(pin)
+        ),
         None => format!("{program} is needed, and it is not installed."),
     }
 }

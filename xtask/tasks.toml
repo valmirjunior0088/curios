@@ -1,26 +1,13 @@
 description = "The repository's tasks: a group of steps for each file under `tasks/`, and the steps here"
 
-# The programs the steps launch beside the Rust toolchain, which `rust-toolchain.toml` pins: the version a run needs, held the first time a step launches each, and what installs it. The workflows read these pins to install each program on their runners.
-[programs.nextest]
-version = "0.9.151"
-install = "cargo install cargo-nextest --locked --version {version}"
-
-[programs.biome]
-version = "2.6.2"
-install = "npm install --global @biomejs/biome@{version}"
-
-[programs.node]
-# A minimum, since the system installs Node, by no command these files can state.
-version = ">= 22"
-
-[programs.npm]
-version = "11.17.0"
-install = "npm install --global npm@{version}"
-
-[programs.wasm-bindgen]
+# The programs the steps launch beside the Rust toolchain, which `rust-toolchain.toml` pins, each at the version a run needs, held the first time a step launches it. The workflows read these pins to install each program on their runners.
+programs.nextest = "0.9.151"
+programs.biome = "2.6.2"
+# A minimum, since a contributor's system provides Node.
+programs.node = ">= 22"
+programs.npm = "11.17.0"
 # The generator must match the `wasm-bindgen` crate `Cargo.lock` gives the bundle, which a test holds this to.
-version = "0.2.129"
-install = "cargo install wasm-bindgen-cli --locked --version {version}"
+programs.wasm-bindgen = "0.2.129"
 
 [handoff]
 description = "Run every check the handoff holds work to: each subject's steps, each after what it requires and consumes"

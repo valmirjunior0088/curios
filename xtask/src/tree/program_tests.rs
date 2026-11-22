@@ -1,64 +1,38 @@
-//! The programs the task files declare: their pins and the lines that install them.
+//! The programs the task files pin, each at the version a run needs.
 
 use {super::test_support::*, super::*};
 
+/// A program is its version, written beside its name: exact, or a minimum after `>=`, spaced or not.
 #[test]
-fn a_program_s_install_line_is_filled_with_its_pin() {
+fn a_program_is_pinned_at_its_version_exactly_or_at_least() {
     let tree = tree(&[(
         "a",
-        "description = \"A\"\n[programs.tool]\nversion = \"1.2.3\"\ninstall = \"get tool@{version}\"\n[programs.other]\nversion = \">= 22\"\n[programs.unspaced]\nversion = \">=1.2\"\n",
+        "description = \"A\"\nprograms.tool = \"1.2.3\"\nprograms.other = \">= 22\"\nprograms.unspaced = \">=1.2\"\n",
     )])
     .unwrap();
 
-    assert_eq!(
-        tree.programs["tool"].pin,
-        Some(Pin::Exact("1.2.3".to_string()))
-    );
-    assert_eq!(
-        tree.programs["tool"].install.as_deref(),
-        Some("get tool@1.2.3")
-    );
-    assert_eq!(
-        tree.programs["other"].pin,
-        Some(Pin::Minimum("22".to_string()))
-    );
-    assert_eq!(tree.programs["other"].install, None);
-    assert_eq!(
-        tree.programs["unspaced"].pin,
-        Some(Pin::Minimum("1.2".to_string()))
-    );
+    assert_eq!(tree.programs["tool"], Pin::Exact("1.2.3".to_string()));
+    assert_eq!(tree.programs["other"], Pin::Minimum("22".to_string()));
+    assert_eq!(tree.programs["unspaced"], Pin::Minimum("1.2".to_string()));
 }
 
+/// A program is its version alone, so a table of keys, a version beside what installs it among them, is refused.
 #[test]
-fn a_key_no_program_has_is_refused() {
+fn a_program_that_is_no_version_is_refused() {
     assert!(
         refused(&[(
             "a",
-            "description = \"A\"\n[programs.tool]\nminimum = \"1\"\n"
+            "description = \"A\"\n[programs.tool]\nversion = \"1\"\ninstall = \"get tool\"\n"
         )])
-        .contains("`minimum` is no key of a program")
+        .contains("a program is pinned at its version, a string")
     );
 }
 
 #[test]
 fn a_pin_that_is_not_numbers_between_dots_is_refused() {
     assert!(
-        refused(&[(
-            "a",
-            "description = \"A\"\n[programs.tool]\nversion = \"^1.2\"\n"
-        )])
-        .contains("a version is numbers between dots")
-    );
-}
-
-#[test]
-fn an_install_line_naming_a_pin_it_lacks_is_refused() {
-    assert!(
-        refused(&[(
-            "a",
-            "description = \"A\"\n[programs.tool]\ninstall = \"get tool@{version}\"\n"
-        )])
-        .contains("this program has none")
+        refused(&[("a", "description = \"A\"\nprograms.tool = \"^1.2\"\n")])
+            .contains("a version is numbers between dots")
     );
 }
 
@@ -66,14 +40,8 @@ fn an_install_line_naming_a_pin_it_lacks_is_refused() {
 fn a_program_declared_in_two_files_is_refused() {
     assert!(
         refused(&[
-            (
-                "a",
-                "description = \"A\"\n[programs.tool]\nversion = \"1\"\n"
-            ),
-            (
-                "b",
-                "description = \"B\"\n[programs.tool]\nversion = \">= 2\"\n"
-            ),
+            ("a", "description = \"A\"\nprograms.tool = \"1\"\n"),
+            ("b", "description = \"B\"\nprograms.tool = \">= 2\"\n"),
         ])
         .contains("program `tool` is declared twice")
     );
@@ -84,7 +52,7 @@ fn programs_below_a_file_s_top_are_refused() {
     assert!(
         refused(&[(
             "a",
-            "description = \"A\"\n[s]\ndescription = \"S\"\nprograms.tool.version = \"1\"\nrun = [[\"true\"]]\n"
+            "description = \"A\"\n[s]\ndescription = \"S\"\nprograms.tool = \"1\"\nrun = [[\"true\"]]\n"
         )])
         .contains("`programs` belongs at a file's top")
     );
