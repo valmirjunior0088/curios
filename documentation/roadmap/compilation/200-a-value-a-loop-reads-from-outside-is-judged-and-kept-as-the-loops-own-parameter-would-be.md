@@ -1,6 +1,6 @@
 # A value a loop reads from outside is judged and kept as the loop's own parameter would be
 
-**Adopted by the user on 2026-11-22; not refined yet.** Two spellings of one loop part ways in the back end: a value the loop reads from outside it is judged by the sharing analysis apart from the same value taken as a parameter every back edge hands on, and such a parameter is kept where it could be the value. The second waits on the first: substituting the parameter turns the second spelling into the first, and the first's verdict copies what the second wrote in place. The next step is stage 1's open question.
+**Not refined yet.** Two spellings of one loop part ways in the back end: a value the loop reads from outside it is judged by the sharing analysis apart from the same value taken as a parameter every back edge hands on, and such a parameter is kept where it could be the value. The second waits on the first: substituting the parameter turns the second spelling into the first, and the first's verdict copies what the second wrote in place. The next step is stage 1's open question.
 
 ## What is wrong today
 
