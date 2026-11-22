@@ -85,8 +85,8 @@ A write **sets** where it decides what work is held to, and the user is asked be
 
 ## Pacing and records
 
-A long command runs in the background, as CLAUDE.md runs one, and the next piece of work starts at once: a wait is never spent waiting, and one watcher serves a run. A scratch note of what is in flight is kept in the scratchpad, so a long session survives its context being summarized. The user's decisions and the lessons a session teaches go into memory as they are made. Every commit is one imperative line on `main`, as CLAUDE.md commits one, and nothing is pushed.
+A long command runs in the background, as CLAUDE.md runs one, and the next piece of work starts at once: a wait is never spent waiting, and one watcher serves a run. Where nothing is left but waiting — every run in flight watched, every question asked, the roadmap and the documents refined as far as they go — the turn ends: the run's notification or the user's answer starts the next one, so a yield costs nothing, where a poll, a sleep or work made up to fill the wait spends the user's budget for nothing. A scratch note of what is in flight is kept in the scratchpad, so a long session survives its context being summarized. The user's decisions and the lessons a session teaches go into memory as they are made. Every commit is one imperative line on `main`, as CLAUDE.md commits one, and nothing is pushed.
 
 ## A pause
 
-There is no close: the session runs until the user stops it. Where it pauses, say what was committed, by its subject, what is in flight, and which questions are open, and give the queue as it stands: the ready entries in order, and what each held entry waits on.
+There is no close: the session runs until the user stops it, and a turn that yields to a wait is a pause, not a close. Where it pauses, say what was committed, by its subject, what is in flight, and which questions are open, and give the queue as it stands: the ready entries in order, and what each held entry waits on.
