@@ -1,27 +1,28 @@
 //! The record stream: [`trace`] runs a closure under a subscriber that writes Perfetto's trace as it happens, one packet a span boundary and an event, so a run that never returns, or dies, still leaves a whole prefix of what it did on disk.
 //!
-//! Nothing is aggregated here. A packet is what the callback had in hand — a track, a timestamp, the names it interns, a span's fields and the allocator's readings — and every statistic is [`fold`](crate::fold())'s to recompute from the file. `README.md` states why the library emits records and leaves aggregation to a consumer; what follows is what a reader of the file needs to know.
+//! Nothing is aggregated here. A packet is what the callback had in hand — a timestamp, the names it interns, a span's fields and the allocator's readings — and every statistic is [`fold`](crate::fold())'s to recompute from the file. `README.md` states why the library emits records and leaves aggregation to a consumer; what follows is what a reader of the file needs to know.
 //!
-//! **One sequence, a track a thread.** Every packet is on one packet sequence, written behind one lock, so a name or a string interned once is referred to by its id from any thread after it. The first packet clears the sequence's state and describes the process; each thread is described as a track of its own the first time it records, and its spans are slices on it, begun where the span is entered and ended where it is exited, which nest because a thread's spans do.
+//! **A sequence a thread, as Perfetto's own writer keeps one.** The process's packet sequence describes the process and, where the allocator counts, its two gauges. Each thread opens a sequence of its own the first time it records. Its first packet clears the sequence's state, declares an incremental clock, and states as defaults what every later packet of it shares: its thread's track and the counter tracks its slices read. So every later packet is stamped with the step since the one before it and names neither its track nor its counters. Names and strings are interned on the sequence that uses them. A thread's spans are slices on its track, begun where the span is entered and ended where it is exited, which nest because a thread's spans do. Every packet is written behind one lock, into one stream.
 //!
-//! **The allocator's readings ride each slice.** Where the counting allocator counts (`CountingAllocator`), four counter tracks under the process — live and allocated bytes, allocations and the peak — are described once, and each slice's beginning and end carries their readings as extra counter values, so a reader differences them as it differences the timestamps. Where it does not count, no counter track is described and no reading carried.
+//! **The allocator's readings ride each slice.** Where the counting allocator counts (`CountingAllocator`), each slice's beginning and end carries four readings as extra counter values. Two are its thread's allocated bytes and allocations, counters of the thread written as steps on its sequence, as Perfetto writes a thread's time. The other two are the process's live bytes and peak, gauges every sequence reads, so each is written whole. Where it does not count, no counter track is described and no reading carried.
 //!
 //! **A stream is a whole prefix of its run.** Each packet is flushed as it is written, so a run that is killed has filed all it did up to its last whole packet; and the first write that fails ends the stream, the run going on, so a disk that filled leaves a file read the same way, never one with packets missing from its middle.
 
 use {
     crate::{
-        allocated_bytes, allocation_count, allocator_counts, begin_counting, end_counting,
-        live_bytes, peak_bytes,
+        allocator_counts, begin_counting, end_counting, live_bytes, peak_bytes,
         perfetto::{
-            CounterDescriptor, DebugAnnotation, DebugAnnotationName, EventCategory, EventName,
-            InternedData, InternedString, ProcessDescriptor, ThreadDescriptor, Trace, TracePacket,
-            TrackDescriptor, TrackEvent, counter_descriptor, debug_annotation, trace_packet,
+            BuiltinClock, ClockSnapshot, CounterDescriptor, DebugAnnotation, DebugAnnotationName,
+            EventCategory, EventName, InternedData, InternedString, ProcessDescriptor,
+            ThreadDescriptor, Trace, TracePacket, TracePacketDefaults, TrackDescriptor, TrackEvent,
+            TrackEventDefaults, clock_snapshot, counter_descriptor, debug_annotation, trace_packet,
             track_descriptor, track_event,
         },
+        thread_allocated_bytes, thread_allocation_count,
     },
     prost::Message,
     std::{
-        collections::HashMap,
+        collections::{HashMap, hash_map::Entry},
         fmt,
         fs::{self, File},
         io::{self, Write},
@@ -43,17 +44,70 @@ use {
     },
 };
 
-/// The one packet sequence every packet of a stream is written on.
-const SEQUENCE: u32 = 1;
+/// The process's packet sequence; each thread's takes an id after it, in the order the threads first record.
+const PROCESS_SEQUENCE: u32 = 1;
 
 /// The process's track, which every other track hangs from.
 const PROCESS_TRACK: u64 = 1;
 
-/// The allocator's four counter tracks, in the order a slice carries their readings: live bytes, allocated bytes, allocations, the peak.
-pub const COUNTER_TRACKS: [u64; 4] = [2, 3, 4, 5];
+/// The tracks of the process's two gauges.
+const LIVE_TRACK: u64 = 2;
+const PEAK_TRACK: u64 = 3;
 
-/// The first id a thread's track is given; the threads that record take the ones after it in the order they first record.
+/// The first thread's track. Each thread takes [`TRACKS_A_THREAD`] ids in the order the threads first record: its own track's, then its two counters'.
 const FIRST_THREAD_TRACK: u64 = 16;
+const TRACKS_A_THREAD: u64 = 3;
+
+/// The clock a thread's sequence stamps its packets on, each a step from the one before: an id in the range Perfetto keeps for a sequence's own clocks, 64 to 127.
+const STEP_CLOCK: u32 = 64;
+
+/// What a counter track of a stream counts, by the name its descriptor gives it: the one statement of those names, which the reader tells the readings apart by.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Counter {
+    /// Bytes a thread took while counting, each reallocation's growth once.
+    Allocated,
+    /// Trips a thread made through the allocator while counting.
+    Allocations,
+    /// Bytes the process holds, counted from where counting began.
+    Live,
+    /// The greatest the process held while counting.
+    Peak,
+}
+
+impl Counter {
+    /// Every counter, in the order a slice carries their readings: its thread's two, then the process's.
+    pub const ALL: [Self; 4] = [Self::Allocated, Self::Allocations, Self::Live, Self::Peak];
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Allocated => "allocated bytes",
+            Self::Allocations => "allocations",
+            Self::Live => "live bytes",
+            Self::Peak => "peak bytes",
+        }
+    }
+
+    /// The counter's track, `uuid` under `parent`: a thread's counter written as steps, the process's whole.
+    fn track(self, uuid: u64, parent: u64) -> TrackDescriptor {
+        let unit = match self {
+            Self::Allocations => counter_descriptor::Unit::Count,
+            Self::Allocated | Self::Live | Self::Peak => counter_descriptor::Unit::SizeBytes,
+        };
+
+        TrackDescriptor {
+            uuid: Some(uuid),
+            parent_uuid: Some(parent),
+            static_or_dynamic_name: Some(track_descriptor::StaticOrDynamicName::Name(
+                self.name().to_string(),
+            )),
+            counter: Some(CounterDescriptor {
+                unit: Some(unit as i32),
+                is_incremental: matches!(self, Self::Allocated | Self::Allocations).then_some(true),
+            }),
+            ..TrackDescriptor::default()
+        }
+    }
+}
 
 /// Where a trace is written.
 pub enum Destination {
@@ -198,24 +252,18 @@ impl Subscriber for Recorder {
     }
 }
 
-/// What a span was created with, kept until it closes: its name's and target's interned ids and its fields, written on each slice it is entered as.
+/// What a span was created with, kept until it closes and written on each slice it is entered as: its callsite, whose name and target are interned on the sequence of the thread that enters it, and its fields.
 struct Created {
-    name: u64,
-    category: u64,
+    callsite: &'static Metadata<'static>,
     fields: Vec<Value>,
 }
 
-/// The open stream, and everything a packet refers to by an id the stream gave it.
+/// The open stream: where its packets go, when it opened, whether the allocator counts, each thread's sequence and each live span.
 struct Sink {
-    /// Where packets go, and `None` once a write to it failed: nothing is written after the first write that fails.
-    writer: Option<Box<dyn Write + Send>>,
+    out: Out,
     opened: Instant,
     counted: bool,
-    names: Interned,
-    categories: Interned,
-    annotation_names: Interned,
-    strings: Interned,
-    threads: HashMap<ThreadId, u64>,
+    threads: HashMap<ThreadId, Sequence>,
     spans: HashMap<u64, Created>,
 }
 
@@ -234,13 +282,9 @@ impl Sink {
         };
 
         let mut sink = Self {
-            writer: Some(writer),
+            out: Out(Some(writer)),
             opened: Instant::now(),
             counted,
-            names: Interned::default(),
-            categories: Interned::default(),
-            annotation_names: Interned::default(),
-            strings: Interned::default(),
             threads: HashMap::new(),
             spans: HashMap::new(),
         };
@@ -249,13 +293,14 @@ impl Sink {
         Ok(sink)
     }
 
-    /// Nanoseconds since the stream opened: the timestamp of what is written now, taken behind the lock so a sequence's packets are in time order.
+    /// Nanoseconds since the stream opened: the time of what is written now, taken behind the lock so each sequence's packets are in time order.
     fn now(&self) -> u64 {
         self.opened.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64
     }
 
-    /// The first packet, which clears the sequence's state and describes the process, then the allocator's counter tracks where it counts.
+    /// The process's sequence: a packet clearing its state and describing the process, then the process's gauges where the allocator counts, each stamped whole.
     fn opening(&mut self) {
+        let now = self.now();
         let process = TrackDescriptor {
             uuid: Some(PROCESS_TRACK),
             process: Some(ProcessDescriptor {
@@ -264,103 +309,47 @@ impl Sink {
             }),
             ..TrackDescriptor::default()
         };
-        self.put(TracePacket {
+        self.out.put(TracePacket {
+            timestamp: Some(now),
+            optional_trusted_packet_sequence_id: Some(sequenced(PROCESS_SEQUENCE)),
             first_packet_on_sequence: Some(true),
             sequence_flags: Some(trace_packet::SequenceFlags::SeqIncrementalStateCleared as u32),
             data: Some(trace_packet::Data::TrackDescriptor(process)),
-            ..self.packet()
+            ..TracePacket::default()
         });
 
         if self.counted {
-            let counters = [
-                ("live bytes", counter_descriptor::Unit::SizeBytes),
-                ("allocated bytes", counter_descriptor::Unit::SizeBytes),
-                ("allocations", counter_descriptor::Unit::Count),
-                ("peak bytes", counter_descriptor::Unit::SizeBytes),
-            ];
-            for (uuid, (name, unit)) in COUNTER_TRACKS.into_iter().zip(counters) {
-                let counter = TrackDescriptor {
-                    uuid: Some(uuid),
-                    parent_uuid: Some(PROCESS_TRACK),
-                    static_or_dynamic_name: Some(track_descriptor::StaticOrDynamicName::Name(
-                        name.to_string(),
+            for (uuid, counter) in [(LIVE_TRACK, Counter::Live), (PEAK_TRACK, Counter::Peak)] {
+                self.out.put(TracePacket {
+                    timestamp: Some(now),
+                    optional_trusted_packet_sequence_id: Some(sequenced(PROCESS_SEQUENCE)),
+                    data: Some(trace_packet::Data::TrackDescriptor(
+                        counter.track(uuid, PROCESS_TRACK),
                     )),
-                    counter: Some(CounterDescriptor {
-                        unit: Some(unit as i32),
-                    }),
-                    ..TrackDescriptor::default()
-                };
-                self.put(TracePacket {
-                    data: Some(trace_packet::Data::TrackDescriptor(counter)),
-                    ..self.packet()
+                    ..TracePacket::default()
                 });
             }
         }
     }
 
-    /// A packet of this stream's sequence, stamped now, which reads the state the sequence has interned.
-    fn packet(&self) -> TracePacket {
-        TracePacket {
-            timestamp: Some(self.now()),
-            optional_trusted_packet_sequence_id: Some(
-                trace_packet::OptionalTrustedPacketSequenceId::TrustedPacketSequenceId(SEQUENCE),
-            ),
-            sequence_flags: Some(trace_packet::SequenceFlags::SeqNeedsIncrementalState as u32),
-            ..TracePacket::default()
-        }
-    }
-
-    /// The track of the thread recording now, described the first time it records.
-    fn track(&mut self) -> u64 {
+    /// The sequence of the thread recording now, opened the first time it records.
+    fn sequence(&mut self, now: u64) -> &mut Sequence {
         let current = thread::current();
-        if let Some(&uuid) = self.threads.get(&current.id()) {
-            return uuid;
+        let index = self.threads.len() as u64;
+        match self.threads.entry(current.id()) {
+            Entry::Occupied(open) => open.into_mut(),
+            Entry::Vacant(first) => first.insert(Sequence::opened(
+                &mut self.out,
+                self.counted,
+                index,
+                current.name(),
+                now,
+            )),
         }
-
-        let uuid = FIRST_THREAD_TRACK + self.threads.len() as u64;
-        self.threads.insert(current.id(), uuid);
-        let described = TrackDescriptor {
-            uuid: Some(uuid),
-            parent_uuid: Some(PROCESS_TRACK),
-            thread: Some(ThreadDescriptor {
-                pid: Some(process::id() as i32),
-                // Numbered by the recorder rather than asked of the system, which names a thread differently on each: a track needs a number no other thread of the stream has.
-                tid: Some((uuid - FIRST_THREAD_TRACK + 1) as i64),
-                thread_name: current.name().map(str::to_string),
-            }),
-            ..TrackDescriptor::default()
-        };
-        self.put(TracePacket {
-            data: Some(trace_packet::Data::TrackDescriptor(described)),
-            ..self.packet()
-        });
-
-        uuid
     }
 
-    fn created(&mut self, id: u64, metadata: &'static Metadata<'static>, fields: Vec<Value>) {
-        let mut interned = InternedData::default();
-        let name = self.names.id(metadata.name(), |iid, name| {
-            interned.event_names.push(EventName {
-                iid: Some(iid),
-                name: Some(name.to_string()),
-            });
-        });
-        let category = self.categories.id(metadata.target(), |iid, name| {
-            interned.event_categories.push(EventCategory {
-                iid: Some(iid),
-                name: Some(name.to_string()),
-            });
-        });
-        self.intern(interned);
-        self.spans.insert(
-            id,
-            Created {
-                name,
-                category,
-                fields,
-            },
-        );
+    fn created(&mut self, id: u64, callsite: &'static Metadata<'static>, fields: Vec<Value>) {
+        self.spans.insert(id, Created { callsite, fields });
     }
 
     /// A value recorded onto a live span after its creation, written on every slice it is entered as from here on.
@@ -376,81 +365,202 @@ impl Sink {
 
     /// A span entered or exited: a slice begun or ended on the thread's track, the allocator's readings beside it where it counts.
     fn boundary(&mut self, id: u64, kind: track_event::Type) {
-        let track = self.track();
+        // Read before anything of the packet is built, which allocates.
+        let counts = self.counted.then(Counts::now);
         let Some(span) = self.spans.get(&id) else {
             return;
         };
-        let (name, category) = (span.name, span.category);
-        let annotations = match kind {
-            track_event::Type::SliceBegin => {
-                let fields = span.fields.clone();
-                self.annotations(&fields)
-            }
+        let callsite = span.callsite;
+        let fields = match kind {
+            track_event::Type::SliceBegin => span.fields.clone(),
             _ => Vec::new(),
         };
-        let (extra_counter_track_uuids, extra_counter_values) = match self.counted {
-            true => (
-                COUNTER_TRACKS.to_vec(),
-                vec![
-                    live_bytes() as i64,
-                    allocated_bytes() as i64,
-                    allocation_count() as i64,
-                    peak_bytes() as i64,
-                ],
-            ),
-            false => (Vec::new(), Vec::new()),
-        };
+        let now = self.now();
+        let sequence = self.sequence(now);
+        let mut interned = InternedData::default();
         let event = TrackEvent {
             r#type: Some(kind as i32),
-            track_uuid: Some(track),
-            name_field: Some(track_event::NameField::NameIid(name)),
-            category_iids: vec![category],
-            debug_annotations: annotations,
-            extra_counter_track_uuids,
-            extra_counter_values,
+            ..sequence.event(callsite, &fields, &mut interned)
         };
-        self.put(TracePacket {
-            data: Some(trace_packet::Data::TrackEvent(event)),
-            ..self.packet()
-        });
+        let extra_counter_values = counts.map_or_else(Vec::new, |counts| sequence.carried(counts));
+        let packet = sequence.packet(
+            now,
+            interned,
+            trace_packet::Data::TrackEvent(TrackEvent {
+                extra_counter_values,
+                ..event
+            }),
+        );
+        self.out.put(packet);
     }
 
     /// An event: an instant on the thread's track, its fields as annotations. One carrying a `value` is a magnitude, `curios_common::sample!`'s.
-    fn event(&mut self, metadata: &'static Metadata<'static>, fields: Vec<Value>) {
-        let track = self.track();
+    fn event(&mut self, callsite: &'static Metadata<'static>, fields: Vec<Value>) {
+        let now = self.now();
+        let sequence = self.sequence(now);
         let mut interned = InternedData::default();
-        let name = self.names.id(metadata.name(), |iid, name| {
+        let event = TrackEvent {
+            r#type: Some(track_event::Type::Instant as i32),
+            ..sequence.event(callsite, &fields, &mut interned)
+        };
+        let packet = sequence.packet(now, interned, trace_packet::Data::TrackEvent(event));
+        self.out.put(packet);
+    }
+}
+
+/// The allocator's counts as one slice carries them.
+struct Counts {
+    allocated: u64,
+    allocations: u64,
+    live: isize,
+    peak: usize,
+}
+
+impl Counts {
+    fn now() -> Self {
+        Self {
+            allocated: thread_allocated_bytes(),
+            allocations: thread_allocation_count(),
+            live: live_bytes(),
+            peak: peak_bytes(),
+        }
+    }
+}
+
+/// A thread's packet sequence: its id, the strings interned on it, the time its last packet was stamped at, and its thread's counts as its last slice carried them.
+struct Sequence {
+    id: u32,
+    names: Interned,
+    categories: Interned,
+    annotation_names: Interned,
+    strings: Interned,
+    stamped: u64,
+    allocated: u64,
+    allocations: u64,
+}
+
+impl Sequence {
+    /// The sequence of the `index`th thread to record, named `name`. Its first packet clears its state, declares its clock beside the stream's and states its defaults; its track, and its counters where the allocator counts, are described after it.
+    fn opened(out: &mut Out, counted: bool, index: u64, name: Option<&str>, now: u64) -> Self {
+        let track = FIRST_THREAD_TRACK + index * TRACKS_A_THREAD;
+        let counters = [
+            (track + 1, Counter::Allocated),
+            (track + 2, Counter::Allocations),
+        ];
+        let mut sequence = Self {
+            id: PROCESS_SEQUENCE + 1 + index as u32,
+            names: Interned::default(),
+            categories: Interned::default(),
+            annotation_names: Interned::default(),
+            strings: Interned::default(),
+            stamped: now,
+            allocated: 0,
+            allocations: 0,
+        };
+        let read = match counted {
+            true => vec![track + 1, track + 2, LIVE_TRACK, PEAK_TRACK],
+            false => Vec::new(),
+        };
+        let stream = BuiltinClock::Boottime as u32;
+        out.put(TracePacket {
+            timestamp: Some(now),
+            timestamp_clock_id: Some(stream),
+            optional_trusted_packet_sequence_id: Some(sequenced(sequence.id)),
+            first_packet_on_sequence: Some(true),
+            sequence_flags: Some(trace_packet::SequenceFlags::SeqIncrementalStateCleared as u32),
+            trace_packet_defaults: Some(TracePacketDefaults {
+                timestamp_clock_id: Some(STEP_CLOCK),
+                track_event_defaults: Some(TrackEventDefaults {
+                    track_uuid: Some(track),
+                    extra_counter_track_uuids: read,
+                }),
+            }),
+            data: Some(trace_packet::Data::ClockSnapshot(ClockSnapshot {
+                clocks: vec![
+                    clock_snapshot::Clock {
+                        clock_id: Some(stream),
+                        timestamp: Some(now),
+                        is_incremental: None,
+                    },
+                    clock_snapshot::Clock {
+                        clock_id: Some(STEP_CLOCK),
+                        timestamp: Some(now),
+                        is_incremental: Some(true),
+                    },
+                ],
+            })),
+            ..TracePacket::default()
+        });
+
+        let described = TrackDescriptor {
+            uuid: Some(track),
+            parent_uuid: Some(PROCESS_TRACK),
+            thread: Some(ThreadDescriptor {
+                pid: Some(process::id() as i32),
+                // Numbered by the recorder rather than asked of the system, which names a thread differently on each: a track needs a number no other thread of the stream has.
+                tid: Some(index as i64 + 1),
+                thread_name: name.map(str::to_string),
+            }),
+            ..TrackDescriptor::default()
+        };
+        out.put(sequence.packet(
+            now,
+            InternedData::default(),
+            trace_packet::Data::TrackDescriptor(described),
+        ));
+        if counted {
+            for (uuid, counter) in counters {
+                out.put(sequence.packet(
+                    now,
+                    InternedData::default(),
+                    trace_packet::Data::TrackDescriptor(counter.track(uuid, track)),
+                ));
+            }
+        }
+
+        sequence
+    }
+
+    /// A packet of this sequence stamped `now`, as the step since the one before it, carrying `data` and what was interned for it for the first time.
+    fn packet(
+        &mut self,
+        now: u64,
+        interned: InternedData,
+        data: trace_packet::Data,
+    ) -> TracePacket {
+        let step = now - self.stamped;
+        self.stamped = now;
+
+        TracePacket {
+            timestamp: Some(step),
+            optional_trusted_packet_sequence_id: Some(sequenced(self.id)),
+            sequence_flags: Some(trace_packet::SequenceFlags::SeqNeedsIncrementalState as u32),
+            interned_data: (interned != InternedData::default()).then_some(interned),
+            data: Some(data),
+            ..TracePacket::default()
+        }
+    }
+
+    /// An event of `callsite` carrying `fields`, its name, target, annotation names and string values interned on this sequence, what is interned for the first time added to `interned`.
+    fn event(
+        &mut self,
+        callsite: &Metadata<'_>,
+        fields: &[Value],
+        interned: &mut InternedData,
+    ) -> TrackEvent {
+        let name = self.names.id(callsite.name(), |iid, name| {
             interned.event_names.push(EventName {
                 iid: Some(iid),
                 name: Some(name.to_string()),
             });
         });
-        let category = self.categories.id(metadata.target(), |iid, name| {
+        let category = self.categories.id(callsite.target(), |iid, name| {
             interned.event_categories.push(EventCategory {
                 iid: Some(iid),
                 name: Some(name.to_string()),
             });
         });
-        self.intern(interned);
-        let annotations = self.annotations(&fields);
-        let event = TrackEvent {
-            r#type: Some(track_event::Type::Instant as i32),
-            track_uuid: Some(track),
-            name_field: Some(track_event::NameField::NameIid(name)),
-            category_iids: vec![category],
-            debug_annotations: annotations,
-            ..TrackEvent::default()
-        };
-        self.put(TracePacket {
-            data: Some(trace_packet::Data::TrackEvent(event)),
-            ..self.packet()
-        });
-    }
-
-    /// `fields` as annotations, each name and string value interned, what is interned for the first time written ahead of them.
-    fn annotations(&mut self, fields: &[Value]) -> Vec<DebugAnnotation> {
-        let mut interned = InternedData::default();
-        let annotations = fields
+        let debug_annotations = fields
             .iter()
             .map(|field| {
                 let name = self.annotation_names.id(field.name, |iid, name| {
@@ -481,24 +591,43 @@ impl Sink {
                 }
             })
             .collect();
-        self.intern(interned);
 
-        annotations
-    }
-
-    /// Write what was interned for the first time, in a packet ahead of the one that refers to it.
-    fn intern(&mut self, interned: InternedData) {
-        if interned != InternedData::default() {
-            self.put(TracePacket {
-                interned_data: Some(interned),
-                ..self.packet()
-            });
+        TrackEvent {
+            name_field: Some(track_event::NameField::NameIid(name)),
+            category_iids: vec![category],
+            debug_annotations,
+            ..TrackEvent::default()
         }
     }
 
+    /// `counts` in the order this sequence's defaults name their tracks, [`Counter::ALL`]'s: the thread's two as steps from what its last slice carried, which only grow, and the process's two whole.
+    fn carried(&mut self, counts: Counts) -> Vec<i64> {
+        let allocated = counts.allocated - self.allocated;
+        let allocations = counts.allocations - self.allocations;
+        self.allocated = counts.allocated;
+        self.allocations = counts.allocations;
+
+        vec![
+            allocated as i64,
+            allocations as i64,
+            counts.live as i64,
+            counts.peak as i64,
+        ]
+    }
+}
+
+/// The packet sequence `id` names.
+fn sequenced(id: u32) -> trace_packet::OptionalTrustedPacketSequenceId {
+    trace_packet::OptionalTrustedPacketSequenceId::TrustedPacketSequenceId(id)
+}
+
+/// Where packets go, and `None` once a write to it failed: nothing is written after the first write that fails.
+struct Out(Option<Box<dyn Write + Send>>);
+
+impl Out {
     /// One packet, written as a `Trace` of that packet alone, which a stream of them concatenates into one `Trace`, and flushed before the step after it runs, since a buffer is lost to anything that ends the process without unwinding — a stack overflow, an abort, a `SIGKILL` — and those are the runs whose last packets are worth the most. The first write that fails drops the writer, and nothing is written after it.
     fn put(&mut self, packet: TracePacket) {
-        let Some(writer) = &mut self.writer else {
+        let Some(writer) = &mut self.0 else {
             return;
         };
         let bytes = Trace {
@@ -510,12 +639,12 @@ impl Sink {
             .and_then(|()| writer.flush())
             .is_err()
         {
-            self.writer = None;
+            self.0 = None;
         }
     }
 }
 
-/// Ids a stream gave the strings it interned of one kind, from one, each written once.
+/// Ids a sequence gave the strings it interned of one kind, from one, each written once.
 #[derive(Default)]
 struct Interned(HashMap<String, u64>);
 

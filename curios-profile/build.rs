@@ -20,12 +20,16 @@ const SHA256: &str = "fc2a7f7a6836b85751468b1dd23d06bef4562f791915008ae915feee4e
 /// The package every message of the schema is declared in.
 const PACKAGE: &str = "perfetto.protos";
 
-/// One message the recorder uses: its name, the fields of it it writes or reads, and the enums declared inside it that those fields, or the recorder's constants, are spelled by.
+/// One message the recorder uses: its name, the fields of it it writes or reads, the enums declared inside it that those fields, or the recorder's constants, are spelled by, and the messages declared inside it that its fields are, each kept as a message is.
 struct Kept {
     message: &'static str,
     fields: &'static [&'static str],
     enums: &'static [&'static str],
+    nested: &'static [Kept],
 }
+
+/// The enums declared at the schema's top that the recorder's constants are spelled by.
+const ENUMS: &[&str] = &["BuiltinClock"];
 
 /// Every message the recorder writes or reads, and of each only what it uses.
 const KEPT: &[Kept] = &[
@@ -33,6 +37,7 @@ const KEPT: &[Kept] = &[
         message: "Trace",
         fields: &["packet"],
         enums: &[],
+        nested: &[],
     },
     Kept {
         message: "TracePacket",
@@ -44,8 +49,12 @@ const KEPT: &[Kept] = &[
             "interned_data",
             "sequence_flags",
             "first_packet_on_sequence",
+            "trace_packet_defaults",
+            "timestamp_clock_id",
+            "clock_snapshot",
         ],
         enums: &["SequenceFlags"],
+        nested: &[],
     },
     Kept {
         message: "TrackDescriptor",
@@ -58,34 +67,60 @@ const KEPT: &[Kept] = &[
             "counter",
         ],
         enums: &[],
+        nested: &[],
     },
     Kept {
         message: "ProcessDescriptor",
         fields: &["pid", "process_name"],
         enums: &[],
+        nested: &[],
     },
     Kept {
         message: "ThreadDescriptor",
         fields: &["pid", "tid", "thread_name"],
         enums: &[],
+        nested: &[],
+    },
+    Kept {
+        message: "TracePacketDefaults",
+        fields: &["timestamp_clock_id", "track_event_defaults"],
+        enums: &[],
+        nested: &[],
+    },
+    Kept {
+        message: "TrackEventDefaults",
+        fields: &["track_uuid", "extra_counter_track_uuids"],
+        enums: &[],
+        nested: &[],
+    },
+    Kept {
+        message: "ClockSnapshot",
+        fields: &["clocks"],
+        enums: &[],
+        nested: &[Kept {
+            message: "Clock",
+            fields: &["clock_id", "timestamp", "is_incremental"],
+            enums: &[],
+            nested: &[],
+        }],
     },
     Kept {
         message: "CounterDescriptor",
-        fields: &["unit"],
+        fields: &["unit", "is_incremental"],
         enums: &["Unit"],
+        nested: &[],
     },
     Kept {
         message: "TrackEvent",
         fields: &[
             "type",
-            "track_uuid",
             "name_iid",
             "category_iids",
             "debug_annotations",
-            "extra_counter_track_uuids",
             "extra_counter_values",
         ],
         enums: &["Type"],
+        nested: &[],
     },
     Kept {
         message: "DebugAnnotation",
@@ -97,6 +132,7 @@ const KEPT: &[Kept] = &[
             "string_value_iid",
         ],
         enums: &[],
+        nested: &[],
     },
     Kept {
         message: "InternedData",
@@ -107,26 +143,31 @@ const KEPT: &[Kept] = &[
             "debug_annotation_string_values",
         ],
         enums: &[],
+        nested: &[],
     },
     Kept {
         message: "EventCategory",
         fields: &["iid", "name"],
         enums: &[],
+        nested: &[],
     },
     Kept {
         message: "EventName",
         fields: &["iid", "name"],
         enums: &[],
+        nested: &[],
     },
     Kept {
         message: "DebugAnnotationName",
         fields: &["iid", "name"],
         enums: &[],
+        nested: &[],
     },
     Kept {
         message: "InternedString",
         fields: &["iid", "str"],
         enums: &[],
+        nested: &[],
     },
 ];
 
@@ -158,7 +199,7 @@ fn main() {
         .unwrap_or_else(|error| panic!("generate the trace messages: {error}"));
 }
 
-/// `parsed` with only what [`KEPT`] names: each kept message's named fields, the oneofs those fields still fill and the enums it names; every other message, enum, service and extension dropped. A kept field whose type is no kept message or enum is refused here rather than left for `prost-build` to name a type it never writes.
+/// `parsed` with only what [`KEPT`] and [`ENUMS`] name: each kept message's named fields, the oneofs those fields still fill and the enums and messages it names; every other message, enum, service and extension dropped. A kept field whose type is no kept message or enum is refused here rather than left for `prost-build` to name a type it never writes.
 fn pruned(mut parsed: FileDescriptorSet, place: &Path) -> FileDescriptorSet {
     let file = parsed
         .file
@@ -168,7 +209,7 @@ fn pruned(mut parsed: FileDescriptorSet, place: &Path) -> FileDescriptorSet {
 
     file.message_type
         .retain(|message| KEPT.iter().any(|kept| kept.message == message.name()));
-    file.enum_type.clear();
+    file.enum_type.retain(|inner| ENUMS.contains(&inner.name()));
     file.service.clear();
     file.extension.clear();
     // Its locations are paths through the declarations as written, which pruning renumbers.
@@ -181,37 +222,53 @@ fn pruned(mut parsed: FileDescriptorSet, place: &Path) -> FileDescriptorSet {
         narrowed(message, kept);
     }
 
-    let types = file
-        .message_type
+    let mut types = file
+        .enum_type
         .iter()
-        .flat_map(|message| {
-            let name = message.name().to_string();
-            message
-                .enum_type
-                .iter()
-                .map(move |inner| format!(".{PACKAGE}.{name}.{}", inner.name()))
-                .chain([format!(".{PACKAGE}.{}", message.name())])
-        })
+        .map(|inner| format!(".{PACKAGE}.{}", inner.name()))
         .collect::<BTreeSet<_>>();
     for message in &file.message_type {
-        for field in &message.field {
-            if let Some(type_name) = &field.type_name
-                && !types.contains(type_name)
-            {
-                panic!(
-                    "{}.{} is a `{type_name}`, which KEPT does not keep",
-                    message.name(),
-                    field.name()
-                );
-            }
-        }
+        declared(message, &format!(".{PACKAGE}"), &mut types);
+    }
+    for message in &file.message_type {
+        refused_unless_kept(message, &types);
     }
 
     parsed.file.retain(|file| file.package() == PACKAGE);
     parsed
 }
 
-/// `message` with only the fields, oneofs and enums `kept` names, nothing nested but those enums, its oneofs renumbered to the ones a kept field still fills.
+/// Every type `message` declares, itself, its enums and its messages, each by its path under `scope`.
+fn declared(message: &DescriptorProto, scope: &str, types: &mut BTreeSet<String>) {
+    let path = format!("{scope}.{}", message.name());
+    for inner in &message.enum_type {
+        types.insert(format!("{path}.{}", inner.name()));
+    }
+    for inner in &message.nested_type {
+        declared(inner, &path, types);
+    }
+    types.insert(path);
+}
+
+/// Refuse a field of `message`, or of a message inside it, whose type is none of `types`.
+fn refused_unless_kept(message: &DescriptorProto, types: &BTreeSet<String>) {
+    for field in &message.field {
+        if let Some(type_name) = &field.type_name
+            && !types.contains(type_name)
+        {
+            panic!(
+                "{}.{} is a `{type_name}`, which KEPT does not keep",
+                message.name(),
+                field.name()
+            );
+        }
+    }
+    for inner in &message.nested_type {
+        refused_unless_kept(inner, types);
+    }
+}
+
+/// `message` with only the fields, oneofs, enums and messages `kept` names, each message inside it narrowed in turn, its oneofs renumbered to the ones a kept field still fills.
 fn narrowed(message: &mut DescriptorProto, kept: &Kept) {
     message
         .field
@@ -223,7 +280,19 @@ fn narrowed(message: &mut DescriptorProto, kept: &Kept) {
             kept.message
         );
     }
-    message.nested_type.clear();
+    message.nested_type.retain(|inner| {
+        kept.nested
+            .iter()
+            .any(|nested| nested.message == inner.name())
+    });
+    for inner in &mut message.nested_type {
+        let nested = kept
+            .nested
+            .iter()
+            .find(|nested| nested.message == inner.name())
+            .expect("a message retained is kept");
+        narrowed(inner, nested);
+    }
     message
         .enum_type
         .retain(|inner| kept.enums.contains(&inner.name()));

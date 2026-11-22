@@ -2,18 +2,23 @@
 //!
 //! Every statistic here is derived, which is the point. A duration is a slice's end differenced against its beginning, a retained byte count the same subtraction over the allocator's readings, and a sample distribution a pass over the instants that carry a `value` — so a question the columns below do not answer is asked of the file directly, by `trace_processor` or Perfetto's UI, rather than by changing what a capture keeps.
 //!
-//! **A track is a thread, and each keeps a stack.** A slice begins and ends on its thread's track, and the slices of one track nest, so self time is each slice's extent less what the slices begun directly inside it on its track took, and what ran inside a span is what its track entered while it was entered. A call is a slice: a span entered twice is two.
+//! **A packet is read with what its sequence stated before it.** Each packet sequence keeps its own state: the names and strings interned on it, its defaults — the track its slices are on and the counter tracks its readings are of — and its incremental clock, each timestamp on it a step from the one before. A counter written as steps is added to where its sequence last left it. A packet that clears its sequence's state starts all of it over.
+//!
+//! **A track is a thread, and each keeps a stack.** A slice begins and ends on its thread's track, and the slices of one track nest, so self time is each slice's extent less what the slices begun directly inside it on its track took, and what ran inside a span is what its track entered while it was entered. A call is a slice: a span entered twice is two. A slice's bytes and allocations are its own thread's, and what it retained is the process's.
 //!
 //! **A stream cut short reads up to its last whole packet.** A killed run's file, and one whose writer stopped at a failed write, end on a whole packet or inside one, and the packet cut short is dropped; the slices begun and never ended are reported in [`Report::open`], which is what a killed run was inside.
 //!
-//! **A packet that names what was never defined is refused.** An interned id, a track or a counter a packet uses before any packet of the stream defined it is a stream that is not this recorder's, or not whole from its first packet, and reading it as one would invent names; `trace_processor` rests on the same order.
+//! **A packet that names what was never defined is refused.** An interned id, a track, a counter or a clock a packet uses before a packet of the stream defined it is a stream that is not this recorder's, or not whole from its first packet, and reading it as one would invent names; `trace_processor` rests on the same order.
 //!
 //! **Each destination has its reader.** [`fold_at`] is [`Destination::File`](crate::Destination::File)'s: it takes the path that destination took and reads the file there. [`fold`] is [`Destination::Stream`](crate::Destination::Stream)'s, for bytes a caller already holds, such as a buffer folded back in the same process.
 
 use {
     crate::{
-        COUNTER_TRACKS,
-        perfetto::{TracePacket, TrackEvent, debug_annotation, trace_packet, track_event},
+        Counter,
+        perfetto::{
+            BuiltinClock, ClockSnapshot, TracePacket, TrackDescriptor, TrackEvent,
+            debug_annotation, trace_packet, track_descriptor, track_event,
+        },
     },
     prost::Message,
     std::{
@@ -140,13 +145,13 @@ pub struct Summary {
 /// What the allocator counted over a row's spans: differences of the readings their slices carried.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Memory {
-    /// Net bytes still held at exit: what the spans took minus what they returned. Negative where they freed more than they took, which is how a pass that consumes a representation reports itself.
+    /// Net bytes the process still held at exit: what it took minus what it returned while the spans were entered, on any thread, since a block one thread takes another may return. Negative where more was freed than taken, which is how a pass that consumes a representation reports itself.
     pub retained: i64,
-    /// Bytes the spans took while entered, whether or not later returned. A pass that allocates heavily and frees as it goes shows large `allocated` beside near-zero [`retained`](Self::retained).
+    /// Bytes the spans' own thread took while they were entered, whether or not later returned. A pass that allocates heavily and frees as it goes shows large `allocated` beside near-zero [`retained`](Self::retained).
     pub allocated: u64,
     /// The part of [`allocated`](Self::allocated) no span entered inside these ones accounts for.
     pub self_allocated: u64,
-    /// Trips through the allocator while the spans were entered. Divided into [`allocated`](Self::allocated) it gives the average request size, which is what separates a pass that wants fewer allocations from one that wants a smaller structure.
+    /// Trips the spans' own thread made through the allocator while they were entered. Divided into [`allocated`](Self::allocated) it gives the average request size, which is what separates a pass that wants fewer allocations from one that wants a smaller structure.
     pub allocations: u64,
 }
 
@@ -454,14 +459,84 @@ struct Credit {
     total: u128,
 }
 
+/// What a packet sequence stated for the packets after it: the names and strings interned on it, its defaults, its incremental clock, and each counter it writes as steps as it last stood.
 #[derive(Default)]
-struct Fold {
+struct Sequence {
     names: HashMap<u64, String>,
     categories: HashMap<u64, String>,
     annotation_names: HashMap<u64, String>,
     strings: HashMap<u64, String>,
-    tracks: HashMap<u64, Track>,
+    /// The track its events are on.
+    track: Option<u64>,
+    /// The counter tracks its events' readings are of, in the order an event carries them.
     counters: Vec<u64>,
+    /// The clock its packets are stamped on where a packet names none.
+    clock: Option<u32>,
+    steps: Option<Steps>,
+    stepped: HashMap<u64, i64>,
+}
+
+/// A sequence's incremental clock: its id, and where its last packet stood on the stream's clock.
+struct Steps {
+    clock: u32,
+    at: u64,
+}
+
+/// The stream's own clock, which a packet stamped on no clock is on.
+const STREAM_CLOCK: u32 = BuiltinClock::Boottime as u32;
+
+impl Sequence {
+    /// Where a packet stamped `timestamp` on `clock` stands on the stream's clock: a step from the last packet where the clock is this sequence's incremental one, whole where it is the stream's.
+    fn at(&mut self, timestamp: Option<u64>, clock: Option<u32>) -> io::Result<Option<u64>> {
+        let Some(timestamp) = timestamp else {
+            return Ok(None);
+        };
+        match clock.or(self.clock).unwrap_or(STREAM_CLOCK) {
+            STREAM_CLOCK => Ok(Some(timestamp)),
+            clock => match &mut self.steps {
+                Some(steps) if steps.clock == clock => {
+                    steps.at += timestamp;
+                    Ok(Some(steps.at))
+                }
+                _ => Err(refused(format_args!(
+                    "clock {clock}, used before it was defined"
+                ))),
+            },
+        }
+    }
+
+    /// The incremental clock a snapshot declares, standing where the stream's clock stood when it was taken.
+    fn clocked(&mut self, snapshot: &ClockSnapshot) -> io::Result<()> {
+        let stream = snapshot
+            .clocks
+            .iter()
+            .find(|clock| clock.clock_id() == STREAM_CLOCK);
+        let stepped = snapshot.clocks.iter().find(|clock| clock.is_incremental());
+        let (Some(stream), Some(stepped)) = (stream, stepped) else {
+            return Err(refused(format_args!(
+                "a clock snapshot that relates no incremental clock to the stream's"
+            )));
+        };
+        self.steps = Some(Steps {
+            clock: stepped.clock_id(),
+            at: stream.timestamp(),
+        });
+
+        Ok(())
+    }
+}
+
+/// A counter track the stream described: what it counts, and whether its values are steps.
+struct Described {
+    counter: Counter,
+    stepped: bool,
+}
+
+#[derive(Default)]
+struct Fold {
+    sequences: HashMap<u32, Sequence>,
+    tracks: HashMap<u64, Track>,
+    counters: HashMap<u64, Described>,
     spans: BTreeMap<(String, String, Option<String>), Aggregate>,
     samples: BTreeMap<Named, Distribution>,
     within: BTreeMap<(Named, Named), Credit>,
@@ -469,44 +544,97 @@ struct Fold {
 }
 
 impl Fold {
+    /// One packet, read with the state of the sequence it is on.
     fn packet(&mut self, packet: TracePacket) -> io::Result<()> {
+        let id = match packet.optional_trusted_packet_sequence_id {
+            Some(trace_packet::OptionalTrustedPacketSequenceId::TrustedPacketSequenceId(id)) => id,
+            None => 0,
+        };
+        let mut sequence = self.sequences.remove(&id).unwrap_or_default();
+        let read = self.read(&mut sequence, packet);
+        self.sequences.insert(id, sequence);
+
+        read
+    }
+
+    fn read(&mut self, sequence: &mut Sequence, packet: TracePacket) -> io::Result<()> {
+        if packet.sequence_flags() & trace_packet::SequenceFlags::SeqIncrementalStateCleared as u32
+            != 0
+        {
+            *sequence = Sequence::default();
+        }
+        if let Some(defaults) = &packet.trace_packet_defaults {
+            let events = defaults.track_event_defaults.clone().unwrap_or_default();
+            sequence.clock = defaults.timestamp_clock_id;
+            sequence.track = events.track_uuid;
+            sequence.counters = events.extra_counter_track_uuids;
+        }
         if let Some(interned) = packet.interned_data {
             for name in interned.event_names {
-                self.names.insert(name.iid(), name.name().to_string());
+                sequence.names.insert(name.iid(), name.name().to_string());
             }
             for category in interned.event_categories {
-                self.categories
+                sequence
+                    .categories
                     .insert(category.iid(), category.name().to_string());
             }
             for name in interned.debug_annotation_names {
-                self.annotation_names
+                sequence
+                    .annotation_names
                     .insert(name.iid(), name.name().to_string());
             }
             for text in interned.debug_annotation_string_values {
-                self.strings
+                sequence
+                    .strings
                     .insert(text.iid(), String::from_utf8_lossy(text.str()).into_owned());
             }
         }
+        let at = sequence.at(packet.timestamp, packet.timestamp_clock_id)?;
 
         match packet.data {
-            Some(trace_packet::Data::TrackDescriptor(track)) => {
-                if track.thread.is_some() {
-                    self.tracks.entry(track.uuid()).or_default();
-                } else if track.counter.is_some() {
-                    self.counters.push(track.uuid());
-                }
-            }
+            Some(trace_packet::Data::ClockSnapshot(snapshot)) => sequence.clocked(&snapshot),
+            Some(trace_packet::Data::TrackDescriptor(track)) => self.described(track),
             Some(trace_packet::Data::TrackEvent(event)) => {
-                self.event(packet.timestamp.unwrap_or_default(), event)?;
+                let at = at.ok_or_else(|| refused(format_args!("an event with no timestamp")))?;
+                self.event(sequence, at, event)
             }
-            None => {}
+            None => Ok(()),
+        }
+    }
+
+    /// A track described: a thread's, which keeps a stack, or a counter's, known by its name.
+    fn described(&mut self, track: TrackDescriptor) -> io::Result<()> {
+        if track.thread.is_some() {
+            self.tracks.entry(track.uuid()).or_default();
+        } else if let Some(counter) = &track.counter {
+            let name = match &track.static_or_dynamic_name {
+                Some(track_descriptor::StaticOrDynamicName::Name(name)) => name.as_str(),
+                None => "",
+            };
+            let Some(counted) = Counter::ALL
+                .into_iter()
+                .find(|counted| counted.name() == name)
+            else {
+                return Err(refused(format_args!("a counter track named `{name}`")));
+            };
+            self.counters.insert(
+                track.uuid(),
+                Described {
+                    counter: counted,
+                    stepped: counter.is_incremental(),
+                },
+            );
         }
 
         Ok(())
     }
 
-    fn event(&mut self, at: u64, event: TrackEvent) -> io::Result<()> {
-        let track = event.track_uuid();
+    fn event(&mut self, sequence: &mut Sequence, at: u64, event: TrackEvent) -> io::Result<()> {
+        let Some(track) = sequence.track else {
+            return Err(refused(format_args!(
+                "an event on a sequence that names no track"
+            )));
+        };
         if !self.tracks.contains_key(&track) {
             return Err(refused(format_args!(
                 "track {track}, used before it was described"
@@ -515,16 +643,16 @@ impl Fold {
         let Some(track_event::NameField::NameIid(name)) = event.name_field else {
             return Err(refused(format_args!("an event with no interned name")));
         };
-        let name = defined(&self.names, name, "event name")?.clone();
+        let name = defined(&sequence.names, name, "event name")?.clone();
         let target = match event.category_iids.first() {
-            Some(&category) => defined(&self.categories, category, "category")?.clone(),
+            Some(&category) => defined(&sequence.categories, category, "category")?.clone(),
             None => String::new(),
         };
-        let readings = self.readings(&event)?;
+        let readings = self.readings(sequence, &event)?;
         if let Some(readings) = readings {
             self.peak = Some(self.peak.unwrap_or(0).max(readings.peak));
         }
-        let annotations = self.annotations(&event)?;
+        let annotations = Self::annotations(sequence, &event)?;
 
         match event.r#type() {
             track_event::Type::SliceBegin => {
@@ -538,40 +666,64 @@ impl Fold {
         Ok(())
     }
 
-    /// The allocator's four readings a slice carries, `None` where it carries none.
-    fn readings(&self, event: &TrackEvent) -> io::Result<Option<Readings>> {
-        if event.extra_counter_track_uuids.is_empty() {
+    /// The allocator's four readings a slice carries, `None` where it carries none: each value is of the counter track its sequence's defaults name in its place, and a counter's steps are added to where the sequence last left it.
+    fn readings(
+        &self,
+        sequence: &mut Sequence,
+        event: &TrackEvent,
+    ) -> io::Result<Option<Readings>> {
+        if event.extra_counter_values.is_empty() {
             return Ok(None);
         }
-        let reading = |track: u64| -> io::Result<i64> {
-            if !self.counters.contains(&track) {
+        if event.extra_counter_values.len() != sequence.counters.len() {
+            return Err(refused(format_args!(
+                "a slice carrying {} readings where its sequence names {} counter tracks",
+                event.extra_counter_values.len(),
+                sequence.counters.len()
+            )));
+        }
+        let mut read = Vec::with_capacity(sequence.counters.len());
+        for (&track, &value) in sequence.counters.iter().zip(&event.extra_counter_values) {
+            let Some(described) = self.counters.get(&track) else {
                 return Err(refused(format_args!(
                     "counter track {track}, used before it was described"
                 )));
-            }
-            event
-                .extra_counter_track_uuids
-                .iter()
-                .position(|&carried| carried == track)
-                .and_then(|at| event.extra_counter_values.get(at).copied())
+            };
+            let value = match described.stepped {
+                true => {
+                    let last = sequence.stepped.entry(track).or_default();
+                    *last += value;
+                    *last
+                }
+                false => value,
+            };
+            read.push((described.counter, value));
+        }
+        let reading = |counter: Counter| {
+            read.iter()
+                .find(|(read, _)| *read == counter)
+                .map(|&(_, value)| value)
                 .ok_or_else(|| {
                     refused(format_args!(
-                        "a slice carrying no reading of counter track {track}"
+                        "a slice carrying no reading of {}",
+                        counter.name()
                     ))
                 })
         };
-        let [live, allocated, allocations, peak] = COUNTER_TRACKS;
 
         Ok(Some(Readings {
-            live: reading(live)?,
-            allocated: reading(allocated)? as u64,
-            allocations: reading(allocations)? as u64,
-            peak: reading(peak)? as u64,
+            live: reading(Counter::Live)?,
+            allocated: reading(Counter::Allocated)? as u64,
+            allocations: reading(Counter::Allocations)? as u64,
+            peak: reading(Counter::Peak)? as u64,
         }))
     }
 
-    /// A slice's annotations as names and values, each id read off what the stream interned.
-    fn annotations(&self, event: &TrackEvent) -> io::Result<Vec<(String, Annotated)>> {
+    /// A slice's annotations as names and values, each id read off what its sequence interned.
+    fn annotations(
+        sequence: &Sequence,
+        event: &TrackEvent,
+    ) -> io::Result<Vec<(String, Annotated)>> {
         event
             .debug_annotations
             .iter()
@@ -579,7 +731,7 @@ impl Fold {
                 let Some(debug_annotation::NameField::NameIid(name)) = annotation.name_field else {
                     return Err(refused(format_args!("an annotation with no interned name")));
                 };
-                let name = defined(&self.annotation_names, name, "annotation name")?.clone();
+                let name = defined(&sequence.annotation_names, name, "annotation name")?.clone();
                 let value = match annotation.value {
                     Some(debug_annotation::Value::BoolValue(value)) => {
                         Annotated::Text(value.to_string())
@@ -587,7 +739,7 @@ impl Fold {
                     Some(debug_annotation::Value::UintValue(value)) => Annotated::Unsigned(value),
                     Some(debug_annotation::Value::IntValue(value)) => Annotated::Signed(value),
                     Some(debug_annotation::Value::StringValueIid(text)) => {
-                        Annotated::Text(defined(&self.strings, text, "string value")?.clone())
+                        Annotated::Text(defined(&sequence.strings, text, "string value")?.clone())
                     }
                     None => Annotated::Text(String::new()),
                 };

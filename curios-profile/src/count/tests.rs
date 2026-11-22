@@ -1,4 +1,4 @@
-//! What the counting allocator counts: nothing while no one reads the counts, everything while a recorder listens or a measurement has asked, and the bytes held from where counting began.
+//! What the counting allocator counts: nothing while no one reads the counts, everything while a recorder listens or a measurement has asked, each thread's own beside the process's, and the bytes held from where counting began.
 //!
 //! Each test runs in a process of its own, as nextest runs them, so no other test's recorder listens beside it.
 
@@ -68,6 +68,27 @@ fn a_measurement_that_asks_is_counted_for() {
     take_and_return();
 
     assert!(allocated_bytes() - before >= HELD);
+}
+
+// A thread's counts are what it took itself: a block another thread takes is counted for that thread and the process, and not for this one.
+#[test]
+fn a_thread_counts_only_what_it_takes() {
+    count_allocations();
+    let (here, process) = (thread_allocated_bytes(), allocated_bytes());
+    let there = std::thread::scope(|scope| {
+        scope
+            .spawn(|| {
+                let before = thread_allocated_bytes();
+                take_and_return();
+                thread_allocated_bytes() - before
+            })
+            .join()
+            .expect("the thread returns")
+    });
+
+    assert!(there >= HELD as u64, "{there}");
+    assert!(allocated_bytes() - process >= HELD);
+    assert!(thread_allocated_bytes() - here < HELD as u64);
 }
 
 // Live bytes count from where counting began: a block taken before it and returned since lowers them below where they began, where an unsigned count would wrap.

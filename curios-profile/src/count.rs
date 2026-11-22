@@ -1,16 +1,17 @@
-//! Allocation accounting for [`trace`](crate::trace()): a `GlobalAlloc` wrapper maintaining process-wide live, cumulative, and high-water byte counters, which the recorder reads at each span boundary.
+//! Allocation accounting for [`trace`](crate::trace()): a `GlobalAlloc` wrapper counting what each thread takes and what the process holds, which the recorder reads at each span boundary.
 //!
 //! A program that reads the counts installs [`CountingAllocator`] as its `#[global_allocator]`; a library that installed it would put it in every binary linked to the compiler, the certifier's and the browser bundle's among them, where nothing reads a count.
 //!
-//! **It counts only while someone reads the counts**: a recorder, [`install`](crate::install)'s for the rest of the process and [`trace`](crate::trace())'s for its closure, or a measurement that asked with [`count_allocations`]. Otherwise a trip through it costs one relaxed load: counting is four atomic read-modify-writes, each a locked instruction on x86, which every compile would pay for a count nobody reads. So the live bytes are counted from where counting began, and a block taken before it and returned since lowers them, below zero where more was returned than taken.
+//! **It counts only while someone reads the counts**: a recorder, [`install`](crate::install)'s for the rest of the process and [`trace`](crate::trace())'s for its closure, or a measurement that asked with [`count_allocations`]. Otherwise a trip through it costs one relaxed load: counting is four atomic read-modify-writes, each a locked instruction on x86, and two thread-local additions, which every compile would pay for a count nobody reads. So the live bytes are counted from where counting began, and a block taken before it and returned since lowers them, below zero where more was returned than taken.
 //!
-//! The counters are process-wide, so a span measures whatever the whole process did while it was entered — precise for the single-threaded stage pipelines the workspace profiles and an overcount anywhere else; `README.md` states why.
+//! **Each thread counts what it takes, and the process what all of them hold.** Bytes taken and trips through the allocator are counted for the thread that asked as well as for the process, so a span is charged what its own thread took; live bytes and their peak are the process's alone, since a block one thread takes another may return. A thread's counts live in thread-locals initialized as constants with no destructor, which never allocate and stand for the whole of the thread's life, so the allocator reaches them without re-entering itself.
 
 #[cfg(test)]
 mod tests;
 
 use std::{
     alloc::{GlobalAlloc, Layout, System},
+    cell::Cell,
     sync::atomic::{AtomicIsize, AtomicUsize, Ordering},
 };
 
@@ -20,6 +21,13 @@ static LIVE: AtomicIsize = AtomicIsize::new(0);
 static ALLOCATED: AtomicUsize = AtomicUsize::new(0);
 static ALLOCATIONS: AtomicUsize = AtomicUsize::new(0);
 static PEAK: AtomicIsize = AtomicIsize::new(0);
+
+thread_local! {
+    /// Bytes this thread took while counting, each reallocation's growth once.
+    static THREAD_ALLOCATED: Cell<u64> = const { Cell::new(0) };
+    /// Trips this thread made through the allocator while counting.
+    static THREAD_ALLOCATIONS: Cell<u64> = const { Cell::new(0) };
+}
 
 /// A `GlobalAlloc` forwarding every request to the system allocator and counting the bytes that pass through it while anyone reads them. A program that reads the counts installs it:
 ///
@@ -38,11 +46,13 @@ impl CountingAllocator {
     /// One trip through the allocator, whatever it was for. Counted separately from the bytes because the two choose different fixes: many small requests want fewer allocations, one large request wants a smaller structure, and a byte total alone cannot tell them apart.
     fn requested() {
         ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
+        THREAD_ALLOCATIONS.with(|count| count.set(count.get() + 1));
     }
 
     // A layout's size is at most `isize::MAX`, so each conversion below is exact.
     fn grew(size: usize) {
         ALLOCATED.fetch_add(size, Ordering::Relaxed);
+        THREAD_ALLOCATED.with(|bytes| bytes.set(bytes.get() + size as u64));
         let live = LIVE.fetch_add(size as isize, Ordering::Relaxed) + size as isize;
         PEAK.fetch_max(live, Ordering::Relaxed);
     }
@@ -52,7 +62,7 @@ impl CountingAllocator {
     }
 }
 
-// SAFETY: every method forwards its request unchanged to `System` and returns exactly what it returned, so the allocator contract is `System`'s. The counters are plain atomics touched after the underlying call and never allocate, so no method re-enters this allocator.
+// SAFETY: every method forwards its request unchanged to `System` and returns exactly what it returned, so the allocator contract is `System`'s. The counters are plain atomics and thread-locals initialized as constants with no destructor, touched after the underlying call; neither allocates nor is ever torn down, so no method re-enters this allocator.
 unsafe impl GlobalAlloc for CountingAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let pointer = unsafe { System.alloc(layout) };
@@ -135,4 +145,14 @@ pub fn allocation_count() -> usize {
 pub fn peak_bytes() -> usize {
     // Never below zero, where it starts and which it only rises from.
     PEAK.load(Ordering::Relaxed) as usize
+}
+
+/// Bytes the calling thread took while counting, each reallocation's growth once, never decreasing: its share of [`allocated_bytes`].
+pub fn thread_allocated_bytes() -> u64 {
+    THREAD_ALLOCATED.with(Cell::get)
+}
+
+/// Trips the calling thread made through the allocator while counting, never decreasing: its share of [`allocation_count`].
+pub fn thread_allocation_count() -> u64 {
+    THREAD_ALLOCATIONS.with(Cell::get)
 }

@@ -1,11 +1,13 @@
-//! What the writer puts in the file: a span's slices on its thread's track, a name and a string interned once, the fields a span and an event carry, the allocator's readings where it counts, a filed stream kept whole and started over, and a stream ended at the first write that fails.
+//! What the writer puts in the file: a sequence a thread, opened with its defaults and stamped in steps, a span's slices on its thread's track, a name and a string interned once, the fields a span and an event carry, the allocator's readings where it counts and a thread's own allocations, a filed stream kept whole and started over, and a stream ended at the first write that fails.
 
 use {
     super::*,
     curios_common::test_support::*,
     std::{
+        collections::BTreeSet,
         io::Read,
         sync::{Arc, Mutex},
+        time::Duration,
     },
 };
 
@@ -23,6 +25,35 @@ impl Buffer {
     fn destination(&self) -> Destination {
         Destination::Stream(Box::new(self.clone()))
     }
+
+    fn folded(&self) -> crate::Report {
+        crate::fold(self.0.lock().expect("buffer lock").as_slice()).expect("the stream folds")
+    }
+}
+
+/// The sequence a packet is on.
+fn sequence_of(packet: &TracePacket) -> u32 {
+    match packet.optional_trusted_packet_sequence_id {
+        Some(trace_packet::OptionalTrustedPacketSequenceId::TrustedPacketSequenceId(id)) => id,
+        None => panic!("every packet names its sequence"),
+    }
+}
+
+/// The packets that open a thread's sequence, each with the defaults it states.
+fn opened(packets: &[TracePacket]) -> Vec<(u32, &TrackEventDefaults)> {
+    packets
+        .iter()
+        .filter_map(|packet| {
+            let defaults = packet.trace_packet_defaults.as_ref()?;
+            Some((
+                sequence_of(packet),
+                defaults
+                    .track_event_defaults
+                    .as_ref()
+                    .expect("a thread's defaults name its track"),
+            ))
+        })
+        .collect()
 }
 
 impl Write for Buffer {
@@ -73,7 +104,7 @@ fn interned(packets: &[TracePacket]) -> InternedData {
     all
 }
 
-// One span's life, in the order the file states it: the sequence cleared and the process described first, then the thread's track, the span's name interned, and a slice begun and ended on that track.
+// One span's life, in the order the file states it: the process's sequence cleared and the process described first, then the thread's sequence opened with its track as its events' default, the span's name interned, and a slice begun and ended on that sequence, which names no track of its own.
 #[test]
 fn a_span_is_written_as_a_slice_begun_and_ended_on_its_thread_s_track() {
     let buffer = Buffer::default();
@@ -92,15 +123,24 @@ fn a_span_is_written_as_a_slice_begun_and_ended_on_its_thread_s_track() {
         .find(|track| track.thread.is_some())
         .expect("the thread's track")
         .uuid();
-    let kinds = events(&packets)
-        .into_iter()
-        .map(|event| (event.r#type(), event.track_uuid()))
+    let [(sequence, defaults)] = opened(&packets)[..] else {
+        panic!("one thread's sequence opens");
+    };
+    assert_eq!(defaults.track_uuid, Some(thread));
+    let kinds = packets
+        .iter()
+        .filter_map(|packet| match &packet.data {
+            Some(trace_packet::Data::TrackEvent(event)) => {
+                Some((event.r#type(), sequence_of(packet)))
+            }
+            _ => None,
+        })
         .collect::<Vec<_>>();
     assert_eq!(
         kinds,
         [
-            (track_event::Type::SliceBegin, thread),
-            (track_event::Type::SliceEnd, thread)
+            (track_event::Type::SliceBegin, sequence),
+            (track_event::Type::SliceEnd, sequence)
         ]
     );
     assert_eq!(
@@ -207,7 +247,7 @@ fn a_string_value_many_spans_carry_is_written_once() {
     assert_eq!(strings[0].str(), b"the same term");
 }
 
-// A slice's beginning and end carry the allocator's four readings, which a fold differences into a byte count. The counters are the process's, so what the span took shows as at least its own allocation between the two cumulative readings, whatever another test allocated beside it.
+// A slice's beginning and end carry the allocator's four readings, one for each counter track its sequence's defaults name, the thread's two written as steps: the end's step of allocated bytes is what the thread took while the span was entered, at least its own allocation.
 #[test]
 fn a_slice_carries_the_allocator_readings() {
     const HELD: usize = 4 * 1024 * 1024;
@@ -222,24 +262,97 @@ fn a_slice_carries_the_allocator_readings() {
     .expect("a stream destination opens");
 
     let packets = buffer.packets();
-    assert_eq!(
-        tracks(&packets)
-            .iter()
-            .filter(|track| track.counter.is_some())
-            .count(),
-        COUNTER_TRACKS.len()
-    );
-    let allocated = events(&packets)
+    let counters = tracks(&packets)
         .into_iter()
-        .map(|event| {
-            assert_eq!(event.extra_counter_track_uuids, COUNTER_TRACKS);
-            event.extra_counter_values[1]
-        })
-        .collect::<Vec<_>>();
-    assert!(
-        (allocated[1] - allocated[0]) as usize >= HELD,
-        "the end reads what the span allocated: {allocated:?}"
+        .filter(|track| track.counter.is_some())
+        .map(|track| track.uuid())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(counters.len(), Counter::ALL.len());
+    let [(_, defaults)] = opened(&packets)[..] else {
+        panic!("one thread's sequence opens");
+    };
+    assert_eq!(
+        defaults
+            .extra_counter_track_uuids
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>(),
+        counters
     );
+    let ended = events(&packets)
+        .into_iter()
+        .find(|event| event.r#type() == track_event::Type::SliceEnd)
+        .expect("the slice ends");
+    assert_eq!(ended.extra_counter_values.len(), Counter::ALL.len());
+    assert!(
+        ended.extra_counter_values[0] as usize >= HELD,
+        "the end's step reads what the span allocated: {:?}",
+        ended.extra_counter_values
+    );
+}
+
+// A span is charged what its own thread took, read back through the stream: another thread's allocation made while it is entered is that thread's span's, and what its thread took before it entered is no part of it.
+#[test]
+fn a_span_is_charged_what_its_own_thread_allocated() {
+    const HELD: usize = 4 * 1024 * 1024;
+
+    let buffer = Buffer::default();
+    trace(buffer.destination(), || {
+        let dispatch = tracing::dispatcher::get_default(Clone::clone);
+        drop(std::hint::black_box(vec![0_u8; 2 * HELD]));
+        let _span = tracing::trace_span!("here").entered();
+        std::thread::scope(|scope| {
+            scope.spawn(|| {
+                tracing::dispatcher::with_default(&dispatch, || {
+                    let _span = tracing::trace_span!("there").entered();
+                    drop(std::hint::black_box(vec![0_u8; HELD]));
+                });
+            });
+        });
+    })
+    .expect("a stream destination opens");
+
+    let report = buffer.folded();
+    let allocated = |name: &str| {
+        report
+            .summaries
+            .iter()
+            .find(|summary| summary.name == name)
+            .and_then(|summary| summary.memory)
+            .map(|memory| memory.allocated as usize)
+            .unwrap_or_else(|| panic!("the span {name} folds with its memory"))
+    };
+    assert!(allocated("there") >= HELD, "{}", allocated("there"));
+    assert!(allocated("here") < HELD, "{}", allocated("here"));
+}
+
+// A thread's packets are stamped as steps on its sequence's clock, each from the one before: summed from where the sequence's opening packet stands, they reach the time its last packet was written, at least what the run slept and at most what it took.
+#[test]
+fn a_thread_s_packets_are_stamped_as_steps_from_the_one_before() {
+    const SLEPT: Duration = Duration::from_millis(20);
+
+    let buffer = Buffer::default();
+    let began = Instant::now();
+    trace(buffer.destination(), || {
+        for _ in 0..2 {
+            let _span = tracing::trace_span!("sleeps").entered();
+            std::thread::sleep(SLEPT);
+        }
+    })
+    .expect("a stream destination opens");
+    let took = began.elapsed();
+
+    let packets = buffer.packets();
+    let [(sequence, _)] = opened(&packets)[..] else {
+        panic!("one thread's sequence opens");
+    };
+    let last = packets
+        .iter()
+        .filter(|packet| sequence_of(packet) == sequence)
+        .map(TracePacket::timestamp)
+        .sum::<u64>();
+    assert!(Duration::from_nanos(last) >= 2 * SLEPT, "{last}");
+    assert!(Duration::from_nanos(last) <= took, "{last} past {took:?}");
 }
 
 // A recorder whose allocator does not count describes no counter track and carries no reading, so its stream reads no memory rather than memory of nought.
@@ -254,15 +367,20 @@ fn a_recorder_whose_allocator_does_not_count_carries_no_reading() {
     let packets = buffer.packets();
     assert!(tracks(&packets).iter().all(|track| track.counter.is_none()));
     assert!(
+        opened(&packets)
+            .iter()
+            .all(|(_, defaults)| defaults.extra_counter_track_uuids.is_empty())
+    );
+    assert!(
         events(&packets)
             .iter()
             .all(|event| event.extra_counter_values.is_empty())
     );
 }
 
-// Each thread that records is a track of its own, so the spans of two threads are slices on two tracks, never one stack.
+// Each thread that records opens a sequence of its own, whose defaults name a track of its own, so the spans of two threads are slices on two tracks, never one stack.
 #[test]
-fn two_threads_record_on_two_tracks() {
+fn two_threads_record_on_two_sequences_and_two_tracks() {
     let buffer = Buffer::default();
     trace(buffer.destination(), || {
         let dispatch = tracing::dispatcher::get_default(Clone::clone);
@@ -282,12 +400,28 @@ fn two_threads_record_on_two_tracks() {
         .iter()
         .filter(|track| track.thread.is_some())
         .map(|track| track.uuid())
-        .collect::<Vec<_>>();
+        .collect::<BTreeSet<_>>();
     assert_eq!(threads.len(), 2, "{threads:?}");
-    let used = events(&packets)
+    let opened = opened(&packets);
+    assert_eq!(
+        opened
+            .iter()
+            .filter_map(|(_, defaults)| defaults.track_uuid)
+            .collect::<BTreeSet<_>>(),
+        threads
+    );
+    let used = packets
         .iter()
-        .map(|event| event.track_uuid())
-        .collect::<std::collections::BTreeSet<_>>();
+        .filter(|packet| matches!(packet.data, Some(trace_packet::Data::TrackEvent(_))))
+        .map(sequence_of)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        used,
+        opened
+            .iter()
+            .map(|(sequence, _)| *sequence)
+            .collect::<BTreeSet<_>>()
+    );
     assert_eq!(used.len(), 2, "{used:?}");
 }
 

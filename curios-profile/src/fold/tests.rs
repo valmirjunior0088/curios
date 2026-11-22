@@ -1,18 +1,26 @@
-//! What a fold recomputes from packets: the per-span aggregates, the distributions beside them, the two things only a stream can say — what a stream cut short still yields, and what a killed run was inside — each thread's track kept apart, a stream that is not the recorder's refused, and a filed stream read back from its path.
+//! What a fold recomputes from packets: the per-span aggregates, the distributions beside them, the two things only a stream can say — what a stream cut short still yields, and what a killed run was inside — each thread's sequence and track kept apart, a stream that is not the recorder's refused, and a filed stream read back from its path.
 
 use {
     super::*,
     crate::perfetto::{
         CounterDescriptor, DebugAnnotation, DebugAnnotationName, EventCategory, EventName,
-        InternedData, InternedString, ThreadDescriptor, Trace, TrackDescriptor,
+        InternedData, InternedString, ThreadDescriptor, Trace, TracePacketDefaults,
+        TrackDescriptor, TrackEventDefaults, clock_snapshot,
     },
     curios_common::test_support::*,
     std::fs,
 };
 
-/// The track a synthetic stream's first thread records on, and a second thread's.
+/// The track a synthetic stream's first thread records on, and a second thread's; each thread's two counters take the ids after its track.
 const THREAD: u64 = 16;
-const OTHER: u64 = 17;
+const OTHER: u64 = 19;
+
+/// The tracks of the process's two gauges.
+const LIVE: u64 = 2;
+const PEAK: u64 = 3;
+
+/// The incremental clock each thread's sequence is stamped on.
+const STEPS: u32 = 64;
 
 /// A field a synthetic slice carries.
 enum Field<'a> {
@@ -20,76 +28,99 @@ enum Field<'a> {
     Number(u64),
 }
 
-/// A stream written packet by packet as the recorder writes one: two threads' tracks and the allocator's counters described, and each name and string interned where it is first used, so a test states its slices' times and readings exactly.
-#[derive(Default)]
+/// What a synthetic stream keeps of one thread's sequence as it writes it: its id, the strings interned on it, the time its last packet stood at, and its counters as its last slice carried them.
+struct Written {
+    id: u32,
+    interned: HashMap<(u8, String), u64>,
+    stamped: u64,
+    allocated: i64,
+    allocations: i64,
+}
+
+/// A stream written packet by packet as the recorder writes one: the process's gauges described on its own sequence, and each of two threads on a sequence of its own, opened with its defaults and its step clock, its track and its two counters described. Each name and string is interned in the packet that first uses it. A test states its slices' times and readings whole, and the stream writes what the recorder would: each time as a step on its thread's clock, each thread counter as a step from its last reading.
 struct Stream {
     packets: Vec<TracePacket>,
-    interned: HashMap<(u8, String), u64>,
+    threads: HashMap<u64, Written>,
 }
 
 impl Stream {
     fn new() -> Self {
-        let mut stream = Self::default();
-        for uuid in [THREAD, OTHER] {
-            stream.describe(TrackDescriptor {
-                uuid: Some(uuid),
-                thread: Some(ThreadDescriptor::default()),
-                ..TrackDescriptor::default()
-            });
+        let mut stream = Self {
+            packets: Vec::new(),
+            threads: HashMap::new(),
+        };
+        stream.packets.push(TracePacket {
+            optional_trusted_packet_sequence_id: Some(sequenced(1)),
+            sequence_flags: Some(trace_packet::SequenceFlags::SeqIncrementalStateCleared as u32),
+            ..TracePacket::default()
+        });
+        for (uuid, counter) in [(LIVE, Counter::Live), (PEAK, Counter::Peak)] {
+            stream
+                .packets
+                .push(described(1, counter_track(uuid, counter, false)));
         }
-        for uuid in COUNTER_TRACKS {
-            stream.describe(TrackDescriptor {
-                uuid: Some(uuid),
-                counter: Some(CounterDescriptor::default()),
-                ..TrackDescriptor::default()
+        for (id, track) in [(2, THREAD), (3, OTHER)] {
+            stream.packets.push(TracePacket {
+                timestamp: Some(0),
+                timestamp_clock_id: Some(STREAM_CLOCK),
+                optional_trusted_packet_sequence_id: Some(sequenced(id)),
+                sequence_flags: Some(
+                    trace_packet::SequenceFlags::SeqIncrementalStateCleared as u32,
+                ),
+                trace_packet_defaults: Some(TracePacketDefaults {
+                    timestamp_clock_id: Some(STEPS),
+                    track_event_defaults: Some(TrackEventDefaults {
+                        track_uuid: Some(track),
+                        extra_counter_track_uuids: vec![track + 1, track + 2, LIVE, PEAK],
+                    }),
+                }),
+                data: Some(trace_packet::Data::ClockSnapshot(ClockSnapshot {
+                    clocks: vec![
+                        clock_snapshot::Clock {
+                            clock_id: Some(STREAM_CLOCK),
+                            timestamp: Some(0),
+                            is_incremental: None,
+                        },
+                        clock_snapshot::Clock {
+                            clock_id: Some(STEPS),
+                            timestamp: Some(0),
+                            is_incremental: Some(true),
+                        },
+                    ],
+                })),
+                ..TracePacket::default()
             });
+            stream.packets.push(described(
+                id,
+                TrackDescriptor {
+                    uuid: Some(track),
+                    thread: Some(ThreadDescriptor::default()),
+                    ..TrackDescriptor::default()
+                },
+            ));
+            stream.packets.push(described(
+                id,
+                counter_track(track + 1, Counter::Allocated, true),
+            ));
+            stream.packets.push(described(
+                id,
+                counter_track(track + 2, Counter::Allocations, true),
+            ));
+            stream.threads.insert(
+                track,
+                Written {
+                    id,
+                    interned: HashMap::new(),
+                    stamped: 0,
+                    allocated: 0,
+                    allocations: 0,
+                },
+            );
         }
         stream
     }
 
-    fn describe(&mut self, track: TrackDescriptor) {
-        self.packets.push(TracePacket {
-            data: Some(trace_packet::Data::TrackDescriptor(track)),
-            ..TracePacket::default()
-        });
-    }
-
-    /// The id of `text` among the strings of `kind` — an event name, a category, an annotation name, a string value — interned in a packet of its own the first time.
-    fn iid(&mut self, kind: u8, text: &str) -> u64 {
-        if let Some(&iid) = self.interned.get(&(kind, text.to_string())) {
-            return iid;
-        }
-        let iid = self.interned.len() as u64 + 1;
-        self.interned.insert((kind, text.to_string()), iid);
-        let mut interned = InternedData::default();
-        match kind {
-            0 => interned.event_names.push(EventName {
-                iid: Some(iid),
-                name: Some(text.to_string()),
-            }),
-            1 => interned.event_categories.push(EventCategory {
-                iid: Some(iid),
-                name: Some(text.to_string()),
-            }),
-            2 => interned.debug_annotation_names.push(DebugAnnotationName {
-                iid: Some(iid),
-                name: Some(text.to_string()),
-            }),
-            _ => interned
-                .debug_annotation_string_values
-                .push(InternedString {
-                    iid: Some(iid),
-                    str: Some(text.as_bytes().to_vec()),
-                }),
-        }
-        self.packets.push(TracePacket {
-            interned_data: Some(interned),
-            ..TracePacket::default()
-        });
-
-        iid
-    }
-
+    /// The event of `name` that `track`'s thread writes at `at`: of `kind`, carrying `fields`, and `readings` — live bytes, allocated bytes, allocations and the peak, as the allocator stood — where the allocator counted.
     fn event(
         mut self,
         track: u64,
@@ -99,32 +130,57 @@ impl Stream {
         fields: &[(&str, Field<'_>)],
         readings: Option<[i64; 4]>,
     ) -> Self {
-        let name = self.iid(0, name);
-        let category = self.iid(1, "curios_test");
+        let thread = self
+            .threads
+            .get_mut(&track)
+            .expect("a thread of the stream");
+        let mut interned = InternedData::default();
+        let name = thread.iid(&mut interned, 0, name);
+        let category = thread.iid(&mut interned, 1, "curios_test");
         let debug_annotations = fields
             .iter()
             .map(|(field, value)| DebugAnnotation {
-                name_field: Some(debug_annotation::NameField::NameIid(self.iid(2, field))),
+                name_field: Some(debug_annotation::NameField::NameIid(thread.iid(
+                    &mut interned,
+                    2,
+                    field,
+                ))),
                 value: Some(match value {
-                    Field::Text(text) => debug_annotation::Value::StringValueIid(self.iid(3, text)),
+                    Field::Text(text) => {
+                        debug_annotation::Value::StringValueIid(thread.iid(&mut interned, 3, text))
+                    }
                     Field::Number(number) => debug_annotation::Value::UintValue(*number),
                 }),
             })
             .collect();
-        let event = TrackEvent {
-            r#type: Some(kind as i32),
-            track_uuid: Some(track),
-            name_field: Some(track_event::NameField::NameIid(name)),
-            category_iids: vec![category],
-            debug_annotations,
-            extra_counter_track_uuids: readings.map_or(Vec::new(), |_| COUNTER_TRACKS.to_vec()),
-            extra_counter_values: readings.map_or(Vec::new(), |readings| readings.to_vec()),
-        };
-        self.packets.push(TracePacket {
-            timestamp: Some(at),
-            data: Some(trace_packet::Data::TrackEvent(event)),
+        let extra_counter_values =
+            readings.map_or(Vec::new(), |[live, allocated, allocations, peak]| {
+                let steps = vec![
+                    allocated - thread.allocated,
+                    allocations - thread.allocations,
+                    live,
+                    peak,
+                ];
+                thread.allocated = allocated;
+                thread.allocations = allocations;
+                steps
+            });
+        let step = at - thread.stamped;
+        thread.stamped = at;
+        let packet = TracePacket {
+            timestamp: Some(step),
+            optional_trusted_packet_sequence_id: Some(sequenced(thread.id)),
+            interned_data: (interned != InternedData::default()).then_some(interned),
+            data: Some(trace_packet::Data::TrackEvent(TrackEvent {
+                r#type: Some(kind as i32),
+                name_field: Some(track_event::NameField::NameIid(name)),
+                category_iids: vec![category],
+                debug_annotations,
+                extra_counter_values,
+            })),
             ..TracePacket::default()
-        });
+        };
+        self.packets.push(packet);
         self
     }
 
@@ -150,6 +206,67 @@ impl Stream {
 
     fn folded(&self) -> Report {
         fold(self.bytes().as_slice()).expect("the stream folds")
+    }
+}
+
+impl Written {
+    /// The id of `text` among this sequence's strings of `kind` — an event name, a category, an annotation name, a string value — added to `interned` the first time.
+    fn iid(&mut self, interned: &mut InternedData, kind: u8, text: &str) -> u64 {
+        if let Some(&iid) = self.interned.get(&(kind, text.to_string())) {
+            return iid;
+        }
+        let iid = self.interned.len() as u64 + 1;
+        self.interned.insert((kind, text.to_string()), iid);
+        match kind {
+            0 => interned.event_names.push(EventName {
+                iid: Some(iid),
+                name: Some(text.to_string()),
+            }),
+            1 => interned.event_categories.push(EventCategory {
+                iid: Some(iid),
+                name: Some(text.to_string()),
+            }),
+            2 => interned.debug_annotation_names.push(DebugAnnotationName {
+                iid: Some(iid),
+                name: Some(text.to_string()),
+            }),
+            _ => interned
+                .debug_annotation_string_values
+                .push(InternedString {
+                    iid: Some(iid),
+                    str: Some(text.as_bytes().to_vec()),
+                }),
+        }
+
+        iid
+    }
+}
+
+fn sequenced(id: u32) -> trace_packet::OptionalTrustedPacketSequenceId {
+    trace_packet::OptionalTrustedPacketSequenceId::TrustedPacketSequenceId(id)
+}
+
+/// A packet of sequence `id` describing `track`.
+fn described(id: u32, track: TrackDescriptor) -> TracePacket {
+    TracePacket {
+        optional_trusted_packet_sequence_id: Some(sequenced(id)),
+        data: Some(trace_packet::Data::TrackDescriptor(track)),
+        ..TracePacket::default()
+    }
+}
+
+/// The track of `counter` at `uuid`, its values written as steps where `stepped`.
+fn counter_track(uuid: u64, counter: Counter, stepped: bool) -> TrackDescriptor {
+    TrackDescriptor {
+        uuid: Some(uuid),
+        static_or_dynamic_name: Some(track_descriptor::StaticOrDynamicName::Name(
+            counter.name().to_string(),
+        )),
+        counter: Some(CounterDescriptor {
+            unit: None,
+            is_incremental: stepped.then_some(true),
+        }),
+        ..TrackDescriptor::default()
     }
 }
 
@@ -542,6 +659,53 @@ fn two_threads_read_as_two_tracks_each_with_its_own_stack() {
     assert!(report.within.is_empty(), "{:?}", report.within);
 }
 
+// A slice is charged what its own thread took, each thread's counters read as steps on its own sequence, and what the process retained meanwhile, whichever thread took it: the other thread's 5,000 bytes, taken while the first slice was entered, are the second slice's and not the first's.
+#[test]
+fn a_slice_is_charged_its_own_thread_s_allocations() {
+    let report = Stream::new()
+        .event(
+            THREAD,
+            0,
+            track_event::Type::SliceBegin,
+            "first",
+            &[],
+            Some([0, 100, 1, 0]),
+        )
+        .event(
+            OTHER,
+            10,
+            track_event::Type::SliceBegin,
+            "second",
+            &[],
+            Some([0, 0, 0, 0]),
+        )
+        .event(
+            OTHER,
+            20,
+            track_event::Type::SliceEnd,
+            "second",
+            &[],
+            Some([5000, 5000, 9, 5000]),
+        )
+        .event(
+            THREAD,
+            30,
+            track_event::Type::SliceEnd,
+            "first",
+            &[],
+            Some([5000, 300, 3, 5000]),
+        )
+        .folded();
+
+    let memory = |name: &str| {
+        let memory = row(&report, name).memory.expect("readings");
+        (memory.retained, memory.allocated, memory.allocations)
+    };
+    assert_eq!(memory("first"), (5000, 200, 2));
+    assert_eq!(memory("second"), (5000, 5000, 9));
+    assert_eq!(report.peak, Some(5000));
+}
+
 /// `count` slices of `name`, the `n`th entered for `durations(n)` and carrying the field `input=n`.
 fn instances(name: &str, count: u64, durations: impl Fn(u64) -> u64) -> Stream {
     let mut stream = Stream::new();
@@ -684,10 +848,10 @@ fn a_packet_cut_short_is_dropped() {
 fn a_name_used_before_it_was_defined_is_refused() {
     let mut stream = Stream::new().slice(0, 100, "defined");
     stream.packets.push(TracePacket {
-        timestamp: Some(200),
+        timestamp: Some(100),
+        optional_trusted_packet_sequence_id: Some(sequenced(stream.threads[&THREAD].id)),
         data: Some(trace_packet::Data::TrackEvent(TrackEvent {
             r#type: Some(track_event::Type::SliceBegin as i32),
-            track_uuid: Some(THREAD),
             name_field: Some(track_event::NameField::NameIid(99)),
             ..TrackEvent::default()
         })),
