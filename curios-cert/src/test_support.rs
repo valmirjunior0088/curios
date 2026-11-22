@@ -5,13 +5,14 @@
 use {
     crate::{
         Certifier, Filed, Globals, Rechecked, Refusal, certify_definitions_over,
-        recheck::refusals_from,
+        recheck::{Changed, Over, refusals_from, verdicts_visiting},
     },
-    curios_common::{Candidates, SyntaxRegistry, fill},
+    curios_common::{Candidates, SyntaxRegistry, fill, grown},
     curios_core::{
         Certification, Definitions, Entrypoint, Free, Global, Places, Subterm, Term, Universes,
     },
     curios_surface::{CoreFile, FormScope, ReadError, to_core, to_core_at},
+    std::{cell::RefCell, collections::BTreeSet},
 };
 
 /// What a candidate is put to the certifier under: the forms its text is read against, the units in scope, the registry the walk judges under, and the budget each judgment is restored to.
@@ -281,22 +282,50 @@ pub fn doubled(node: &str, base: &str, depth: usize, keys: usize) -> String {
     })
 }
 
-/// [`certify_definitions`](crate::certify_definitions)'s verdicts with the certifier's evaluation memos off.
+/// The certifier's verdicts on the items of `definitions` at `chosen` alone, with its evaluation memos on or off (`memoized`), every other item standing on `baseline`'s record of it as a walk over a baseline leaves what it does not visit: a whole unit's walk made a share at a time, each share judged in the environment the whole walk gives it.
 ///
-/// Exists for one purpose: asserting that memoization changes no *semantic* verdict — the property that makes a memo an evaluation strategy rather than a store. A resource verdict may differ, since a term-keyed hit is free.
-pub fn recheck_definitions_refusals_uncached(
+/// For `curios-prelude`'s `memo_parity_in`, which puts the prelude to the certifier both ways, a share to a test.
+pub fn refusals_of_chosen<'s>(
     definitions: &Definitions,
+    chosen: &BTreeSet<usize>,
+    memoized: bool,
     budget: u64,
-    globals: &Globals,
+    globals: &'s Globals<'s>,
+    (baseline, places): (Filed<'s>, &'s Places),
     syntax: SyntaxRegistry,
 ) -> Vec<Refusal> {
-    refusals_from(
-        &mut Certifier::uncached(budget, syntax),
-        definitions,
-        None,
-        globals,
-        None,
-    )
+    let changed = Changed {
+        touched: BTreeSet::new(),
+        items: chosen.clone(),
+        lost: Vec::new(),
+        visited: chosen.clone(),
+        visited_names: chosen
+            .iter()
+            .flat_map(|place| definitions.items.names(*place))
+            .collect(),
+        redeclares: false,
+    };
+    let mut certifier = match memoized {
+        true => Certifier::new(budget, syntax),
+        false => Certifier::uncached(budget, syntax),
+    };
+    let over = Over {
+        baseline,
+        places,
+        candidates: None,
+    };
+
+    grown(|| {
+        verdicts_visiting(
+            &mut certifier,
+            definitions,
+            None,
+            globals,
+            Some(over),
+            Some(changed),
+            &RefCell::default(),
+        )
+    })
     .module()
     .into_refusals()
 }

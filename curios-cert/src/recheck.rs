@@ -600,7 +600,29 @@ fn verdicts_within<'s>(
     curios_profile::profile!("recheck_definitions");
     // Whether each part the baseline's walk read of a unit that moved is the part in scope now: asked once, a part being read by every declaration that names it.
     let abroad = RefCell::new(HashMap::<(Global, bool), bool>::new());
-    let mut changed = over.map(|over| Changed::of(definitions, globals, over, &abroad));
+    let changed = over.map(|over| Changed::of(definitions, globals, over, &abroad));
+
+    verdicts_visiting(
+        certifier,
+        definitions,
+        entry,
+        globals,
+        over,
+        changed,
+        &abroad,
+    )
+}
+
+/// [`verdicts_within`] over what `changed` says to visit, the whole module where it walks over no baseline: the walk the certifier makes of a unit, handed the set it visits: by [`verdicts_within`], which finds it from an edit, or by a caller judging a chosen share of a unit.
+pub fn verdicts_visiting<'s>(
+    certifier: &mut Certifier<'s>,
+    definitions: &Definitions,
+    entry: Option<&Entrypoint>,
+    globals: &'s Globals<'s>,
+    over: Option<Over<'s>>,
+    mut changed: Option<Changed>,
+    abroad: &RefCell<HashMap<(Global, bool), bool>>,
+) -> Walk {
     // A module that declares a name twice, its environment's among them, is refused here, whole, before anything of it is judged. Over a baseline every item is asked only where an item it changed may have declared a held name.
     if changed.as_ref().is_none_or(|changed| changed.redeclares) {
         let redeclared = redeclarations(definitions, globals);
@@ -853,7 +875,7 @@ fn verdicts_within<'s>(
             && !own_terms(place)
             && let Some(certified) = adopting.adopts(item, |name, body| {
                 certifier.passed(name)
-                    || read_stands(globals, adopting.baseline(), &abroad, name, body)
+                    || read_stands(globals, adopting.baseline(), abroad, name, body)
             })
         {
             let adopted = adopt(certifier, adopting.baseline(), item, &certified);
@@ -1357,19 +1379,19 @@ fn revised(
 /// What a walk over a baseline finds changed of the module it judges, and what that could reach: by its own comparison of the two modules ([`Filed::holds`]) and its own record read backwards ([`ReadBy`](curios_core::ReadBy)).
 ///
 /// **Found from the edit, by the certifier's own record.** Where the module is a version of the baseline's, the two are compared by what they do not share ([`Items::changed_since`](curios_core::Items::changed_since)), and only the items held where the baseline held another or none are asked whether they are the baseline's; otherwise every item is. An item that is not, a name the baseline declared and the module does not, and, of a unit in scope that moved, each part read whose digest moved ([`read_stands`]) are where what was read can have moved. A declaration whose filed reads name one of them is reached, and so is one whose reads name a declaration reached, and so is one held where the baseline held another or none whose filed reads name a declaration of the module stored after it, which a walk in the module's order meets before what it read is settled. A declaration none reaches reads only what stands, so asking its reads would adopt it: nothing another component computed decides that, and the record is the one this crate filed.
-struct Changed {
+pub struct Changed {
     /// The places the module holds another item at than the baseline does, or every place where the two modules are not one a version of the other.
-    touched: BTreeSet<usize>,
+    pub touched: BTreeSet<usize>,
     /// The places of the items whose terms or registry entries are not the baseline's.
-    items: BTreeSet<usize>,
+    pub items: BTreeSet<usize>,
     /// The names the baseline declared and the module does not.
-    lost: Vec<Global>,
+    pub lost: Vec<Global>,
     /// The places of the declarations the walk visits: the items above, and every declaration an edit could reach.
-    visited: BTreeSet<usize>,
+    pub visited: BTreeSet<usize>,
     /// The names the visited declarations declare.
-    visited_names: HashSet<Global>,
+    pub visited_names: HashSet<Global>,
     /// Whether an item the module holds where the baseline held another or none declares a name another item or a unit in scope declares, or nothing says which items those are: then every item is asked whether it redeclares a name.
-    redeclares: bool,
+    pub redeclares: bool,
 }
 
 impl Changed {

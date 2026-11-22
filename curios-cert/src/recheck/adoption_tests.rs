@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::*,
+    crate::{test_support::refusals_of_chosen, *},
     curios_analysis::test_support::*,
     curios_common::fill,
     curios_core::{
@@ -10,6 +10,56 @@ use {
         Totality,
     },
 };
+
+/// A share of a unit walked alone judges the items it is handed and only those, every other item standing on the baseline's record of it: `identity` returning a type where a `Nat` is due is refused where the share holds it, with the memos on and off alike, and stands on the record where the share holds only `five`, which reads it. What `curios-prelude`'s memo parity puts the prelude to the certifier by, a share to a test.
+///
+/// Mutation-checked: with the share's walk visiting nothing, `identity` goes unjudged and nothing is refused.
+#[test]
+fn a_chosen_share_is_judged_and_the_rest_stands_on_the_record() {
+    let baseline = written();
+    let certification = walked(&baseline).certification().clone();
+    let baseline_places = Places::of(&baseline);
+    let edited = reading_definitions("#NatType", "#NatType");
+    let places = Places::of(&edited);
+    let globals = Globals::default();
+    let filed = Filed {
+        definitions: &baseline,
+        places: &baseline_places,
+        certification: &certification,
+    };
+    let refused = |chosen: &[&str], memoized: bool| {
+        let chosen = chosen
+            .iter()
+            .map(|name| {
+                places
+                    .place(&global(name))
+                    .expect("the module declares it")
+                    .item()
+            })
+            .collect();
+
+        refusals_of_chosen(
+            &edited,
+            &chosen,
+            memoized,
+            BUDGET,
+            &globals,
+            (filed, &places),
+            SYNTAX,
+        )
+        .iter()
+        .map(|verdict| verdict.name)
+        .collect::<Vec<_>>()
+    };
+
+    for memoized in [true, false] {
+        assert_eq!(
+            refused(&["identity"], memoized),
+            vec![Some(global("identity"))]
+        );
+        assert_eq!(refused(&["five"], memoized), Vec::new());
+    }
+}
 
 /// The fixture the trusted base is held by: a dependency's body changes, its dependent is presented as it was, and the walk judges the dependent again because its own record says it unfolded that body. `three : alias = 3` stood while `alias` was `Nat` and is refused once `alias` is `Bool`, whatever the caller took to be unchanged.
 #[test]

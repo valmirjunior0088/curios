@@ -4,13 +4,13 @@ use {
     super::{test_support::*, *},
     curios_cert::{Error, Refusal, certify_definitions, infer, test_support::*},
     curios_core::{
-        Exhaustion, Free, FuncType, Global, Intrinsic, Item, Nat, Polarity, Quality, Reducer,
-        Subterm, Telescope, Term, Variance, instantiate_qualities,
+        Definitions, Exhaustion, Free, FuncType, Global, Intrinsic, Item, Nat, Polarity, Quality,
+        Reducer, Subterm, Telescope, Term, Variance, instantiate_qualities,
     },
     curios_elab::DEFAULT_BUDGET,
     curios_module::SYNTAX,
     curios_surface::Spellable,
-    std::collections::BTreeMap,
+    std::collections::{BTreeMap, BTreeSet},
 };
 
 /// A term's printed head, clipped — enough to tell one refusal's shape from another's without pasting a standard-library type into a tally.
@@ -87,22 +87,33 @@ fn certifier_disagreements() {
     });
 }
 
-/// Memoization is an evaluation strategy exactly as long as switching it off changes no *semantic* verdict. This runs the whole-prelude walk both ways and requires the verdicts alike wherever the memo-free walk reaches one.
+/// Memoization is an evaluation strategy exactly as long as switching it off changes no *semantic* verdict. Each part below runs its share of the prelude's walk both ways and requires the verdicts alike wherever the memo-free walk reaches one.
 ///
 /// **The relation is the memo decision's, exactly.** A term-keyed memo hit spends nothing and mints nothing, so a memo-free walk spends at least as much as the certifier: it may exhaust where the certifier answers, and a binder opened after a hit takes another identity in each; `curios-cert`'s `spend` module argues why that is the whole of what the design gives up. So what the memo-free walk exhausts on is set aside, and every other verdict must agree, the certifier's exhaustion among them, which a walk spending no less shares. Requiring the memo-free walk to finish everywhere would assert what the design gives up, and the library would be written to its budget.
 ///
-/// The prelude is the subject because the property needs a large body of real terms to mean anything, and this is the only one the workspace has. It runs with the suite, since the memo decision rests on it and nothing else holds it: walking the prelude twice takes one test thread what a part of the library's read-back does.
-#[test]
-fn certifier_memo_parity() {
+/// The prelude is the subject because the property needs a large body of real terms to mean anything, and this is the only one the workspace has. It runs with the suite, since the memo decision rests on it and nothing else holds it, a part at a time, a `#[test]` each ([`memo_parity_in_parts`]): `/sys` whole in the first, and `/std`'s items in runs of equal weight ([`runs`]), each run judged both ways where the rest of the unit stands on the archive's record of it, which is the environment the whole walk gives it.
+fn memo_parity_in(part: usize) {
     with_prelude(|prelude| {
         for (index, root) in prelude.iter().enumerate() {
             let globals = certified(&prelude[..index]);
-            let memo_free = recheck_definitions_refusals_uncached(
-                root.core(),
-                DEFAULT_BUDGET,
-                &globals,
-                SYNTAX,
-            );
+            let definitions = root.core();
+            let chosen = match index {
+                0 if part == 0 => definitions.items.places().collect(),
+                0 => continue,
+                _ => runs(definitions, MEMO_PARTS.len()).swap_remove(part),
+            };
+            let walked = |memoized| {
+                refusals_of_chosen(
+                    definitions,
+                    &chosen,
+                    memoized,
+                    DEFAULT_BUDGET,
+                    &globals,
+                    (root.filed(), root.places()),
+                    SYNTAX,
+                )
+            };
+            let memo_free = walked(false);
             let spent = memo_free
                 .iter()
                 .filter(|verdict| verdict.error.is_exhausted())
@@ -114,16 +125,78 @@ fn certifier_memo_parity() {
                     .filter(|verdict| !spent.contains(&verdict.name))
                     .collect::<Vec<_>>()
             };
-            assert_eq!(
-                judged(
-                    certify_definitions(root.core(), DEFAULT_BUDGET, &globals, SYNTAX)
-                        .0
-                        .into_refusals()
-                ),
-                judged(memo_free),
-            );
+            assert_eq!(judged(walked(true)), judged(memo_free));
         }
     });
+}
+
+/// The places of `definitions`' items cut into `parts` runs in the order the module stores them, each as heavy as another to within one item. An item weighs the distinct nodes of its definitions' types and bodies, which what judging it costs grows with, and a run of neighbours keeps a part's walk among the declarations they read.
+fn runs(definitions: &Definitions, parts: usize) -> Vec<BTreeSet<usize>> {
+    let weighed = definitions
+        .items
+        .places()
+        .map(|place| {
+            let weight = definitions.items[place]
+                .definitions()
+                .iter()
+                .map(|definition| {
+                    definition.type_.distinct_nodes() + definition.body.distinct_nodes()
+                })
+                .sum::<usize>();
+            (place, weight.max(1))
+        })
+        .collect::<Vec<_>>();
+    let total = weighed
+        .iter()
+        .map(|(_, weight)| weight)
+        .sum::<usize>()
+        .max(1);
+    let mut runs = vec![BTreeSet::new(); parts];
+    let mut before = 0;
+    for (place, weight) in weighed {
+        runs[((before + weight / 2) * parts / total).min(parts - 1)].insert(place);
+        before += weight;
+    }
+
+    runs
+}
+
+/// One `#[test]` per part [`memo_parity_in`] judges, and the number of runs [`runs`] cuts `/std` into, declared from one list so the two cannot disagree.
+macro_rules! memo_parity_in_parts {
+    ($($part:ident),* $(,)?) => {
+        const MEMO_PARTS: &[&str] = &[$(stringify!($part)),*];
+
+        $(
+            #[test]
+            fn $part() {
+                let part = MEMO_PARTS
+                    .iter()
+                    .position(|name| *name == stringify!($part))
+                    .expect("a part is one of the list it is declared in");
+
+                memo_parity_in(part);
+            }
+        )*
+    };
+}
+
+memo_parity_in_parts! {
+    the_first_part_of_the_prelude_is_judged_alike_without_memos,
+    the_second_part_of_the_prelude_is_judged_alike_without_memos,
+    the_third_part_of_the_prelude_is_judged_alike_without_memos,
+    the_fourth_part_of_the_prelude_is_judged_alike_without_memos,
+    the_fifth_part_of_the_prelude_is_judged_alike_without_memos,
+    the_sixth_part_of_the_prelude_is_judged_alike_without_memos,
+    the_seventh_part_of_the_prelude_is_judged_alike_without_memos,
+    the_eighth_part_of_the_prelude_is_judged_alike_without_memos,
+    the_ninth_part_of_the_prelude_is_judged_alike_without_memos,
+    the_tenth_part_of_the_prelude_is_judged_alike_without_memos,
+    the_eleventh_part_of_the_prelude_is_judged_alike_without_memos,
+    the_twelfth_part_of_the_prelude_is_judged_alike_without_memos,
+    the_thirteenth_part_of_the_prelude_is_judged_alike_without_memos,
+    the_fourteenth_part_of_the_prelude_is_judged_alike_without_memos,
+    the_fifteenth_part_of_the_prelude_is_judged_alike_without_memos,
+    the_sixteenth_part_of_the_prelude_is_judged_alike_without_memos,
 }
 
 /// The closed values a parameter at `domain`, reduced, is put at: both cases of a `Bool` and the first two of a `Nat`, each as its literal and as a spelling that computes to it and is no value as it stands. None for a parameter at any other type.
