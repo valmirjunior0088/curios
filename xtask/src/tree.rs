@@ -6,10 +6,13 @@
 
 use {
     crate::{launched, root},
+    curios_common::{About, Report, Said, Source, Span},
     std::{
         collections::{BTreeMap, BTreeSet},
-        fmt, fs,
+        fs,
         ops::Range,
+        path::PathBuf,
+        sync::Arc,
     },
     toml_edit::{Array, Document, Item, TableLike},
 };
@@ -229,84 +232,35 @@ impl Word {
     }
 }
 
-/// Why the task files cannot be run, and where.
-#[derive(Debug, PartialEq, Eq)]
-pub struct Refusal {
-    file: String,
-    /// The line, the column, the line's text and how many characters to mark, where the refusal has a place.
-    at: Option<(usize, usize, String, usize)>,
-    message: String,
+/// Why the task files cannot be run, about the file that says so, or the place in it where it has one: a report drawn as every other the toolchain makes is.
+fn in_file(path: &str, message: String) -> Box<Report> {
+    Box::new(Report::about(
+        About::Path(PathBuf::from(path)),
+        Said::line(message),
+    ))
 }
 
-impl Refusal {
-    fn in_file(file: &str, message: String) -> Self {
-        Refusal {
-            file: file.to_string(),
-            at: None,
-            message,
-        }
-    }
-
-    fn at(file: &str, text: &str, span: Option<Range<usize>>, message: String) -> Self {
-        let Some(span) = span else {
-            return Refusal::in_file(file, message);
-        };
-
-        let start = span.start.min(text.len());
-        let line_start = text[..start].rfind('\n').map_or(0, |at| at + 1);
-        let line_end = text[start..].find('\n').map_or(text.len(), |at| start + at);
-        let line = text[line_start..line_end].to_string();
-        let column = text[line_start..start].chars().count();
-        let width = text[start..span.end.min(line_end).max(start)]
-            .chars()
-            .count()
-            .max(1);
-
-        Refusal {
-            file: file.to_string(),
-            at: Some((
-                text[..start].matches('\n').count() + 1,
-                column + 1,
-                line,
-                width,
-            )),
-            message,
-        }
-    }
-}
-
-impl fmt::Display for Refusal {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.at {
-            None => write!(formatter, "{}: {}", self.file, self.message),
-            Some((line, column, text, width)) => {
-                let gutter = line.to_string().len();
-                write!(
-                    formatter,
-                    "{}:{line}:{column}: {}\n{:gutter$} |\n{line} | {text}\n{:gutter$} | {:pad$}{}",
-                    self.file,
-                    self.message,
-                    "",
-                    "",
-                    "",
-                    "^".repeat(*width),
-                    pad = column - 1,
-                )
-            }
-        }
-    }
-}
-
-/// One file as read: where it is, its text, and the name its group takes.
+/// One file as read: its text, as a report quotes it, and the name its group takes.
 struct File<'a> {
     path: &'a str,
     text: &'a str,
+    source: Arc<Source>,
     scope: Name,
 }
 
 impl File<'_> {
-    fn refuse(&self, span: Option<Range<usize>>, message: String) -> Refusal {
-        Refusal::at(self.path, self.text, span, message)
+    /// A refusal about `span` of this file, or the whole file where it has none.
+    fn refuse(&self, span: Option<Range<usize>>, message: String) -> Box<Report> {
+        let Some(span) = span else {
+            return in_file(self.path, message);
+        };
+        let start = span.start.min(self.text.len());
+        let end = span.end.clamp(start, self.text.len());
+
+        Box::new(Report::at(
+            Span::new(Arc::clone(&self.source), start, end),
+            message,
+        ))
     }
 }
 
@@ -328,29 +282,27 @@ enum Kind {
 
 impl Tree {
     /// The task files of the checkout, read and resolved.
-    pub fn read() -> Result<Self, Refusal> {
+    pub fn read() -> Result<Self, Box<Report>> {
         let read = |path: &str| {
             fs::read_to_string(root().join(path))
-                .map_err(|error| Refusal::in_file(path, format!("cannot be read: {error}")))
+                .map_err(|error| in_file(path, format!("cannot be read: {error}")))
         };
 
         let mut files = vec![(ROOT_FILE.to_string(), read(ROOT_FILE)?)];
         let directory = root().join(DIRECTORY);
         let mut names = fs::read_dir(&directory)
-            .map_err(|error| Refusal::in_file(DIRECTORY, format!("cannot be read: {error}")))?
+            .map_err(|error| in_file(DIRECTORY, format!("cannot be read: {error}")))?
             .map(|entry| {
                 entry
                     .map(|entry| entry.file_name().to_string_lossy().into_owned())
-                    .map_err(|error| {
-                        Refusal::in_file(DIRECTORY, format!("cannot be read: {error}"))
-                    })
+                    .map_err(|error| in_file(DIRECTORY, format!("cannot be read: {error}")))
             })
             .collect::<Result<Vec<_>, _>>()?;
         names.sort();
         for name in names {
             let path = format!("{DIRECTORY}/{name}");
             if !name.ends_with(".toml") {
-                return Err(Refusal::in_file(
+                return Err(in_file(
                     &path,
                     "is no task file: the directory holds `.toml` files alone".to_string(),
                 ));
@@ -368,12 +320,13 @@ impl Tree {
     }
 
     /// The tree the files `(path, text)` make: the root file, then the files of [`DIRECTORY`], each a group named after it.
-    pub fn parse(files: &[(&str, &str)]) -> Result<Self, Refusal> {
+    pub fn parse(files: &[(&str, &str)]) -> Result<Self, Box<Report>> {
         let files = files
             .iter()
             .map(|(path, text)| File {
                 path,
                 text,
+                source: Arc::new(Source::of(None, Some(PathBuf::from(path)), *text)),
                 scope: match path.strip_prefix(&format!("{DIRECTORY}/")) {
                     Some(name) => vec![name.trim_end_matches(".toml").to_string()],
                     None => Vec::new(),
@@ -589,7 +542,7 @@ impl Tree {
             }
 
             // A word of what the step runs, held to reading only the produced files the step is ordered after.
-            let word = |word: &toml_edit::Value| -> Result<Word, Refusal> {
+            let word = |word: &toml_edit::Value| -> Result<Word, Box<Report>> {
                 let text = word
                     .as_str()
                     .ok_or_else(|| file.refuse(word.span(), "a word is a string".to_string()))?;
@@ -742,7 +695,11 @@ impl Tree {
     }
 
     /// Refuse a step that runs after itself, through what it requires or consumes.
-    fn refuse_cycles(&self, files: &[File<'_>], written: &[Written<'_>]) -> Result<(), Refusal> {
+    fn refuse_cycles(
+        &self,
+        files: &[File<'_>],
+        written: &[Written<'_>],
+    ) -> Result<(), Box<Report>> {
         #[derive(Clone, Copy, PartialEq, Eq)]
         enum Mark {
             Unvisited,
@@ -827,7 +784,7 @@ fn declare(
     name: &Name,
     kind: Kind,
     span: Option<Range<usize>>,
-) -> Result<(), Refusal> {
+) -> Result<(), Box<Report>> {
     if kinds.insert(name.clone(), kind).is_some() {
         return Err(file.refuse(span, format!("`{}` is declared twice", from_top(name))));
     }
@@ -844,7 +801,7 @@ fn walk<'a>(
     span: Option<Range<usize>>,
     tree: &mut Tree,
     written: &mut Vec<Written<'a>>,
-) -> Result<(), Refusal> {
+) -> Result<(), Box<Report>> {
     let is_step = table.iter().any(|(key, _)| STEP_KEYS.contains(&key));
     if is_step {
         for (key, item) in table.iter() {
@@ -903,14 +860,14 @@ fn walk<'a>(
 }
 
 /// The string `item` holds, as the value of `key`.
-fn text_of(file: &File<'_>, item: &Item, key: &str) -> Result<String, Refusal> {
+fn text_of(file: &File<'_>, item: &Item, key: &str) -> Result<String, Box<Report>> {
     item.as_str()
         .map(str::to_string)
         .ok_or_else(|| file.refuse(item.span(), format!("`{key}` is a string")))
 }
 
 /// The spellings `item` states for a flag: one string, or a list of a short spelling and a long one, `-E` and `--filterset`, each kind once.
-fn flags_of(file: &File<'_>, item: &Item) -> Result<Vec<String>, Refusal> {
+fn flags_of(file: &File<'_>, item: &Item) -> Result<Vec<String>, Box<Report>> {
     let spellings = match (item.as_str(), item.as_array()) {
         (Some(spelling), _) => vec![spelling.to_string()],
         (None, Some(list)) => words_of(file, list)?,
@@ -939,7 +896,7 @@ fn flags_of(file: &File<'_>, item: &Item) -> Result<Vec<String>, Refusal> {
 type Placed = (String, Option<Range<usize>>);
 
 /// The strings of the list `item` holds, as the value of `key`, each with where it stands.
-fn strings_of(file: &File<'_>, item: Option<&Item>, key: &str) -> Result<Vec<Placed>, Refusal> {
+fn strings_of(file: &File<'_>, item: Option<&Item>, key: &str) -> Result<Vec<Placed>, Box<Report>> {
     let Some(item) = item else {
         return Ok(Vec::new());
     };
@@ -958,7 +915,7 @@ fn strings_of(file: &File<'_>, item: Option<&Item>, key: &str) -> Result<Vec<Pla
 }
 
 /// The words of a list, each a string.
-fn words_of(file: &File<'_>, list: &Array) -> Result<Vec<String>, Refusal> {
+fn words_of(file: &File<'_>, list: &Array) -> Result<Vec<String>, Box<Report>> {
     list.iter()
         .map(|value| {
             value
@@ -970,7 +927,7 @@ fn words_of(file: &File<'_>, list: &Array) -> Result<Vec<String>, Refusal> {
 }
 
 /// The pin `item` declares: the version a program must be, or reach where `>=` leads it.
-fn program_of(file: &File<'_>, item: &Item) -> Result<Pin, Refusal> {
+fn program_of(file: &File<'_>, item: &Item) -> Result<Pin, Box<Report>> {
     let written = item.as_str().ok_or_else(|| {
         file.refuse(
             item.span(),
@@ -998,7 +955,7 @@ fn program_of(file: &File<'_>, item: &Item) -> Result<Pin, Refusal> {
 }
 
 /// The variable `item` declares.
-fn variable_of(file: &File<'_>, item: &Item) -> Result<Variable, Refusal> {
+fn variable_of(file: &File<'_>, item: &Item) -> Result<Variable, Box<Report>> {
     if let Some(text) = item.as_str() {
         return Ok(Variable::Words(vec![text.to_string()]));
     }
@@ -1013,14 +970,14 @@ fn variable_of(file: &File<'_>, item: &Item) -> Result<Variable, Refusal> {
                 .to_string(),
         )
     })?;
-    let text = |key: &str| -> Result<Option<String>, Refusal> {
+    let text = |key: &str| -> Result<Option<String>, Box<Report>> {
         table
             .get(key)
             .map(|item| text_of(file, item, key))
             .transpose()
     };
     let keys = table.iter().map(|(key, _)| key).collect::<BTreeSet<_>>();
-    let only = |allowed: &[&str]| -> Result<(), Refusal> {
+    let only = |allowed: &[&str]| -> Result<(), Box<Report>> {
         match keys.iter().find(|key| !allowed.contains(key)) {
             Some(key) => Err(file.refuse(
                 table.key(key).and_then(|key| key.span()),
@@ -1070,22 +1027,21 @@ fn variable_of(file: &File<'_>, item: &Item) -> Result<Variable, Refusal> {
     ))
 }
 
-/// The word `text` writes, its braces resolved in `file`'s scope.
 /// The write `table` states: the file its `write` names and the `contents` it holds, each one string, so neither may be a value that stands for several words or none.
 fn write_of(
     file: &File<'_>,
     table: &toml_edit::InlineTable,
     span: Option<Range<usize>>,
     variables: &BTreeMap<Name, Variable>,
-    word: &dyn Fn(&toml_edit::Value) -> Result<Word, Refusal>,
-) -> Result<Instruction, Refusal> {
+    word: &dyn Fn(&toml_edit::Value) -> Result<Word, Box<Report>>,
+) -> Result<Instruction, Box<Report>> {
     if let Some((key, _)) = table.iter().find(|(key, _)| !WRITE_KEYS.contains(key)) {
         return Err(file.refuse(
             span,
             format!("a write holds `write` and `contents`, and `{key}` is neither"),
         ));
     }
-    let one = |key: &str| -> Result<Word, Refusal> {
+    let one = |key: &str| -> Result<Word, Box<Report>> {
         let value = table.get(key).ok_or_else(|| {
             file.refuse(
                 span.clone(),
@@ -1116,13 +1072,14 @@ fn write_of(
     })
 }
 
+/// The word `text` writes, its braces resolved in `file`'s scope.
 fn word_of(
     file: &File<'_>,
     text: &str,
     span: Option<Range<usize>>,
     kinds: &BTreeMap<Name, Kind>,
     variables: &BTreeMap<Name, Variable>,
-) -> Result<Word, Refusal> {
+) -> Result<Word, Box<Report>> {
     let refuse = |message: String| file.refuse(span.clone(), message);
 
     let mut pieces = Vec::new();

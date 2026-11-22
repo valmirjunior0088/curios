@@ -36,7 +36,14 @@ use installer::*;
 mod release;
 use release::*;
 
-use std::process::ExitCode;
+use {
+    curios_common::{Kind, Style},
+    std::{
+        env,
+        io::{self, IsTerminal},
+        process::ExitCode,
+    },
+};
 
 #[cfg(test)]
 mod tests;
@@ -45,7 +52,13 @@ fn main() -> ExitCode {
     let tree = match Tree::read() {
         Ok(tree) => tree,
         Err(refusal) => {
-            eprintln!("{refusal}");
+            // Painted as the compiler paints what it reports: where standard error is a terminal and `NO_COLOR` says nothing.
+            let style = Style {
+                here: None,
+                painted: io::stderr().is_terminal()
+                    && env::var_os("NO_COLOR").is_none_or(|unpainted| unpainted.is_empty()),
+            };
+            eprintln!("{}", refusal.rendered(Kind::Error, &style));
 
             return ExitCode::FAILURE;
         }

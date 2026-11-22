@@ -66,8 +66,11 @@ fn a_name_declared_twice_is_refused() {
     ])
     .unwrap_err();
     assert!(
-        refusal.message.contains("`.variables.x` is declared twice"),
-        "{refusal}"
+        refusal
+            .headline
+            .contains("`.variables.x` is declared twice"),
+        "{}",
+        refusal.render()
     );
 }
 

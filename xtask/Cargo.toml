@@ -10,6 +10,8 @@ publish = false
 workspace = true
 
 [dependencies]
+# A refusal of the task files is a report, drawn as every other the toolchain makes is.
+curios-common = { workspace = true }
 # `string` for a command line whose subcommands and flags are the task files' names, read when the program runs.
 clap = { workspace = true, features = ["string"] }
 askama = { workspace = true }

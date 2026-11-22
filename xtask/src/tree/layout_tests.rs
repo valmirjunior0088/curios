@@ -86,21 +86,33 @@ fn a_task_named_like_a_command_outside_the_tree_is_refused() {
     )])
     .unwrap_err();
 
-    assert!(refusal.message.contains("outside the tree"), "{refusal}");
+    assert!(
+        refusal.headline.contains("outside the tree"),
+        "{}",
+        refusal.render()
+    );
 }
 
+/// A refusal is drawn as every report of the toolchain is: what it says, the line it is about with the place marked, and the file, line and column it closes on.
 #[test]
-fn a_refusal_names_its_file_line_and_column_and_marks_the_place() {
+fn a_refusal_marks_its_place_and_closes_on_its_file_line_and_column() {
     let refusal = tree(&[(
         "a",
         "description = \"A\"\n[s]\ndescription = \"S\"\nrequires = [\".nothing\"]\n",
     )])
     .unwrap_err()
-    .to_string();
+    .render();
 
-    assert!(
-        refusal.starts_with("xtask/tasks/a.toml:4:13: `.nothing` names nothing"),
-        "{refusal}"
+    assert_eq!(
+        refusal,
+        [
+            "`.nothing` names nothing",
+            "│",
+            "│  4 │ requires = [\".nothing\"]",
+            "│    │             ^^^^^^^^^^",
+            "│",
+            "└─ [error] xtask/tasks/a.toml:4:13",
+        ]
+        .join("\n")
     );
-    assert!(refusal.ends_with("^^^^^^^^^^"), "{refusal}");
 }
