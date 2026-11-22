@@ -5,5 +5,6 @@
 mod cli;
 mod core_text;
 mod false_;
+mod loose;
 mod server;
 mod test_support;

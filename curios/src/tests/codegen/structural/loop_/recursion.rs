@@ -1,0 +1,447 @@
+//! Recursion kept direct and reducible: trees built and summed, a walk allocating no closure, mutual recursion, a conjunction's calls, a fold's known step, and unread calls and folds dropped.
+
+use crate::tests::{codegen::structural::test_support::*, test_support::*};
+
+/// Every node of `continuation`'s body and of the continuations it binds, and none of a function's.
+fn region(
+    module: &curios_cps::Module,
+    continuation: curios_cps::ContinuationId,
+) -> Vec<curios_cps::NodeId> {
+    let mut found = Vec::new();
+    let mut work = vec![
+        module
+            .continuation(continuation)
+            .expect("a region's continuation is live")
+            .body,
+    ];
+    while let Some(id) = work.pop() {
+        found.push(id);
+        match module.node(id) {
+            Some(
+                curios_cps::Node::LetValue { next, .. }
+                | curios_cps::Node::LetIntrinsic { next, .. }
+                | curios_cps::Node::LetFun { body: next, .. },
+            ) => work.push(*next),
+            Some(curios_cps::Node::LetCont {
+                continuations,
+                body,
+            }) => {
+                work.push(*body);
+                work.extend(
+                    continuations
+                        .iter()
+                        .filter_map(|member| module.continuation(*member))
+                        .map(|member| member.body),
+                );
+            }
+            _ => {}
+        }
+    }
+    found
+}
+
+/// The intrinsic that computes `value`, where one does.
+fn computed_by(
+    module: &curios_cps::Module,
+    value: curios_cps::ValueId,
+) -> Option<(curios_cps::Intrinsic, Vec<curios_cps::Atom>)> {
+    module.nodes().iter().flatten().find_map(|node| match node {
+        curios_cps::Node::LetIntrinsic {
+            result, op, args, ..
+        } if *result == value => Some((*op, args.clone())),
+        _ => None,
+    })
+}
+
+fn is_nat(atom: &curios_cps::Atom, value: u32) -> bool {
+    matches!(atom, curios_cps::Atom::Literal(curios_cps::Literal::Nat(literal)) if u32::try_from(literal).ok() == Some(value))
+}
+
+// -- trees ------------------------------------------------------------------
+
+/// Build and sum retain direct recursive code. `sum` is the function carrying the `1000003` modulus; `build` is the other user function with two direct self calls (the recursive `to_str` prelude helper has one). Both recurse through direct `call`/`return_call`, and — since no user function emits a `call_indirect` (see [`trees_hot_arithmetic_has_no_indirect_calls`]) — that recursion is direct.
+#[test]
+fn trees_build_and_sum_stay_direct_recursive() {
+    let wat = wat(TREES);
+    let functions = functions(&wat);
+
+    let sum = function_with(&functions, "1000003");
+    assert!(sum.self_calls() >= 1, "sum must recurse directly");
+
+    let build = functions
+        .iter()
+        .filter(|f| f.name.starts_with("$func/") && !f.body.contains("1000003"))
+        .find(|f| f.self_calls() >= 2)
+        .expect("build recurses directly on both subtrees");
+    assert!(
+        build.name != sum.name,
+        "build and sum are distinct direct-recursive functions",
+    );
+}
+
+/// The recursive arithmetic is folded to bare intrinsic instructions rather than dispatched through a witness — the invariant `Nat` operation implementations propagate through the recursive SCC and collapse to `i32` instructions, with no `call_indirect` witness dispatch left behind. The SCC known-argument propagation that enables this is owned by `curios-cps`'s specialization tests; this pins its emitted consequence.
+#[test]
+fn trees_invariant_arithmetic_propagates_through_scc() {
+    let wat = wat(TREES);
+    let functions = functions(&wat);
+    let sum = function_with(&functions, "1000003");
+
+    assert!(
+        sum.body.contains("i32.rem_u"),
+        "the modulus folded to a bare instruction"
+    );
+    assert!(
+        sum.body.contains("i32.add"),
+        "the summation folded to bare instructions"
+    );
+    assert!(
+        !sum.body.contains("call_indirect"),
+        "no witness dispatch survives in the recursive arithmetic",
+    );
+}
+
+/// The hot recursive code performs no indirect calls. Every call in the trees module is direct except at the effect boundary, where forcing a description *is* an indirect call — `main` forces the program's own description, and `io/bind` forces each of the two it sequences. The tree recursion is not among them.
+///
+/// A program is a description, so two forces are structural and "the module contains no indirect dispatch" would be false. Pinning `main`'s count keeps that from being a licence: an indirect call anywhere in user code, or a second one in `main`, still fails.
+#[test]
+fn trees_hot_arithmetic_has_no_indirect_calls() {
+    let wat = wat(TREES);
+    let functions = functions(&wat);
+
+    let stray = user_functions_with(&functions, "call_indirect");
+    assert!(
+        stray.is_empty(),
+        "trees calls indirectly outside the effect boundary: {stray:?}"
+    );
+
+    let main = functions
+        .iter()
+        .find(|function| function.name == "$func/main")
+        .expect("the module has an entry");
+    assert_eq!(
+        main.body.matches("call_indirect").count(),
+        1,
+        "main forces the program's description once and calls nothing else indirectly",
+    );
+}
+
+/// Ordinary recursive functions allocate no closures. The trees module allocates only data tuples (`$tuple/…` for the `Tree` nodes) — no closure (`$clsr/`) or environment (`$envr/`) structs.
+#[test]
+fn trees_ordinary_recursion_allocates_no_closures() {
+    let wat = wat(TREES);
+    let closures = user_allocations(&wat, "struct.new $clsr/");
+    assert!(closures.is_empty(), "no closure allocation: {closures:?}");
+    let envs = user_allocations(&wat, "struct.new $envr/");
+    assert!(envs.is_empty(), "no environment allocation: {envs:?}");
+}
+
+/// A string walk allocates nothing per character.
+///
+/// `/std/Str/fold` is a `rec` whose parameters carry the scan state and the accumulator, and whose tail call advances them. An induction over the bytes would need a result that is a *function* of the scan state and the accumulator, since a right fold cannot carry a value leftwards any other way: every step would return a closure, the walk would build `step₀ ∘ … ∘ base` and apply it once, and N characters would cost N environment allocations and N indirect calls before any of the user's own work ran.
+///
+/// **What this asserts is the property, not the spelling.** Any encoding that captures per character reintroduces an environment allocation here, whatever it is named — which is what makes this survive the next person to reach for the induction form.
+///
+/// The walk's timings live beside the probe that retakes them, in `ladder`.
+#[test]
+fn a_string_walk_allocates_no_closure_per_character() {
+    let wat = wat(STRING_WALK);
+    let envs = user_allocations(&wat, "struct.new $envr/");
+    assert!(
+        envs.is_empty(),
+        "the walk carries its state in parameters, so nothing is captured per character: {envs:?}"
+    );
+}
+
+/// Function-only recursion allocates no closure. `down` is a plain recursive function; the module allocates no closure (`$clsr/`) or environment (`$envr/`) for it.
+#[test]
+fn function_only_recursion_allocates_no_closures() {
+    let wat = wat(FUNCTION_ONLY);
+    // Allocation, not mention: a module that forces a description at all declares the closure *type* for the arity it forces at, and names it in the `call_indirect`. What `down` must not do is allocate one.
+    let closures = user_allocations(&wat, "struct.new $clsr/");
+    assert!(
+        closures.is_empty(),
+        "function-only recursion needs no closures: {closures:?}"
+    );
+    let envs = user_allocations(&wat, "struct.new $envr/");
+    assert!(
+        envs.is_empty(),
+        "function-only recursion needs no environments: {envs:?}"
+    );
+}
+
+/// Ordinary corpus cases use no irreducible fallback. None of the ordinary fixtures — including mutual recursion — emit a `loop $$dispatch/` localized dispatcher; their constructor-tag matches lower to ordinary data switches — a `br_table` over `$case$N` labels where the family is wide enough to want one, an `if` where it is not — and neither is a dispatcher.
+#[test]
+fn ordinary_corpus_uses_no_irreducible_fallback() {
+    for (label, source) in [
+        ("lcg", LCG),
+        ("trees", TREES),
+        ("function-only", FUNCTION_ONLY),
+        ("higher-order", HIGHER_ORDER),
+        ("direct/escaping", DIRECT_ESCAPING),
+    ] {
+        assert!(
+            !wat(source).contains("$dispatch/"),
+            "{label} must not need an irreducible dispatcher",
+        );
+    }
+}
+
+/// The one-localized-dispatcher guarantee. Curios surface syntax has no unstructured jump, so even mutual recursion entered from two arms is structured reducibly (no `$dispatch/`) — there is no `.crs` program that produces a genuine irreducible cycle. The dispatcher path (exactly one `loop $$dispatch/` per irreducible component) is therefore owned and asserted at the backend-unit level by `curios-emit`'s `an_irreducible_component_uses_exactly_one_localized_dispatcher` in `curios-emit`'s `module_tests`; this test pins the surface-level fact that motivates that ownership boundary.
+#[test]
+fn mutual_recursion_stays_reducible() {
+    assert!(
+        !wat(MUTUAL_RECURSION).contains("$dispatch/"),
+        "mutual recursion must structure reducibly, without a localized dispatcher",
+    );
+}
+
+/// The second operand of `taint == 4 && spin(taint, 1) == 20608` is a call of a function that terminates and does nothing else, so it runs only on the arm the comparison leaves where it holds: `spin`'s loop, found by the `65537` it reduces by, stands inside that arm and nowhere outside it.
+#[test]
+fn a_conjunctions_second_call_runs_only_on_the_arm_its_first_operand_holds_on() {
+    let module = cps_optm_module(CONJUNCTION_CALL);
+    let spin_steps = module
+        .live_nodes()
+        .filter(|(_, node)| {
+            matches!(node, curios_cps::Node::LetIntrinsic { op: curios_cps::Intrinsic::NatRem, args, .. } if args.iter().any(|arg| is_nat(arg, 65537)))
+        })
+        .map(|(id, _)| id)
+        .collect::<Vec<_>>();
+    assert!(
+        !spin_steps.is_empty(),
+        "the premise: `spin`'s loop survives:\n{module}"
+    );
+    let arm = module
+        .live_nodes()
+        .find_map(|(_, node)| match node {
+            curios_cps::Node::Switch {
+                scrutinee: curios_cps::Atom::Value(decision),
+                cases,
+                ..
+            } => computed_by(&module, *decision)
+                .filter(|(op, args)| {
+                    *op == curios_cps::Intrinsic::NatEql && args.iter().any(|arg| is_nat(arg, 4))
+                })
+                .and_then(|_| cases.get(&1))
+                .map(|edge| edge.target),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("a branch on `taint == 4`:\n{module}"));
+    let inside = region(&module, arm);
+    assert!(
+        spin_steps.iter().all(|step| inside.contains(step)),
+        "the loop runs only where the comparison holds:\n{module}",
+    );
+}
+
+/// A recursion closed by `x == y && same(xs, ys)` that may be dropped is left to placement by the rebase, which makes the recursive call a tail call on the arm the comparison holds on, so the loop it becomes branches on that comparison and carries no conjunction: it leaves at the first pair that differs rather than carrying a decided answer to the end.
+#[test]
+fn a_list_equality_a_conjunction_closes_is_a_loop_that_leaves_at_its_first_difference() {
+    let module = cps_optm_module(LIST_EQUALITY);
+    let read_from_a_list = |atom: &curios_cps::Atom| match atom {
+        curios_cps::Atom::Value(value) => {
+            computed_by(&module, *value).is_some_and(|(op, _)| op == curios_cps::Intrinsic::ListGet)
+        }
+        _ => false,
+    };
+    // The comparison of two elements read from the lists, which only the equality makes.
+    let comparisons = module
+        .live_nodes()
+        .filter_map(|(id, node)| match node {
+            curios_cps::Node::LetIntrinsic {
+                result,
+                op: curios_cps::Intrinsic::NatEql,
+                args,
+                ..
+            } if args.iter().all(read_from_a_list) => Some((id, *result)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        !comparisons.is_empty(),
+        "the premise: the elements are compared:\n{module}"
+    );
+    let enters =
+        |id: &curios_cps::NodeId, target: curios_cps::ContinuationId| match module.node(*id) {
+            Some(curios_cps::Node::ApplyCont(edge)) => edge.target == target,
+            Some(curios_cps::Node::Switch { cases, default, .. }) => cases
+                .values()
+                .chain(default.iter())
+                .any(|edge| edge.target == target),
+            _ => false,
+        };
+    let loops = module
+        .live_continuations()
+        .map(|(id, _)| (id, region(&module, id)))
+        .filter(|(id, inside)| {
+            inside.iter().any(|node| enters(node, *id))
+                && comparisons.iter().any(|(node, _)| inside.contains(node))
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        !loops.is_empty(),
+        "the premise: the equality is a loop:\n{module}"
+    );
+    for (_, inside) in loops {
+        assert!(
+            !inside.iter().any(|node| matches!(
+                module.node(*node),
+                Some(curios_cps::Node::LetIntrinsic {
+                    op: curios_cps::Intrinsic::BoolAnd,
+                    ..
+                })
+            )),
+            "the loop carries no conjunction:\n{module}",
+        );
+        assert!(
+            inside.iter().any(|node| matches!(
+                module.node(*node),
+                Some(curios_cps::Node::Switch {
+                    scrutinee: curios_cps::Atom::Value(decision),
+                    ..
+                }) if comparisons.iter().any(|(_, result)| result == decision)
+            )),
+            "the loop branches on the elements' comparison:\n{module}",
+        );
+    }
+}
+
+/// The conjunction answers what its two operands decide on either arm, raw and through Binaryen alike.
+#[test]
+fn a_conjunction_with_a_call_answers_as_its_operands_decide() {
+    for (args, answer) in [
+        (&["prog", "a", "b", "c"][..], &b"true"[..]),
+        (&["prog", "a", "b"][..], &b"false"[..]),
+    ] {
+        assert_eq!(run_raw(CONJUNCTION_CALL, args), answer, "raw, {args:?}");
+        assert_eq!(
+            run_binaryen(CONJUNCTION_CALL, args),
+            answer,
+            "through Binaryen, {args:?}"
+        );
+    }
+}
+
+/// `programs/walk` as written: `/std/Str/fold` is called at two sites, the walk's own and `Nat/of_str`'s, each handing it a step of its own, and each call is given a copy in which the step is a known call and then inlined, so no function the program holds calls its step through a closure.
+#[test]
+fn a_fold_handed_a_known_step_calls_it_in_place() {
+    let source = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../programs/walk/walk.crs"
+    ));
+    let wat = wat(source);
+    let functions = functions(&wat);
+
+    assert_eq!(
+        user_functions_with(&functions, "call_indirect $clsr/2"),
+        Vec::<&str>::new(),
+        "no step of two arguments is reached through its closure",
+    );
+}
+
+/// `programs/spines` as written: both its calls of `/std/Map/insert` hand the one encoding `Nat/hash`, which is substituted into it and, through the call it hands the parameter on to, into the recursive descent, so a leaf's key is encoded by a direct call.
+#[test]
+fn a_map_inserts_leaf_key_is_encoded_through_a_direct_call() {
+    let source = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../programs/spines/spines.crs"
+    ));
+    let wat = wat(source);
+    let functions = functions(&wat);
+    let insert = functions
+        .iter()
+        .find(|function| function.name.contains("$/std/Map/internal/Node/insert"))
+        .expect("the descent survives as a function of its own");
+
+    assert!(!insert.body.contains("call_indirect"), "{}", insert.body);
+    assert!(
+        insert.body.contains("$/std/Nat/hash/from"),
+        "{}",
+        insert.body
+    );
+}
+
+/// A loop a total definition defines in its body is part of that definition's evaluation, so a call of the definition nothing reads is dropped with its loop; the same loop in a definition the certifier found partial keeps its call, since it may never return. What licenses the drop is the definition's record reaching the function nested in it ([`curios_anf::Function::total`]). The partial loop dispatches on its parameter, so the literal that marks it stays read: one whose parameter only builds its own next value keeps its call with no parameter left to mark it. Mutation-checked: marking only the functions a name is bound to keeps the total definition's loop.
+#[test]
+fn an_unread_call_through_a_total_definitions_local_loop_is_dropped() {
+    const LOCAL_LOOPS: &str = r#"
+        use /std/{Nat, List, Proc};
+        let tally(n: Nat) -> Nat =
+            let count(k: Nat, acc: Nat) -> Nat = match k | 0 => acc | j + 1 => count(j, acc + 30011) end;
+            count(n, 0);
+        let whirl(n: Nat) -> Nat =
+            let spin(k: Nat) -> Nat = match k | 0 => 0 | _ => spin(k + 30013) end;
+            spin(n);
+        let entry() -> /std/Io({}) =
+            let taint = List/len(Proc/args()!);
+            let unread_total = tally(taint);
+            let unread_partial = whirl(taint);
+            /std/print("done");
+        entry()
+        "#;
+
+    let module = cps_optm_module(LOCAL_LOOPS);
+    assert!(
+        !reads_nat(&module, 30011),
+        "the unread call of the total definition, loop and all, is dropped:\n{module}"
+    );
+    assert!(
+        reads_nat(&module, 30013),
+        "and the partial definition's is kept:\n{module}"
+    );
+}
+
+/// An unread fold handed a pure stepper is dropped, though the fold applies a function it was handed: the summary names what it applies, and the call hands a function droppable at every call ([`curios_cps::Droppable`]). A fold handed a stepper that may never return is kept, the stepper dispatching on its parameter so the literal that marks it stays read. Mutation-checked: a function applying its parameter judged an unknown keeps the pure ones.
+#[test]
+fn an_unread_fold_handed_a_pure_stepper_is_dropped() {
+    const FOLDS: &str = r#"
+        use /std/{Nat, List, Bytes, Proc};
+        let spin(k: Nat) -> Nat = match k | 0 => 0 | _ => spin(k + 30023) end;
+        let tally(bytes: Bytes, arguments: List(Bytes)) -> Nat =
+            let unread_bytes = Bytes/fold(bytes, 0, (b, acc) => acc + 30017);
+            let unread_list = List/fold(arguments, 0, (s, acc) => acc + 30019);
+            List/len(arguments);
+        let churn(bytes: Bytes) -> Nat =
+            let unread_partial = Bytes/fold(bytes, 0, (b, acc) => spin(acc));
+            Bytes/len(bytes);
+        let entry() -> /std/Io({}) =
+            let arguments = Proc/args()!;
+            let bytes = Bytes/flatten(arguments);
+            /std/print(Nat/to_str(tally(bytes, arguments) + churn(bytes)));
+        entry()
+        "#;
+
+    let module = cps_optm_module(FOLDS);
+    assert!(
+        !reads_nat(&module, 30017),
+        "the unread fold over bytes is dropped:\n{module}"
+    );
+    assert!(
+        !reads_nat(&module, 30019),
+        "and the one over a list:\n{module}"
+    );
+    assert!(
+        reads_nat(&module, 30023),
+        "and the one handed a stepper that may never return is kept:\n{module}"
+    );
+}
+
+/// A fold the program calls once is moved into its call, its stepper put in place of its parameter, and the loop it defines, droppable given that parameter, is then droppable given the stepper: the caller reads nothing of it, so the call to the loop goes ([`curios_cps::Droppable::mapped`]). Mutation-checked: a claim left naming the parameter the move put the stepper in place of keeps the loop.
+#[test]
+fn an_unread_fold_inlined_into_its_one_caller_is_dropped() {
+    const FOLD: &str = r#"
+        use /std/{Nat, List, Bytes, Proc};
+        let tally(bytes: Bytes) -> Nat =
+            let unread = Bytes/fold(bytes, 0, (b, acc) => acc + 30029);
+            Bytes/len(bytes);
+        let entry() -> /std/Io({}) =
+            let bytes = Bytes/flatten(Proc/args()!);
+            /std/print(Nat/to_str(tally(bytes)));
+        entry()
+        "#;
+
+    let module = cps_optm_module(FOLD);
+    assert!(
+        !reads_nat(&module, 30029),
+        "the unread fold is dropped:\n{module}"
+    );
+}

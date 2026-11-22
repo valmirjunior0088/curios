@@ -1,6 +1,12 @@
 //! An object's records: its address names no compiler, the header of each names the compiler that filed it, each compiler believes its own records alone, and the object holds what its last two filings name.
 
-use {super::*, curios_common::candidate_name, curios_unit::pack_names};
+use {
+    super::test_support::*,
+    crate::verdicts::*,
+    curios_common::{candidate_name, test_support::*},
+    curios_unit::pack_names,
+    std::path::Path,
+};
 
 /// A handle on the own cabinet of the project at `root`, filing as the compiler identifying itself as `compiler`, in place of the binary running the suite.
 fn filing_as(root: &Path, compiler: &str) -> Verdicts {

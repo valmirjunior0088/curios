@@ -1,6 +1,13 @@
 //! A unit a cabinet filed is reused only where every name it read means what it meant: read of a package of one name in another project, or of a package named `std` standing in for the archived root.
 
-use super::*;
+use {
+    super::test_support::*,
+    crate::verdicts::*,
+    curios_common::fill,
+    curios_package::{Cabinet, Governing, order},
+    curios_pipeline::Fold,
+    std::path::Path,
+};
 
 /// A manifest for the package `name`, depending on the package beside it named `below` where there is one, as `chained` writes them.
 fn beside(name: &str, below: Option<&str>) -> String {

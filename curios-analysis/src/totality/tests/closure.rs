@@ -1,6 +1,6 @@
 //! The closure and the gate over a call graded over other than its caller part's parameters, which no path through a group can be read off: each claims nothing.
 
-use super::*;
+use {super::test_support::*, crate::totality::*, curios_core::Size};
 
 /// A self-call whose matrix is not square was graded short, and a pair of calls that do not compose was too, so neither closes to a cycle that passes: `decide` reads each as `Partial`, where reading it as no cycle would accept a recursion the walk found and could not grade.
 #[test]
