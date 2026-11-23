@@ -1,8 +1,7 @@
-//! Consistency: positive cycles and contradictory bounds refused with the path and origins that show them, constraints discharged at insertion, and speculation rolled back or abandoned.
+//! Consistency: positive cycles and contradictory bounds refused with the least conflict and the origins that show it, constraints discharged at insertion, a context held to the naturals, and speculation rolled back or abandoned.
 
 use {
     crate::universes::solver::*,
-    curios_analysis::satisfiable,
     curios_common::{Plicity, Qualifier, Symbol},
     curios_core::{
         Anchor, Anchored, ArgumentSite, CalleeId, Extent, Global, Mention, SortForm, WrittenSort,
@@ -198,10 +197,11 @@ fn solver_rejects_cycles_hidden_behind_right_hand_maxima() {
         )
         .unwrap();
     let error = solver.check_consistent().unwrap_err();
-    assert!(matches!(
-        error,
-        UniverseError::Inconsistency { path, .. } if !path.is_empty()
-    ));
+    // `u + 1 ≤ max(u, v)` holds alone, at `v` above `u`: the conflict needs `v ≤ u` too.
+    assert!(
+        matches!(&error, UniverseError::Inconsistency { path, .. } if path.len() == 2),
+        "{error:?}"
+    );
 }
 
 #[test]
@@ -226,77 +226,75 @@ fn solver_rejects_inconsistent_constant_bounds_through_atoms() {
     assert!(matches!(error, UniverseError::Inconsistency { .. }));
 }
 
+/// A refusal names the constraints its conflict needs and no other: a loop of two beside a bound on the same levels that holds alone, raised from elsewhere, names the loop's two.
 #[test]
-fn consistency_checks_match_the_exact_solver() {
-    for trial in 0..1_000_u64 {
-        // One independent generator per trial, indexed off the high bits: an LCG's low three bits cycle with period 8, and one generator threaded across trials at a step count divisible by 8 would keep every trial at the same phase.
-        let mut state = 0x4d59_5df4_d0f3_3173_u64 ^ trial.wrapping_mul(0x9e37_79b9_7f4a_7c15);
-        let mut draw = || {
-            state = state
-                .wrapping_mul(6_364_136_223_846_793_005)
-                .wrapping_add(1);
-            (state >> 33) as usize
-        };
-        let mut solver = UniverseSolver::new(0);
-        let u = solver.fresh(UniverseRole::Generalizable, None);
-        let v = solver.fresh(UniverseRole::Generalizable, None);
-        let levels = [
-            Level::zero(),
-            Level::constant(1),
+fn an_inconsistency_names_no_constraint_its_conflict_does_not_need() {
+    let mut solver = UniverseSolver::new(0);
+    let u = solver.fresh(UniverseRole::Generalizable, None);
+    let v = solver.fresh(UniverseRole::Generalizable, None);
+    solver
+        .add_leq(
             Level::meta(u),
             Level::meta(v),
+            UniverseConstraintOrigin::Stated,
+        )
+        .unwrap();
+    solver
+        .add_leq(
             Level::meta(u).succ().unwrap(),
-            Level::meta(v).succ().unwrap(),
-            Level::max([Level::meta(u), Level::meta(v)]),
-            Level::max([Level::meta(u).succ().unwrap(), Level::meta(v)]),
-        ];
-        for step in 0..12 {
-            let lower = levels[draw() % levels.len()].clone();
-            let upper = levels[draw() % levels.len()].clone();
-            let constraint = UniverseConstraint { lower, upper };
+            Level::meta(v),
+            UniverseConstraintOrigin::Converted,
+        )
+        .unwrap();
+    solver
+        .add_leq(
+            Level::meta(v),
+            Level::meta(u),
+            UniverseConstraintOrigin::Converted,
+        )
+        .unwrap();
 
-            // The exact side: the same normalization and insertion-time discharges `add_constraint` performs, then the ground-up exponential check over the pushed store.
-            let mut exact = solver.clone();
-            exact.consistency = None;
-            let normalized = UniverseConstraint {
-                lower: exact.zonk(&constraint.lower).unwrap(),
-                upper: exact.zonk(&constraint.upper).unwrap(),
-            };
-            let exact_result = if normalized.lower.structurally_leq(&normalized.upper) {
-                Ok(())
-            } else if normalized.lower.atoms.is_empty() && normalized.upper.atoms.is_empty() {
-                if normalized.lower.constant <= normalized.upper.constant {
-                    Ok(())
-                } else {
-                    Err(UniverseError::Inconsistency {
-                        lower: normalized.lower,
-                        upper: normalized.upper,
-                        path: vec![UniverseConstraintOrigin::Converted],
-                    })
-                }
-            } else {
-                exact
-                    .constraints
-                    .push(normalized, UniverseConstraintOrigin::Converted);
-                exact.check_consistent_full().map(|_| ())
-            };
+    let error = solver.check_consistent().unwrap_err();
+    assert!(
+        matches!(
+            &error,
+            UniverseError::Inconsistency { path, .. }
+                if *path == vec![UniverseConstraintOrigin::Converted; 2]
+        ),
+        "{error:?}"
+    );
+}
 
-            // The incremental side decides in two moves — `add_constraint` refuses only the ground case and records otherwise; `check_consistent` is the verdict — so the comparison targets the pair, not the insertion alone.
-            let incremental_result = solver
-                .add_constraint(constraint, UniverseConstraintOrigin::Converted)
-                .and_then(|()| solver.check_consistent());
-            assert_eq!(
-                incremental_result.is_ok(),
-                exact_result.is_ok(),
-                "consistency diverged in trial {trial} at step {step}"
-            );
+/// A refusal is worded from the constraint of its conflict raised last, the one the rest refuses.
+#[test]
+fn an_inconsistency_is_worded_from_the_constraint_its_conflict_raised_last() {
+    let mut solver = UniverseSolver::new(0);
+    let u = solver.fresh(UniverseRole::Generalizable, None);
+    let v = solver.fresh(UniverseRole::Generalizable, None);
+    solver
+        .add_leq(
+            Level::meta(u).succ().unwrap(),
+            Level::meta(v),
+            UniverseConstraintOrigin::Converted,
+        )
+        .unwrap();
+    solver
+        .add_leq(
+            Level::meta(v),
+            Level::meta(u),
+            UniverseConstraintOrigin::Converted,
+        )
+        .unwrap();
 
-            // An inconsistent store stays inconsistent — every later step would re-compare the same verdict — so a trial ends at its first refusal.
-            if exact_result.is_err() {
-                break;
-            }
-        }
-    }
+    let error = solver.check_consistent().unwrap_err();
+    assert!(
+        matches!(
+            &error,
+            UniverseError::Inconsistency { lower, upper, .. }
+                if *lower == Level::meta(v) && *upper == Level::meta(u)
+        ),
+        "{error:?}"
+    );
 }
 
 #[test]
@@ -345,152 +343,7 @@ fn rollback_restores_constraints_and_solutions() {
     assert!(solver.solution(output).is_none());
 }
 
-/// The two checkers decide universe-context validity separately, and this is where that decision is held to account.
-///
-/// `curios-cert/src/satisfy.rs` records the reason for the duplication: a transcription would inherit whatever the original gets wrong and agree for that reason, so the certifier's decision is written from the constraint semantics instead, and "a disagreement is a signal". A signal nothing can observe is not one. [`universe_context_validate`] runs during elaboration, so a context it rejects never becomes part of a module, and the certifier's `closed`/`satisfiable` are asked only about contexts this function has already passed — for every program in the corpus. Comparing them therefore has to be done directly, which is what this does, and it is the obligation that argument incurs rather than an extra precaution.
-///
-/// The direction that matters is the *certifier* being the more permissive of the two: it assumes an item's constraints while checking it, so a set it wrongly calls satisfiable is a hypothesis set from which every level relation follows, and `check_instance` stops discharging anything. The elaborator being the more permissive one is ordinary incompleteness and surfaces as a refusal. Neither is observable from a program, which is why the assertion is equality rather than an implication.
-///
-/// The final two assertions are the control: a table whose contexts were all valid, or all invalid, would pass this while comparing nothing.
-#[test]
-fn both_checkers_decide_universe_context_validity_alike() {
-    let leq = |lower: Level, upper: Level| UniverseConstraint { lower, upper };
-    let param = |index: usize| Level::param(UniverseParam(index));
-
-    let contexts: Vec<(&str, UniverseContext)> = vec![
-        ("empty", UniverseContext::empty()),
-        (
-            "one bound",
-            UniverseContext {
-                parameter_count: 2,
-                quality_count: 0,
-                constraints: vec![leq(param(0), param(1))],
-            },
-        ),
-        // Mutually bounded parameters are legal and satisfiable: they force equality, not a contradiction.
-        (
-            "cyclic but satisfiable",
-            UniverseContext {
-                parameter_count: 2,
-                quality_count: 0,
-                constraints: vec![leq(param(0), param(1)), leq(param(1), param(0))],
-            },
-        ),
-        (
-            "direct positive cycle",
-            UniverseContext {
-                parameter_count: 1,
-                quality_count: 0,
-                constraints: vec![leq(param(0).succ().expect("successor"), param(0))],
-            },
-        ),
-        (
-            "long positive cycle",
-            UniverseContext {
-                parameter_count: 3,
-                quality_count: 0,
-                constraints: vec![
-                    leq(param(0).succ().expect("successor"), param(1)),
-                    leq(param(1), param(2)),
-                    leq(param(2), param(0)),
-                ],
-            },
-        ),
-        // A right-hand maximum is what makes the certifier's decision a search: nothing local says which alternative bounds the left side.
-        (
-            "right-hand maximum",
-            UniverseContext {
-                parameter_count: 2,
-                quality_count: 0,
-                constraints: vec![leq(
-                    Level::max([Level::constant(1), param(0)]),
-                    Level::max([Level::constant(1), param(1)]),
-                )],
-            },
-        ),
-        (
-            "constant bounds that cross",
-            UniverseContext {
-                parameter_count: 1,
-                quality_count: 0,
-                constraints: vec![
-                    leq(Level::constant(3), param(0)),
-                    leq(param(0).succ().expect("successor"), Level::constant(2)),
-                ],
-            },
-        ),
-        (
-            "offsets that shift",
-            UniverseContext {
-                parameter_count: 2,
-                quality_count: 0,
-                constraints: vec![leq(
-                    param(0).checked_add(2).expect("offset"),
-                    param(1).checked_add(5).expect("offset"),
-                )],
-            },
-        ),
-        // Not a stronger hypothesis but a meaningless one: instantiation has nothing to substitute for `P3`.
-        (
-            "escaping parameter",
-            UniverseContext {
-                parameter_count: 1,
-                quality_count: 0,
-                constraints: vec![leq(param(3), param(0))],
-            },
-        ),
-        // Elaboration residue a zonked module cannot contain.
-        (
-            "metavariable residue",
-            UniverseContext {
-                parameter_count: 1,
-                quality_count: 0,
-                constraints: vec![leq(Level::meta(UniverseMetaId(0)), param(0))],
-            },
-        ),
-        // A ceiling with no floor: `P1 ≤ 0` forces `P0 + 1 ≤ 0`, which only the zero floor refutes. "Constant bounds that cross" above carries `3 ≤ P0`, whose return arc closes a negative cycle, so it is decided without that floor and cannot separate the two solvers.
-        (
-            "ceiling with no floor",
-            UniverseContext {
-                parameter_count: 2,
-                quality_count: 0,
-                constraints: vec![
-                    leq(param(0).succ().expect("successor"), param(1)),
-                    leq(param(1), Level::zero()),
-                ],
-            },
-        ),
-    ];
-
-    let mut verdicts = Vec::new();
-    for (label, context) in &contexts {
-        let elaborator = universe_context_validate(context).is_ok();
-        let certifier = context.is_closed() && satisfiable(&context.constraints);
-
-        assert_eq!(
-            elaborator,
-            certifier,
-            "the two checkers disagree about `{label}`: the elaborator says {}, the certifier says {}",
-            match elaborator {
-                true => "valid",
-                false => "invalid",
-            },
-            match certifier {
-                true => "valid",
-                false => "invalid",
-            },
-        );
-        verdicts.push(elaborator);
-    }
-
-    assert!(verdicts.contains(&true), "no context in the table is valid");
-    assert!(
-        verdicts.contains(&false),
-        "no context in the table is invalid",
-    );
-}
-
-/// Every level a two-parameter context can state within three rungs: the constants, each parameter at each offset, and the maxima that mix them. The table above names eleven contexts by hand; this is the alphabet the sweep below builds every context of two and three constraints from.
+/// Every level a two-parameter context can state within three rungs: the constants, each parameter at each offset, and the maxima that mix them: the alphabet the sweep below builds every context of one and two constraints from.
 fn small_levels() -> Vec<Level> {
     let param = |index: usize| Level::param(UniverseParam(index));
     let plus = |level: Level, offset: u32| level.checked_add(offset).expect("offset");
@@ -531,7 +384,7 @@ fn level_value(level: &Level, at: &[u64]) -> u64 {
     value
 }
 
-/// Whether some assignment of naturals below `bound` satisfies every constraint — the ground truth the two decisions are held to.
+/// Whether some assignment of naturals below `bound` satisfies every constraint — the ground truth a context's validity is held to.
 fn satisfied_somewhere(constraints: &[UniverseConstraint], params: usize, bound: u64) -> bool {
     let mut at = vec![0u64; params];
     let total = (bound + 1).pow(params as u32);
@@ -551,15 +404,13 @@ fn satisfied_somewhere(constraints: &[UniverseConstraint], params: usize, bound:
     false
 }
 
-/// Both checkers call a universe context satisfiable exactly where an assignment of naturals satisfies it.
+/// A context is valid exactly where an assignment of naturals satisfies it.
 ///
-/// Two tests stand beside this and neither states it. [`both_checkers_decide_universe_context_validity_alike`] above compares the two decisions to *each other* over a table written by hand, which can only hold the shapes someone thought of, and nothing in it is held to the naturals. `curios-cert`'s `satisfy::tests::a_set_is_satisfiable_exactly_when_it_has_a_model_in_the_naturals` holds the certifier's half to the naturals over singles and pairs, and the elaborator's solver — the half that *runs a search*, with a node budget it can exhaust — is no part of it.
+/// `curios-analysis`'s `satisfy::tests::a_set_is_satisfiable_exactly_when_it_has_a_model_in_the_naturals` holds the decision itself over single constraints and pairs. This holds the route a context takes here — its constraints raised as the store raises them, through `add_constraint`, which discharges what holds structurally and refuses what is ground and false, then the decision asked of what the store keeps — over every ordered pair of [`small_levels`] as one constraint and every set of two of those, and adds the case neither reaches: sets of **three** constraints, over the narrower alphabet a loop through a right-hand maximum needs, since a maximum read the other way is a disjunction and the set that separates a conjunctive derivation from the naturals' total order wants a clause to bound each part of one.
 ///
-/// So this holds the elaborator's decision to the naturals, over every ordered pair of [`small_levels`] as one constraint and every set of two of those, and adds the case neither reaches: sets of **three** constraints, over the narrower alphabet a loop through a right-hand maximum needs, since a maximum read the other way is a disjunction and the set that separates a conjunctive derivation from the naturals' total order wants a clause to bound each part of one. The bound on the search is well above the least model any set in these alphabets can have, whose values a clause can raise by at most the largest offset once per head.
-///
-/// The unsound direction is the *certifier* calling satisfiable a set no assignment satisfies: the walk assumes an item's constraints while judging it, so such a set is a hypothesis set from which `entails` derives every level relation and `check_instance` discharges nothing — the universe discipline that keeps the paradox out stops applying. That direction is asserted to be empty, and so is the certifier being the more permissive of the two. The other two disagreements are incompleteness, which surfaces as a refusal, and are asserted empty as well, so a change that trades one for the other shows here.
+/// The unsound direction is a context called valid that no assignment satisfies: a walk assumes it, `entails` derives every level relation under it and `check_instance` discharges nothing. Both directions are asserted, and both answers must occur, or the sweep would be testing a constant.
 #[test]
-fn both_checkers_agree_with_the_naturals_over_every_small_context() {
+fn a_context_is_valid_exactly_where_an_assignment_of_naturals_satisfies_it() {
     const PARAMS: usize = 2;
     const BOUND: u64 = 12;
     let levels = small_levels();
@@ -573,34 +424,23 @@ fn both_checkers_agree_with_the_naturals_over_every_small_context() {
         .flat_map(|lower| levels.iter().map(move |upper| constraint(lower, upper)))
         .collect::<Vec<_>>();
 
-    let mut admitted_without_a_model: Vec<Vec<UniverseConstraint>> = Vec::new();
-    let mut refused_with_a_model = 0usize;
-    let mut elaborator_alone = 0usize;
-    let mut certifier_alone: Vec<Vec<UniverseConstraint>> = Vec::new();
+    let mut mistaken: Vec<(bool, Vec<UniverseConstraint>)> = Vec::new();
+    let mut answers = [0usize; 2];
     let mut sets = 0usize;
 
     let mut judge = |constraints: Vec<UniverseConstraint>| {
-        let certifier = satisfiable(&constraints);
         let truth = satisfied_somewhere(&constraints, PARAMS, BOUND);
         let context = UniverseContext {
             parameter_count: PARAMS,
             quality_count: 0,
             constraints: constraints.clone(),
         };
-        let elaborator = universe_context_validate(&context).is_ok();
+        let valid = universe_context_validate(&context).is_ok();
 
-        if certifier && !truth {
-            admitted_without_a_model.push(constraints.clone());
+        if valid != truth {
+            mistaken.push((valid, constraints));
         }
-        if !certifier && truth {
-            refused_with_a_model += 1;
-        }
-        if elaborator && !certifier {
-            elaborator_alone += 1;
-        }
-        if certifier && !elaborator {
-            certifier_alone.push(constraints);
-        }
+        answers[usize::from(valid)] += 1;
         sets += 1;
     };
 
@@ -642,21 +482,15 @@ fn both_checkers_agree_with_the_naturals_over_every_small_context() {
     }
 
     assert!(
-        admitted_without_a_model.is_empty(),
-        "the certifier called {} of {sets} sets satisfiable with no assignment satisfying them, the first being {:?}",
-        admitted_without_a_model.len(),
-        admitted_without_a_model.first(),
+        mistaken.is_empty(),
+        "{} of {sets} contexts were judged against the naturals, the first (judged valid: {}) being {:?}",
+        mistaken.len(),
+        mistaken.first().is_some_and(|(valid, _)| *valid),
+        mistaken.first().map(|(_, constraints)| constraints),
     );
     assert!(
-        certifier_alone.is_empty(),
-        "the certifier is the more permissive of the two over {} of {sets} sets, the first being {:?}",
-        certifier_alone.len(),
-        certifier_alone.first(),
-    );
-    assert_eq!(
-        (refused_with_a_model, elaborator_alone),
-        (0, 0),
-        "a decision refused a set an assignment satisfies, or the two disagree, over {sets} sets",
+        answers.iter().all(|count| *count > 0),
+        "every one of {sets} contexts was judged alike, so the sweep compared nothing: {answers:?}",
     );
 }
 

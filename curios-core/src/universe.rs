@@ -624,14 +624,6 @@ pub enum UniverseError {
     },
     UnknownMeta(UniverseMetaId),
     MismatchedRecursiveContexts,
-    /// The disjunctive consistency search exceeded its node budget.
-    ///
-    /// Deciding a set of inequalities whose right-hand sides are genuine maxima means choosing, for each left atom, which branch dominates it — a search exponential in the number of such clauses. The budget makes that blowup a reported diagnostic rather than an unbounded spin, and names the shape that caused it.
-    SearchExhausted {
-        constraints: usize,
-        branches: usize,
-        widths: Vec<usize>,
-    },
     Inconsistency {
         lower: Level,
         upper: Level,

@@ -1990,15 +1990,6 @@ impl fmt::Display for Spelled<'_, UniverseError> {
             UniverseError::UnknownMeta(meta) => write!(formatter, "unknown universe meta {meta}"),
             UniverseError::MismatchedRecursiveContexts => formatter
                 .write_str("members of one recursive group carry different universe contexts"),
-            UniverseError::SearchExhausted {
-                constraints,
-                branches,
-                widths,
-            } => write!(
-                formatter,
-                "universe consistency search exceeded its budget: \
-                 {constraints} constraints, {branches} disjunctive clauses, widths {widths:?}"
-            ),
             // The elaborator words a conflict for its reader itself (`curios-elab`'s `Error::UniverseInconsistency`), from the reasons on its path: this is the inequality alone.
             UniverseError::Inconsistency { lower, upper, path } => write!(
                 formatter,

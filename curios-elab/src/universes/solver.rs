@@ -1,6 +1,6 @@
 //! The transactional universe constraint solver.
 //!
-//! Elaboration machinery, not representation: it owns the live inequality store, the difference graph that decides consistency, and the marks that roll a speculative branch back. The levels, contexts, and schemes it solves over live in `curios-core`'s `universe`, which knows nothing about any of this.
+//! Elaboration machinery, not representation: it owns the live inequality store, which the shared least model decides (`curios_analysis::satisfiable`), and the marks that roll a speculative branch back. The levels, contexts, and schemes it solves over live in `curios-core`'s `universe`, which knows nothing about any of this.
 //!
 //! **A constraint's origin is live, and a scheme's constraint has none.** Where each constraint was raised — the written sort a level was minted for, the check that put one level below another, the use that instantiated a scheme — is held beside it in the store and read by the report of a conflict; what generalization hands out is the inequalities alone (`UniverseConstraint`), so a scheme says what it means wherever it is held, and an instance raises its scheme's constraints again where the use is written ([`UniverseSolver::instantiate`]).
 
@@ -17,7 +17,7 @@ mod test_support;
 mod tests;
 
 use {
-    curios_analysis::LevelModel,
+    curios_analysis::{LevelModel, satisfiable},
     curios_common::recurse,
     curios_core::{
         Extent, Global, Level, LevelHead, Quality, QualityMetaId, Term, UniverseConstraint,
@@ -100,441 +100,6 @@ impl From<UniverseRole> for Provenance {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum DifferenceNode {
-    Zero,
-    Head(LevelHead),
-}
-
-/// The difference constraint `to - from ≤ weight`.
-#[derive(Debug, Clone)]
-struct DifferenceEdge {
-    from: DifferenceNode,
-    to: DifferenceNode,
-    weight: i64,
-    origin: Option<usize>,
-}
-
-/// One difference constraint over *indexed* nodes. Node identity is resolved once, at insertion: keeping `DifferenceNode` keys in the engine instead would make every relaxation step a `BTreeMap` lookup, inside the innermost loop of an exponential search.
-#[derive(Debug, Clone, Copy)]
-struct Arc {
-    from: usize,
-    to: usize,
-    weight: i64,
-    origin: Option<usize>,
-}
-
-/// One journal entry: a node's distance and predecessor before a relaxation overwrote them.
-type Touched = (usize, i128, Option<usize>);
-
-/// A feasible potential over committed arcs — the one relaxation engine both consistency paths drive. The incremental graph commits destructively (`touched: None`; an inconsistency discards the whole graph), while the exact search journals every write so a refuted branch reverts in O(changes) — the only capability the two paths do not share.
-///
-/// The invariant is that `distance` satisfies every arc in `arcs`. Committing more arcs restores it by relaxing outward from those arcs alone; re-deriving the whole potential per search node instead — a full Bellman-Ford over every arc — would make the exact search dominate elaboration.
-#[derive(Debug, Clone, Default)]
-struct Potential {
-    arcs: Vec<Arc>,
-    outgoing: Vec<Vec<usize>>,
-    distance: Vec<i128>,
-    predecessor: Vec<Option<usize>>,
-}
-
-impl Potential {
-    /// Grow to `count` nodes. Every node has an implicit zero-weight edge from a super-source, so the all-zero potential is feasible for the empty arc set.
-    fn ensure_nodes(&mut self, count: usize) {
-        while self.distance.len() < count {
-            self.outgoing.push(Vec::new());
-            self.distance.push(0);
-            self.predecessor.push(None);
-        }
-    }
-
-    fn push_arc(&mut self, arc: Arc) -> usize {
-        let index = self.arcs.len();
-        self.arcs.push(arc);
-        self.outgoing[arc.from].push(index);
-        index
-    }
-
-    /// Tighten `to` along one arc. `Ok(None)` means the potential already satisfied it; `Err` means committing it closes a negative cycle, reported as the origins around that cycle.
-    fn relax(
-        &mut self,
-        arc: usize,
-        touched: Option<&mut Vec<Touched>>,
-    ) -> Result<Option<usize>, Vec<usize>> {
-        let Arc {
-            from, to, weight, ..
-        } = self.arcs[arc];
-        let candidate = self.distance[from] + i128::from(weight);
-        if self.distance[to] <= candidate {
-            return Ok(None);
-        }
-
-        // Predecessors form a forest while the potential is feasible. Making an ancestor depend on its descendant closes a cycle, and the strict improvement proves its weight is negative.
-        let mut cursor = from;
-        let mut path = vec![arc];
-        loop {
-            if cursor == to {
-                let mut origins = path
-                    .into_iter()
-                    .filter_map(|arc| self.arcs[arc].origin)
-                    .collect::<Vec<_>>();
-                origins.reverse();
-                origins.dedup();
-                return Err(origins);
-            }
-            let Some(predecessor) = self.predecessor[cursor] else {
-                break;
-            };
-            path.push(predecessor);
-            cursor = self.arcs[predecessor].from;
-        }
-
-        if let Some(touched) = touched {
-            touched.push((to, self.distance[to], self.predecessor[to]));
-        }
-        self.distance[to] = candidate;
-        self.predecessor[to] = Some(arc);
-        Ok(Some(to))
-    }
-
-    /// Restore feasibility after arcs `first..` were pushed: relax each new arc, then work the improvements outward.
-    fn restore_from(
-        &mut self,
-        first: usize,
-        mut touched: Option<&mut Vec<Touched>>,
-    ) -> Result<(), Vec<usize>> {
-        let mut queue = VecDeque::new();
-        let mut queued = vec![false; self.distance.len()];
-        for arc in first..self.arcs.len() {
-            if let Some(to) = self.relax(arc, touched.as_deref_mut())?
-                && !queued[to]
-            {
-                queued[to] = true;
-                queue.push_back(to);
-            }
-        }
-        while let Some(from) = queue.pop_front() {
-            queued[from] = false;
-            for index in 0..self.outgoing[from].len() {
-                let arc = self.outgoing[from][index];
-                if let Some(to) = self.relax(arc, touched.as_deref_mut())?
-                    && !queued[to]
-                {
-                    queued[to] = true;
-                    queue.push_back(to);
-                }
-            }
-        }
-        Ok(())
-    }
-}
-
-/// The incremental consistency graph: the shared [`Potential`] behind a node-interning face, extended one constraint at a time and discarded whole on inconsistency.
-#[derive(Debug, Clone)]
-struct DifferenceGraph {
-    positions: BTreeMap<DifferenceNode, usize>,
-    potential: Potential,
-}
-
-impl DifferenceGraph {
-    fn new() -> Self {
-        let mut graph = Self {
-            positions: BTreeMap::from([(DifferenceNode::Zero, 0)]),
-            potential: Potential::default(),
-        };
-        graph.potential.ensure_nodes(1);
-        graph
-    }
-
-    fn ensure_node(&mut self, node: DifferenceNode) -> usize {
-        if let Some(&index) = self.positions.get(&node) {
-            return index;
-        }
-        let index = self.positions.len();
-        self.positions.insert(node, index);
-        self.potential.ensure_nodes(index + 1);
-        // Universe heads range over naturals: `0 - head ≤ 0`.
-        self.potential.push_arc(Arc {
-            from: index,
-            to: 0,
-            weight: 0,
-            origin: None,
-        });
-        index
-    }
-
-    fn extend(
-        &mut self,
-        nodes: impl IntoIterator<Item = DifferenceNode>,
-        edges: impl IntoIterator<Item = DifferenceEdge>,
-    ) -> Result<(), Vec<usize>> {
-        for node in nodes {
-            self.ensure_node(node);
-        }
-        let first = self.potential.arcs.len();
-        for edge in edges {
-            let from = self.ensure_node(edge.from);
-            let to = self.ensure_node(edge.to);
-            self.potential.push_arc(Arc {
-                from,
-                to,
-                weight: edge.weight,
-                origin: edge.origin,
-            });
-        }
-        self.potential.restore_from(first, None)
-    }
-}
-
-/// What one committed arc changed, in the order it changed it.
-struct Undo {
-    arcs: usize,
-    from: usize,
-    touched: Vec<Touched>,
-}
-
-/// The exact search's engine: the shared [`Potential`] plus the journal that makes branch exploration reversible.
-struct Search(Potential);
-
-impl Search {
-    fn new(node_count: usize) -> Self {
-        let mut potential = Potential::default();
-        potential.ensure_nodes(node_count);
-        Self(potential)
-    }
-
-    /// Commit one arc, restoring feasibility. On failure the search is left exactly as it was, so a refuted branch costs nothing.
-    fn commit(&mut self, arc: Arc) -> Result<Undo, Vec<usize>> {
-        let index = self.0.push_arc(arc);
-        let mut undo = Undo {
-            arcs: index,
-            from: arc.from,
-            touched: Vec::new(),
-        };
-        match self.0.restore_from(index, Some(&mut undo.touched)) {
-            Ok(()) => Ok(undo),
-            Err(path) => {
-                self.revert(undo);
-                Err(path)
-            }
-        }
-    }
-
-    fn revert(&mut self, undo: Undo) {
-        for (node, distance, predecessor) in undo.touched.into_iter().rev() {
-            self.0.distance[node] = distance;
-            self.0.predecessor[node] = predecessor;
-        }
-        self.0.outgoing[undo.from].pop();
-        self.0.arcs.truncate(undo.arcs);
-    }
-}
-
-/// Bounding the search is what makes the decision procedure total.
-///
-/// Accepting is always justified: a satisfying branch assignment is a model of the original constraints, so any `Ok` is sound however few branches were explored. Only *refuting* needs the whole tree, so exhausting the budget means "not decided", and the caller reports it rather than continuing an exponential walk.
-const SEARCH_BUDGET: u64 = 200_000;
-
-/// `budget` bounds the nodes this search may visit. Exhausting it is reported as `Err(None)`, distinct from a refuted branch, so the caller can name the clause shape instead of spinning.
-///
-/// Reaching the last clause needs no final check: feasibility is the search's invariant, so an assignment that committed is a model.
-///
-/// Guarded by [`recurse`], because depth here is the number of *branching* clauses and the budget does not bound it — the budget counts visits, so a constraint set wide enough to need many decisions would overflow the native stack before the budget ever noticed. That depth is a function of how many constraints reached the declaration, which is the data-shaped kind.
-///
-/// The recursion is what pairs a committed arc with its revert: the alternative that committed one owns it for exactly the call it is exploring, and reverts before reading that call's verdict.
-fn choose(
-    clauses: &[(usize, Vec<Option<Arc>>)],
-    clause: usize,
-    search: &mut Search,
-    budget: &mut u64,
-) -> Result<(), Option<Vec<usize>>> {
-    recurse(|| {
-        match budget.checked_sub(1) {
-            None => return Err(None),
-            Some(remaining) => *budget = remaining,
-        }
-
-        if clause == clauses.len() {
-            return Ok(());
-        }
-
-        let mut best_failure = None;
-
-        for choice in clauses[clause].1.iter().copied() {
-            let undo = match choice {
-                // A clause alternative that needs no arc is already satisfied by the committed potential.
-                None => None,
-                Some(arc) => match search.commit(arc) {
-                    Ok(undo) => Some(undo),
-                    Err(path) => {
-                        record_failure(&mut best_failure, path);
-                        continue;
-                    }
-                },
-            };
-
-            let explored = choose(clauses, clause + 1, search, budget);
-            if let Some(undo) = undo {
-                search.revert(undo);
-            }
-
-            match explored {
-                Ok(()) => return Ok(()),
-                Err(None) => return Err(None),
-                Err(Some(path)) => record_failure(&mut best_failure, path),
-            }
-        }
-
-        Err(Some(
-            best_failure.unwrap_or_else(|| vec![clauses[clause].0]),
-        ))
-    })
-}
-
-/// Keep the longest refutation seen for a clause: the deeper path names more of what forced the contradiction, which is what the caller renders.
-fn record_failure(best: &mut Option<Vec<usize>>, path: Vec<usize>) {
-    if best.as_ref().is_none_or(|kept| path.len() > kept.len()) {
-        *best = Some(path);
-    }
-}
-
-/// What a store was last found consistent from, kept while the store stands: the potential its forced arcs leave feasible, and the clauses its genuine maxima leave to branch on, narrowest first. A store whose every constraint is forced has no clause and is extended a constraint at a time.
-#[derive(Debug, Clone)]
-struct ConsistencyCache {
-    constraint_len: usize,
-    graph: DifferenceGraph,
-    branches: Vec<(usize, Vec<Option<Arc>>)>,
-}
-
-fn atomic_difference_edge(
-    lower: (Option<LevelHead>, u32),
-    upper: (Option<LevelHead>, u32),
-    origin: usize,
-) -> Result<Option<DifferenceEdge>, ()> {
-    match (lower, upper) {
-        ((None, lower), (None, upper)) => {
-            if lower <= upper {
-                Ok(None)
-            } else {
-                Err(())
-            }
-        }
-        ((Some(lower), lower_offset), (None, upper)) => {
-            if lower_offset > upper {
-                Err(())
-            } else {
-                Ok(Some(DifferenceEdge {
-                    from: DifferenceNode::Zero,
-                    to: DifferenceNode::Head(lower),
-                    weight: i64::from(upper) - i64::from(lower_offset),
-                    origin: Some(origin),
-                }))
-            }
-        }
-        ((None, lower), (Some(upper), upper_offset)) => {
-            Ok((lower > upper_offset).then_some(DifferenceEdge {
-                from: DifferenceNode::Head(upper),
-                to: DifferenceNode::Zero,
-                weight: i64::from(upper_offset) - i64::from(lower),
-                origin: Some(origin),
-            }))
-        }
-        ((Some(lower), lower_offset), (Some(upper), upper_offset)) => {
-            if lower == upper {
-                if lower_offset <= upper_offset {
-                    Ok(None)
-                } else {
-                    Err(())
-                }
-            } else {
-                Ok(Some(DifferenceEdge {
-                    from: DifferenceNode::Head(upper),
-                    to: DifferenceNode::Head(lower),
-                    weight: i64::from(upper_offset) - i64::from(lower_offset),
-                    origin: Some(origin),
-                }))
-            }
-        }
-    }
-}
-
-/// The difference-graph fragment one constraint contributes: the nodes it names and the edges relating them.
-type DifferenceFragment = (BTreeSet<DifferenceNode>, Vec<DifferenceEdge>);
-
-/// One side's part in a constraint's max-decomposition: an atom's head at its offset, or a bare constant.
-type Part = (Option<LevelHead>, u32);
-
-/// A constraint's max-decomposition: each lower part (every atom, plus a nonzero constant) must be dominated by some upper part. A redundant zero upper constant beside atoms is dropped — canonical normalization leaves it only when every atom dominates it, and keeping it would double the consistency search for nearly every ordinary max constraint. Both consistency paths read their clauses off this one decomposition.
-fn constraint_parts(constraint: &UniverseConstraint) -> (Vec<Part>, Vec<Part>) {
-    let mut lower_parts = constraint
-        .lower
-        .atoms()
-        .map(|(head, offset)| (Some(head), offset))
-        .collect::<Vec<_>>();
-    if constraint.lower.constant != 0 {
-        lower_parts.push((None, constraint.lower.constant));
-    }
-    let mut upper_parts = constraint
-        .upper
-        .atoms()
-        .map(|(head, offset)| (Some(head), offset))
-        .collect::<Vec<_>>();
-    if upper_parts.is_empty() || constraint.upper.constant != 0 {
-        upper_parts.push((None, constraint.upper.constant));
-    }
-    (lower_parts, upper_parts)
-}
-
-/// One lower part's deduplicated alternatives against every upper part: `None` is "already satisfied"; an empty list refutes constraint `index` outright.
-fn edge_choices(lower: Part, upper_parts: &[Part], index: usize) -> Vec<Option<DifferenceEdge>> {
-    let mut choices = upper_parts
-        .iter()
-        .copied()
-        .filter_map(|upper| atomic_difference_edge(lower, upper, index).ok())
-        .collect::<Vec<_>>();
-    choices.sort_by_key(|edge| {
-        edge.as_ref()
-            .map_or((DifferenceNode::Zero, DifferenceNode::Zero, 0), |edge| {
-                (edge.from, edge.to, edge.weight)
-            })
-    });
-    choices.dedup_by(|left, right| match (left, right) {
-        (None, None) => true,
-        (Some(left), Some(right)) => {
-            left.from == right.from && left.to == right.to && left.weight == right.weight
-        }
-        _ => false,
-    });
-    choices
-}
-
-/// Encode a constraint whose right-hand maxima have one forced viable choice. `Ok(None)` means that the exact disjunctive solver is required.
-fn forced_difference_edges(
-    constraint: &UniverseConstraint,
-    index: usize,
-) -> Result<Option<DifferenceFragment>, Vec<usize>> {
-    let nodes = BTreeSet::from_iter(
-        constraint
-            .lower
-            .atoms()
-            .chain(constraint.upper.atoms())
-            .map(|(head, _)| DifferenceNode::Head(head))
-            .chain([DifferenceNode::Zero]),
-    );
-    let (lower_parts, upper_parts) = constraint_parts(constraint);
-
-    let mut edges = Vec::new();
-    for lower in lower_parts {
-        match edge_choices(lower, &upper_parts, index).as_slice() {
-            [] => return Err(vec![index]),
-            [None] => {}
-            [Some(edge)] => edges.push(edge.clone()),
-            _ => return Ok(None),
-        }
-    }
-    Ok(Some((nodes, edges)))
-}
-
 /// The mutable algebraic-universe inference state.
 #[derive(Debug, Clone)]
 pub struct UniverseSolver {
@@ -547,7 +112,6 @@ pub struct UniverseSolver {
     quality_log: Vec<QualityMetaId>,
     /// Each record type formed over two open qualities apart, with its extent ([`UniverseSolver::note_quality_join`]).
     quality_joins: Vec<(Quality, Quality, Option<Extent>)>,
-    consistency: Option<ConsistencyCache>,
     /// The pairs conversion met at positions a nominal family or a definition is irrelevant in, in the order it met them. None is a constraint, since no checker compares the two levels of one; each is tried where its declaration's levels settle ([`UniverseSolver::join_weak_equations`]).
     weak: Vec<(Level, Level)>,
     /// What [`UniverseSolver::zonk`] has made of a solved metavariable, kept once it names no metavariable at all, so a chain of solutions is followed once rather than at every read of a level that names its head ([`ZonkedLevels`]).
@@ -637,7 +201,6 @@ impl UniverseSolver {
                 .chain(constraint.upper.metas())
                 .all(|meta| !metas.contains(&meta))
         });
-        self.consistency = None;
     }
 
     pub fn new(meta_floor: usize) -> Self {
@@ -655,7 +218,6 @@ impl UniverseSolver {
             qualities: Vec::new(),
             quality_log: Vec::new(),
             quality_joins: Vec::new(),
-            consistency: None,
             weak: Vec::new(),
             zonked: RefCell::default(),
             scheme_open: false,
@@ -699,7 +261,6 @@ impl UniverseSolver {
             })
             .collect();
         self.next_meta = seeds.len();
-        self.consistency = None;
     }
 
     pub fn fresh(
@@ -785,14 +346,12 @@ impl UniverseSolver {
         self.unsolve_qualities(mark.quality_log_len);
         self.quality_joins.truncate(mark.quality_joins_len);
         self.constraints.rollback(mark.constraints);
-        self.consistency = None;
         self.weak.truncate(mark.weak_len);
     }
 
     /// Release inference constraints after their enclosing declaration has finalized. Any relation that remains externally meaningful has already been projected into that declaration's [`UniverseContext`]; later uses reinsert the stored residual context at fresh instances.
     pub fn clear_constraints(&mut self) {
         self.constraints.clear();
-        self.consistency = None;
         self.weak.clear();
     }
 
@@ -963,7 +522,7 @@ impl UniverseSolver {
                 UniverseConstraintOrigin::Converted,
             )
             .is_ok()
-        }) && self.check_consistent().is_ok()
+        }) && self.consistent()
             && before.is_some_and(|before| self.relations_stand(held, before));
         if joined {
             self.release(mark);
@@ -1046,7 +605,7 @@ impl UniverseSolver {
         origin: UniverseConstraintOrigin,
     ) -> bool {
         let mark = self.mark();
-        let held = self.add_leq(lower, upper, origin).is_ok() && self.check_consistent().is_ok();
+        let held = self.add_leq(lower, upper, origin).is_ok() && self.consistent();
         if !held {
             self.rollback(mark);
         }
@@ -1099,7 +658,7 @@ impl UniverseSolver {
 
     /// Record an inequality. Consistency is *not* decided here.
     ///
-    /// Deciding it at every insertion — push, run a full consistency check, pop on refusal — would pay an incremental cycle detection over the difference graph, one relaxation pass per constraint, at each of the prelude's many insertions, and nothing would buy it. The rendered diagnostic is `lower ≤ upper` plus a step count, both read off the *graph* by `inconsistency_from_path`, so a check taken later names the same cycle; the declaring item comes from `Error::in_declaration` at the item boundary, not from the insertion site; and every caller outside this module propagates the refusal with `?` rather than recovering from it, so no decision depended on learning it early.
+    /// Deciding it at every insertion — push, run a full consistency check, pop on refusal — would pay a least model over the whole store at each of the prelude's many insertions, and nothing would buy it. The rendered diagnostic is the least conflict the store holds, read off the store by [`Self::check_consistent`] wherever it is asked, so a check taken later names it as well; the declaring item comes from `Error::in_declaration` at the item boundary, not from the insertion site; and every caller outside this module propagates the refusal with `?` rather than recovering from it, so no decision depended on learning it early.
     ///
     /// What decides consistency is what needs a *verdict* rather than a diagnostic: the speculative commit in `close_stalled_components`, and the declaration-boundary checks in `finalize` and `solve_flexible_in`. An inconsistent set can therefore exist between an insertion and the next of those, which is the price — the boundary refuses the declaration either way, and `curios-cert` decides every context it assumes independently.
     pub fn add_constraint(
@@ -1364,8 +923,8 @@ impl UniverseSolver {
             let committed = floors
                 .into_iter()
                 .try_for_each(|(meta, floor)| self.assign(meta, floor))
-                .and_then(|()| self.check_consistent())
-                .is_ok();
+                .is_ok()
+                && self.consistent();
             if !committed {
                 self.rollback(mark);
             }
@@ -1515,7 +1074,6 @@ impl UniverseSolver {
         }
         entry.solution = Some(level);
         self.solution_log.push(meta);
-        self.consistency = None;
 
         let head = LevelHead::Meta(meta);
         let solution = self.zonk(&Level::meta(meta))?;
@@ -1724,7 +1282,7 @@ impl UniverseSolver {
 
     /// Settle `metas` at their least solutions, round after round until one settles nothing.
     ///
-    /// A level with a principal lower bound takes it, and one nothing bounds from below takes zero. One whose only lower bounds are disjunctive stays, for the reason [`Self::close_stalled_components`] declines a disjunction, and so does one a lower bound of which still names an open level. A round commits every settlement it finds and checks consistency once, since a check after an assignment rebuilds the difference graph; a round the check refuses is retaken one level at a time, keeping each settlement that stays consistent.
+    /// A level with a principal lower bound takes it, and one nothing bounds from below takes zero. One whose only lower bounds are disjunctive stays, for the reason [`Self::close_stalled_components`] declines a disjunction, and so does one a lower bound of which still names an open level. A round commits every settlement it finds and checks consistency once, since a check reads the whole store; a round the check refuses is retaken one level at a time, keeping each settlement that stays consistent.
     fn settle(&mut self, metas: &BTreeSet<UniverseMetaId>) -> Result<(), UniverseError> {
         curios_common::profile!("universe::settle");
         loop {
@@ -1734,7 +1292,7 @@ impl UniverseSolver {
                 self.release(mark);
                 return Ok(());
             }
-            if self.check_consistent().is_ok() {
+            if self.consistent() {
                 self.release(mark);
                 continue;
             }
@@ -1768,7 +1326,7 @@ impl UniverseSolver {
                 continue;
             }
             let mark = self.mark();
-            let committed = self.assign(meta, level).is_ok() && self.check_consistent().is_ok();
+            let committed = self.assign(meta, level).is_ok() && self.consistent();
             if !committed {
                 self.rollback(mark);
             }
@@ -1985,19 +1543,56 @@ impl UniverseSolver {
         Ok(())
     }
 
-    /// Explain an inconsistency from the constraint indices that closed the cycle, widening the path with the origins of the levels it names.
-    fn inconsistency_from_path(&self, path: Vec<usize>) -> UniverseError {
+    /// Whether the store has a model in the naturals, as the shared least model decides it: what a speculative step asks before it keeps what it wrote, and the whole of what a check costs where nothing is refused.
+    fn consistent(&self) -> bool {
+        curios_common::profile!("universe::check_consistent");
+        satisfiable(self.constraints.iter())
+    }
+
+    /// The store's consistency, or the conflict it holds, for a caller that reports one: a least set of its constraints with no model ([`Self::conflict`]).
+    fn check_consistent(&self) -> Result<(), UniverseError> {
+        if self.consistent() {
+            return Ok(());
+        }
+
+        Err(self.inconsistency(&self.conflict()))
+    }
+
+    /// A least set of the store's constraints with no model, in the order they were raised: each is dropped in turn where the rest without it still has none, so every one kept is one the conflict needs.
+    ///
+    /// A satisfiability run a constraint, paid only where a refusal is reported; why not a loop traced through the model is `curios-analysis`'s README's.
+    fn conflict(&self) -> Vec<usize> {
+        curios_common::profile!("universe::conflict");
+        let mut kept = (0..self.constraints.len()).collect::<Vec<_>>();
+        let mut at = 0;
+        while at < kept.len() {
+            let without = kept
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| *index != at)
+                .filter_map(|(_, position)| self.constraints.get(*position));
+            if satisfiable(without) {
+                at += 1;
+            } else {
+                kept.remove(at);
+            }
+        }
+
+        kept
+    }
+
+    /// Word a conflict: the constraint of it raised last as what is required, and as where it was required, the origins of every constraint in it and of every level they name.
+    fn inconsistency(&self, conflict: &[usize]) -> UniverseError {
         let constraint = |index: usize| {
             self.constraints
                 .get(index)
-                .expect("a cycle's path names constraints the store holds")
+                .expect("a conflict names constraints the store holds")
         };
-        let witness = path.first().copied().unwrap_or(0);
-        let mut origins = path
+        let mut origins = conflict
             .iter()
             .filter_map(|index| self.constraints.origin(*index).cloned())
             .collect::<Vec<_>>();
-        for index in path.iter().copied().chain([witness]) {
+        for index in conflict.iter().copied() {
             for meta in constraint(index)
                 .lower
                 .metas()
@@ -2010,178 +1605,16 @@ impl UniverseSolver {
                 }
             }
         }
-        UniverseError::Inconsistency {
-            lower: constraint(witness).lower.clone(),
-            upper: constraint(witness).upper.clone(),
-            path: origins,
-        }
-    }
-
-    fn check_consistent(&mut self) -> Result<(), UniverseError> {
-        curios_common::profile!("universe::check_consistent");
-        if let Some(mut cache) = self.consistency.take() {
-            if cache.constraint_len == self.constraints.len() {
-                self.consistency = Some(cache);
-                return Ok(());
-            }
-            // A constraint added to a store with clauses to branch on is decided with them, from nothing.
-            if cache.constraint_len + 1 == self.constraints.len() && cache.branches.is_empty() {
-                let index = cache.constraint_len;
-                match forced_difference_edges(
-                    self.constraints
-                        .get(index)
-                        .expect("the cache trails the store by one"),
-                    index,
-                ) {
-                    Ok(Some((nodes, edges))) => match cache.graph.extend(nodes, edges) {
-                        Ok(()) => {
-                            cache.constraint_len += 1;
-                            self.consistency = Some(cache);
-                            return Ok(());
-                        }
-                        Err(path) => return Err(self.inconsistency_from_path(path)),
-                    },
-                    Err(path) => return Err(self.inconsistency_from_path(path)),
-                    Ok(None) => {}
-                }
-            }
-        }
-
-        let constraints = &self.constraints;
-        let mut nodes = BTreeSet::new();
-        let mut edges = Vec::new();
-        let mut forced = true;
-        for (index, constraint) in constraints.iter().enumerate() {
-            match forced_difference_edges(constraint, index) {
-                Ok(Some((new_nodes, new_edges))) => {
-                    nodes.extend(new_nodes);
-                    edges.extend(new_edges);
-                }
-                Ok(None) => {
-                    forced = false;
-                    break;
-                }
-                Err(path) => {
-                    return Err(self.inconsistency_from_path(path));
-                }
-            }
-        }
-        if forced {
-            let mut graph = DifferenceGraph::new();
-            if let Err(path) = graph.extend(nodes, edges) {
-                return Err(self.inconsistency_from_path(path));
-            }
-            self.consistency = Some(ConsistencyCache {
-                constraint_len: constraints.len(),
-                graph,
-                branches: Vec::new(),
-            });
-            return Ok(());
-        }
-
-        self.consistency = Some(self.check_consistent_full()?);
-        Ok(())
-    }
-
-    /// Decide consistency from scratch, branching on genuine right-hand maxima, and hand back what a consistent store was decided from. Reads the store directly: every stored constraint is already normalized, so there is no separate zonked copy to drift from.
-    fn check_consistent_full(&self) -> Result<ConsistencyCache, UniverseError> {
-        curios_common::profile!("universe::check_consistent_full");
-        let constraints = &self.constraints;
-
-        // A maximum on the left is conjunctive. A maximum on the right is a finite disjunction: under any satisfying valuation, each left atom is dominated by at least one right atom. Enumerating those symbolic choices and checking their difference graphs decides consistency without searching numeric universe assignments.
-        let mut nodes = BTreeSet::from([DifferenceNode::Zero]);
-        for constraint in constraints.iter() {
-            nodes.extend(
-                constraint
-                    .lower
-                    .atoms()
-                    .chain(constraint.upper.atoms())
-                    .map(|(head, _)| DifferenceNode::Head(head)),
-            );
-        }
-        let positions = nodes
-            .iter()
-            .enumerate()
-            .map(|(index, node)| (*node, index))
-            .collect::<BTreeMap<_, _>>();
-        let zero = positions[&DifferenceNode::Zero];
-        let arc = |edge: DifferenceEdge| Arc {
-            from: positions[&edge.from],
-            to: positions[&edge.to],
-            weight: edge.weight,
-            origin: edge.origin,
-        };
-
-        let mut clauses = Vec::<(usize, Vec<Option<Arc>>)>::new();
-        for (index, constraint) in constraints.iter().enumerate() {
-            let (lower_parts, upper_parts) = constraint_parts(constraint);
-            for lower in lower_parts {
-                let choices = edge_choices(lower, &upper_parts, index)
-                    .into_iter()
-                    .map(|edge| edge.map(arc))
-                    .collect::<Vec<_>>();
-                clauses.push((index, choices));
-            }
-        }
-
-        let mut search = Search::new(nodes.len());
-        // Universe heads range over naturals: `0 - head ≤ 0`.
-        let grounded = (0..nodes.len())
-            .filter(|index| *index != zero)
-            .map(|index| Arc {
-                from: index,
-                to: zero,
-                weight: 0,
-                origin: None,
-            })
-            // Ordinary difference constraints have exactly one symbolic RHS choice; they hold under every branch assignment, so they belong to the base potential rather than the search.
-            .chain(
-                clauses
-                    .iter()
-                    .filter_map(|(_, choices)| match choices.as_slice() {
-                        [choice] => *choice,
-                        _ => None,
-                    }),
-            )
-            .collect::<Vec<_>>();
-        for arc in grounded {
-            if let Err(path) = search.commit(arc) {
-                return Err(self.inconsistency_from_path(path));
-            }
-        }
-
-        // Narrowest clause first. A clause whose alternatives are all refuted by the committed arcs fails at the shallowest possible depth, so ordering by width prunes the tree before it is built rather than after. The decision is unchanged — only the order in which the same finite set of assignments is explored.
-        let mut branches = clauses
-            .into_iter()
-            .filter(|(_, choices)| choices.len() != 1)
-            .collect::<Vec<_>>();
-        branches.sort_by_key(|(_, choices)| choices.len());
-
-        let mut budget = SEARCH_BUDGET;
-        let consistency = curios_common::profile!(
-            "universe::choose" => choose(&branches, 0, &mut search, &mut budget)
+        let witness = constraint(
+            *conflict
+                .last()
+                .expect("a store with no model holds a constraint"),
         );
 
-        match consistency {
-            // Every arc the search committed it reverted, so the potential is the one the forced arcs left.
-            Ok(()) => Ok(ConsistencyCache {
-                constraint_len: constraints.len(),
-                graph: DifferenceGraph {
-                    positions,
-                    potential: search.0,
-                },
-                branches,
-            }),
-            Err(Some(path)) => Err(self.inconsistency_from_path(path)),
-            Err(None) => Err(UniverseError::SearchExhausted {
-                constraints: constraints.len(),
-                branches: branches.len(),
-                widths: branches
-                    .iter()
-                    .map(|(_, choices)| choices.len())
-                    .take(16)
-                    .collect(),
-            }),
+        UniverseError::Inconsistency {
+            lower: witness.lower.clone(),
+            upper: witness.upper.clone(),
+            path: origins,
         }
     }
 }
