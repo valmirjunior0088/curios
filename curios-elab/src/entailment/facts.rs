@@ -1772,7 +1772,6 @@ pub fn solved(context: &mut Context, term: &Term) -> Result<Term, Error> {
     Ok(zonk_solved_term_metas(context, &reduced))
 }
 
-/// The goal's negation, a fact of the refuting form's false arm, where a split on the goal's decision refined it to `false`: `a < b` failing is `b <= a`, `a <= b` failing is `b < a`. Read by the same reader, after the facts, proved by `qed` there, and lifted by `lifts` as they were. `None` where the vocabulary is not in scope.
 /// The hole's own binders, in scope order: the frames past the base.
 pub fn binders(context: &Context) -> Vec<(Free, Term)> {
     context.local_binders().cloned().collect()
