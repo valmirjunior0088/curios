@@ -118,6 +118,23 @@ jobs:
       - name: Test
         run: cargo xtask bundle test
 
+  biome:
+    name: JavaScript, JSON and CSS
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: xtask
+          workspaces: .
+          cache-directories: |
+            xtask/.artifacts
+      - name: Lint
+        run: cargo xtask biome lint
+
   tree-sitter:
     name: Tree-sitter grammars
     runs-on: ubuntu-24.04
@@ -132,8 +149,6 @@ jobs:
           workspaces: .
           cache-directories: |
             xtask/.artifacts
-      - name: Lint
-        run: cargo xtask tree-sitter lint
       - name: Test
         run: cargo xtask tree-sitter test
 
@@ -152,8 +167,6 @@ jobs:
           cache-directories: |
             xtask/.artifacts
             ~/.npm
-      - name: Lint
-        run: cargo xtask textmate lint
       - name: Test
         run: cargo xtask textmate test
 
@@ -172,8 +185,6 @@ jobs:
           cache-directories: |
             xtask/.artifacts
             ~/.npm
-      - name: Lint
-        run: cargo xtask vscode lint
       - name: Build
         run: cargo xtask vscode build
 

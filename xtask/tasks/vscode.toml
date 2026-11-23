@@ -8,18 +8,6 @@ run = [
     ["{.tools.npm}", "clean-install"],
 ]
 
-[lint.biome-format]
-description = "Fail on formatting drift in the VS Code extension's JavaScript and JSON"
-run = [
-    ["{.tools.biome}", "format", "editors/vscode"],
-]
-
-[lint.biome-lint]
-description = "Lint the VS Code extension's JavaScript and JSON"
-run = [
-    ["{.tools.biome}", "lint", "--error-on-warnings", "editors/vscode"],
-]
-
 [build]
 description = "Bundle the VS Code extension and the TextMate grammars it ships, and write its package as it ships, which the snapshots never load"
 dir = "editors/vscode"

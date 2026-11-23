@@ -11,8 +11,6 @@ const LOCK: &str = include_str!("../../Cargo.lock");
 /// `curios-profile`'s build script, which names the Perfetto release it takes the trace schema at.
 const PROFILE_BUILD: &str = include_str!("../../curios-profile/build.rs");
 
-const BIOME: &str = include_str!("../../biome.json");
-
 fn tree() -> Tree {
     Tree::read().unwrap()
 }
@@ -110,39 +108,6 @@ fn a_workspace_lint_goes_on_past_a_crate_that_fails() {
                 );
             }
         }
-    }
-}
-
-/// Every directory `biome.json` reads outside the editors' own trees is one the workspace's Biome steps hand it, so no file Biome reads is left to no step.
-#[test]
-fn the_workspace_s_biome_steps_reach_every_file_biome_reads_of_it() {
-    let tree = tree();
-    let Variable::Words(handed) = &tree.variables[&vec![
-        "workspace".to_string(),
-        "variables".to_string(),
-        "web".to_string(),
-    ]] else {
-        panic!("the workspace's web paths are words");
-    };
-    // The one list `biome.json` holds, read as text: the file is JSON, which nothing else here parses.
-    let includes = BIOME
-        .split("\"includes\": [")
-        .nth(1)
-        .and_then(|rest| rest.split(']').next())
-        .expect("biome.json lists the files it reads");
-    for include in includes
-        .split(',')
-        .map(|item| item.trim().trim_matches('"'))
-    {
-        if include.is_empty() || include.starts_with('!') || include.starts_with("editors/") {
-            continue;
-        }
-        assert!(
-            handed
-                .iter()
-                .any(|path| include == path || include.starts_with(&format!("{path}/"))),
-            "{include}"
-        );
     }
 }
 

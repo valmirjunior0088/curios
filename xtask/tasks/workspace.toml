@@ -6,8 +6,6 @@ variables.edition.key = "workspace.package.edition"
 variables.loose.run = ["git", "ls-files", "--", "programs/*.rs"]
 # The Curios sources the formatter holds to canonical form: every tracked `.crs` but the editors' highlighting samples and the soundness board's archive, whose witnesses are written in forms the language no longer has.
 variables.sources.run = ["git", "ls-files", "--", "*.crs", ":!editors/**", ":!xboard/archive/**"]
-# What Biome reads of the workspace, beside the editors' own trees: `biome.json` lists the same.
-variables.web = ["biome.json", ".claude/settings.json", "curios-browser/src", "curios-document/static"]
 variables.package.flag = ["-p", "--package"]
 variables.package.help = "Compile and run one shipped package's tests alone, as a mutation of a crate the standard library's build parses through asks; every shipped member's when omitted"
 variables.expression.flag = ["-E", "--filterset"]
@@ -23,12 +21,6 @@ run = [
     ],
 ]
 
-[lint.biome-format]
-description = "Fail on formatting drift in the JavaScript, JSON and CSS the workspace holds"
-run = [
-    ["{.tools.biome}", "format", "{.workspace.variables.web}"],
-]
-
 [lint.curios-format]
 description = "Fail on formatting drift in the tree's Curios sources, as this tree's `curios format --check` reads each, under the package that governs it"
 consumes = [".launcher.build.produces.binary"]
@@ -41,12 +33,6 @@ description = "Lint every target of the workspace as it ships, which elaborates,
 consumes = [".launcher.build.produces.binary"]
 run = [
     ["cargo", "clippy", "--all-targets", "--keep-going"],
-]
-
-[lint.biome-lint]
-description = "Lint the JavaScript, JSON and CSS the workspace holds: the browser harness, the documentation pages' script and stylesheet"
-run = [
-    ["{.tools.biome}", "lint", "--error-on-warnings", "{.workspace.variables.web}"],
 ]
 
 [test.suite]

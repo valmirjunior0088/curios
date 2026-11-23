@@ -3,18 +3,6 @@ description = "The tree-sitter grammars"
 variables.programs.run = ["git", "ls-files", "--", "curios-prelude-build/std/*.crs", "programs/*.crs"]
 variables.core.run = ["git", "ls-files", "--", "xboard/tickets/*.crsc"]
 
-[lint.biome-format]
-description = "Fail on formatting drift in the grammar's JavaScript and JSON"
-run = [
-    ["{.tools.biome}", "format", "editors/tree-sitter"],
-]
-
-[lint.biome-lint]
-description = "Lint the grammar's JavaScript and JSON"
-run = [
-    ["{.tools.biome}", "lint", "--error-on-warnings", "editors/tree-sitter"],
-]
-
 # A grammar is JavaScript, evaluated by the Node every other step's JavaScript runs under. Its parser is written just before it is compiled into the checkout, a file the steps that parse with it load by its path: tree-sitter keeps parsers by the grammar's name in a cache every checkout of the machine shares, and hands one back in place of compiling sources older than it, so a parser read through that cache may be another checkout's.
 [build.base]
 description = "Generate the program's parser into `base/src/`, where the repository commits it, and compile it for the steps that parse with it"

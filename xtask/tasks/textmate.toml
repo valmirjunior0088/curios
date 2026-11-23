@@ -8,18 +8,6 @@ run = [
     ["{.tools.npm}", "clean-install"],
 ]
 
-[lint.biome-format]
-description = "Fail on formatting drift in the TextMate grammars and their table"
-run = [
-    ["{.tools.biome}", "format", "editors/textmate"],
-]
-
-[lint.biome-lint]
-description = "Lint the TextMate grammars and their table"
-run = [
-    ["{.tools.biome}", "lint", "--error-on-warnings", "editors/textmate"],
-]
-
 [test]
 description = "Hold the TextMate grammars to their snapshots"
 dir = "editors/textmate"

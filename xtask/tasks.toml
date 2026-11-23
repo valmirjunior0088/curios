@@ -72,7 +72,7 @@ sha256.aarch64-apple-darwin = "46cb97d9a2c52c94e22d9a76c2f1116156b8b61f98360e2a9
 [handoff]
 description = "Run every check the handoff holds work to: each subject's steps, each after what it requires and consumes"
 requires = [
-    ".launcher", ".workspace", ".docs", ".compiler", ".bundle",
+    ".launcher", ".workspace", ".docs", ".compiler", ".bundle", ".biome",
     ".tree-sitter", ".textmate", ".vscode", ".zed", ".jig",
 ]
 

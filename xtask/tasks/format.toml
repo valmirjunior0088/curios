@@ -14,7 +14,7 @@ run = [
     ["cargo", "run", "--quiet", "--package", "curios", "--", "format", "{.workspace.variables.sources}"],
 ]
 
-[web]
+[biome]
 description = "Format the JavaScript, JSON and CSS of every tree, as `biome.json` lists them"
 run = [
     ["{.tools.biome}", "format", "--write", "."],
