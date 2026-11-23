@@ -17,6 +17,7 @@ mod test_support;
 mod tests;
 
 use {
+    curios_analysis::LevelModel,
     curios_common::recurse,
     curios_core::{
         Extent, Global, Level, LevelHead, Quality, QualityMetaId, Term, UniverseConstraint,
@@ -99,9 +100,6 @@ impl From<UniverseRole> for Provenance {
     }
 }
 
-/// How wide a gap between two held levels a join's check looks for. No declaration sets one level more than a few successors above another, and a consistent store entails no gap without end, so this bounds a search that ends before it.
-const GAP_CAP: u32 = 16;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum DifferenceNode {
     Zero,
@@ -148,13 +146,6 @@ impl Potential {
             self.distance.push(0);
             self.predecessor.push(None);
         }
-    }
-
-    /// Forget every node past the first `count`. No arc the potential holds names one.
-    fn truncate_nodes(&mut self, count: usize) {
-        self.outgoing.truncate(count);
-        self.distance.truncate(count);
-        self.predecessor.truncate(count);
     }
 
     fn push_arc(&mut self, arc: Arc) -> usize {
@@ -407,87 +398,12 @@ fn record_failure(best: &mut Option<Vec<usize>>, path: Vec<usize>) {
     }
 }
 
-/// What a store was last found consistent from, kept while the store stands: the potential its forced arcs leave feasible, and the clauses its genuine maxima leave to branch on, narrowest first. A store whose every constraint is forced has no clause and is extended a constraint at a time; either is asked what one more constraint would do with nothing built again ([`ConsistencyCache::refuses`]).
+/// What a store was last found consistent from, kept while the store stands: the potential its forced arcs leave feasible, and the clauses its genuine maxima leave to branch on, narrowest first. A store whose every constraint is forced has no clause and is extended a constraint at a time.
 #[derive(Debug, Clone)]
 struct ConsistencyCache {
     constraint_len: usize,
     graph: DifferenceGraph,
     branches: Vec<(usize, Vec<Option<Arc>>)>,
-}
-
-impl ConsistencyCache {
-    /// Whether the store this was decided from is refused with `constraint` added as its constraint `index`, the cache left as it was. `None` where the constraint holds a genuine maximum of its own, a clause the search would place among the store's: that question is the store's to decide.
-    ///
-    /// **The answer deciding the longer store from nothing gives.** The constraint's forced arcs are committed over the potential the store's own left feasible, each write journalled, the store's clauses are searched under them on a budget of their own, and every write is undone, with the nodes the constraint alone names. Whether a set of arcs is feasible does not depend on the order they were committed in, so the search visits what a search from nothing visits and runs out where it does.
-    fn refuses(&mut self, constraint: &UniverseConstraint, index: usize) -> Option<bool> {
-        let edges = match forced_difference_edges(constraint, index) {
-            Ok(Some((_, edges))) => edges,
-            Ok(None) => return None,
-            Err(_) => return Some(true),
-        };
-
-        let zero = self.graph.positions[&DifferenceNode::Zero];
-        let nodes = self.graph.positions.len();
-        let mut search = Search(std::mem::take(&mut self.graph.potential));
-        let mut committed = Vec::new();
-        let mut named = Vec::new();
-        let mut commit = |search: &mut Search, arc: Arc| match search.commit(arc) {
-            Ok(undo) => {
-                committed.push(undo);
-                true
-            }
-            Err(_) => false,
-        };
-        let feasible = edges.into_iter().all(|edge| {
-            let mut ends = [zero; 2];
-            for (end, node) in ends.iter_mut().zip([edge.from, edge.to]) {
-                *end = match self.graph.positions.get(&node) {
-                    Some(&position) => position,
-                    None => {
-                        let position = self.graph.positions.len();
-                        self.graph.positions.insert(node, position);
-                        named.push(node);
-                        search.0.ensure_nodes(position + 1);
-                        // Universe heads range over naturals: `0 - head ≤ 0`.
-                        let grounded = Arc {
-                            from: position,
-                            to: zero,
-                            weight: 0,
-                            origin: None,
-                        };
-                        if !commit(&mut search, grounded) {
-                            return false;
-                        }
-                        position
-                    }
-                };
-            }
-            commit(
-                &mut search,
-                Arc {
-                    from: ends[0],
-                    to: ends[1],
-                    weight: edge.weight,
-                    origin: edge.origin,
-                },
-            )
-        });
-        let refused = !feasible || {
-            let mut budget = SEARCH_BUDGET;
-            choose(&self.branches, 0, &mut search, &mut budget).is_err()
-        };
-
-        for undo in committed.into_iter().rev() {
-            search.revert(undo);
-        }
-        search.0.truncate_nodes(nodes);
-        for node in named {
-            self.graph.positions.remove(&node);
-        }
-        self.graph.potential = search.0;
-
-        Some(refused)
-    }
 }
 
 fn atomic_difference_edge(
@@ -1007,6 +923,7 @@ impl UniverseSolver {
     /// **A join puts nothing between two levels the declaration holds.** `held` are the levels that stand where conversion compares them, and a pair is kept only where the store then says of them, one against another and each against zero, what it said before ([`Self::held_relations`]). A weak equation is met at a position nothing reads, so it has no standing to decide a level something does. Two arms answering a `Result` at their own constructors' levels would otherwise make those two levels one through the declared `Result`'s, which no caller could then tell apart, and a small action sequenced into a region would hold the region's payload to the action's level, zero. The occurrence it leaves unjoined settles from its own bounds, at the join of the held levels below it.
     fn join_weak_equations(&mut self, held: &BTreeSet<UniverseMetaId>) {
         curios_common::profile!("universe::join_weak_equations");
+        let mut met = BTreeSet::new();
         let pairs = std::mem::take(&mut self.weak)
             .into_iter()
             .filter_map(|(left, right)| {
@@ -1015,6 +932,8 @@ impl UniverseSolver {
                 let open = left.metas().chain(right.metas()).next().is_some();
                 (left != right && open).then_some((left, right))
             })
+            // A pair met again is tried once. Whether the store holds a pair only falls as the pairs kept before it grow, so trying a repeat asks what its first copy's answer says, save where a pair kept between the two took one of its sides out of the shape `add_eq`'s default pins and the plain equation is asked instead — and what a weak pair decides is only where an irrelevant occurrence lands. A pair is ordered, where Rocq keeps its weak constraints as unordered pairs (`UPairSet`): its direction picks which meta that default pins, so `(u, v)` and `(v, u)` may leave different levels standing.
+            .filter(|pair| met.insert(pair.clone()))
             .collect::<Vec<_>>();
         if pairs.is_empty() {
             return;
@@ -1023,17 +942,17 @@ impl UniverseSolver {
         curios_common::sample!("universe::held_levels", held.len());
 
         let before = self.held_relations(held);
-        self.join_run(&pairs, held, &before);
+        self.join_run(&pairs, held, before.as_deref());
     }
 
-    /// Join the pairs of `pairs` the store can hold, in order: each is kept where the store, with the pairs kept before it, stays consistent and says of the held levels what `before` says.
+    /// Join the pairs of `pairs` the store can hold, in order: each is kept where the store, with the pairs kept before it, stays consistent and says of the held levels what `before` says. `before` is `None` where reading the held levels met a loop in the store before any pair was tried, or one did not read, and no run is kept.
     ///
     /// **A run the store holds whole is kept whole, and one it does not is halved.** Whether a store holds a set of equations only falls as the set grows, so a run that is held together is one each of whose pairs would have been kept in its turn, and nothing is asked of them one by one; a run that is not held is tried as its two halves, the first before the second, down to the pair that is dropped. The pairs kept are the ones trying each alone in order keeps, and a declaration with a few hundred of them, a handful of which the store refuses, asks a few dozen times where it asked once for each.
     fn join_run(
         &mut self,
         pairs: &[(Level, Level)],
         held: &BTreeSet<UniverseMetaId>,
-        before: &[Option<u32>],
+        before: Option<&[Vec<Option<u64>>]>,
     ) {
         curios_common::sample!("universe::weak_run", pairs.len());
         let mark = self.mark();
@@ -1045,7 +964,7 @@ impl UniverseSolver {
             )
             .is_ok()
         }) && self.check_consistent().is_ok()
-            && self.relations_stand(held, before);
+            && before.is_some_and(|before| self.relations_stand(held, before));
         if joined {
             self.release(mark);
             return;
@@ -1068,80 +987,55 @@ impl UniverseSolver {
         }
     }
 
-    /// The levels a declaration holds, zero before them: what [`Self::held_relations`] relates, in the order it relates them.
-    fn held_levels(held: &BTreeSet<UniverseMetaId>) -> Vec<Level> {
-        std::iter::once(Level::zero())
-            .chain(held.iter().map(|meta| Level::meta(*meta)))
+    /// The levels a declaration holds, zero before them, each as the store reads it now: what [`Self::held_relations`] relates, in the order it relates them. `None` where one does not read.
+    fn held_levels(&self, held: &BTreeSet<UniverseMetaId>) -> Option<Vec<Level>> {
+        std::iter::once(Ok(Level::zero()))
+            .chain(held.iter().map(|meta| self.zonk(&Level::meta(*meta))))
+            .collect::<Result<_, _>>()
+            .ok()
+    }
+
+    /// How far each of `levels` stands below `top` as the store entails it — the widest `k` with `level + k ≤ top`, and none where it entails no order between them — read off the least model of what the store derives below `top`. `None` where that reading meets a loop in the store.
+    fn relations_below(&self, top: &Level, levels: &[Level]) -> Option<Vec<Option<u64>>> {
+        let model = LevelModel::below(top, self.constraints.iter())?;
+
+        Some(levels.iter().map(|level| model.admits(level)).collect())
+    }
+
+    /// What the store says of the levels a declaration holds, one against another and each against zero: for each, how far every one stands below it ([`Self::relations_below`]). Two stores that answer alike here leave a caller the same choice of those levels. `None` where reading them meets a loop in the store, or a held level does not read.
+    fn held_relations(&self, held: &BTreeSet<UniverseMetaId>) -> Option<Vec<Vec<Option<u64>>>> {
+        if held.is_empty() {
+            return Some(Vec::new());
+        }
+        curios_common::profile!("universe::held_relations");
+        let levels = self.held_levels(held)?;
+
+        levels
+            .iter()
+            .map(|top| self.relations_below(top, &levels))
             .collect()
     }
 
     /// Whether the store says of the held levels what `before`, their relations as [`Self::held_relations`] read them of an earlier store this one extends, says.
     ///
-    /// **One refutation a pair.** A store that extends another entails all it did, so a relation can only have widened: it stands where the store does not entail the step past the gap it had, and the first that does not stand ends the asking.
-    fn relations_stand(&mut self, held: &BTreeSet<UniverseMetaId>, before: &[Option<u32>]) -> bool {
+    /// **One model a level.** A store that extends another entails all it did, so a relation can only have widened; the levels are read one top at a time, and the first whose relations moved ends the reading.
+    fn relations_stand(
+        &self,
+        held: &BTreeSet<UniverseMetaId>,
+        before: &[Vec<Option<u64>>],
+    ) -> bool {
         if held.is_empty() {
             return true;
         }
         curios_common::profile!("universe::relations_stand");
-        let levels = Self::held_levels(held);
-        let mut relation = before.iter();
-        for (below, lower) in levels.iter().enumerate() {
-            for (above, upper) in levels.iter().enumerate() {
-                if below == above {
-                    continue;
-                }
-                let next = match relation.next().expect("a relation for each ordered pair") {
-                    Some(gap) => gap + 1,
-                    None => 0,
-                };
-                // Past the cap a gap is not looked for, before or after.
-                if next > GAP_CAP {
-                    continue;
-                }
-                if let Ok(raised) = lower.checked_add(next)
-                    && self.entails(&raised, upper)
-                {
-                    return false;
-                }
-            }
-        }
+        let Some(levels) = self.held_levels(held) else {
+            return false;
+        };
 
-        true
-    }
-
-    /// What the store says of the levels a declaration holds, one against another and each against zero: for each ordered pair, the widest gap it entails between them ([`Self::gap`]). Two stores that answer alike here leave a caller the same choice of those levels.
-    fn held_relations(&mut self, held: &BTreeSet<UniverseMetaId>) -> Vec<Option<u32>> {
-        if held.is_empty() {
-            return Vec::new();
-        }
-        curios_common::profile!("universe::held_relations");
-        let levels = Self::held_levels(held);
-        let mut relations = Vec::with_capacity(levels.len() * (levels.len() - 1));
-        for (below, lower) in levels.iter().enumerate() {
-            for (above, upper) in levels.iter().enumerate() {
-                if below != above {
-                    relations.push(self.gap(lower, upper));
-                }
-            }
-        }
-
-        relations
-    }
-
-    /// The widest gap the store entails between two levels: the greatest `k` with `lower + k ≤ upper`, and none where it entails no order between them. A consistent store entails only a finite one, so the search ends where the next step is not entailed; [`GAP_CAP`] bounds it all the same.
-    fn gap(&mut self, lower: &Level, upper: &Level) -> Option<u32> {
-        let mut widest = None;
-        for step in 0..=GAP_CAP {
-            let Ok(raised) = lower.checked_add(step) else {
-                break;
-            };
-            if !self.entails(&raised, upper) {
-                break;
-            }
-            widest = Some(step);
-        }
-
-        widest
+        levels
+            .iter()
+            .zip(before)
+            .all(|(top, was)| self.relations_below(top, &levels).as_ref() == Some(was))
     }
 
     /// Record `lower ≤ upper` where the store stays consistent with it, and answer whether it did. A relation a use needs and nothing has settled is one the declaration comes to require, as every level settles by where it stands; one the store refuses is taken back, and the use is answered no. A speculative judgment around the use takes the relation back with everything else it recorded.
@@ -1159,45 +1053,6 @@ impl UniverseSolver {
         self.release(mark);
 
         held
-    }
-
-    /// Whether the store entails `lower ≤ upper`: its negation, `upper + 1 ≤ lower`, is one the store refuses. Asked of what the store was last decided from where that can say ([`Self::refused_as_decided`]), and of the store with the negation added and taken back where it cannot.
-    fn entails(&mut self, lower: &Level, upper: &Level) -> bool {
-        let Ok(above) = upper.succ() else {
-            return false;
-        };
-        if let Some(refused) = self.refused_as_decided(&above, lower) {
-            return refused;
-        }
-        let mark = self.mark();
-        let refused = self
-            .add_leq(above, lower.clone(), UniverseConstraintOrigin::Converted)
-            .is_err()
-            || self.check_consistent().is_err();
-        self.rollback(mark);
-        self.release(mark);
-
-        refused
-    }
-
-    /// Whether the store refuses `lower ≤ upper`, asked of what a consistent store was decided from ([`ConsistencyCache::refuses`]) and writing nothing to it: what adding the constraint, deciding the store and taking the constraint back answers. `None` where the store is not consistent, or the constraint is a clause of its own.
-    ///
-    /// A declaration asks this of every ordered pair of the levels it holds, each time it tries a run of its weak equations ([`Self::relations_stand`]). Deciding the store again for each is what made those questions most of what elaborating the library allocates.
-    fn refused_as_decided(&mut self, lower: &Level, upper: &Level) -> Option<bool> {
-        self.check_consistent().ok()?;
-        let lower = self.zonk(lower).ok()?;
-        let upper = self.zonk(upper).ok()?;
-        // What `add_constraint` settles before it stores anything.
-        if lower.structurally_leq(&upper) {
-            return Some(false);
-        }
-        if lower.atoms.is_empty() && upper.atoms.is_empty() {
-            return Some(lower.constant > upper.constant);
-        }
-
-        let index = self.constraints.len();
-        let constraint = UniverseConstraint { lower, upper };
-        self.consistency.as_mut()?.refuses(&constraint, index)
     }
 
     /// Default an equation whose zonked sides differ at exactly one meta atom with a shared offset: `max(s, α+k) = max(s, β+k)` pins one meta to the other instead of parking two inequalities the bound propagators cannot decompose. Without this, independently instantiated spellings of one written annotation meet only here, both metas survive to declaration finalization, and the scheme generalizes two parameters where the program wrote one universe.

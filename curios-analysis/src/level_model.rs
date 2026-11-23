@@ -2,7 +2,9 @@
 //!
 //! A constraint `L ≤ U` is a Horn clause: wherever every part of `U` is bounded, every part of `L` is, and so is each of its upward shifts, since the successor distributes over a maximum — `L + s ≤ U + s` for every `s ≥ 0`, and never for a negative one. [`LevelModel`] holds what firing those clauses has derived, and one pass fires every clause at the largest shift the model admits. The procedure is Bezem and Coquand's (*Loop-checking and the uniform word problem for join-semilattices with an inflationary endomorphism*, TCS 913, 2022): the least model above any starting point is computed by such passes (their Theorem 3.2), its finite values stay under a ceiling (their Corollary 4.2), and a value climbing past it is climbing without end, which only a loop — some `t + 1 ≤ t` — makes it do. A parameter ranging over the naturals adds one rule of its own, which the model's floor carries: `h + k` bounds the constant `k`, the zero being below every head.
 //!
-//! Two decisions read it. [`entails`](crate::entails) starts from the facts the upper level of its question states and asks whether the least model bounds the lower one (their Theorem 2.2). [`satisfiable`](crate::satisfiable) starts every head at the largest offset any upper side carries and asks whether the least model exists at all (their Corollary 3.5: exactly one of a loop and a model in the naturals).
+//! Three readings take it. [`entails`](crate::entails) starts from the facts the upper level of its question states and asks whether the least model bounds the lower one (their Theorem 2.2). [`LevelModel::below`] starts from the same facts and keeps the least model, which answers how far every level stands below the top at once. [`satisfiable`](crate::satisfiable) starts every head at the largest offset any upper side carries and asks whether the least model exists at all (their Corollary 3.5: exactly one of a loop and a model in the naturals).
+//!
+//! **Constraints are read where a caller holds them.** Every reading takes them as anything that iterates them more than once, a slice or an iterator, so a set held beside other data — the elaborator's store keeps each constraint beside where it was raised — is read in place rather than copied out at each question.
 
 use {
     curios_core::{Level, LevelHead, UniverseConstraint},
@@ -17,9 +19,32 @@ pub struct LevelModel {
     floor: u64,
 }
 
+/// How a run of passes ended ([`LevelModel::settle`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Settled {
+    /// What the caller asked of the model came to hold.
+    Asked,
+    /// A pass raised nothing: the model is the least one above where it started.
+    Least,
+    /// A value climbed past the ceiling, which only a loop in the constraints makes it do.
+    Loop,
+}
+
 impl LevelModel {
+    /// Everything `constraints` derive below `top`: the least model above the facts `top` states, which answers how far each level stands below `top` ([`LevelModel::admits`]). `None` where a value climbs past the ceiling, which only a loop in `constraints` makes it do: they have no model in the naturals.
+    pub fn below<'a>(
+        top: &Level,
+        constraints: impl IntoIterator<Item = &'a UniverseConstraint, IntoIter: Clone>,
+    ) -> Option<Self> {
+        let mut model = Self::of(top);
+        match model.settle(constraints.into_iter(), |_| false) {
+            Settled::Loop => None,
+            Settled::Asked | Settled::Least => Some(model),
+        }
+    }
+
     /// The facts `upper` states about itself, with `upper` as the top: each of its atoms, and its floor.
-    pub fn of(upper: &Level) -> Self {
+    pub(crate) fn of(upper: &Level) -> Self {
         Self {
             reached: upper
                 .atoms()
@@ -30,9 +55,11 @@ impl LevelModel {
     }
 
     /// Every head `constraints` mention, and the floor, at the largest offset any upper side carries — Bezem and Coquand's starting point for loop-checking, from which every clause is admitted at a shift of zero or more.
-    pub fn throughout(constraints: &[UniverseConstraint]) -> Self {
+    pub(crate) fn throughout<'a>(
+        constraints: impl Iterator<Item = &'a UniverseConstraint> + Clone,
+    ) -> Self {
         let start = constraints
-            .iter()
+            .clone()
             .map(|constraint| u64::from(floor(&constraint.upper)))
             .max()
             .unwrap_or(0);
@@ -44,7 +71,7 @@ impl LevelModel {
     }
 
     /// Whether `head` has been bounded at any offset.
-    pub fn reaches(&self, head: LevelHead) -> bool {
+    pub(crate) fn reaches(&self, head: LevelHead) -> bool {
         self.reached.contains_key(&head)
     }
 
@@ -62,12 +89,37 @@ impl LevelModel {
     }
 
     /// Whether what is derived bounds `level` — [`LevelModel::admits`] at shift zero.
-    pub fn bounds(&self, level: &Level) -> bool {
+    pub(crate) fn bounds(&self, level: &Level) -> bool {
         self.admits(level).is_some()
     }
 
+    /// Pass over `constraints` until `asked` holds of the model, a pass raises nothing, or a value climbs past the ceiling the model stood under when the passes began — the one loop every reading runs.
+    pub(crate) fn settle<'a>(
+        &mut self,
+        constraints: impl Iterator<Item = &'a UniverseConstraint> + Clone,
+        asked: impl Fn(&Self) -> bool,
+    ) -> Settled {
+        let ceiling = self.ceiling(constraints.clone());
+        loop {
+            let raised = self.pass(constraints.clone());
+
+            if asked(self) {
+                return Settled::Asked;
+            }
+            if self.climbs_past(ceiling) {
+                return Settled::Loop;
+            }
+            if !raised {
+                return Settled::Least;
+            }
+        }
+    }
+
     /// One pass over `constraints`: every clause whose upper side the model admits fires at the largest shift admitted, raising its lower side. Whether anything rose — a pass that raised nothing has reached the least model.
-    pub fn pass(&mut self, constraints: &[UniverseConstraint]) -> bool {
+    pub(crate) fn pass<'a>(
+        &mut self,
+        constraints: impl Iterator<Item = &'a UniverseConstraint>,
+    ) -> bool {
         let mut raised = false;
         for constraint in constraints {
             if let Some(shift) = self.admits(&constraint.upper) {
@@ -81,12 +133,14 @@ impl LevelModel {
     /// The height no value of the least model above this one reaches when `constraints` hold no loop: the highest value now, raised once per head by the most one clause can add — Bezem and Coquand's Corollary 4.2, with the zero as one more head. Past it, a value is climbing without end.
     ///
     /// What one clause can add is its *gain*: how far its lower side's floor stands above the least part of its upper side that admitted it.
-    pub fn ceiling(&self, constraints: &[UniverseConstraint]) -> u64 {
-        let heads = heads(constraints)
+    fn ceiling<'a>(
+        &self,
+        constraints: impl Iterator<Item = &'a UniverseConstraint> + Clone,
+    ) -> u64 {
+        let heads = heads(constraints.clone())
             .chain(self.reached.keys().copied())
             .collect::<BTreeSet<_>>();
         let gain = constraints
-            .iter()
             .map(|constraint| {
                 let least = constraint
                     .upper
@@ -104,7 +158,7 @@ impl LevelModel {
     }
 
     /// Whether some value has passed `ceiling`, the floor standing at or above every value.
-    pub fn climbs_past(&self, ceiling: u64) -> bool {
+    fn climbs_past(&self, ceiling: u64) -> bool {
         self.floor > ceiling
     }
 
@@ -137,9 +191,10 @@ impl LevelModel {
 }
 
 /// Every head either side of `constraints` mentions.
-fn heads(constraints: &[UniverseConstraint]) -> impl Iterator<Item = LevelHead> + '_ {
+fn heads<'a>(
+    constraints: impl Iterator<Item = &'a UniverseConstraint>,
+) -> impl Iterator<Item = LevelHead> {
     constraints
-        .iter()
         .flat_map(|constraint| constraint.lower.atoms().chain(constraint.upper.atoms()))
         .map(|(head, _)| head)
 }

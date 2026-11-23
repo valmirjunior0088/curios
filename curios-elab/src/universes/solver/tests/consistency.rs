@@ -281,15 +281,6 @@ fn consistency_checks_match_the_exact_solver() {
                 exact.check_consistent_full().map(|_| ())
             };
 
-            // What a decided store answers of a constraint it does not hold, where it answers, is the exact verdict on the store that holds it.
-            if let Some(refused) = solver.refused_as_decided(&constraint.lower, &constraint.upper) {
-                assert_eq!(
-                    refused,
-                    exact_result.is_err(),
-                    "a decided store answered otherwise in trial {trial} at step {step}"
-                );
-            }
-
             // The incremental side decides in two moves — `add_constraint` refuses only the ground case and records otherwise; `check_consistent` is the verdict — so the comparison targets the pair, not the insertion alone.
             let incremental_result = solver
                 .add_constraint(constraint, UniverseConstraintOrigin::Converted)

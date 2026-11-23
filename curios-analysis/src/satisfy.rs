@@ -13,21 +13,16 @@
 #[cfg(test)]
 mod tests;
 
-use {super::LevelModel, curios_core::UniverseConstraint};
+use {
+    super::{LevelModel, Settled},
+    curios_core::UniverseConstraint,
+};
 
 /// Whether some assignment of naturals to parameters satisfies every constraint.
-pub fn satisfiable(constraints: &[UniverseConstraint]) -> bool {
-    let mut model = LevelModel::throughout(constraints);
-    let ceiling = model.ceiling(constraints);
-
-    loop {
-        let raised = model.pass(constraints);
-
-        if model.climbs_past(ceiling) {
-            return false;
-        }
-        if !raised {
-            return true;
-        }
-    }
+pub fn satisfiable<'a>(
+    constraints: impl IntoIterator<Item = &'a UniverseConstraint, IntoIter: Clone>,
+) -> bool {
+    let constraints = constraints.into_iter();
+    let mut model = LevelModel::throughout(constraints.clone());
+    model.settle(constraints, |_| false) != Settled::Loop
 }

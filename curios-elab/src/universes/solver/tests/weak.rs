@@ -240,102 +240,32 @@ fn a_weak_equation_joins_what_the_held_levels_already_bound() {
     assert_eq!(level(u), level(a));
 }
 
-// What a store entails is asked of what it was decided from, and the answer is the store's own: every order between two levels, at each step up to three, is answered as adding its negation, deciding the store and taking it back answers. Over a store whose every constraint is forced and two that branch on a genuine maximum, with a level no constraint names among the levels asked about.
+// How far one held level stands below another is read whole, however far: a join that would widen a gap of twenty is dropped as one that would widen a gap of one is, and the occurrence it met settles from its own bounds.
 #[test]
-fn an_order_asked_of_a_decided_store_is_answered_as_the_store_answers() {
-    type Store = fn(&mut UniverseSolver, [Level; 4]);
-    let stores: [(&str, Store); 3] = [
-        ("forced", |solver, [u, v, w, _]| {
-            let above = u.succ().unwrap();
-            solver
-                .add_leq(above, v.clone(), UniverseConstraintOrigin::Converted)
-                .unwrap();
-            solver
-                .add_leq(v, w.clone(), UniverseConstraintOrigin::Converted)
-                .unwrap();
-            solver
-                .add_leq(w, Level::constant(3), UniverseConstraintOrigin::Converted)
-                .unwrap();
-        }),
-        ("a maximum of two levels", |solver, [u, v, w, t]| {
-            let either = Level::max([v.clone(), w.clone()]);
-            solver
-                .add_leq(u.clone(), either, UniverseConstraintOrigin::Converted)
-                .unwrap();
-            solver
-                .add_leq(
-                    v.succ().unwrap(),
-                    t.clone(),
-                    UniverseConstraintOrigin::Converted,
-                )
-                .unwrap();
-            solver
-                .add_leq(
-                    w.checked_add(2).unwrap(),
-                    t,
-                    UniverseConstraintOrigin::Converted,
-                )
-                .unwrap();
-            solver
-                .add_leq(Level::constant(1), u, UniverseConstraintOrigin::Converted)
-                .unwrap();
-        }),
-        ("a maximum with a constant", |solver, [u, v, w, t]| {
-            let either = Level::max([v.clone(), Level::constant(2)]);
-            solver
-                .add_leq(
-                    u.succ().unwrap(),
-                    either,
-                    UniverseConstraintOrigin::Converted,
-                )
-                .unwrap();
-            solver
-                .add_leq(v, Level::constant(1), UniverseConstraintOrigin::Converted)
-                .unwrap();
-            let either = Level::max([u, t]);
-            solver
-                .add_leq(w, either, UniverseConstraintOrigin::Converted)
-                .unwrap();
-        }),
-    ];
-
-    for (label, store) in stores {
+fn a_weak_equation_widens_no_gap_between_held_levels_however_wide() {
+    for gap in [1, 20] {
         let mut solver = UniverseSolver::new(0);
-        let [u, v, w, t, unnamed] = [(); 5].map(|()| Level::meta(open(&mut solver)));
-        store(&mut solver, [u.clone(), v.clone(), w.clone(), t.clone()]);
-        let levels = [Level::zero(), u, v, w, t, unnamed];
+        let a = open(&mut solver);
+        let b = open(&mut solver);
+        let u = open(&mut solver);
+        solver
+            .add_leq(
+                Level::meta(a).checked_add(gap).unwrap(),
+                Level::meta(b),
+                UniverseConstraintOrigin::Converted,
+            )
+            .unwrap();
+        solver
+            .add_leq(
+                Level::meta(a).checked_add(gap + 1).unwrap(),
+                Level::meta(u),
+                UniverseConstraintOrigin::Converted,
+            )
+            .unwrap();
+        solver.add_weak_eq(Level::meta(u), Level::meta(b));
 
-        let (mut entailed, mut open_orders) = (0, 0);
-        for lower in &levels {
-            for upper in &levels {
-                for step in 0..=3 {
-                    let raised = lower.checked_add(step).unwrap();
-                    let above = upper.succ().unwrap();
-                    let asked = solver.refused_as_decided(&above, &raised);
-
-                    let mark = solver.mark();
-                    let stored = solver
-                        .add_leq(above, raised.clone(), UniverseConstraintOrigin::Converted)
-                        .is_err()
-                        || solver.check_consistent().is_err();
-                    solver.rollback(mark);
-                    solver.release(mark);
-
-                    assert_eq!(
-                        asked,
-                        Some(stored),
-                        "{label}: whether {raised:?} ≤ {upper:?} is entailed"
-                    );
-                    match stored {
-                        true => entailed += 1,
-                        false => open_orders += 1,
-                    }
-                }
-            }
-        }
-        assert!(
-            entailed > 0 && open_orders > 0,
-            "{label}: the store entails some orders and not others"
-        );
+        solver.finalize([a, b], [u], [a, b]).unwrap();
+        let level = |meta| solver.zonk(&Level::meta(meta)).unwrap();
+        assert_ne!(level(u), level(b), "gap: {gap}");
     }
 }

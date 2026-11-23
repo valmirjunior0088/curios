@@ -73,7 +73,7 @@ impl ConstraintStore {
         self.raised.len()
     }
 
-    pub fn iter(&self) -> impl ExactSizeIterator<Item = &UniverseConstraint> {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = &UniverseConstraint> + Clone {
         self.raised.iter().map(|raised| &raised.constraint)
     }
 

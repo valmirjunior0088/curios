@@ -10,7 +10,7 @@
 mod tests;
 
 use {
-    super::LevelModel,
+    super::{LevelModel, Settled},
     curios_core::{Level, UniverseConstraint},
     std::collections::BTreeSet,
 };
@@ -18,8 +18,13 @@ use {
 /// Whether `assumed` proves `lower ≤ upper` — the entailment a generic definition is checked under, where `assumed` is its own declared constraint set with the parameters held abstract.
 ///
 /// Sound and deliberately incomplete, in the trusted base's stated direction: a refusal is a visible disagreement, an over-eager acceptance is silent. Every step of the derivation is valid over the naturals — a left maximum is bounded exactly when each of its parts is, a hypothesis may be shifted up and never down, and a parameter carries its offset whatever it is assigned. What it cannot see is a consequence of the naturals being *totally* ordered: `u + 1 ≤ max(u, v)` forces `u + 1 ≤ v` in every instance, and no clause says so.
-pub fn entails(assumed: &[UniverseConstraint], lower: &Level, upper: &Level) -> bool {
+pub fn entails<'a>(
+    assumed: impl IntoIterator<Item = &'a UniverseConstraint, IntoIter: Clone>,
+    lower: &Level,
+    upper: &Level,
+) -> bool {
     curios_common::profile!("entails");
+    let assumed = assumed.into_iter();
     let mut model = LevelModel::of(upper);
 
     // The model `upper` states on its own is exactly `Level::structurally_leq`'s, so the fast path is the first answer rather than a second predicate beside this one.
@@ -28,7 +33,7 @@ pub fn entails(assumed: &[UniverseConstraint], lower: &Level, upper: &Level) -> 
     }
     // A head no hypothesis can raise and `upper` does not state is never reached, which answers most refusals before a pass is spent.
     let raisable = assumed
-        .iter()
+        .clone()
         .flat_map(|constraint| constraint.lower.atoms().map(|(head, _)| head))
         .collect::<BTreeSet<_>>();
     if lower
@@ -38,16 +43,6 @@ pub fn entails(assumed: &[UniverseConstraint], lower: &Level, upper: &Level) -> 
         return false;
     }
 
-    let ceiling = model.ceiling(assumed);
-    loop {
-        let raised = model.pass(assumed);
-
-        if model.bounds(lower) {
-            return true;
-        }
-        // A pass that raised nothing is the least model, and it does not bound `lower`. A value past the ceiling is climbing without end, which only a loop in the hypotheses can make it do; such a set has no instance in the naturals, a checker refuses it as unsatisfiable before assuming it, and refusing here is the trusted base's direction.
-        if !raised || model.climbs_past(ceiling) {
-            return false;
-        }
-    }
+    // A least model that does not bound `lower` refuses it. So does a value past the ceiling, climbing without end, which only a loop in the hypotheses can make it do: such a set has no instance in the naturals, a checker refuses it as unsatisfiable before assuming it, and refusing here is the trusted base's direction.
+    model.settle(assumed, |model| model.bounds(lower)) == Settled::Asked
 }

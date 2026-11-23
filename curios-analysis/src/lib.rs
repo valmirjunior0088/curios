@@ -72,6 +72,7 @@ mod erased;
 pub use erased::Erased;
 
 mod level_model;
+pub use level_model::LevelModel;
 use level_model::*;
 
 mod entail;

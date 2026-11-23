@@ -164,6 +164,36 @@ fn the_structural_fast_path_never_outruns_the_oracle() {
     );
 }
 
+/// The least model below a level answers every relation into it at once: how far a level stands below the top is the widest step `entails` grants, over every pair of levels above and the hypothesis sets the fast path is swept under. The elaborator's weak join reads a held level's relations so; an `admits` off by one, or a model kept short of its least, reads a gap otherwise than the oracle answers it.
+#[test]
+fn the_model_below_a_level_reads_each_gap_as_entailment_answers_it() {
+    let (u, v) = (param(0), param(1));
+    let raised = u.checked_add(1).expect("the offset is small");
+    let hypotheses = [
+        Vec::new(),
+        vec![leq(&u, &v)],
+        vec![leq(&u, &v), leq(&v, &u)],
+        vec![leq(&raised, &v)],
+    ];
+
+    for assumed in &hypotheses {
+        for upper in levels() {
+            let model = LevelModel::below(&upper, assumed).expect("the hypotheses hold no loop");
+            for lower in levels() {
+                let gap = model.admits(&lower);
+                for step in 0..=3 {
+                    let stepped = lower.checked_add(step).expect("the offset is small");
+                    assert_eq!(
+                        gap.is_some_and(|gap| gap >= u64::from(step)),
+                        entails(assumed, &stepped, &upper),
+                        "{lower:?} + {step} <= {upper:?} under {assumed:?}",
+                    );
+                }
+            }
+        }
+    }
+}
+
 #[test]
 fn cyclic_hypotheses_terminate_and_refuse_the_unrelated() {
     let (u, v, w) = (param(0), param(1), param(2));
@@ -181,6 +211,7 @@ fn a_looping_hypothesis_set_is_refused_rather_than_chased() {
     let far = u.checked_add(8).expect("level admits the offset");
 
     assert!(!entails(&[leq(&raised, &v), leq(&v, &u)], &far, &u));
+    assert!(LevelModel::below(&u, &[leq(&raised, &v), leq(&v, &u)]).is_none());
 }
 
 /// The maximum of the parameters at `indices`, or zero when there are none.
@@ -254,7 +285,7 @@ fn the_try_lift_s_questions_are_answered_in_one_pass() {
             "{lower:?} <= {upper:?} is not structural"
         );
 
-        model.pass(&assumed);
+        model.pass(assumed.iter());
         assert!(
             model.bounds(&lower),
             "{lower:?} <= {upper:?} after one pass"
