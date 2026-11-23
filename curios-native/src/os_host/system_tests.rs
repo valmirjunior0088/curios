@@ -1,6 +1,10 @@
-//! What the system answers: randomness, an environment variable, the clock, a file's modification time, an open that creates, and what a private file or directory may be read by.
+//! What the system answers: randomness, an environment variable, the clock, a file's modification time, an open that creates, what a private file or directory may be read by, and a symbolic link read as itself.
 
-use {super::*, curios_common::test_support::*, std::os::unix::fs::PermissionsExt};
+use {
+    super::*,
+    curios_common::test_support::*,
+    std::os::unix::{self, fs::PermissionsExt},
+};
 
 /// Randomness answers exactly the bytes asked for, and a request no memory can hold refuses the call rather than abort the process.
 #[test]
@@ -97,5 +101,26 @@ fn a_private_file_and_directory_are_their_owners_alone() {
             permissions("shared")
         ],
         [0o600, 0o666, 0o700, 0o777]
+    );
+}
+
+/// `file_link_stat` reads a symbolic link as itself, where `file_stat` reads what it names: a link to a directory is a directory to one and a link to the other, and the directory itself is a directory to both.
+#[test]
+fn a_link_is_read_as_itself_where_stat_follows_it() {
+    let host = OsHost::with_args(vec![]);
+    let dir = Temporary::new("runtime-stat", "link");
+    fs::create_dir_all(dir.join("target")).expect("a fresh temporary directory");
+    unix::fs::symlink(dir.join("target"), dir.join("link")).expect("a link");
+    let bytes = |name: &str| dir.join(name).into_os_string().into_vec();
+    let kind = |stat: Result<FileStat, Failure>| stat.map(|stat| stat.kind);
+
+    assert_eq!(kind(host.file_stat(bytes("link"))), Ok(FileKind::Directory));
+    assert_eq!(
+        kind(host.file_link_stat(bytes("link"))),
+        Ok(FileKind::Symlink)
+    );
+    assert_eq!(
+        kind(host.file_link_stat(bytes("target"))),
+        Ok(FileKind::Directory)
     );
 }

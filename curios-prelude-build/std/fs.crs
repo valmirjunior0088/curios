@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, List, Option, Path, Str, Try, Io, Show};
+use /std/{Nat, Int, Bool, List, Option, Path, Str, Try, Io, Show};
 use /std/ops/{Eql};
 use /std/time/{Timestamp};
 use /std/internal/{Status, temporary_path};
@@ -49,9 +49,18 @@ pub struct Metadata: pub Type {
 --- What is at this path: `ok` beside its kind, one of `/sys/file_kind`'s codes, its size in bytes and when its contents last changed, or the status of the failure.
 foreign file_stat(Bytes) -> {status: Nat, kind: Nat, size: Nat, mtime_secs: Int, mtime_nanos: Nat};
 
---- What is at `path`. A kind the host names by no code this library knows is a reply its row rules out.
-pub let stat(path: Path) -> Try(Io, Io/Error, Metadata) =
-    let reply = file_stat(Path/to_bytes(path))!;
+--- What is at this path itself, a symbolic link reported as one and never followed: `ok` beside its kind, one of `/sys/file_kind`'s codes, its size in bytes and when its contents last changed, or the status of the failure.
+foreign file_link_stat(Bytes) -> {
+    status: Nat,
+    kind: Nat,
+    size: Nat,
+    mtime_secs: Int,
+    mtime_nanos: Nat};
+
+-- What a reply of `file_stat` or `file_link_stat` reports. A kind the host names by no code this library knows is a reply its row rules out.
+let metadata_of(
+    reply: {status: Nat, kind: Nat, size: Nat, mtime_secs: Int, mtime_nanos: Nat},
+) -> Try(Io, Io/Error, Metadata) =
     let () = Status/succeeded(reply.status)!;
     match kind_of(reply.kind)
     | some(kind) =>
@@ -64,6 +73,16 @@ pub let stat(path: Path) -> Try(Io, Io/Error, Metadata) =
                         reply.mtime_secs * 1000000000 + Nat/to_int(reply.mtime_nanos)) })
     | none() => Try/raise(Io/Error/invalid_reply())
     end;
+
+--- What is at `path`, following a symbolic link to what it names: a link to a directory is a `directory()`, and only a link that names nothing is a `symlink()`. POSIX's `stat(2)`.
+pub let stat(path: Path) -> Try(Io, Io/Error, Metadata) =
+    let reply = file_stat(Path/to_bytes(path))!;
+    metadata_of(reply);
+
+--- What is at `path` itself, a symbolic link never followed: a link is a `symlink()` whatever it names, its size and time the link's own. What a program reads before acting on a path it must not act through, as a walk does; POSIX's `lstat(2)`.
+pub let lstat(path: Path) -> Try(Io, Io/Error, Metadata) =
+    let reply = file_link_stat(Path/to_bytes(path))!;
+    metadata_of(reply);
 
 let kind_is(path: Path, want: (Kind) -> Bool) -> Try(Io, Io/Error, Bool) =
     let r = Try/run(stat(path))!;
@@ -167,9 +186,25 @@ pub let create_dir_all(path: Path) -> Try(Io, Io/Error, {}) =
         end
     end;
 
---- Remove what is at `path`, a directory's entries first.
+--- Every path beneath the directory at `path`, each joined onto it: a directory before what it holds, and each directory's entries in the order `list` gives them, which sorts them. A symbolic link is listed and never followed, so a walk ends however the links point, and the first failure ends the walk.
+pub let walk(path: Path) -> Try(Io, Io/Error, List(Path)) =
+    let entries = list(path)!;
+    walked(path, entries)
+and walked(directory: Path, entries: List(Path)) -> Try(Io, Io/Error, List(Path)) =
+    match entries
+    | [] => Try/pure([])
+    | [entry, ..rest] =>
+        let joined = Path/join(directory, entry);
+        let found = lstat(joined)!;
+        let beneath = match found.kind | directory() => walk(joined) | _ => Try/pure([]) end;
+        let inner = beneath!;
+        let after = walked(directory, rest)!;
+        Try/pure([joined, ..inner, ..after])
+    end;
+
+--- Remove what is at `path`, a directory's entries first. A symbolic link is removed as itself and never followed, so nothing outside the tree at `path` is removed through one, as `rm -r` removes a tree.
 pub let remove_all(path: Path) -> Try(Io, Io/Error, {}) =
-    let m = stat(path)!;
+    let m = lstat(path)!;
     match m.kind
     | directory() =>
         let entries = list(path)!;

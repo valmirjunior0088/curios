@@ -311,6 +311,7 @@ export async function run(config) {
     serial_list: deniedList,
     // No filesystem either: every filesystem row is denied as `file_open` is, listing a directory among them.
     file_stat: () => [status.PERMISSION_DENIED, 0n, 0n, 0n, 0n],
+    file_link_stat: () => [status.PERMISSION_DENIED, 0n, 0n, 0n, 0n],
     file_remove: denied,
     file_rename: denied,
     dir_list: deniedList,

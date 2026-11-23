@@ -56,6 +56,16 @@ use {
     webpki_roots::TLS_SERVER_ROOTS,
 };
 
+/// The kind `file_type` is: a link where it is one, which only what is read off the link itself, `symlink_metadata`, can be.
+fn kind_of(file_type: fs::FileType) -> FileKind {
+    match () {
+        () if file_type.is_symlink() => FileKind::Symlink,
+        () if file_type.is_dir() => FileKind::Directory,
+        () if file_type.is_file() => FileKind::File,
+        () => FileKind::Other,
+    }
+}
+
 /// What `file_stat` answers of `metadata`, read as `kind`: its size and its modification time as the wall clock reads it. A platform that keeps no modification time fails as it reports, and one a signed 64-bit count of seconds cannot carry fails as `stat(2)` does, with `EOVERFLOW`.
 fn stat(kind: FileKind, metadata: &fs::Metadata) -> Result<FileStat, Failure> {
     let modified = metadata.modified().map_err(failure_from_error)?;
@@ -1567,13 +1577,14 @@ impl HostOps for OsHost {
             Err(error) => return Err(failure_from_error(error)),
         };
 
-        let file_type = metadata.file_type();
-        let kind = match () {
-            () if file_type.is_dir() => FileKind::Directory,
-            () if file_type.is_file() => FileKind::File,
-            () => FileKind::Other,
-        };
-        stat(kind, &metadata)
+        stat(kind_of(metadata.file_type()), &metadata)
+    }
+
+    fn file_link_stat(&self, path: Vec<u8>) -> Result<FileStat, Failure> {
+        let metadata =
+            fs::symlink_metadata(OsStr::from_bytes(&path)).map_err(failure_from_error)?;
+
+        stat(kind_of(metadata.file_type()), &metadata)
     }
 
     fn file_remove(&self, path: Vec<u8>) -> Result<(), Failure> {

@@ -125,6 +125,9 @@ macro_rules! for_each_host_op {
             /// What is at `path`, following symbolic links. `kind` is a `FileKindCodes` tag, `size` the size in bytes, and `mtime_secs` and `mtime_nanos` the modification time as `clock_wall` reads the clock, a moment before 1970 as itself. A dangling link reports the `SYMLINK` kind with what the link itself holds. A time a signed 64-bit count of seconds cannot carry fails with `EOVERFLOW`, as `stat(2)` does, and a platform that keeps no modification time fails as it reports.
             FileStat: fn file_stat(path: Vec<u8>) -> Result<FileStat, Failure> { module: fs }
 
+            /// What is at `path` itself, as `file_stat` answers but never following a symbolic link: a link is the `SYMLINK` kind with what the link holds, as `lstat(2)` reports it, so a walk of a tree can list a link without descending through it.
+            FileLinkStat: fn file_link_stat(path: Vec<u8>) -> Result<FileStat, Failure> { module: fs }
+
             /// Remove the file at `path`. `IsDirectory` on a directory.
             FileRemove: fn file_remove(path: Vec<u8>) -> Result<(), Failure> { module: fs }
 

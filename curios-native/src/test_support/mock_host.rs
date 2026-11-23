@@ -1459,6 +1459,11 @@ impl HostOps for MockHost {
         Ok(paths)
     }
 
+    fn file_link_stat(&self, path: Vec<u8>) -> Result<FileStat, Failure> {
+        // The scripted disk holds no links, so what is at a path is what `file_stat` finds there.
+        self.file_stat(path)
+    }
+
     fn file_stat(&self, path: Vec<u8>) -> Result<FileStat, Failure> {
         // The scripted disk keeps no timestamps, so a modification time is the epoch.
         match self.files.stat(&path) {

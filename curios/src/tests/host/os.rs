@@ -1,9 +1,10 @@
-//! The few programs that run against the real host rather than a scripted one: what they assert is that the scheduler's park-poll-resume path works over a descriptor the certifier decides on. The real host's standard output cannot be captured, so a program reports through a file the test reads back.
+//! The few programs that run against the real host rather than a scripted one: what they assert is that the scheduler's park-poll-resume path works over a descriptor the certifier decides on, and how the filesystem's symbolic links are read, which the scripted disk holds none of. The real host's standard output cannot be captured, so a program reports through a file the test reads back.
 
 use {
     crate::tests::test_support::*,
     curios_common::{fill, test_support::*},
     curios_native::OsHost,
+    std::os::unix,
 };
 
 // A child's piped outputs are drained side by side, and its input written beside them: the pipe answers would-block until the child writes, the reader suspends on a watch, the host's wait wakes it, and everything joins before the child is reaped. `/bin/echo` and `/bin/cat` are present on both release targets; `cat` writes back what it was fed and exits at the end of its input, which only finishing the input gives it.
@@ -180,4 +181,81 @@ fn a_rest_a_timeout_cuts_loses_nothing() {
     );
 
     assert_eq!(String::from_utf8_lossy(&written), "cut|abcdef");
+}
+
+/// A tree under the real host's temporary directory with symbolic links in it: `tree` holds `f` and `sub/g`, `tree/out` links to `outside`, a directory beside the tree holding `kept`, and `tree/sub/up` links back to `tree`; what a program whose `body` reads the three paths as `tree`, `outside` and `report` wrote to `report`, its paths relative to the root.
+fn linked(name: &str, body: &str) -> String {
+    let root = Temporary::new("host", name);
+    for directory in ["tree/sub", "outside"] {
+        std::fs::create_dir_all(root.join(directory)).expect("a directory of its own");
+    }
+    for file in ["tree/f", "tree/sub/g", "outside/kept"] {
+        std::fs::write(root.join(file), "x").expect("a file of its own");
+    }
+    unix::fs::symlink(root.join("outside"), root.join("tree/out")).expect("a link out");
+    unix::fs::symlink(root.join("tree"), root.join("tree/sub/up")).expect("a link up");
+    let path = |name: &str| {
+        root.join(name)
+            .to_str()
+            .expect("a UTF-8 temporary path")
+            .to_string()
+    };
+    let (tree, outside, report) = (path("tree"), path("outside"), path("report"));
+    let source = fill!(
+        r#"
+        use /std/{Str, List, Show, Try, Io, Path, File, fs};
+        let program() -> Try(Io, Io/Error, {}) =
+            let tree = Path/of_str("${tree}");
+            let outside = Path/of_str("${outside}");
+            let report = Path/of_str("${report}");
+            ${body};
+        let main() -> Io({}) =
+            let r = Try/run(program())!;
+            match r
+            | failure(e) => /std/print(Show/show(e))
+            | success(_) => Io/pure(())
+            end;
+        main()
+        "#,
+        tree,
+        outside,
+        report,
+        body
+    );
+
+    run_text(&source, OsHost::with_args(vec![])).expect("expected result");
+
+    let written = std::fs::read_to_string(&report).expect("the program wrote its report");
+    written.replace(
+        &format!("{}/", root.to_str().expect("a UTF-8 temporary path")),
+        "",
+    )
+}
+
+/// A walk lists a symbolic link and never follows it: a link to a directory beside the tree and a link back to the tree are each one entry, and the walk ends.
+#[test]
+fn a_walk_lists_a_link_and_never_follows_it() {
+    let written = linked(
+        "walk-links",
+        r#"let walked = fs/walk(tree)!;
+            let () = File/write_all(report, Str/to_bytes(Str/join(",", List/map(walked, (p: Path) => Show/show(p)))))!;
+            Try/pure(())"#,
+    );
+
+    assert_eq!(written, "tree/f,tree/out,tree/sub,tree/sub/g,tree/sub/up");
+}
+
+/// Removing a tree removes a symbolic link in it as itself and nothing it names: the directory beside the tree, reached through a link inside it, keeps what it holds, and the link back to the tree ends no removal early.
+#[test]
+fn removing_a_tree_removes_a_link_in_it_and_not_what_it_names() {
+    let written = linked(
+        "remove-links",
+        r#"let removed = Try/run(fs/remove_all(tree))!;
+            let answered = match removed | success(_) => "removed" | failure(e) => Show/show(e) end;
+            let there = fs/exists(tree)!;
+            let kept = fs/walk(outside)!;
+            File/write_all(report, Str/to_bytes(Str/join(" ", [answered, Show/show(there), ..List/map(kept, (p: Path) => Show/show(p))])))"#,
+    );
+
+    assert_eq!(written, "removed false outside/kept");
 }

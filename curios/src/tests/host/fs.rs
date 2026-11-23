@@ -132,6 +132,23 @@ fn an_uncaught_failure_ends_the_region_with_its_name() {
     assert_eq!(io.output(), b"not_found");
 }
 
+// A walk lists every path beneath its root joined onto it, a directory before what it holds and each directory's entries in byte order, and a root that is not there fails as `not_found`.
+#[test]
+fn a_walk_lists_every_path_beneath_its_root_in_pre_order() {
+    let source = program(
+        r#"
+            let walked = fs/walk(Path/of_str("data"))!;
+            let listed = Str/join(",", List/map(walked, (p: Path) => Show/show(p)));
+            let missing = Try/run(fs/walk(Path/of_str("nope")))!;
+            Try/pure(Str/join(" ", [listed, show_unit(Result/map(missing, (_) => ()))]))
+        "#,
+    );
+
+    let (host, io) = seeded();
+    run_text(&source, host).expect("expected result");
+    assert_eq!(io.output(), b"data/a.txt,data/sub,data/sub/b.txt not_found");
+}
+
 /// The temporaries a program makes in a scope under a `/scratch` that `TMPDIR` names: a file written through the handle it answers and read back by its path, and a directory holding a file, each printed by its path, then whether each is still there once the scope has ended.
 fn temporaries(prefix: &str) -> String {
     program(&fill!(
