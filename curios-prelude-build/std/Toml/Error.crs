@@ -9,8 +9,6 @@ pub induct Rule: pub Type
 | table_defined_twice()
 --- A header reaches into a table written inline, which is closed once written.
 | extends_inline_table()
---- A header reaches into a table a dotted key made, which the header may not extend.
-| extends_dotted_table()
 --- A dotted key reaches into a table another header defined.
 | extends_table_defined_elsewhere()
 --- A header names a table a dotted key already made.
@@ -58,7 +56,6 @@ let rule_message(r: Rule) -> Str =
     | duplicate_key() => "duplicate key"
     | table_defined_twice() => "table defined more than once"
     | extends_inline_table() => "cannot extend an inline table"
-    | extends_dotted_table() => "cannot extend a table created by dotted keys"
     | extends_table_defined_elsewhere() =>
         "cannot extend a table defined elsewhere with dotted keys"
     | redefines_dotted_table() => "cannot redefine a table created by dotted keys"

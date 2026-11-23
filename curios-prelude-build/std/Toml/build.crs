@@ -76,8 +76,7 @@ let may_extend(side: Map(Bytes, Origin), kp: Bytes, act: Act) -> Result(Rule, {}
             end
         | _ =>
             match st
-            | header() | implicit() => Result/success(())
-            | dotted() => Result/failure(Rule/extends_dotted_table())
+            | header() | implicit() | dotted() => Result/success(())
             | _ => Result/failure(Rule/extends_inline_table())
             end
         end

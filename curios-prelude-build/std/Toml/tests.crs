@@ -206,7 +206,7 @@ test a_refusal_names_where_it_stopped =
             "duplicate key at key a", "table defined more than once at key t",
             "cannot extend a table defined elsewhere with dotted keys at key b.c"]);
 
--- Table construction: a key or table defined twice, a table opened over a dotted key or an inline table, and arrays of tables against tables, against the three that are allowed.
+-- Table construction: a key or table defined twice, a table opened over a dotted key or an inline table, a table dotted keys made named again by a header, and arrays of tables against tables, against those allowed: a table or an array of tables a header opens below a table dotted keys made, as TOML 1.0's own example has it.
 test a_table_is_constructed_once =
     Test/equal(
         [
@@ -223,9 +223,13 @@ test a_table_is_constructed_once =
             verdict("t = {a = 1, a = 2}"),
             verdict("[a.b]\n[a]"),
             verdict("[[a]]\nb = 1\n[[a]]\nb = 1"),
-            verdict("p.q = 1\np.r = 2")],
+            verdict("p.q = 1\np.r = 2"),
+            verdict(
+                "[fruit]\napple.color = \"red\"\napple.taste.sweet = true\n[fruit.apple.taste]"),
+            verdict("[fruit]\napple.color = \"red\"\n[fruit.apple.texture]\nsmooth = true"),
+            verdict("[fruit]\napple.color = \"red\"\n[[fruit.apple.seeds]]\nsize = 1")],
         ["reject", "reject", "reject", "reject", "reject", "reject", "reject", "reject", "reject",
-            "reject", "reject", "accept", "accept", "accept"]);
+            "reject", "reject", "accept", "accept", "accept", "reject", "accept", "accept"]);
 
 -- Comments, CRLF and blank lines accepted; trailing junk after a value, a header or an empty key refused.
 test comments_and_line_endings_are_read_and_junk_is_refused =
