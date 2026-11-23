@@ -635,8 +635,14 @@ fn check_cases(
             let Some(family) = family else {
                 return Err(Error::Unclassified(scrutinee.clone()));
             };
-            // The instance a match states is held to the type its scrutinee was inferred at, and typed, so that a call in it is one this check graded: reduction reads the payload of the one arm off it and looks no binder up ([`unread_payload`](super::unread_payload)).
+            // The instance a match states is held to the type its scrutinee was inferred at, and typed, so that a call in it is one this check graded: reduction reads the payload of the one arm off it and looks no binder up ([`unread_payload`](super::unread_payload)). It is held to a proposition too, since a match that states one reads nothing of its scrutinee where it is closed, which is the step a proof's totality licenses and a value's does not.
             if let Some(stated) = stated {
+                let family_type: Term = Subterm::InductType(family.clone()).into();
+                if !Sort::of(certifier, &family_type)?.is_prop() {
+                    return Err(Error::StatedOverData {
+                        family: family.name,
+                    });
+                }
                 infer_type(certifier, stated)?;
                 if !convert(certifier, &Term::type_ground(), stated, scrutinee_type)? {
                     return Err(Error::Mismatch {

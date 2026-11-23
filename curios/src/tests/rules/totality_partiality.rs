@@ -609,9 +609,9 @@ fn a_group_inside_a_term_is_judged_at_every_assignment_of_its_declarations_sorts
     });
 }
 
-// A closed match whose one arm reads nothing is that arm with its scrutinee unread, and where the indices rule the arm out the certifier types none of it: so a call that never returns, at an instance no case builds, may be read only where nothing is erased, and the type and the proof that would read it are refused, while the elaborator types the arm a reader wrote. `curios_cert`'s `recheck::closed_computation_tests` puts the module to the certifier under this name. The control's call returns the case the arm names.
+// A match on data is taken by its scrutinee's value, a match reading nothing of its scrutinee being one that states the proposition it eliminates, so an arm its indices rule out, which the certifier types none of, is reached by no reduction over a call that never returns: the type and the proof that would read it are refused, while the elaborator types the arm a reader wrote. `curios_cert`'s `recheck::closed_computation_tests` puts the module to the certifier under this name. The control's call returns the case the arm names.
 #[test]
-fn a_ruled_out_arm_a_closed_match_takes_is_reached_only_through_a_partial_call() {
+fn a_ruled_out_arm_of_a_closed_match_on_data_is_reached_by_no_reduction() {
     let refusals = control(
         r#"
         use /std/{Nat};

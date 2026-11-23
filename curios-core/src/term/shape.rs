@@ -625,7 +625,7 @@ impl Cases {
 
     /// The body of a match that reads nothing of its scrutinee: its [sole arm](Self::sole_arm), naming none of its payload. `None` for every other match.
     ///
-    /// On a closed term such a match is its arm's body with the scrutinee unevaluated, which is how a cast along a proof runs none of the proof.
+    /// On a closed term such a match that states the proposition it eliminates ([`Cases::stated`]) is its arm's body with the scrutinee unevaluated, which is how a cast along a proof runs none of the proof.
     pub fn unread(&self) -> Option<Term> {
         let (_, arm) = self.sole_arm()?;
         if (0..arm.arity()).any(|index| arm.body.uses(index)) {

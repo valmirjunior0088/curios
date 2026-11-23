@@ -195,6 +195,8 @@ pub enum Error {
     MissingArm { family: Global, tag: Atom },
     /// A value of a case, or an arm of an elimination, at a tag its family does not declare: the family is held, and has no case of that name.
     UndeclaredCase { family: Global, tag: Atom },
+    /// A match stating the instance it eliminates over a family that is no proposition: a match that states one reads nothing of its closed scrutinee, which a proof's totality licenses and a value's does not, so a stated instance stands on a proposition alone.
+    StatedOverData { family: Global },
     /// A recursive member that is a proof or a type, in a group whose recursion does not descend. Assuming such a member at its declared type is what certifies `rec f : False = f` — erasure deletes proofs and types wholesale, so a non-descending one proves anything. A non-descending *value* recursion is not an error: `rec` is general recursion by design, and a program that loops is only a program that loops.
     NotDescending { type_: Box<Term> },
     /// A declaration that is not strictly positive: `part` of `name` reaches back to `name` at a non-accepting polarity. Without this gate, `induct Bad | c(f : (Bad) -> False) end` inhabits `False` in four lines with no recursion at all.
@@ -233,6 +235,7 @@ variants!(Error {
     NotClosed,
     Undeclared,
     UndeclaredCase,
+    StatedOverData,
     Redeclared,
     Unclassified,
     NotASort,
@@ -466,6 +469,11 @@ impl fmt::Display for Displayed<'_> {
             Error::UndeclaredCase { family, tag } => write!(
                 formatter,
                 "`{}` declares no case `{tag}`",
+                family.faithful()
+            ),
+            Error::StatedOverData { family } => write!(
+                formatter,
+                "a match states the instance it eliminates over `{}`, which is no proposition",
                 family.faithful()
             ),
             Error::NotDescending { type_ } => {

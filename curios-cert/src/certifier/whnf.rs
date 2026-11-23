@@ -200,10 +200,12 @@ fn whnf_within(certifier: &mut ByValue, term: Term) -> Result<Term, ReduceError>
             Subterm::Instance(instance) => step_instance(certifier, instance)?,
             // The scrutinee is reduced by a nested call, so a tower of matches over a deep closed spine — the scan-state chain a string literal lowers to — costs one native frame per link. That is data-shaped depth, which is what [`recurse`] at the entry point is for.
             Subterm::Match(Match { head, goal, cases }) => {
-                // A match the instance it states decides does not reduce its scrutinee, and reads nothing of it. Closed, it is its arm: at no payload where the arm names none, as the closed machine takes it, and at the payload the stated instance's indices say where it names one. Open, stating an instance of a proposition whose indices pin its payload, it is its arm at that payload where the instance is the one the constructor builds there, and stands where it is not. A match that states none is reduced by its scrutinee's value.
+                // A match the instance it states decides does not reduce its scrutinee, and reads nothing of it: a match that states one eliminates a proposition, whose closed proofs are total and are its one constructor. Closed, it is its arm: at no payload where the arm names none, as the closed machine takes it, and at the payload the stated instance's indices say where it names one. Open, stating an instance of a proposition whose indices pin its payload, it is its arm at that payload where the instance is the one the constructor builds there, and stands where it is not. A match that states none is reduced by its scrutinee's value, a match on data among them, whose closed scrutinee may be a loop no checker unfolds.
                 let fired = match (cases.sole_arm(), cases.stated()) {
                     (None, _) => None,
-                    (Some(_), _) if closed && cases.unread().is_some() => Some(cases.unread()),
+                    (Some(_), Some(_)) if closed && cases.unread().is_some() => {
+                        Some(cases.unread())
+                    }
                     (Some(_), None) => None,
                     (Some((tag, arm)), Some(stated)) => match closed {
                         true => stated_payload(certifier, stated, tag)?

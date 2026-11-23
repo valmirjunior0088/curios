@@ -582,8 +582,10 @@ impl Machine {
                 else {
                     unreachable!("rebuilt from the same value")
                 };
-                // A match with one arm and no catch-all, naming none of its scrutinee's payload, is its arm's body: on a closed term the scrutinee can be no other case, so nothing evaluates it, a proof least of all.
-                if let Some(body) = cases.unread() {
+                // A match stating the proposition it eliminates, with one arm and no catch-all, naming none of its scrutinee's payload, is its arm's body: on a closed term the proof, total, can be no other case, so nothing evaluates it. A match that states none is a match on data, whose closed scrutinee may be a loop no checker unfolds, and is evaluated by its scrutinee's value.
+                if cases.stated().is_some()
+                    && let Some(body) = cases.unread()
+                {
                     return Ok(Step::Eval(body, demand));
                 }
                 // An arm that names its payload is bound to what the instance the match states says of it, where it states one the host reads a payload off: the scrutinee is no more evaluated than above.

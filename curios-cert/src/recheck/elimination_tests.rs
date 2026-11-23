@@ -617,3 +617,30 @@ fn a_refinements_fit_is_decided_at_the_levels_its_variables_instance_states() {
         "the reading a capture would have left was refused for some other reason",
     );
 }
+
+/// A match states the instance it eliminates over a proposition alone: stated over a family of data, as `forged` states `F(0)`, it is refused, since a match that states one reads nothing of its closed scrutinee, which a proof's totality licenses and a value's does not. Mutation-checked: without the refusal `forged` stands.
+#[test]
+fn a_match_stating_an_instance_of_data_is_refused() {
+    let verdicts = text_refusals(
+        r#"
+induct /F: (i: #NatType) -> pub Type
+| c(): (0)
+end
+
+let /forged: (d: #{node = InductType} /F()(0)) -> #NatType =
+    (d: #{node = InductType} /F()(0)) =>
+        #{goal = #NatType, cases = {stated = #{node = InductType} /F()(0)}}
+        match d
+        | c() => 0
+        end;
+"#,
+    );
+
+    assert!(
+        refuses(&verdicts, Some("forged"), |error| matches!(
+            error,
+            Error::StatedOverData { .. }
+        )),
+        "{verdicts:?}",
+    );
+}

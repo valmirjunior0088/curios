@@ -319,3 +319,40 @@ fn a_guard_answers_its_definition_one_unfolding_down() {
         );
     }
 }
+
+/// A match on data that turns closed under a beta step stands in both strategies where its scrutinee unfolds to nothing: `((x) => match loop | c() => 7 end)(n)` is open, so neither checker hands it to the closed machine, and the step makes the match closed with `loop`, a name of `F(1)` declared with no value, as a definition whose recursion does not descend is. A match reads nothing of its scrutinee only where it states the proposition it eliminates, and one on data is taken by its scrutinee's value. Mutation-checked at each strategy's statement, the elaborator's `reduce` and the certifier's `whnf`, each alone: firing on data by its shape reads `7` past `loop`.
+#[test]
+fn a_match_on_data_over_a_name_with_no_value_stands_in_both_strategies() {
+    let mut context = context();
+    let mut certifier = certifier();
+    let n = context.fresh(Some("n"));
+    let x = context.fresh(Some("x"));
+    let looping = Global::Authored(Qualifier::from(["loop"]));
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    let family = Term::induct_type(nominal("F"), Vec::<Term>::new(), [nat(1)]);
+
+    context.declare(&looping, &family);
+    certifier
+        .declare(&looping, &family, &UniverseContext::default())
+        .expect("declared once");
+    certifier.assume(&n, &nat_type);
+    context.assume(&n, &nat_type);
+
+    let matched = Term::induct_match(
+        Term::instance(looping, Universes::default()),
+        nat_type.clone(),
+        [("c", Vec::<Free>::new(), nat(7))],
+    );
+    let applied = Term::apply(
+        Term::func([(x, nat_type.clone())], matched.clone()),
+        [Term::free_var(&n)],
+    );
+
+    let elaborated = super::reduce_forced(&mut context, applied.clone()).expect("reduces");
+    let checked = certifier.reduce_forced(applied).expect("reduces");
+    assert_eq!(elaborated, checked);
+    assert!(
+        matches!(&*elaborated, Subterm::Match(_)),
+        "a match on data over `loop` stood: {elaborated:?}"
+    );
+}

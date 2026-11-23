@@ -526,3 +526,42 @@ fn the_closed_machine_takes_a_bytes_dispatch_as_the_strategy_does() {
         assert_eq!(Some(reduct), expected, "{scrutinee}");
     }
 }
+
+/// `F`, a family of data whose one case stands at `0`, and `Q`, a proposition whose one case stands at `0` and holds no payload.
+const ONE_CASE: &str = "induct /F: (i: #NatType) -> pub Type\n| c(): (0)\nend\ninduct /Q: (i: #NatType) -> pub Prop\n| q(): (0)\nend";
+
+/// Declare in `certifier` the families of [`ONE_CASE`], and `loop`, a name at `F(1)`, and `held`, a name at `Q(0)`, each with a type and no body, as a definition whose recursion does not descend is declared, and a proof.
+fn declare_opaque_cases(certifier: &mut Certifier) {
+    declared(certifier, ONE_CASE);
+    for (name, type_) in [
+        ("loop", "#{node = InductType} /F()(1)"),
+        ("held", "#{node = InductType} /Q()(0)"),
+    ] {
+        certifier
+            .declare(
+                &Global::Authored(Qualifier::from([name])),
+                &term(type_),
+                &UniverseContext::default(),
+            )
+            .expect("declared once");
+    }
+}
+
+/// A closed one-arm match reads nothing of its scrutinee only where it states the proposition it eliminates, under the machine as under the strategy: `match held | q() => 7 end`, stating `Q(0)`, is `7` with `held` unread, while `match loop | c() => 7 end` on data is taken by its scrutinee's value and stands where `loop` unfolds to nothing, its arm being one the indices rule out and no judgment typed. Mutation-checked at the machine's statement and at the strategy's, each alone: firing on data by shape reads `7` past `loop`.
+#[test]
+fn a_closed_match_reads_nothing_of_its_scrutinee_only_where_it_states_a_proposition() {
+    let on_data = term("#{goal = #NatType} match /loop | c() => 7 end");
+    let on_a_proof = term(
+        "#{goal = #NatType, cases = {stated = #{node = InductType} /Q()(0)}} match /held | q() => 7 end",
+    );
+
+    for mut certifier in [certifier(), strategy_certifier()] {
+        declare_opaque_cases(&mut certifier);
+        assert_eq!(certifier.reduce_forced(on_a_proof.clone()), Ok(term("7")));
+        let reduct = certifier.reduce_forced(on_data.clone()).expect("reduces");
+        assert!(
+            matches!(&*reduct, Subterm::Match(_)),
+            "a match on data over `loop` stood: {reduct:?}"
+        );
+    }
+}

@@ -601,11 +601,11 @@ fn a_let_and_an_arm_bind_a_proof_as_written() {
     }
 }
 
-/// A match with one arm, no catch-all and no payload named is its arm's body, its scrutinee unevaluated: the scrutinee here is a term no budget evaluates. The control names the payload, and the scrutinee is then run for the constructor that binds it.
+/// A match that states the proposition it eliminates, with one arm, no catch-all and no payload named, is its arm's body, its scrutinee unevaluated: the scrutinee here is a term no budget evaluates. The same match stating none is a match on data, whose closed scrutinee may be a loop no checker unfolds, and is run for its value, as the control naming the payload is. Mutation-checked: firing by the match's shape alone answers `5` for the match that states nothing.
 #[test]
-fn a_match_that_reads_nothing_of_its_scrutinee_does_not_evaluate_it() {
+fn a_match_stating_what_it_eliminates_reads_nothing_of_its_scrutinee() {
     let x = binder(0, "x");
-    let unread = Term::induct_match(unaffordable(), nat_type(), [("box", vec![x], nat(5))]);
+    let unread = || Term::induct_match(unaffordable(), nat_type(), [("box", vec![x], nat(5))]);
     let read = Term::induct_match(
         unaffordable(),
         nat_type(),
@@ -613,13 +613,19 @@ fn a_match_that_reads_nothing_of_its_scrutinee_does_not_evaluate_it() {
     );
 
     assert_eq!(
-        reduce_closed(&mut Host::new(100_000), unread, Demand::Forced),
+        reduce_closed(
+            &mut Host::new(100_000),
+            unread().stating(nat_type()),
+            Demand::Forced
+        ),
         Ok(nat(5))
     );
-    assert!(
-        reduce_closed(&mut Host::new(100_000), read, Demand::Forced)
-            .is_err_and(|refusal| refusal.is_exhausted())
-    );
+    for run in [unread(), read] {
+        assert!(
+            reduce_closed(&mut Host::new(100_000), run, Demand::Forced)
+                .is_err_and(|refusal| refusal.is_exhausted())
+        );
+    }
 }
 
 /// An arm that names its payload is bound to what the host reads off the instance the match states, the scrutinee unevaluated: the same match that runs out of steps above is its payload where it states an instance the host reads one off. A match that states none is asked of no host, and evaluates its scrutinee.

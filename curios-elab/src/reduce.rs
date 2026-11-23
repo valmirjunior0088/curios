@@ -1707,12 +1707,14 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
                 }
                 // The scrutinee is reduced by a nested call, so a tower of matches over a deep closed spine costs one native frame per link. That is data-shaped depth, which is what [`recurse`] at the entry point is for. The nested call probes and stores the reduction cache under the scrutinee itself, so a warm scrutinee needs no special case here.
                 Subterm::Match(m) => {
-                    // A match the instance it states decides does not reduce its scrutinee, and reads nothing of it. Closed, it is its arm: at no payload where the arm names none, as the closed machine takes it, and at the payload the stated instance's indices say where it names one. Open, stating an instance of a proposition whose indices pin its payload, it is its arm at that payload where the instance is the one the constructor builds there, and stands where it is not. A match that states none is reduced by its scrutinee's value.
+                    // A match the instance it states decides does not reduce its scrutinee, and reads nothing of it: a match that states one eliminates a proposition, whose closed proofs are total and are its one constructor. Closed, it is its arm: at no payload where the arm names none, as the closed machine takes it, and at the payload the stated instance's indices say where it names one. Open, stating an instance of a proposition whose indices pin its payload, it is its arm at that payload where the instance is the one the constructor builds there, and stands where it is not. A match that states none is reduced by its scrutinee's value, a match on data among them, whose closed scrutinee may be a loop no checker unfolds.
                     let fired = match m.cases.sole_arm() {
                         None => None,
                         Some((tag, arm)) => {
                             let payload = match (closed, m.cases.stated()) {
-                                (true, _) if m.cases.unread().is_some() => Some(Some(Vec::new())),
+                                (true, Some(_)) if m.cases.unread().is_some() => {
+                                    Some(Some(Vec::new()))
+                                }
                                 (_, None) => None,
                                 (true, Some(instance)) => match stated(context, instance, tag)? {
                                     Said::Stated(stated) => Some(Some(stated.payload)),
