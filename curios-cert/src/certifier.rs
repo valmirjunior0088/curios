@@ -77,8 +77,8 @@ use {
     curios_core::{
         Advance, Applications, Atom, Consumption, Cost, Exhaustion, Free, Global, InductDecl,
         Level, LevelHead, Names, Notation, Polarity, Quality, Reads, ReduceError, Reducer,
-        StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError, Universes, Variance,
-        instantiate_qualities,
+        StructDecl, Term, Totality, UniverseConstraint, UniverseContext, UniverseError, Universes,
+        Variance, instantiate_qualities,
     },
     std::{collections::HashMap, fmt, rc::Rc},
 };
@@ -679,9 +679,9 @@ impl<'s> Certifier<'s> {
         self.globals.passed(name)
     }
 
-    /// Whether the baseline's record calls `name` not known to terminate, where `name` is a declaration the walk does not visit and has passed: what the walk's own classification is read beside.
-    pub(crate) fn passed_partial(&self, name: &Global) -> bool {
-        self.globals.passed_partial(name)
+    /// The baseline's verdict on `name`, where `name` is a declaration the walk does not visit and has passed: what the walk's own classification is read beside.
+    pub(crate) fn passed_totality(&self, name: &Global) -> Option<Totality> {
+        self.globals.passed_totality(name)
     }
 
     /// Take the definition `name` as the baseline this walk is over holds it, unjudged, as [`Certifier::define`] records one. Refused as [`Error::Redeclared`] where a definition already stands under `name`, and where the baseline holds none.

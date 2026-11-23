@@ -978,6 +978,7 @@ impl Described {
         let totality = self.totality.map(|totality| match totality {
             Totality::Total => "total",
             Totality::Partial => "partial",
+            Totality::Unfounded => "unfounded",
         });
         let derived = stated.is_some_and(|stated| stated.derived);
         let words = [

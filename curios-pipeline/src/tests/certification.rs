@@ -22,6 +22,23 @@ pub let spin(n: Nat) -> Nat = spin(n);
 pub let twice: Nat = double(2);
 ";
 
+/// Each way an item's recursion fails to descend, and each way a definition is partial with its own recursion descending: a group of two whose calls come back to where they started, a definition enclosing a group that calls itself unchanged, a definition reaching one that loops, and one calling a host row that never returns.
+const VERDICTS: &str = "use /std/{Nat, Byte, Io};
+
+pub let looping(n: Nat) -> Nat = sibling(n + 1)
+pub and sibling(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => looping(k) end;
+
+pub let encloses(n: Nat) -> Nat =
+    let again(k: Nat) -> Nat = again(k);
+    again(n);
+
+pub let reaches(n: Nat) -> Nat = looping(n);
+
+foreign abort(Byte) -> Never;
+
+pub let quits(b: Byte) -> Io(Nat) = abort(b);
+";
+
 /// A type named by a value typed at it, a value that names neither, and a family whose one constructor takes it.
 const READING: &str = "use /std/{Nat};
 
@@ -108,8 +125,30 @@ fn a_compiled_unit_files_the_certifiers_record_of_every_definition() {
 
     assert!(answers_for_every_name(&unit));
     assert_eq!(classified(&unit, "double"), Some(Totality::Total));
-    assert_eq!(classified(&unit, "spin"), Some(Totality::Partial));
+    assert_eq!(classified(&unit, "spin"), Some(Totality::Unfounded));
     assert_eq!(classified(&unit, "twice"), Some(Totality::Total));
+}
+
+/// An item whose recursion does not descend is `Unfounded` in both checkers' records, each of its definitions alike, the member whose own calls descend among them, and so is a definition enclosing a group that does not; a definition that reaches one, or calls a host row that never returns, is `Partial`, its own recursion descending. Mutation-checked: with the certifier reading no `let` as enclosing a group, `encloses` is filed `Total`.
+#[test]
+fn an_item_whose_recursion_does_not_descend_is_unfounded_in_both_records() {
+    let unit = unit_of(VERDICTS);
+    let elaborated = |symbol: &str| {
+        unit.traces()
+            .classified(&named(&unit, symbol))
+            .map(|classified| classified.totality)
+    };
+
+    for (symbol, totality) in [
+        ("looping", Totality::Unfounded),
+        ("sibling", Totality::Unfounded),
+        ("encloses", Totality::Unfounded),
+        ("reaches", Totality::Partial),
+        ("quits", Totality::Partial),
+    ] {
+        assert_eq!(classified(&unit, symbol), Some(totality), "{symbol}");
+        assert_eq!(elaborated(symbol), Some(totality), "{symbol}");
+    }
 }
 
 /// An item-level recompile's walk is handed the baseline whole and adopts the verdicts that stand, so its record covers the unit — a declaration the edit did not reach classified, and read, as the walk that filed the baseline left it, and one that read the edit judged again.
@@ -124,7 +163,7 @@ fn an_item_level_recompile_keeps_the_baselines_record_for_what_it_reuses() {
     assert!(!reuses_body(&baseline, &recompiled, "twice"));
     assert!(answers_for_every_name(&recompiled));
     assert_eq!(classified(&recompiled, "double"), Some(Totality::Total));
-    assert_eq!(classified(&recompiled, "spin"), Some(Totality::Partial));
+    assert_eq!(classified(&recompiled, "spin"), Some(Totality::Unfounded));
     assert_eq!(classified(&recompiled, "twice"), Some(Totality::Total));
     assert_eq!(read_by(&recompiled, "double"), read_by(&baseline, "double"));
     assert!(

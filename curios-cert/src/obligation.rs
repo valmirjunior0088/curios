@@ -49,7 +49,7 @@ fn calls_a_diverging_row(term: &Term, memo: &mut HashMap<Term, bool>) -> bool {
     )
 }
 
-/// The definitions not known to terminate, as a walk comes to know them: the environment's, then each judged item's as it is classified.
+/// The verdicts on the definitions not known to terminate, as a walk comes to know them: the environment's, then each judged item's as it is classified.
 ///
 /// What an environment already answers for is read rather than recomputed: a name of a unit in scope is classified as the certifier's record of that unit classifies it, asked where a judgment reaches the name, and of a module's items only the judged ones are classified — the walk's own answer to which are new, the rest being the environment's own. That is what keeps a compile from re-analyzing the standard library, and from copying its classification.
 ///
@@ -57,8 +57,8 @@ fn calls_a_diverging_row(term: &Term, memo: &mut HashMap<Term, bool>) -> bool {
 pub struct Totals<'g> {
     /// The units in scope, whose records answer for their own definitions.
     scope: &'g Globals<'g>,
-    /// What this walk classified as not known to terminate: the items it judged and the verdicts it adopted.
-    partial: BTreeSet<Global>,
+    /// What this walk classified short of `Total`: the items it judged and the verdicts it adopted.
+    classified: BTreeMap<Global, Totality>,
     /// Which terms call a diverging host row, carried across every item the walk classifies: definitions share subterms heavily, and a node settled for one is settled for all.
     memo: HashMap<Term, bool>,
 }
@@ -68,22 +68,34 @@ impl<'g> Totals<'g> {
     pub fn seeded(globals: &'g Globals<'g>) -> Self {
         Self {
             scope: globals,
-            partial: BTreeSet::new(),
+            classified: BTreeMap::new(),
             memo: HashMap::new(),
         }
     }
 
-    /// Whether `name` is not known to terminate, as far as the walk has come: by its own classification, by the baseline's record where `certifier` reads `name` as a declaration it does not visit, or by the record of the unit in scope that defines it.
+    /// The verdict on `name`, as far as the walk has come: its own classification, the baseline's record where `certifier` reads `name` as a declaration it does not visit, or the record of the unit in scope that defines it; `Total` where none of them classifies it short of that.
+    pub fn totality(&self, certifier: &Certifier, name: &Global) -> Totality {
+        self.classified
+            .get(name)
+            .copied()
+            .or_else(|| certifier.passed_totality(name))
+            .or_else(|| self.scope.totality(name))
+            .unwrap_or(Totality::Total)
+    }
+
+    /// Whether `name` is not known to terminate, as far as the walk has come ([`Totals::totality`]).
     pub fn partial(&self, certifier: &Certifier, name: &Global) -> bool {
-        self.partial.contains(name) || certifier.passed_partial(name) || self.scope.partial(name)
+        !self.totality(certifier, name).is_total()
     }
 
-    /// Put `name` into the set on the word of an earlier walk's record: a definition whose verdict this walk adopts, which that walk classified as not known to terminate.
-    pub fn adopt(&mut self, name: Global) {
-        self.partial.insert(name);
+    /// Take `totality` for `name` on the word of an earlier walk's record: a definition whose verdict this walk adopts.
+    pub fn adopt(&mut self, name: Global, totality: Totality) {
+        if !totality.is_total() {
+            self.classified.insert(name, totality);
+        }
     }
 
-    /// Classify a judged `item` into the set.
+    /// Classify a judged `item`.
     ///
     /// Asked as the item's check ends, so what its check enclosed was noted as it went, and after every definition it mentions outside itself was classified: the walk judges an item after the items it reaches, and what a judged item mentions of the environment its unit's record answers for. So one pass over the item settles it, its members closed over one another where it is a group.
     pub fn classify(&mut self, certifier: &Certifier, item: &Item) {
@@ -92,34 +104,36 @@ impl<'g> Totals<'g> {
         self.close(certifier, &mentions);
     }
 
-    /// Put each definition of `item`, which this walk checked, that is partial on its own account into the set, and record what each mentions: what its check enclosed was noted as it went.
+    /// Classify each definition of `item`, which this walk checked, that is partial on its own account, and record what each mentions: what its check enclosed was noted as it went.
+    ///
+    /// The item's recursion is one: where its group does not descend, or a definition it holds encloses a group that does not, every definition it holds is `Unfounded`, a sibling reaching the loop through the group's own spelling as readily as by its name. A definition that calls a host row that diverges is `Partial`, the row being no recursion a checker could unfold.
     fn locally(
         &mut self,
         certifier: &Certifier,
         item: &Item,
         mentions: &mut BTreeMap<Global, BTreeSet<Global>>,
     ) {
-        // A group that does not descend makes every member partial, whatever each body looks like on its own.
-        let rejected = match item {
-            Item::Rec(rec) => !descends(certifier, rec.group()),
-            Item::Let(_) | Item::Nominal(_) => false,
+        let definitions = item.definitions();
+        let unfounded = match item {
+            Item::Rec(rec) => {
+                !descends(certifier, rec.group())
+                    || (0..definitions.len())
+                        .any(|index| certifier.member_encloses_partial(rec.group(), index))
+            }
+            Item::Let(definition) => certifier.definition_encloses_partial(&definition.name),
+            Item::Nominal(_) => false,
         };
 
-        for (index, definition) in item.definitions().into_iter().enumerate() {
-            let encloses = match item {
-                Item::Rec(rec) => certifier.member_encloses_partial(rec.group(), index),
-                Item::Let(_) => certifier.definition_encloses_partial(&definition.name),
-                Item::Nominal(_) => unreachable!("a nominal declaration defines no name"),
-            };
-            if rejected
-                || encloses
-                || calls_a_diverging_row(&definition.body, &mut self.memo)
+        let own = item.declared_names();
+        for definition in definitions {
+            if unfounded {
+                self.classified.insert(definition.name, Totality::Unfounded);
+            } else if calls_a_diverging_row(&definition.body, &mut self.memo)
                 || calls_a_diverging_row(&definition.type_, &mut self.memo)
             {
-                self.partial.insert(definition.name);
+                self.classified.insert(definition.name, Totality::Partial);
             }
             let mentioned = definition.mentions();
-            let own = item.declared_names();
             for name in mentioned.iter().filter(|name| !own.contains(name)) {
                 certifier.read_verdict(name);
             }
@@ -127,16 +141,16 @@ impl<'g> Totals<'g> {
         }
     }
 
-    /// Close the set over `mentions`: a definition that mentions a partial one is partial, iterated until nothing joins.
+    /// Close the verdicts over `mentions`: a definition that mentions a partial one is `Partial`, iterated until nothing joins.
     fn close(&mut self, certifier: &Certifier, mentions: &BTreeMap<Global, BTreeSet<Global>>) {
         loop {
             let mut changed = false;
             for (name, reached) in mentions {
-                if self.partial.contains(name) {
+                if self.classified.contains_key(name) {
                     continue;
                 }
                 if reached.iter().any(|other| self.partial(certifier, other)) {
-                    self.partial.insert(*name);
+                    self.classified.insert(*name, Totality::Partial);
                     changed = true;
                 }
             }

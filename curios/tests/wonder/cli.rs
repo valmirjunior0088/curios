@@ -521,7 +521,7 @@ fn a_block_states_what_a_source_does_not_show_and_holds_the_source() {
         named("/spin"),
         concat!(
             "/spin\n",
-            "│  partial\n",
+            "│  unfounded\n",
             "├─ --- Never returns.\n",
             "│  let spin(n: Nat) -> Nat\n",
             "└─ [declaration] facts.crs:24:5\n",

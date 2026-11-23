@@ -23,7 +23,7 @@ use {
     crate::Filed,
     curios_core::{
         Applications, Definitions, Global, InductDecl, InductParts, Item, Place, Places, Polarity,
-        StructDecl, Term, UniverseContext, Universes, Variance,
+        StructDecl, Term, Totality, UniverseContext, Universes, Variance,
     },
     std::collections::{BTreeMap, HashMap, HashSet},
 };
@@ -246,13 +246,13 @@ impl<'s> Globals<'s> {
             .map(|mounted| mounted.unit)
     }
 
-    /// Whether `name` is a definition in scope here that is *not* known to terminate, closed transitively already, as the certifier's record of the unit that holds it classifies it.
+    /// The verdict on `name`, a definition in scope here, as the certifier's record of the unit that holds it classifies it, closed transitively already: `None` where no unit here holds it.
     ///
     /// Type totality and proof totality close over what an erased position reaches, and what it reaches runs out of this environment as readily as out of the module being walked.
     ///
     /// It is read off [`Certification`](curios_core::Certification), which only this crate's walk makes, and never off anything elaboration concluded, which no [`Definition`](curios_core::Definition) carries: a verdict arriving here is one this crate reached about those exact terms. A record answers for the unit it was filed with, every name of it, and for no name beside it.
-    pub(crate) fn partial(&self, name: &Global) -> bool {
-        self.holding(name).is_some_and(|unit| unit.partial(name))
+    pub(crate) fn totality(&self, name: &Global) -> Option<Totality> {
+        self.holding(name).map(|unit| unit.totality(name))
     }
 
     /// Whether a unit here declares `name`.
@@ -393,9 +393,11 @@ impl<'s> Environment<'s> {
         })
     }
 
-    /// Whether the baseline's record calls `name` not known to terminate, where `name` is a declaration the walk does not visit and has passed.
-    pub fn passed_partial(&self, name: &Global) -> bool {
-        self.passed(name) && self.baseline.is_some_and(|baseline| baseline.partial(name))
+    /// The baseline's verdict on `name`, where `name` is a declaration the walk does not visit and has passed.
+    pub fn passed_totality(&self, name: &Global) -> Option<Totality> {
+        self.baseline
+            .filter(|_| self.passed(name))
+            .map(|baseline| baseline.totality(name))
     }
 
     /// What `name` is held at: as the walk wrote it, as the baseline it adopted it from holds it, or as a unit in scope does.

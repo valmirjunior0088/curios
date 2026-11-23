@@ -122,7 +122,7 @@ fn a_walk_types_again_what_a_reader_typed() {
         ));
         assert_eq!(
             certifier.group_verdict(rec.group()),
-            Some(Totality::Partial)
+            Some(Totality::Unfounded)
         );
     }
 }

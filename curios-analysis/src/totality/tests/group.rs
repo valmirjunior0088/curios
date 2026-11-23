@@ -187,7 +187,7 @@ fn a_closure_past_its_limit_claims_nothing() {
 
     assert_eq!(
         decide(vec![call(0, 0, swapped), call(0, 0, rotated)]),
-        Totality::Partial
+        Totality::Unfounded
     );
 }
 

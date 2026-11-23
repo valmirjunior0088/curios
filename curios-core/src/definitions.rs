@@ -29,22 +29,28 @@ use {
     },
 };
 
-/// Whether a definition is known to terminate on every input.
+/// Whether a definition is known to terminate on every input, and where it is not, whether its own recursion is why.
 ///
-/// `Partial` is "not proven total", never "proven divergent": a productive corecursive definition and a genuine infinite loop are both `Partial`, and both remain legal wherever erasure keeps them.
+/// Neither `Partial` nor `Unfounded` is "proven divergent": a productive corecursive definition and a genuine infinite loop are both not proven total, and both remain legal wherever erasure keeps them. The variants are ordered by how much of the reason is the definition's own, so the verdict of a term made of parts is the greatest of theirs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 #[curios_archive::archived]
 pub enum Totality {
     /// Every recursive group this definition contains descends, it calls no diverging host row, and neither does anything it reaches.
     Total,
-    /// Not proven total. The conservative default: a definition whose classification is unknown is `Partial`, never `Total`.
+    /// Not proven total, through what it reaches or a host row it calls, its own recursion descending. The conservative default: a definition whose classification is unknown is `Partial`, never `Total`.
     #[default]
     Partial,
+    /// Its item's recursion does not descend: the item's group's calls do not close to a descent, or a definition it holds encloses a group that does not. Partial too, and the verdict a checker withholds a definition's value by.
+    Unfounded,
 }
 
 impl Totality {
     pub fn is_total(self) -> bool {
         matches!(self, Totality::Total)
+    }
+
+    pub fn is_unfounded(self) -> bool {
+        matches!(self, Totality::Unfounded)
     }
 }
 
@@ -56,7 +62,7 @@ impl Totality {
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub struct Certification {
-    /// Each judged definition's totality, closed over everything it mentions.
+    /// Each judged definition's totality: `Unfounded` where its item's recursion does not descend, and otherwise closed over everything it mentions.
     #[archived_with(InKeyOrder)]
     totalities: Sorted<Global, Totality>,
     /// How each judged definition applies its parameters, where it applies one every use of which is seen: what a later walk grades a call in a callback the definition is handed by.
@@ -185,7 +191,7 @@ pub struct Concluded {
     pub signatures: Vec<Option<Option<[u8; 32]>>>,
     /// The same, of each body read.
     pub bodies: Vec<Option<Option<[u8; 32]>>>,
-    /// The definition's totality, closed over what it mentions.
+    /// The definition's totality: `Unfounded` where its item's recursion does not descend, and otherwise closed over what it mentions.
     pub totality: Totality,
     /// How it applies its parameters ([`Applications`]).
     pub applications: Applications,
@@ -353,7 +359,7 @@ impl Eq for Certification {}
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct Certified {
-    /// Whether the definition terminates, closed over everything it mentions.
+    /// Whether the definition terminates: `Unfounded` where its item's recursion does not descend, and otherwise closed over everything it mentions.
     pub totality: Totality,
     /// How it applies its parameters ([`Applications`]).
     pub applications: Applications,

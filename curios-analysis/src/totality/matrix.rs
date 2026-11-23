@@ -8,7 +8,7 @@ use {curios_core::CallMatrix, std::collections::HashSet};
 
 /// How far a group's transitive closure may outgrow one call for each ordered pair of its members.
 ///
-/// Closure is worst-case exponential in the number of call sites. The prelude's largest group closes in tens of matrices; a group that blows past its bound is classified `Partial`, which is the conservative direction. The bound grows with the group ([`closure_limit`]), since members that all reach each other close to a call for every ordered pair of them whatever they descend on, and this is the room left for the matrices a pair may hold beyond its first.
+/// Closure is worst-case exponential in the number of call sites. The prelude's largest group closes in tens of matrices; a group that blows past its bound is classified `Unfounded`, which is the conservative direction. The bound grows with the group ([`closure_limit`]), since members that all reach each other close to a call for every ordered pair of them whatever they descend on, and this is the room left for the matrices a pair may hold beyond its first.
 pub const CLOSURE_LIMIT: usize = 4096;
 
 /// The largest closure a group of `members` may reach: a call for each ordered pair of them, and [`CLOSURE_LIMIT`] beside.

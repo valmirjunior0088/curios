@@ -881,8 +881,8 @@ pub fn verdicts_visiting<'s>(
             let adopted = adopt(certifier, adopting.baseline(), item, &certified);
             verdicts.extend(adopted.refusals);
             reads.extend(adopted.reads);
-            for name in adopted.partial {
-                totals.adopt(name);
+            for (name, totality) in adopted.totalities {
+                totals.adopt(name, totality);
             }
             for (name, vector) in adopted.vectors {
                 polarities.insert(name, vector);
@@ -929,9 +929,7 @@ pub fn verdicts_visiting<'s>(
             for (name, record) in records {
                 reads.insert(name, (**record).clone());
                 let made = record.made().expect("a record taken is complete");
-                if made.totality != Totality::Total {
-                    totals.adopt(name);
-                }
+                totals.adopt(name, made.totality);
                 if !made.applications.is_empty() {
                     certifier.file_applications(&name, made.applications.clone());
                     applications.insert(name, made.applications.clone());
@@ -949,7 +947,7 @@ pub fn verdicts_visiting<'s>(
                 adopting.judged(
                     (&stated, over.places),
                     item,
-                    |name| totals.partial(certifier, name),
+                    |name| totals.totality(certifier, name),
                     &polarities,
                     &variances,
                     &applications,
@@ -1166,7 +1164,7 @@ pub fn verdicts_visiting<'s>(
             adopting.judged(
                 (&stated, over.places),
                 item,
-                |name| totals.partial(certifier, name),
+                |name| totals.totality(certifier, name),
                 &polarities,
                 &variances,
                 &applications,
@@ -1200,10 +1198,7 @@ pub fn verdicts_visiting<'s>(
         verdicts.push(Refusal { name: None, error });
     }
 
-    let totality = |name: &Global| match totals.partial(certifier, name) {
-        true => Totality::Partial,
-        false => Totality::Total,
-    };
+    let totality = |name: &Global| totals.totality(certifier, name);
     let certification = match (over, changed) {
         (Some(over), Some(changed)) => revised(
             globals,
@@ -1673,7 +1668,7 @@ fn stands(
         if unit && names.contains(read) {
             let concluded = own.get(read)?;
             let verdict = (
-                concluded.totality != Totality::Total,
+                concluded.totality,
                 concluded
                     .vectors
                     .as_ref()
@@ -1691,7 +1686,7 @@ fn stands(
         if unit {
             let verdict = match (now.settled.contains(read), certifier.passed(read)) {
                 (true, _) => (
-                    now.totals.partial(certifier, read),
+                    now.totals.totality(certifier, read),
                     now.polarities.get(read).map(Vec::as_slice),
                     now.variances.get(read).map(Vec::as_slice),
                     now.applications.get(read),
@@ -1802,11 +1797,11 @@ fn put(definitions: &mut Definitions, place: usize, item: Item) {
     }
 }
 
-/// What adopting one item's verdict files: the refusals met on the way, each name's reads as the baseline's record holds them, the names that record calls partial, and the polarity vector of each registry entry the item declares.
+/// What adopting one item's verdict files: the refusals met on the way, each name's reads as the baseline's record holds them, the verdict that record holds of each name it calls partial, and the polarity vector of each registry entry the item declares.
 struct Adopted {
     refusals: Vec<Refusal>,
     reads: Vec<(Global, Reads)>,
-    partial: Vec<Global>,
+    totalities: Vec<(Global, Totality)>,
     vectors: Vec<(Global, Vec<Polarity>)>,
     variances: Vec<(Global, Vec<Variance>)>,
 }
@@ -1831,15 +1826,15 @@ fn adopt(
             })
             .collect(),
         reads: Vec::new(),
-        partial: Vec::new(),
+        totalities: Vec::new(),
         vectors: Vec::new(),
         variances: Vec::new(),
     };
 
     for (name, (totality, reads)) in names.into_iter().zip(certified) {
         adopted.reads.push((name, (*reads).clone()));
-        if *totality != Totality::Total {
-            adopted.partial.push(name);
+        if !totality.is_total() {
+            adopted.totalities.push((name, *totality));
         }
         if item.nominal(&name).is_some() {
             let vector = baseline

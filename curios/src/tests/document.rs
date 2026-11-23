@@ -2,7 +2,7 @@
 
 use {
     curios_common::{Class, Qualifier, Source, test_support::*},
-    curios_document::{Block, Entry, Kind, Marked, Signature},
+    curios_document::{Block, Entry, Kind, Marked, Signature, Totality},
     curios_elab::DEFAULT_BUDGET,
     curios_module::{Overlay, written},
     curios_package::{Governing, order},
@@ -52,10 +52,10 @@ fn the_standard_library_documents_from_the_archive() {
         try_get
             .declarations()
             .find(|declaration| declaration.name == name)
-            .map(|declaration| (declaration.proof, declaration.total))
+            .map(|declaration| (declaration.proof, declaration.totality))
     };
-    assert_eq!(checked("try_get"), Some((false, Some(true))));
-    assert_eq!(checked("of_insert"), Some((true, Some(true))));
+    assert_eq!(checked("try_get"), Some((false, Some(Totality::Total))));
+    assert_eq!(checked("of_insert"), Some((true, Some(Totality::Total))));
 
     let nat = documentation
         .modules
@@ -443,17 +443,17 @@ fn a_declaration_carries_what_its_checks_established() {
 
     let same = named("same");
     assert!(same.proof, "a definition whose type is a proposition");
-    assert_eq!(same.total, Some(true));
+    assert_eq!(same.totality, Some(Totality::Total));
 
     let other = named("other");
     assert!(!other.proof);
-    assert_eq!(other.total, Some(true));
+    assert_eq!(other.totality, Some(Totality::Total));
 
     // A type is neither, and a definition another page declares carries what that page's does.
     let shade = named("Shade");
     assert!(!shade.proof);
-    assert_eq!(shade.total, None);
-    assert_eq!(named("pitch").total, Some(true));
+    assert_eq!(shade.totality, None);
+    assert_eq!(named("pitch").totality, Some(Totality::Total));
 
     let witness = page
         .declarations()

@@ -12,7 +12,7 @@
 //!
 //! # Shared, not duplicated
 //!
-//! Both checkers run *this* engine, through [`Driver`]: it is a total function of post-zonk terms, so a second implementation would be a second run of the same function on the same input rather than a second opinion. What differs is the obligation each driver hangs on the verdict. The elaborator's is positional and whole-module — type totality and proof totality, seeded from what elaboration settled, turning a `Partial` classification into a rejection only where erasure deletes. The certifier's is local and self-derivable: a `rec` member whose declared type is a proof or yields a sort must descend, because assuming it at that type otherwise certifies `rec f : False = f`. Rejection by the *engine* is a classification, not an error — corecursive and productive definitions classify `Partial` and stay usable everywhere erasure keeps them.
+//! Both checkers run *this* engine, through [`Driver`]: it is a total function of post-zonk terms, so a second implementation would be a second run of the same function on the same input rather than a second opinion. What differs is the obligation each driver hangs on the verdict. The elaborator's is positional and whole-module — type totality and proof totality, seeded from what elaboration settled, turning a classification short of `Total` into a rejection only where erasure deletes. The certifier's is local and self-derivable: a `rec` member whose declared type is a proof or yields a sort must descend, because assuming it at that type otherwise certifies `rec f : False = f`. Rejection by the *engine* is a classification, not an error — a corecursive or productive group classifies `Unfounded` and stays usable everywhere erasure keeps it.
 //!
 //! # Discovery, grading, and closure are three things
 //!
@@ -59,7 +59,7 @@ use {
     },
 };
 
-/// Whether every recursive call path in `group` descends, discovering the calls by walking its member bodies.
+/// Whether every recursive call path in `group` descends, discovering the calls by walking its member bodies: `Total` where it does, and `Unfounded` where it does not, a group's verdict being of its own recursion alone.
 ///
 /// This is the whole of size-change termination as the elaborator applies it: collect one matrix per call site, close them under composition, and demand a decrease on the diagonal of every idempotent result — [`decide`]. A group with no recursive call at all closes to nothing and is accepted, which is how the prelude's call-free `; ih` folds pass — their recursion is the intrinsic eliminator's, already structural by construction.
 pub fn group_totality<D: Driver>(driver: &mut D, group: &RecGroup) -> Result<Totality, D::Error> {
@@ -93,7 +93,7 @@ pub fn group_totality<D: Driver>(driver: &mut D, group: &RecGroup) -> Result<Tot
     Ok(decide(calls))
 }
 
-/// How many matrices a parameter's applications may close to before the parameter is summarized as used otherwise: the conservative direction, as a closure past its bound is `Partial`.
+/// How many matrices a parameter's applications may close to before the parameter is summarized as used otherwise: the conservative direction, as a closure past its bound is `Unfounded`.
 const APPLICATIONS_LIMIT: usize = 64;
 
 /// How each part of each member of `group` applies its parameters ([`Applications`]): for a parameter at a position no part uses otherwise than as the head of an application, a field of it applied, or handed on unchanged — at that position to a member taking a parameter there, or to a definition whose summary applies what it is handed — every application of it the part makes, graded against the part's parameters, and every one reached through a path of the group's calls, graded through the path. A member's leading lambdas are one part, and each field lambda of the record under them another ([`PartShape`]), over the member's parameters and then its own; a member's parameter a field lambda applies is applied wherever the field is called, so the leading lambdas' summary states nothing of it and the field's does.
@@ -307,7 +307,7 @@ fn field_application(steps: &[Segment]) -> Option<(Vec<usize>, Vec<Term>)> {
     Some((fields, arguments))
 }
 
-/// Whether `calls`, every graded call of one group, close to no call path that can repeat forever without a strict decrease.
+/// Whether `calls`, every graded call of one group, close to no call path that can repeat forever without a strict decrease: `Total` where they do, `Unfounded` where they do not.
 ///
 /// The closure and the verdict are shared by every walk that finds a group's calls, whichever walk met them.
 pub fn decide(calls: Vec<Call>) -> Totality {
@@ -320,10 +320,10 @@ pub fn decide(calls: Vec<Call>) -> Totality {
                     && (!call.matrix.is_idempotent() || call.matrix.descends()))
         }) {
             true => Totality::Total,
-            false => Totality::Partial,
+            false => Totality::Unfounded,
         },
         // The closure outgrew its bound; claim nothing.
-        None => Totality::Partial,
+        None => Totality::Unfounded,
     }
 }
 

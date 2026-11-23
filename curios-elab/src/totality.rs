@@ -21,7 +21,7 @@ use {
         Sharing, Subterm, Term, Totality,
     },
     std::{
-        collections::{BTreeSet, HashMap, HashSet},
+        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         ops::ControlFlow,
         rc::Rc,
     },
@@ -35,16 +35,15 @@ pub fn record_definition_totality(
     definition: &Definition,
     group: Totality,
 ) -> Result<(), Error> {
-    let partial = !group.is_total()
-        || definition_is_locally_partial(context, definition, &mut LocalMemo::new())?
-        || definition.mentions().iter().any(|name| {
-            context
-                .definition_totality(name)
-                .is_some_and(|totality| !totality.is_total())
-        });
-    let totality = match partial {
-        true => Totality::Partial,
-        false => Totality::Total,
+    let own = definition_on_its_own(context, definition, &mut LocalMemo::new())?.max(group);
+    let reaches_partial = definition.mentions().iter().any(|name| {
+        context
+            .definition_totality(name)
+            .is_some_and(|totality| !totality.is_total())
+    });
+    let totality = match (own, reaches_partial) {
+        (Totality::Total, true) => Totality::Partial,
+        (own, _) => own,
     };
     context.record_definition_totality(&definition.name, totality);
     Ok(())
@@ -127,15 +126,14 @@ pub fn check_written_type_totality(
 
 /// Classify a published item and record each of its definitions' verdict: the one every other declaration reads, and the one the unit files ([`crate::Classified::totality`]).
 ///
-/// Group rejection is only the local part. A definition is also `Partial` if it calls a host row that diverges — which erasure drops, so an exit behind a nullary proof never fires — or if it mentions anything already `Partial`. That last clause is a transitive closure, and it is what makes the flag a usable summary across declarations and across units: "this definition is partial" means something partial is in its closure, so a proof mentioning it inherits the same.
+/// The item's own recursion is one verdict: where its group does not descend, or a definition it holds encloses a group that does not, every definition it holds is `Unfounded`, a sibling reaching the loop through the group's own spelling as readily as by its name. Short of that, a definition is `Partial` if it calls a host row that diverges — which erasure drops, so an exit behind a nullary proof never fires — or if it mentions anything not known to terminate. That last clause is a transitive closure, and it is what makes the verdict a usable summary across declarations and across units: "this definition is partial" means something partial is in its closure, so a proof mentioning it inherits the same.
 ///
 /// Runs as the item is published, where its terms are final and meta-free, so no metavariable can be solved to a partial term after the fact. Everything the item mentions outside itself has finished, a declaration elaborating after what it reads, so its verdict is recorded and is a closure already, and the walk stops there: at a predecessor unit's definition, which is why the standard library is not analyzed again on every compilation, and at an earlier declaration's of this unit alike. Among the members of one group the closure is iterated, since each may mention the others. A name with no verdict is treated as total: every `Global` a published item mentions is defined by a finished declaration or by the item itself, so that case is unreachable rather than an approximation.
 pub fn classify_totality(context: &mut Context, item: &Item) -> Result<(), Error> {
     curios_common::profile!("record_totality");
-    // A group that does not descend makes every member partial, whatever each body looks like on its own.
-    let rejected = match item {
-        Item::Let(_) | Item::Nominal(_) => false,
-        Item::Rec(rec) => group_totality(context, rec.group())? == Totality::Partial,
+    let group = match item {
+        Item::Let(_) | Item::Nominal(_) => Totality::Total,
+        Item::Rec(rec) => group_totality(context, rec.group())?,
     };
     let definitions = item.definitions();
     let own = definitions
@@ -144,7 +142,14 @@ pub fn classify_totality(context: &mut Context, item: &Item) -> Result<(), Error
         .collect::<BTreeSet<_>>();
     // One cache for the item: its definitions share subterms, and a node classified for one is classified for all.
     let mut memo = LocalMemo::new();
-    let mut partial = BTreeSet::new();
+    let mut verdicts = BTreeMap::new();
+    for definition in &definitions {
+        verdicts.insert(
+            definition.name,
+            definition_on_its_own(context, definition, &mut memo)?,
+        );
+    }
+    let unfounded = !group.is_total() || verdicts.values().any(|own| own.is_unfounded());
     let mut mentions = Vec::with_capacity(definitions.len());
     for definition in &definitions {
         let named = definition.mentions();
@@ -154,32 +159,34 @@ pub fn classify_totality(context: &mut Context, item: &Item) -> Result<(), Error
                     .definition_totality(name)
                     .is_some_and(|totality| !totality.is_total())
         });
-        if rejected
-            || reaches_partial
-            || definition_is_locally_partial(context, definition, &mut memo)?
-        {
-            partial.insert(definition.name);
-        }
+        let verdict = verdicts
+            .get_mut(&definition.name)
+            .expect("each definition was classified on its own");
+        *verdict = match (unfounded, reaches_partial) {
+            (true, _) => Totality::Unfounded,
+            (false, true) => (*verdict).max(Totality::Partial),
+            (false, false) => *verdict,
+        };
         mentions.push((definition.name, named));
     }
     loop {
-        let before = partial.len();
+        let mut changed = false;
         for (name, named) in &mentions {
-            if named.iter().any(|other| partial.contains(other)) {
-                partial.insert(*name);
+            let reaches = named
+                .iter()
+                .any(|other| verdicts.get(other).is_some_and(|other| !other.is_total()));
+            if reaches && verdicts[name].is_total() {
+                verdicts.insert(*name, Totality::Partial);
+                changed = true;
             }
         }
-        if partial.len() == before {
+        if !changed {
             break;
         }
     }
 
-    let of = |name: &Global| match partial.contains(name) {
-        true => Totality::Partial,
-        false => Totality::Total,
-    };
-    for name in &own {
-        context.record_definition_totality(name, of(name));
+    for (name, totality) in verdicts {
+        context.record_definition_totality(&name, totality);
     }
 
     Ok(())
@@ -207,7 +214,7 @@ fn faults(
     let keys = Sharing::new();
     let mut memo = LocalMemo::new();
     for position in positions {
-        if locally_partial(context, &keys.share(&position.term), &mut memo)? {
+        if !on_its_own(context, &keys.share(&position.term), &mut memo)?.is_total() {
             faults.push((
                 ErasedSite::clone(&position.site),
                 Fault::Inline,
@@ -569,61 +576,64 @@ impl Turns {
     }
 }
 
-/// Per-node verdicts for [`locally_partial`], carried across the terms one pass classifies.
+/// Per-node verdicts for [`on_its_own`], carried across the terms one pass classifies.
 ///
 /// Keyed on the term, whose hash is cached on the node and whose equality is already a worklist walk, so a lookup does not re-traverse what it is looking up. Where the terms classified were built apart — the positions' types, each zonked from its own recorded term — they are keyed by their canonical nodes, since two equal terms in two allocations are compared node by node at every probe that finds one.
-type LocalMemo = HashMap<Term, bool>;
+type LocalMemo = HashMap<Term, Totality>;
 
-/// Whether `term` contains a call to a diverging host row or a `rec` group that does not descend — the "is this term partial on its own account" test both obligations apply one level below a definition.
+/// What `term` is on its own account: `Unfounded` where it contains a `rec` group that does not descend, `Partial` where it contains a call to a diverging host row and no such group, `Total` where it contains neither — the test both obligations apply one level below a definition.
 ///
 /// **Iterative and memoized, and both are load-bearing.** Proof totality seeds one position per link of a `Str` literal's UTF-8 derivation, and those links share their tails, so a native per-node recursion would cost one stack frame per byte *and* re-walk the shared tail once per position — quadratic in the literal's length. Depth is not steps, so the reduction budget cannot bound either one.
 ///
 /// The memo is what makes the sharing pay: hash-consing gives the tails one node, so each distinct node is classified once however many positions reach it. Per-position answers are unchanged — the cache records each node's own verdict, not whether some earlier position already reported it.
-fn locally_partial(
-    context: &mut Context,
-    term: &Term,
-    memo: &mut LocalMemo,
-) -> Result<bool, Error> {
+fn on_its_own(context: &mut Context, term: &Term, memo: &mut LocalMemo) -> Result<Totality, Error> {
     // Post-order over the term's DAG on the shared `Term::try_walk` driver: a memo hit settles at enter, and the exit combine sees every child's verdict. A `rec` group is classified at enter, the one place the walk can stop, so the budget's refusal ends the walk rather than reading as a verdict; a group that does not descend settles its node there, and one that does leaves the node to its children.
     let mut state = (context, memo);
     let walked = term.try_walk(
         &mut state,
         |state, term| {
-            if let Some(&partial) = state.1.get(term) {
-                return ControlFlow::Continue(Enter::Skip(partial));
+            if let Some(&own) = state.1.get(term) {
+                return ControlFlow::Continue(Enter::Skip(own));
             }
             if let Subterm::Rec(block) = &**term {
-                let group = block.group();
-                match group_totality(state.0, group) {
+                match group_totality(state.0, block.group()) {
                     Err(spent) => return ControlFlow::Break(spent),
-                    Ok(Totality::Partial) => {
-                        state.1.insert(term.clone(), true);
-                        return ControlFlow::Continue(Enter::Skip(true));
-                    }
                     Ok(Totality::Total) => {}
+                    Ok(_) => {
+                        state.1.insert(term.clone(), Totality::Unfounded);
+                        return ControlFlow::Continue(Enter::Skip(Totality::Unfounded));
+                    }
                 }
             }
             ControlFlow::Continue(Enter::Descend)
         },
-        |state, term, mut children| {
-            let partial = matches!(&**term, Subterm::Foreign(curios_core::Foreign { function, .. }) if function.diverges())
-                || children.any(|child| child);
-            state.1.insert(term.clone(), partial);
-            partial
+        |state, term, children| {
+            let own = match &**term {
+                Subterm::Foreign(curios_core::Foreign { function, .. }) if function.diverges() => {
+                    Totality::Partial
+                }
+                _ => Totality::Total,
+            };
+            let own = children.fold(own, Totality::max);
+            state.1.insert(term.clone(), own);
+            own
         },
     );
     match walked {
-        ControlFlow::Continue(partial) => Ok(partial),
+        ControlFlow::Continue(own) => Ok(own),
         ControlFlow::Break(spent) => Err(spent),
     }
 }
 
-/// Whether this definition is partial on its own account: it mentions an exit, or it contains a local `rec` group that does not descend.
-fn definition_is_locally_partial(
+/// What this definition is on its own account ([`on_its_own`]), over its body and its type.
+fn definition_on_its_own(
     context: &mut Context,
     definition: &Definition,
     memo: &mut LocalMemo,
-) -> Result<bool, Error> {
-    Ok(locally_partial(context, &definition.body, memo)?
-        || locally_partial(context, &definition.type_, memo)?)
+) -> Result<Totality, Error> {
+    Ok(on_its_own(context, &definition.body, memo)?.max(on_its_own(
+        context,
+        &definition.type_,
+        memo,
+    )?))
 }

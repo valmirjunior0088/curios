@@ -362,7 +362,7 @@ pub fn check_rec_group(
             enclosing[index] |= certifier.member_encloses_partial(group, index);
         }
         if certifier.group_verdict(group) != Some(Totality::Total) {
-            totality = Totality::Partial;
+            totality = Totality::Unfounded;
         }
 
         Ok(())

@@ -17,7 +17,7 @@ use {
     },
     curios_document::{
         Block, Declaration, Documentation, Entry, ExposureLine, Kind, Mark, Marked, Member,
-        ModuleDocumentation, Signature,
+        ModuleDocumentation, Signature, Totality,
     },
     curios_print::{Annotated, Printer, each_named, render_annotated},
     curios_surface::{
@@ -94,11 +94,15 @@ impl<'a> Checked<'a> {
             .is_some_and(|definition| definition.proof)
     }
 
-    /// Whether the certifier proved `name` total, where it classifies it.
-    fn total(&self, name: &curios_core::Global) -> Option<bool> {
+    /// What the certifier concluded of `name`'s termination, where it classifies it.
+    fn totality(&self, name: &curios_core::Global) -> Option<Totality> {
         self.certification
             .totality(name)
-            .map(curios_core::Totality::is_total)
+            .map(|totality| match totality {
+                curios_core::Totality::Total => Totality::Total,
+                curios_core::Totality::Partial => Totality::Partial,
+                curios_core::Totality::Unfounded => Totality::Unfounded,
+            })
     }
 }
 
@@ -729,7 +733,9 @@ impl Reader<'_> {
                 proof: defined
                     .as_ref()
                     .is_some_and(|name| self.checked.proof(name)),
-                total: defined.as_ref().and_then(|name| self.checked.total(name)),
+                totality: defined
+                    .as_ref()
+                    .and_then(|name| self.checked.totality(name)),
                 parties: Vec::new(),
                 // A witness has no name, and no mark names one.
                 named: match stated.name.is_empty() {

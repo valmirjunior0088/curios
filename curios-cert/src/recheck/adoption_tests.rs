@@ -255,7 +255,7 @@ fn chained_definitions(partial: bool) -> Definitions {
     core_text_module(&fill!(CHAINED, base))
 }
 
-/// A verdict that moves reaches what read it through a declaration whose terms stand: `base` made partial is judged, `middle`, which read its signature, is judged and comes out partial, and so does `top`, which read `middle` alone and whose terms are the baseline's. `apart` reads nothing that moved and keeps the baseline's verdict.
+/// A verdict that moves reaches what read it through a declaration whose terms stand: `base`, made to enclose a group that does not descend, is judged and comes out `Unfounded`, `middle`, which read its signature, is judged and comes out partial, and so does `top`, which read `middle` alone and whose terms are the baseline's. `apart` reads nothing that moved and keeps the baseline's verdict.
 ///
 /// Mutation-checked: with the declarations that read a moved one marked and theirs not, `top` keeps the baseline's `Total`.
 #[test]
@@ -267,10 +267,14 @@ fn a_verdict_that_moves_reaches_what_read_it_through_a_declaration_whose_terms_s
     let rechecked = walked_over(&edited, &baseline, &certification);
 
     assert_eq!(rechecked.refusals(), Vec::new());
-    for name in ["base", "middle", "top"] {
+    for (name, totality) in [
+        ("base", Totality::Unfounded),
+        ("middle", Totality::Partial),
+        ("top", Totality::Partial),
+    ] {
         assert_eq!(
             rechecked.certification().totality(&global(name)),
-            Some(Totality::Partial),
+            Some(totality),
             "{name}",
         );
     }

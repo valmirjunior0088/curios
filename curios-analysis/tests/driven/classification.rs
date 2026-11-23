@@ -15,7 +15,7 @@ use {
     curios_num::{Integer, Natural, Rounding},
 };
 
-/// Reading an argument's size through what stands before it is a probe: where the budget cannot afford the reading, the engine answers with the refusal. Reading the argument as nothing would classify the group `Partial`, a verdict with no cause in the term that the drivers would report as non-termination. The control is the same group with the budget to read it.
+/// Reading an argument's size through what stands before it is a probe: where the budget cannot afford the reading, the engine answers with the refusal. Reading the argument as nothing would classify the group `Unfounded`, a verdict with no cause in the term that the drivers would report as non-termination. The control is the same group with the budget to read it.
 #[test]
 fn a_size_the_budget_cannot_read_refuses_the_classification() {
     let nat = || Term::intrinsic(Intrinsic::NatType);
@@ -46,7 +46,7 @@ fn a_size_the_budget_cannot_read_refuses_the_classification() {
     assert!(group_totality(&mut starved, group).is_err_and(|error| error.is_exhausted()));
     assert_eq!(
         group_totality(&mut certifier(), group),
-        Ok(Totality::Partial)
+        Ok(Totality::Unfounded)
     );
 }
 

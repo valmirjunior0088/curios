@@ -51,13 +51,16 @@ fn a_huge_literal_call_argument_grades_without_expansion() {
     };
     let group = block.group();
 
-    // A constant argument never decreases, so the verdict is `Partial` — promptly.
-    assert_eq!(group_totality(&mut certifier, group), Ok(Totality::Partial));
+    // A constant argument never decreases, so the verdict is `Unfounded` — promptly.
+    assert_eq!(
+        group_totality(&mut certifier, group),
+        Ok(Totality::Unfounded)
+    );
 }
 
 /// Whether the engine finds a nullary self-call planted at one child position.
 ///
-/// The group is `rec f : Nat = <plant(f)>`, whose member takes no lambda and so has an empty parameter vector: a self-call from it is a 0x0 matrix, idempotent with no diagonal, so the verdict is `Partial` exactly when [`Walk::walk`] reached the planted occurrence and `Total` exactly when it did not. Nothing here needs to be well typed — the engine is a total function of post-zonk terms and types nothing — which is what lets one probe cover every child position of every variant.
+/// The group is `rec f : Nat = <plant(f)>`, whose member takes no lambda and so has an empty parameter vector: a self-call from it is a 0x0 matrix, idempotent with no diagonal, so the verdict is `Unfounded` exactly when [`Walk::walk`] reached the planted occurrence and `Total` exactly when it did not. Nothing here needs to be well typed — the engine is a total function of post-zonk terms and types nothing — which is what lets one probe cover every child position of every variant.
 fn call_is_seen(body: Term) -> bool {
     let mut certifier = Certifier::new(100_000, SYNTAX);
     let rec = Term::rec(
@@ -69,7 +72,7 @@ fn call_is_seen(body: Term) -> bool {
     };
     let group = block.group();
 
-    group_totality(&mut certifier, group) == Ok(Totality::Partial)
+    group_totality(&mut certifier, group) == Ok(Totality::Unfounded)
 }
 
 /// The `index`th placeholder child: a literal no walk reads as anything, distinct from every other so that replacing one names one position.
@@ -190,7 +193,7 @@ fn forms(term: &Term) -> Vec<&'static str> {
 ///
 /// This matters more here than anywhere else on the soundness board because this is the only analysis whose blindness *admits*. Every other one refuses when it cannot see — positivity answers `Mixed` at an out-of-set name, `whnf` goes stuck, inversion derives nothing at a `Prop`-valued position, an under-applied call is graded `Matrix::unknown` — while a call site the walk never visits contributes no edge, and a group with no edges is `Total`. A projected inner group left unwalked is exactly that: `rec f(n) -> False = (rec g(m) -> False = f(m); g)(n)` would close to no call whatsoever, both groups would classify `Total`, and `f(0)` would diverge through `g` while proof totality read the verdict.
 ///
-/// The probe needs no instrumentation because the engine types nothing: it is a total function of post-zonk terms, so an ill-typed fixture is a legitimate input. Each row plants a *nullary* self-call at one child position — the member takes no lambda, so a self-call from it is a 0x0 matrix, idempotent with no diagonal — which makes the verdict `Partial` exactly when the walk reached the plant and `Total` exactly when it did not.
+/// The probe needs no instrumentation because the engine types nothing: it is a total function of post-zonk terms, so an ill-typed fixture is a legitimate input. Each row plants a *nullary* self-call at one child position — the member takes no lambda, so a self-call from it is a 0x0 matrix, idempotent with no diagonal — which makes the verdict `Unfounded` exactly when the walk reached the plant and `Total` exactly when it did not.
 ///
 /// **The rows are the fold's, not a list kept here.** Each specimen is one form with a distinct marker in every child position; the fold is asked for its children, and the call is planted at each child it reports. A list written by hand holds a row for whatever its author thinks of, and passes while every position it forgot has none. Two things are asserted of every specimen before anything is planted: that the fold reports exactly the markers it was built from, so a specimen populating a field the fold does not visit fails here rather than passing unplanted, and that every form in `FORMS` has one.
 ///
@@ -572,7 +575,7 @@ fn a_self_calling_type_level_rec_leaves_the_walk_terminating() {
     assert_eq!(vectors.get(&name), Some(&Vec::new()));
 }
 
-/// Well-founded recursion's shape, put to the engine under the certifier: `rec f : (a : T) -> Nat = (a) => match a | c(g) => f(g(0)) end`, where `T`'s one constructor stores a function. The call descends on `a` only because `g(0)` reads as the payload `g` it came from — a function-typed payload is a branching node whose children are its applications. The control moves the applied function out of the constructor into a second parameter, `rec f : (a : T, g : (Nat) -> T) -> Nat = (a, g) => f(g(0), g)`, and is `Partial`: `g` is bound by no arm, so nothing relates `g(0)` to `a`, and a rule that read every application of a binder as a decrease would have accepted it.
+/// Well-founded recursion's shape, put to the engine under the certifier: `rec f : (a : T) -> Nat = (a) => match a | c(g) => f(g(0)) end`, where `T`'s one constructor stores a function. The call descends on `a` only because `g(0)` reads as the payload `g` it came from — a function-typed payload is a branching node whose children are its applications. The control moves the applied function out of the constructor into a second parameter, `rec f : (a : T, g : (Nat) -> T) -> Nat = (a, g) => f(g(0), g)`, and is `Unfounded`: `g` is bound by no arm, so nothing relates `g(0)` to `a`, and a rule that read every application of a binder as a decrease would have accepted it.
 #[test]
 fn an_application_of_a_constructor_payload_descends_only_from_its_arm() {
     let mut certifier = certifier();
@@ -627,7 +630,10 @@ fn an_application_of_a_constructor_payload_descends_only_from_its_arm() {
         panic!("the fixture changed shape");
     };
     let group = block.group();
-    assert_eq!(group_totality(&mut certifier, group), Ok(Totality::Partial));
+    assert_eq!(
+        group_totality(&mut certifier, group),
+        Ok(Totality::Unfounded)
+    );
 }
 
 /// A lambda applied to an arm's payload is graded as its contractum: the call inside reads the payload, which is below the scrutinee. This is the shape a convoy takes — an arm generalized over a hypothesis and applied back to it — and without the rule a proof that descends through one closes to an all-unknown matrix. The control applies the same lambda to an unrelated parameter, which must stay unread: the rule reads a binder as what it stands for, never as a decrease of its own.
@@ -684,7 +690,10 @@ fn a_lambda_applied_to_the_arm_payload_descends() {
         panic!("the fixture changed shape");
     };
     let group = block.group();
-    assert_eq!(group_totality(&mut certifier, group), Ok(Totality::Partial));
+    assert_eq!(
+        group_totality(&mut certifier, group),
+        Ok(Totality::Unfounded)
+    );
 }
 
 /// The same pair through a `let`: a binder aliasing the payload is below the scrutinee exactly as the payload is, and one aliasing an unrelated parameter is not.
@@ -740,7 +749,10 @@ fn a_let_alias_of_the_arm_payload_descends() {
         panic!("the fixture changed shape");
     };
     let group = block.group();
-    assert_eq!(group_totality(&mut certifier, group), Ok(Totality::Partial));
+    assert_eq!(
+        group_totality(&mut certifier, group),
+        Ok(Totality::Unfounded)
+    );
 }
 
 /// A binder forced to a top-level name is solved to it, bare or at a universe instance, as to a literal. No arm refines a top-level name, a case equation's key naming a local (`records_case_equation`), so the name is a value nothing in force reads back to the binder.
@@ -904,7 +916,7 @@ fn a_payload_stuck_on_a_neutral_is_read_through_its_arms() {
     }
 }
 
-/// A call's argument reduction cannot fire is read as no size: `rec f : (a : T) -> Nat = (a) => match a | c(t) => f(match g | false => t | true => t end) end`, both arms of the inner match the payload `t`, and with `g` a `Bool` the certifier holds no value for, the inner match is stuck on a neutral. A reader that took either arm of a stuck match would grade the call below `a`; `Driver::force` hands it back as it stands, the reader answers unread, and the group is `Partial`. The control defines `g` as `true`: the match fires to `t`, the payload, and the group is `Total`.
+/// A call's argument reduction cannot fire is read as no size: `rec f : (a : T) -> Nat = (a) => match a | c(t) => f(match g | false => t | true => t end) end`, both arms of the inner match the payload `t`, and with `g` a `Bool` the certifier holds no value for, the inner match is stuck on a neutral. A reader that took either arm of a stuck match would grade the call below `a`; `Driver::force` hands it back as it stands, the reader answers unread, and the group is `Unfounded`. The control defines `g` as `true`: the match fires to `t`, the payload, and the group is `Total`.
 #[test]
 fn a_call_argument_stuck_on_a_neutral_grades_unread() {
     let name = Global::Authored(Qualifier::from(["T"]));
@@ -940,7 +952,7 @@ fn a_call_argument_stuck_on_a_neutral_grades_unread() {
     };
     let group = block.group();
 
-    for (defined, expected) in [(false, Totality::Partial), (true, Totality::Total)] {
+    for (defined, expected) in [(false, Totality::Unfounded), (true, Totality::Total)] {
         let mut certifier = certifier();
         certifier
             .declare_induct(

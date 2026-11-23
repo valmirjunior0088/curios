@@ -373,7 +373,7 @@ impl Certifier<'_> {
     /// Close the innermost group's recorded calls to a verdict, and remember it for the rest of the walk — with `enclosing`, whether each member's signature or body enclosed a group of its own that does not descend.
     pub(super) fn close_group(&mut self, group: &RecGroup, enclosing: Vec<bool>) -> Totality {
         let Some(frame) = self.calls.frames.last_mut() else {
-            return Totality::Partial;
+            return Totality::Unfounded;
         };
         frame.caller = None;
         let read_by_value = mem::take(&mut frame.values).iter().any(Option::is_some);

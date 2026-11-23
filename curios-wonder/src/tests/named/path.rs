@@ -277,7 +277,7 @@ fn a_definition_is_answered_with_its_totality() {
     let totality = |path| described(program, path).expect("in scope").totality;
 
     assert_eq!(totality("/halve"), Some(Totality::Total));
-    assert_eq!(totality("/spin"), Some(Totality::Partial));
+    assert_eq!(totality("/spin"), Some(Totality::Unfounded));
     assert_eq!(totality("/std/Bool/not"), Some(Totality::Total));
     assert_eq!(
         described(POINT, "/Point")

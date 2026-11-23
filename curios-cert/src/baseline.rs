@@ -35,9 +35,9 @@ pub struct Filed<'a> {
 const ANSWERS: &str = "a filed record answers for every name its unit holds";
 
 impl<'a> Filed<'a> {
-    /// Whether the definition `name`, which this unit holds, is not known to terminate.
-    pub fn partial(&self, name: &Global) -> bool {
-        self.certification.totality(name).expect(ANSWERS) == Totality::Partial
+    /// The certifier's verdict on the definition `name`, which this unit holds.
+    pub fn totality(&self, name: &Global) -> Totality {
+        self.certification.totality(name).expect(ANSWERS)
     }
 
     /// The polarity vector of the family or record this unit holds under `name`: `None` where it holds none there.
@@ -60,7 +60,7 @@ impl<'a> Filed<'a> {
     /// What a signature read of `name`, a definition this unit holds, reads beside its terms.
     pub fn beside(&self, name: &Global) -> Beside<'a> {
         (
-            self.partial(name),
+            self.totality(name),
             self.polarities(name),
             self.variances(name),
             self.applications(name),
@@ -202,7 +202,7 @@ pub fn read_digest(
         held,
         family: globals.induct_decl(name),
         record: globals.struct_decl(name),
-        partial: globals.partial(name),
+        totality: globals.totality(name).unwrap_or(Totality::Total),
         polarities: globals.polarities(name),
         variances: globals.variances(name),
         applications: globals.applications(name),
@@ -211,12 +211,12 @@ pub fn read_digest(
     read.digest(body).map(Some)
 }
 
-/// [`read_digest`] of `name` as `module` holds it where `places` says, under the verdict `partial` and the vectors `polarities` and `variances`: what a walk reads of a declaration of its own unit, as it settled it or as the baseline holds it. `Ok(None)` where the module holds no such name.
+/// [`read_digest`] of `name` as `module` holds it where `places` says, under the verdict `totality` and the vectors `polarities` and `variances`: what a walk reads of a declaration of its own unit, as it settled it or as the baseline holds it. `Ok(None)` where the module holds no such name.
 pub fn held_digest(
     definitions: &Definitions,
     places: &Places,
     name: &Global,
-    (partial, polarities, variances, applications): Beside<'_>,
+    (totality, polarities, variances, applications): Beside<'_>,
     body: bool,
 ) -> Result<Option<String>, String> {
     let Some(held) = held(definitions, places, name) else {
@@ -226,7 +226,7 @@ pub fn held_digest(
         held,
         family: definitions.induct_decl(places, name),
         record: definitions.struct_decl(places, name),
-        partial,
+        totality,
         polarities,
         variances,
         applications,
@@ -235,9 +235,9 @@ pub fn held_digest(
     read.digest(body).map(Some)
 }
 
-/// What a signature read of a definition reads beside its terms: whether it is not known to terminate, the vectors of the entry it is the former of, and how it applies its parameters.
+/// What a signature read of a definition reads beside its terms: the certifier's verdict on it, the vectors of the entry it is the former of, and how it applies its parameters.
 pub type Beside<'a> = (
-    bool,
+    Totality,
     Option<&'a [Polarity]>,
     Option<&'a [Variance]>,
     Option<&'a Applications>,
@@ -257,7 +257,7 @@ struct Readable<'a> {
     held: Held<'a>,
     family: Option<&'a InductDecl>,
     record: Option<&'a StructDecl>,
-    partial: bool,
+    totality: Totality,
     polarities: Option<&'a [Polarity]>,
     variances: Option<&'a [Variance]>,
     applications: Option<&'a Applications>,
@@ -303,7 +303,7 @@ impl Readable<'_> {
             self.held.universes.clone(),
             family,
             record,
-            self.partial,
+            self.totality,
             self.polarities.map(<[Polarity]>::to_vec),
             self.variances.map(<[Variance]>::to_vec),
             self.applications.cloned(),
@@ -501,14 +501,14 @@ impl<'a> Adopting<'a> {
         }
     }
 
-    /// Record how `item`, judged by this walk where `module` holds it at the places `places` gives, came out against the baseline's declaration under each of its names: `partial` is the walk's classification of a name once the item is classified, and `polarities` and `variances` the vectors it has filed.
+    /// Record how `item`, judged by this walk where `module` holds it at the places `places` gives, came out against the baseline's declaration under each of its names: `totality` is the walk's classification of a name once the item is classified, and `polarities` and `variances` the vectors it has filed.
     ///
     /// **Told by the digest a read records** ([`held_digest`]), of the declaration as the walk settled it and as the baseline holds it: a part that digests alike is one to every judgment, and one that differs in a binder's name alone is told apart, so a record carried from the baseline digests what a walk that judged every declaration would.
     pub fn judged(
         &mut self,
         (definitions, places): (&Definitions, &Places),
         item: &Item,
-        partial: impl Fn(&Global) -> bool,
+        totality: impl Fn(&Global) -> Totality,
         polarities: &BTreeMap<Global, Vec<Polarity>>,
         variances: &BTreeMap<Global, Vec<Variance>>,
         applications: &BTreeMap<Global, Applications>,
@@ -518,7 +518,7 @@ impl<'a> Adopting<'a> {
         for name in item.declared_names() {
             let now = |body| {
                 let verdict = (
-                    partial(&name),
+                    totality(&name),
                     polarities.get(&name).map(Vec::as_slice),
                     variances.get(&name).map(Vec::as_slice),
                     applications.get(&name),
@@ -529,7 +529,7 @@ impl<'a> Adopting<'a> {
             };
             let then = |body| {
                 let verdict = (
-                    certification.totality(&name) != Some(Totality::Total),
+                    certification.totality(&name).unwrap_or_default(),
                     certification.polarities(&name),
                     certification.variances(&name),
                     certification.applications(&name),

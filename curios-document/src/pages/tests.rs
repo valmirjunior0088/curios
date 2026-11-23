@@ -31,7 +31,7 @@ fn declaration(kind: Kind, name: &str, named: &[&str], members: &[&str]) -> Decl
         opaque: false,
         derived: false,
         proof: false,
-        total: None,
+        totality: None,
         parties: Vec::new(),
         named: Qualifier::from(named.iter().copied()),
         chip: None,
@@ -49,7 +49,7 @@ fn witness(module: &[&str], text: &str, parties: &[&[&str]]) -> Declaration {
         opaque: false,
         derived: false,
         proof: false,
-        total: None,
+        totality: None,
         parties: parties
             .iter()
             .map(|party| Qualifier::from(party.iter().copied()))

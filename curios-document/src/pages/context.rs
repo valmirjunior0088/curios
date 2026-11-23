@@ -8,7 +8,7 @@ use {
     super::{Bundle, Paragraph, Span, paragraphs, spans, texts},
     crate::{
         Block, Declaration, Entry, ExposureLine, Kind, Marked, Member, ModuleDocumentation,
-        Signature,
+        Signature, Totality,
     },
     askama::Template,
     curios_common::{Class, Keyword, Qualifier},
@@ -632,13 +632,18 @@ fn facts(declaration: &Declaration) -> Vec<Fact> {
             "its type is a proposition: it states a fact, and its body proves it",
         )
     });
-    let total = declaration.total.map(|total| match total {
-        true => fact(
+    let total = declaration.totality.map(|totality| match totality {
+        Totality::Total => fact(
             "total",
             "plain",
             "proven total: it terminates on every input",
         ),
-        false => fact("partial", "", "not proven total"),
+        Totality::Partial => fact("partial", "", "not proven total"),
+        Totality::Unfounded => fact(
+            "unfounded",
+            "",
+            "its own recursion is not shown to descend, so no type computes through it",
+        ),
     });
 
     [representation, adopted, proof, total]

@@ -325,7 +325,7 @@ fn a_reader_of_a_moved_value_sort_is_judged_again() {
                 &low,
                 &low_places,
                 &global("G"),
-                (false, None, None, None),
+                (Totality::Total, None, None, None),
                 body
             )
             .expect("G digests"),
@@ -333,7 +333,7 @@ fn a_reader_of_a_moved_value_sort_is_judged_again() {
                 &high,
                 &high_places,
                 &global("G"),
-                (false, None, None, None),
+                (Totality::Total, None, None, None),
                 body
             )
             .expect("G digests"),

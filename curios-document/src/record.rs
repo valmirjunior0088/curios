@@ -71,6 +71,18 @@ pub enum Kind {
     Foreign,
 }
 
+/// What the certifier concluded of a definition's termination, as a page states it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[curios_archive::archived]
+pub enum Totality {
+    /// Proven to terminate on every input.
+    Total,
+    /// Not proven total, through what it reaches or a host row it calls; its own recursion descends.
+    Partial,
+    /// Its own recursion is not shown to descend, so no type computes through it.
+    Unfounded,
+}
+
 /// How a declaration's source writes the members its representation shows: what follows its head, what leads and trails each member, what closes the block, and whether its members stand indented under the head.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Block {
@@ -121,8 +133,8 @@ pub struct Declaration {
     pub derived: bool,
     /// Whether the declaration is a proof: one a checker marks as written at a proposition, or as a function into one. Read off the check of the unit, the one fact of a page the surface tree does not state.
     pub proof: bool,
-    /// Whether the certifier proved the definition total, where it classifies it at all: none for what is no definition, a type or a witness.
-    pub total: Option<bool>,
+    /// What the certifier concluded of the definition's termination, where it classifies it at all: none for what is no definition, a type or a witness.
+    pub totality: Option<Totality>,
     /// What a witness takes part in: the concept it witnesses and each declaration its key names, by the path a consumer names them. Empty for anything else.
     pub parties: Vec<Qualifier>,
     /// The path every [`Mark`] names this declaration by: its own, the path of the module that lists it with its `name`, where that module's page is where a consumer finds it, and the one another page shows it by where it is shown there too, so two entries of one declaration name one path. Never a path inside a root no consumer can name. A witness, which no mark names, carries the path of the module that declares it.

@@ -20,7 +20,7 @@ fn declaration(home: &Qualifier, name: &str, kind: Kind) -> Declaration {
         opaque: false,
         derived: false,
         proof: false,
-        total: None,
+        totality: None,
         parties: Vec::new(),
         named: home.with(name),
         chip: None,
@@ -220,17 +220,24 @@ fn a_declaration_states_what_its_source_does_not_show() {
     assert_eq!(
         stated(&Declaration {
             proof: true,
-            total: Some(true),
+            totality: Some(Totality::Total),
             ..of(Kind::Definition, false)
         }),
         [fact("proof", "proof"), fact("total", "plain")]
     );
     assert_eq!(
         stated(&Declaration {
-            total: Some(false),
+            totality: Some(Totality::Partial),
             ..of(Kind::Definition, false)
         }),
         [fact("partial", "")]
+    );
+    assert_eq!(
+        stated(&Declaration {
+            totality: Some(Totality::Unfounded),
+            ..of(Kind::Definition, false)
+        }),
+        [fact("unfounded", "")]
     );
     assert_eq!(
         stated(&Declaration {
