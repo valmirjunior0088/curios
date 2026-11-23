@@ -32,6 +32,9 @@ pub use inline::*;
 mod merge;
 pub use merge::*;
 
+mod negated;
+pub use negated::*;
+
 mod protocol;
 pub use protocol::*;
 
@@ -138,6 +141,10 @@ pub fn optimize(module: &mut Module) {
             | pass!("cps::answer_row_tests", answer_row_tests(module))
             | pass!("cps::answer_window_guards", answer_window_guards(module))
             | pass!("cps::dedupe_intrinsics", dedupe_intrinsics(module))
+            | pass!(
+                "cps::fold_negated_comparisons",
+                fold_negated_comparisons(module)
+            )
             | pass!("cps::fuse_append_chains", fuse_append_chains(module))
             | pass!("cps::flatten_indexed_lists", flatten_indexed_lists(module))
             | pass!(
