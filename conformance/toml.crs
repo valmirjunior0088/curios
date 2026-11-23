@@ -1,0 +1,104 @@
+-- toml-test's TOML 1.0 documents, decoded by `Toml/decode`: each invalid one refused, and each valid one read to the value the tagged JSON beside it states, compared as toml-test compares the two, a NaN of either sign a NaN and floats as IEEE compares them. The one argument is the directory holding toml-test's lists and cases; every case answered otherwise is named, and the program fails where any is.
+use /std/{Str, List, Option, Result, Try, Io, Proc, Fmt, Json, Toml, Map, Path, File, Int, Flt,
+    Bool, Monad};
+use /std/time/{Date, Time, DateTime, OffsetDateTime};
+
+--- The member `key` of `members`, where it is a string.
+let member(members: List({Str, Json}), key: Str) -> Option(Str) =
+    match List/find(members, (m: {Str, Json}) => m.0 == key)
+    | some((_, str(text))) => Option/some(text)
+    | _ => Option/none()
+    end;
+
+--- Whether the floats `a` and `b` are one value as toml-test compares them: a NaN of either sign is a NaN, and any other float is compared as IEEE compares it.
+let same_float(a: Flt, b: Flt) -> Bool =
+    Flt/is_nan(a) && Flt/is_nan(b) || a <= b && b <= a;
+
+--- Whether the scalar `value` is what toml-test's tag `kind` and text `text` state, the text read by `/std`'s own reader of its kind rather than by the decoder under test.
+let scalar(value: Toml, kind: Str, text: Str) -> Bool =
+    match value
+    | str(s) => kind == "string" && s == text
+    | int(i) =>
+        kind == "integer" && Option/map(Int/of_str(text), (j: Int) => i == j) == Option/some(true)
+    | flt(f) =>
+        kind == "float"
+            && Option/map(Flt/of_str(text), (g: Flt) => same_float(f, g)) == Option/some(true)
+    | bool(b) => kind == "bool" && text == Bool/to_str(b)
+    | offset_date_time(odt) => kind == "datetime" && OffsetDateTime/of_str(text) == Option/some(odt)
+    | local_date_time(dt) => kind == "datetime-local" && DateTime/of_str(text) == Option/some(dt)
+    | local_date(d) => kind == "date-local" && Date/of_str(text) == Option/some(d)
+    | local_time(t) => kind == "time-local" && Time/of_str(text) == Option/some(t)
+    | _ => false
+    end;
+
+--- Whether `value` is what the tagged JSON `expected` states: a table an object of its keys, an array an array of its elements in order, and a scalar the object toml-test tags it with, its `type` and its `value`.
+let agree(value: Toml, expected: Json) -> Bool =
+    match (value, expected)
+    | (table(entries), obj(members)) =>
+        let pairs = Map/to_list(entries);
+        List/len(pairs) == List/len(members)
+            && List/all(pairs, (pair: {Str, Toml}) =>
+                match List/find(members, (m: {Str, Json}) => m.0 == pair.0)
+                | some(m) => agree(pair.1, m.1)
+                | none() => false
+                end)
+    | (arr(items), arr(wanted)) =>
+        List/len(items) == List/len(wanted)
+            && List/all(List/zip(items, wanted), (pair: {Toml, Json}) => agree(pair.0, pair.1))
+    | (_, obj(members)) =>
+        match (member(members, "type"), member(members, "value"))
+        | (some(kind), some(text)) => List/len(members) == 2 && scalar(value, kind, text)
+        | _ => false
+        end
+    | _ => false
+    end;
+
+--- The file at `name` under `root`, as text where it is text.
+let text(root: Path, name: Str) -> Try(Io, Str, Option(Str)) =
+    let bytes =
+        Try/map_failure(
+            File/read_all(Path/join(root, Path/of_str(name))),
+            (_) => Str/concat("cannot read ", name))!;
+    Try/pure(Result/to_option(Str/of_bytes(bytes)));
+
+--- What is wrong with the case `name` under `root`, or nothing.
+let judged(root: Path, name: Str) -> Try(Io, Str, Option(Str)) =
+    let source = text(root, name)!;
+    let decoded = Option/bind(source, (s: Str) => Result/to_option(Toml/decode(s)));
+    match (Str/starts_with(name, "invalid/"), decoded)
+    | (true, none()) => Try/pure(Option/none())
+    | (true, some(_)) =>
+        Try/pure(Option/some(Str/concat(name, " is read, which a decoder must refuse")))
+    | (false, none()) =>
+        Try/pure(Option/some(Str/concat(name, " is refused, which a decoder must read")))
+    | (false, some(table)) =>
+        let tagged = Str/concat(Option/unwrap_or(Str/strip_suffix(name, "toml"), name), "json");
+        let json = text(root, tagged)!;
+        match Option/bind(json, (s: Str) => Result/to_option(Json/decode(s)))
+        | none() => Try/raise(Str/concat(tagged, " is no JSON"))
+        | some(expected) =>
+            match agree(Toml/table(table), expected)
+            | true => Try/pure(Option/none())
+            | false =>
+                Try/pure(
+                    Option/some(Str/concat(name, " is read to a value other than its JSON states")))
+            end
+        end
+    end;
+
+let execute() -> Try(Io, Str, {}) =
+    let arguments = Proc/args()!;
+    let given =
+        Option/to_result(List/try_get(arguments, 1), "the corpus's directory is the one argument")!;
+    let root = Path/of_bytes(given);
+    let listed = Option/to_result(text(root, "files-toml-1.0.0")!, "toml-test's list is not text")!;
+    let cases = List/filter(Str/split(listed, "\n"), (line: Str) => Str/ends_with(line, ".toml"));
+    let answers = List/traverse(cases, (name: Str) => judged(root, name))!;
+    let wrong = List/filter_map(answers, (answer: Option(Str)) => answer);
+    let () = Monad/lift(Fmt/print("% cases\n")(List/len(cases)))!;
+    match List/len(wrong)
+    | 0 => Try/pure(())
+    | count => Try/raise(Str/join("\n", [Fmt/render("% answered otherwise:")(count), ..wrong]))
+    end;
+
+execute()

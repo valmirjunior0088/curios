@@ -77,6 +77,13 @@ url = "https://github.com/nst/JSONTestSuite/archive/{.corpora.json.version}.tar.
 path = "test_parsing"
 sha256 = "abc15ec8c3df7ff6fa771b051a8950012403b241af2688e82374e0bcafcdd21c"
 
+# toml-test's valid and invalid documents, each valid one beside the tagged JSON of its value, with the list of those each version of TOML holds.
+[corpora.toml]
+version = "96fd088448ec0f4d9f061c730ed7854399c46faf"
+url = "https://github.com/toml-lang/toml-test/archive/{.corpora.toml.version}.tar.gz"
+path = "tests"
+sha256 = "2af617ef8e263f3c6f4932ea28aa5bc659cc1b6994ff498e7b7ac3771b06dbb0"
+
 
 [handoff]
 description = "Run every check the handoff holds work to: each subject's steps, each after what it requires and consumes"

@@ -1,8 +1,16 @@
 description = "The standard library's codecs held to the corpora of the standards they read, each by a Curios program over the corpus the task files pin"
+# Each check is a Curios program over `File`, `fs` and the codec it holds, so a corpus exercises `/std` as a program does; Rust tests handed the cases would hold the codec through no program.
 
 [json]
 description = "Decode every document of JSONTestSuite with `Json/decode`, each answered as its name's prefix asks: a `y_` document read, an `n_` one refused, an `i_` one either; fail naming every case answered otherwise"
 consumes = [".compiler.launcher.produces.binary"]
 run = [
     ["cargo", "run", "--quiet", "--package", "curios", "--", "run", "conformance/json.crs", "{.corpora.json}"],
+]
+
+[toml]
+description = "Decode every TOML 1.0 document of toml-test with `Toml/decode`: each invalid one refused, each valid one read to the value the tagged JSON beside it states, its scalars read by `/std`'s own readers; fail naming every case answered otherwise"
+consumes = [".compiler.launcher.produces.binary"]
+run = [
+    ["cargo", "run", "--quiet", "--package", "curios", "--", "run", "conformance/toml.crs", "{.corpora.toml}"],
 ]
