@@ -1,6 +1,6 @@
 # What the tree is held to outside it is checked by one group
 
-**Adopted by the user on 2026-11-22; its next step waits on [tools/101](101-a-tool-a-step-runs-is-fetched-at-its-digest-and-named-by-the-step.md), whose fetching it extends.** A check of the tree against something it does not own — a standard's corpus, or a revision published elsewhere — is a step of `conformance`, a group apart from the suite as `workspace caches` is, which the handoff requires and a workflow job runs.
+**Adopted by the user on 2026-11-22; its next step is the decision of its two open questions, then stage 1, a ready delivery; it extends the fetching [`xtask`'s README](../../../xtask/README.md#a-tool-a-step-runs-is-fetched-at-its-digest-and-named-by-the-step) states.** A check of the tree against something it does not own — a standard's corpus, or a revision published elsewhere — is a step of `conformance`, a group apart from the suite as `workspace caches` is, which the handoff requires and a workflow job runs.
 
 ## What is wrong today
 
