@@ -73,71 +73,68 @@ fn reached(
     Ok(reached)
 }
 
-/// Refuse the first declaration among `foreigns` that nothing `answered` names and the host does not answer, by what would answer it: a provider that answers it and states no table for `target`, which is the author's word that the target links nothing for it, or a provider in a manifest's `[foreign]`, which a loose program has none to write in.
-fn unanswered(
-    manifest: Option<&Path>,
-    foreigns: &ForeignStore,
-    elsewhere: &[Provider],
-    target: Target,
-    answered: impl Fn(&str) -> bool,
-) -> Result<(), Box<Report>> {
-    let Some(name) = foreigns
+/// The first declaration among `foreigns` that nothing `answered` names and the host does not answer: what a page, beside which no engine stands to ask, is refused for before anything is written.
+fn first_unanswered(foreigns: &ForeignStore, answered: impl Fn(&str) -> bool) -> Option<&str> {
+    foreigns
         .iter()
         .map(|function| function.name())
         .find(|name| !answered(name) && !host_answers(name))
-    else {
-        return Ok(());
-    };
+}
 
+/// The refusal of `name`, a declaration nothing answers, by what would answer it among `providers`: a provider that answers it and states no table for `target`, which is the author's word that the target links nothing for it, or a provider in a manifest's `[foreign]`, which a loose program has none to write in.
+fn unanswered(
+    name: &str,
+    providers: &[&Provider],
+    manifest: Option<&Path>,
+    target: Target,
+) -> Box<Report> {
     let refused = Refused::of("no implementation");
     let spelled = target.spelled();
 
-    Err(
-        match elsewhere
-            .iter()
-            .find(|provider| provider.foreign.answers.contains_key(name))
-        {
-            Some(Provider {
-                package,
-                directory,
-                name: row,
-                ..
-            }) => {
-                let refused = refused
-                    .stating(format_args!(
-                        "`{name}` is answered by the foreign row `{row}` of `/{package}`"
-                    ))
-                    .stating(format_args!(
-                        "that row states no `[foreign.{row}.{spelled}]`"
-                    ))
-                    .stating(format_args!(
-                        "the {spelled} target has nothing to link for it"
-                    ));
-                // A gateway is tested natively through a module standing in for it, and against the gateway itself by a test serve, so the native refusal names both doors.
-                let refused = match target {
-                    Target::Native => refused
-                        .stating(format_args!("a `.wasm` standing in for its gateway, stated as `[foreign.{row}.native]`, is what `run` and `test` link"))
-                        .stating("`test --target browser` runs its tests against the gateway"),
-                    Target::Browser => refused,
-                };
+    match providers
+        .iter()
+        .find(|provider| provider.foreign.answers.contains_key(name))
+    {
+        Some(Provider {
+            package,
+            directory,
+            name: row,
+            ..
+        }) => {
+            let refused = refused
+                .stating(format_args!(
+                    "`{name}` is answered by the foreign row `{row}` of `/{package}`"
+                ))
+                .stating(format_args!(
+                    "that row states no `[foreign.{row}.{spelled}]`"
+                ))
+                .stating(format_args!(
+                    "the {spelled} target has nothing to link for it"
+                ));
+            // A gateway is tested natively through a module standing in for it, and against the gateway itself by a test serve, so the native refusal names both doors.
+            let refused = match target {
+                Target::Native => refused
+                    .stating(format_args!("a `.wasm` standing in for its gateway, stated as `[foreign.{row}.native]`, is what `run` and `test` link"))
+                    .stating("`test --target browser` runs its tests against the gateway"),
+                Target::Browser => refused,
+            };
 
-                written(directory, row).refuse(refused)
-            }
-            None => {
-                let refused = refused.stating(format_args!("`{name}` is declared `foreign`"));
+            written(directory, row).refuse(refused)
+        }
+        None => {
+            let refused = refused.stating(format_args!("`{name}` is declared `foreign`"));
 
-                match manifest {
-                    Some(manifest) => refused
-                        .stating("no `[foreign]` row of the package's manifests names an export that answers it")
-                        .about_path(manifest),
-                    None => refused
-                        .stating("a `foreign` is answered by a module that a `[foreign]` row of a manifest names")
-                        .stating("a loose program has no manifest to write one in")
-                        .about_named(name),
-                }
+            match manifest {
+                Some(manifest) => refused
+                    .stating("no `[foreign]` row of the package's manifests names an export that answers it")
+                    .about_path(manifest),
+                None => refused
+                    .stating("a `foreign` is answered by a module that a `[foreign]` row of a manifest names")
+                    .stating("a loose program has no manifest to write one in")
+                    .about_named(name),
             }
-        },
-    )
+        }
+    }
 }
 
 /// The foreign row `row` of the package whose manifest sits in `directory`: where a refusal of what the row declares stands.
@@ -156,12 +153,30 @@ pub fn unlinked(
         .and_then(|governing| declared_modules(&governing).ok())
         .unwrap_or_default();
 
-    refused(unlinked, &providers, manifest)
+    refused(
+        unlinked,
+        &providers.iter().collect::<Vec<_>>(),
+        manifest,
+        Target::Native,
+    )
 }
 
-/// The report of what linking refused: at the row that declares the module it is said of, found among `providers` by its package and its name, and about the manifest, or the program where it has none, otherwise.
-fn refused(unlinked: Unlinked, providers: &[Provider], manifest: Option<&Path>) -> Box<Report> {
-    let Unlinked { tag, facts, module } = unlinked;
+/// The report of what linking refused for `target`: of a declaration nothing answers, by what among `providers` would have ([`unanswered`]); otherwise at the row that declares the module it is said of, found among `providers` by its package and its name, and about the manifest, or the program where it has none.
+fn refused(
+    unlinked: Unlinked,
+    providers: &[&Provider],
+    manifest: Option<&Path>,
+    target: Target,
+) -> Box<Report> {
+    let Unlinked {
+        tag,
+        facts,
+        module,
+        unanswered: declaration,
+    } = unlinked;
+    if let Some(declaration) = declaration {
+        return unanswered(&declaration, providers, manifest, target);
+    }
     let mut said = Said::line(tag);
     for fact in facts {
         said.stating(fact);
@@ -230,15 +245,17 @@ pub fn bindings_of(
         });
     }
 
+    let providers = reached
+        .stating
+        .iter()
+        .chain(&reached.elsewhere)
+        .collect::<Vec<_>>();
     let bindings = plugin_bindings(foreigns, modules)
-        .map_err(|unlinked| refused(unlinked, &reached.stating, manifest))?;
-    unanswered(
-        manifest,
-        foreigns,
-        &reached.elsewhere,
-        Target::Native,
-        |name| bindings.answers(name),
-    )?;
+        .map_err(|unlinked| refused(unlinked, &providers, manifest, Target::Native))?;
+    // Linked as the run links, entering nothing: whether each reached row is answered, and at its declaration's types, is the engine's one judgment, and what it refuses is worded here from what the package graph says of the row.
+    bindings
+        .check(foreigns)
+        .map_err(|unlinked| refused(unlinked, &providers, manifest, Target::Native))?;
 
     Ok(bindings)
 }
@@ -310,19 +327,21 @@ pub fn linked_of(
         });
     }
 
-    unanswered(
-        manifest,
-        foreigns,
-        &reached.elsewhere,
-        Target::Browser,
-        |name| {
-            linked.iter().any(|row| {
-                row.answers
-                    .iter()
-                    .any(|(declaration, _)| declaration == name)
-            })
-        },
-    )?;
+    let answered = |name: &str| {
+        linked.iter().any(|row| {
+            row.answers
+                .iter()
+                .any(|(declaration, _)| declaration == name)
+        })
+    };
+    if let Some(name) = first_unanswered(foreigns, answered) {
+        return Err(unanswered(
+            name,
+            &reached.elsewhere.iter().collect::<Vec<_>>(),
+            manifest,
+            Target::Browser,
+        ));
+    }
 
     Ok(linked)
 }

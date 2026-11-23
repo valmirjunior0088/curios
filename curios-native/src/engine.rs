@@ -572,6 +572,7 @@ fn answering<'a, T>(
             Unlinked::of("no implementation")
                 .stating(format_args!("`{name}` is declared `foreign`"))
                 .stating("no module answers it, and this host does not")
+                .unanswered(name)
         })?;
 
     let signature = declared.signature();

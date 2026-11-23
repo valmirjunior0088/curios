@@ -176,8 +176,8 @@ fn refused(directory: &Path, output: &Path, arguments: &[&str]) -> String {
     String::from_utf8_lossy(&compiled.stderr).into_owned()
 }
 
-/// A program that calls a `foreign` of its own, which no `[foreign]` row answers.
-const UNANSWERED: &str = "foreign frobnicate(Nat) -> Nat;\nlet main() -> /std/Io({}) = let n = frobnicate(3)!;\n/std/print(/std/Nat/to_str(n));\nmain()\n";
+/// A program that calls a `foreign` of its own, which no `[foreign]` row answers, and declares a test that calls it too.
+const UNANSWERED: &str = "foreign frobnicate(Nat) -> Nat;\nlet main() -> /std/Io({}) = let n = frobnicate(3)!;\n/std/print(/std/Nat/to_str(n));\ntest frobbed = let n = frobnicate(3)!;\n/std/Test/equal(n, 6);\nmain()\n";
 
 /// `compile` links what it bundles before it writes, as `run` links before it runs: a reached row nothing answers is refused by its name and by what would answer it, a `[foreign]` row, and no executable is written that its launcher would refuse at every start.
 #[test]
@@ -282,7 +282,7 @@ fn a_row_with_no_native_table_is_refused_natively_by_name() {
     );
 }
 
-/// A loose program has no manifest to write a `[foreign]` row in, and `compile` and `run` both say so of a row of its own, where the link would say only that nothing answered.
+/// A loose program has no manifest to write a `[foreign]` row in, and `compile`, `run` and `test` each say so of a row of its own, where the link would say only that nothing answered — `test` once, before any test runs, as the other two do before a step.
 #[test]
 fn a_loose_program_is_told_it_has_no_manifest_to_answer_its_foreign_in() {
     let root = Temporary::new("cli-bundle", "loose");
@@ -316,6 +316,18 @@ fn a_loose_program_is_told_it_has_no_manifest_to_answer_its_foreign_in() {
         "{}",
         String::from_utf8_lossy(&run.stderr)
     );
+
+    let tested = Command::new(env!("CARGO_BIN_EXE_curios"))
+        .env_remove(CABINET)
+        .args(["test", "loose.crs"])
+        .current_dir(&*root)
+        .output()
+        .expect("run the compiler");
+    let said = String::from_utf8_lossy(&tested.stderr);
+
+    assert_eq!(tested.status.code(), Some(1), "{said}");
+    assert!(said.contains(expected), "{said}");
+    assert!(!said.contains("frobbed"), "a test ran: {said}");
 }
 
 /// What a run refuses of a package's modules is refused by `compile` too: two rows that claim one declaration, where the manifest is read, and an export that answers another type than its declaration crosses as, where the two are linked.

@@ -318,11 +318,8 @@ fn dispatch() -> Result<(), Failure> {
                 foreigns,
                 tree,
             } = compiled?;
+            // Linked as the run links, entering nothing, so what could not be linked is the compiler's to refuse, at the row that declares it, before the program has taken a step.
             let bindings = bindings_of(manifest.as_deref(), &foreigns, cabinet)?;
-            // Linked here as the run links, entering nothing, so what could not be linked is the compiler's to refuse, at the row that declares it, before the program has taken a step.
-            bindings
-                .check(&foreigns)
-                .map_err(|refusal| unlinked(refusal, manifest.as_deref(), cabinet))?;
 
             // Nothing announces the run: what follows is the program's own output, written past the transcript.
             tree.close();
@@ -525,9 +522,6 @@ fn dispatch() -> Result<(), Failure> {
 
                     // Linked here as a run links, entering nothing: the executable's launcher has these modules and its host and no other answer, so what it would refuse at every start is refused before the executable is written.
                     let bindings = bindings_of(manifest.as_deref(), &foreigns, cabinet)?;
-                    bindings
-                        .check(&foreigns)
-                        .map_err(|refusal| unlinked(refusal, manifest.as_deref(), cabinet))?;
 
                     // Written out here, where Cranelift is, so the launcher only ever deserializes: that is what lets a program declaring `foreign` reach a machine with no compiler, no manifest and no sources, carrying the modules answering it inside its own image.
                     let plugins = bindings

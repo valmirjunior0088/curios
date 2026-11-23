@@ -10,6 +10,8 @@ pub struct Unlinked {
     pub tag: &'static str,
     pub facts: Vec<String>,
     pub module: Option<(String, String)>,
+    /// The `foreign` declaration nothing answers, where that is what is refused: the compiler says what of the program's manifests would have answered it.
+    pub unanswered: Option<String>,
 }
 
 impl Unlinked {
@@ -19,7 +21,14 @@ impl Unlinked {
             tag,
             facts: Vec::new(),
             module: None,
+            unanswered: None,
         }
+    }
+
+    /// This refusal, of the declaration `name`, which nothing answers.
+    pub fn unanswered(mut self, name: &str) -> Self {
+        self.unanswered = Some(name.to_string());
+        self
     }
 
     /// This refusal, resting on `fact` as well.
