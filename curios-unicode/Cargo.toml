@@ -9,9 +9,17 @@ description = "The Unicode Character Database the toolchain pins: each scalar's 
 workspace = true
 
 [features]
-# The conformance cases of `GraphemeBreakTest.txt`, for the tests of a crate that segments text by these tables in another language: `curios-prelude`'s, whose segmentation is Curios.
-test-support = []
+# The conformance cases of `GraphemeBreakTest.txt` and `NormalizationTest.txt`, fetched at their pinned digests, for the tests of a crate that segments and normalizes text by these tables in another language: `curios-prelude`'s, whose segmentation and normalization are Curios.
+test-support = ["dep:curios-download"]
+
+# Test support fetches the conformance files as the build script fetches the tables' files, where a test asks for them alone.
+[dependencies]
+curios-download = { workspace = true, optional = true }
 
 # The pinned files are fetched, checked and kept as every build script that fetches does.
 [build-dependencies]
+curios-download = { workspace = true }
+
+# The same fetch for this crate's own tests, which compile test support without the feature.
+[dev-dependencies]
 curios-download = { workspace = true }

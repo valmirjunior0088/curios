@@ -251,7 +251,7 @@ fn every_conformance_case_normalizes_through_the_library_as_the_database_states(
     let cases = normalization_cases()
         .iter()
         .map(|case| {
-            let columns = case.map(|column| {
+            let columns = case.each_ref().map(|column| {
                 let text: String = column
                     .iter()
                     .map(|&scalar| {

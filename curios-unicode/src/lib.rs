@@ -20,7 +20,7 @@ pub use packed::{
     class_codes, packed_mappings, packed_normalization, packed_tables,
 };
 
-#[cfg(feature = "test-support")]
+#[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 
 #[cfg(test)]

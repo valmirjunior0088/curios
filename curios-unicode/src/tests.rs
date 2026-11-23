@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{test_support::*, *};
 
 /// The scalars of a conformance case as the text they spell.
 fn spelled(scalars: &[u32]) -> String {
@@ -10,9 +10,10 @@ fn spelled(scalars: &[u32]) -> String {
 
 #[test]
 fn every_conformance_case_segments_into_the_clusters_it_states() {
+    let cases = grapheme_break_cases();
     let mut failed = Vec::new();
 
-    for case in GRAPHEME_BREAK_CASES {
+    for case in &cases {
         let text = spelled(&case.concat());
         let found: Vec<String> = graphemes(&text).map(str::to_string).collect();
         let stated: Vec<String> = case.iter().map(|cluster| spelled(cluster)).collect();
@@ -25,7 +26,7 @@ fn every_conformance_case_segments_into_the_clusters_it_states() {
         failed.is_empty(),
         "{} of {} cases segment otherwise:\n{}",
         failed.len(),
-        GRAPHEME_BREAK_CASES.len(),
+        cases.len(),
         failed.join("\n")
     );
 }

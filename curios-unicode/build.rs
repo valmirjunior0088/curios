@@ -22,8 +22,8 @@ use {
 /// The version of the database every table is built from.
 const VERSION: &str = "18.0.0";
 
-/// Every file read, by its path under the version's `ucd/` directory, with its SHA-256.
-const FILES: [(&str, &str); 11] = [
+/// Every file the tables are built from, by its path under the version's `ucd/` directory, with its SHA-256: the conformance files beside them are test support's, `src/test_support.rs`, which no build reads.
+const FILES: [(&str, &str); 9] = [
     (
         "EastAsianWidth.txt",
         "a0cf29eacd00cfcaec4381c6b7c281685f18dbb4e7ff82b4076ccb342ca839aa",
@@ -39,10 +39,6 @@ const FILES: [(&str, &str); 11] = [
     (
         "DerivedCoreProperties.txt",
         "09c928886a178fcafd93c29e4bd59073a058e5a100b716d425cb563ab50f68c9",
-    ),
-    (
-        "auxiliary/GraphemeBreakTest.txt",
-        "b0cf047ee94485bbdc846de2b902f5f8a815f6b674f9d04223cddadd91c9df31",
     ),
     (
         "UnicodeData.txt",
@@ -63,10 +59,6 @@ const FILES: [(&str, &str); 11] = [
     (
         "DerivedNormalizationProps.txt",
         "98ac7f67d985fe781e317f6182e885e94cabb0c314769e6dd73e48b226931ccd",
-    ),
-    (
-        "NormalizationTest.txt",
-        "25a50d816764b04abfb4a646d3eb2b2a803284c3873d9a06757b94fe4513dde3",
     ),
 ];
 
@@ -501,27 +493,6 @@ fn compositions(
     pairs
 }
 
-/// Every case of `NormalizationTest.txt`: its five columns, each the scalars it holds.
-fn normalization_cases(text: &str) -> Vec<[Vec<u32>; 5]> {
-    text.lines()
-        .map(|line| line.split('#').next().unwrap_or("").trim())
-        .filter(|content| !content.is_empty() && !content.starts_with('@'))
-        .map(|content| {
-            let columns: Vec<Vec<u32>> = content
-                .split(';')
-                .take(5)
-                .map(|column| {
-                    column
-                        .split_whitespace()
-                        .map(|hex| u32::from_str_radix(hex, 16).expect("a scalar in hexadecimal"))
-                        .collect()
-                })
-                .collect();
-            columns.try_into().expect("a case has five columns")
-        })
-        .collect()
-}
-
 /// The canonical combining classes as the Rust they are written to: each run of scalars of one class but `0`.
 fn combining_class_table(out: &mut String, each: &[usize]) {
     out.push_str(
@@ -556,44 +527,21 @@ fn composition_table(out: &mut String, pairs: &[(usize, usize, usize)]) {
     out.push_str("];\n\n");
 }
 
-/// Every case of the conformance file: the clusters a run of scalars segments into.
-fn cases(text: &str) -> Vec<Vec<Vec<u32>>> {
-    text.lines()
-        .map(|line| line.split('#').next().unwrap_or("").trim())
-        .filter(|content| !content.is_empty())
-        .map(|content| {
-            let mut clusters: Vec<Vec<u32>> = Vec::new();
-            for token in content.split_whitespace() {
-                match token {
-                    "÷" => clusters.push(Vec::new()),
-                    "×" => {}
-                    hex => clusters
-                        .last_mut()
-                        .expect("a case opens with a boundary")
-                        .push(u32::from_str_radix(hex, 16).expect("a scalar in hexadecimal")),
-                }
-            }
-            clusters.retain(|cluster| !cluster.is_empty());
-            clusters
-        })
-        .collect()
-}
-
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");
+    // The version is stated once, here, and test support fetches the conformance files at it.
+    println!("cargo::rustc-env=CURIOS_UNICODE_VERSION={VERSION}");
 
     let [
         width,
         emoji,
         grapheme,
         derived,
-        conformance,
         unicode_data,
         properties,
         special,
         folded,
         normalization,
-        normalization_conformance,
     ] = FILES.map(|(path, sha256)| text(path, sha256));
 
     let second = |fields: &[&str]| fields.get(1).map(|class| (*class).to_string());
@@ -720,36 +668,6 @@ fn main() {
             &binary(&normalization, "Full_Composition_Exclusion"),
         ),
     );
-
-    out.push_str(
-        "/// Every case of `GraphemeBreakTest.txt`: a run of scalars as the clusters it segments into.\n#[cfg(any(test, feature = \"test-support\"))]\npub(crate) static GRAPHEME_BREAK_CASES: &[&[&[u32]]] = &[\n",
-    );
-    for case in cases(&conformance) {
-        let clusters: Vec<String> = case
-            .iter()
-            .map(|cluster| {
-                let scalars: Vec<String> = cluster
-                    .iter()
-                    .map(|scalar| format!("0x{scalar:X}"))
-                    .collect();
-                format!("&[{}]", scalars.join(", "))
-            })
-            .collect();
-        let _ = writeln!(out, "    &[{}],", clusters.join(", "));
-    }
-    out.push_str("];\n\n");
-
-    out.push_str(
-        "/// Every case of `NormalizationTest.txt`: its five columns, each the scalars it holds, which another crate's tests hold its normalization to.\n#[cfg(feature = \"test-support\")]\npub(crate) static NORMALIZATION_CASES: &[[&[u32]; 5]] = &[\n",
-    );
-    for case in normalization_cases(&normalization_conformance) {
-        let columns: Vec<String> = case
-            .iter()
-            .map(|column| format!("&[{}]", spelled(column)))
-            .collect();
-        let _ = writeln!(out, "    [{}],", columns.join(", "));
-    }
-    out.push_str("];\n");
 
     let generated =
         Path::new(&env::var("OUT_DIR").expect("cargo sets the output directory")).join("tables.rs");
