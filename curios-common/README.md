@@ -26,7 +26,7 @@ Foundational utilities shared across every pipeline stage: source spans and repo
 
 ### The language's words are stated once, beside the identity
 
-**Decision.** `is_identifier` — the identifier characters — lives beside `Qualifier`, and `Keyword` beside it states every word the surface grammar reads as itself, each with where it is one, from one table; `is_reserved` is its reserved part. The parser reads its words from it, and a test holds the editors' grammars and `documentation/language.md` to it ([Curios is coloured from one class set](../documentation/design/tools/curios-is-coloured-from-one-class-set.md)).
+**Decision.** `is_identifier` — the identifier characters — lives beside `Qualifier`, and `Keyword` beside it states every word the surface grammar reads as itself, each with where it is one, from one table; `is_reserved` is its reserved part. The parser reads its words from it, and a test holds the editors' grammars and `documentation/language.md` to it ([Curios is coloured from one class set](../documentation/design/tooling/curios-is-coloured-from-one-class-set.md)).
 
 **Rationale.** A segment's legality is a property of the identity: `curios-surface` refuses a reserved word in a path and `curios-package` refuses one as a package's name, which becomes a mount prefix nothing could write. One statement below both keeps the two refusals one refusal, and the parser and every grammar that restates a word read the same one.
 

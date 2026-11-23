@@ -585,7 +585,7 @@ pub let job() -> Job({}) =
 
 `Monad/lift(action)` names the same embedding, its target monad read from the region, and a region's tail is lifted as an action in it is.
 
-Embeddings never chain: an action of `Io` sequences in a `Sched` region only where `Monad/Lift(Io, Sched)` is declared. Why: [A fallible operation returns `Try`, and `!` lifts along declared edges](design/standard-library/a-fallible-operation-returns-try-and-bang-lifts-along-declared-edges.md).
+Embeddings never chain: an action of `Io` sequences in a `Sched` region only where `Monad/Lift(Io, Sched)` is declared. Why: [A fallible operation returns `Try`, and `!` lifts along declared edges](design/prelude/a-fallible-operation-returns-try-and-bang-lifts-along-declared-edges.md).
 
 ## Pattern matching
 
@@ -944,7 +944,7 @@ let _right_identity(n: Nat) -> Eq()(n + 0, n) =
     Eq/refl();
 ```
 
-A test takes no parameters. A claim about every instance is a proposition, not a description: it is a `let` whose type states the claim and whose body proves it, checked on every build, as the second declaration above is, its `_` marking a declaration that exists for its type. Why: [A test is a declared description, and a proof is a `let`](design/tools/a-test-is-a-declared-description-and-a-proof-is-a-let.md).
+A test takes no parameters. A claim about every instance is a proposition, not a description: it is a `let` whose type states the claim and whose body proves it, checked on every build, as the second declaration above is, its `_` marking a declaration that exists for its type. Why: [A test is a declared description, and a proof is a `let`](design/tooling/a-test-is-a-declared-description-and-a-proof-is-a-let.md).
 
 A claim checked at chosen instances is a definition answering `Test({})`, run over a table: `test table = Test/all(List/map(cases, ((a, b)) => claim(a, b)));` is one test over the author's cases, reporting each case that fails by its position: the cases are independent, so each runs whatever the others found. `Test/step(label, test)` names a part of a test the same way, its label leading the path of each failure the part reports.
 

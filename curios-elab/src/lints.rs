@@ -1,4 +1,4 @@
-//! The binder lints, decided where elaboration files a declaration's record: from the sites the lowering found no written name reads ([`curios_core::Unread`]), less every binder a proof elaboration wrote read, worded by what each site binds ([`SiteClass`]). Each lint is decided by the stage that establishes its last fact, and what a proof reads is elaboration's: the decision is `documentation/design/tools/a-lint-is-an-exact-finding-read-off-the-compilation.md`.
+//! The binder lints, decided where elaboration files a declaration's record: from the sites the lowering found no written name reads ([`curios_core::Unread`]), less every binder a proof elaboration wrote read, worded by what each site binds ([`SiteClass`]). Each lint is decided by the stage that establishes its last fact, and what a proof reads is elaboration's: the decision is `documentation/design/tooling/a-lint-is-an-exact-finding-read-off-the-compilation.md`.
 
 use {
     crate::SiteClass,

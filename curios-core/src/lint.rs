@@ -2,7 +2,7 @@
 //!
 //! **A lint stands in a text of its unit, as a lowered term's position does** ([`Extent`]): in the declaration it is about, or in the `use` or `mod` line it is on ([`Anchored::Namespace`](crate::Anchored::Namespace)). So a stored lint holds no source, a unit storing its lints writes none of its files a second time, and its report is made where it is shown ([`Lint::report`]), from the anchors of the unit that holds it.
 //!
-//! **Each stage words what it decides.** There are no levels and no suppression: what keeps a name is spelled in the program, and each message says how. The decision is `documentation/design/tools/a-lint-is-an-exact-finding-read-off-the-compilation.md`.
+//! **Each stage words what it decides.** There are no levels and no suppression: what keeps a name is spelled in the program, and each message says how. The decision is `documentation/design/tooling/a-lint-is-an-exact-finding-read-off-the-compilation.md`.
 
 use {
     crate::{Anchors, Extent},

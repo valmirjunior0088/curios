@@ -2,7 +2,7 @@
 //!
 //! **Each setting is declared once, as a field**: its key under `[format]` is the field's name as serde reads it, and its flag the same name as clap reads it, so no setting has a key without a flag or a flag without a key, and `format/tests.rs` holds the two spellings equal.
 //!
-//! **A file's format has one source.** Where a package governs the file, it is that package's `[format]`, or its enumerating umbrella's, which a member does not restate, as it does not restate `compiler`; where none governs it — standard input, a file with no package's manifest above it — it is the command line's. A flag where a package governs is refused rather than ranked against the manifest, so the command line, a check and an editor's server format a file one way. The decision is `documentation/design/tools/a-file-is-formatted-as-one-place-states.md`'s.
+//! **A file's format has one source.** Where a package governs the file, it is that package's `[format]`, or its enumerating umbrella's, which a member does not restate, as it does not restate `compiler`; where none governs it — standard input, a file with no package's manifest above it — it is the command line's. A flag where a package governs is refused rather than ranked against the manifest, so the command line, a check and an editor's server format a file one way. The decision is `documentation/design/tooling/a-file-is-formatted-as-one-place-states.md`'s.
 
 #[cfg(test)]
 mod tests;

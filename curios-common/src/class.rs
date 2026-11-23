@@ -1,6 +1,6 @@
 //! The classes Curios is coloured in: what a reader tells a span of code apart as — a word, a literal, a comment, a mark, or a name by what it names — each named once, so the documentation, the editors' tables and a page's palette paint by one name.
 //!
-//! What classes which text is `documentation/design/tools/curios-is-coloured-from-one-class-set.md`'s: the printer what the compiler prints, a grammar what a person types, and the server's semantic tokens over the grammar in an editor. A name's class is read off what its declaration states, never off where it lives.
+//! What classes which text is `documentation/design/tooling/curios-is-coloured-from-one-class-set.md`'s: the printer what the compiler prints, a grammar what a person types, and the server's semantic tokens over the grammar in an editor. A name's class is read off what its declaration states, never off where it lives.
 
 /// Declares [`Class`] from one table, so the roster, [`Class::ALL`] and the names cannot drift apart.
 macro_rules! classes {

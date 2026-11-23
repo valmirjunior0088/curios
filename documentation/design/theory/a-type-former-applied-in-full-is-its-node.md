@@ -10,7 +10,7 @@
 
 **Rejected.**
 
-- **The name**, every node read back to the former that holds it wherever one is made: reduction makes a node at every intrinsic's type operand and every literal, so the rule never closes under reduction; and reading a reduct back to the name it came from is the model of reduction beside the printer that [A diagnostic spells what its reader can write](../tools/a-diagnostic-spells-what-its-reader-can-write.md) rejects.
+- **The name**, every node read back to the former that holds it wherever one is made: reduction makes a node at every intrinsic's type operand and every literal, so the rule never closes under reduction; and reading a reduct back to the name it came from is the model of reduction beside the printer that [A diagnostic spells what its reader can write](../tooling/a-diagnostic-spells-what-its-reader-can-write.md) rejects.
 - **A former respelled after its elaboration**: an intrinsic former's name mints a level its node then drops, left to close on nothing, and the schemes of the declarations that wrote one drift.
 - **Each committed solution's former applications respelled**, in place of the β-step where a term is made: a method's instantiated type and a reduct keep the name, which an exact key and a plain reduction still tell apart from the node.
 - **A key that reads through a former's name**, as GHC's type maps expand synonyms and Lean's discrimination trees reduce at reducible transparency: [Case equations and their key](../soundness/case-equations-and-their-key.md) keys structurally in both checkers, and with one spelling there is nothing to read through.

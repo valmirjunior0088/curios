@@ -43,4 +43,4 @@
 
 ## Verification and retirement
 
-Each stage's check, then `cargo xtask compiler lint`, `cargo xtask jig lint`, the suite, the corpus tests and `cargo xtask docs build`. As stage 3 lands, [A test is a declared description, and a proof is a `let`](../../design/tools/a-test-is-a-declared-description-and-a-proof-is-a-let.md) is restated to the report gathered through `/test`, with the alternatives above among its rejected, `documentation/usage.md`'s `curios test` and package names with it, and `curios_abi`'s `ENTRY` and `ADVANCE`; once stage 4 lands, this file is deleted.
+Each stage's check, then `cargo xtask compiler lint`, `cargo xtask jig lint`, the suite, the corpus tests and `cargo xtask docs build`. As stage 3 lands, [A test is a declared description, and a proof is a `let`](../../design/tooling/a-test-is-a-declared-description-and-a-proof-is-a-let.md) is restated to the report gathered through `/test`, with the alternatives above among its rejected, `documentation/usage.md`'s `curios test` and package names with it, and `curios_abi`'s `ENTRY` and `ADVANCE`; once stage 4 lands, this file is deleted.

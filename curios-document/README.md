@@ -1,6 +1,6 @@
 # curios-document
 
-Everything documentation: the record of a unit's interface, made from the unit a compilation builds, and the pages `curios document` writes from that record. What a page shows and why it is read off the compilation rather than the source is [A library is documented for its consumers, from the compilation that builds it](../documentation/design/tools/a-library-is-documented-for-its-consumers-from-the-compilation-that-builds-it.md); how the record is built belongs to `curios-module`, how it is obtained from a compilation to `curios-pipeline`'s fold and `curios-wonder`'s engine, where the prelude's are filed to `curios-prelude`, and the record's shape and the pages' design to the crate rustdoc.
+Everything documentation: the record of a unit's interface, made from the unit a compilation builds, and the pages `curios document` writes from that record. What a page shows and why it is read off the compilation rather than the source is [A library is documented for its consumers, from the compilation that builds it](../documentation/design/tooling/a-library-is-documented-for-its-consumers-from-the-compilation-that-builds-it.md); how the record is built belongs to `curios-module`, how it is obtained from a compilation to `curios-pipeline`'s fold and `curios-wonder`'s engine, where the prelude's are filed to `curios-prelude`, and the record's shape and the pages' design to the crate rustdoc.
 
 ## Design
 

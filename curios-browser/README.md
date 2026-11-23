@@ -1,6 +1,6 @@
 # curios-browser
 
-The Curios browser host: `harness.mjs`, which runs a compiled program under a JavaScript engine against the browser's answers to the host rows and an embedder's hooks; the bridge module it reads the program's values through; what it is configured with, rendered from `curios-abi`; the page a browser build of a program is, which `curios compile --target browser` writes; and the runner `curios test --target browser` answers at its root, with the wire its reports cross on. Its wasm-bindgen `run` reaches the playground through the bundle `curios-js` is built into. How a page is laid out is [A browser page is closed and laid out as its packages](../documentation/design/tools/a-browser-page-is-closed-and-laid-out-as-its-packages.md); build steps belong to `xtask`.
+The Curios browser host: `harness.mjs`, which runs a compiled program under a JavaScript engine against the browser's answers to the host rows and an embedder's hooks; the bridge module it reads the program's values through; what it is configured with, rendered from `curios-abi`; the page a browser build of a program is, which `curios compile --target browser` writes; and the runner `curios test --target browser` answers at its root, with the wire its reports cross on. Its wasm-bindgen `run` reaches the playground through the bundle `curios-js` is built into. How a page is laid out is [A browser page is closed and laid out as its packages](../documentation/design/tooling/a-browser-page-is-closed-and-laid-out-as-its-packages.md); build steps belong to `xtask`.
 
 ## Design
 

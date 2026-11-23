@@ -310,7 +310,7 @@ pub enum About {
     Named(String),
 }
 
-/// A piece of a program a report shows — a term, a name, a pattern, a label, a value as written — in backticks, wherever it stands in a fact, behind a label or inside a sentence: the one rule by which a reader and a tool tell the program's text from the report's words ([A command narrates on one transcript and reports in blocks](../../documentation/design/tools/a-command-narrates-on-one-transcript-and-reports-in-blocks.md)).
+/// A piece of a program a report shows — a term, a name, a pattern, a label, a value as written — in backticks, wherever it stands in a fact, behind a label or inside a sentence: the one rule by which a reader and a tool tell the program's text from the report's words ([A command narrates on one transcript and reports in blocks](../../documentation/design/tooling/a-command-narrates-on-one-transcript-and-reports-in-blocks.md)).
 #[derive(Debug, Clone, Copy)]
 pub struct Code<T>(pub T);
 

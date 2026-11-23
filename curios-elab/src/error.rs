@@ -1085,7 +1085,7 @@ pub enum Error {
     },
     /// A hidden member at a proposition that nothing proved: the bound the reduct's one inhabitant and the procedure that proves a bound from the facts in scope both left open. Carries the insertion provenance (the applied function, literal or operator and the binder it filled) so the report says whose bound it is and how it is written, and the binder's instantiated type — the `bound` nothing discharged — because naming the slot says where the refusal is and naming its type says what was asked for: `Has(layout, "sidebr")` is the whole of why the call was refused.
     ///
-    /// Named by the procedure that fills the member, as [`Error::UninferredImplicit`] and [`Error::NoWitness`] are, so one fault reads alike at a call, a literal and an operator ([A diagnostic spells what its reader can write](../../documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md)).
+    /// Named by the procedure that fills the member, as [`Error::UninferredImplicit`] and [`Error::NoWitness`] are, so one fault reads alike at a call, a literal and an operator ([A diagnostic spells what its reader can write](../../documentation/design/tooling/a-diagnostic-spells-what-its-reader-can-write.md)).
     UndischargedBound {
         callee: Callee,
         binder: Option<String>,

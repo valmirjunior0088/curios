@@ -4,7 +4,7 @@
 
 ## What is missing
 
-**A program is one instance on one thread.** The native host enters a module on a thread built for it ([`curios-native`'s decision](../../../curios-native/README.md#a-module-runs-on-a-stack-of-its-own)) and advances it turn by turn, waiting between turns on what its suspension names ([A wait is a suspension, and only the host waits](../../design/standard-library/a-wait-is-a-suspension-and-only-the-host-waits.md)); a page runs it on its main thread (`documentation/usage.md`). `/std/Io/Scope`'s children are branches of that one instance, advanced by one driver, so they wait together and compute one at a time: no program computes on two cores at once.
+**A program is one instance on one thread.** The native host enters a module on a thread built for it ([`curios-native`'s decision](../../../curios-native/README.md#a-module-runs-on-a-stack-of-its-own)) and advances it turn by turn, waiting between turns on what its suspension names ([A wait is a suspension, and only the host waits](../../design/prelude/a-wait-is-a-suspension-and-only-the-host-waits.md)); a page runs it on its main thread (`documentation/usage.md`). `/std/Io/Scope`'s children are branches of that one instance, advanced by one driver, so they wait together and compute one at a time: no program computes on two cores at once.
 
 **A fault ends everything.** A trap in any branch ends the instance, and the instance is the program. Nothing a program writes can keep one part running while another has failed.
 
@@ -14,7 +14,7 @@
 - **A heap boundary exists already.** A foreign module is instantiated once per row and shares nothing with the program: every value crosses as a copy between the guest's GC arrays and the module's linear memory (`curios-native/src/plugin.rs`).
 - **Shared GC objects are not available.** Wasmtime lists the shared-everything-threads proposal as unimplemented ([Wasm proposals](https://docs.wasmtime.dev/stability-wasm-proposals.html)), and the proposal itself is still being merged from its first phase ([Overview](https://github.com/WebAssembly/shared-everything-threads/blob/main/proposals/shared-everything-threads/Overview.md)). In a browser, workers exchange what `postMessage` copies or transfers.
 - **Peers that share nothing.** Erlang's processes share no heap, exchange copied messages and are the unit of failure, a monitor or a link telling another of an exit (Armstrong, *Making reliable distributed systems in the presence of software errors*, 2003). Lunatic runs each such process as a WebAssembly instance of its own on Wasmtime, scheduled by a work-stealing executor ([Lunatic](https://docs.rs/crate/lunatic/latest)). The Component Model's asynchronous ABI drives each instance from its host's one event loop ([Concurrency](https://github.com/WebAssembly/component-model/blob/main/design/mvp/Concurrency.md)).
-- **A resource belongs to a scope.** Nothing a program opens outlives the scope that opened it ([A wait is a suspension, and only the host waits](../../design/standard-library/a-wait-is-a-suspension-and-only-the-host-waits.md)), so an instance a program starts is opened into a scope as a child or a file is, unless a decision says otherwise.
+- **A resource belongs to a scope.** Nothing a program opens outlives the scope that opened it ([A wait is a suspension, and only the host waits](../../design/prelude/a-wait-is-a-suspension-and-only-the-host-waits.md)), so an instance a program starts is opened into a scope as a child or a file is, unless a decision says otherwise.
 
 ## The direction discussed
 

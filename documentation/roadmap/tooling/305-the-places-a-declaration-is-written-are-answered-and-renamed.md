@@ -1,6 +1,6 @@
 # The places a declaration is written are answered, and renamed
 
-**Not refined yet.** Every place a declaration is written across a package and every unit that imports it is answered, and a rename edits each, the edit handed back as text the formatter lays out. Today a place answers what is written there ([A place in a file is answered from the declaration that writes it](../../design/tools/a-place-in-a-file-is-answered-from-the-declaration-that-writes-it.md)), and no query answers the places a declaration is written at, within a package or across its importers.
+**Not refined yet.** Every place a declaration is written across a package and every unit that imports it is answered, and a rename edits each, the edit handed back as text the formatter lays out. Today a place answers what is written there ([A place in a file is answered from the declaration that writes it](../../design/tooling/a-place-in-a-file-is-answered-from-the-declaration-that-writes-it.md)), and no query answers the places a declaration is written at, within a package or across its importers.
 
 ## What is known
 

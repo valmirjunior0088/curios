@@ -1,6 +1,6 @@
 # The terminal paints the source it prints by class
 
-**Not refined yet.** Every piece of source the command line prints is plain: the terminal paints a report's structure alone — its headline bold, its tree and gutter dim, what went wrong red (`Style`, `curios-common/src/style.rs`) — and has no palette for the classes [Curios is coloured from one class set](../../design/tools/curios-is-coloured-from-one-class-set.md) names, which an editor and a documentation page paint by.
+**Not refined yet.** Every piece of source the command line prints is plain: the terminal paints a report's structure alone — its headline bold, its tree and gutter dim, what went wrong red (`Style`, `curios-common/src/style.rs`) — and has no palette for the classes [Curios is coloured from one class set](../../design/tooling/curios-is-coloured-from-one-class-set.md) names, which an editor and a documentation page paint by.
 
 ## What is known
 

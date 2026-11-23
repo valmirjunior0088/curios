@@ -20,7 +20,7 @@ Settled by the user on 2026-11-20.
 
 - **The concept's shape.** Its name; whether the element's type is a parameter or a field its witness chooses, as `Div`'s `Ok` is a field; and its bound, `Ok` over the sequence and the index.
 - **Whether `Map` satisfies it.** `Map/get` asks `Holds(Map/has(m, key))` already, the bounded shape, so a witness is one declaration, and a guard on `Map/has` puts its fact in scope; against it, a read by a key that a reader takes for a position's.
-- **What a report prints.** The operator where its bound is proved again and the call with its proof where it is not, as [the tools findings](../tools/000-findings.md)' entry on an operator form states of `/`.
+- **What a report prints.** The operator where its bound is proved again and the call with its proof where it is not, as [the tools findings](../tooling/000-findings.md)' entry on an operator form states of `/`.
 
 ## Stages
 

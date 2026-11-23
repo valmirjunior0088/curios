@@ -33,7 +33,7 @@ pub fn int_is_small(value: &Integer) -> bool {
         .is_some_and(|value| value >> (ENVELOPE_BITS - 1) == value >> ENVELOPE_BITS)
 }
 
-// Sigils follow the naming scheme shared with `curios-anf` and `curios-wasm` — see `documentation/design/tools/a-printer-states-each-fact-once-where-it-is-bound.md`.
+// Sigils follow the naming scheme shared with `curios-anf` and `curios-wasm` — see `documentation/design/tooling/a-printer-states-each-fact-once-where-it-is-bound.md`.
 id!(NodeId, "~n");
 id!(ValueId, "~v");
 id!(FunctionId, "~f");

@@ -1,6 +1,6 @@
 # Arithmetic modulo a word
 
-**Not refined yet.** This specification reserves how a program computes modulo `2^32` or `2^64`, which Curios digest rounds of [bytes are written as text and digested](../standard-library/300-bytes-are-written-as-text-and-digested.md) wait on, as would a generator of random values a seed determines, which no consumer has asked for: the measurement corpus's generators are part of what it measures. Encodings have no dependency on this decision of their own. It is not an implementation plan: it waits on the choice under *Refinement*, which its first consumer makes once here.
+**Not refined yet.** This specification reserves how a program computes modulo `2^32` or `2^64`, which Curios digest rounds of [bytes are written as text and digested](../prelude/300-bytes-are-written-as-text-and-digested.md) wait on, as would a generator of random values a seed determines, which no consumer has asked for: the measurement corpus's generators are part of what it measures. Encodings have no dependency on this decision of their own. It is not an implementation plan: it waits on the choice under *Refinement*, which its first consumer makes once here.
 
 ## What is missing
 

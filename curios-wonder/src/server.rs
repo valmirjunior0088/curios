@@ -1081,7 +1081,7 @@ fn symbol(name: &str, kind: SymbolKind, range: Range, label: Range) -> DocumentS
     }
 }
 
-/// The protocol's token type a class is encoded as, and whether it carries `readonly`: the class set's legend, mapped once over every class, so a class added is given its type before anything compiles (`documentation/design/tools/curios-is-coloured-from-one-class-set.md`). `None` for a lexical class, which no record answers and a grammar paints by itself.
+/// The protocol's token type a class is encoded as, and whether it carries `readonly`: the class set's legend, mapped once over every class, so a class added is given its type before anything compiles (`documentation/design/tooling/curios-is-coloured-from-one-class-set.md`). `None` for a lexical class, which no record answers and a grammar paints by itself.
 fn encoded(class: Class) -> Option<(SemanticTokenType, bool)> {
     Some(match class {
         Class::Module => (SemanticTokenType::NAMESPACE, false),
