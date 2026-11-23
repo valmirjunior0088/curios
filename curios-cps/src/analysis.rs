@@ -244,13 +244,15 @@ pub fn analyze_calls(module: &Module) -> CallAnalysis {
     analysis
 }
 
-/// The functions a body may name, each function's and each continuation's, read off the one walk `verify_lexical_scopes` performs rather than restated here: what a pass that forwards a function reference into a body asks, known-value propagation and component specialization alone, so it is built where one of them first meets a function a call hands, and by no other reader of the call analysis.
+/// The functions a body may name, each function's and each continuation's, and the values a continuation's may, read off the one walk `verify_lexical_scopes` performs rather than restated here: what a pass that forwards a function reference or a value into a body asks, known-value propagation and component specialization alone, so it is built where one of them first meets a function a call hands or a value a loop is handed, and by no other reader of the call analysis.
 #[derive(Default, PartialEq)]
 pub struct Scopes {
     /// Each function's: its own `LetFun` group, every group enclosing it, and every group bound before it along the chain from the entry. Where the walk does not reach a live function, the entry is the owner-chain subset instead, which refuses more than the rule does and never less.
     pub functions: BTreeMap<FunctionId, InScope<FunctionId>>,
     /// Each continuation's: those in scope where its `LetCont` binds it. A continuation the walk does not reach is absent.
     pub continuations: BTreeMap<ContinuationId, InScope<FunctionId>>,
+    /// The values each continuation's body may name from outside it: those in scope where its `LetCont` binds it. A continuation the walk does not reach is absent.
+    pub continuation_values: BTreeMap<ContinuationId, InScope<ValueId>>,
 }
 
 impl Scopes {
@@ -612,7 +614,7 @@ pub fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
         record_known_literals(params, &inputs, &mut known);
     }
 
-    // A loop's parameter is forwarded by its own back edges, which the flat join above reads as a conflict, so a function its entry hands it and every back edge passes on is recovered by the fixpoint the recursive members' parameters take below, over every transfer into a continuation: an edge hands its arguments, and an operation delivering into its `return_to` a value nothing sees, which is a conflict. Only a function is taken from it, where the continuation's body may name it, so a loop over a combinator a caller hands its step calls the step directly; what it finds of literals the flat join already answers where it may.
+    // A loop's parameter is forwarded by its own back edges, which the flat join above reads as a conflict, so a function or a value its entry hands it and every back edge passes on is recovered by the fixpoint the recursive members' parameters take below, over every transfer into a continuation: an edge hands its arguments, and an operation delivering into its `return_to` a value nothing sees, which is a conflict. A function or a value is taken from it where the continuation's body may name it, so a loop over a combinator a caller hands its step calls the step directly, and one handed a value it hands on unchanged reads that value where it is bound, as the trivial φ of Braun et al. is that value; what it finds of literals the flat join already answers where it may.
     let mut continuation_params = BTreeMap::<ContinuationId, Vec<ValueId>>::new();
     for (continuation, definition) in module.live_continuations() {
         continuation_params.insert(continuation, definition.params.clone());
@@ -644,14 +646,25 @@ pub fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
         .flat_map(|(continuation, params)| params.iter().map(move |param| (*param, *continuation)))
         .collect::<BTreeMap<_, _>>();
     for (param, knowledge) in invariant_fixpoint(&continuation_params, &transfers, &known) {
-        if let Knowledge::Known(Atom::Fun(passed)) = knowledge
-            && scopes
+        let Knowledge::Known(atom) = knowledge else {
+            continue;
+        };
+        let owner = owner_of_param[&param];
+        let named = match &atom {
+            Atom::Fun(passed) => scopes
                 .get_or_init(|| module.scopes())
                 .continuations
-                .get(&owner_of_param[&param])
-                .is_some_and(|scope| scope.contains(&passed))
-        {
-            known.insert(param, Atom::Fun(passed));
+                .get(&owner)
+                .is_some_and(|scope| scope.contains(passed)),
+            Atom::Value(passed) => scopes
+                .get_or_init(|| module.scopes())
+                .continuation_values
+                .get(&owner)
+                .is_some_and(|scope| scope.contains(passed)),
+            Atom::Literal(_) | Atom::Filler => false,
+        };
+        if named {
+            known.insert(param, atom);
         }
     }
 
@@ -677,7 +690,7 @@ pub fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
     }
     known
 }
-/// Resolve an argument atom to its lattice value: literals and function references are known; a value is a forwarded SCC parameter (its current class), a caller constant (`known_literals`), or otherwise an unobservable runtime value that forces `Conflict`.
+/// Resolve an argument atom to its lattice value: literals and function references are known; a value is a forwarded parameter of the fixpoint's domain (its current class), a caller constant (`known_literals`), or otherwise itself, one value from outside the domain every transfer that hands it agrees on, which a reader takes only where the receiving body may name it.
 pub fn resolve_atom(
     atom: &Atom,
     class: &Solver<Knowledge>,
@@ -695,7 +708,7 @@ pub fn resolve_atom(
             {
                 Knowledge::Known(atom.clone())
             } else {
-                Knowledge::Conflict
+                Knowledge::Known(Atom::Value(*value))
             }
         }
     }

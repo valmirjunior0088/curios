@@ -428,7 +428,7 @@ fn a_read_in_a_loop_keeps_the_run_it_last_resolved() {
     assert!(!resolve.contains("array.len"), "{resolve}");
 }
 
-/// A `List/fold` walks its list through a window, as a `Bytes/fold` does: erased as the peel loop that library fold is written as, its loop is handed the window's base, end and length where a suffix stood, and reads each element where it stands rather than building a suffix a turn.
+/// A `List/fold` walks its list through a window, as a `Bytes/fold` does: erased as the peel loop that library fold is written as, its loop is handed the window's end and length where a suffix stood, the base every round hands on unchanged being the list its caller binds, and reads each element where it stands rather than building a suffix a turn.
 #[test]
 fn a_list_fold_walks_its_list_through_a_window() {
     let source = r#"
@@ -460,7 +460,7 @@ fn a_list_fold_walks_its_list_through_a_window() {
         .collect::<Vec<_>>();
     assert!(!loops.is_empty(), "the fold is a loop:\n{module}");
     for params in &loops {
-        for field in ["/base", "/end", "/length"] {
+        for field in ["/end", "/length"] {
             assert!(
                 params
                     .iter()

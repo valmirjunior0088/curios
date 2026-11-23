@@ -613,7 +613,7 @@ impl Module {
         Ok(())
     }
 
-    /// The functions each function's body may name, and each continuation's, as the [`Scopes`] it starts, by the rule [`Self::scope_step`] states and [`Self::verify_lexical_scopes`] enforces: a function's own `LetFun` group, every group enclosing it, and every group bound *before* it along the chain from the entry; a continuation's, those in scope where its `LetCont` binds it, which take in the groups its function's body binds before it. Recorded rather than checked, so a pass forwarding a function reference into a body can ask whether that body may legally name it.
+    /// The functions each function's body may name, and each continuation's, as the [`Scopes`] it starts, by the rule [`Self::scope_step`] states and [`Self::verify_lexical_scopes`] enforces: a function's own `LetFun` group, every group enclosing it, and every group bound *before* it along the chain from the entry; a continuation's, those in scope where its `LetCont` binds it, which take in the groups its function's body binds before it, and beside them the values in scope there. Recorded rather than checked, so a pass forwarding a function reference or a value into a body can ask whether that body may legally name it.
     ///
     /// A function or continuation the walk does not reach is absent rather than empty, and the caller decides what to answer for it. This runs mid-round, where the module is transiently unscoped by design and only a round boundary promises a walk from the entry reaches every live function.
     pub(crate) fn scope_walk(&self) -> Scopes {
@@ -650,6 +650,7 @@ impl Module {
             {
                 for member in members {
                     scopes.continuations.insert(*member, functions.clone());
+                    scopes.continuation_values.insert(*member, values.clone());
                 }
             }
             let step = self.scope_step(None, node, values, functions, continuations);

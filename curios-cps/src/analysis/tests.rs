@@ -611,6 +611,191 @@ fn known_value_analysis_records_a_continuation_parameter_every_jump_passes_the_s
     ));
 }
 
+/// What a loop's entry hands the parameter its back edges hand on.
+#[derive(Clone, Copy)]
+enum Handed {
+    /// The function's first parameter.
+    Parameter,
+    /// The parameter of an outer loop the function enters with its first parameter, and the inner loop's exit enters again with what it hands on.
+    ThroughALoop,
+    /// The function's first parameter on one edge of a switch and its second on the other.
+    TwoParameters,
+    /// A value the function binds below the `LetCont` binding the loop, which the loop's body cannot name.
+    BoundBelow,
+}
+
+/// `main(x, y)` enters a loop `round(k, p)` that counts `k` down from 3, each back edge handing `p` itself, and answers `p` where `k` is 0; its entry hands `p` what `handed` says. Answers the module, `p` and `x`.
+fn counted_loop(handed: Handed) -> (Module, ValueId, ValueId) {
+    let mut module = Module::new();
+    let main = module.reserve_function();
+    let main_return = module.reserve_continuation();
+    let [x, y, k, p, k2] =
+        ["x", "y", "k", "p", "k2"].map(|name| module.add_value(Some(name.into())));
+    let outer = matches!(handed, Handed::ThroughALoop).then(|| module.reserve_continuation());
+    let round = module.reserve_continuation();
+    let step = module.reserve_continuation();
+    let back = module.add_node(Node::ApplyCont(Edge {
+        target: round,
+        args: vec![Atom::Value(k2), Atom::Value(p)],
+    }));
+    let count_down = module.add_node(Node::LetIntrinsic {
+        result: k2,
+        op: Intrinsic::NatSub,
+        args: vec![
+            Atom::Value(k),
+            Atom::Literal(Literal::Nat(Natural::from(1u32))),
+        ],
+        next: back,
+    });
+    module.define_continuation(
+        step,
+        Continuation {
+            lineage: None,
+            debug_name: None,
+            params: vec![],
+            body: count_down,
+            terminates: false,
+        },
+    );
+    let decide = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(k),
+        cases: BTreeMap::from([(
+            0,
+            Edge {
+                target: outer.unwrap_or(main_return),
+                args: vec![Atom::Value(p)],
+            },
+        )]),
+        default: Some(Edge {
+            target: step,
+            args: vec![],
+        }),
+    });
+    let round_body = module.add_node(Node::LetCont {
+        continuations: vec![step],
+        body: decide,
+    });
+    module.define_continuation(
+        round,
+        Continuation {
+            lineage: None,
+            debug_name: None,
+            params: vec![k, p],
+            body: round_body,
+            terminates: false,
+        },
+    );
+    let enter = |module: &mut Module, handed: Atom| {
+        module.add_node(Node::ApplyCont(Edge {
+            target: round,
+            args: vec![Atom::Literal(Literal::Nat(Natural::from(3u32))), handed],
+        }))
+    };
+    let entered = match handed {
+        Handed::Parameter => enter(&mut module, Atom::Value(x)),
+        Handed::ThroughALoop => {
+            let q = module.add_value(Some("q".into()));
+            let jump = enter(&mut module, Atom::Value(q));
+            let outer_body = module.add_node(Node::LetCont {
+                continuations: vec![round],
+                body: jump,
+            });
+            let outer = outer.expect("an outer loop is reserved for it");
+            module.define_continuation(
+                outer,
+                Continuation {
+                    lineage: None,
+                    debug_name: None,
+                    params: vec![q],
+                    body: outer_body,
+                    terminates: false,
+                },
+            );
+            module.add_node(Node::ApplyCont(Edge {
+                target: outer,
+                args: vec![Atom::Value(x)],
+            }))
+        }
+        Handed::TwoParameters => {
+            let [first, second] = [x, y].map(|value| {
+                let arm = module.reserve_continuation();
+                let jump = enter(&mut module, Atom::Value(value));
+                module.define_continuation(
+                    arm,
+                    Continuation {
+                        lineage: None,
+                        debug_name: None,
+                        params: vec![],
+                        body: jump,
+                        terminates: false,
+                    },
+                );
+                arm
+            });
+            let split = module.add_node(Node::Switch {
+                scrutinee: Atom::Value(x),
+                cases: BTreeMap::from([(
+                    0,
+                    Edge {
+                        target: first,
+                        args: vec![],
+                    },
+                )]),
+                default: Some(Edge {
+                    target: second,
+                    args: vec![],
+                }),
+            });
+            module.add_node(Node::LetCont {
+                continuations: vec![first, second],
+                body: split,
+            })
+        }
+        Handed::BoundBelow => {
+            let v = module.add_value(Some("v".into()));
+            let jump = enter(&mut module, Atom::Value(v));
+            module.add_node(Node::LetIntrinsic {
+                result: v,
+                op: Intrinsic::NatAdd,
+                args: vec![Atom::Value(x), Atom::Value(y)],
+                next: jump,
+            })
+        }
+    };
+    let body = module.add_node(Node::LetCont {
+        continuations: vec![outer.unwrap_or(round)],
+        body: entered,
+    });
+    module.define_function(
+        main,
+        Function {
+            lineage: None,
+            debug_name: Some("main".into()),
+            params: vec![x, y],
+            return_cont: main_return,
+            body,
+            droppable: Droppable::Never,
+            terminates: false,
+        },
+    );
+    module.set_entry(main);
+    module.verify().unwrap();
+    (module, p, x)
+}
+
+/// A loop parameter every transfer into which hands it itself or one value bound where the loop is bound is that value, which the loop's body names in its place, as it would a function or a literal: the function's own parameter, or the one an outer loop's invariant parameter stands for. Two values handed, or one the loop's body cannot name, leave it a parameter.
+#[test]
+fn a_loop_parameter_every_transfer_hands_itself_or_one_value_in_scope_is_that_value() {
+    for handed in [Handed::Parameter, Handed::ThroughALoop] {
+        let (module, p, x) = counted_loop(handed);
+        assert_eq!(known_values(&module).get(&p), Some(&Atom::Value(x)));
+    }
+    for handed in [Handed::TwoParameters, Handed::BoundBelow] {
+        let (module, p, _) = counted_loop(handed);
+        assert_eq!(known_values(&module).get(&p), None);
+    }
+}
+
 /// A join that is an operation's `return_to` as well as a jump's target learns nothing from the jump, whichever of the two the arena lists first. The call comes first here: the order in which a merge leaving `Unknown` standing would let the jump decide.
 #[test]
 fn a_join_also_reached_by_a_call_result_learns_nothing_from_a_jump() {

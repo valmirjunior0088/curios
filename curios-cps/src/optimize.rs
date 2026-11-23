@@ -53,7 +53,7 @@ pub use specialize::*;
 mod uncurry;
 pub use uncurry::*;
 
-use super::{Module, known_values};
+use super::{Atom, Module, known_values};
 
 /// What one copy of a callee with more than one call site may weigh, past [`MULTI_SITE_INLINE_FLOOR`], and still be made at each site, where all its copies together weigh at most [`SCC_CLONE_WEIGHT_LIMIT`].
 ///
@@ -123,8 +123,14 @@ pub fn optimize(module: &mut Module) {
 
     // The round on which the sequence settled, or `None` if it never did.
     let mut converged = None;
+    // A value from outside stands for a loop's parameter only once the rounds have settled without it, and the rounds run on until they settle again: before that, it would take the rope a window splits, `split_windows` running only once everything else has settled, and the loop would slice the rope on every round where the window allocated nothing (`walk_mirror_family_isolates_each_obligation`).
+    let mut values_taken = false;
     for round in 1..=ROUND_LIMIT {
-        let substitutions = curios_common::profile!("cps::known_values" => known_values(module));
+        let mut substitutions =
+            curios_common::profile!("cps::known_values" => known_values(module));
+        if !values_taken {
+            substitutions.retain(|_, atom| !matches!(atom, Atom::Value(_)));
+        }
         let changed = pass!("cps::rewrite_atoms", rewrite_atoms(module, &substitutions))
             | pass!("cps::forward_continuations", forward_continuations(module))
             | pass!("cps::forward_calls", forward_calls(module))
@@ -182,8 +188,11 @@ pub fn optimize(module: &mut Module) {
             panic!("invalid high CPS at the close of round {round}: {error:?}");
         }
         if !changed {
-            converged = Some(round);
-            break;
+            if values_taken {
+                converged = Some(round);
+                break;
+            }
+            values_taken = true;
         }
     }
     curios_common::sample!("cps_optimize::rounds", converged.unwrap_or(ROUND_LIMIT));
