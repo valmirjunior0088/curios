@@ -127,8 +127,11 @@ fn a_metavariable_born_in_a_retry_has_exactly_the_locals_its_problem_holds() {
     context.with_frame(|context| {
         context.assume(&b, &nat());
         let names = context.standing_on(&held, |context| {
-            let (telescope, _) = context.identity_snapshot();
-            telescope.iter().map(|(name, _)| *name).collect::<Vec<_>>()
+            context
+                .birth_telescope()
+                .iter()
+                .map(|(name, _)| *name)
+                .collect::<Vec<_>>()
         });
         assert_eq!(names, vec![a]);
     });

@@ -1152,6 +1152,15 @@ impl<'s> Frames<'s> {
             None => (BirthTelescope::default(), SharedSpine::new()),
         }
     }
+
+    /// The current Γ's telescope alone: each local of the frames past the base once, at its innermost binding, in binding order, as [`Frames::identity_snapshot`] hands it to a metavariable.
+    pub fn birth_telescope(&self) -> BirthTelescope {
+        self.read_scope();
+        self.top
+            .as_ref()
+            .map(|top| top.telescope.clone())
+            .unwrap_or_default()
+    }
 }
 
 /// Forget what the settlements made under `frame`'s refinements remembered: the frame registers another, which they were not made under.

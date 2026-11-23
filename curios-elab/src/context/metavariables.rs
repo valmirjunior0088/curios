@@ -212,6 +212,10 @@ impl<'s> Context<'s> {
         self.typing.frames.identity_snapshot()
     }
 
+    pub(crate) fn birth_telescope(&self) -> BirthTelescope {
+        self.typing.frames.birth_telescope()
+    }
+
     /// Mint a metavariable for an omitted implicit argument and birth it immediately — frozen local Γ, the binder's instantiated type as `result` — so the id always has a birth record. Returns its id beside the metavariable term carrying the *call site's* extent and the insertion provenance (which rides on the node; see [`Metavar::origin`]). `proposition` is whether `result` is one, decided by the caller, which has the sort in hand; it is kept on the birth record for the unsolved report, which cannot ask.
     pub(crate) fn fresh_metavar(
         &mut self,

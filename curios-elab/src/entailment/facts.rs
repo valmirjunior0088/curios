@@ -1772,9 +1772,9 @@ pub fn solved(context: &mut Context, term: &Term) -> Result<Term, Error> {
     Ok(zonk_solved_term_metas(context, &reduced))
 }
 
-/// The hole's own binders, in scope order: the frames past the base.
+/// The hole's own binders, in scope order, each at its innermost binding: the frames past the base, read as a metavariable born here is. An arm assumes again each local its case re-types, at the case's statement, which is the outer one with the case's solution substituted, so the outer binding states no fact the inner one does not.
 pub fn binders(context: &Context) -> Vec<(Free, Term)> {
-    context.local_binders().cloned().collect()
+    context.birth_telescope().iter().cloned().collect()
 }
 
 /// What a hypothesis states, each statement beside the proof that inhabits it and where it came from: the hypothesis itself, or the fields of a tuple or a structure, one level down and in their order.

@@ -1182,6 +1182,18 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
     assert!(!silent.contains("facts in scope"), "{silent}");
 }
 
+/// An arm assumes again each hypothesis its case re-types, and the facts are read at each local's innermost binding: a refusal names such a hypothesis once, as the arm states it.
+#[test]
+fn a_refusal_names_a_hypothesis_its_arm_retypes_once() {
+    let program = format!(
+        "{HEADER}\nlet first(l: List(Nat), q: Holds(List/len(l) <= 3)) -> Nat =\n    match l\n    | [] => match proved(@False) end\n    | [x, .._] => x\n    end;\nIo/pure(())"
+    );
+
+    let refusal = typecheck(&program).expect_err("the empty case is no contradiction");
+
+    assert_eq!(refusal.matches("a hypothesis, `q`").count(), 1, "{refusal}");
+}
+
 /// A counterexample names an atom as the bound states it, as the facts beside it are named: a call by its name, where the view read the body it unfolds to. Through a parameter's bound the statement is the signature's, and through the proposition `proved()` leaves implicit it is the solution of a metavariable, which is read for the report alone.
 #[test]
 fn a_counterexample_spells_an_atom_as_the_bound_states_it() {
