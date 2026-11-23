@@ -1,125 +1,263 @@
-//! What a run of the repository's own task files takes, and in what order.
+//! What a run takes, and in what order, over task files of each test's own.
 
-use {super::*, crate::*};
+use {super::*, crate::tree::test_support::*, crate::*};
 
-/// The steps a run of `asked` performs, by their command-line spelling, in order.
-fn scheduled(asked: &str, given: &[(&str, &str)]) -> Vec<String> {
-    let tree = Tree::read().unwrap();
+/// A subject `l` whose one step produces a file, which the trees below consume.
+const PRODUCER: (&str, &str) = (
+    "l",
+    r#"
+description = "L"
+
+[build]
+description = "Build"
+produces.binary = "out/binary"
+run = [["true"]]
+"#,
+);
+
+/// The steps a run of `asked` over `tree` performs, by their command-line spelling, in order.
+fn scheduled(tree: &Tree, asked: &str, given: &[(&str, &str)]) -> Vec<String> {
     let given = given
         .iter()
-        .map(|(name, value)| {
-            (
-                name.split('.').map(str::to_string).collect(),
-                value.to_string(),
-            )
-        })
+        .map(|(variable, value)| (name(variable), value.to_string()))
         .collect::<Given>();
     let asked = asked.split(' ').map(str::to_string).collect::<Name>();
 
-    schedule(&tree, &asked, &given)
+    schedule(tree, &asked, &given)
         .into_iter()
         .map(|step| spelled(&tree.steps[step].name))
         .collect()
 }
 
 #[test]
-fn a_subject_brings_no_step_of_another_but_what_it_consumes() {
+fn a_subject_brings_no_step_of_another_but_the_producers_of_what_it_consumes() {
+    let tree = tree(&[
+        PRODUCER,
+        (
+            "c",
+            r#"
+description = "C"
+
+[build]
+description = "Build"
+consumes = [".l.build.produces.binary"]
+produces.binary = "out/c"
+run = [["true"]]
+
+[test]
+description = "Test"
+consumes = [".c.build.produces.binary"]
+run = [["true"]]
+"#,
+        ),
+        (
+            "o",
+            r#"
+description = "O"
+
+[test]
+description = "Test"
+run = [["true"]]
+"#,
+        ),
+    ])
+    .unwrap();
+
+    assert_eq!(scheduled(&tree, "c", &[]), ["l build", "c build", "c test"]);
+}
+
+#[test]
+fn a_group_s_steps_run_in_its_file_s_order_each_after_the_producer_of_what_it_consumes() {
+    let tree = tree(&[
+        PRODUCER,
+        (
+            "w",
+            r#"
+description = "W"
+
+[lint.first]
+description = "First"
+run = [["true"]]
+
+[lint.second]
+description = "Second"
+consumes = [".l.build.produces.binary"]
+run = [["true"]]
+
+[lint.third]
+description = "Third"
+run = [["true"]]
+"#,
+        ),
+    ])
+    .unwrap();
+
     assert_eq!(
-        scheduled("compiler", &[]),
-        ["launcher build", "compiler build", "compiler test"]
+        scheduled(&tree, "w lint", &[]),
+        ["w lint first", "l build", "w lint second", "w lint third"]
     );
 }
 
 #[test]
-fn a_lint_of_the_workspace_builds_the_launcher_first() {
+fn a_step_that_neither_requires_nor_consumes_runs_alone() {
+    let tree = tree(&[
+        PRODUCER,
+        (
+            "n",
+            r#"
+description = "N"
+
+[lint]
+description = "Lint"
+run = [["true"]]
+
+[test]
+description = "Test"
+run = [["true"]]
+"#,
+        ),
+    ])
+    .unwrap();
+
+    assert_eq!(scheduled(&tree, "n", &[]), ["n lint", "n test"]);
+}
+
+#[test]
+fn a_step_runs_after_the_steps_it_requires() {
+    let tree = tree(&[(
+        "t",
+        r#"
+description = "T"
+
+[test]
+description = "Test"
+requires = [".t.install"]
+run = [["true"]]
+
+[install]
+description = "Install"
+run = [["true"]]
+"#,
+    )])
+    .unwrap();
+
+    assert_eq!(scheduled(&tree, "t test", &[]), ["t install", "t test"]);
+}
+
+#[test]
+fn a_step_runs_after_the_producer_of_each_file_it_consumes_in_the_order_it_names_them() {
+    let tree = tree(&[
+        (
+            "g",
+            r#"
+description = "G"
+
+[build.base]
+description = "Base"
+produces.parser = "out/base"
+run = [["true"]]
+
+[build.core]
+description = "Core"
+produces.parser = "out/core"
+run = [["true"]]
+"#,
+        ),
+        (
+            "z",
+            r#"
+description = "Z"
+
+[check]
+description = "Check"
+consumes = [".g.build.core.produces.parser", ".g.build.base.produces.parser"]
+run = [["true"]]
+"#,
+        ),
+    ])
+    .unwrap();
+
     assert_eq!(
-        scheduled("workspace lint", &[]),
-        [
-            "workspace lint rustfmt",
-            "workspace lint biome-format",
-            "launcher build",
-            "workspace lint curios-format",
-            "workspace lint clippy",
-            "workspace lint biome-lint"
-        ]
+        scheduled(&tree, "z check", &[]),
+        ["g build core", "g build base", "z check"]
     );
 }
 
-/// The native host's checks build no `curios`, so they consume no launcher and run without one being built.
-#[test]
-fn the_native_host_s_checks_build_no_launcher() {
-    assert_eq!(scheduled("native", &[]), ["native lint", "native test"]);
-}
-
-#[test]
-fn an_npm_script_runs_after_its_tree_s_install() {
-    assert_eq!(
-        scheduled("textmate test", &[]),
-        ["textmate install", "textmate test"]
-    );
-}
-
-/// `zed test` hashes the parsers `tree-sitter build` generates, a step a grammar.
-#[test]
-fn the_extension_s_test_runs_after_the_grammar_it_hashes() {
-    assert_eq!(
-        scheduled("zed test", &[]),
-        [
-            "tree-sitter build base",
-            "tree-sitter build core",
-            "zed test"
-        ]
-    );
-}
-
-/// A filter given to the workspace picks the suite, whose run takes it, and leaves every other step, the lint and the cache checks, which ask about other crates' builds.
+/// A variable given narrows what was asked to the steps whose commands use it, and leaves the rest of the subject, which asks other questions.
 #[test]
 fn a_variable_given_runs_only_the_steps_that_use_it() {
-    assert_eq!(
-        scheduled(
-            "workspace",
-            &[("workspace.variables.expression", "test(~cli)")]
+    let tree = tree(&[
+        PRODUCER,
+        (
+            "w",
+            r#"
+description = "W"
+variables.expression.flag = ["-E", "--filterset"]
+
+[lint]
+description = "Lint"
+consumes = [".l.build.produces.binary"]
+run = [["true"]]
+
+[test]
+description = "Test"
+consumes = [".l.build.produces.binary"]
+run = [["true", "{.w.variables.expression}"]]
+"#,
         ),
-        ["launcher build", "workspace test suite"]
+    ])
+    .unwrap();
+
+    assert_eq!(
+        scheduled(&tree, "w", &[("w.variables.expression", "test(~cli)")]),
+        ["l build", "w test"]
     );
-    let whole = scheduled("workspace", &[]);
-    for step in ["workspace lint clippy", "workspace caches prelude"] {
-        assert!(whole.iter().any(|run| run == step), "{whole:?}");
-    }
+    assert_eq!(scheduled(&tree, "w", &[]), ["l build", "w lint", "w test"]);
 }
 
 #[test]
-fn the_handoff_runs_every_subject_s_steps_in_the_order_it_names_them() {
-    let tree = Tree::read().unwrap();
-    let handoff = scheduled("handoff", &[]);
+fn a_step_that_requires_subjects_runs_every_step_of_each_in_the_order_it_names_them_and_itself_last()
+ {
+    let tree = tree(&[
+        (
+            "a",
+            r#"
+description = "A"
 
-    assert_eq!(handoff.first().map(String::as_str), Some("launcher build"));
-    assert_eq!(handoff.last().map(String::as_str), Some("handoff"));
-    for subject in [
-        "launcher",
-        "workspace",
-        "docs",
-        "compiler",
-        "bundle",
-        "tree-sitter",
-        "textmate",
-        "vscode",
-        "zed",
-        "jig",
-    ] {
-        for step in tree.steps_of(&[subject.to_string()]) {
-            assert!(
-                handoff.contains(&spelled(&tree.steps[step].name)),
-                "{subject}"
-            );
-        }
-    }
-    for subject in ["format", "native", "profile"] {
-        assert!(
-            !handoff
-                .iter()
-                .any(|step| step.starts_with(&format!("{subject} "))),
-            "{subject}"
-        );
-    }
+[lint]
+description = "Lint"
+run = [["true"]]
+
+[test]
+description = "Test"
+run = [["true"]]
+"#,
+        ),
+        (
+            "b",
+            r#"
+description = "B"
+
+[test]
+description = "Test"
+run = [["true"]]
+"#,
+        ),
+        (
+            "h",
+            r#"
+description = "H"
+
+[all]
+description = "All"
+requires = [".b", ".a"]
+"#,
+        ),
+    ])
+    .unwrap();
+
+    assert_eq!(
+        scheduled(&tree, "h all", &[]),
+        ["b test", "a lint", "a test", "h all"]
+    );
 }

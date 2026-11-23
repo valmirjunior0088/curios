@@ -18,7 +18,7 @@ use {
 };
 
 #[cfg(test)]
-mod test_support;
+pub mod test_support;
 
 #[cfg(test)]
 mod instruction_tests;

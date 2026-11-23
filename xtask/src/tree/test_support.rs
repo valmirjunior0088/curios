@@ -1,4 +1,4 @@
-//! What the reader's suites share: task files of a test's own, read under a top holding nothing of its own.
+//! What the suites of the reader, the scheduler and the command line share: task files of a test's own, read under a top holding nothing of its own, so a test holds the runner's rules and no step the repository's files hold.
 
 use super::*;
 

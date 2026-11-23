@@ -1,31 +1,44 @@
-//! What the command line the repository's task files read as accepts.
+//! What the command line a tree reads as accepts, over task files of the tests' own.
 
-use {super::*, crate::*};
+use {super::*, crate::tree::test_support::*, crate::*};
+
+/// A subject holding a group, a step beside it, and a flag one step of the group takes.
+const SUBJECT: (&str, &str) = (
+    "a",
+    r#"
+description = "A"
+variables.expression.flag = ["-E", "--filterset"]
+variables.expression.help = "Run only what the expression selects"
+
+[lint.clippy]
+description = "Clippy"
+run = [["true"]]
+
+[test.suite]
+description = "Suite"
+run = [["true", "{.a.variables.expression}"]]
+
+[build]
+description = "Build"
+run = [["true"]]
+"#,
+);
 
 fn parsed(words: &[&str]) -> Result<Asked, clap::Error> {
-    let tree = Tree::read().unwrap();
+    let tree = tree(&[SUBJECT]).unwrap();
 
     command(&tree)
         .try_get_matches_from(["cargo xtask"].into_iter().chain(words.iter().copied()))
         .map(|matches| asked(&matches))
 }
 
-fn name(text: &str) -> Name {
-    text.split(' ').map(str::to_string).collect()
-}
-
 #[test]
 fn a_path_names_a_task_at_any_depth() {
-    for path in [
-        "workspace",
-        "workspace lint",
-        "workspace lint clippy",
-        "handoff",
-    ] {
+    for path in ["a", "a lint", "a lint clippy", "a build"] {
         assert_eq!(
             parsed(&path.split(' ').collect::<Vec<_>>()).unwrap(),
             Asked::Task {
-                name: name(path),
+                name: path.split(' ').map(str::to_string).collect(),
                 given: Given::new()
             }
         );
@@ -35,36 +48,28 @@ fn a_path_names_a_task_at_any_depth() {
 /// An action a subject lacks is the parser's own error rather than a refusal written here.
 #[test]
 fn a_path_the_tree_does_not_hold_is_refused() {
-    assert!(parsed(&["bundle", "lint"]).is_err());
+    assert!(parsed(&["a", "bundle"]).is_err());
+    assert!(parsed(&["b"]).is_err());
 }
 
 #[test]
 fn a_flag_is_taken_where_a_step_under_the_path_uses_it() {
     let expected = Asked::Task {
-        name: name("workspace test"),
-        given: [(
-            name("workspace variables expression"),
-            "test(~cli)".to_string(),
-        )]
-        .into_iter()
-        .map(|(name, value)| {
-            (
-                name.join(".").split('.').map(str::to_string).collect(),
-                value,
-            )
-        })
-        .collect(),
+        name: vec!["a".to_string(), "test".to_string()],
+        given: [(name("a.variables.expression"), "test(~cli)".to_string())]
+            .into_iter()
+            .collect(),
     };
 
     assert_eq!(
-        parsed(&["workspace", "test", "-E", "test(~cli)"]).unwrap(),
+        parsed(&["a", "test", "-E", "test(~cli)"]).unwrap(),
         expected
     );
     assert_eq!(
-        parsed(&["workspace", "test", "--filterset", "test(~cli)"]).unwrap(),
+        parsed(&["a", "test", "--filterset", "test(~cli)"]).unwrap(),
         expected
     );
-    assert!(parsed(&["workspace", "lint", "-E", "test(~cli)"]).is_err());
+    assert!(parsed(&["a", "lint", "-E", "test(~cli)"]).is_err());
 }
 
 #[test]
