@@ -22,16 +22,17 @@ pub fn formatted_within(source: &str, format: Format) -> String {
     }
 }
 
-/// The format of lines `columns` wide, a match kept on one line as the defaults keep it there.
+/// The format of lines `columns` wide, indented and keeping a match on one line as the defaults do.
 pub fn at(columns: usize) -> Format {
     let line_width = Width::new(columns).expect("the line width is admitted");
     Format {
         line_width,
+        indent_width: Indent::default(),
         flat_match: FlatMatch::within(line_width, None, None).expect("the defaults fit every line"),
     }
 }
 
-/// Every format a file may be formatted within, at the extremes: at each admitted line width, a match kept on one line by the defaults and at each extreme the settings admit — kept off every line, as wide as the line with the fewest arms, and as wide as the line with the most.
+/// Every format a file may be formatted within, at the extremes: at each admitted line width and indentation, a match kept on one line by the defaults and at each extreme the settings admit — kept off every line, as wide as the line with the fewest arms, and as wide as the line with the most.
 pub fn admitted_formats() -> Vec<Format> {
     LINE_WIDTHS
         .into_iter()
@@ -47,8 +48,12 @@ pub fn admitted_formats() -> Vec<Format> {
                 within(columns, MIN_FLAT_MATCH_ARMS),
                 within(columns, MAX_FLAT_MATCH_ARMS),
             ]
-            .map(|flat_match| Format {
+            .map(|flat_match| (line_width, flat_match))
+        })
+        .flat_map(|(line_width, flat_match)| {
+            INDENT_WIDTHS.map(|columns| Format {
                 line_width,
+                indent_width: Indent::new(columns).expect("the indentation is admitted"),
                 flat_match,
             })
         })

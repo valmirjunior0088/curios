@@ -8,7 +8,7 @@
 //!
 //! **One document for the whole file**, built and rendered once by [`emit`], which says why.
 //!
-//! **A file is formatted within a [`Format`]**: the width of its lines, and how much of a match one line keeps ([`FlatMatch`]). Every law holds at each line width it admits, [`LINE_WIDTHS`], under the default flat match and at each extreme the settings admit, which `format/width_tests.rs` and `format/place_tests.rs` hold over the sources of the tree. Where a file's format comes from is `curios-package`'s `FormatSettings`.
+//! **A file is formatted within a [`Format`]**: the width of its lines, the columns a level of nesting indents them by, and how much of a match one line keeps ([`FlatMatch`]). Every law holds at each line width it admits, [`LINE_WIDTHS`], at each indentation, [`INDENT_WIDTHS`], under the default flat match and at each extreme the settings admit, which `format/width_tests.rs` and `format/place_tests.rs` hold over the sources of the tree. Where a file's format comes from is `curios-package`'s `FormatSettings`.
 
 use {
     super::{
@@ -75,6 +75,54 @@ impl FromStr for Width {
             format!(
                 "a line width is a number of columns, {}, not `{spelling}`",
                 spelled_choices(&LINE_WIDTHS)
+            )
+        })?;
+        Self::new(columns)
+    }
+}
+
+/// The indentation where nothing states another, the corpus's four columns.
+pub const DEFAULT_INDENT_WIDTH: usize = 4;
+
+/// The indentations a file may be formatted at: two columns, which a narrow page wants, four nesting levels taking eight columns where the default takes sixteen, and [`DEFAULT_INDENT_WIDTH`]. The formatter's laws are held over the sources of the tree at each, so no other is admitted.
+pub const INDENT_WIDTHS: [usize; 2] = [2, DEFAULT_INDENT_WIDTH];
+
+/// The columns a level of nesting indents a line by, written as spaces: one of [`INDENT_WIDTHS`], [`DEFAULT_INDENT_WIDTH`] where nothing states another. A fact of the page, as its width is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Indent(usize);
+
+impl Indent {
+    /// `columns` as an indentation, refused outside the indentations the formatter admits.
+    pub fn new(columns: usize) -> Result<Self, String> {
+        match INDENT_WIDTHS.contains(&columns) {
+            true => Ok(Self(columns)),
+            false => Err(format!(
+                "an indentation is {} columns, and `{columns}` is not",
+                spelled_choices(&INDENT_WIDTHS)
+            )),
+        }
+    }
+
+    /// The columns a level indents by.
+    pub fn columns(self) -> usize {
+        self.0
+    }
+}
+
+impl Default for Indent {
+    fn default() -> Self {
+        Self(DEFAULT_INDENT_WIDTH)
+    }
+}
+
+impl FromStr for Indent {
+    type Err = String;
+
+    fn from_str(spelling: &str) -> Result<Self, String> {
+        let columns = spelling.parse().map_err(|_| {
+            format!(
+                "an indentation is a number of columns, {}, not `{spelling}`",
+                spelled_choices(&INDENT_WIDTHS)
             )
         })?;
         Self::new(columns)
@@ -175,10 +223,11 @@ impl Default for FlatMatch {
     }
 }
 
-/// What a file is formatted within: the width of its lines, and how much of a match one line keeps.
+/// What a file is formatted within: the width of its lines, the columns a level of nesting indents them by, and how much of a match one line keeps.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Format {
     pub line_width: Width,
+    pub indent_width: Indent,
     pub flat_match: FlatMatch,
 }
 
@@ -219,9 +268,6 @@ impl Formatted {
         Self::from_source(&source, WrittenIn::of(path), format)
     }
 }
-
-/// The canonical indent — the corpus's four spaces.
-const INDENT: usize = 4;
 
 /// What the renderer follows: the text `source` was read from, with the comments the parse consumed, each classified.
 fn original<'a>(source: &'a Source, comments: &[Span]) -> Original<'a> {
@@ -306,17 +352,28 @@ fn classify(source: &str, spans: &[Span]) -> Vec<Owed> {
         .collect()
 }
 
-/// Render one document within `width` at the canonical indent, following `original`.
-fn render(printer: Printer, original: &Original<'_>, width: Width) -> String {
-    struct Within<'a, 'b>(RefCell<Option<Printer>>, &'a Original<'b>, Width);
+/// Render one document within `format`'s width at its indentation, following `original`.
+fn render(printer: Printer, original: &Original<'_>, format: Format) -> String {
+    struct Within<'a, 'b>(RefCell<Option<Printer>>, &'a Original<'b>, Format);
     impl fmt::Display for Within<'_, '_> {
         fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
             let printer = self.0.borrow_mut().take().expect("rendered once");
+            let Format {
+                line_width,
+                indent_width,
+                ..
+            } = self.2;
 
-            run_printer_placing(printer, formatter, INDENT, self.2.columns(), self.1)
+            run_printer_placing(
+                printer,
+                formatter,
+                indent_width.columns(),
+                line_width.columns(),
+                self.1,
+            )
         }
     }
-    Within(RefCell::new(Some(printer)), original, width).to_string()
+    Within(RefCell::new(Some(printer)), original, format).to_string()
 }
 
 /// The parsed file as one document: items separated by exactly one blank line — except a `use` following a `use` or a `mod X;`, which keeps the separation it was written with, stacked as the corpus writes its import heads and its `mod X; use X/{…}` pairs, or one blank line apart however many were written — and the tail last.
@@ -344,7 +401,7 @@ pub fn emit(input: &FormatInput, original: &Original<'_>, format: Format) -> Str
         parts.push(print_term(tail.clone(), format.flat_match));
     }
 
-    format!("{}\n", render(flat(parts), original, format.line_width))
+    format!("{}\n", render(flat(parts), original, format))
 }
 
 /// A file of Core text as one document, as a program's is ([`emit`]): its items a blank line apart, each marked at both ends, and the entry last.
@@ -367,7 +424,7 @@ fn emit_core_text(input: &CoreFormatInput, original: &Original<'_>, format: Form
         parts.push(print_core_entry(entry.clone(), format.flat_match));
     }
 
-    format!("{}\n", render(flat(parts), original, format.line_width))
+    format!("{}\n", render(flat(parts), original, format))
 }
 
 /// Whether a blank line stands between the item that starts at `start` and the code before it, read back over the comment lines between them: a comment is no blank line, and an item sharing its line with the one before is not apart from it. Read from the item's start, since an item's span runs on over the blank lines and comments the parse consumed after it.

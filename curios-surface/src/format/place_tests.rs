@@ -322,7 +322,7 @@ fn a_comment_keeps_its_place_in_the_sources_of_the_tree() {
     assert_every_comment_keeps_its_place(&sources_of_the_tree(), Format::default());
 }
 
-/// The same law at every line width a file may be formatted within, over the sources of the tree as the formatter writes them there, where at the narrowest far more of their lines break: a match kept on one line by the defaults and at each extreme the settings admit.
+/// The same law at every line width and indentation a file may be formatted within, over the sources of the tree as the formatter writes them there, where at the narrowest far more of their lines break: a match kept on one line by the defaults and at each extreme the settings admit.
 #[test]
 fn a_comment_keeps_its_place_in_the_sources_of_the_tree_at_every_width() {
     at_every_admitted_format(|format| {

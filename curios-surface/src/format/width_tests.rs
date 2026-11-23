@@ -1,4 +1,4 @@
-//! The width a file is formatted within: which widths are admitted, how one is read, and that the laws hold at each over the sources of the tree.
+//! The width and the indentation a file is formatted within: which are admitted, how each is read, and that the laws hold at each over the sources of the tree.
 
 use {
     super::{test_support::*, *},
@@ -37,6 +37,48 @@ fn a_width_is_read_from_its_digits_alone() {
 }
 
 #[test]
+fn an_indentation_is_one_of_the_two_the_laws_are_held_at() {
+    assert_eq!(Indent::default().columns(), DEFAULT_INDENT_WIDTH);
+    for columns in INDENT_WIDTHS {
+        assert_eq!(Indent::new(columns).map(Indent::columns), Ok(columns));
+    }
+    for columns in [0, 3, 8] {
+        assert_eq!(
+            Indent::new(columns),
+            Err(format!(
+                "an indentation is `2` or `4` columns, and `{columns}` is not"
+            ))
+        );
+    }
+    assert_eq!("2".parse::<Indent>().map(Indent::columns), Ok(2));
+    let refusal = "two".parse::<Indent>().expect_err("no digits");
+    assert!(refusal.contains("`two`"), "{refusal}");
+}
+
+/// At two columns a file is indented two columns a level and broken where the default breaks it: a source canonical at four, its leading spaces halved.
+#[test]
+fn a_two_column_indentation_indents_each_level_by_two() {
+    let source = "struct Pair: Type {\n    fst: /std/Nat,\n    snd: /std/Nat,\n}\n\nlet f(n: /std/Nat) -> /std/Nat =\n    match n\n    | 0 => 1\n    | 1 => 2\n    | 2 => 3\n    | _ =>\n        let m = n + 1;\n        m\n    end;\n";
+    let halved = source
+        .lines()
+        .map(|line| {
+            let written = line.trim_start();
+            format!(
+                "{}{written}\n",
+                " ".repeat((line.len() - written.len()) / 2)
+            )
+        })
+        .collect::<String>();
+    let two = Format {
+        indent_width: Indent::new(2).expect("the indentation is admitted"),
+        ..Format::default()
+    };
+
+    assert_eq!(formatted(source), source);
+    assert_eq!(formatted_within(source, two), halved);
+}
+
+#[test]
 fn a_narrower_width_breaks_what_the_default_keeps_on_one_line() {
     let source =
         "let total: Nat =\n    combine(first_argument, second_argument, third_argument);\n";
@@ -54,7 +96,7 @@ fn a_narrower_width_breaks_what_the_default_keeps_on_one_line() {
     assert_eq!(formatted_within(&narrow, narrowest), narrow);
 }
 
-/// Every source of the tree formats at every admitted line width without refusal, a match kept on one line by the defaults and at each extreme the settings admit, keeping its program and its comments, and what that writes is written again unchanged: the laws hold there over every shape the corpus holds, the narrowest putting far more breaks to the renderer than the default does.
+/// Every source of the tree formats at every admitted line width and indentation without refusal, a match kept on one line by the defaults and at each extreme the settings admit, keeping its program and its comments, and what that writes is written again unchanged: the laws hold there over every shape the corpus holds, the narrowest putting far more breaks to the renderer than the default does.
 #[test]
 fn every_source_in_the_tree_formats_at_every_width_and_holds_there() {
     let faults = at_every_admitted_format(|format| {
@@ -111,6 +153,7 @@ fn a_flat_match_keeps_or_breaks_a_match_by_its_span_and_its_arms() {
             Format {
                 line_width,
                 flat_match,
+                ..Format::default()
             },
         )
     };
@@ -142,6 +185,7 @@ fn a_flat_match_keeps_or_breaks_a_match_by_its_span_and_its_arms() {
                 line_width,
                 flat_match: FlatMatch::within(line_width, None, Some(arms))
                     .expect("the flat match is admitted"),
+                ..Format::default()
             },
         )
     };
@@ -169,6 +213,7 @@ fn the_most_arms_a_flat_match_keeps_is_the_most_a_line_shows() {
             width: MAX_LINE_WIDTH,
             arms,
         },
+        ..Format::default()
     };
     let kept = |text: &str| {
         text.lines()

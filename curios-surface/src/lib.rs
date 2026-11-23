@@ -51,9 +51,9 @@ pub use core_text::{ReadError, Refusal, to_core, to_core_at};
 
 mod format;
 pub use format::{
-    DEFAULT_FLAT_MATCH_ARMS, DEFAULT_FLAT_MATCH_WIDTH, FlatMatch, FlatMatchSetting, Format,
-    Formatted, LINE_WIDTHS, MAX_FLAT_MATCH_ARMS, MIN_FLAT_MATCH_ARMS, MIN_LINE_WIDTH, Width,
-    spelled_choices,
+    DEFAULT_FLAT_MATCH_ARMS, DEFAULT_FLAT_MATCH_WIDTH, DEFAULT_INDENT_WIDTH, FlatMatch,
+    FlatMatchSetting, Format, Formatted, INDENT_WIDTHS, Indent, LINE_WIDTHS, MAX_FLAT_MATCH_ARMS,
+    MIN_FLAT_MATCH_ARMS, MIN_LINE_WIDTH, Width, spelled_choices,
 };
 
 mod print;

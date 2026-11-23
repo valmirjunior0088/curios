@@ -21,10 +21,10 @@ use {
     },
     curios_print::{Annotated, Printer, each_named, render_annotated},
     curios_surface::{
-        Doc, Module, TopItem, UseGroup, carrier_former, print_case_head, print_concept_field_head,
-        print_concept_head, print_exposure_head, print_foreign_head, print_induct_head,
-        print_let_head, print_struct_field_head, print_struct_head, print_test_head,
-        print_witness_head,
+        DEFAULT_INDENT_WIDTH, Doc, Module, TopItem, UseGroup, carrier_former, print_case_head,
+        print_concept_field_head, print_concept_head, print_exposure_head, print_foreign_head,
+        print_induct_head, print_let_head, print_struct_field_head, print_struct_head,
+        print_test_head, print_witness_head,
     },
     std::{
         collections::{HashMap, HashSet},
@@ -36,9 +36,6 @@ use {
 
 /// Where a name is written: the name and the file of the source it lies in, and its byte range there — what a name a signature prints is found by among the unit's mentions.
 pub type Written = (Option<SourceName>, Option<PathBuf>, usize, usize);
-
-/// The indent a broken signature continues at — the formatter's.
-const INDENT: usize = 4;
 
 /// The mounts whose declarations reach a consumer only through the documented one, each with the word a page chips onto them.
 ///
@@ -805,7 +802,7 @@ impl Reader<'_> {
                 referent.map(|referent| (self.public_name(&referent), self.class_of(&referent))),
             );
         });
-        let (text, annotations) = render_annotated(head, INDENT, MAX_LINE_WIDTH);
+        let (text, annotations) = render_annotated(head, DEFAULT_INDENT_WIDTH, MAX_LINE_WIDTH);
 
         let mut referents = referents.into_iter();
         let marks = annotations
@@ -1125,7 +1122,7 @@ impl Heading {
 /// The indent `block` writes its members at.
 fn indent_of(block: &Block) -> String {
     match block.indented {
-        true => " ".repeat(INDENT),
+        true => " ".repeat(DEFAULT_INDENT_WIDTH),
         false => String::new(),
     }
 }
@@ -1159,7 +1156,7 @@ pub fn written(kind: Kind, opaque: bool, head: &str, members: &[impl AsRef<str>]
 pub fn heading(declaration: &str, label: usize) -> Option<Heading> {
     let module = Module::parse(&Source::inline(declaration)).ok()?;
     let named = |stated: &Stated| stated.label.is_some_and(|span| span.start == label);
-    let printed = |head: Printer| render_annotated(head, INDENT, MAX_LINE_WIDTH).0;
+    let printed = |head: Printer| render_annotated(head, DEFAULT_INDENT_WIDTH, MAX_LINE_WIDTH).0;
 
     module.items.iter().flat_map(stated).find_map(|stated| {
         if named(&stated) {

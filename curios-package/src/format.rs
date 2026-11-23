@@ -12,8 +12,9 @@ use {
     clap::Args,
     curios_common::{MAX_LINE_WIDTH, Report},
     curios_surface::{
-        DEFAULT_FLAT_MATCH_ARMS, DEFAULT_FLAT_MATCH_WIDTH, FlatMatch, FlatMatchSetting, Format,
-        LINE_WIDTHS, MAX_FLAT_MATCH_ARMS, MIN_FLAT_MATCH_ARMS, Width, spelled_choices,
+        DEFAULT_FLAT_MATCH_ARMS, DEFAULT_FLAT_MATCH_WIDTH, DEFAULT_INDENT_WIDTH, FlatMatch,
+        FlatMatchSetting, Format, INDENT_WIDTHS, Indent, LINE_WIDTHS, MAX_FLAT_MATCH_ARMS,
+        MIN_FLAT_MATCH_ARMS, Width, spelled_choices,
     },
     serde::{Deserialize, Deserializer, de::Error},
     std::path::{Path, PathBuf},
@@ -27,6 +28,10 @@ pub struct FormatSettings {
     #[arg(long, value_name = "COLUMNS", help = line_width_help())]
     #[serde(default, deserialize_with = "line_width")]
     pub line_width: Option<Width>,
+    /// The columns a level of nesting indents a line by.
+    #[arg(long, value_name = "COLUMNS", help = indent_width_help())]
+    #[serde(default, deserialize_with = "indent_width")]
+    pub indent_width: Option<Indent>,
     /// The most columns a match keeps on one line, from `match` to `end`.
     #[arg(long, value_name = "COLUMNS", help = flat_match_width_help())]
     #[serde(default)]
@@ -97,6 +102,7 @@ impl FormatSettings {
         // Every setting is named here, so one added to the struct does not compile until it is read.
         let Self {
             line_width,
+            indent_width,
             flat_match_width,
             flat_match_arms,
         } = self;
@@ -106,6 +112,7 @@ impl FormatSettings {
 
         Ok(Format {
             line_width,
+            indent_width: indent_width.unwrap_or_default(),
             flat_match,
         })
     }
@@ -114,11 +121,13 @@ impl FormatSettings {
     fn stated(&self) -> Vec<&'static str> {
         let Self {
             line_width,
+            indent_width,
             flat_match_width,
             flat_match_arms,
         } = self;
         [
             (line_width.is_some(), "--line-width"),
+            (indent_width.is_some(), "--indent-width"),
             (flat_match_width.is_some(), "--flat-match-width"),
             (flat_match_arms.is_some(), "--flat-match-arms"),
         ]
@@ -133,6 +142,14 @@ fn line_width_help() -> String {
     format!(
         "The columns a formatted line is written within, {}, for standard input or a file no package governs; a package states its own under `[format]` (default: `{MAX_LINE_WIDTH}`)",
         spelled_choices(&LINE_WIDTHS)
+    )
+}
+
+/// `--indent-width`'s help, its indentations read off the constants that set them.
+fn indent_width_help() -> String {
+    format!(
+        "The columns a level of nesting indents a line by, {}, for standard input or a file no package governs; a package states its own under `[format]` (default: `{DEFAULT_INDENT_WIDTH}`)",
+        spelled_choices(&INDENT_WIDTHS)
     )
 }
 
@@ -164,6 +181,14 @@ fn line_width<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Width
     let columns = usize::try_from(columns).map_err(D::Error::custom)?;
 
     Width::new(columns).map(Some).map_err(D::Error::custom)
+}
+
+/// `indent-width` as a manifest spells it: a whole number of columns, refused where the formatter admits no such indentation.
+fn indent_width<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Indent>, D::Error> {
+    let columns = u64::deserialize(deserializer)?;
+    let columns = usize::try_from(columns).map_err(D::Error::custom)?;
+
+    Indent::new(columns).map(Some).map_err(D::Error::custom)
 }
 
 /// Membership chooses the one owner of a package's format, as it chooses the owner of its compiler version: an enumerating umbrella, whose `[format]` a member does not restate, or the standalone package itself. The settings are `None` where the owner states no `[format]`, which is every setting at its default.

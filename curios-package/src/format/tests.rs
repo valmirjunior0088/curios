@@ -84,6 +84,47 @@ fn a_width_the_formatter_does_not_admit_is_refused_where_the_manifest_is_read() 
     }
 }
 
+/// An indentation is stated under `[format]` and as a flag, the default's where neither states one, and one the formatter does not admit is refused where the manifest is read.
+#[test]
+fn an_indentation_is_stated_as_a_width_is() {
+    let two = Indent::new(2).expect("the indentation is admitted");
+    let Ok(Manifest::Package(package)) = "name = \"app\"\n\n[format]\nindent-width = 2\n".parse()
+    else {
+        panic!("a package's manifest");
+    };
+    assert_eq!(
+        package.format.map(|settings| settings.indent_width),
+        Some(Some(two))
+    );
+    let flag = FormatSettings {
+        indent_width: Some(two),
+        ..FormatSettings::default()
+    };
+    assert_eq!(
+        flag.format_under(None).map(|format| format.indent_width),
+        Ok(two)
+    );
+    assert_eq!(
+        FormatSettings::default()
+            .format_under(None)
+            .map(|format| format.indent_width),
+        Ok(Indent::default())
+    );
+
+    for (stated, refused) in [
+        ("3", "an indentation is `2` or `4` columns, and `3` is not"),
+        ("8", "and `8` is not"),
+        ("-1", "`indent-width` is a whole number"),
+    ] {
+        let refusal = format!("name = \"app\"\n\n[format]\nindent-width = {stated}\n")
+            .parse::<Manifest>()
+            .unwrap_err()
+            .said
+            .to_string();
+        assert!(refusal.contains(refused), "{stated}: {refusal}");
+    }
+}
+
 /// A flat match is stated beside the line width, and refused where it says what no line could show or keeps a match off every line by its arms, which the span alone says: where the manifest is read, at the key, and as a flag, by the flag.
 #[test]
 fn a_flat_match_past_its_lines_or_of_no_arms_is_refused() {
@@ -144,6 +185,7 @@ fn a_flat_match_is_its_defaults_where_nothing_states_it() {
             line_width: Some(width(50)),
             flat_match_width: Some(0),
             flat_match_arms: Some(MAX_FLAT_MATCH_ARMS),
+            ..FormatSettings::default()
         }),
         Ok((0, MAX_FLAT_MATCH_ARMS))
     );

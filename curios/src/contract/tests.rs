@@ -597,7 +597,7 @@ lint SUBJECT — Any, cabinet Write, leaves Nothing, options --budget --manifest
   work/app/helper: bench → program bench
   work/app/nested: (none) → entire nested
   .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
-format SUBJECT — Files, cabinet None, leaves Rewritten, options --check --line-width --flat-match-width --flat-match-arms --core --manifest
+format SUBJECT — Files, cabinet None, leaves Rewritten, options --check --line-width --indent-width --flat-match-width --flat-match-arms --core --manifest
   work/app: (none) → files lib.crs util.crs bench.crs serve.crs helper.crs helper/deep.crs within 100
   work/app: serve → files serve.crs helper.crs helper/deep.crs within 100
   work/app: absent → refused: unknown executable: `app` declares no executable named `absent` · it declares: `bench`, `serve` → <root>/work/app/curios.toml
@@ -618,7 +618,7 @@ format SUBJECT — Files, cabinet None, leaves Rewritten, options --check --line
   work/app/helper: bench → files <root>/work/app/bench.crs within 100
   work/app/nested: (none) → files lib.crs within 100
   .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
-format --core SUBJECT — Files, cabinet None, leaves Rewritten, options --check --line-width --flat-match-width --flat-match-arms --core --manifest
+format --core SUBJECT — Files, cabinet None, leaves Rewritten, options --check --line-width --indent-width --flat-match-width --flat-match-arms --core --manifest
   work/app: (none) → refused: surplus flag: `--core` says the text on standard input is Core text · with no subject nothing reads standard input; `-` does → --core
   work/app: serve → refused: surplus flag: `--core` says the text on standard input is Core text · `serve` names an executable, a program → --core
   work/app: absent → refused: surplus flag: `--core` says the text on standard input is Core text · `absent` names an executable, a program → --core
