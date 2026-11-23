@@ -58,12 +58,16 @@ fn an_npm_script_runs_after_its_tree_s_install() {
     );
 }
 
-/// `zed test` hashes the parser `tree-sitter build` generates, which the grammar's own tools generate.
+/// `zed test` hashes the parsers `tree-sitter build` generates, a step a grammar.
 #[test]
 fn the_extension_s_test_runs_after_the_grammar_it_hashes() {
     assert_eq!(
         scheduled("zed test", &[]),
-        ["tree-sitter install", "tree-sitter build", "zed test"]
+        [
+            "tree-sitter build base",
+            "tree-sitter build core",
+            "zed test"
+        ]
     );
 }
 

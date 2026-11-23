@@ -8,11 +8,12 @@
 
 ## Goal
 
-- The tree-sitter steps name the CLI, a tool of `xtask/tasks/tree-sitter.toml` fetched as tree-sitter's gzipped binary for each host, `tree-sitter-{linux,macos}-{x64,arm64}.gz`, at GitHub's digest of the release asset; and `editors/tree-sitter` holds the grammars and no npm tree.
+- The tree-sitter steps name the CLI, a tool of `xtask/tasks.toml` fetched as tree-sitter's gzipped binary for each host, `tree-sitter-{linux,macos}-{x64,arm64}.gz`, at GitHub's digest of the release asset; and `editors/tree-sitter` holds the grammars and no npm tree.
 
 ## Settled
 
-- **Generation needs a JavaScript engine.** `tree-sitter generate` evaluates `grammar.js`, with Node by default and with its built-in QuickJS under `--js-runtime native`: QuickJS is taken where it regenerates the committed parsers byte for byte, and the fetched Node otherwise.
+- **Generation runs under the fetched Node.** `tree-sitter generate` evaluates `grammar.js`, and the Node every other step's JavaScript runs under is the one engine that wrote the committed parsers; its built-in QuickJS would be a second engine to keep in agreement with the first.
+- **A parser is compiled into the checkout.** tree-sitter keeps a compiled parser by the grammar's name in a cache of the user's, which every checkout of the machine shares, so two checkouts load each other's parser or wait on each other's lock; each grammar is built with `--output` into `editors/tree-sitter/.artifacts`, a produced file the steps that parse load with `--lib-path`.
 - **The sources are read from git.** The test's `find` over the library, the corpus and the board becomes a variable whose command lists the tracked sources, so the steps run no shell.
 
 ## Stages

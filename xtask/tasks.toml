@@ -58,6 +58,17 @@ sha256.x86_64-unknown-linux-gnu = "58042408e6cc861fb1a731c26bb082dc222285561eaa4
 sha256.aarch64-unknown-linux-gnu = "0e6e0c5452c505c8d46fe472fd196a0d17d963460727e2ce2013b02aa1309555"
 sha256.aarch64-apple-darwin = "d29864d1ba3b36855527bb1b0ca3aa7f703cdce338b9680bb922c5c151b358fa"
 
+# The grammars' command line, which generates a parser from a grammar and parses, tests and queries with it: a gzipped binary a platform, published without sums, so its digests are GitHub's.
+[tools.tree-sitter]
+version = "0.27.1"
+url.x86_64-unknown-linux-gnu = "https://github.com/tree-sitter/tree-sitter/releases/download/v{.tools.tree-sitter.version}/tree-sitter-linux-x64.gz"
+url.aarch64-unknown-linux-gnu = "https://github.com/tree-sitter/tree-sitter/releases/download/v{.tools.tree-sitter.version}/tree-sitter-linux-arm64.gz"
+url.aarch64-apple-darwin = "https://github.com/tree-sitter/tree-sitter/releases/download/v{.tools.tree-sitter.version}/tree-sitter-macos-arm64.gz"
+sha256.x86_64-unknown-linux-gnu = "d01042f94ba3d6827ddc9788e235f75d8366431be42bdf90ade534d960c98b7d"
+sha256.aarch64-unknown-linux-gnu = "404be5d54a4955571c4067c21d4699660eab3a534cefb0659341b207f7139ec5"
+sha256.aarch64-apple-darwin = "46cb97d9a2c52c94e22d9a76c2f1116156b8b61f98360e2a9cce05fcb197cd4d"
+
+
 [handoff]
 description = "Run every check the handoff holds work to: each subject's steps, each after what it requires and consumes"
 requires = [

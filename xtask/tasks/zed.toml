@@ -23,9 +23,9 @@ run = [
 
 [test]
 description = "Hold the Zed extension to the tree around it: the grammar revisions it pins publish these grammars, and its lints are the workspace's"
-# It hashes the grammar where `extension.toml` says Zed installs it from, a path it states rather than one it is handed.
+# It hashes each grammar where `extension.toml` says Zed installs it from, a path it states rather than one it is handed.
 dir = "editors/zed"
-consumes = [".tree-sitter.build.produces.parser"]
+consumes = [".tree-sitter.build.base.produces.parser", ".tree-sitter.build.core.produces.parser"]
 run = [
     ["cargo", "test"],
 ]

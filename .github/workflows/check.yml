@@ -132,7 +132,6 @@ jobs:
           workspaces: .
           cache-directories: |
             xtask/.artifacts
-            ~/.npm
       - name: Lint
         run: cargo xtask tree-sitter lint
       - name: Test
@@ -194,7 +193,6 @@ jobs:
             editors/zed
           cache-directories: |
             xtask/.artifacts
-            ~/.npm
       - name: Lint
         run: cargo xtask zed lint
       - name: Build
