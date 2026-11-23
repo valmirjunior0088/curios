@@ -14,7 +14,7 @@ Settled by the user on 2026-11-20.
 - **A concept backs it.** `xs[i]` is a call of a method of a concept of `/std/ops`, resolved as any witness is: read off the intrinsic sequences alone it would be the one operator no witness answers. The witness chooses the index's type, as Rust's `Index` and Lean's `GetElem` take it as a parameter, so a program's own type takes part.
 - **The optional face stays a call.** `List/try_get(xs, i)` answers an `Option`, taken apart by `!` where a region sequences. One operator, one meaning.
 - **`/std` reads by the operator.** Its bounded reads are rewritten to it.
-- **Rejected.** An index spelled `xs.[i]`, which is not the spelling a reader brings, as F# found, which carried it and added `xs[i]`; an operator on the optional face, which would make the short spelling the one that states no bound.
+- **Rejected.** An index spelled `xs.[i]`, which is not the spelling a reader brings, as F# found, which carried it and added `xs[i]`; an index spelled as the call of the sequence it reads, `xs(i)`, as Ada, Fortran, MATLAB and Scala's `apply` spell one and Clojure's vectors answer one, a sequence being the function its bounded index reads: it asks no form of the grammar, but it is not the spelling a reader brings either, and a read stops looking unlike a call; an operator on the optional face, which would make the short spelling the one that states no bound.
 
 ## Open
 

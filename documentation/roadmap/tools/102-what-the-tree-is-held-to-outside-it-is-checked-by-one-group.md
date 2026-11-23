@@ -4,7 +4,7 @@
 
 ## What is wrong today
 
-- **Two corpora are run by nothing.** At `3ea89cfbf`, `Json/decode` answers all 318 of JSONTestSuite's cases as the suite asks — the 95 to read read, the 188 to refuse refused, the 35 left to a parser 11 read and 24 refused — and `Toml/decode` refuses all 509 of `toml-test`'s invalid TOML 1.0 documents and reads 206 of its 208 valid ones ([the entry on dotted tables](../standard-library/000-findings.md)); only `Json/tests`'s number cases run, by hand-copied names.
+- **Two corpora are run by nothing.** At `3ea89cfbf`, `Json/decode` answers all 318 of JSONTestSuite's cases as the suite asks — the 95 to read read, the 188 to refuse refused, the 35 left to a parser 11 read and 24 refused — and at `2e44199cb` `Toml/decode` refuses all 509 of `toml-test`'s invalid TOML 1.0 documents and reads all 208 of its valid ones; only `Json/tests`'s number cases run, by hand-copied names.
 - **The checks against what the tree does not own run where it cannot be told apart.** Unicode's grapheme cases run inside the suite (`curios-prelude/tests/std.rs`'s `every_conformance_case_segments_through_the_library_as_the_database_states`, and `curios-unicode`'s own), and the Zed pins' check inside the extension's tests (`editors/zed`'s `every_pinned_rev_publishes_this_grammar`), each a check of an outside fact among the tree's own.
 
 ## Goal
@@ -34,7 +34,7 @@
 
 **3. `json`.** Check: the step passes, and fails naming a case `Json/decode` is made to answer otherwise.
 
-**4. `toml`, after the entry on dotted tables.** Check: the same, a valid document's value among what it holds.
+**4. `toml`.** Check: the same, a valid document's value among what it holds.
 
 ## Verification and retirement
 
