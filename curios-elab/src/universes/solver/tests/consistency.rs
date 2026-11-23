@@ -2,7 +2,7 @@
 
 use {
     crate::universes::solver::*,
-    curios_cert::satisfiable,
+    curios_analysis::satisfiable,
     curios_common::{Plicity, Qualifier, Symbol},
     curios_core::{
         Anchor, Anchored, ArgumentSite, CalleeId, Extent, Global, Mention, SortForm, WrittenSort,

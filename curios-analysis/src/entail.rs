@@ -1,4 +1,4 @@
-//! The level entailment oracle: whether an assumed constraint set forces `lower <= upper`. Sound and deliberately incomplete — it derives what the hypotheses force by forward reasoning alone, the Horn-clause reading of the level algebra, and refuses what needs the naturals' total order on top. It is a rule that admits programs (levels the hypotheses force equal are equal in every instance satisfying them), which is why it lives in the certifier rather than beside the representation.
+//! The level entailment oracle: whether an assumed constraint set forces `lower <= upper`. Sound and deliberately incomplete — it derives what the hypotheses force by forward reasoning alone, the Horn-clause reading of the level algebra, and refuses what needs the naturals' total order on top. It is a rule that admits programs (levels the hypotheses force equal are equal in every instance satisfying them), which is why it lives with the rules both checkers run, inside the trusted base, rather than beside the representation.
 //!
 //! # Forward, to a least model
 //!
@@ -17,7 +17,7 @@ use {
 
 /// Whether `assumed` proves `lower ≤ upper` — the entailment a generic definition is checked under, where `assumed` is its own declared constraint set with the parameters held abstract.
 ///
-/// Sound and deliberately incomplete, in the certifier's stated direction: a refusal is a visible disagreement, an over-eager acceptance is silent. Every step of the derivation is valid over the naturals — a left maximum is bounded exactly when each of its parts is, a hypothesis may be shifted up and never down, and a parameter carries its offset whatever it is assigned. What it cannot see is a consequence of the naturals being *totally* ordered: `u + 1 ≤ max(u, v)` forces `u + 1 ≤ v` in every instance, and no clause says so.
+/// Sound and deliberately incomplete, in the trusted base's stated direction: a refusal is a visible disagreement, an over-eager acceptance is silent. Every step of the derivation is valid over the naturals — a left maximum is bounded exactly when each of its parts is, a hypothesis may be shifted up and never down, and a parameter carries its offset whatever it is assigned. What it cannot see is a consequence of the naturals being *totally* ordered: `u + 1 ≤ max(u, v)` forces `u + 1 ≤ v` in every instance, and no clause says so.
 pub fn entails(assumed: &[UniverseConstraint], lower: &Level, upper: &Level) -> bool {
     curios_common::profile!("entails");
     let mut model = LevelModel::of(upper);
@@ -45,7 +45,7 @@ pub fn entails(assumed: &[UniverseConstraint], lower: &Level, upper: &Level) -> 
         if model.bounds(lower) {
             return true;
         }
-        // A pass that raised nothing is the least model, and it does not bound `lower`. A value past the ceiling is climbing without end, which only a loop in the hypotheses can make it do; such a set has no instance in the naturals, the walk refuses it as unsatisfiable before assuming it, and refusing here is this crate's direction.
+        // A pass that raised nothing is the least model, and it does not bound `lower`. A value past the ceiling is climbing without end, which only a loop in the hypotheses can make it do; such a set has no instance in the naturals, a checker refuses it as unsatisfiable before assuming it, and refusing here is the trusted base's direction.
         if !raised || model.climbs_past(ceiling) {
             return false;
         }
