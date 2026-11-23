@@ -33,7 +33,6 @@ mod matching;
 mod numeric;
 mod operators;
 mod packages;
-mod programs;
 mod readme;
 mod recovery;
 mod recursion;

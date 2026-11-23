@@ -6,6 +6,8 @@ variables.edition.key = "workspace.package.edition"
 variables.loose.run = ["git", "ls-files", "--", "programs/*.rs"]
 # The Curios sources the formatter holds to canonical form: every tracked `.crs` but the editors' highlighting samples and the soundness board's archive, whose witnesses are written in forms the language no longer has.
 variables.sources.run = ["git", "ls-files", "--", "*.crs", ":!editors/**", ":!xboard/archive/**"]
+# The programs the tree ships, each loose, compiled against `/std` alone: the measurement corpus.
+variables.programs.run = ["git", "ls-files", "--", "programs/*.crs"]
 variables.package.flag = ["-p", "--package"]
 variables.package.help = "Compile and run one shipped package's tests alone, as a mutation of a crate the standard library's build parses through asks; every shipped member's when omitted"
 variables.expression.flag = ["-E", "--filterset"]
@@ -53,6 +55,14 @@ description = "Fail on formatting drift in the tree's Curios sources, as this tr
 consumes = [".compiler.launcher.produces.binary"]
 run = [
     ["cargo", "run", "--quiet", "--package", "curios", "--", "format", "--check", "{.compiler.variables.sources}"],
+]
+
+# One `curios lint` over every program, which takes several subjects into one report; `programs/` stays no package, since the corpus is loose by design, compiled against `/std` alone.
+[lint.curios-lint]
+description = "Fail on a lint in the programs the tree ships, as this tree's `curios lint` reports each, loose as it places a file no unit declares: a lint is exact and always on, so one is fixed in the program rather than excused"
+consumes = [".compiler.launcher.produces.binary"]
+run = [
+    ["cargo", "run", "--quiet", "--package", "curios", "--", "lint", "{.compiler.variables.programs}"],
 ]
 
 [lint.clippy]
