@@ -1,8 +1,8 @@
 //! The task files read into one tree, and every refusal reading them can make.
 //!
-//! **A file is a group, and a key's meaning is where it sits.** `xtask/tasks.toml` is the group the files in `xtask/tasks/` belong to, each a group named after its file. A file's top level holds `description`, `variables`, and its steps and groups, and the root's holds `tools` beside them; a group holds only steps and groups; a step holds `description`, `requires`, `consumes`, `produces`, `run` and `dir`, and no table of its own. So whether a key is an attribute or a child is read off its position, and one out of place is refused rather than guessed at.
+//! **A file is a group, and a key's meaning is where it sits.** `xtask/tasks.toml` is the group the files in `xtask/tasks/` belong to, each a group named after its file. A file's top level holds `description`, `variables`, and its steps and groups, and the root's holds `tools` and `corpora` beside them; a group holds only steps and groups; a step holds `description`, `requires`, `consumes`, `produces`, `run` and `dir`, and no table of its own. So whether a key is an attribute or a child is read off its position, and one out of place is refused rather than guessed at.
 //!
-//! **A name is the path to where it is declared, written from the top with a leading `.`, and it names one thing.** Each segment is a key, read from the top one projection at a time: a step or a group is its tables, `.compiler.lint.clippy`; a variable sits under its file's `variables`, `.compiler.variables.edition`; a tool under the root's `tools`, `.tools.node`, and its version beneath it, `.tools.node.version`; and a produced file under its step's `produces`, `.compiler.launcher.produces.binary`. So a name reads the same wherever it is written, and says where to find what it names. `requires` names steps and groups, `consumes` produced files, and the braces in a command a variable, a tool or a produced file, or, with a `!` where the `.` stands, a value the runner fills ([`BUILT_INS`]). Each resolves as the tree is read, so a name that names nothing, one written without its `.`, or one naming the wrong kind of thing, is refused before anything runs, and so is a command that reads a file its step does not consume, which would run without the edge that orders it.
+//! **A name is the path to where it is declared, written from the top with a leading `.`, and it names one thing.** Each segment is a key, read from the top one projection at a time: a step or a group is its tables, `.compiler.lint.clippy`; a variable sits under its file's `variables`, `.compiler.variables.edition`; a tool under the root's `tools`, `.tools.node`, and its version beneath it, `.tools.node.version`; a corpus under the root's `corpora`, `.corpora.json`; and a produced file under its step's `produces`, `.compiler.launcher.produces.binary`. So a name reads the same wherever it is written, and says where to find what it names. `requires` names steps and groups, `consumes` produced files, and the braces in a command a variable, a tool, a corpus or a produced file, or, with a `!` where the `.` stands, a value the runner fills ([`BUILT_INS`]). Each resolves as the tree is read, so a name that names nothing, one written without its `.`, or one naming the wrong kind of thing, is refused before anything runs, and so is a command that reads a file its step does not consume, which would run without the edge that orders it.
 
 use {
     crate::{CHECKS, Check, root},
@@ -20,6 +20,8 @@ use {
 #[cfg(test)]
 pub mod test_support;
 
+#[cfg(test)]
+mod corpus_tests;
 #[cfg(test)]
 mod instruction_tests;
 #[cfg(test)]
@@ -84,6 +86,7 @@ pub struct Tree {
     pub variables: BTreeMap<Name, Variable>,
     pub produced: BTreeMap<Name, Produced>,
     pub tools: BTreeMap<Name, Tool>,
+    pub corpora: BTreeMap<Name, Corpus>,
 }
 
 #[derive(Debug)]
@@ -172,6 +175,22 @@ pub struct Published {
     pub shape: Shape,
 }
 
+/// A directory of data a step reads, `{.corpora.json}`, kept under `xtask/.artifacts` before a run's first step: one directory of the archive a forge generates at a commit, checked by the digest of its files, the same on every host.
+#[derive(Debug)]
+pub struct Corpus {
+    /// The commit the archive is generated at.
+    pub version: String,
+    /// Where the archive is published, a gzipped tarball.
+    pub url: Word,
+    /// The directory kept, from the archive's top, its sole top directory taken as the contents.
+    pub path: String,
+    /// The digest of the files the directory holds, as `curios_download::tree_sha256_hex` writes it.
+    pub sha256: String,
+}
+
+/// The keys a corpus holds.
+const CORPUS_KEYS: [&str; 4] = ["version", "url", "path", "sha256"];
+
 /// How a download is kept, read off the end of its URL: a gzipped tarball, `.tar.gz`, is unpacked into a directory; a gzipped file, `.gz`, is decoded into the executable; anything else is the executable as it was downloaded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Shape {
@@ -183,6 +202,10 @@ pub enum Shape {
 /// Where a tool is declared: once, at the root's top, where every tool the steps run stands together.
 const TOOLS_AT_THE_ROOT: &str =
     "`tools` belongs at the top of `xtask/tasks.toml`, where every tool is declared";
+
+/// Where a corpus is declared: at the root's top, beside the tools, whose fetch it shares.
+const CORPORA_AT_THE_ROOT: &str =
+    "`corpora` belongs at the top of `xtask/tasks.toml`, where every corpus is declared";
 
 /// The keys a tool fetched itself holds, and those of one shipped in another's download.
 const FETCHED_KEYS: [&str; 4] = ["version", "url", "sha256", "path"];
@@ -244,6 +267,8 @@ pub enum Fill {
     Produced(Name),
     /// A tool's executable, kept for the host the run is on.
     Tool(Name),
+    /// A corpus's kept directory.
+    Corpus(Name),
 }
 
 impl Word {
@@ -311,6 +336,7 @@ enum Kind {
     Variable,
     Produced,
     Tool,
+    Corpus,
 }
 
 impl Tree {
@@ -381,10 +407,12 @@ impl Tree {
             variables: BTreeMap::new(),
             produced: BTreeMap::new(),
             tools: BTreeMap::new(),
+            corpora: BTreeMap::new(),
         };
         let mut kinds = BTreeMap::<Name, Kind>::new();
         let mut written = Vec::new();
         let mut tools = Vec::new();
+        let mut corpora = Vec::new();
 
         // The first pass declares every name, so the second resolves against the whole tree whatever order its files come in.
         for (index, (file, document)) in files.iter().zip(&documents).enumerate() {
@@ -440,6 +468,48 @@ impl Tree {
                                     .insert(version_name, Variable::Words(vec![version]));
                             }
                             tools.push(Written {
+                                file: index,
+                                name,
+                                table: entry,
+                                span: value.span(),
+                            });
+                        }
+                    }
+                    "corpora" => {
+                        if !file.scope.is_empty() {
+                            return Err(file.refuse(span, CORPORA_AT_THE_ROOT.to_string()));
+                        }
+                        let table = item.as_table_like().ok_or_else(|| {
+                            file.refuse(
+                                item.span(),
+                                "`corpora` is a table of corpora by name".to_string(),
+                            )
+                        })?;
+                        for (key, value) in table.iter() {
+                            let name = scoped(&scoped(&file.scope, "corpora"), key);
+                            let span = table.key(key).and_then(|key| key.span());
+                            declare(&mut kinds, file, &name, Kind::Corpus, span)?;
+                            let entry = value.as_table_like().ok_or_else(|| {
+                                file.refuse(
+                                    value.span(),
+                                    format!("corpus `{key}` is a table: its `version`, `url`, `path` and `sha256`"),
+                                )
+                            })?;
+                            // A corpus's version is a value its URL writes, `{.corpora.json.version}`.
+                            if let Some(version) = entry.get("version") {
+                                let version_name = scoped(&name, "version");
+                                declare(
+                                    &mut kinds,
+                                    file,
+                                    &version_name,
+                                    Kind::Variable,
+                                    version.span(),
+                                )?;
+                                let version = text_of(file, version, "version")?;
+                                tree.variables
+                                    .insert(version_name, Variable::Words(vec![version]));
+                            }
+                            corpora.push(Written {
                                 file: index,
                                 name,
                                 table: entry,
@@ -534,6 +604,10 @@ impl Tree {
             tree.tools.insert(tool.name.clone(), read);
         }
         tree.refuse_tools(&files, &tools)?;
+        for corpus in &corpora {
+            let read = corpus_of(&files[corpus.file], corpus, &kinds, &tree.variables)?;
+            tree.corpora.insert(corpus.name.clone(), read);
+        }
 
         // The second pass resolves each step's names against every declaration.
         let mut steps = Vec::new();
@@ -1138,6 +1212,64 @@ fn tool_of(
     }))
 }
 
+/// The corpus `written` declares: the commit, the archive's URL, the directory kept and its digest, each stated once, whatever host a run is on.
+fn corpus_of(
+    file: &File<'_>,
+    written: &Written<'_>,
+    kinds: &BTreeMap<Name, Kind>,
+    variables: &BTreeMap<Name, Variable>,
+) -> Result<Corpus, Box<Report>> {
+    let table = written.table;
+    let key = written.name.last().expect("a corpus is named");
+    if let Some((other, _)) = table.iter().find(|(key, _)| !CORPUS_KEYS.contains(key)) {
+        return Err(file.refuse(
+            table.key(other).and_then(|key| key.span()),
+            format!("`{other}` is no key of corpus `{key}`, which holds `version`, `url`, `path` and `sha256`"),
+        ));
+    }
+    let stated = |name: &str| {
+        table.get(name).ok_or_else(|| {
+            file.refuse(
+                written.span.clone(),
+                format!("corpus `{key}` states its `{name}`"),
+            )
+        })
+    };
+
+    let url = stated("url")?;
+    let text = url
+        .as_str()
+        .ok_or_else(|| file.refuse(url.span(), "a corpus's `url` is a string".to_string()))?;
+    let url_word = word_of(file, text, url.span(), kinds, variables)?;
+    if !matches!(url_word.0.last(), Some(Piece::Text(tail)) if tail.ends_with(".tar.gz")) {
+        return Err(file.refuse(
+            url.span(),
+            "a corpus's `url` names the gzipped tarball a forge generates at its commit, `.tar.gz`"
+                .to_string(),
+        ));
+    }
+    let sum = stated("sha256")?;
+    let sha256 = text_of(file, sum, "sha256")?;
+    if sha256.len() != 64
+        || !sha256
+            .chars()
+            .all(|digit| matches!(digit, '0'..='9' | 'a'..='f'))
+    {
+        return Err(file.refuse(
+            sum.span(),
+            "a corpus's `sha256` is the digest of its files, 64 lowercase hexadecimal digits"
+                .to_string(),
+        ));
+    }
+
+    Ok(Corpus {
+        version: text_of(file, stated("version")?, "version")?,
+        url: url_word,
+        path: text_of(file, stated("path")?, "path")?,
+        sha256,
+    })
+}
+
 /// The entries of the table `item` holds under `key`, a value a host, by its triple.
 fn hosts_of<'a>(
     file: &File<'_>,
@@ -1372,6 +1504,7 @@ fn word_of(
                     Some(Kind::Variable) => Fill::Variable(name),
                     Some(Kind::Produced) => Fill::Produced(name),
                     Some(Kind::Tool) => Fill::Tool(name),
+                    Some(Kind::Corpus) => Fill::Corpus(name),
                     Some(Kind::Task) => {
                         return Err(refuse(format!(
                             "`{written}` is a step or group, which has no value"

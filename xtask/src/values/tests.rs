@@ -221,3 +221,26 @@ fn a_key_a_file_does_not_hold_as_a_string_is_refused_naming_both() {
         );
     }
 }
+
+#[test]
+fn a_corpus_stands_for_its_kept_directory() {
+    let tree = Tree::parse(&[
+        (
+            "xtask/tasks.toml",
+            "description = \"The top\"\n[corpora.cases]\nversion = \"abc\"\nurl = \"https://example.invalid/abc.tar.gz\"\npath = \"cases\"\nsha256 = \"0000000000000000000000000000000000000000000000000000000000000000\"\n",
+        ),
+        (
+            "xtask/tasks/a.toml",
+            "description = \"A\"\n[s]\ndescription = \"S\"\nrun = [[\"ls\", \"{.corpora.cases}\"]]\n",
+        ),
+    ])
+    .unwrap();
+
+    assert_eq!(
+        words(&tree, &[]).unwrap(),
+        [
+            "ls".to_string(),
+            artifacts().join("cases-abc").to_string_lossy().into_owned()
+        ]
+    );
+}

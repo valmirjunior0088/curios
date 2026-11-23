@@ -1,10 +1,10 @@
-//! Where a tool is kept and how a run gets it, from task files of the test's own whose tools are fetched for the host the test runs on, each under a name of this process's own in `xtask/.artifacts`.
+//! Where a tool or a corpus is kept and how a run gets it, from task files of the test's own whose tools are fetched for the host the test runs on, each under a name of this process's own in `xtask/.artifacts`.
 
 use {
     super::*,
     crate::*,
     curios_common::fill,
-    curios_download::sha256_hex,
+    curios_download::{sha256_hex, tree_sha256_hex},
     std::{
         net::TcpListener,
         os::unix,
@@ -244,4 +244,79 @@ fn a_placed_download_whose_digest_differs_is_refused() {
     let refused = outcome.unwrap_err();
     assert!(refused.contains("sha256 mismatch"), "{refused}");
     assert!(!kept, "a refused download was kept");
+}
+
+/// A placed archive whose top holds `cases/one.json` and `other/two.json` under one directory, as a forge generates one at a commit, and the digest of its `cases`.
+fn archived(name: &str) -> (PathBuf, String) {
+    let placed = artifacts().join(format!("{name}.tar.gz"));
+    let staging = artifacts().join(format!("{name}-staging"));
+    fs::create_dir_all(staging.join("repo-abc/cases")).unwrap();
+    fs::create_dir_all(staging.join("repo-abc/other")).unwrap();
+    fs::write(staging.join("repo-abc/cases/one.json"), b"[1]").unwrap();
+    fs::write(staging.join("repo-abc/other/two.json"), b"[2]").unwrap();
+    let archived = Command::new("tar")
+        .arg("-czf")
+        .arg(&placed)
+        .arg("-C")
+        .arg(&staging)
+        .arg("repo-abc")
+        .status()
+        .unwrap();
+    assert!(archived.success());
+    let digest = tree_sha256_hex(&staging.join("repo-abc/cases")).unwrap();
+    let _ = fs::remove_dir_all(&staging);
+
+    (placed, digest)
+}
+
+/// The root declaring the corpus `name` at commit `abc`, its archive at `url`, its directory `cases` at `digest`.
+fn corpus_of(name: &str, url: &str, digest: &str) -> String {
+    format!(
+        "[corpora.{name}]\nversion = \"abc\"\nurl = \"{url}\"\npath = \"cases\"\nsha256 = \"{digest}\"\n"
+    )
+}
+
+/// A corpus a scheduled step names is kept as its one directory, read here from a placed archive with nothing to answer the network.
+#[test]
+fn a_corpus_is_kept_as_its_one_directory_of_a_placed_archive() {
+    let name = unique("cases");
+    let (placed, digest) = archived(&name);
+    let tree = tree_of(
+        &corpus_of(&name, &unanswered(&format!("{name}.tar.gz")), &digest),
+        &fill!("[\"true\", \"{.corpora.${name}}\"]", name),
+    );
+
+    let outcome = fetch(&tree, &Values::new(&tree, &Given::new()), &[0]);
+
+    let kept = corpus(&tree, &vec!["corpora".to_string(), name.clone()]);
+    let one = fs::read(kept.join("one.json")).ok();
+    let other = kept.join("other").exists();
+    let _ = fs::remove_file(&placed);
+    let _ = fs::remove_dir_all(&kept);
+    assert_eq!(outcome, Ok(()));
+    assert_eq!(one.as_deref(), Some(&b"[1]"[..]));
+    assert!(!other, "what the corpus does not read was kept");
+}
+
+/// An archive whose directory's files are not the digest's is refused, and nothing is kept for a step to read.
+#[test]
+fn a_corpus_whose_files_differ_from_its_digest_is_refused() {
+    let name = unique("differing");
+    let (placed, _) = archived(&name);
+    let tree = tree_of(
+        &corpus_of(
+            &name,
+            &unanswered(&format!("{name}.tar.gz")),
+            &sha256_hex(b"another tree"),
+        ),
+        &fill!("[\"true\", \"{.corpora.${name}}\"]", name),
+    );
+
+    let outcome = fetch(&tree, &Values::new(&tree, &Given::new()), &[0]);
+
+    let kept = corpus(&tree, &vec!["corpora".to_string(), name.clone()]).exists();
+    let _ = fs::remove_file(&placed);
+    let refused = outcome.unwrap_err();
+    assert!(refused.contains("digest mismatch over cases"), "{refused}");
+    assert!(!kept, "a refused corpus was kept");
 }

@@ -1,9 +1,10 @@
-//! What a pinned file is read from, what is kept, and what refuses it: a copy a hand placed, a download served by a listener on loopback, a digest either fails, and what a download holds kept unpacked or as an executable.
+//! What a pinned file is read from, what is kept, and what refuses it: a copy a hand placed, a download served by a listener on loopback, a digest either fails, what a download holds kept unpacked or as an executable, and a directory of an archive pinned by the digest of its files.
 
 use {
     super::*,
     flate2::{Compression, write::GzEncoder},
     std::{
+        collections::BTreeSet,
         env,
         io::{BufRead, BufReader, Write as _},
         net::TcpListener,
@@ -258,4 +259,113 @@ fn a_gzipped_file_decodes_to_what_was_compressed() {
     encoder.write_all(CONTENT).unwrap();
 
     assert_eq!(gunzipped(&encoder.finish().unwrap()).unwrap(), CONTENT);
+}
+
+/// Write each file of `files`, a path and its text, under `root`.
+fn files(root: &Path, files: &[(&str, &str)]) {
+    for (path, text) in files {
+        let path = root.join(path);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, text).unwrap();
+    }
+}
+
+// The digest of a directory is what coreutils print over its files, sorted by their paths' bytes, `B.txt` before `a.txt`: `find . -type f -printf '%P\0' | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum` printed this over these four.
+#[test]
+fn a_directory_s_digest_is_what_sha256sum_prints_over_its_files_sorted() {
+    let directory = directory("digest");
+    files(
+        &directory,
+        &[
+            ("a.txt", "one\n"),
+            ("nested/b.txt", "two\n"),
+            ("nested/deeper/c", "three\n"),
+            ("B.txt", "zero\n"),
+        ],
+    );
+
+    assert_eq!(
+        tree_sha256_hex(&directory).unwrap(),
+        "dcb61b3fb37e05cd458ac9a2e66e7cbdba5610ca1771e336792c76f2fdf31213"
+    );
+    let _ = fs::remove_dir_all(&directory);
+}
+
+/// An archive a forge generates, its sole top directory named for the commit, holding the cases a corpus keeps and what it does not.
+fn generated() -> Vec<u8> {
+    tarball(&[
+        ("repo-abc/cases/one.json", b"[1]", 0o644),
+        ("repo-abc/cases/deeper/two.json", b"[2]", 0o644),
+        ("repo-abc/parsers/huge.bin", b"not kept", 0o644),
+    ])
+}
+
+/// The digest of the cases `generated` holds, taken over the same files written out.
+fn cases_digest(directory: &Path) -> String {
+    let written = directory.join("written");
+    files(&written, &[("one.json", "[1]"), ("deeper/two.json", "[2]")]);
+    let digest = tree_sha256_hex(&written).unwrap();
+    let _ = fs::remove_dir_all(&written);
+    digest
+}
+
+// An archive placed by hand is read without a download, and of it only the directory is kept, once its files check.
+#[test]
+fn an_archive_s_directory_whose_files_check_is_kept_alone() {
+    let directory = directory("unpacked");
+    let placed = directory.join("abc.tar.gz");
+    fs::write(&placed, generated()).unwrap();
+    let place = directory.join("kept");
+    let url = unanswered();
+
+    Unpacked {
+        what: "a test's cases",
+        url: &url,
+        directory: "cases",
+        digest: &cases_digest(&directory),
+        placed: &placed,
+        place: &place,
+    }
+    .kept()
+    .unwrap();
+
+    assert_eq!(fs::read(place.join("deeper/two.json")).unwrap(), b"[2]");
+    assert!(!place.join("parsers").exists());
+    let leftovers = fs::read_dir(&directory)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        leftovers,
+        BTreeSet::from(["abc.tar.gz".to_string(), "kept".to_string()])
+    );
+    let _ = fs::remove_dir_all(&directory);
+}
+
+// A directory whose files are not the digest's is refused, naming the mismatch and where the archive goes, and nothing is kept.
+#[test]
+fn an_archive_s_directory_whose_files_differ_is_refused_and_not_kept() {
+    let directory = directory("unpacked-differs");
+    let placed = directory.join("abc.tar.gz");
+    fs::write(&placed, generated()).unwrap();
+    let place = directory.join("kept");
+    let url = unanswered();
+
+    let refused = Unpacked {
+        what: "a test's cases",
+        url: &url,
+        directory: "cases",
+        digest: &sha256_hex(b"another tree"),
+        placed: &placed,
+        place: &place,
+    }
+    .kept()
+    .expect_err("a directory that does not check is refused")
+    .to_string();
+
+    assert!(refused.contains("digest mismatch over cases"), "{refused}");
+    assert!(refused.contains(&placed.display().to_string()), "{refused}");
+    assert!(!place.exists());
+    assert_eq!(fs::read_dir(&directory).unwrap().count(), 1);
+    let _ = fs::remove_dir_all(&directory);
 }

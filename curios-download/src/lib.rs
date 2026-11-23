@@ -1,4 +1,4 @@
-//! A file a build pins by its SHA-256: read where a hand placed it or an earlier run kept it, else downloaded, and checked against its digest either way, a failure saying how to place it by hand where it cannot be had; and the pieces that keep what it holds, unpacked or as an executable.
+//! A file a build pins by its SHA-256: read where a hand placed it or an earlier run kept it, else downloaded, and checked against its digest either way, a failure saying how to place it by hand where it cannot be had; a directory of an archive a forge generates, pinned by the digest of its files; and the pieces that keep what it holds, unpacked or as an executable.
 //!
 //! What takes something from the network takes it through [`Download`] — the build scripts, `curios-unicode`'s database, `curios-binaryen`'s source archive and `curios-profile`'s trace schema, and `xtask`, each tool a step runs — so how a pinned file is obtained, checked and kept, and what an offline build is told, is written once. Why this is a crate of its own is `README.md`'s decision.
 //!
@@ -35,7 +35,8 @@ pub struct Download<'a> {
 pub struct Unobtained {
     what: String,
     url: String,
-    sha256: String,
+    /// What is checked of the file placed by hand, said as the instructions say it.
+    verify: String,
     place: PathBuf,
     cause: String,
 }
@@ -44,11 +45,11 @@ impl fmt::Display for Unobtained {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
-            "could not obtain {}:\n  {}\n\nTo build offline, download this file by hand:\n  {}\nverify it has sha256:\n  {}\nand place it at:\n  {}\nthen run again.",
+            "could not obtain {}:\n  {}\n\nTo build offline, download this file by hand:\n  {}\n{}\nand place it at:\n  {}\nthen run again.",
             self.what,
             self.cause,
             self.url,
-            self.sha256,
+            self.verify,
             self.place.display(),
         )
     }
@@ -101,11 +102,123 @@ impl Download<'_> {
         Unobtained {
             what: self.what.to_string(),
             url: self.url.to_string(),
-            sha256: self.sha256.to_string(),
+            verify: format!("verify it has sha256:\n  {}", self.sha256),
             place: self.place.to_path_buf(),
             cause,
         }
     }
+}
+
+/// A directory a run pins by the digest of the files it holds: one directory of a gzipped tarball a forge generates at a commit, whose bytes the forge does not hold stable where its contents are — the reason Go's module hash and Nix's `fetchFromGitHub` pin what they unpack.
+pub struct Unpacked<'a> {
+    /// What the directory is, as the instructions a failure prints name it: "JSONTestSuite's cases".
+    pub what: &'a str,
+    /// Where the archive is published, at the commit the run pins.
+    pub url: &'a str,
+    /// The directory kept, from the archive's top, its sole top directory taken as the contents as [`unpack`] takes it.
+    pub directory: &'a str,
+    /// The digest of the files the directory holds, as [`tree_sha256_hex`] writes it.
+    pub digest: &'a str,
+    /// Where a copy of the archive placed by hand stands, read before the network.
+    pub placed: &'a Path,
+    /// Where the directory is kept.
+    pub place: &'a Path,
+}
+
+impl Unpacked<'_> {
+    /// Keep the directory at [`place`](Self::place), where it is not kept already: the archive placed by hand, or else a download, unpacked beside the place, the directory's files checked against the digest, and the directory renamed onto the place, whole or not at all. A kept directory is trusted by its presence, since only one that checked is renamed there; the rest of the archive, and the archive itself, are not kept.
+    pub fn kept(&self) -> Result<(), Unobtained> {
+        if self.place.is_dir() {
+            return Ok(());
+        }
+        let archive = match fs::read(self.placed) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == ErrorKind::NotFound => {
+                download(self.url).map_err(|cause| self.unobtained(cause))?
+            }
+            Err(error) => {
+                return Err(self.unobtained(format!("read {}: {error}", self.placed.display())));
+            }
+        };
+
+        let unpacked = partial(self.place);
+        let kept = self.checked(&archive, &unpacked);
+        let removed = match unpacked.exists() {
+            true => fs::remove_dir_all(&unpacked),
+            false => Ok(()),
+        };
+
+        kept?;
+        removed.map_err(|error| self.unobtained(format!("remove {}: {error}", unpacked.display())))
+    }
+
+    /// Unpack `archive` at `unpacked`, check the directory's files, and rename the directory onto the place.
+    fn checked(&self, archive: &[u8], unpacked: &Path) -> Result<(), Unobtained> {
+        let failed = |error: io::Error| self.unobtained(error.to_string());
+        unpack(archive, unpacked).map_err(failed)?;
+        let directory = unpacked.join(self.directory);
+        let actual = tree_sha256_hex(&directory)
+            .map_err(|error| self.unobtained(format!("read {}: {error}", directory.display())))?;
+        if actual != self.digest {
+            return Err(self.unobtained(format!(
+                "digest mismatch over {}: expected {}, got {actual}",
+                self.directory, self.digest
+            )));
+        }
+        if let Some(parent) = self.place.parent() {
+            fs::create_dir_all(parent).map_err(failed)?;
+        }
+
+        match fs::rename(&directory, self.place) {
+            Ok(()) => Ok(()),
+            Err(_) if self.place.is_dir() => Ok(()),
+            Err(error) => Err(failed(error)),
+        }
+    }
+
+    /// `cause`, with how to fetch the archive by hand and what is checked of it.
+    fn unobtained(&self, cause: String) -> Unobtained {
+        Unobtained {
+            what: self.what.to_string(),
+            url: self.url.to_string(),
+            verify: format!(
+                "the files of its directory `{}` are checked to have the digest:\n  {}",
+                self.directory, self.digest
+            ),
+            place: self.placed.to_path_buf(),
+            cause,
+        }
+    }
+}
+
+/// The SHA-256 of the files under `directory`, in lowercase hexadecimal: of the lines `<sha256>  <path>` of every file, its path from `directory` with `/` between its parts, sorted by path, each line ending in a newline — what `find . -type f -printf '%P\0' | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum` prints there, as Go's `h1:` hash is defined over a module's files.
+pub fn tree_sha256_hex(directory: &Path) -> io::Result<String> {
+    let mut files = Vec::new();
+    files_under(directory, "", &mut files)?;
+    files.sort();
+
+    let mut lines = String::new();
+    for path in files {
+        let bytes = fs::read(directory.join(&path))?;
+        let _ = writeln!(lines, "{}  {path}", sha256_hex(&bytes));
+    }
+
+    Ok(sha256_hex(lines.as_bytes()))
+}
+
+/// Every file under `directory`, by its path from the directory the walk began at, `prefix` the path to this one.
+fn files_under(directory: &Path, prefix: &str, files: &mut Vec<String>) -> io::Result<()> {
+    for entry in fs::read_dir(directory)? {
+        let entry = entry?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let path = format!("{prefix}{name}");
+        match entry.file_type()?.is_dir() {
+            true => files_under(&entry.path(), &format!("{path}/"), files)?,
+            false => files.push(path),
+        }
+    }
+
+    Ok(())
 }
 
 /// The SHA-256 of `bytes` in lowercase hexadecimal, as a [`Download`]'s digest is written.

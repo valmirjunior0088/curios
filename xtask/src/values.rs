@@ -1,11 +1,11 @@
 //! What a run fills a command's braces with.
 //!
-//! **A variable is a constant of the run.** Each has one value for the whole run: what its file writes, what the command line gave, what a command printed, or what a key of another file holds, the last two asked once and only where a step that runs uses them. The values the runner fills, each written after a `!`, are the triple `xtask` was built for, Cargo's target directory, Cargo's home and the toolchain's root, the last asked of the pinned `rustc` once a run; a tool stands for its executable's path, kept for the host the run is on; and a produced file stands for its path, from the repository's root wherever a step runs.
+//! **A variable is a constant of the run.** Each has one value for the whole run: what its file writes, what the command line gave, what a command printed, or what a key of another file holds, the last two asked once and only where a step that runs uses them. The values the runner fills, each written after a `!`, are the triple `xtask` was built for, Cargo's target directory, Cargo's home and the toolchain's root, the last asked of the pinned `rustc` once a run; a tool stands for its executable's path, kept for the host the run is on, and a corpus for its kept directory; and a produced file stands for its path, from the repository's root wherever a step runs.
 
 use {
     crate::{
         Fill, HOST_TRIPLE, Name, Piece, Tree, Variable, Word, ask, ask_launched, cargo_home,
-        executable, from_top, launch, root, target_directory,
+        corpus, executable, from_top, launch, root, target_directory,
     },
     std::{
         cell::{OnceCell, RefCell},
@@ -99,7 +99,8 @@ impl<'a> Values<'a> {
             | Fill::CargoHome
             | Fill::RustSysroot
             | Fill::Produced(_)
-            | Fill::Tool(_) => self.text(word).map(|text| Some(vec![text])),
+            | Fill::Tool(_)
+            | Fill::Corpus(_) => self.text(word).map(|text| Some(vec![text])),
         }
     }
 
@@ -120,6 +121,9 @@ impl<'a> Values<'a> {
                 }
                 Piece::Value(Fill::Tool(name)) => {
                     text.push_str(&executable(self.tree, name).to_string_lossy())
+                }
+                Piece::Value(Fill::Corpus(name)) => {
+                    text.push_str(&corpus(self.tree, name).to_string_lossy())
                 }
                 Piece::Value(Fill::Variable(name)) => match &self.tree.variables[name] {
                     Variable::Words(words) => text.push_str(&words.concat()),
