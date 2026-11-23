@@ -44,5 +44,5 @@ test all_answers_each_action_or_the_first_failure =
     let answers = Try/run(Try/all(actions))!;
     let refused = Try/run(Try/all([Try/pure(1), Try/raise("refused")]))!;
     Test/all([
-        Test/equal(Result/unwrap_or(answers, []), [10, 20]),
+        Test/equal(Result/unwrap_or(Result/map(answers, (v) => v.list), []), [10, 20]),
         Test/equal(failed_with(refused), Option/some("refused"))]);

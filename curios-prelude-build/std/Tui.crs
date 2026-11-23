@@ -210,7 +210,7 @@ let running(
             | true => Session/forget(s)
             | false => Try/pure(())
             end!;
-        Try/pure((tasks = tasks, quit = a.quit));
+        Try/pure((tasks = tasks.list, quit = a.quit));
     -- `events` through `update` from `m`, a size the terminal reported kept as it passes; stopping at the first quit, with the work its update asked for.
     let fold(
         m: M,

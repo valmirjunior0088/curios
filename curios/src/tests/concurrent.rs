@@ -108,7 +108,7 @@ fn a_scope_inside_a_child_of_another_composes() {
     );
 }
 
-// `all` answers each action's answer in the actions' order: both complete when first advanced, writing "a;" then "b;", and the answers [1, 2] sum to 3.
+// `all` answers each action's answer in the actions' order: both complete when first advanced, writing "a;" then "b;", and the answers [1, 2], read by their positions with no case for one missing, sum to 3.
 #[test]
 fn all_answers_in_the_order_of_its_actions() {
     assert_eq!(
@@ -119,7 +119,7 @@ fn all_answers_in_the_order_of_its_actions() {
                 Io/bind(/std/print("a;"), (_) => Io/pure(1)),
                 Io/bind(/std/print("b;"), (_) => Io/pure(2))
             ])!;
-            /std/print(Nat/to_str(Nat/add(/std/Option/unwrap_or(List/try_get(rs, 0), 0), /std/Option/unwrap_or(List/try_get(rs, 1), 0))));
+            /std/print(Nat/to_str(Nat/add(List/get(rs.list, 0), List/get(rs.list, 1))));
         program()
         "#),
         b"a;b;3"

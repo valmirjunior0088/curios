@@ -1,4 +1,6 @@
--- `/std/Io`: the pieces a reader's named reads ask for, and waiting.
+-- `/std/Io`: what `all` answers, the pieces a reader's named reads ask for, and waiting.
+mod all;
+
 mod reader;
 
 mod waits;

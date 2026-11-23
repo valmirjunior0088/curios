@@ -18,7 +18,7 @@ pub use Reader/{let Reader};
 --- What a body does with the scope `scope` runs it in: spawning children into it and joining them, deferring releases to it, and how it ended as each release is told.
 pub mod Scope;
 
-use /std/{Monad, Bytes, Nat, Int, Bool, List, Option, Cell, Box, Program, Try};
+use /std/{Monad, Bytes, Nat, Int, Bool, List, Option, Cell, Box, Program, Try, Vec, Eq};
 use /std/Io/Scope/{Ended};
 use /std/internal/{Handle, Waiting, suspend_on, wait_filled};
 use /std/time/{Duration, Instant};
@@ -337,34 +337,35 @@ pub let both(@A: Type, @B: Type, a: Io(A), b: Io(B)) -> Io({A, B}) =
     pure((x, y));
 
 -- A future for each action of `actions`, beside it.
-let promised(@A: Type, actions: List(Io(A))) -> Io(List({Io(A), Future(A)})) =
+let promised(@A: Type, actions: List(Io(A))) -> Io(Vec({Io(A), Future(A)}, List/len(actions))) =
     match actions
-    | [] => pure([])
+    | [] => pure(Vec/nil())
     | [a, ..more] =>
         let f = Future/new()!;
         let rest = promised(more)!;
-        pure([(a, f), ..rest])
+        pure(Vec/cons((a, f), rest))
     end;
 
 -- The answer of each future of `fs`, in their order.
-let awaited(@A: Type, fs: List(Future(A))) -> Io(List(A)) =
+let awaited(@A: Type, fs: List(Future(A))) -> Io(Vec(A, List/len(fs))) =
     match fs
-    | [] => pure([])
+    | [] => pure(Vec/nil())
     | [f, ..more] =>
         let a = Future/wait(f)!;
         let rest = awaited(more)!;
-        pure([a, ..rest])
+        pure(Vec/cons(a, rest))
     end;
 
---- Every action of `actions` side by side, and their answers in their order once all have them.
-pub let all(@A: Type, actions: List(Io(A))) -> Io(List(A)) =
+--- Every action of `actions` side by side, and their answers in their order once all have them, one for each action: an answer is read by its position, with no case for one missing, whatever the actions do.
+pub let all(@A: Type, actions: List(Io(A))) -> Io(Vec(A, List/len(actions))) =
     let pairs = promised(actions)!;
     let () =
         drive(
-            List/map(pairs, (p: {Io(A), Future(A)}) => into(p.0, p.1)),
+            List/map(pairs.list, (p: {Io(A), Future(A)}) => into(p.0, p.1)),
             nothing_more,
             pure(false))!;
-    awaited(List/map(pairs, (p: {Io(A), Future(A)}) => p.1));
+    let answers = awaited(List/map(pairs.list, (p: {Io(A), Future(A)}) => p.1))!;
+    pure(Vec { list = answers.list, counted = Eq/trans(answers.counted, pairs.counted) });
 
 --- The answer of the first of `actions` to finish; every other one is cancelled where it waits. They are stepped in list order, so of two that can answer at once the earlier wins: `select([a, Io/pure(d)])` tries `a` and answers `d` rather than wait, and in a loop an action that is always ready starves the ones after it. Which action answered is its answer's to say. With no action, nothing answers.
 ---

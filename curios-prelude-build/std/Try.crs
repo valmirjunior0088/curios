@@ -1,6 +1,6 @@
 mod tests;
 
-use /std/{Monad, Result, List, Io, Program, Show, Str, print_err, Proc};
+use /std/{Monad, Result, List, Io, Program, Show, Str, print_err, Proc, Vec};
 use /std/Io/{Future};
 
 --- An `M(Result(E, A))` sequenced so that a failure stops the region.
@@ -73,8 +73,12 @@ pub let both(
     let failed: Future(E) = Future/new()!;
     first_failure(failed, Io/both(guarded(failed, a), guarded(failed, b)));
 
---- Every action of `actions` side by side, and their answers in their order once all have them; the first to fail answers for all, the rest then cancelled where they wait.
-pub let all(@E: Type, @A: Type, actions: List(Try(Io, E, A))) -> Try(Io, E, List(A)) =
+--- Every action of `actions` side by side, and their answers in their order once all have them, one for each action, as `Io/all` answers them; the first to fail answers for all, the rest then cancelled where they wait.
+pub let all(
+    @E: Type,
+    @A: Type,
+    actions: List(Try(Io, E, A)),
+) -> Try(Io, E, Vec(A, List/len(actions))) =
     let failed: Future(E) = Future/new()!;
     first_failure(failed, Io/all(List/map(actions, (x: Try(Io, E, A)) => guarded(failed, x))));
 
