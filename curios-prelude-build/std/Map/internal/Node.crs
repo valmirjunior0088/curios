@@ -1028,7 +1028,6 @@ let wedge_count(
         Eq/trans(
             pick_set(e, d, @proved(), h, digit(k, c)),
             match d == digit(k, c)
-            | true => match proved(@Bool/False) end
             | false => pick_vacant(e, Bool/True/qed(), digit(k, c))
             end);
     let last2 =
@@ -3501,14 +3500,9 @@ pub and canonical_in(
         find(pick(l2, digit(Hash/hash(x), at) - d), Hash/hash(x))),
 ) -> Eq()(l1, l2) =
     match l1
-    | [] =>
-        match l2
-        | [] => Eq/refl()
-        | [_, .._] => match proved(@Bool/False) end
-        end
+    | [] => match l2 | [] => Eq/refl() end
     | [h1, ..r1] =>
         match l2
-        | [] => match proved(@Bool/False) end
         | [h2, ..r2] =>
             let heads: Eq()(h1, h2) =
                 canonical(

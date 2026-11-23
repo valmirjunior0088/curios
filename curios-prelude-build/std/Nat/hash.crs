@@ -104,7 +104,6 @@ let top_mono(
                     end
                 | false =>
                     match b < 16
-                    | true => match proved(@Bool/False) end
                     | false => ih(m / 256, proved())(b / 256, proved(), proved())
                     end
                 end,
@@ -150,11 +149,7 @@ let first_ranks(
                             x[..first(lb - 7, tb), ..u],
                             proved())
                     end
-                | false =>
-                    match lb < 7
-                    | true => match proved(@Bool/False) end
-                    | false => ih(l - 7, proved())(lb - 7, proved())
-                    end
+                | false => match lb < 7 | false => ih(l - 7, proved())(lb - 7, proved()) end
                 end,
         la)(
         lb,
@@ -190,11 +185,9 @@ let first_tops(
                             s,
                             u,
                             proved())
-                    | false => match proved(@Bool/False) end
                     end
                 | false =>
                     match lb < 7
-                    | true => match proved(@Bool/False) end
                     | false =>
                         ih(l - 7, proved())(
                             lb - 7,
@@ -251,11 +244,9 @@ let first_same(
                                         proved(),
                                         proved()))),
                             parted)
-                    | false => match proved(@Bool/False) end
                     end
                 | false =>
                     match lb < 7
-                    | true => match proved(@Bool/False) end
                     | false =>
                         ih(l - 7, proved())(
                             lb - 7,
@@ -291,7 +282,6 @@ let tails(
                 match m < 16
                 | true =>
                     match b < 16
-                    | true => match proved(@Bool/False) end
                     | false => match ranks end
                     end
                 | false =>

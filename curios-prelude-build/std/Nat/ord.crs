@@ -27,10 +27,7 @@ pub let refl(a: Nat) -> Eq()(ord(a, a), Ordering/eq()) =
     Eq/refl();
 
 pub let of_lt(a: Nat, b: Nat, p: Bool/Holds(a < b)) -> Eq()(ord(a, b), Ordering/lt()) =
-    match a < b
-    | true => Eq/refl()
-    | false => match proved(@Bool/False) end
-    end;
+    match a < b | true => Eq/refl() end;
 
 pub let of_eq(a: Nat, b: Nat, e: Eq()(a, b)) -> Eq()(ord(a, b), Ordering/eq()) =
     Eq/subst((x: Nat) => Eq()(ord(a, x), Ordering/eq()), e, refl(a));

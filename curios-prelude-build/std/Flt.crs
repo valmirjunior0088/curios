@@ -440,11 +440,9 @@ pub let total_key_injective(a: Flt, b: Flt, e: Eq()(total_key(a), total_key(b)))
                     Bytes/to_nat(to_le_bytes(b)),
                     proved(),
                     proved())
-            | false => match proved(@Bool/False) end
             end
         | false =>
             match Bytes/to_nat(to_le_bytes(b)) >= 9223372036854775808
-            | true => match proved(@Bool/False) end
             | false =>
                 Nat/le/antisym(
                     Bytes/to_nat(to_le_bytes(a)),

@@ -90,7 +90,6 @@ let in_months(
     within: Bool/Holds(r < span(year, months)),
 ) -> Date =
     match months
-    | [] => match proved(@Bool/False) end
     | [m, ..rest] =>
         match r < days_in_month(year, m)
         | true =>

@@ -89,7 +89,6 @@ pub let of_lt(
     | true =>
         match b >= +0
         | true => Nat/hash/of_lt(Int/abs(a), Int/abs(b), proved())
-        | false => match proved(@Bool/False) end
         end
     | false =>
         match b >= +0
