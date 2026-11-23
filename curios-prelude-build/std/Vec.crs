@@ -1,27 +1,19 @@
 mod tests;
 
-use /std/{Nat, List, Eq, Show, Spell, Fmt, Bool};
+use /std/{Nat, List, Eq, Show, Spell, Fmt, Bool, proved};
 use /std/ops/{Eql};
 
 --- That `l` holds exactly `n` elements.
 pub let Counted(@T: Type, l: List(T), n: Nat) -> Prop =
-    Eq()(List/length(l), n);
+    Bool/Holds(List/length(l) == n);
 
---- A list of exactly `n` elements.
+--- A list of exactly `n` elements. The count is a bound: a literal at a stated length, and every operation below, has it discharged by the elaborator.
 pub struct Vec(T: Type, n: Nat): pub Type {
     --- The elements themselves.
     list: List(T),
-    --- Why there are exactly `n` of them.
-    counted: Counted(list, n),
+    --- That there are exactly `n` of them.
+    @counted: Counted(list, n),
 }
-
--- Zero is no successor, refuted by the comparison that decides it.
-let zero_not_succ(@n: Nat, e: Eq()(0, n + 1)) -> Bool/False =
-    Eq/subst((m: Nat) => Bool/Holds(0 == m), e, Bool/True/qed());
-
--- A successor cancels off both sides, which is how a tail's length is read off the whole's.
-let succ_cancel(@a: Nat, @b: Nat, e: Eq()(a + 1, b + 1)) -> Eq()(a, b) =
-    Eq/cong((w: Nat) => w - 1, e);
 
 --- The length, read off the type.
 pub let length(@T: Type, @n: Nat, _: Vec(T, n)) -> Nat =
@@ -29,7 +21,7 @@ pub let length(@T: Type, @n: Nat, _: Vec(T, n)) -> Nat =
 
 --- The list as a vector, at the length it turns out to have.
 pub let of_list(@T: Type, l: List(T)) -> Vec(T, List/length(l)) =
-    Vec { list = l, counted = Eq/refl() };
+    Vec { list = l };
 
 --- Equal elements are equal vectors, since the count is a proof and proofs do not differ.
 pub let eq_of_list(
@@ -40,54 +32,50 @@ pub let eq_of_list(
     p: Eq()(v.list, w.list),
 ) -> Eq()(v, w) =
     Eq/subst(
-        (l: List(T)) => (counted: Counted(l, n)) -> Eq()(v, Vec { list = l, counted = counted }),
+        (l: List(T)) => (counted: Counted(l, n)) -> Eq()(v, Vec { list = l, @counted = counted }),
         p,
         (_: Counted(v.list, n)) => Eq/refl())(
         w.counted);
 
 --- No elements.
 pub let nil(@T: Type) -> Vec(T, 0) =
-    Vec { list = [], counted = Eq/refl() };
+    Vec { list = [] };
 
 --- `x` in front of a vector one shorter.
 pub let cons(@T: Type, @n: Nat, x: T, v: Vec(T, n)) -> Vec(T, n + 1) =
-    Vec { list = [x, ..v.list], counted = Eq/cong((w: Nat) => w + 1, v.counted) };
+    Vec { list = [x, ..v.list] };
 
 --- `v` with `x` at `i`, under the evidence that `i < n`: the count carries over, since an update keeps the length.
 pub let set(@T: Type, @n: Nat, v: Vec(T, n), i: Nat, x: T, @ok: Bool/Holds(i < n)) -> Vec(T, n) =
-    Vec { list = List/set(@T, v.list, i, x), counted = v.counted };
+    Vec { list = List/set(@T, v.list, i, x) };
 
 --- Everything after the first element.
 pub let rest(@T: Type, @n: Nat, v: Vec(T, n + 1)) -> Vec(T, n) =
     match v.list
-    | [] => match zero_not_succ(v.counted) end
-    | [_, ..t] => Vec { list = t, counted = succ_cancel(v.counted) }
+    | [] => match proved(@Bool/False) end
+    | [_, ..t] => Vec { list = t }
     end;
 
 --- `v` then `w`.
 pub let append(@T: Type, @n: Nat, @m: Nat, v: Vec(T, n), w: Vec(T, m)) -> Vec(T, n + m) =
-    Vec {
-        list = [..v.list, ..w.list],
-        counted =
-            Eq/subst(
-                (x: Nat) => Eq()(x + List/length(w.list), n + m),
-                Eq/sym(v.counted),
-                Eq/subst((y: Nat) => Eq()(n + y, n + m), Eq/sym(w.counted), Eq/refl())) };
+    Vec { list = [..v.list, ..w.list] };
 
 --- `f` on every element.
 pub let map(@A: Type, @B: Type, @n: Nat, v: Vec(A, n), f: (A) -> B) -> Vec(B, n) =
-    Vec { list = List/map(v.list, f), counted = v.counted };
+    Vec { list = List/map(v.list, f) };
 
 -- A run of one value is as long as the count it was built from, which the recursion's own shape gives.
 let replicate_length(@T: Type, n: Nat, x: T) -> Counted(List/replicate(n, x), n) =
     match n
-    | 0 => Eq/refl()
-    | k + 1 => Eq/cong((w: Nat) => w + 1, replicate_length(k, x))
+    | 0 => proved()
+    | k + 1 =>
+        let shorter = replicate_length(k, x);
+        proved()
     end;
 
 --- `n` copies of `x`.
 pub let replicate(@T: Type, n: Nat, x: T) -> Vec(T, n) =
-    Vec { list = List/replicate(n, x), counted = replicate_length(n, x) };
+    Vec { list = List/replicate(n, x), @counted = replicate_length(n, x) };
 
 --- Pairs, position by position.
 pub let zip(@A: Type, @B: Type, @n: Nat, v: Vec(A, n), w: Vec(B, n)) -> Vec({A, B}, n) =

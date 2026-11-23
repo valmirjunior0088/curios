@@ -1,4 +1,4 @@
-use /std/{Nat, Str, List, Vec, Eq, Option, Bool};
+use /std/{Nat, Str, List, Vec, Option, Bool, proved};
 use /std/Tui/{Style, Glyph, Line, Tile, View};
 
 --- `h` rows of `w` tiles: what a view is drawn as, and what the renderer compares from one frame to the next.
@@ -20,18 +20,22 @@ let padded(@T: Type, fill: T, m: Nat) -> (List(T)) -> List(T) =
 -- Either arm adds exactly one element to a run the shorter padding already counted, so the count is the one asked for whatever the input was.
 let padded_length(@T: Type, fill: T, m: Nat) -> (l: List(T)) -> Vec/Counted(padded(fill, m)(l), m) =
     match m
-    | 0 => (_) => Eq/refl()
+    | 0 => (_) => proved()
     | k + 1 =>
         (l) =>
             match l
-            | [] => Eq/cong((w: Nat) => w + 1, padded_length(fill, k)([]))
-            | [_, ..t] => Eq/cong((w: Nat) => w + 1, padded_length(fill, k)(t))
+            | [] =>
+                let shorter = padded_length(fill, k)([]);
+                proved()
+            | [_, ..t] =>
+                let shorter = padded_length(fill, k)(t);
+                proved()
             end
     end;
 
 -- The elements at exactly `m`, which is where a frame's index is re-established after a list has carried it.
 let resize(@T: Type, fill: T, m: Nat, l: List(T)) -> Vec(T, m) =
-    Vec { list = padded(fill, m)(l), counted = padded_length(fill, m)(l) };
+    Vec { list = padded(fill, m)(l), @counted = padded_length(fill, m)(l) };
 
 let drop_upto(@T: Type, l: List(T), k: Nat) -> List(T) =
     match k

@@ -1465,3 +1465,15 @@ fn a_written_goal_over_a_bound_shows_what_the_procedure_found() {
         "{refused}"
     );
 }
+
+/// A vector's count is a bound its literal discharges at the length its type states, and refuses at another, by the field that states it.
+#[test]
+fn a_vector_literal_of_another_length_is_refused_by_its_count() {
+    let report =
+        error("use /std/{Vec, Nat};\nlet v: Vec(Nat, 2) = Vec { [1, 2, 3] };\n/std/print(\"ok\")");
+    assert!(
+        report.contains("the bound `counted` of `Vec` was not discharged")
+            && report.contains("which reduces to `/std/Bool/False`"),
+        "{report}"
+    );
+}

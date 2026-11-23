@@ -660,8 +660,7 @@ pub let empties(@K: Type, @V: Type) -> Vec(Node(K, V), 16) =
                 Node/empty(),
                 Node/empty(),
                 Node/empty(),
-                Node/empty()],
-        counted = Eq/refl() };
+                Node/empty()] };
 
 --- What `pick` reads of twigs that hold nothing: nothing.
 pub let pick_vacant(
@@ -2122,9 +2121,7 @@ pub let map(@K: Type, @V: Type, @W: Type, t: Node(K, V), f: (V) -> W) -> Node(K,
     | empty() => Node/empty()
     | leaf(k, v) => Node/leaf(k, f(v))
     | branch(at, tw) =>
-        Node/branch(
-            at,
-            Vec { list = List/map(tw.list, (c: Node(K, V)) => map(c, f)), counted = tw.counted })
+        Node/branch(at, Vec { list = List/map(tw.list, (c: Node(K, V)) => map(c, f)) })
     end;
 
 --- The keys under a node appended to `acc`, in order: [`keys`] by one walk that builds its answer from the back.
@@ -3455,7 +3452,7 @@ pub let canonical(
                     first_in(l2),
                     s1.twigs,
                     twigs2,
-                    Eq/trans(tw1.counted, Eq/sym(tw2.counted)),
+                    Nat/eq_of_eql(List/length(l1), List/length(l2), proved()),
                     (x, _) =>
                         let s1x = small(Hash/hash(x), at1);
                         let s2x = small(Hash/hash(x), at2);
