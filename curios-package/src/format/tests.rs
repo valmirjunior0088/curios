@@ -31,12 +31,12 @@ fn a_package_and_an_umbrella_each_state_a_width_under_format() {
     let Ok(Manifest::Package(package)) = concat!(
         "name = \"app\"\ncompiler = \"",
         env!("CARGO_PKG_VERSION"),
-        "\"\n\n[format]\nline-width = 72\n"
+        "\"\n\n[format]\nline-width = 80\n"
     )
     .parse() else {
         panic!("a package's manifest");
     };
-    assert_eq!(package.format, Some(flags(72)));
+    assert_eq!(package.format, Some(flags(80)));
 
     let Ok(Manifest::Umbrella(umbrella)) = concat!(
         "compiler = \"",
@@ -67,6 +67,10 @@ fn a_key_format_does_not_take_is_refused_where_the_manifest_is_read() {
 fn a_width_the_formatter_does_not_admit_is_refused_where_the_manifest_is_read() {
     for (stated, refused) in [
         ("30", "a line width is"),
+        (
+            "60",
+            "a line width is `50`, `80` or `100` columns, and `60` is not",
+        ),
         ("101", "a line width is"),
         ("-1", "`line-width` is a whole number"),
         ("\"80\"", "`line-width` is a whole number"),
@@ -85,11 +89,15 @@ fn a_width_the_formatter_does_not_admit_is_refused_where_the_manifest_is_read() 
 fn a_flat_match_past_its_lines_or_of_no_arms_is_refused() {
     for (stated, refused) in [
         (
-            "line-width = 60\nflat-match-width = 70\n",
-            "a flat match's width is at most the line width, and `70` is past `60`",
+            "line-width = 50\nflat-match-width = 70\n",
+            "a flat match's width is at most the line width, and `70` is past `50`",
         ),
         ("flat-match-width = 101\n", "`101` is past `100`"),
         ("flat-match-arms = 0\n", "a flat match keeps at least 1 arm"),
+        (
+            "flat-match-arms = 11\n",
+            "a flat match keeps at most 10 arms",
+        ),
         (
             "flat-match-arms = -1\n",
             "`flat-match-arms` is a whole number",
@@ -104,7 +112,7 @@ fn a_flat_match_past_its_lines_or_of_no_arms_is_refused() {
     }
 
     let past = FormatSettings {
-        line_width: Some(width(60)),
+        line_width: Some(width(50)),
         flat_match_width: Some(70),
         ..FormatSettings::default()
     };
@@ -118,7 +126,7 @@ fn a_flat_match_past_its_lines_or_of_no_arms_is_refused() {
     assert!(refusal.contains("--flat-match-arms"), "{refusal}");
 }
 
-/// A flat match unstated keeps the defaults, narrowed to the line where the line is narrower, and one stated is kept as stated, from no span up to the line and any count of arms.
+/// A flat match unstated keeps the defaults, narrowed to the line where the line is narrower, and one stated is kept as stated, from no span up to the line and from the fewest arms through the most.
 #[test]
 fn a_flat_match_is_its_defaults_where_nothing_states_it() {
     let flat_match = |settings: FormatSettings| {
@@ -130,14 +138,14 @@ fn a_flat_match_is_its_defaults_where_nothing_states_it() {
         flat_match(FormatSettings::default()),
         Ok((DEFAULT_FLAT_MATCH_WIDTH, DEFAULT_FLAT_MATCH_ARMS))
     );
-    assert_eq!(flat_match(flags(60)), Ok((60, DEFAULT_FLAT_MATCH_ARMS)));
+    assert_eq!(flat_match(flags(50)), Ok((50, DEFAULT_FLAT_MATCH_ARMS)));
     assert_eq!(
         flat_match(FormatSettings {
-            line_width: Some(width(60)),
+            line_width: Some(width(50)),
             flat_match_width: Some(0),
-            flat_match_arms: Some(usize::MAX),
+            flat_match_arms: Some(MAX_FLAT_MATCH_ARMS),
         }),
-        Ok((0, usize::MAX))
+        Ok((0, MAX_FLAT_MATCH_ARMS))
     );
 }
 
@@ -150,7 +158,7 @@ fn a_package_formats_at_the_width_it_states_and_at_the_line_width_where_it_state
         concat!(
             "name = \"stated\"\ncompiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\n\n[format]\nline-width = 72\n"
+            "\"\n\n[format]\nline-width = 80\n"
         ),
     );
     write(
@@ -170,7 +178,7 @@ fn a_package_formats_at_the_width_it_states_and_at_the_line_width_where_it_state
     assert_eq!(
         none.format_under(Some(&stated))
             .map(|format| format.line_width),
-        Ok(width(72))
+        Ok(width(80))
     );
     assert_eq!(
         none.format_under(Some(&silent))
@@ -188,14 +196,14 @@ fn a_member_formats_at_its_umbrellas_width_and_states_none_of_its_own() {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nmembers = [\"app\", \"own\"]\n\n[format]\nline-width = 60\n"
+            "\"\nmembers = [\"app\", \"own\"]\n\n[format]\nline-width = 50\n"
         ),
     );
     write(&root, "app/curios.toml", "name = \"app\"\n");
     write(
         &root,
         "own/curios.toml",
-        "name = \"own\"\n\n[format]\nline-width = 90\n",
+        "name = \"own\"\n\n[format]\nline-width = 80\n",
     );
 
     let member = Governing::of(&root.join("app"), None).expect("a member");
@@ -203,7 +211,7 @@ fn a_member_formats_at_its_umbrellas_width_and_states_none_of_its_own() {
         FormatSettings::default()
             .format_under(Some(&member))
             .map(|format| format.line_width),
-        Ok(width(60))
+        Ok(width(50))
     );
 
     let refusal = Governing::of(&root.join("own"), None)
@@ -245,23 +253,23 @@ fn a_flag_sets_the_width_of_what_no_package_governs_and_is_refused_where_one_doe
     write(&root, "work/scratch.crs", "");
     write(&root, "loose.crs", "");
 
-    let narrow = flags(60);
+    let narrow = flags(50);
     assert_eq!(
         narrow.format_under(None).map(|format| format.line_width),
-        Ok(width(60))
+        Ok(width(50))
     );
     assert_eq!(
         narrow
             .format_of_file(&root.join("loose.crs"), None, None)
             .map(|format| format.line_width),
-        Ok(width(60))
+        Ok(width(50))
     );
     // An umbrella governs only the packages it enumerates, so a file in its tree and in none of them is no package's.
     assert_eq!(
         narrow
             .format_of_file(&root.join("work/scratch.crs"), None, None)
             .map(|format| format.line_width),
-        Ok(width(60))
+        Ok(width(50))
     );
 
     let refusal = narrow

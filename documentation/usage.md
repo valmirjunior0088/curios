@@ -511,12 +511,12 @@ curios format proof.crsc        # a file of Core text
 curios format --check           # write nothing, exit nonzero if anything would change
 curios format - < draft.crs     # standard input, written canonically to standard output
 curios format --core - < p.crsc # standard input, read as Core text
-curios format --line-width 64 - # standard input, within 64 columns
+curios format --line-width 80 - # standard input, within 80 columns
 ```
 
 Each subject names files, and what several subjects name is rewritten once: no subject is every file the governing package declares — its library's header and the modules its `mod` lines reach, then each executable's entry and the modules the entry reaches — an executable's name is its own, a file is itself whatever declares it, and `-` is standard input, written back to standard output, read as a program or, under `--core`, as Core text. A file nothing declares is formatted only when it is named, and a `.crsc` is formatted as the Core text it holds, read and not checked, so a file its reader refuses is formatted all the same.
 
-There is one canonical style, and three settings: `line-width`, the width a line is written within, 50 through 100 columns counted in characters, and 100 where nothing states another; and `flat-match-width` and `flat-match-arms`, the most columns, from `match` to `end`, and the most arms a match keeps on one line — the columns 0 through the line width, 70 where nothing states another or the line width where that is narrower, and the arms 1 or more, 3 where nothing states another. A file takes its settings from one place. Where a package governs it — the package whose manifest is nearest above the file, or the one `--manifest` names — that is the package's [`[format]`](#the-manifest) table, or its umbrella's, and a flag given for such a file is refused before anything is written. Standard input and a file no package governs take the flags, so `curios format --line-width 80 - < file.crs` shows a package's file at another width without rewriting it. The rules and what they rejected are [A file is formatted as one place states](design/tools/a-file-is-formatted-as-one-place-states.md)'s.
+There is one canonical style, and three settings: `line-width`, the width a line is written within, 50, 80 or 100 columns counted in characters, and 100 where nothing states another; and `flat-match-width` and `flat-match-arms`, the most columns, from `match` to `end`, and the most arms a match keeps on one line — the columns 0 through the line width, 70 where nothing states another or the line width where that is narrower, and the arms 1 through 10, 3 where nothing states another. A file takes its settings from one place. Where a package governs it — the package whose manifest is nearest above the file, or the one `--manifest` names — that is the package's [`[format]`](#the-manifest) table, or its umbrella's, and a flag given for such a file is refused before anything is written. Standard input and a file no package governs take the flags, so `curios format --line-width 80 - < file.crs` shows a package's file at another width without rewriting it. The rules and what they rejected are [A file is formatted as one place states](design/tools/a-file-is-formatted-as-one-place-states.md)'s.
 
 The canonical form writes no byte-order mark, and writes a character that prints as nothing or as a blank inside a literal by its escape, `\u{200D}`.
 
@@ -614,7 +614,7 @@ A `curios.toml` declares a package or an umbrella, never both, and one that decl
 | `compiler` | required for a standalone package: the Curios version it is written for, a bare SemVer version, or the oldest one, after `>=`; an umbrella member inherits this from its umbrella instead |
 | `description` | one line, which opens the landing page [`document`](#document) writes |
 | `default` | which executable a bare `run`, `compile` or `test` means; it may name a key of `[executables]` or the package's own `exe.crs` program |
-| `[format]` | how [`format`](#format) writes the package's files: `line-width`, the columns a line is written within, 50 through 100; `flat-match-width` and `flat-match-arms`, the most columns and arms a match keeps on one line; an umbrella member inherits this from its umbrella instead |
+| `[format]` | how [`format`](#format) writes the package's files: `line-width`, the columns a line is written within, 50, 80 or 100; `flat-match-width` and `flat-match-arms`, the most columns and arms a match keeps on one line; an umbrella member inherits this from its umbrella instead |
 | `[dependencies]` | one row per package this one reaches, keyed by that package's name |
 | `[executables]` | one entry per program beyond `exe.crs`, keyed by the name `run` takes: `path` when the file is not `<name>.crs` |
 | `[foreign]` | one row per provider of this package's [`foreign` declarations](language.md#foreign-declarations), keyed by the handle `pin foreign` takes: what each target links, in `[foreign.<handle>.native]` and `[foreign.<handle>.browser]`, and what its exports answer |
@@ -635,11 +635,11 @@ An executable is named by one identifier, its key; a name written twice is refus
 
 An umbrella must declare `compiler`, and every package its `members` enumerates inherits that version. A member cannot declare a local override; the refusal points to its umbrella. A package merely beneath an umbrella directory is still standalone unless enumerated. Inheritance follows each dependency's own membership, never its consumer's umbrella. A dependency delivered without the umbrella it needs cannot inherit and must declare a version of its own in its manifest.
 
-`[format]` is inherited as `compiler` is: an umbrella's table is every member's, a member that writes one of its own is refused naming its umbrella, and a package no umbrella enumerates states its own or takes every setting's default. A line width outside 50 through 100, a flat match wider than the line width or of no arms, and a key the table does not take are refused where the manifest is read.
+`[format]` is inherited as `compiler` is: an umbrella's table is every member's, a member that writes one of its own is refused naming its umbrella, and a package no umbrella enumerates states its own or takes every setting's default. A line width other than 50, 80 or 100, a flat match wider than the line width, of no arms or of more than 10, and a key the table does not take are refused where the manifest is read.
 
 ```toml
 [format]
-line-width = 72
+line-width = 80
 ```
 
 A `[foreign]` row, keyed by a handle for `curios pin` that no program refers to, names a module in the table of the target that links it, and says which of its exports answers each of the package's `foreign` declarations it is named for:

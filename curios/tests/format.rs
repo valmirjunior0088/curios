@@ -396,11 +396,11 @@ fn a_flat_match_is_stated_by_a_flag_and_by_a_manifest_alike() {
         &root,
         "app/curios.toml",
         &format!(
-            "compiler = \"{compiler}\"\nname = \"app\"\n\n[format]\nline-width = 60\nflat-match-width = 70\n"
+            "compiler = \"{compiler}\"\nname = \"app\"\n\n[format]\nline-width = 50\nflat-match-width = 70\n"
         ),
     );
     let refused = curios(&root.join("app"), &["format", "--check"], "");
     let stderr = String::from_utf8_lossy(&refused.stderr);
     assert!(!refused.status.success(), "{stderr}");
-    assert!(stderr.contains("`70` is past `60`"), "{stderr}");
+    assert!(stderr.contains("`70` is past `50`"), "{stderr}");
 }

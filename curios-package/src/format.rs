@@ -13,7 +13,7 @@ use {
     curios_common::{MAX_LINE_WIDTH, Report},
     curios_surface::{
         DEFAULT_FLAT_MATCH_ARMS, DEFAULT_FLAT_MATCH_WIDTH, FlatMatch, FlatMatchSetting, Format,
-        MIN_FLAT_MATCH_ARMS, MIN_LINE_WIDTH, Width,
+        LINE_WIDTHS, MAX_FLAT_MATCH_ARMS, MIN_FLAT_MATCH_ARMS, Width, spelled_choices,
     },
     serde::{Deserialize, Deserializer, de::Error},
     std::path::{Path, PathBuf},
@@ -128,10 +128,11 @@ impl FormatSettings {
     }
 }
 
-/// `--line-width`'s help, its bounds read off the constants that set them.
+/// `--line-width`'s help, its widths read off the constants that set them.
 fn line_width_help() -> String {
     format!(
-        "The columns a formatted line is written within, `{MIN_LINE_WIDTH}` through `{MAX_LINE_WIDTH}`, for standard input or a file no package governs; a package states its own under `[format]` (default: `{MAX_LINE_WIDTH}`)"
+        "The columns a formatted line is written within, {}, for standard input or a file no package governs; a package states its own under `[format]` (default: `{MAX_LINE_WIDTH}`)",
+        spelled_choices(&LINE_WIDTHS)
     )
 }
 
@@ -150,10 +151,10 @@ fn flat_match_width_help() -> String {
     )
 }
 
-/// `--flat-match-arms`' help, its default read off the constant that sets it.
+/// `--flat-match-arms`' help, its bounds and its default read off the constants that set them.
 fn flat_match_arms_help() -> String {
     format!(
-        "The most arms a match keeps on one line, from `{MIN_FLAT_MATCH_ARMS}`, for standard input or a file no package governs; a package states its own under `[format]` (default: `{DEFAULT_FLAT_MATCH_ARMS}`)"
+        "The most arms a match keeps on one line, `{MIN_FLAT_MATCH_ARMS}` through `{MAX_FLAT_MATCH_ARMS}`, for standard input or a file no package governs; a package states its own under `[format]` (default: `{DEFAULT_FLAT_MATCH_ARMS}`)"
     )
 }
 

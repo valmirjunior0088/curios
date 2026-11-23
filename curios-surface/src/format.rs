@@ -8,7 +8,7 @@
 //!
 //! **One document for the whole file**, built and rendered once by [`emit`], which says why.
 //!
-//! **A file is formatted within a [`Format`]**: the width of its lines, and how much of a match one line keeps ([`FlatMatch`]). Every law holds at each line width it admits, [`MIN_LINE_WIDTH`] through [`MAX_LINE_WIDTH`], and under the narrowest and the widest flat match, which `format/width_tests.rs` and `format/place_tests.rs` hold over the sources of the tree at the narrowest. Where a file's format comes from is `curios-package`'s `FormatSettings`.
+//! **A file is formatted within a [`Format`]**: the width of its lines, and how much of a match one line keeps ([`FlatMatch`]). Every law holds at each line width it admits, [`LINE_WIDTHS`], under the default flat match and at each extreme the settings admit, which `format/width_tests.rs` and `format/place_tests.rs` hold over the sources of the tree. Where a file's format comes from is `curios-package`'s `FormatSettings`.
 
 use {
     super::{
@@ -21,20 +21,36 @@ use {
     std::{cell::RefCell, fmt, path::Path, str::FromStr, sync::Arc},
 };
 
-/// The narrowest width a file may be formatted within. The formatter's laws are held over the sources of the tree at it, and below it a line nothing can break — a long name, a deep nesting's indentation — is most of what a narrower width would change.
+/// The narrowest width a file may be formatted within, a page's narrow column, as a cheatsheet's: below it a line nothing can break — a long name, a deep nesting's indentation — is most of what a narrower width would change.
 pub const MIN_LINE_WIDTH: usize = 50;
 
-/// The columns a formatted line is written within, counted in scalar values: one of [`MIN_LINE_WIDTH`] through [`MAX_LINE_WIDTH`], which is the default. No wider, since a report quotes a line as a window [`MAX_LINE_WIDTH`] wide, and a line the formatter wrote is quoted whole.
+/// The widths a file may be formatted within, narrowest first: a page's narrow column, a terminal's line, which most style guides keep, and [`MAX_LINE_WIDTH`], the default. The formatter's laws are held over the sources of the tree at each, so no width between them is admitted, the laws never held there.
+pub const LINE_WIDTHS: [usize; 3] = [MIN_LINE_WIDTH, 80, MAX_LINE_WIDTH];
+
+/// The values a setting admits, as a refusal and a help text name them: [`LINE_WIDTHS`] as `` `50`, `80` or `100` ``.
+pub fn spelled_choices(choices: &[usize]) -> String {
+    let spelled = choices
+        .iter()
+        .map(|choice| format!("`{choice}`"))
+        .collect::<Vec<_>>();
+    match spelled.split_last() {
+        Some((last, rest)) => format!("{} or {last}", rest.join(", ")),
+        None => String::new(),
+    }
+}
+
+/// The columns a formatted line is written within, counted in scalar values: one of [`LINE_WIDTHS`], [`MAX_LINE_WIDTH`] where nothing states another. No wider, since a report quotes a line as a window [`MAX_LINE_WIDTH`] wide, and a line the formatter wrote is quoted whole.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Width(usize);
 
 impl Width {
     /// `columns` as a width, refused outside the widths the formatter admits.
     pub fn new(columns: usize) -> Result<Self, String> {
-        match (MIN_LINE_WIDTH..=MAX_LINE_WIDTH).contains(&columns) {
+        match LINE_WIDTHS.contains(&columns) {
             true => Ok(Self(columns)),
             false => Err(format!(
-                "a line width is {MIN_LINE_WIDTH} through {MAX_LINE_WIDTH} columns, and `{columns}` is not"
+                "a line width is {} columns, and `{columns}` is not",
+                spelled_choices(&LINE_WIDTHS)
             )),
         }
     }
@@ -57,7 +73,8 @@ impl FromStr for Width {
     fn from_str(spelling: &str) -> Result<Self, String> {
         let columns = spelling.parse().map_err(|_| {
             format!(
-                "a line width is a number of columns, {MIN_LINE_WIDTH} through {MAX_LINE_WIDTH}, not `{spelling}`"
+                "a line width is a number of columns, {}, not `{spelling}`",
+                spelled_choices(&LINE_WIDTHS)
             )
         })?;
         Self::new(columns)
@@ -80,6 +97,9 @@ pub const DEFAULT_FLAT_MATCH_ARMS: usize = 3;
 /// The fewest arms a match may be told it keeps on one line: a match kept off every line is the span's to say, `0` columns, and one way to say it is enough.
 pub const MIN_FLAT_MATCH_ARMS: usize = 1;
 
+/// The most arms a match may be told it keeps on one line: the most a line [`MAX_LINE_WIDTH`] wide shows of the narrowest match the printer writes, one with no head whose every arm is a guard or `_` and a body of a character each, `match | b => 0 | _ => 0 end`. A count past it keeps no match on one line that this count would not.
+pub const MAX_FLAT_MATCH_ARMS: usize = (MAX_LINE_WIDTH - "match end".len()) / " | b => 0".len();
+
 /// The setting of a [`FlatMatch`] a stated value was refused for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FlatMatchSetting {
@@ -94,7 +114,7 @@ impl FlatMatch {
         arms: DEFAULT_FLAT_MATCH_ARMS,
     };
 
-    /// A match kept on one line within `width` columns and `arms` arms, each its default where it is `None`, on lines `line` wide: a stated width past the line is refused, since no line could show it, and the default is the line's where the line is narrower; arms fewer than [`MIN_FLAT_MATCH_ARMS`] are refused, and any count past it is admitted, the span bounding what a line holds.
+    /// A match kept on one line within `width` columns and `arms` arms, each its default where it is `None`, on lines `line` wide: a stated width past the line is refused, since no line could show it, and the default is the line's where the line is narrower; arms fewer than [`MIN_FLAT_MATCH_ARMS`] or more than [`MAX_FLAT_MATCH_ARMS`] are refused.
     pub fn within(
         line: Width,
         width: Option<usize>,
@@ -120,6 +140,14 @@ impl FlatMatch {
                     FlatMatchSetting::Arms,
                     format!(
                         "a flat match keeps at least {MIN_FLAT_MATCH_ARMS} arm, and `{arms}` is fewer; a match kept off every line is `flat-match-width = 0`"
+                    ),
+                ));
+            }
+            Some(arms) if arms > MAX_FLAT_MATCH_ARMS => {
+                return Err((
+                    FlatMatchSetting::Arms,
+                    format!(
+                        "a flat match keeps at most {MAX_FLAT_MATCH_ARMS} arms, the most a line of {MAX_LINE_WIDTH} columns shows, and `{arms}` is more"
                     ),
                 ));
             }

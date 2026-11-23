@@ -31,24 +31,45 @@ pub fn at(columns: usize) -> Format {
     }
 }
 
-/// The formats of the narrowest lines a file may be formatted within, a match kept on one line by the defaults and at each extreme the settings admit: kept off every line, as wide as the line with the fewest arms, and as wide as the line with no count of arms its own bound.
-pub fn narrowest_formats() -> Vec<Format> {
-    let line_width = Width::new(MIN_LINE_WIDTH).expect("the narrowest line width is admitted");
-    let within = |width, arms| {
-        FlatMatch::within(line_width, Some(width), Some(arms)).expect("the extreme is admitted")
-    };
-    [
-        FlatMatch::within(line_width, None, None).expect("the defaults fit every line"),
-        within(0, DEFAULT_FLAT_MATCH_ARMS),
-        within(MIN_LINE_WIDTH, MIN_FLAT_MATCH_ARMS),
-        within(MIN_LINE_WIDTH, usize::MAX),
-    ]
-    .into_iter()
-    .map(|flat_match| Format {
-        line_width,
-        flat_match,
+/// Every format a file may be formatted within, at the extremes: at each admitted line width, a match kept on one line by the defaults and at each extreme the settings admit — kept off every line, as wide as the line with the fewest arms, and as wide as the line with the most.
+pub fn admitted_formats() -> Vec<Format> {
+    LINE_WIDTHS
+        .into_iter()
+        .flat_map(|columns| {
+            let line_width = Width::new(columns).expect("the line width is admitted");
+            let within = move |width, arms| {
+                FlatMatch::within(line_width, Some(width), Some(arms))
+                    .expect("the extreme is admitted")
+            };
+            [
+                FlatMatch::within(line_width, None, None).expect("the defaults fit every line"),
+                within(0, DEFAULT_FLAT_MATCH_ARMS),
+                within(columns, MIN_FLAT_MATCH_ARMS),
+                within(columns, MAX_FLAT_MATCH_ARMS),
+            ]
+            .map(|flat_match| Format {
+                line_width,
+                flat_match,
+            })
+        })
+        .collect()
+}
+
+/// `check` run at every format of [`admitted_formats`], each on a thread of its own, so a sweep of the tree costs its slowest format's run rather than every format's in turn: what each answers, in the formats' order, and a panic in any raised again as it was.
+pub fn at_every_admitted_format<T: Send>(check: impl Fn(Format) -> T + Sync) -> Vec<T> {
+    let check = &check;
+    std::thread::scope(|scope| {
+        admitted_formats()
+            .into_iter()
+            .map(|format| scope.spawn(move || check(format)))
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|run| {
+                run.join()
+                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+            })
+            .collect()
     })
-    .collect()
 }
 
 /// Every `.crs` of the tree, by its path, with the text it holds.

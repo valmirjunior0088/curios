@@ -1,4 +1,4 @@
-//! The width a file is formatted within: which widths are admitted, how one is read, and that the laws hold at the narrowest over the sources of the tree.
+//! The width a file is formatted within: which widths are admitted, how one is read, and that the laws hold at each over the sources of the tree.
 
 use {
     super::{test_support::*, *},
@@ -6,23 +6,23 @@ use {
 };
 
 #[test]
-fn a_width_is_admitted_from_the_narrowest_through_the_line_width() {
+fn a_width_is_one_of_the_widths_the_laws_are_held_at() {
     assert_eq!(Width::default().columns(), MAX_LINE_WIDTH);
-    assert_eq!(
-        Width::new(MIN_LINE_WIDTH).map(Width::columns),
-        Ok(MIN_LINE_WIDTH)
-    );
-    assert_eq!(
-        Width::new(MAX_LINE_WIDTH).map(Width::columns),
-        Ok(MAX_LINE_WIDTH)
-    );
-    assert!(Width::new(MIN_LINE_WIDTH - 1).is_err());
-    assert!(Width::new(MAX_LINE_WIDTH + 1).is_err());
+    for columns in LINE_WIDTHS {
+        assert_eq!(Width::new(columns).map(Width::columns), Ok(columns));
+    }
+    for columns in [MIN_LINE_WIDTH - 1, 60, MAX_LINE_WIDTH + 1] {
+        let refusal = Width::new(columns).expect_err("a width between or past them");
+        assert_eq!(
+            refusal,
+            format!("a line width is `50`, `80` or `100` columns, and `{columns}` is not")
+        );
+    }
 }
 
 #[test]
 fn a_width_is_read_from_its_digits_alone() {
-    assert_eq!("72".parse::<Width>().map(Width::columns), Ok(72));
+    assert_eq!("80".parse::<Width>().map(Width::columns), Ok(80));
     for spelling in ["72px", "-72", "", "seventy"] {
         let refusal = spelling.parse::<Width>().expect_err(spelling);
         assert!(refusal.contains(&format!("`{spelling}`")), "{refusal}");
@@ -54,52 +54,51 @@ fn a_narrower_width_breaks_what_the_default_keeps_on_one_line() {
     assert_eq!(formatted_within(&narrow, narrowest), narrow);
 }
 
-/// Every source of the tree formats at the narrowest line width without refusal, a match kept on one line by the defaults and at each extreme the settings admit, keeping its program and its comments, and what that writes is written again unchanged: the laws hold there over every shape the corpus holds, which far more breaks put to the renderer than the default does.
+/// Every source of the tree formats at every admitted line width without refusal, a match kept on one line by the defaults and at each extreme the settings admit, keeping its program and its comments, and what that writes is written again unchanged: the laws hold there over every shape the corpus holds, the narrowest putting far more breaks to the renderer than the default does.
 #[test]
-fn every_source_in_the_tree_formats_at_the_narrowest_width_and_holds_there() {
-    let mut faults = Vec::new();
-
-    for (format, (path, text)) in narrowest_formats().into_iter().flat_map(|format| {
+fn every_source_in_the_tree_formats_at_every_width_and_holds_there() {
+    let faults = at_every_admitted_format(|format| {
         sources_of_the_tree()
             .into_iter()
-            .map(move |source| (format, source))
-    }) {
-        let once = match Formatted::from_source(
-            &Source::held(path.clone(), text),
-            WrittenIn::of(&path),
-            format,
-        ) {
-            Ok(Formatted::Unchanged(text) | Formatted::Changed(text)) => text,
-            Err(refusal) => {
-                faults.push(format!(
-                    "{}: {refusal}",
-                    path.display(),
-                    refusal = refusal.render()
-                ));
-                continue;
-            }
-        };
-        match Formatted::from_source(
-            &Source::held(path.clone(), once.as_str()),
-            WrittenIn::of(&path),
-            format,
-        ) {
-            Ok(Formatted::Unchanged(_)) => {}
-            Ok(Formatted::Changed(_)) => {
-                faults.push(format!("{}: a second run changes it", path.display()))
-            }
-            Err(refusal) => faults.push(format!(
-                "{}: its own output was refused: {refusal}",
-                path.display(),
-                refusal = refusal.render()
-            )),
-        }
-    }
+            .filter_map(|(path, text)| {
+                let once = match Formatted::from_source(
+                    &Source::held(path.clone(), text),
+                    WrittenIn::of(&path),
+                    format,
+                ) {
+                    Ok(Formatted::Unchanged(text) | Formatted::Changed(text)) => text,
+                    Err(refusal) => {
+                        return Some(format!(
+                            "{}: {refusal}",
+                            path.display(),
+                            refusal = refusal.render()
+                        ));
+                    }
+                };
+                match Formatted::from_source(
+                    &Source::held(path.clone(), once.as_str()),
+                    WrittenIn::of(&path),
+                    format,
+                ) {
+                    Ok(Formatted::Unchanged(_)) => None,
+                    Ok(Formatted::Changed(_)) => {
+                        Some(format!("{}: a second run changes it", path.display()))
+                    }
+                    Err(refusal) => Some(format!(
+                        "{}: its own output was refused: {refusal}",
+                        path.display(),
+                        refusal = refusal.render()
+                    )),
+                }
+            })
+            .collect::<Vec<_>>()
+    })
+    .concat();
 
     assert!(faults.is_empty(), "{}", faults.join("\n"));
 }
 
-/// A match is kept on one line within its format's flat match and broken past it: by its span, which `0` closes to every match, and by its arms, of which any count may be admitted.
+/// A match is kept on one line within its format's flat match and broken past it: by its span, which `0` closes to every match, and by its arms.
 #[test]
 fn a_flat_match_keeps_or_breaks_a_match_by_its_span_and_its_arms() {
     let source = "let f(n: /std/Nat) -> /std/Nat =\n    match n | 0 => 1 | 1 => 2 | _ => n end;\n";
@@ -151,7 +150,44 @@ fn a_flat_match_keeps_or_breaks_a_match_by_its_span_and_its_arms() {
         "four arms past the default"
     );
     assert!(
-        kept(&wide(usize::MAX)),
-        "four arms within no count of its own"
+        kept(&wide(MAX_FLAT_MATCH_ARMS)),
+        "four arms within the most"
     );
+}
+
+/// The bound on a flat match's arms is the most a line shows: the narrowest match the printer writes, one with no head, stays on a line [`MAX_LINE_WIDTH`] wide at [`MAX_FLAT_MATCH_ARMS`] arms, and at one more arm no line holds it, whatever its count admitted.
+#[test]
+fn the_most_arms_a_flat_match_keeps_is_the_most_a_line_shows() {
+    let narrowest = |arms: usize| {
+        let guarded = " | b => 0".repeat(arms - 1);
+        format!("let b: /std/Bool = true;\n\nmatch{guarded} | _ => 0 end\n")
+    };
+    let line_width = Width::default();
+    let at = |arms: usize| Format {
+        line_width,
+        flat_match: FlatMatch {
+            width: MAX_LINE_WIDTH,
+            arms,
+        },
+    };
+    let kept = |text: &str| {
+        text.lines()
+            .any(|line| line.starts_with("match |") && line.ends_with(" end"))
+    };
+
+    let most = narrowest(MAX_FLAT_MATCH_ARMS);
+    assert!(
+        kept(&formatted_within(&most, at(MAX_FLAT_MATCH_ARMS))),
+        "{most}"
+    );
+    let past = formatted_within(
+        &narrowest(MAX_FLAT_MATCH_ARMS + 1),
+        at(MAX_FLAT_MATCH_ARMS + 1),
+    );
+    assert!(!kept(&past), "{past}");
+    assert!(FlatMatch::within(line_width, None, Some(MAX_FLAT_MATCH_ARMS)).is_ok());
+    let (setting, refusal) = FlatMatch::within(line_width, None, Some(MAX_FLAT_MATCH_ARMS + 1))
+        .expect_err("one arm past the most");
+    assert_eq!(setting, FlatMatchSetting::Arms);
+    assert!(refusal.contains("at most 10 arms"), "{refusal}");
 }
