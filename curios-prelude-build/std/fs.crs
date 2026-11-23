@@ -1,7 +1,7 @@
-use /std/{Nat, Bool, List, Option, Path, Try, Io, Show};
+use /std/{Nat, Bool, List, Option, Path, Str, Try, Io, Show};
 use /std/ops/{Eql};
 use /std/time/{Timestamp};
-use /std/internal/{Status};
+use /std/internal/{Status, temporary_path};
 
 --- What is at a path.
 pub induct Kind: pub Type
@@ -94,13 +94,35 @@ pub let list(path: Path) -> Try(Io, Io/Error, List(Path)) =
     let () = Status/succeeded(reply.status)!;
     Try/pure(List/map(reply.names, Path/of_bytes));
 
---- Create the directory at this path: `ok`, or the status of the failure.
-foreign dir_create(Bytes) -> Nat;
+--- Create the directory at this path, its owner's alone where the flag is set: `ok`, or the status of the failure.
+foreign dir_create(Bytes, Bool) -> Nat;
 
 --- A directory at `path`, whose parent must exist.
 pub let create_dir(path: Path) -> Try(Io, Io/Error, {}) =
-    let status = dir_create(Path/to_bytes(path))!;
+    let status = dir_create(Path/to_bytes(path), false)!;
     Status/succeeded(status);
+
+-- What is at `path` removed, a failure to remove it dropped: what a temporary directory's scope does as it ends, whether or not the program removed it first.
+let removed(path: Path) -> Io({}) =
+    let _ = Try/run(remove_all(path))!;
+    Io/pure(());
+
+--- A new empty directory under the system's temporary directory — the one `TMPDIR` names, or `/tmp` — its name `prefix` and sixteen random hexadecimal digits, which `s` removes with all it holds when it ends, and its owner's alone. A name something holds already is drawn again, and `prefix` holds no `/`, which would name another directory: decided where it is written, so a literal one needs nothing more. Python's `tempfile.mkdtemp` and Go's `os.MkdirTemp`.
+pub let temp_dir(
+    s: Io/Scope,
+    prefix: Str,
+    @plain: Bool/Holds(Bool/not(Str/contains(prefix, '/'))),
+) -> Try(Io, Io/Error, Path) =
+    let path = temporary_path(prefix)!;
+    let status = dir_create(Path/to_bytes(path), true)!;
+    let created = Try/run(Status/succeeded(status))!;
+    match created
+    | success(()) =>
+        let () = Io/Scope/defer(s, (_) => removed(path))!;
+        Try/pure(path)
+    | failure(already_exists()) => temp_dir(s, prefix)
+    | failure(failed) => Try/raise(failed)
+    end;
 
 --- Remove the directory at this path: `ok`, or the status of the failure.
 foreign dir_remove(Bytes) -> Nat;

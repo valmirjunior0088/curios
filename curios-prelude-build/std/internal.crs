@@ -6,11 +6,31 @@ pub use Handle/{let Handle};
 pub mod Status;
 pub use Status/{let Status};
 
-use /std/{Bytes, List, Option, Cell, Io, Try};
+use /std/{Bytes, Str, List, Option, Cell, Io, Try, Path, Proc, Show, rand};
 
 --- An argument refused before any host call, by the errno `/sys/errno` names for it.
 pub let invalid: Io/Error =
     Io/Error/other(/sys/errno/inval);
+
+-- The system's temporary directory: the one `TMPDIR` names, or `/tmp` where it names none or is empty, as POSIX reads it.
+let temporary_directory() -> Io(Path) =
+    let named = Proc/env("TMPDIR")!;
+    let directory =
+        match named
+        | some(written) =>
+            match Bytes/len(written)
+            | 0 => Path/of_str("/tmp")
+            | _ => Path/of_bytes(written)
+            end
+        | none() => Path/of_str("/tmp")
+        end;
+    Io/pure(directory);
+
+--- A name for a temporary file or directory that no other is likely to hold yet: `prefix` and sixteen hexadecimal digits of eight random bytes, under the system's temporary directory.
+pub let temporary_path(prefix: Str) -> Io(Path) =
+    let directory = temporary_directory()!;
+    let drawn = rand/bytes(8)!;
+    Io/pure(Path/join(directory, Path/of_str(Str/concat(prefix, Show/show(drawn)))));
 
 --- What a wait waits on: handles a host makes ready and cells the program fills, and what releases what the wait made for itself, whether the wait ends or is cancelled.
 pub struct Waiting: pub Type {

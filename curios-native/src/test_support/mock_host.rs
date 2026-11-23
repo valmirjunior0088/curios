@@ -863,7 +863,7 @@ impl HostOps for MockHost {
             },
             Mode::Write => self.files.truncate(&path),
             Mode::Append => self.files.ensure(&path),
-            Mode::Create => match self.files.contains(&path) {
+            Mode::Create | Mode::CreatePrivate => match self.files.contains(&path) {
                 true => Err(Failure::AlreadyExists),
                 false => self.files.ensure(&path),
             },
@@ -1484,7 +1484,7 @@ impl HostOps for MockHost {
         self.files.list(&path)
     }
 
-    fn dir_create(&self, path: Vec<u8>) -> Result<(), Failure> {
+    fn dir_create(&self, path: Vec<u8>, _private: bool) -> Result<(), Failure> {
         self.files.create_dir(&path)
     }
 

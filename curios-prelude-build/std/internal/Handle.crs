@@ -21,6 +21,7 @@ let mode_code(mode: Mode) -> Nat =
     | append() => /sys/open_mode/append
     | read_write() => /sys/open_mode/read_write
     | create() => /sys/open_mode/create
+    | create_private() => /sys/open_mode/create_private
     end;
 
 --- The handle the file at `path` opens to in `mode`: what a file and a terminal are each opened through.

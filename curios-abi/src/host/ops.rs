@@ -134,8 +134,8 @@ macro_rules! for_each_host_op {
             /// The names in directory `path`, as the bytes the directory holds — no `.` or `..`, sorted so two listings agree. `NotDirectory` on a file.
             DirList: fn dir_list(path: Vec<u8>) -> Result<Vec<Vec<u8>>, Failure> { module: fs, yields: names }
 
-            /// Create the directory at `path`; its parent must exist. `AlreadyExists` when anything is there.
-            DirCreate: fn dir_create(path: Vec<u8>) -> Result<(), Failure> { module: fs }
+            /// Create the directory at `path`, its owner's alone where `private`, as a temporary directory is, and with every permission the umask leaves otherwise; its parent must exist. `AlreadyExists` when anything is there.
+            DirCreate: fn dir_create(path: Vec<u8>, private: bool) -> Result<(), Failure> { module: fs }
 
             /// Remove the empty directory at `path`. `NotEmpty` when it has entries, `NotDirectory` on a file.
             DirRemove: fn dir_remove(path: Vec<u8>) -> Result<(), Failure> { module: fs }

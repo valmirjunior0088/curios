@@ -49,7 +49,7 @@ fn a_writing_open_under_a_missing_directory_is_refused_until_the_directory_exist
     }
     assert_eq!(host.file_stat(b"a".to_vec()), Err(Failure::NotFound));
 
-    assert_eq!(host.dir_create(b"a".to_vec()), Ok(()));
+    assert_eq!(host.dir_create(b"a".to_vec(), false), Ok(()));
     let handle = host.file_open(b"a/b.txt".to_vec(), Mode::Write).unwrap();
     assert_eq!(host.handle_write(handle.clone(), b"x".to_vec()), Ok(()));
     host.handle_close(handle);
@@ -68,7 +68,7 @@ fn a_writing_open_under_a_missing_directory_is_refused_until_the_directory_exist
 fn the_root_directory_exists_holds_absolute_paths_and_cannot_be_removed() {
     let (host, _io) = MockHost::builder().build();
 
-    assert_eq!(host.dir_create(b"/x".to_vec()), Ok(()));
+    assert_eq!(host.dir_create(b"/x".to_vec(), false), Ok(()));
     let handle = host.file_open(b"/x/f".to_vec(), Mode::Write).unwrap();
     host.handle_close(handle);
 
@@ -81,7 +81,10 @@ fn the_root_directory_exists_holds_absolute_paths_and_cannot_be_removed() {
     ));
     assert_eq!(host.dir_list(b"/".to_vec()), Ok(vec![b"x".to_vec()]));
     assert_eq!(host.dir_list(b"/x".to_vec()), Ok(vec![b"f".to_vec()]));
-    assert_eq!(host.dir_create(b"/".to_vec()), Err(Failure::AlreadyExists));
+    assert_eq!(
+        host.dir_create(b"/".to_vec(), false),
+        Err(Failure::AlreadyExists)
+    );
     assert_eq!(host.file_remove(b"/".to_vec()), Err(Failure::IsDirectory));
     assert_eq!(host.dir_remove(b"/".to_vec()), Err(Failure::NotEmpty));
 

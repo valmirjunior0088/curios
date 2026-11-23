@@ -1,6 +1,6 @@
-//! What the system answers: randomness, an environment variable, the clock, a file's modification time, and an open that creates.
+//! What the system answers: randomness, an environment variable, the clock, a file's modification time, an open that creates, and what a private file or directory may be read by.
 
-use {super::*, curios_common::test_support::*};
+use {super::*, curios_common::test_support::*, std::os::unix::fs::PermissionsExt};
 
 /// Randomness answers exactly the bytes asked for, and a request no memory can hold refuses the call rather than abort the process.
 #[test]
@@ -61,4 +61,41 @@ fn an_open_to_create_is_refused_where_the_file_exists() {
         host.file_open(path, Mode::Create),
         Err(Failure::AlreadyExists)
     ));
+}
+
+/// A private create and a private directory are their owner's alone, whatever the umask lets the others have, where a plain create and a plain directory keep what the umask leaves of every bit; the umask is set to `0` for the test, so what is created is what was asked.
+#[test]
+fn a_private_file_and_directory_are_their_owners_alone() {
+    let host = OsHost::with_args(vec![]);
+    let dir = Temporary::new("runtime-open", "private");
+    fs::create_dir(&dir).expect("a fresh temporary directory");
+    let bytes = |name: &str| dir.join(name).into_os_string().into_vec();
+    let permissions = |name: &str| {
+        fs::metadata(dir.join(name))
+            .expect("what the host created")
+            .permissions()
+            .mode()
+            & 0o777
+    };
+
+    let was = rustix::process::umask(rustix::fs::Mode::empty());
+    let created = (
+        host.file_open(bytes("private"), Mode::CreatePrivate)
+            .is_ok(),
+        host.file_open(bytes("plain"), Mode::Create).is_ok(),
+        host.dir_create(bytes("held"), true),
+        host.dir_create(bytes("shared"), false),
+    );
+    rustix::process::umask(was);
+
+    assert_eq!(created, (true, true, Ok(()), Ok(())));
+    assert_eq!(
+        [
+            permissions("private"),
+            permissions("plain"),
+            permissions("held"),
+            permissions("shared")
+        ],
+        [0o600, 0o666, 0o700, 0o777]
+    );
 }

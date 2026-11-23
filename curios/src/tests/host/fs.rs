@@ -131,3 +131,105 @@ fn an_uncaught_failure_ends_the_region_with_its_name() {
     run_text(&source, host).expect("expected result");
     assert_eq!(io.output(), b"not_found");
 }
+
+/// The temporaries a program makes in a scope under a `/scratch` that `TMPDIR` names: a file written through the handle it answers and read back by its path, and a directory holding a file, each printed by its path, then whether each is still there once the scope has ended.
+fn temporaries(prefix: &str) -> String {
+    program(&fill!(
+        r#"
+            let made =
+                Try/scope((s) =>
+                    let t = File/temp(s, "${prefix}")!;
+                    let () = Io/write(t.file, Str/to_bytes("held"))!;
+                    let held = File/read_all(t.path)!;
+                    let d = fs/temp_dir(s, "work-")!;
+                    let () = File/write_all(Path/join(d, Path/of_str("inner")), Str/to_bytes("x"))!;
+                    Try/pure((t.path, d, text(held))))!;
+            let file_kept = fs/exists(made.0)!;
+            let dir_kept = fs/exists(made.1)!;
+            Try/pure(Str/join(" ", [Show/show(made.0), Show/show(made.1), made.2, Bool/to_str(file_kept), Bool/to_str(dir_kept)]))
+        "#,
+        prefix
+    ))
+}
+
+/// A temporary file and a temporary directory are made under the directory `TMPDIR` names, each named by its prefix and sixteen hexadecimal digits, the file written through the handle `File/temp` answers beside its path, and both removed when their scope ends, the directory with what it holds.
+#[test]
+fn a_temporary_file_and_directory_are_made_under_tmpdir_and_removed_with_their_scope() {
+    let (host, io) = MockHost::builder()
+        .files([("/scratch/keep", "")])
+        .env([("TMPDIR", "/scratch")])
+        .build();
+    run_text(&temporaries("run-"), host).expect("expected result");
+    let output = String::from_utf8(io.output()).expect("text");
+    let fields = output.split(' ').collect::<Vec<_>>();
+
+    let named = |path: &str, prefix: &str| {
+        path.strip_prefix(prefix).is_some_and(|digits| {
+            digits.len() == 16 && digits.chars().all(|digit| digit.is_ascii_hexdigit())
+        })
+    };
+    assert_eq!(fields.len(), 5, "{output}");
+    assert!(named(fields[0], "/scratch/run-"), "{output}");
+    assert!(named(fields[1], "/scratch/work-"), "{output}");
+    assert_eq!(fields[2..], ["held", "false", "false"], "{output}");
+}
+
+/// Where `TMPDIR` names nothing, or is empty, the temporaries are made under `/tmp`.
+#[test]
+fn a_temporary_is_made_under_tmp_where_tmpdir_names_nothing() {
+    for env in [vec![], vec![("TMPDIR", "")]] {
+        let (host, io) = MockHost::builder()
+            .files([("/tmp/keep", "")])
+            .env(env)
+            .build();
+        run_text(&temporaries("run-"), host).expect("expected result");
+        let output = String::from_utf8(io.output()).expect("text");
+
+        assert!(output.starts_with("/tmp/run-"), "{output}");
+        assert!(output.ends_with(" held false false"), "{output}");
+    }
+}
+
+/// The `field`th path `temporaries` prints is drawn again where a file holds the name it took: the mock host's randomness draws the same bytes in every run, so the file a first run's temporary was named, there before a second run, sends that run's temporary to another name, and is left as it was.
+fn drawn_again(field: usize) {
+    let (host, io) = MockHost::builder()
+        .files([("/scratch/keep", "")])
+        .env([("TMPDIR", "/scratch")])
+        .build();
+    run_text(&temporaries("run-"), host).expect("expected result");
+    let first = String::from_utf8(io.output()).expect("text");
+    let taken = first.split(' ').nth(field).expect("a path").to_string();
+
+    let (host, io) = MockHost::builder()
+        .files([(taken.as_str(), "someone's")])
+        .env([("TMPDIR", "/scratch")])
+        .build();
+    run_text(&temporaries("run-"), host).expect("expected result");
+    let second = String::from_utf8(io.output()).expect("text");
+    let drawn = second.split(' ').nth(field).expect("a path");
+
+    assert_ne!(drawn, taken, "{second}");
+    assert!(drawn.starts_with(&taken[..taken.len() - 16]), "{second}");
+    assert_eq!(io.file(taken.as_bytes()), Some(b"someone's".to_vec()));
+}
+
+/// A temporary file's name another file holds is drawn again.
+#[test]
+fn a_temporary_file_name_a_file_holds_is_drawn_again() {
+    drawn_again(0);
+}
+
+/// A temporary directory's name a file holds is drawn again.
+#[test]
+fn a_temporary_directory_name_a_file_holds_is_drawn_again() {
+    drawn_again(1);
+}
+
+/// A prefix holding a `/` would name another directory, so it is refused where it is written: the bound it fails reduces to `Bool/False`, and the program never runs.
+#[test]
+fn a_temporary_prefix_holding_a_slash_is_refused_where_it_is_written() {
+    let refusal = typecheck(&temporaries("../run-")).expect_err("the prefix is refused");
+
+    assert!(refusal.contains("undischarged bound"), "{refusal}");
+    assert!(refusal.contains("`plain`"), "{refusal}");
+}

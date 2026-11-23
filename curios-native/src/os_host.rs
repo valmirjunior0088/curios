@@ -42,7 +42,7 @@ use {
             fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd},
             unix::{
                 ffi::{OsStrExt, OsStringExt},
-                fs::{FileTypeExt, OpenOptionsExt},
+                fs::{DirBuilderExt, FileTypeExt, OpenOptionsExt},
             },
         },
         sync::{
@@ -868,6 +868,7 @@ impl HostOps for OsHost {
             Mode::Append => options.append(true).create(true),
             Mode::ReadWrite => options.read(true).write(true),
             Mode::Create => options.write(true).create_new(true),
+            Mode::CreatePrivate => options.write(true).create_new(true).mode(0o600),
         };
 
         // Opened without blocking, so the open waits on no peer: a FIFO's other end, a device's carrier. Never as the controlling terminal, which a terminal a process leading its session opens would otherwise become, its hangup then ending the process. What the path turns out to name decides how it is filed.
@@ -1598,8 +1599,16 @@ impl HostOps for OsHost {
         Ok(names)
     }
 
-    fn dir_create(&self, path: Vec<u8>) -> Result<(), Failure> {
-        fs::create_dir(OsStr::from_bytes(&path)).map_err(failure_from_error)
+    fn dir_create(&self, path: Vec<u8>, private: bool) -> Result<(), Failure> {
+        // A private directory is its owner's alone, as a file a private create makes is; the umask narrows either further.
+        let permissions = match private {
+            true => 0o700,
+            false => 0o777,
+        };
+        fs::DirBuilder::new()
+            .mode(permissions)
+            .create(OsStr::from_bytes(&path))
+            .map_err(failure_from_error)
     }
 
     fn dir_remove(&self, path: Vec<u8>) -> Result<(), Failure> {

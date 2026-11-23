@@ -1,5 +1,5 @@
-use /std/{Bytes, Str, Path, Try, Io};
-use /std/internal/{Handle, read_to_end};
+use /std/{Bytes, Bool, Str, Path, Try, Io, fs};
+use /std/internal/{Handle, read_to_end, temporary_path};
 
 --- An open file.
 pub struct File: Type {
@@ -18,6 +18,8 @@ pub induct Mode: pub Type
 | read_write()
 --- Opened to write a file this open creates, refused with `already_exists` where anything is at the path: how a lock file, or a name no other process holds, is taken with no race between looking and creating.
 | create()
+--- Opened to write a file this open creates, as `create()` is, readable and writable by its owner alone: how a temporary file no other user of the machine reads is taken.
+| create_private()
 end
 
 --- The file at `path`, opened in `mode` into `s`, which closes it when it ends.
@@ -26,6 +28,28 @@ pub let open(s: Io/Scope, path: Path, mode: Mode) -> Try(Io, Io/Error, File) =
     let f = File { h };
     let () = Io/Scope/defer(s, (_) => Io/close(f))!;
     Try/pure(f);
+
+--- A new empty file under the system's temporary directory — the one `TMPDIR` names, or `/tmp` — its name `prefix` and sixteen random hexadecimal digits, opened to write into `s`, which closes and removes it when it ends, and readable by its owner alone: its path beside it. A name another file holds already is drawn again, and `prefix` holds no `/`, which would name another directory: decided where it is written, so a literal one needs nothing more. Python's `tempfile.NamedTemporaryFile` and Go's `os.CreateTemp`.
+pub let temp(
+    s: Io/Scope,
+    prefix: Str,
+    @plain: Bool/Holds(Bool/not(Str/contains(prefix, '/'))),
+) -> Try(Io, Io/Error, {path: Path, file: File}) =
+    let path = temporary_path(prefix)!;
+    let opened = Try/run(open(s, path, Mode/create_private()))!;
+    match opened
+    | success(file) =>
+        let () = Io/Scope/defer(s, (_) => closed_and_removed(file, path))!;
+        Try/pure((path = path, file = file))
+    | failure(already_exists()) => temp(s, prefix)
+    | failure(failed) => Try/raise(failed)
+    end;
+
+-- `file` closed and the file at `path` removed, a failure to remove it dropped: what a temporary file's scope does as it ends, whether or not the program moved or removed it first.
+let closed_and_removed(file: File, path: Path) -> Io({}) =
+    let () = Io/close(file)!;
+    let _ = Try/run(fs/remove_file(path))!;
+    Io/pure(());
 
 --- Close `f` before its scope ends. The scope's own close then finds nothing to close.
 satisfy Io/Close(File) {
