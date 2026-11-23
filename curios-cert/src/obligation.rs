@@ -1,4 +1,4 @@
-//! Type totality and proof totality: what the erased half of a program unfolds must be total — a proof reaching nothing not known to terminate, a type no recursion of its own declaration that does not descend — decided here from the module alone.
+//! Type totality and proof totality: what the erased half of a program unfolds must be total — a proof reaching, as the checkers reduce it, nothing not known to terminate, a type no recursion of its own declaration that does not descend — decided here from the module alone.
 //!
 //! Erasure deletes proofs and types. A proof that may not terminate therefore proves anything, and a type that may not terminate reties the negative knot strict positivity exists to forbid — so both halves carry a termination obligation that the halves the machine actually runs do not.
 //!
@@ -14,7 +14,7 @@
 
 use {
     super::{ByValue, Certifier, Error, Globals, Position, declared_into_prop},
-    curios_analysis::Erased,
+    curios_analysis::{Erased, reached_as_reduced},
     curios_core::{
         Enter, Foreign, FuncType, Global, Item, RecGroup, Reducer, Sharing, Subterm, Term, Totality,
     },
@@ -177,29 +177,41 @@ pub struct PositionVerdicts {
 
 /// Type totality and proof totality over the positions one item's check recorded: each must reach nothing its obligation holds partial, and must not be partial in itself — enclose no group that does not descend, as the walk noted where it typed one, and call no host row that diverges.
 ///
-/// A proof reaches every definition it names, and a type only `own`'s, the names of the item whose check recorded it, where one does not descend: a finished declaration whose recursion does not descend unfolds to nothing ([`define_as_stated`](crate::define_as_stated)), so a type naming it reaches nothing that loops.
+/// A proof reaches the definitions not known to terminate that it reaches as the checkers reduce it ([`reached_as_reduced`]), read so only where it names one, and a type only `own`'s, the names of the item whose check recorded it, where one does not descend: a finished declaration whose recursion does not descend unfolds to nothing ([`define_as_stated`](crate::define_as_stated)), so a type naming it reaches nothing that loops.
 pub fn check_positions(
-    certifier: &Certifier,
+    certifier: &mut Certifier,
     positions: &[Position],
     totals: &Totals<'_>,
     own: &[Global],
     memo: &mut PositionVerdicts,
 ) -> Result<(), Error> {
     curios_common::profile!("check_positions");
+    let partial = |certifier: &Certifier, name: &Global| totals.partial(certifier, name);
     for position in positions {
-        let reaches = |name: &Global| match position.erased {
-            Erased::Type => own.contains(name) && totals.totality(certifier, name).is_unfounded(),
-            Erased::Proof => totals.partial(certifier, name),
+        let written = position
+            .term
+            .first_declaration(|name| match position.erased {
+                Erased::Type => {
+                    own.contains(name) && totals.totality(certifier, name).is_unfounded()
+                }
+                Erased::Proof => partial(certifier, name),
+            });
+        let partial_in_itself = position.encloses_partial
+            || calls_a_diverging_row(&memo.keys.share(&position.term), &mut memo.verdicts);
+        // A proof is read as the checkers reduce it, where it names a definition not known to terminate, and by the first it names where it is partial in itself, a group it encloses that does not descend unfolding without end, or where the budget is spent reading it.
+        let reached = match (position.erased, written) {
+            (Erased::Proof, Some(written)) if !partial_in_itself => {
+                reached_as_reduced(certifier, &position.term, &partial).unwrap_or(Some(written))
+            }
+            (_, written) => written,
         };
-        if let Some(reached) = position.term.first_declaration(reaches) {
+        if let Some(reached) = reached {
             return Err(Error::NotTotal {
                 erased: position.erased,
                 reached: Some(reached),
             });
         }
-        if position.encloses_partial
-            || calls_a_diverging_row(&memo.keys.share(&position.term), &mut memo.verdicts)
-        {
+        if partial_in_itself {
             return Err(Error::NotTotal {
                 erased: position.erased,
                 reached: None,

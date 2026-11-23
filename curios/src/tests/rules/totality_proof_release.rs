@@ -656,3 +656,120 @@ fn a_proof_reaching_a_partial_prelude_definition_is_rejected() {
         )
     });
 }
+
+// A proof carrying a loop its reduction discards proves its proposition by a total term: the bound `List/get(answers.list, 2)` owes over a vector counted by `List/len([spin(1), Io/pure(2), Io/pure(3)])` is discharged by a proof whose arguments spell that count, and the count reduces to `3` whatever `spin` does. Both checkers read the proof as they reduce it, so `spin` is no reach. Mutation-checked: reading a proof by the names it writes refuses `first` as reaching `spin`.
+#[test]
+fn a_proof_carrying_a_loop_its_reduction_discards_is_accepted() {
+    let source = r#"
+        use /std/{Nat, List, Io, Vec};
+
+        let spin(n: Nat) -> Io(Nat) = Io/bind(Io/yield(), (()) => spin(n));
+
+        let all_counted(@A: Type, actions: List(Io(A))) -> Io(Vec(A, List/len(actions))) =
+            match actions
+            | [] => Io/pure(Vec/nil())
+            | [a, ..more] =>
+                let x = a!;
+                let rest = all_counted(more)!;
+                Io/pure(Vec/cons(x, rest))
+            end;
+
+        let first() -> Io(Nat) =
+            let answers = all_counted([spin(1), Io/pure(2), Io/pure(3)])!;
+            Io/pure(List/get(answers.list, 2));
+
+        /std/print("ok")
+        "#;
+
+    assert_eq!(run(source), b"ok");
+}
+
+// A proof's arguments are read as parts of it, never passed over: `ex_falso` is total, and handed a loop folded at `Empty` it would prove `False` by a term that never reduces to one, since the loop is no value a model of `Empty` holds. Reduction leaves `loop(())` standing, so both checkers refuse `held` by its name. The control takes the `Empty` as a parameter.
+#[test]
+fn a_total_proof_handed_a_folded_loop_at_an_empty_type_is_refused_by_name() {
+    control(
+        r#"
+        use /std/Bool/{False};
+
+        induct Empty: Type
+        end
+
+        let loop(u: {}) -> Empty = loop(u);
+
+        let ex_falso(@e: Empty) -> False = match e end;
+
+        let held(e: Empty) -> False = ex_falso(@e);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[(
+        "let held(e: Empty) -> False = ex_falso(@e);",
+        "let held: False = ex_falso(@loop(()));",
+    )])
+    .by_elaborator_in("/held", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Proof,
+                offender: Some(offender),
+                ..
+            } if *offender == global("/loop")
+        )
+    })
+    .by_certifier_in("/held", |error| {
+        matches!(
+            error,
+            curios_cert::Error::NotTotal {
+                erased: Erased::Proof,
+                reached: Some(reached),
+            } if *reached == global("/loop")
+        )
+    });
+}
+
+// A match's scrutinee is read as a part of its own: `match loop(()) end` at `F(1)`, an instance no case builds, has no arm to type and so types at `False`, and reduction leaves it stuck on `loop`, which both checkers then refuse by name, where an arm's body would be a forged one. The control matches on a parameter.
+#[test]
+fn a_match_stuck_on_a_folded_loop_at_an_instance_no_case_builds_is_refused_by_name() {
+    control(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{False};
+
+        induct F: (n: Nat) -> Type
+        | c(): (0)
+        end
+
+        let loop(u: {}) -> F(1) = loop(u);
+
+        let held(x: F(1)) -> False = match x end;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[(
+        "let held(x: F(1)) -> False = match x end;",
+        "let held: False = match loop(()) end;",
+    )])
+    .by_elaborator_in("/held", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Proof,
+                offender: Some(offender),
+                ..
+            } if *offender == global("/loop")
+        )
+    })
+    .by_certifier_in("/held", |error| {
+        matches!(
+            error,
+            curios_cert::Error::NotTotal {
+                erased: Erased::Proof,
+                reached: Some(reached),
+            } if *reached == global("/loop")
+        )
+    });
+}

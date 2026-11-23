@@ -1169,6 +1169,13 @@ pub fn verdicts_visiting<'s>(
                 error,
             });
         }
+        // What reading a proof as reduced unfolded is read by the item, as what its judgment unfolded is.
+        let walked = certifier.take_reads();
+        for name in item.declared_names() {
+            if let Some(read) = reads.get_mut(&name) {
+                read.extend(walked.clone());
+            }
+        }
 
         // How the item came out against the baseline's, for the declarations that read it.
         put(&mut stated, *place, item.clone());

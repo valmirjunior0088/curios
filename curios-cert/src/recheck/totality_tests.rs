@@ -26,19 +26,25 @@ let /reaches: (m: #NatType) -> #NatType =
     (m: #NatType) => /sink(m);
 "#;
 
-/// `held : Vouched`, a proof applying a lambda to `reaches`, which it reads nothing of.
+/// `keep`, a proof of `Vouched` from a function, which no checker unfolds, so a function handed it stays.
+const KEEP: &str = r#"
+let /keep: (g: (n: #NatType) -> #NatType) -> #{node = InductType} /Vouched() =
+    (g: (n: #NatType) -> #NatType) => #{node = Variant} /Vouched/qed(());
+"#;
+
+/// `held : Vouched`, a proof handing `reaches` to [`KEEP`]'s `keep`.
 const HELD: &str = r#"
-let /held: #{node = InductType} /Vouched() =
-    ((g: (n: #NatType) -> #NatType) => #{node = Variant} /Vouched/qed(()))(/reaches);
+let /held: #{node = InductType} /Vouched() = /keep(/reaches);
 "#;
 
 /// [`LIBRARY`], with [`VOUCHED`] and the proof [`HELD`] beside it where `held` is.
 fn reaching_library(held: bool) -> Definitions {
     match held {
         true => core_text_module(&fill!(
-            "${VOUCHED}${LIBRARY}${HELD}",
+            "${VOUCHED}${LIBRARY}${KEEP}${HELD}",
             VOUCHED,
             LIBRARY,
+            KEEP,
             HELD
         )),
         false => core_text_module(LIBRARY),
@@ -47,7 +53,7 @@ fn reaching_library(held: bool) -> Definitions {
 
 /// The proof [`HELD`], carried over a library it reads `reaches` of.
 fn carried_proof_definitions() -> Definitions {
-    core_text_module(&fill!("${VOUCHED}${HELD}", VOUCHED, HELD))
+    core_text_module(&fill!("${VOUCHED}${KEEP}${HELD}", VOUCHED, KEEP, HELD))
 }
 
 /// Partiality is a classification: a definition reaching a partial one is accepted, and a rule refusing every mention of a partial definition would break the language.
@@ -65,7 +71,12 @@ fn reaches() -> Global {
     Global::Authored(Qualifier::from(["reaches"]))
 }
 
-/// Whether `verdicts` refuse `held : Vouched` for reaching `reaches` — the refusal a walk owes the proof whenever it knows `reaches` is partial.
+/// The definition `reaches` calls, which does not terminate.
+fn sink() -> Global {
+    Global::Authored(Qualifier::from(["sink"]))
+}
+
+/// Whether `verdicts` refuse `held : Vouched` for reaching `sink` — the refusal a walk owes the proof whenever it knows `reaches` is partial: the proof names `reaches`, and reduced, its value calls `sink`, which it keeps.
 fn refuses_the_proof_reaching_partiality(verdicts: &[Refusal]) -> bool {
     verdicts.iter().any(|verdict| {
         verdict.name.as_ref() == Some(&Global::Authored(Qualifier::from(["held"])))
@@ -74,7 +85,7 @@ fn refuses_the_proof_reaching_partiality(verdicts: &[Refusal]) -> bool {
                 Error::NotTotal {
                     erased: Erased::Proof,
                     reached: Some(name),
-                } if *name == reaches()
+                } if *name == sink()
             )
     })
 }
@@ -114,21 +125,20 @@ fn a_carried_units_totality_is_read_from_the_certifiers_record() {
 
 /// Proof totality fires at an argument position, where the corpus never reaches it.
 ///
-/// [The soundness board](../../../documentation/design/soundness/the-soundness-board.md)'s *Rejected* paragraph says the corpus "passes proof totality inert at argument positions", so a fixture reaching it has to be constructed. This is one: `held : Nat = ((p : Vouched) => 0)(proof)`, whose only recorded position naming `reaches` is the argument — `held`'s type and body sit at `Nat`, which the classification records nothing for. The control is the same term with `Vouched/qed(())` in the argument's place, which names nothing partial and must stay accepted.
+/// [The soundness board](../../../documentation/design/soundness/the-soundness-board.md)'s *Rejected* paragraph says the corpus "passes proof totality inert at argument positions", so a fixture reaching it has to be constructed. This is one: `held : Nat = ((p : Vouched) => 0)(keep(reaches))`, whose only recorded position naming `reaches` is the argument — `held`'s type and body sit at `Nat`, which the classification records nothing for. The control is the same term with `Vouched/qed(())` in the argument's place, which names nothing partial and must stay accepted.
 #[test]
 fn a_proof_at_an_argument_position_reaching_a_partial_definition_is_refused() {
     let at_an_argument = |proof: &str| {
         text_refusals(&fill!(
-            "${VOUCHED}${LIBRARY}\nlet /held: #NatType =\n    ((p: #{node = InductType} /Vouched()) => 0)(${proof});",
+            "${VOUCHED}${LIBRARY}${KEEP}\nlet /held: #NatType =\n    ((p: #{node = InductType} /Vouched()) => 0)(${proof});",
             VOUCHED,
             LIBRARY,
+            KEEP,
             proof
         ))
     };
 
-    let verdicts = at_an_argument(
-        "((g: (n: #NatType) -> #NatType) => #{node = Variant} /Vouched/qed(()))(/reaches)",
-    );
+    let verdicts = at_an_argument("/keep(/reaches)");
     assert!(
         refuses_the_proof_reaching_partiality(&verdicts),
         "a proof at an argument position reaching a partial definition was not refused: {verdicts:?}",
@@ -171,8 +181,9 @@ fn covering_the_library(extra: bool) -> Certification {
 /// [`carried_proof_definitions`] with `again : Vouched = held` beside the proof: a reader of `held` at a proof position, which a walk taking `held` for partial refuses.
 fn carried_proof_and_its_reader() -> Definitions {
     core_text_module(&fill!(
-        "${VOUCHED}${HELD}\nlet /again: #{node = InductType} /Vouched() = /held;",
+        "${VOUCHED}${KEEP}${HELD}\nlet /again: #{node = InductType} /Vouched() = /held;",
         VOUCHED,
+        KEEP,
         HELD
     ))
 }
@@ -199,7 +210,7 @@ fn a_record_answers_for_no_name_its_unit_does_not_declare() {
     );
 }
 
-/// A proof reaching two partial definitions is refused by the one written first, whichever spells first, as the elaborator refuses a type reaching two.
+/// A proof reaching two partial definitions is refused by the one written first, whichever spells first, as the elaborator refuses one. Each is handed to `/keep`, a proof, which no checker unfolds, so reduction keeps both.
 #[test]
 fn a_proof_reaching_two_partial_definitions_names_the_first_written() {
     for (first, second) in [("zeta", "alpha"), ("alpha", "zeta")] {
@@ -215,9 +226,13 @@ let /${second}: (n: #NatType) -> #NatType =
     (let x: (n: #NatType) -> #NatType = (n2: #NatType) => x(n2);
     x);
 
-let /held: #{node = InductType} /Vouched() =
-    ((g: (n: #NatType) -> #NatType, h: (n: #NatType) -> #NatType) =>
-        #{node = Variant} /Vouched/qed(()))(/${first}, /${second});
+let /keep: (g: (n: #NatType) -> #NatType, h: (n: #NatType) -> #NatType) ->
+    #{node = InductType}
+    /Vouched() =
+    (g: (n: #NatType) -> #NatType, h: (n: #NatType) -> #NatType) =>
+        #{node = Variant} /Vouched/qed(());
+
+let /held: #{node = InductType} /Vouched() = /keep(/${first}, /${second});
 "#,
             VOUCHED,
             first,

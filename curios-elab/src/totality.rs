@@ -15,7 +15,10 @@ use {
         Context, ErasedSite, Error, SettledPlace, ZonkPass, proof_position, reduce,
         zonk_solved_term_metas,
     },
-    curios_analysis::{Erased, blocker, group_totality, known_to_terminate, yields_a_sort_where},
+    curios_analysis::{
+        Erased, blocker, group_totality, known_to_terminate, reached_as_reduced,
+        yields_a_sort_where,
+    },
     curios_core::{
         Bound, Definition, Definitions, Enter, Entrypoint, Extent, Free, Global, Item, MetavarId,
         Sharing, Subterm, Term, Totality,
@@ -184,45 +187,73 @@ pub fn classify_totality(context: &mut Context, item: &Item) -> Result<(), Error
 
 /// Every way the given positions fail to be total, with the site of each and where it was written, for a position that kept one.
 ///
-/// Two ways, and a position can fail either: it names a definition whose verdict the obligation `reaches` holds to be a fault, or it *is* partial with no name to blame — an inline `rec` that does not descend, or a call to a host row that diverges. A verdict is a closure already ([`classify_totality`]), so what a position reaches through a total definition is total, and the definitions it names are all there is to ask.
+/// Two ways, and a position can fail either: it reaches a definition whose verdict the obligation `reaches` holds to be a fault, or it *is* partial with no name to blame — an inline `rec` that does not descend, or a call to a host row that diverges. A verdict is a closure already ([`classify_totality`]), so what a position reaches through a total definition is total, and the definitions it reaches are all there is to ask: a type's, the ones it names; a proof's, the ones it reaches as the checkers reduce it ([`reached_as_reduced`]), read so only where the proof names one.
 fn faults(
     context: &mut Context,
     positions: &[Position],
+    erased: Erased,
     reaches: &dyn Fn(&Global, Totality) -> bool,
 ) -> Result<Vec<(ErasedSite, Fault, Option<Extent>)>, Error> {
     curios_common::sample!("totality::faults_positions", positions.len());
-    // In the order the positions write them, each first where it is first written, so a refusal names the definition its reader wrote first whatever the names spell: each search leaves out what the ones before it found.
-    let mut named = Vec::<Global>::new();
-    for position in positions {
-        while let Some(found) = position.term.first_declaration(|name| {
-            !named.contains(name)
-                && context
-                    .definition_totality(name)
-                    .is_some_and(|totality| reaches(name, totality))
-        }) {
-            named.push(found);
-        }
-    }
-
     let mut faults = Vec::new();
     // One cache across every position: proof totality seeds a literal's derivation once per link, and those links share their tails. It is keyed by the positions' canonical nodes, so a type zonked apart from an equal one is that one's key and is found by identity.
     let keys = Sharing::new();
     let mut memo = LocalMemo::new();
+    let mut partial_in_itself = Vec::with_capacity(positions.len());
     for position in positions {
-        if !on_its_own(context, &keys.share(&position.term), &mut memo)?.is_total() {
+        let partial = !on_its_own(context, &keys.share(&position.term), &mut memo)?.is_total();
+        if partial {
             faults.push((
                 ErasedSite::clone(&position.site),
                 Fault::Inline,
                 position.term.extent(),
             ));
         }
+        partial_in_itself.push(partial);
     }
-    // One named fault per offending definition, attributed to the first position that names it, in the order they are first written.
-    for name in named {
-        let position = positions
-            .iter()
-            .find(|position| position.term.mentions_declaration(&name))
-            .expect("a seed is a name some position writes");
+
+    let held = |context: &Context, name: &Global| {
+        context
+            .definition_totality(name)
+            .is_some_and(|totality| reaches(name, totality))
+    };
+    // Each definition at the position that first reaches it, in the order the positions reach them.
+    let mut named = Vec::<(Global, usize)>::new();
+    for (index, position) in positions.iter().enumerate() {
+        match erased {
+            // Each first where it is first written, so a refusal names the definition its reader wrote first whatever the names spell: each search leaves out what the ones before it found.
+            Erased::Type => {
+                while let Some(found) = position.term.first_declaration(|name| {
+                    !named.iter().any(|(seen, _)| seen == name) && held(&*context, name)
+                }) {
+                    named.push((found, index));
+                }
+            }
+            // A proof partial in itself is read by the first definition it names, as one whose reading as reduced spent the budget is: a group it holds that does not descend would unfold without end.
+            Erased::Proof => {
+                let Some(written) = position
+                    .term
+                    .first_declaration(|name| held(&*context, name))
+                else {
+                    continue;
+                };
+                let kept = match partial_in_itself[index] {
+                    true => Some(written),
+                    false => {
+                        reached_as_reduced(context, &position.term, &held).unwrap_or(Some(written))
+                    }
+                };
+                if let Some(kept) = kept
+                    && !named.iter().any(|(seen, _)| *seen == kept)
+                {
+                    named.push((kept, index));
+                }
+            }
+        }
+    }
+
+    for (name, index) in named {
+        let position = &positions[index];
         faults.push((
             ErasedSite::clone(&position.site),
             Fault::Named(name),
@@ -349,7 +380,7 @@ fn by_value(term: &Term, labels: &[(Free, Term)]) -> Term {
     }
 }
 
-/// **Proof totality**: everything a `Prop`-checked term reaches must be total.
+/// **Proof totality**: everything a `Prop`-checked term reaches as the checkers reduce it must be total ([`reached_as_reduced`]).
 ///
 /// A divergent proof proves anything, and erasure deletes it — so an `exit` behind a proposition never fires and the program continues with a forged invariant. Independent of [`check_type_totality`]: neither obligation subsumes the other. Decided where that one is, over the terms recorded since `mark`, which it takes.
 pub fn check_proof_totality(
@@ -444,7 +475,10 @@ fn report(
     erased: Erased,
     reaches: &dyn Fn(&Global, Totality) -> bool,
 ) -> Result<(), Error> {
-    match faults(context, positions, reaches)?.into_iter().next() {
+    match faults(context, positions, erased, reaches)?
+        .into_iter()
+        .next()
+    {
         None => Ok(()),
         Some((site, fault, extent)) => Err(Error::PartialInErasedPosition {
             erased,

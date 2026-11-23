@@ -69,7 +69,7 @@ pub use totality::{
 };
 
 mod erased;
-pub use erased::Erased;
+pub use erased::{Erased, reached_as_reduced};
 
 mod level_model;
 pub use level_model::LevelModel;
