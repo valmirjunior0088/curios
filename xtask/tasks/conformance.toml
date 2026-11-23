@@ -1,0 +1,8 @@
+description = "The standard library's codecs held to the corpora of the standards they read, each by a Curios program over the corpus the task files pin"
+
+[json]
+description = "Decode every document of JSONTestSuite with `Json/decode`, each answered as its name's prefix asks: a `y_` document read, an `n_` one refused, an `i_` one either; fail naming every case answered otherwise"
+consumes = [".compiler.launcher.produces.binary"]
+run = [
+    ["cargo", "run", "--quiet", "--package", "curios", "--", "run", "conformance/json.crs", "{.corpora.json}"],
+]

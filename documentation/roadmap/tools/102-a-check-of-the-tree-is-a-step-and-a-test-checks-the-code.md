@@ -4,12 +4,12 @@
 
 ## What is wrong today
 
-- **Two corpora are run by nothing.** At `3a407eed0`, counted: `Json/decode` answers all 318 of JSONTestSuite's cases at `1ef36fa` as the suite asks — the 95 to read read, the 188 to refuse refused, and of the 35 left to a parser 11 read — and `Toml/decode` refuses all 509 invalid TOML 1.0 documents of `toml-test` at `96fd088` and reads all 208 valid ones, each to the value its tagged JSON states, a NaN of either sign being a NaN and floats compared as IEEE compares them. Only `Json/tests`'s number cases run, copied by name.
+- **A corpus is run by nothing.** At `3a407eed0`, counted: `Toml/decode` refuses all 509 invalid TOML 1.0 documents of `toml-test` at `96fd088` and reads all 208 valid ones, each to the value its tagged JSON states, a NaN of either sign being a NaN and floats compared as IEEE compares them; `conformance json` holds `Json/decode` to JSONTestSuite, and nothing holds `Toml/decode` so.
 - **Two topics of the documentation are named for what they are not.** `standard-library` holds `/std`'s capabilities and laws, which the documents call the prelude's, and `tools` every decision a programmer meets of the toolchain, which `.claude/rules/tooling.md` names tooling.
 
 ## Goal
 
-- `conformance`, a subject of two steps, `json` and `toml`, each reading a corpus of the `corpora` table, JSONTestSuite's `test_parsing/` at `1ef36fa` and toml-test's `tests/` at `96fd088`: Curios programs, `curios run conformance/<suite>.crs -- {.corpora.<suite>}`, which list the corpus, decode each case and exit nonzero naming every case answered otherwise. A valid TOML document's value is held to the tagged JSON beside it as `toml-test` compares them, its scalars read by `/std`'s own readers, `Int/of_str`, `Flt/of_str` and `/std/time/rfc3339`. `compiler lint curios-lint` lints them beside `programs/`.
+- `conformance toml`, beside `conformance json`: a Curios program, `conformance/toml.crs`, over toml-test's `tests/` at `96fd088`, a corpus of the `corpora` table, which reads the TOML 1.0 list, decodes each case and exits nonzero naming every case answered otherwise: an invalid document read, a valid one refused, or a valid one whose value is not the tagged JSON beside it as `toml-test` compares them, its scalars read by `/std`'s own readers, `Int/of_str`, `Flt/of_str` and `/std/time/rfc3339`.
 - `documentation/roadmap/` and `documentation/design/`'s `standard-library` named `prelude` and `tools` named `tooling`, every link to them restated.
 
 ## Settled
@@ -22,12 +22,10 @@
 
 ## Stages
 
-**1. `json`.** Check: the step passes, and fails naming a case `Json/decode` is made to answer otherwise.
+**1. `toml`.** Check: the step passes, and fails naming a case `Toml/decode` is made to answer otherwise, a valid document whose value is made to differ among them.
 
-**2. `toml`.** Check: the same, and fails naming a valid document whose value is made to differ.
-
-**3. The topics renamed**: `prelude` and `tooling`, every link restated, taken last, after any branch editing a file under either has landed. Check: `cargo xtask docs build` and `jig agents` hold every link.
+**2. The topics renamed**: `prelude` and `tooling`, every link restated, taken last, after any branch editing a file under either has landed. Check: `cargo xtask docs build` and `jig agents` hold every link.
 
 ## Verification and retirement
 
-Each stage's check, then `cargo xtask compiler lint`, the jig's lint, the suite, `cargo xtask docs build` and `cargo xtask handoff`'s new requirements. Once stage 3 lands, this file is deleted.
+Each stage's check, then `cargo xtask compiler lint`, the jig's lint, the suite, `cargo xtask docs build` and `cargo xtask handoff`'s new requirements. Once stage 2 lands, this file is deleted.

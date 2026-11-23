@@ -118,6 +118,25 @@ jobs:
       - name: Test
         run: cargo xtask bundle test
 
+  conformance:
+    name: Conformance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: conformance
+          workspaces: .
+          cache-directories: |
+            curios/.artifacts
+            curios-binaryen/.artifacts
+            xtask/.artifacts
+      - name: Decode the corpora
+        run: cargo xtask conformance
+
   biome:
     name: JavaScript, JSON and CSS
     runs-on: ubuntu-24.04
