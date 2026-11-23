@@ -87,7 +87,8 @@ fn text(path: &str, sha256: &str) -> String {
         sha256,
         place: &place,
     }
-    .kept();
+    .kept()
+    .unwrap_or_else(|unobtained| panic!("{unobtained}"));
 
     String::from_utf8(bytes).unwrap_or_else(|error| panic!("{path} is not UTF-8: {error}"))
 }

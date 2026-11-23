@@ -3,15 +3,13 @@
 //! Cargo gives distinct build-script fingerprints their own `OUT_DIR`, so that directory cannot cache an expensive C++ build shared by ordinary builds, tests, and Clippy. This script builds in `OUT_DIR`, then keeps only the static library in one locked cache per compilation target in `.artifacts/` beside this crate — outside Cargo's target tree, so `cargo clean` does not take a build measured in minutes with it — and empties `OUT_DIR` again. A cache entry is complete only once its library is in place and the script writes its versioned `done` marker.
 
 use {
-    curios_download::{Download, sha256_hex},
-    flate2::read::GzDecoder,
+    curios_download::{Download, sha256_hex, unpack},
     std::{
         env,
         fs::{self, File, OpenOptions},
         path::{Path, PathBuf},
         process::Command,
     },
-    tar::Archive,
 };
 
 /// Set, a cache entry that does not hold this build is refused rather than filled: what the workspace's Binaryen check sets on a second cargo mode, which must reuse the entry the first one left.
@@ -118,6 +116,7 @@ fn source(entry: &Path) -> Vec<u8> {
         place: &placed,
     }
     .bytes()
+    .unwrap_or_else(|unobtained| panic!("{unobtained}"))
 }
 
 /// Fill the cache `entry` unless its marker already names this build: unpack the source into `out`, build and install it there, keep the static library alone in the entry's `lib/`, and empty `out` again.
@@ -144,14 +143,17 @@ fn build(entry: &Path, out: &Path) {
     }
     fresh(out);
 
-    let archive = source(entry);
-    Archive::new(GzDecoder::new(archive.as_slice()))
-        .unpack(out)
-        .expect("extract Binaryen source archive");
+    let unpacked = out.join("source");
+    unpack(&source(entry), &unpacked).unwrap_or_else(|error| {
+        panic!(
+            "unpack the Binaryen source into {}: {error}",
+            unpacked.display()
+        )
+    });
 
     // An assertion names the file it is written in, so the build's own directory would be in every compiler that links the library: mapped to a word, as the release's Rust is (`xtask/tasks/compiler.toml`).
     let mapped = format!("-ffile-prefix-map={}=binaryen", out.display());
-    let prefix = cmake::Config::new(out.join(format!("binaryen-{BINARYEN_VERSION}")))
+    let prefix = cmake::Config::new(&unpacked)
         .profile("Release")
         .cflag(&mapped)
         .cxxflag(&mapped)

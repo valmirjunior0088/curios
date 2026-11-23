@@ -673,8 +673,6 @@ version = "0.16.25"
 dependencies = [
  "cmake",
  "curios-download",
- "flate2",
- "tar",
 ]
 
 [[package]]
@@ -760,7 +758,9 @@ dependencies = [
 name = "curios-download"
 version = "0.16.25"
 dependencies = [
+ "flate2",
  "sha2 0.11.1",
+ "tar",
  "ureq",
 ]
 

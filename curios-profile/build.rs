@@ -185,7 +185,8 @@ fn main() {
         sha256: SHA256,
         place: &place,
     }
-    .kept();
+    .kept()
+    .unwrap_or_else(|unobtained| panic!("{unobtained}"));
     // The schema sits outside Cargo's target tree, so nothing else tells Cargo when it goes away.
     println!("cargo::rerun-if-changed={}", place.display());
 
