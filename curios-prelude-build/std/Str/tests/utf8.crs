@@ -72,3 +72,17 @@ test char_of_nat_accepts_exact_unicode_scalar_boundaries =
     Test/equal(
         Str/join(",", List/map([0, 0xD7FF, 0xD800, 0xDFFF, 0xE000, 0x10FFFF, 0x110000], render)),
         "0,55295,x,x,57344,1114111,x");
+
+-- Unicode's own example of maximal subparts (Table 3-8): a four-byte character cut short by a three-byte one, which a two-byte one cuts short, which `b` cuts short, then a lone continuation, and two more: each run that begins a character and is cut short is one U+FFFD, and each byte that begins none is one.
+test lossy_decoding_replaces_each_maximal_subpart_once =
+    Test/equal(
+        Str/of_bytes_lossy(0x[0x61, 0xF1, 0x80, 0x80, 0xE1, 0x80, 0xC2, 0x62, 0x80, 0x63, 0x80,
+            0xBF, 0x64]),
+        "a\u{FFFD}\u{FFFD}\u{FFFD}b\u{FFFD}c\u{FFFD}\u{FFFD}d");
+
+-- Well-formed bytes are the text they are; a surrogate's encoding, which no character has, is three U+FFFD, its lead holding no byte after it and the two after it beginning no character; and a character the bytes end inside is one.
+test lossy_decoding_keeps_text_and_replaces_a_surrogate_and_a_cut_end =
+    Test/all([
+        Test/equal(Str/of_bytes_lossy(0x[0xC3, 0xA9]), "é"),
+        Test/equal(Str/of_bytes_lossy(0x[0xED, 0xA0, 0x80]), "\u{FFFD}\u{FFFD}\u{FFFD}"),
+        Test/equal(Str/of_bytes_lossy(0x[0x61, 0xE2, 0x82]), "a\u{FFFD}")]);

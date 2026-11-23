@@ -21,7 +21,7 @@ let deps: Cli =
         Option/some("1.0.0"));
 
 let read(argv: List(Str)) -> Str =
-    match Cli/parse(deps, argv, Map/empty())
+    match Cli/parse(deps, List/map(argv, Str/to_bytes), Map/empty())
     | parsed(p) =>
         let dry = Bool/to_str(Cli/get(p, "dry"));
         match Cli/command(p, "add")

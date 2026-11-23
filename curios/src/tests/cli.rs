@@ -235,9 +235,9 @@ fn a_refused_line_reports_on_stderr_and_exits_two() {
     );
 }
 
-/// An argument the host hands over as bytes that are not text is refused by its position rather than converted lossily, and takes the same stream and status as any other refusal.
+/// An argument the host hands over as bytes that are not text is refused by the name of what reads it as text rather than converted lossily, and takes the same stream and status as any other refusal.
 #[test]
-fn a_non_utf8_argument_is_refused_by_its_position() {
+fn a_non_utf8_argument_read_as_text_is_refused_by_what_reads_it() {
     let (system, io) = MockHost::builder()
         .args([
             b"serve".as_slice(),
@@ -248,13 +248,13 @@ fn a_non_utf8_argument_is_refused_by_its_position() {
 
     assert_eq!(serve().run(system, ForeignBindings::empty()), Ok(2));
     assert!(
-        String::from_utf8_lossy(&io.errors()).contains("argument 1 is not valid UTF-8"),
-        "the refusal names which argument:\n{}",
+        String::from_utf8_lossy(&io.errors()).contains("invalid value for 'ROOT': not valid UTF-8"),
+        "the refusal names what reads the argument:\n{}",
         String::from_utf8_lossy(&io.errors())
     );
 }
 
-/// A declared variable the host hands over as bytes that are not text is refused by its name, as an argument that is not text is by its position, rather than read as unset.
+/// A declared variable the host hands over as bytes that are not text is refused by its name, as an argument read as text is by what reads it, rather than read as unset.
 #[test]
 fn a_non_utf8_variable_is_refused_by_its_name() {
     let (system, io) = MockHost::builder()

@@ -29,7 +29,7 @@ let why(f: Cli/Failure) -> Str =
     end;
 
 let read(argv: List(Str)) -> Str =
-    match Cli/parse(serve, argv, Map/empty())
+    match Cli/parse(serve, List/map(argv, Str/to_bytes), Map/empty())
     | parsed(p) =>
         Str/join(" ", [
             Bool/to_str(Cli/get(p, "verbose")),

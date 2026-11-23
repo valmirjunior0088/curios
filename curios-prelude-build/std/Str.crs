@@ -90,6 +90,46 @@ pub let of_bytes(b: Bytes) -> Result(Nat, Str) =
     | none() => Result/failure(text_before(Scan/lead(), b, 0, 0))
     end;
 
+-- U+FFFD, which stands where bytes are no text.
+let replacement: Char =
+    '\u{FFFD}';
+
+-- The character the scalar `n` is, or U+FFFD where it is none.
+let scalar(n: Nat) -> Char =
+    match Char/of_nat(n) | some(c) => c | none() => replacement end;
+
+-- A decoding that replaces what is not text after `c` begins a character: its scan, the bits of the character in flight, and the characters read, newest first.
+let begun(c: Byte, read: List(Char)) -> {Scan, Nat, List(Char)} =
+    match classify(c)
+    | ascii() => (Scan/lead(), 0, [scalar(Byte/to_nat(c)), ..read])
+    | lead(count, lo, hi, payload) => (Scan/cont(count, lo, hi), payload, read)
+    | bad() => (Scan/lead(), 0, [replacement, ..read])
+    end;
+
+-- `at` with `c` read: a byte the character in flight admits goes into it, and one it does not ends it as U+FFFD and begins anew.
+let replaced(c: Byte, at: {Scan, Nat, List(Char)}) -> {Scan, Nat, List(Char)} =
+    let (scan, bits, read) = at;
+    let n = Byte/to_nat(c);
+    match scan
+    | cont(remaining, lo, hi) =>
+        match
+        | Bool/not(Nat/in_range(n, lo, hi)) => begun(c, [replacement, ..read])
+        | remaining == 1 => (Scan/lead(), 0, [scalar(bits * 64 + n % 64), ..read])
+        | _ => (Scan/cont(remaining - 1, 0x80, 0xBF), bits * 64 + n % 64, read)
+        end
+    | _ => begun(c, read)
+    end;
+
+--- The text the bytes encode, each maximal ill-formed subsequence replaced by U+FFFD as Unicode's substitution practice and the Encoding Standard's UTF-8 decoder replace it: one for a byte no character begins with, one for a character a byte it cannot hold cuts short, and one for a character the bytes end inside. Well-formed bytes are the text they are.
+pub let of_bytes_lossy(b: Bytes) -> Str =
+    match of_bytes(b)
+    | success(s) => s
+    | failure(_) =>
+        let (scan, _, read) = Bytes/fold(b, (Scan/lead(), 0, []), replaced);
+        let chars = match scan | cont(_, _, _) => [replacement, ..read] | _ => read end;
+        flatten(List/map(List/reverse(chars), of_char))
+    end;
+
 --- The one-character string.
 pub let of_char(c: Char) -> Str =
     Str { bytes = Char/to_utf8(c), @valid = Valid/encoded(c) };

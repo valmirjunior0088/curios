@@ -1297,10 +1297,9 @@ fn clipped(said: &str) -> String {
 }
 
 /// The `let`s of the library the translation declines, each holding a form its module cannot write, under their reason and in the order of their names. A report raised in one shows the term as the compiler holds it.
-const DECLINED: [&str; 4] = [
+const DECLINED: [&str; 3] = [
     // Each holds a string past the length a report prints one whole.
-    "/std/Cli/main",
-    "/std/Cli/parse/switch",
+    "/std/Cli/parse/switch_word",
     "/std/http/Url/part",
     "/std/http/syntax/status_line",
 ];

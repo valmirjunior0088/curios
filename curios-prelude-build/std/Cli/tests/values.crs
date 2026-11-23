@@ -1,5 +1,5 @@
 -- What each kind of argument reads into, read back by name at the type the declaration decides, and what stands for one the line leaves out.
-use /std/{Cli, Str, Nat, Int, Bool, Option, List, Map, Test};
+use /std/{Cli, Str, Nat, Int, Bool, Option, List, Map, Path, Test};
 
 induct Format: Type
 | json()
@@ -54,7 +54,7 @@ let listed(items: List(Str)) -> Str =
 
 -- Every slot of a parse, one word each.
 let read(argv: List(Str), env: Map(Str, Str)) -> Str =
-    match Cli/parse(tool, argv, env)
+    match Cli/parse(tool, List/map(argv, Str/to_bytes), Map/map(env, Str/to_bytes))
     | parsed(p) =>
         Str/join(" ", [
             Bool/to_str(Cli/get(p, "verbose")),
@@ -131,8 +131,47 @@ test alternatives_of_one_choice_are_refused_together =
 test a_closed_set_reads_by_name_and_refuses_the_rest =
     let level: Cli/Value = Cli/one_of("L", [("low", 1), ("high", 9)]);
     Test/all([
-        Test/equal(match level.read("high") | success(_) => "read" | failure(r) => r end, "read"),
         Test/equal(
-            match level.read("mid") | success(_) => "read" | failure(r) => r end,
+            match level.read(Str/to_bytes("high"))
+            | success(_) => "read"
+            | failure(r) => r
+            end,
+            "read"),
+        Test/equal(
+            match level.read(Str/to_bytes("mid"))
+            | success(_) => "read"
+            | failure(r) => r
+            end,
             "expected one of low, high, found 'mid'"),
         Test/equal(level.choices, ["low", "high"])]);
+
+-- A file to copy, read as a path, and a label, read as text.
+let copy: Cli =
+    Cli/declare(
+        Cli/leaf(
+            "copy",
+            "Copy a file",
+            [Cli/optional("label", Cli/str, "What to call the copy")],
+            Cli/positionals([Cli/positional("from", Cli/path, "The file to copy")])),
+        Option/none());
+
+-- A name the system holds need not be text: a path takes the bytes it is given as they are, and a value read as text refuses them, by the name of what reads it.
+test a_path_takes_bytes_that_are_no_text_where_text_refuses_them =
+    let name = 0x[0x66, 0xFF];
+    let taken =
+        match Cli/parse(copy, [name], Map/empty())
+        | parsed(p) => Path/to_bytes(Cli/get(p, "from")) == name
+        | _ => false
+        end;
+    let refused =
+        match Cli/parse(copy, [Str/to_bytes("--label"), name, Str/to_bytes("x")], Map/empty())
+        | refused(_, f) =>
+            match f
+            | bad_value(n, reason) => Str/flatten([n, ": ", reason])
+            | _ => "refused otherwise"
+            end
+        | _ => "read"
+        end;
+    Test/all([
+        Test/assert("the path holds the bytes given", taken),
+        Test/equal(refused, "--label: not valid UTF-8")]);

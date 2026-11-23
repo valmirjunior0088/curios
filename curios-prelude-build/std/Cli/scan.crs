@@ -1,4 +1,4 @@
-use /std/{Str, Nat, Bool, Char, List, Option, Map};
+use /std/{Str, Byte, Bytes, Nat, Bool, Char, List, Option, Map};
 use /std/Cli/{Failure, Field};
 
 --- What one occurrence of an option on the line was.
@@ -7,8 +7,8 @@ pub induct Seen: pub Type
 | given()
 --- A switch's `--no-` name.
 | negated()
---- A name given with this value.
-| value(text: Str)
+--- A name given with this value, as the bytes the line holds.
+| value(bytes: Bytes)
 --- The alternative of a choice at this index.
 | picked(index: Nat)
 end
@@ -26,8 +26,8 @@ end
 --- What a scan of a command's tokens found: each option's occurrences by its index, newest first, the positionals in order, what a group hands its command, and what was asked or refused.
 pub struct Raw: pub Type {
     seen: Map(Nat, List(Seen)),
-    positionals: List(Str),
-    rest: List(Str),
+    positionals: List(Bytes),
+    rest: List(Bytes),
     help: Bool,
     version: Bool,
     failure: Option(Failure),
@@ -101,17 +101,17 @@ let take(
     raw: Raw,
     claim: Claim,
     spelled: Str,
-    attached: Option(Str),
-    more: List(Str),
-) -> {Raw, List(Str)} =
+    attached: Option(Bytes),
+    more: List(Bytes),
+) -> {Raw, List(Bytes)} =
     match claim
     | valued(i) =>
         match attached
-        | some(text) => (seen(raw, i, Seen/value(text)), more)
+        | some(value) => (seen(raw, i, Seen/value(value)), more)
         | none() =>
             match more
             | [] => (refuse(raw, Failure/missing_value(spelled)), [])
-            | [text, ..rest] => (seen(raw, i, Seen/value(text)), rest)
+            | [value, ..rest] => (seen(raw, i, Seen/value(value)), rest)
             end
         end
     | _ =>
@@ -121,51 +121,84 @@ let take(
         end
     end;
 
+-- Whether `b` begins with the bytes `p`.
+let leads(p: Bytes, b: Bytes) -> Bool =
+    let matched =
+        Bytes/fold(
+            p,
+            (0, true),
+            (x: Byte, at: {Nat, Bool}) =>
+                (
+                    at.0 + 1,
+                    at.1
+                        && match Bytes/try_get(b, at.0) | some(y) => y == x | none() => false end));
+    matched.1;
+
+-- The bytes of `b` after its first `k`, or none where it holds no more.
+let after(b: Bytes, k: Nat) -> Bytes =
+    match Bool/holds(k <= Bytes/len(b))
+    | some(ok) => Bytes/drop(b, k, @ok)
+    | none() => 0x[]
+    end;
+
+-- The short names `lookup` holds, `-c`, each by the bytes of its character beside its spelling and its claim.
+let shorts(lookup: Map(Str, Claim)) -> List({Bytes, Str, Claim}) =
+    List/concat_map(
+        Map/to_list(lookup),
+        (entry: {Str, Claim}) =>
+            match Str/strip_prefix(entry.0, "-")
+            | some(c), Bool/not(Str/starts_with(c, "-")) => [(Str/to_bytes(c), entry.0, entry.1)]
+            | _ => []
+            end);
+
+-- The short names glued in `body`, each read off its front by the bytes of its character: a switch read and the rest read on, and a name taking a value taking what follows it. A byte no name begins is refused as the token `whole` and stepped over, so a name after it, help's among them, is still read.
 let cluster(
-    lookup: Map(Str, Claim),
+    names: List({Bytes, Str, Claim}),
     raw: Raw,
-    chars: List(Char),
-    whole: Str,
-    more: List(Str),
-) -> {Raw, List(Str)} =
-    match chars
-    | [] => (raw, more)
-    | [c, ..rest] =>
-        let spelled = Str/concat("-", Str/of_char(c));
-        match Map/try_get(lookup, spelled)
+    body: Bytes,
+    whole: Bytes,
+    more: List(Bytes),
+) -> {Raw, List(Bytes)} =
+    match Bytes/len(body) == 0
+    | true => (raw, more)
+    | false =>
+        match List/find(names, (name: {Bytes, Str, Claim}) => leads(name.0, body))
         | none() =>
             cluster(
-                lookup,
-                refuse(raw, Failure/unknown_option(whole, Option/none())),
-                rest,
+                names,
+                refuse(raw, Failure/unknown_option(Str/of_bytes_lossy(whole), Option/none())),
+                after(body, 1),
                 whole,
                 more)
-        | some(claim) =>
+        | some((character, spelled, claim)) =>
+            let rest = after(body, Bytes/len(character));
             match claim
             | valued(_) =>
                 let attached =
-                    match rest
-                    | [] => Option/none()
-                    | [_, .._] => Option/some(Str/flatten(List/map(rest, Str/of_char)))
+                    match Bytes/len(rest) == 0
+                    | true => Option/none()
+                    | false => Option/some(rest)
                     end;
                 take(raw, claim, spelled, attached, more)
-            | _ => cluster(lookup, flagged(raw, claim), rest, whole, more)
+            | _ => cluster(names, flagged(raw, claim), rest, whole, more)
             end
         end
     end;
 
 -- A token read as a value rather than a cluster: a dash and a digit, as a negative number is, which no short name can be.
-let numeric(token: Str) -> Bool =
-    match Str/strip_prefix(token, "-")
-    | some(body) =>
-        match Str/to_list(body)
-        | [d, .._] => Char/is_ascii_digit(d)
-        | [] => false
-        end
-    | none() => false
+let numeric(token: Bytes) -> Bool =
+    match (Bytes/try_get(token, 0), Bytes/try_get(token, 1))
+    | (some(dash), some(digit)) => dash == '-' && Nat/in_range(Byte/to_nat(digit), 0x30, 0x39)
+    | _ => false
     end;
 
-let step(lookup: Map(Str, Claim), raw: Raw, literal: Bool, tokens: List(Str), group: Bool) -> Raw =
+let step(
+    lookup: Map(Str, Claim),
+    raw: Raw,
+    literal: Bool,
+    tokens: List(Bytes),
+    group: Bool,
+) -> Raw =
     match tokens
     | [] => Raw { ..raw, positionals = List/reverse(raw.positionals) }
     | [token, ..more] =>
@@ -181,40 +214,47 @@ let step(lookup: Map(Str, Claim), raw: Raw, literal: Bool, tokens: List(Str), gr
                     group)
             end;
         match
-        | literal || token == "-" || numeric(token) => positional()
-        | token == "--" => step(lookup, raw, true, more, group)
-        | some(body) = Str/strip_prefix(token, "--") =>
+        | literal || token == 0x['-'] || numeric(token) => positional()
+        | token == 0x['-', '-'] => step(lookup, raw, true, more, group)
+        | leads(0x['-', '-'], token) =>
             let (name, attached) =
-                match Str/split_once(body, "=")
-                | none() => (body, Option/none())
-                | some((n, v)) => (n, Option/some(v))
+                match Bytes/split(after(token, 2), '=')
+                | [n, v, ..vs] => (n, Option/some(Bytes/join(0x['='], [v, ..vs])))
+                | [n] => (n, Option/none())
+                | [] => (0x[], Option/none())
                 end;
-            let spelled = Str/concat("--", name);
-            match Map/try_get(lookup, spelled)
-            | none() =>
-                let known =
-                    List/filter(
-                        List/map(Map/to_list(lookup), (entry: {Str, Claim}) => entry.0),
-                        (s) => Str/starts_with(s, "--"));
+            let unknown(near: Option(Str)) -> Raw =
                 step(
                     lookup,
-                    refuse(raw, Failure/unknown_option(token, closest(spelled, known))),
+                    refuse(raw, Failure/unknown_option(Str/of_bytes_lossy(token), near)),
                     false,
                     more,
-                    group)
-            | some(claim) =>
-                let (next, remaining) = take(raw, claim, spelled, attached, more);
-                step(lookup, next, false, remaining, group)
+                    group);
+            match Str/of_bytes(name)
+            | failure(_) => unknown(Option/none())
+            | success(text) =>
+                let spelled = Str/concat("--", text);
+                match Map/try_get(lookup, spelled)
+                | none() =>
+                    let known =
+                        List/filter(
+                            List/map(Map/to_list(lookup), (entry: {Str, Claim}) => entry.0),
+                            (s) => Str/starts_with(s, "--"));
+                    unknown(closest(spelled, known))
+                | some(claim) =>
+                    let (next, remaining) = take(raw, claim, spelled, attached, more);
+                    step(lookup, next, false, remaining, group)
+                end
             end
-        | some(body) = Str/strip_prefix(token, "-") =>
-            let (next, remaining) = cluster(lookup, raw, Str/to_list(body), token, more);
+        | leads(0x['-'], token) =>
+            let (next, remaining) = cluster(shorts(lookup), raw, after(token, 1), token, more);
             step(lookup, next, false, remaining, group)
         | _ => positional()
         end
     end;
 
 --- `tokens` read against `fields` and the built-ins. A group stops at its first positional, the word that names its command, and hands it and what follows to the command.
-pub let line(fields: List(Field), version: Option(Str), tokens: List(Str), group: Bool) -> Raw =
+pub let line(fields: List(Field), version: Option(Str), tokens: List(Bytes), group: Bool) -> Raw =
     step(
         claims(fields, version),
         Raw {

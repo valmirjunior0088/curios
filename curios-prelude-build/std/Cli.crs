@@ -18,30 +18,32 @@ pub use Parsed/{let Parsed, Slot, Carrier, option_slots, slots, Slots, Values, C
     get, HasIn, NamedIn, HasCommand, Named, command};
 
 use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Map, Io, Show, Fmt, Proc,
-    print, print_err};
+    Path, print, print_err};
 use /std/ops/{Eql};
 
---- How an argument's text is read.
+--- How an argument is read, from the bytes the host handed over: a reader of text decodes them first and refuses bytes that are no text, and a path takes them as they are.
 pub struct Value: pub Type {
     --- The type it is read into.
     A: Type,
     --- The placeholder help shows for it.
     metavar: Str,
-    read: (Str) -> Result(Str, A),
+    read: (Bytes) -> Result(Str, A),
     --- Prints a value: what help shows a default with.
     show: (A) -> Str,
     --- The texts it takes where they are a closed set, which help lists; empty otherwise.
     choices: List(Str),
 }
 
+-- The text the bytes `b` encode, or why a reader of text refuses them.
+let decoded(b: Bytes) -> Result(Str, Str) =
+    match Str/of_bytes(b)
+    | success(s) => Result/success(s)
+    | failure(_) => Result/failure("not valid UTF-8")
+    end;
+
 --- Text, as written.
 pub let str: Value =
-    Value {
-        A = Str,
-        metavar = "S",
-        read = (s) => Result/success(s),
-        show = (s) => s,
-        choices = [] };
+    Value { A = Str, metavar = "S", read = decoded, show = (s) => s, choices = [] };
 
 --- A natural number in decimal.
 pub let nat: Value =
@@ -49,7 +51,8 @@ pub let nat: Value =
         A = Nat,
         metavar = "N",
         read =
-            (s) =>
+            (b) =>
+                let s = decoded(b)!;
                 match Nat/of_str(s)
                 | some(n) => Result/success(n)
                 | none() => Result/failure(Fmt/render("expected a natural number, found '%'")(s))
@@ -63,7 +66,8 @@ pub let int: Value =
         A = Int,
         metavar = "N",
         read =
-            (s) =>
+            (b) =>
+                let s = decoded(b)!;
                 match Int/of_str(s)
                 | some(n) => Result/success(n)
                 | none() => Result/failure(Fmt/render("expected an integer, found '%'")(s))
@@ -77,7 +81,8 @@ pub let flt: Value =
         A = Flt,
         metavar = "X",
         read =
-            (s) =>
+            (b) =>
+                let s = decoded(b)!;
                 match Flt/of_str(s)
                 | some(x) => Result/success(x)
                 | none() => Result/failure(Fmt/render("expected a number, found '%'")(s))
@@ -85,9 +90,26 @@ pub let flt: Value =
         show = Show/show,
         choices = [] };
 
---- A reader of a program's own type: `read` turns the text into a value or says why it cannot, and `show` writes a value back, as help shows a default.
+--- A path, as the bytes it arrived as: a name the system holds need not be text.
+pub let path: Value =
+    Value {
+        A = Path,
+        metavar = "PATH",
+        read = (b) => Result/success(Path/of_bytes(b)),
+        show = (p) => Str/of_bytes_lossy(Path/to_bytes(p)),
+        choices = [] };
+
+--- A reader of a program's own type: `read` turns the text into a value or says why it cannot, and `show` writes a value back, as help shows a default. Bytes that are no text are refused before `read` is asked.
 pub let reader(@A: Type, metavar: Str, read: (Str) -> Result(Str, A), show: (A) -> Str) -> Value =
-    Value { A = A, metavar = metavar, read = read, show = show, choices = [] };
+    Value {
+        A = A,
+        metavar = metavar,
+        read =
+            (b) =>
+                let s = decoded(b)!;
+                read(s),
+        show = show,
+        choices = [] };
 
 --- One of a closed set of values, each read from its name: help lists the names, and shows a value by its own.
 pub let one_of(@A: Type, use Eql(A), metavar: Str, named: List({Str, A})) -> Value =
@@ -96,7 +118,8 @@ pub let one_of(@A: Type, use Eql(A), metavar: Str, named: List({Str, A})) -> Val
         A = A,
         metavar = metavar,
         read =
-            (s) =>
+            (b) =>
+                let s = decoded(b)!;
                 match List/find(named, (entry: {Str, A}) => entry.0 == s)
                 | some(entry) => Result/success(entry.1)
                 | none() =>
@@ -152,7 +175,7 @@ pub struct Field: pub Type {
     --- The other long names it answers to.
     aliases: List(Str),
     help: Str,
-    --- The environment variable read where the command line does not give the option, by the reader the line's text for it takes: a flag's and a toggle's as one of `y`, `yes`, `t`, `true`, `on`, `1` or `n`, `no`, `f`, `false`, `off`, `0`, in any case. An empty variable is unset, and one its reader refuses is refused by its name, `$NAME`.
+    --- The environment variable read where the command line does not give the option, by the reader the line's value for it takes: a flag's and a toggle's as one of `y`, `yes`, `t`, `true`, `on`, `1` or `n`, `no`, `f`, `false`, `off`, `0`, in any case. An empty variable is unset, and one its reader refuses is refused by its name, `$NAME`.
     env: Option(Str),
     --- Whether help leaves it out.
     hidden: Bool,
@@ -361,7 +384,7 @@ pub induct Reading(A: Type): pub Type
 end
 
 --- `argv` read against `cli`, `env` the environment variables the declaration names: what it parsed into, a request for help or the version, or the refusal. Help is answered before anything else on the line is, and the version next.
-pub let parse(cli: Cli, argv: List(Str), env: Map(Str, Str)) -> Reading(Parsed(cli.command)) =
+pub let parse(cli: Cli, argv: List(Bytes), env: Map(Str, Bytes)) -> Reading(Parsed(cli.command)) =
     parse/command(cli.command, argv, [], cli.version, env);
 
 --- The help of the command `path` names from the root, as `--help` writes it.
@@ -375,20 +398,6 @@ pub let usage(cli: Cli, path: List(Str)) -> Str =
 --- `failure` as `main` reports it: what the line got wrong, the usage line of the command `path` names, and where help is.
 pub let report(cli: Cli, path: List(Str), failure: Failure) -> Str =
     render/report(cli.command, path, failure);
-
-let decode(raw: List(Bytes)) -> Result(Nat, List(Str)) =
-    let walk(rest: List(Bytes), at: Nat) -> Result(Nat, List(Str)) =
-        match rest
-        | [] => Result/success([])
-        | [b, ..more] =>
-            match Str/of_bytes(b)
-            | failure(_) => Result/failure(at)
-            | success(s) =>
-                let tail = walk(more, at + 1)!;
-                Result/success([s, ..tail])
-            end
-        end;
-    walk(raw, 0);
 
 -- Every environment variable `c` and the commands beneath it declare.
 let variables(c: Command) -> List(Str) =
@@ -406,21 +415,16 @@ and variables_of(commands: List(Command)) -> List(Str) =
     | [c, ..more] => [..variables(c), ..variables_of(more)]
     end;
 
--- The variables of `names` the host sets, each as text, or the first whose value is not text.
-let environment(names: List(Str)) -> Io(Result(Str, Map(Str, Str))) =
+-- The variables of `names` the host sets, each as the bytes it holds, which a value reads as it reads an argument.
+let environment(names: List(Str)) -> Io(Map(Str, Bytes)) =
     match names
-    | [] => Io/pure(Result/success(Map/empty()))
+    | [] => Io/pure(Map/empty())
     | [n, ..more] =>
         let value = Proc/env(n)!;
+        let held = environment(more)!;
         match value
-        | none() => environment(more)
-        | some(b) =>
-            match Str/of_bytes(b)
-            | failure(_) => Io/pure(Result/failure(n))
-            | success(text) =>
-                let held = environment(more)!;
-                Io/pure(Result/map(held, (m) => Map/insert(m, n, text)))
-            end
+        | none() => Io/pure(held)
+        | some(b) => Io/pure(Map/insert(held, n, b))
         end
     end;
 
@@ -432,30 +436,12 @@ let refuse(text: Str) -> Io({}) =
 pub let main(cli: Cli, run: (Parsed(cli.command)) -> Io({})) -> Io({}) =
     let raw = Proc/args()!;
     let dropped = match raw | [] => [] | [_, ..more] => more end;
-    match decode(dropped)
-    | failure(at) =>
-        refuse(
-            Fmt/render(
-                "error: argument % is not valid UTF-8\n\n%\n\nFor more information, try '--help'.\n")(
-                at + 1)(
-                usage(cli, [name(cli.command)])))
-    | success(argv) =>
-        let read = environment(variables(cli.command))!;
-        match read
-        | failure(n) =>
-            refuse(
-                report(
-                    cli,
-                    [name(cli.command)],
-                    Failure/bad_value(Str/concat("$", n), "not valid UTF-8")))
-        | success(env) =>
-            match parse(cli, argv, env)
-            | parsed(p) => run(p)
-            | help(path) => print(help(cli, path))
-            | version(text) => print(Str/concat(text, "\n"))
-            | refused(path, f) => refuse(report(cli, path, f))
-            end
-        end
+    let env = environment(variables(cli.command))!;
+    match parse(cli, dropped, env)
+    | parsed(p) => run(p)
+    | help(path) => print(help(cli, path))
+    | version(text) => print(Str/concat(text, "\n"))
+    | refused(path, f) => refuse(report(cli, path, f))
     end;
 
 --- `command` checked as the program starts and run as `main` runs a declared one; a declaration with problems is reported on standard error before the line is read, and ends the program with 1.
