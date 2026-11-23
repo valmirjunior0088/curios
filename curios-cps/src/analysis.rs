@@ -245,7 +245,7 @@ pub fn analyze_calls(module: &Module) -> CallAnalysis {
 }
 
 /// The functions a body may name, each function's and each continuation's, read off the one walk `verify_lexical_scopes` performs rather than restated here: what a pass that forwards a function reference into a body asks, known-value propagation and component specialization alone, so it is built where one of them first meets a function a call hands, and by no other reader of the call analysis.
-#[derive(PartialEq)]
+#[derive(Default, PartialEq)]
 pub struct Scopes {
     /// Each function's: its own `LetFun` group, every group enclosing it, and every group bound before it along the chain from the entry. Where the walk does not reach a live function, the entry is the owner-chain subset instead, which refuses more than the rule does and never less.
     pub functions: BTreeMap<FunctionId, InScope<FunctionId>>,
@@ -257,7 +257,7 @@ impl Scopes {
     /// `module`'s scopes, a function the walk does not reach placed by the owners `calls` read.
     pub fn of(module: &Module, calls: &CallAnalysis) -> Self {
         // Reading a function's scope off the `LetFun` nodes alone — a member's own group, then everything its owner's group holds, up to the entry — would miss the third of the three things `scope_step` admits: a group bound *earlier along the same body chain*. Every group the lowering emits is a singleton, so that is precisely a body's siblings, which is nearly every function reference a program makes.
-        let (mut functions, continuations) = module.scope_walk();
+        let mut scopes = module.scope_walk();
 
         // A function the walk did not reach keeps the owner-chain answer, which is a subset of what it may name. This runs mid-round, where the module is transiently unscoped by design, so a walk from the entry can miss a live function; and the set is read to *refuse* a forward, so answering with less than the truth costs an optimization where answering with more would forward a reference the body cannot legally name.
         let mut group_of: BTreeMap<FunctionId, (FunctionId, Vec<FunctionId>)> = BTreeMap::new();
@@ -272,7 +272,7 @@ impl Scopes {
             }
         }
         for function in module.function_ids() {
-            if functions.contains_key(&function) {
+            if scopes.functions.contains_key(&function) {
                 continue;
             }
             let mut scope = InScope::default();
@@ -290,12 +290,9 @@ impl Scopes {
                     }
                 }
             }
-            functions.insert(function, scope);
+            scopes.functions.insert(function, scope);
         }
-        Self {
-            functions,
-            continuations,
-        }
+        scopes
     }
 }
 

@@ -1,9 +1,9 @@
-//! The verifier: the structure every pass may assume of a module, the rows and lexical scope a round boundary promises on top, and the scope walk [`Scopes`](crate::Scopes) reads back.
+//! The verifier: the structure every pass may assume of a module, the rows and lexical scope a round boundary promises on top, and the scope walk a [`Scopes`] starts from.
 
 use {
     super::{
         Atom, Callee, ContinuationId, Edge, Function, FunctionId, Intrinsic, IntrinsicCall, Module,
-        Node, NodeId, Panic, RowId, ValueExpr, ValueId, atoms, function_nodes,
+        Node, NodeId, Panic, RowId, Scopes, ValueExpr, ValueId, atoms, function_nodes,
     },
     curios_common::Sorted,
     std::{
@@ -613,20 +613,14 @@ impl Module {
         Ok(())
     }
 
-    /// The functions each function's body may name, and each continuation's, by the rule [`Self::scope_step`] states and [`Self::verify_lexical_scopes`] enforces: a function's own `LetFun` group, every group enclosing it, and every group bound *before* it along the chain from the entry; a continuation's, those in scope where its `LetCont` binds it, which take in the groups its function's body binds before it. Recorded rather than checked, so a pass forwarding a function reference into a body can ask whether that body may legally name it.
+    /// The functions each function's body may name, and each continuation's, as the [`Scopes`] it starts, by the rule [`Self::scope_step`] states and [`Self::verify_lexical_scopes`] enforces: a function's own `LetFun` group, every group enclosing it, and every group bound *before* it along the chain from the entry; a continuation's, those in scope where its `LetCont` binds it, which take in the groups its function's body binds before it. Recorded rather than checked, so a pass forwarding a function reference into a body can ask whether that body may legally name it.
     ///
     /// A function or continuation the walk does not reach is absent rather than empty, and the caller decides what to answer for it. This runs mid-round, where the module is transiently unscoped by design and only a round boundary promises a walk from the entry reaches every live function.
-    pub(crate) fn scope_walk(
-        &self,
-    ) -> (
-        BTreeMap<FunctionId, InScope<FunctionId>>,
-        BTreeMap<ContinuationId, InScope<FunctionId>>,
-    ) {
+    pub(crate) fn scope_walk(&self) -> Scopes {
+        let mut scopes = Scopes::default();
         let Some(entry) = self.entry() else {
-            return (BTreeMap::new(), BTreeMap::new());
+            return scopes;
         };
-        let mut scopes = BTreeMap::new();
-        let mut continuation_scopes = BTreeMap::new();
         let mut walk = ScopeVerifier {
             function_work: vec![(entry, InScope::default(), InScope::of(entry))],
             ..ScopeVerifier::default()
@@ -635,7 +629,7 @@ impl Module {
 
         while !walk.function_work.is_empty() || !walk.node_work.is_empty() {
             while let Some((function, values, functions)) = walk.function_work.pop() {
-                scopes.insert(function, functions.clone());
+                scopes.functions.insert(function, functions.clone());
                 let step = self.function_scope(function, values, functions);
                 walk.queue(step.tasks);
             }
@@ -655,13 +649,13 @@ impl Module {
             } = node
             {
                 for member in members {
-                    continuation_scopes.insert(*member, functions.clone());
+                    scopes.continuations.insert(*member, functions.clone());
                 }
             }
             let step = self.scope_step(None, node, values, functions, continuations);
             walk.queue(step.tasks);
         }
-        (scopes, continuation_scopes)
+        scopes
     }
 
     /// The scope a function's own body sees: its parameters join the values it inherits, and no continuation crosses the boundary.
