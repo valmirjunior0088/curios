@@ -4,7 +4,7 @@ mod tests;
 use {
     super::{
         AbsHeapType, AddressType, ArrayType, BlockType, CompType, DataMode, DataName, DataSegment,
-        ElemList, ElemMode, ElemName, ElemSegment, Export, Expr, FieldName, FieldType, Func,
+        ElemList, ElemMode, ElemName, ElemSegment, Export, Expr, FieldName, FieldType, Float, Func,
         FuncName, FuncType, Global, GlobalName, GlobalType, HeapType, Import, Instr, LabelName,
         Limits, LocalName, MemArg, MemName, MemType, Module, Mutability, NumType, PackedType,
         RecType, RefType, ResultType, StorageType, StructType, SubType, Table, TableName,
@@ -39,15 +39,15 @@ fn is_delimiter(char: char) -> bool {
     char.is_whitespace() || ['(', ')', '"'].contains(&char)
 }
 
-/// Parses any `FromStr` numeric type from a delimiter-bounded token, failing with the type's own name (via `type_name`, which for an intrinsic like `u32`/`f64` is exactly that name) when the token doesn't parse — the one shape every numeric literal (`u32`, `i32`, `i64`, `f32`, `f64`) parses by.
-fn parse_number<'a, T>(state: ParserState<'a>) -> Parsed<'a, T>
+/// Parses a delimiter-bounded token as `read` reads it, failing with the type's own name (via `type_name`, which for an intrinsic like `u32`/`f64` is exactly that name) when it reads nothing — the one shape every numeric literal parses by.
+fn parse_token<'a, T>(state: ParserState<'a>, read: fn(&str) -> Option<T>) -> Parsed<'a, T>
 where
-    T: FromStr + 'a,
+    T: 'a,
 {
     take_while(|char| !is_delimiter(char))
-        .flat_map(|value| match T::from_str(value) {
-            Ok(value) => pure(value).boxed(),
-            Err(_) => fail(format!(
+        .flat_map(move |value| match read(value) {
+            Some(value) => pure(value).boxed(),
+            None => fail(format!(
                 "Expected '{}', obtained '{value}'",
                 std::any::type_name::<T>()
             ))
@@ -55,6 +55,35 @@ where
         })
         .and_drop(parse_whitespace)
         .parse(state)
+}
+
+/// An integer literal (`u32`, `u64`, `i32`, `i64`), as its `FromStr` reads it.
+fn parse_number<'a, T>(state: ParserState<'a>) -> Parsed<'a, T>
+where
+    T: FromStr + 'a,
+{
+    parse_token(state, |token| T::from_str(token).ok())
+}
+
+/// A float literal (`f32`, `f64`), a NaN read by its sign and its payload as the printer spells it, `nan` alone the canonical one, and any other value as its `FromStr` reads it.
+fn parse_float<'a, F>(state: ParserState<'a>) -> Parsed<'a, F>
+where
+    F: Float + 'a,
+{
+    parse_token(state, |token| {
+        let (negative, unsigned) = match token.strip_prefix('-') {
+            Some(unsigned) => (true, unsigned),
+            None => (false, token.strip_prefix('+').unwrap_or(token)),
+        };
+        match unsigned.strip_prefix("nan") {
+            Some("") => F::of_nan(negative, F::CANONICAL),
+            Some(payload) => {
+                let digits = payload.strip_prefix(":0x")?;
+                F::of_nan(negative, u64::from_str_radix(digits, 16).ok()?)
+            }
+            None => F::from_str(token).ok(),
+        }
+    })
 }
 
 /// An identifier, bare or quoted, `$"…"`, its escapes the bytes they are, as a data segment's are.
@@ -778,10 +807,10 @@ fn parse_const_instr<'a>(state: ParserState<'a>) -> Parsed<'a, Instr> {
         .and_keep(parse_number::<i64>)
         .map(|value| Instr::I64Const { value }))
     .or(parse_literal("f32.const")
-        .and_keep(parse_number::<f32>)
+        .and_keep(parse_float::<f32>)
         .map(|value| Instr::F32Const { value }))
     .or(parse_literal("f64.const")
-        .and_keep(parse_number::<f64>)
+        .and_keep(parse_float::<f64>)
         .map(|value| Instr::F64Const { value }))
     .parse(state)
 }

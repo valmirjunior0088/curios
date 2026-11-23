@@ -22,7 +22,7 @@ The Curios WebAssembly-GC back end: the symbolic module model, the WAT parser an
 
 ### The text form is WebAssembly's
 
-**Decision.** `Module`'s `Display` writes, and its `FromStr` reads, the WebAssembly text format: a name an identifier cannot hold — a hint with a brace, a parenthesis or a space — is written in the format's quoted form, `$"…"`, a quote, a backslash and a control character in it escaped as the bytes they are; an indirect call names its signature as a type use, `call_indirect $table (type $t)`; and a passive segment names no mode.
+**Decision.** `Module`'s `Display` writes, and its `FromStr` reads, the WebAssembly text format: a name an identifier cannot hold — a hint with a brace, a parenthesis or a space — is written in the format's quoted form, `$"…"`, a quote, a backslash and a control character in it escaped as the bytes they are; an indirect call names its signature as a type use, `call_indirect $table (type $t)`; a passive segment names no mode; and a NaN float constant is written by its sign and its payload, `nan` for the canonical one and `nan:0x…` for any other, so the text holds the bits the module does.
 
 **Rationale.** The text is what `wonder --stage wasm` prints, and a tool that reads WebAssembly text then reads it as it stands, to assemble, validate or measure the module beside the compiler's own encoder. A dialect of its own made every such check a conversion first, and a name it wrote bare it could not always read back: a witness's hint, which holds a space and parentheses, ended its own parser's name.
 

@@ -4,7 +4,7 @@ mod tests;
 use {
     super::{
         AbsHeapType, AddressType, ArrayType, BlockType, CompType, DataMode, DataName, DataSegment,
-        ElemList, ElemMode, ElemName, ElemSegment, Export, Expr, FieldName, FieldType, Func,
+        ElemList, ElemMode, ElemName, ElemSegment, Export, Expr, FieldName, FieldType, Float, Func,
         FuncName, FuncType, Global, GlobalName, GlobalType, HeapType, Import, Instr, LabelName,
         Limits, LocalName, MemAccess, MemName, MemType, Module, Mutability, NumType, PackedType,
         RecType, RefType, ResultType, StorageType, StructType, SubType, Table, TableName,
@@ -13,6 +13,23 @@ use {
     curios_common::recurse,
     curios_print::{Printer, flat, group, hard_line, indent, line, pure, sep_flat},
 };
+
+/// A float immediate as the text format spells it, so a tool reading the text reads the bits the module holds: a NaN by its sign and its payload, `nan` alone for the canonical one and `nan:0x…` for any other, and every other value by Rust's shortest decimal, `inf` and `-0` among them, which the format reads as written.
+fn print_float<F: Float>(value: F) -> Printer {
+    pure(match value.nan() {
+        Some((negative, payload)) => {
+            let sign = match negative {
+                true => "-",
+                false => "",
+            };
+            match payload == F::CANONICAL {
+                true => format!("{sign}nan"),
+                false => format!("{sign}nan:0x{payload:x}"),
+            }
+        }
+        None => value.to_string(),
+    })
+}
 
 /// An identifier as the text format writes one: bare where each of its characters is one an identifier may hold, and otherwise quoted, `$"…"`, since a hint may hold a brace, a parenthesis or a space. A quote, a backslash and a control character are escaped as the bytes they are, the one escape the parser reads.
 fn print_dollar_ident(name: &str) -> Printer {
@@ -652,8 +669,8 @@ fn print_instr(instr: &Instr) -> Printer {
         }
         Instr::I32Const { value } => flat([pure("i32.const "), pure(value.to_string())]),
         Instr::I64Const { value } => flat([pure("i64.const "), pure(value.to_string())]),
-        Instr::F32Const { value } => flat([pure("f32.const "), pure(value.to_string())]),
-        Instr::F64Const { value } => flat([pure("f64.const "), pure(value.to_string())]),
+        Instr::F32Const { value } => flat([pure("f32.const "), print_float(*value)]),
+        Instr::F64Const { value } => flat([pure("f64.const "), print_float(*value)]),
         // Everything else is table-driven beside `Instr`: a load or store from the memory-access table, and otherwise an operand-less instruction from the mnemonic table. A variant in neither place is a bug in those tables.
         other => match other.mem_access() {
             Some(access) => print_mem_access(access),

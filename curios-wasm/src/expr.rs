@@ -1,7 +1,64 @@
-use super::{
-    BlockType, DataName, ElemName, FieldName, FuncName, GlobalName, HeapType, LabelName, LocalName,
-    MemName, RefType, TableName, TypeName, ValType,
+use {
+    super::{
+        BlockType, DataName, ElemName, FieldName, FuncName, GlobalName, HeapType, LabelName,
+        LocalName, MemName, RefType, TableName, TypeName, ValType,
+    },
+    std::{fmt::Display, str::FromStr},
 };
+
+/// What the text format spells of a float immediate beside its decimal: a NaN by its sign and its payload, the bits below its exponent, `nan` alone standing for the canonical payload, the quiet bit and no other.
+pub trait Float: Copy + Display + FromStr {
+    /// The canonical NaN's payload.
+    const CANONICAL: u64;
+
+    /// The sign and the payload of a NaN, and nothing for any other value.
+    fn nan(self) -> Option<(bool, u64)>;
+
+    /// The NaN of that sign and that payload, where the payload fits below the exponent and is no zero, which would be an infinity.
+    fn of_nan(negative: bool, payload: u64) -> Option<Self>;
+}
+
+impl Float for f32 {
+    const CANONICAL: u64 = 1 << (f32::MANTISSA_DIGITS - 2);
+
+    fn nan(self) -> Option<(bool, u64)> {
+        self.is_nan().then(|| {
+            let payload = self.to_bits() & !(-f32::INFINITY).to_bits();
+            (self.is_sign_negative(), u64::from(payload))
+        })
+    }
+
+    fn of_nan(negative: bool, payload: u64) -> Option<Self> {
+        let infinity = match negative {
+            true => -f32::INFINITY,
+            false => f32::INFINITY,
+        };
+        u32::try_from(payload)
+            .ok()
+            .filter(|payload| *payload != 0 && payload & (-f32::INFINITY).to_bits() == 0)
+            .map(|payload| f32::from_bits(infinity.to_bits() | payload))
+    }
+}
+
+impl Float for f64 {
+    const CANONICAL: u64 = 1 << (f64::MANTISSA_DIGITS - 2);
+
+    fn nan(self) -> Option<(bool, u64)> {
+        self.is_nan().then(|| {
+            let payload = self.to_bits() & !(-f64::INFINITY).to_bits();
+            (self.is_sign_negative(), payload)
+        })
+    }
+
+    fn of_nan(negative: bool, payload: u64) -> Option<Self> {
+        let infinity = match negative {
+            true => -f64::INFINITY,
+            false => f64::INFINITY,
+        };
+        (payload != 0 && payload & (-f64::INFINITY).to_bits() == 0)
+            .then(|| f64::from_bits(infinity.to_bits() | payload))
+    }
+}
 
 /// The immediate every load and store carries: the memory it reaches, the alignment its address is promised to have — as the binary format's log2 exponent, not a byte count — and a static offset added to the dynamic address operand, wide enough for a 64-bit memory. The memory is named like every other cross-reference, so the encoder is the only place that knows one of them is index 0 and may leave the index implicit.
 #[derive(Debug, Clone)]

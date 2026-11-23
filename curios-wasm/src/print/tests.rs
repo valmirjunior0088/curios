@@ -103,6 +103,88 @@ fn a_name_an_identifier_cannot_hold_prints_quoted_and_reads_back() {
     );
 }
 
+/// A NaN prints as the text format spells one, by its sign and its payload — `nan` alone for the canonical payload, `nan:0x…` for any other — so a tool reading WebAssembly text reads the bits the module holds, and the text reads back to them; an infinity and a finite value print as Rust spells them, which the format reads alike.
+#[test]
+fn a_nan_prints_its_sign_and_payload_and_reads_back_to_its_bits() {
+    let singles = [
+        f32::NAN,
+        -f32::NAN,
+        f32::from_bits(0x7f80_0001),
+        f32::from_bits(0xffc0_0001),
+        f32::INFINITY,
+        -1.5,
+    ];
+    let doubles = [
+        f64::NAN,
+        -f64::NAN,
+        f64::from_bits(0x7ff0_0000_0000_0001),
+        f64::NEG_INFINITY,
+        0.1,
+    ];
+    let mut module = named(&["func"]);
+    module.add_func(
+        FuncName::from("floats"),
+        Func {
+            type_name: TypeName::from("type"),
+            params: vec![],
+            locals: vec![],
+            expr: Expr::from(
+                singles
+                    .map(|value| Instr::F32Const { value })
+                    .into_iter()
+                    .chain(doubles.map(|value| Instr::F64Const { value })),
+            ),
+        },
+    );
+    let text = module.to_string();
+    let spelled = |head: &str| {
+        text.split(head)
+            .skip(1)
+            .map(|rest| {
+                rest.split(|char: char| char.is_whitespace() || char == ')')
+                    .next()
+                    .unwrap_or_default()
+                    .to_string()
+            })
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(
+        spelled("f32.const "),
+        ["nan", "-nan", "nan:0x1", "-nan:0x400001", "inf", "-1.5"],
+        "{text}"
+    );
+    assert_eq!(
+        spelled("f64.const "),
+        ["nan", "-nan", "nan:0x1", "-inf", "0.1"],
+        "{text}"
+    );
+    let read = text
+        .parse::<Module>()
+        .expect("the printed module reads back");
+    let (_, floats) = read
+        .funcs()
+        .iter()
+        .find(|(name, _)| name.as_str() == "floats")
+        .expect("the function reads back");
+    let bits = floats
+        .expr
+        .instrs
+        .iter()
+        .filter_map(|instr| match instr {
+            Instr::F32Const { value } => Some(u64::from(value.to_bits())),
+            Instr::F64Const { value } => Some(value.to_bits()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let written = singles
+        .map(|value| u64::from(value.to_bits()))
+        .into_iter()
+        .chain(doubles.map(f64::to_bits))
+        .collect::<Vec<_>>();
+    assert_eq!(bits, written, "{text}");
+}
+
 /// The text is the format's own, so a tool reading WebAssembly text reads it: an indirect call names its signature as a type use, `(type $t)`, and a passive segment names no mode.
 #[test]
 fn an_indirect_call_names_a_type_use_and_a_passive_segment_no_mode() {
