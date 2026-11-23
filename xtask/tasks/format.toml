@@ -7,6 +7,13 @@ run = [
     ["rustfmt", "--edition", "{.workspace.variables.edition}", "{.workspace.variables.loose}"],
 ]
 
+[curios]
+description = "Format the tree's Curios sources with this tree's compiler, each as the package that governs it states"
+consumes = [".launcher.build.produces.binary"]
+run = [
+    ["cargo", "run", "--quiet", "--package", "curios", "--", "format", "{.workspace.variables.sources}"],
+]
+
 [web]
 description = "Format the JavaScript, JSON and CSS of every tree, as `biome.json` lists them"
 run = [

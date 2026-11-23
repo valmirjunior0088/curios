@@ -11,17 +11,14 @@ use {
     curios_package::{Cabinet, Selection, Spelling, Target},
     curios_pipeline::compile_with_prelude,
     curios_prelude_build::{std_directory, std_source},
-    curios_surface::{Entrypoint, Format, Formatted},
+    curios_surface::Entrypoint,
     curios_unicode::{
         east_asian_width, grapheme_break, indic_conjunct_break, is_alphabetic,
         is_emoji_presentation, is_extended_pictographic, is_white_space, test_support::*,
     },
     curios_verdict::Verdicts,
     curios_wonder::{Severity, Subject, diagnostics},
-    std::{
-        fs,
-        path::{Path, PathBuf},
-    },
+    std::path::Path,
 };
 
 /// One `#[test]` per module of tests `/std` declares, each by the subject it stands in — none for the root's own — and the roster [`every_test_stands_in_a_rostered_module`] holds the library against, declared from one list so the two cannot disagree.
@@ -244,56 +241,6 @@ fn every_test_stands_in_a_rostered_module() {
     assert!(
         empty.is_empty(),
         "rostered modules with no test: {empty:#?}"
-    );
-}
-
-/// Every `.crs` file under `directory`, at any depth, in path order.
-fn sources_under(directory: PathBuf) -> Vec<PathBuf> {
-    let mut sources = Vec::new();
-    let mut pending = vec![directory];
-
-    while let Some(directory) = pending.pop() {
-        for entry in fs::read_dir(&directory).expect("a directory of this crate") {
-            let path = entry.expect("a readable entry").path();
-
-            match path.is_dir() {
-                true => pending.push(path),
-                false if path.extension().is_some_and(|kind| kind == "crs") => sources.push(path),
-                false => {}
-            }
-        }
-    }
-
-    sources.sort();
-    sources
-}
-
-/// **The library is written in the canonical form `curios format` produces.**
-///
-/// `curios format --check` is only a guarantee where something checks it. A tree drifted from canonical form hands anyone formatting it a diff that says nothing about their own change, and hides a formatter defect — a comment placed on the wrong arm — from the one corpus large enough to show it.
-///
-/// Formatting is syntax-only — no prelude, no elaboration — so one walk holds every `.crs` file this crate authors, its tests among them. A failure names the file, and `curios format <file>` is the fix.
-#[test]
-fn every_source_is_canonically_formatted() {
-    let mut wrong = Vec::new();
-
-    for path in sources_under(std_directory()) {
-        match Formatted::from_path(&path, Format::default()) {
-            Ok(Formatted::Unchanged(_)) => {}
-            Ok(Formatted::Changed(_)) => wrong.push(format!("{}: not canonical", path.display())),
-            Err(refusal) => wrong.push(format!(
-                "{}: {refusal}",
-                path.display(),
-                refusal = refusal.render()
-            )),
-        }
-    }
-
-    assert!(
-        wrong.is_empty(),
-        "{} of these sources are not as `curios format` writes them:\n  {}\n\nrun `cargo run --package curios -- format <file>` on each",
-        wrong.len(),
-        wrong.join("\n  ")
     );
 }
 

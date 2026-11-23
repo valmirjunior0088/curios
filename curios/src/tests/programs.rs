@@ -5,7 +5,6 @@ use {
     curios_common::Style,
     curios_elab::DEFAULT_BUDGET,
     curios_module::Overlay,
-    curios_surface::{Format, Formatted},
     curios_wonder::{Origin, Severity, Subject, diagnostics},
 };
 
@@ -41,30 +40,5 @@ fn every_program_lints_clean() {
         "{} findings:\n\n{}",
         wrong.len(),
         wrong.join("\n\n")
-    );
-}
-
-/// **The programs are written in the canonical form `curios format` produces**, as `curios-prelude`'s `every_source_is_canonically_formatted` holds `/std` and its corpus: a tree nothing holds drifts, and a drifted file hands whoever formats it a diff that says nothing about their own change.
-#[test]
-fn every_program_source_is_canonically_formatted() {
-    let mut wrong = Vec::new();
-
-    for path in programs(&workspace().join("programs")) {
-        match Formatted::from_path(&path, Format::default()) {
-            Ok(Formatted::Unchanged(_)) => {}
-            Ok(Formatted::Changed(_)) => wrong.push(format!("{}: not canonical", path.display())),
-            Err(refusal) => wrong.push(format!(
-                "{}: {refusal}",
-                path.display(),
-                refusal = refusal.render()
-            )),
-        }
-    }
-
-    assert!(
-        wrong.is_empty(),
-        "{} of these sources are not as `curios format` writes them:\n  {}\n\nrun `cargo run --package curios -- format <file>` on each",
-        wrong.len(),
-        wrong.join("\n  ")
     );
 }

@@ -3,6 +3,8 @@ description = "The Rust workspace, as it ships"
 variables.edition = "2024"
 # The measurement corpus's Rust twins belong to no package, so `cargo fmt` never visits them.
 variables.loose.run = ["git", "ls-files", "--", "programs/*.rs"]
+# The Curios sources the formatter holds to canonical form: every tracked `.crs` but the editors' highlighting samples and the soundness board's archive, whose witnesses are written in forms the language no longer has.
+variables.sources.run = ["git", "ls-files", "--", "*.crs", ":!editors/**", ":!xboard/archive/**"]
 # What Biome reads of the workspace, beside the editors' own trees: `biome.json` lists the same.
 variables.web = ["biome.json", ".claude/settings.json", "curios-browser/src", "curios-document/static"]
 variables.package.flag = ["-p", "--package"]
@@ -24,6 +26,13 @@ run = [
 description = "Fail on formatting drift in the JavaScript, JSON and CSS the workspace holds"
 run = [
     ["{.tools.biome}", "format", "{.workspace.variables.web}"],
+]
+
+[lint.curios-format]
+description = "Fail on formatting drift in the tree's Curios sources, as this tree's `curios format --check` reads each, under the package that governs it"
+consumes = [".launcher.build.produces.binary"]
+run = [
+    ["cargo", "run", "--quiet", "--package", "curios", "--", "format", "--check", "{.workspace.variables.sources}"],
 ]
 
 [lint.clippy]

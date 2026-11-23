@@ -38,6 +38,7 @@ fn a_lint_of_the_workspace_builds_the_launcher_first() {
             "workspace lint rustfmt",
             "workspace lint biome-format",
             "launcher build",
+            "workspace lint curios-format",
             "workspace lint clippy",
             "workspace lint biome-lint"
         ]
