@@ -11,3 +11,7 @@ description = "Run the jig's tests: these task files held to the command line an
 run = [
     ["{.tools.cargo-nextest}", "nextest", "run", "--package", "x*", "--all-targets", "--no-fail-fast"],
 ]
+
+[agents]
+description = "Hold the agent files, CLAUDE.md and every Markdown file under .claude/, to the tree: each glob of a rule matches a tracked file, and each link, path and source name they cite is there"
+run = [{ check = "agents" }]

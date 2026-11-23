@@ -218,3 +218,5 @@ jobs:
         run: cargo xtask jig lint
       - name: Test
         run: cargo xtask jig test
+      - name: Check the agent files against the tree
+        run: cargo xtask jig agents

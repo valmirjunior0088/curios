@@ -2,6 +2,9 @@
 //!
 //! **A check is a judgment, as `release`'s refusals are.** What a step can say as a command it says as one; what no command says without a shell between — a revision's tree against the working tree's, a file opening with another, two tables equal, every citation of a document reaching a file — is Rust here, read off the tree's files where they stand, and reports every departure it finds rather than the first. Which step runs a check, and what it runs after, is the task files'.
 
+mod agents;
+use agents::*;
+
 mod zed;
 use zed::*;
 
@@ -13,7 +16,13 @@ pub struct Check {
 }
 
 /// Every check a step may name: the reader refuses any other.
-pub const CHECKS: [Check; 1] = [Check {
-    name: "zed",
-    judge: zed,
-}];
+pub const CHECKS: [Check; 2] = [
+    Check {
+        name: "agents",
+        judge: agents,
+    },
+    Check {
+        name: "zed",
+        judge: zed,
+    },
+];

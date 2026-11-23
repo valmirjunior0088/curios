@@ -104,7 +104,7 @@ fn a_check_names_a_judgment_the_runner_holds() {
 fn a_check_the_runner_does_not_hold_is_refused_naming_those_it_does() {
     assert_eq!(
         run_refused("", "[{ check = \"nothing\" }]"),
-        "`nothing` is no check the runner holds, which are `zed`"
+        "`nothing` is no check the runner holds, which are `agents`, `zed`"
     );
     assert!(run_refused("", "[{ check = \"zed\", dir = \"x\" }]").contains("`dir` is not it"));
 }

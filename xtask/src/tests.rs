@@ -2,8 +2,6 @@
 
 use {crate::*, std::collections::BTreeSet};
 
-mod agents;
-
 /// The check workflow, whose jobs are the machines the steps run on.
 const WORKFLOW: &str = include_str!("../../.github/workflows/check.yml");
 

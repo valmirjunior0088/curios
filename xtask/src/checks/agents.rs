@@ -1,32 +1,48 @@
-//! What the agent files hold of the tree: `CLAUDE.md` and every Markdown file under `.claude/`.
+//! `jig agents`: what the agent files, `CLAUDE.md` and every Markdown file under `.claude/`, hold of the tree — each glob of a rule matches a tracked file, and each citation is in the tree.
 //!
 //! A rule's globs decide where it loads, and a citation is where a session is sent. Each is text no compiler reads, so a moved file fails nothing until it is put to the tree here.
 
 use {
-    crate::*,
+    crate::{ask, root},
     std::{collections::BTreeSet, fs, path::Path, process::Command},
 };
 
+#[cfg(test)]
+mod tests;
+
+/// Every glob that matches no tracked file and every citation that leads nowhere, a line each, or nothing.
+pub fn agents() -> Result<(), String> {
+    let tracked = tracked()?;
+    let files = agent_files(&tracked)?;
+    let mut wrong = stranded(&tracked, &files);
+    wrong.extend(stale(&tracked, &files)?);
+
+    match wrong.is_empty() {
+        true => Ok(()),
+        false => Err(wrong.join("\n")),
+    }
+}
+
 /// Every file the repository tracks, by its path from the root.
-fn tracked() -> Vec<String> {
-    ask(Command::new("git"), &["ls-files"])
-        .expect("git lists the tracked files")
+fn tracked() -> Result<Vec<String>, String> {
+    Ok(ask(Command::new("git"), &["ls-files"])?
         .lines()
         .map(str::to_string)
-        .collect()
+        .collect())
 }
 
 /// The agent files among `tracked`: `CLAUDE.md` and each Markdown file under `.claude/`, with its text.
-fn agent_files(tracked: &[String]) -> Vec<(&str, String)> {
+fn agent_files(tracked: &[String]) -> Result<Vec<(&str, String)>, String> {
     tracked
         .iter()
         .filter(|path| {
             *path == "CLAUDE.md" || (path.starts_with(".claude/") && path.ends_with(".md"))
         })
         .map(|path| {
-            let text = fs::read_to_string(root().join(path)).expect("a tracked file is read");
+            let text = fs::read_to_string(root().join(path))
+                .map_err(|error| format!("{path}: {error}"))?;
 
-            (path.as_str(), text)
+            Ok((path.as_str(), text))
         })
         .collect()
 }
@@ -161,29 +177,25 @@ fn is_identifier(span: &str) -> bool {
         })
 }
 
-/// Each glob of a rule's `paths:` matches a file the repository tracks: one that matches none names a place that moved, and the rule has stopped loading for it.
-#[test]
-fn every_glob_of_a_rule_matches_a_tracked_file() {
-    let tracked = tracked();
+/// Each glob of a rule's `paths:` that matches no file the repository tracks: one that matches none names a place that moved, and the rule has stopped loading for it.
+fn stranded(tracked: &[String], files: &[(&str, String)]) -> Vec<String> {
     let mut stranded = Vec::new();
 
-    for (file, text) in agent_files(&tracked) {
-        for glob in globs_and_body(&text).0 {
+    for (file, text) in files {
+        for glob in globs_and_body(text).0 {
             if !tracked.iter().any(|path| matches(glob, path)) {
-                stranded.push(format!("{file}: {glob}"));
+                stranded.push(format!("{file}: the glob `{glob}` matches no tracked file"));
             }
         }
     }
 
-    assert!(stranded.is_empty(), "{stranded:#?}");
+    stranded
 }
 
-/// What an agent file cites is in the tree: a link leads to a tracked file or a directory of them; a path of the repository in a code span is tracked, a directory of tracked files, or one the ignore file names, which a build makes; and an identifier in a code span is a word of a tracked source. A path or a name written with a placeholder, a glob or a space cites nothing.
-#[test]
-fn every_citation_of_an_agent_file_is_in_the_tree() {
-    let tracked = tracked();
+/// Each citation of an agent file that is not in the tree, where what one cites is: a link leads to a tracked file or a directory of them; a path of the repository in a code span is tracked, a directory of tracked files, or one the ignore file names, which a build makes; and an identifier in a code span is a word of a tracked source. A path or a name written with a placeholder, a glob or a space cites nothing.
+fn stale(tracked: &[String], agent_files: &[(&str, String)]) -> Result<Vec<String>, String> {
     let files = tracked.iter().map(String::as_str).collect::<BTreeSet<_>>();
-    let directories = directories(&tracked);
+    let directories = directories(tracked);
     let held = |path: &str| files.contains(path) || directories.contains(path);
     let top = tracked
         .iter()
@@ -191,8 +203,8 @@ fn every_citation_of_an_agent_file_is_in_the_tree() {
         .collect::<BTreeSet<_>>();
     let mut stale = Vec::new();
 
-    for (file, text) in agent_files(&tracked) {
-        let body = globs_and_body(&text).1;
+    for (file, text) in agent_files {
+        let body = globs_and_body(text).1;
         let directory = Path::new(file).parent().unwrap_or(Path::new(""));
 
         for target in link_targets(body) {
@@ -232,5 +244,5 @@ fn every_citation_of_an_agent_file_is_in_the_tree() {
         }
     }
 
-    assert!(stale.is_empty(), "{stale:#?}");
+    Ok(stale)
 }
