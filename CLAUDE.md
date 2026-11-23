@@ -22,7 +22,7 @@ Curios is a dependently typed functional language implemented in Rust 2024, comp
 
 ## The compiler is the interface
 
-A claim about what a Curios program means is a hypothesis until this tree's compiler answers it: `cargo run --package curios --`, after `cargo xtask launcher build` once per checkout. An installed `curios` is another build.
+A claim about what a Curios program means is a hypothesis until this tree's compiler answers it: `cargo run --package curios --`, after `cargo xtask compiler launcher` once per checkout. An installed `curios` is another build.
 
 - Probe on standard input, never with a file left in the tree: `cargo run --package curios -- run - <<'CRS' … CRS`.
 - `wonder -` reports every error and goal as `run` would. It stops at the first failure, so iterate.
@@ -34,8 +34,8 @@ Every other fact is on disk: `documentation/language.md` for the surface languag
 
 ## Build and check
 
-- `cargo xtask <task>` runs a task of the files `xtask/tasks.toml` and `xtask/tasks/*.toml`, where every step is stated once: a path such as `cargo xtask workspace lint` names a group or a step, a group runs every step it holds, and `--help` at any depth lists what is there. `cargo xtask launcher build` builds the launcher the compiler embeds, once per checkout.
-- Between the steps of a larger effort, and as the whole check for a focused change: `cargo xtask format`, then every step that reads Rust — `cargo xtask workspace lint`, which holds the formatting too, `cargo xtask jig lint`, and `cargo xtask docs build` last, the one step that follows a link — of which the first elaborates the prelude for the state of the sources and the rest take its images, so each costs what its own tool takes; plus the change's own tests by name, `cargo xtask workspace test --filterset 'test(~<name>)'`, with `--package <crate>` where a mutation of that crate breaks the standard library's build before any test runs, or `cargo xtask jig test` where they are the jig's, and where the change touches `curios-cps`, `curios-emit` or `curios-wasm`, the corpus tests that reach it, `curios-prelude`'s. Test code and Markdown keep lines of their own:
+- `cargo xtask <task>` runs a task of the files `xtask/tasks.toml` and `xtask/tasks/*.toml`, where every step is stated once: a path such as `cargo xtask compiler lint` names a group or a step, a group runs every step it holds, and `--help` at any depth lists what is there. `cargo xtask compiler launcher` builds the launcher the compiler embeds, once per checkout.
+- Between the steps of a larger effort, and as the whole check for a focused change: `cargo xtask format`, then every step that reads Rust — `cargo xtask compiler lint`, which holds the formatting too, `cargo xtask jig lint`, and `cargo xtask docs build` last, the one step that follows a link — of which the first elaborates the prelude for the state of the sources and the rest take its images, so each costs what its own tool takes; plus the change's own tests by name, `cargo xtask compiler test --filterset 'test(~<name>)'`, with `--package <crate>` where a mutation of that crate breaks the standard library's build before any test runs, or `cargo xtask jig test` where they are the jig's, and where the change touches `curios-cps`, `curios-emit` or `curios-wasm`, the corpus tests that reach it, `curios-prelude`'s. Test code and Markdown keep lines of their own:
   - Test code alone, after a run of the suite every other test of which passed: the tests it changed, by name, and the suite again only once production code moves.
   - Markdown alone: nothing, and it is committed at once.
 - No `cargo check`, and no retaking of measurements — name any figure the change may have moved. While a check runs, draft the next step in a scratchpad mirror, not in the tree.

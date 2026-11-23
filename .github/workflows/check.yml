@@ -18,8 +18,8 @@ env:
 
 # A job sets up a machine and runs tasks of one subject, each a `cargo xtask` line, which runs first what its steps require and consume. Which steps there are, and what each runs, is the task files' in `xtask/tasks.toml` and `xtask/tasks/`; `every_step_the_handoff_runs_has_a_job` there holds that these lines parse and together run every step the handoff runs. A subject's `lint` holds its formatting, so no line writes or checks it apart. The toolchain is the one `rust-toolchain.toml` pins, so no job names a version of it, and it is the one thing a job installs: every other tool a step runs is fetched by the run at the digest the task files state and kept in `xtask/.artifacts`, which a job caches.
 jobs:
-  workspace:
-    name: Workspace
+  compiler:
+    name: Compiler
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
@@ -34,15 +34,15 @@ jobs:
             curios-binaryen/.artifacts
             xtask/.artifacts
       - name: Lint
-        run: cargo xtask workspace lint
+        run: cargo xtask compiler lint
       - name: Test
-        run: cargo xtask workspace test
+        run: cargo xtask compiler test
       - name: Caches
-        run: cargo xtask workspace caches
+        run: cargo xtask compiler caches
 
   # The native host's macOS branches — the serial speed ioctl, the modem-line opcodes, the device listing — are compiled by no Linux job, and the release workflow would be the first to meet them. The runtime's lint and tests need neither the launcher nor Binaryen.
-  workspace-macos:
-    name: Workspace (`curios-native`) (macOS)
+  native-macos:
+    name: Native host (macOS)
     runs-on: macos-26
     timeout-minutes: 60
     steps:
@@ -60,8 +60,8 @@ jobs:
       - name: Test the runtime
         run: cargo xtask native test
 
-  compiler:
-    name: Compiler
+  distribution:
+    name: Distribution
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -70,16 +70,16 @@ jobs:
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
-          key: compiler
+          key: distribution
           workspaces: .
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
             xtask/.artifacts
       - name: Build
-        run: cargo xtask compiler build
+        run: cargo xtask distribution build
       - name: Test
-        run: cargo xtask compiler test
+        run: cargo xtask distribution test
 
   docs:
     name: Documentation

@@ -8,7 +8,7 @@ use {
     std::{fs, io, os::unix::fs::PermissionsExt, path::Path},
 };
 
-/// The slim `curios-native` launcher stub, embedded at build time. Produced by `cargo xtask launcher build` (an isolated `--package curios-native` build, kept Cranelift/Binaryen-free) into `curios/.artifacts/<triple>`, which is outside Cargo's target tree so `cargo clean` cannot remove it. Absence is caught before this line: `build.rs` emits a `cargo::error` naming the command to run. So `compile` needs no launcher lookup at runtime.
+/// The slim `curios-native` launcher stub, embedded at build time. Produced by `cargo xtask compiler launcher` (an isolated `--package curios-native` build, kept Cranelift/Binaryen-free) into `curios/.artifacts/<triple>`, which is outside Cargo's target tree so `cargo clean` cannot remove it. Absence is caught before this line: `build.rs` emits a `cargo::error` naming the command to run. So `compile` needs no launcher lookup at runtime.
 const LAUNCHER: &[u8] = include_bytes!(env!("CURIOS_NATIVE_BIN"));
 
 /// Build a self-contained executable: the embedded launcher stub with `bundle` and its footer appended to the tail (see [`curios_native::append_bundle`]).

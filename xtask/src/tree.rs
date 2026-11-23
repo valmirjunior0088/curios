@@ -2,7 +2,7 @@
 //!
 //! **A file is a group, and a key's meaning is where it sits.** `xtask/tasks.toml` is the group the files in `xtask/tasks/` belong to, each a group named after its file. A file's top level holds `description`, `variables`, and its steps and groups, and the root's holds `tools` beside them; a group holds only steps and groups; a step holds `description`, `requires`, `consumes`, `produces`, `run` and `dir`, and no table of its own. So whether a key is an attribute or a child is read off its position, and one out of place is refused rather than guessed at.
 //!
-//! **A name is the path to where it is declared, written from the top with a leading `.`, and it names one thing.** Each segment is a key, read from the top one projection at a time: a step or a group is its tables, `.workspace.lint.clippy`; a variable sits under its file's `variables`, `.workspace.variables.edition`; a tool under the root's `tools`, `.tools.node`, and its version beneath it, `.tools.node.version`; and a produced file under its step's `produces`, `.launcher.build.produces.binary`. So a name reads the same wherever it is written, and says where to find what it names. `requires` names steps and groups, `consumes` produced files, and the braces in a command a variable, a tool or a produced file, or, with a `!` where the `.` stands, a value the runner fills ([`BUILT_INS`]). Each resolves as the tree is read, so a name that names nothing, one written without its `.`, or one naming the wrong kind of thing, is refused before anything runs, and so is a command that reads a file its step does not consume, which would run without the edge that orders it.
+//! **A name is the path to where it is declared, written from the top with a leading `.`, and it names one thing.** Each segment is a key, read from the top one projection at a time: a step or a group is its tables, `.compiler.lint.clippy`; a variable sits under its file's `variables`, `.compiler.variables.edition`; a tool under the root's `tools`, `.tools.node`, and its version beneath it, `.tools.node.version`; and a produced file under its step's `produces`, `.compiler.launcher.produces.binary`. So a name reads the same wherever it is written, and says where to find what it names. `requires` names steps and groups, `consumes` produced files, and the braces in a command a variable, a tool or a produced file, or, with a `!` where the `.` stands, a value the runner fills ([`BUILT_INS`]). Each resolves as the tree is read, so a name that names nothing, one written without its `.`, or one naming the wrong kind of thing, is refused before anything runs, and so is a command that reads a file its step does not consume, which would run without the edge that orders it.
 
 use {
     crate::{CHECKS, Check, root},
@@ -862,7 +862,7 @@ fn resolved(text: &str) -> Option<Name> {
 /// What refuses a name written without its leading `.`.
 fn unrooted(text: &str) -> String {
     format!(
-        "`{text}` is no path: a name is written from the top with a leading `.`, as `.workspace.variables.edition`"
+        "`{text}` is no path: a name is written from the top with a leading `.`, as `.compiler.variables.edition`"
     )
 }
 

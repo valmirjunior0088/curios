@@ -1,4 +1,4 @@
-// What the compiler as it is released carries of the machine that built it, under Node's own test runner beside the page's suites, which `cargo xtask compiler test` runs against the same compiler: no directory of its build — the target directory, Cargo's home, the toolchain's root, the repository's or the home they lie in — is in the compiler `CURIOS` names, nor in an executable it writes, whose launcher it embeds.
+// What the compiler as it is released carries of the machine that built it, under Node's own test runner beside the page's suites, which `cargo xtask distribution test` runs against the same compiler: no directory of its build — the target directory, Cargo's home, the toolchain's root, the repository's or the home they lie in — is in the compiler `CURIOS` names, nor in an executable it writes, whose launcher it embeds.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

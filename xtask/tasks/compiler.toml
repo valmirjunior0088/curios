@@ -1,33 +1,89 @@
-description = "The compiler as it is released"
+description = "The compiler's crates, as they ship, with the launcher the compiler embeds"
+# The edition every member inherits, read where `Cargo.toml` states it, which `rustfmt` is handed for what belongs to no package.
+variables.edition.read = "Cargo.toml"
+variables.edition.key = "workspace.package.edition"
+# The measurement corpus's Rust twins belong to no package, so `cargo fmt` never visits them.
+variables.loose.run = ["git", "ls-files", "--", "programs/*.rs"]
+# The Curios sources the formatter holds to canonical form: every tracked `.crs` but the editors' highlighting samples and the soundness board's archive, whose witnesses are written in forms the language no longer has.
+variables.sources.run = ["git", "ls-files", "--", "*.crs", ":!editors/**", ":!xboard/archive/**"]
+variables.package.flag = ["-p", "--package"]
+variables.package.help = "Compile and run one shipped package's tests alone, as a mutation of a crate the standard library's build parses through asks; every shipped member's when omitted"
+variables.expression.flag = ["-E", "--filterset"]
+variables.expression.help = "Run only the tests nextest's filterset selects, as `test(~name)` or `binary(=name)`; every test when omitted"
 
-[build]
-description = "Build the compiler as it is released, handing rustc the target directory, Cargo's home and the toolchain's root remapped, so no directory of the machine it is built on is in it"
-consumes = [".launcher.build.produces.binary"]
-produces.binary = "{!cargo_target_dir}/release/curios"
+[launcher]
+description = "Build the slim launcher in a cargo invocation of its own and file it where the compiler embeds it: the one build of the launcher's crate as it ships, handing rustc the target directory, Cargo's home and the toolchain's root remapped, so no directory of the machine it is built on is in an executable it is part of"
+# A cargo of its own, so workspace feature unification cannot give the launcher what the compiler turns on, and its own target directory, so the two builds of `curios-native` never overwrite each other. The copies keep cargo's times, which move only when cargo built it again, so the compiler that embeds it is not built again for nothing; `curios/build.rs` reads the dep-info beside it to warn when the launcher is older than its sources.
+produces.binary = "curios/.artifacts/{!host_triple}"
+produces.dep-info = "curios/.artifacts/{!host_triple}.d"
 run = [
     [
         """CARGO_ENCODED_RUSTFLAGS=\
             --remap-path-prefix={!cargo_target_dir}=target\u001F\
             --remap-path-prefix={!cargo_home}=cargo\u001F\
             --remap-path-prefix={!rust_sysroot}=rust""",
-        "cargo", "build", "--release", "--package", "curios", "--keep-going",
+        "cargo", "build", "--release", "--package", "curios-native",
+        "--target", "{!host_triple}", "--keep-going",
+    ],
+    ["mkdir", "-p", "curios/.artifacts"],
+    [
+        "cp", "-p",
+        "{!cargo_target_dir}/{!host_triple}/release/curios-native",
+        "{.compiler.launcher.produces.binary}",
+    ],
+    [
+        "cp", "-p",
+        "{!cargo_target_dir}/{!host_triple}/release/curios-native.d",
+        "{.compiler.launcher.produces.dep-info}",
     ],
 ]
 
+[lint.rustfmt]
+description = "Fail on formatting drift in the workspace's Rust, the corpus's Rust twins included"
+run = [
+    ["cargo", "fmt", "--all", "--", "--check"],
+    [
+        "rustfmt", "--edition", "{.compiler.variables.edition}", "--check",
+        "{.compiler.variables.loose}",
+    ],
+]
+
+[lint.curios-format]
+description = "Fail on formatting drift in the tree's Curios sources, as this tree's `curios format --check` reads each, under the package that governs it"
+consumes = [".compiler.launcher.produces.binary"]
+run = [
+    ["cargo", "run", "--quiet", "--package", "curios", "--", "format", "--check", "{.compiler.variables.sources}"],
+]
+
+[lint.clippy]
+description = "Lint every target of the compiler's crates as they ship, which elaborates, erases and certifies the whole standard library; alone refuses a loop over a hash's order"
+consumes = [".compiler.launcher.produces.binary"]
+run = [
+    ["cargo", "clippy", "--all-targets", "--keep-going"],
+]
+
 [test]
-description = "Compile fixture packages for a browser with the compiler as it is released and start each page's loader under a JavaScript engine, beside the test runner's own pieces: alone runs a page the compiler wrote, its gateways answering their rows, and a test serve end to end; and hold the compiler, and an executable it writes, to holding no directory of the machine that built them"
-# The compiler under test is the one this file's build filed, named to the suite rather than found on PATH, where an installed one would answer instead.
-consumes = [".compiler.build.produces.binary"]
+description = "Run the compiler's tests as they ship, the one compilation of the suite; alone reaches the back end, through the cross-stage corpus, renders the standard library's pages end to end and runs an executable the compiler wrote"
+consumes = [".compiler.launcher.produces.binary"]
 run = [
     [
-        "CURIOS={.compiler.build.produces.binary}",
-        "{.tools.node}", "--test", "curios-browser/src/page.test.mjs", "curios-browser/src/runner.test.mjs",
+        "{.tools.cargo-nextest}", "nextest", "run", "{.compiler.variables.package}",
+        "--all-targets", "--no-fail-fast", "--no-tests=warn",
+        "{.compiler.variables.expression}",
     ],
-    [
-        "CURIOS={.compiler.build.produces.binary}",
-        "TARGET={!cargo_target_dir}",
-        "CARGO_HOME={!cargo_home}",
-        "SYSROOT={!rust_sysroot}",
-        "{.tools.node}", "--test", "curios-browser/src/released.test.mjs",
-    ],
+]
+
+# What two builds no other step makes do with their caches, a group apart from the suite: the prelude's step elaborates the library again after any edit to a crate it links, which nearly every change to the compiler is.
+[caches.binaryen]
+description = "Hold that a second cargo mode reuses Binaryen's build rather than making it again; the first build after an edit to its build script makes it from source, since its cache is keyed by the script's hash"
+run = [
+    ["cargo", "build", "--package", "curios-binaryen"],
+    ["CURIOS_BINARYEN_CACHED=1", "cargo", "clippy", "--package", "curios-binaryen", "--all-targets", "--keep-going"],
+]
+
+[caches.prelude]
+description = "Hold the prelude's images the checkout keeps: the prelude built alone, asked to compare, makes them again and refuses any the kept images hold otherwise for their state, and linted alone, asked to reuse, takes them rather than making them; each a unit no other step builds, so the step runs the script after every edit to a crate it links"
+run = [
+    ["CURIOS_PRELUDE_IMAGES=compare", "cargo", "build", "--package", "curios-prelude"],
+    ["CURIOS_PRELUDE_IMAGES=reuse", "cargo", "clippy", "--package", "curios-prelude", "--all-targets", "--keep-going"],
 ]

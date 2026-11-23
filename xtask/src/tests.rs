@@ -79,12 +79,12 @@ fn every_step_the_handoff_runs_has_a_job() {
     }
 }
 
-/// The workspace is checked as it ships: no step of it turns a feature on.
+/// The compiler is checked as it ships: no step of it turns a feature on.
 #[test]
-fn a_workspace_step_names_no_feature() {
+fn a_compiler_step_names_no_feature() {
     let tree = tree();
 
-    for (step, words) in commands_of(&tree, "workspace") {
+    for (step, words) in commands_of(&tree, "compiler") {
         assert!(
             words.iter().all(|word| !word.contains("feature")),
             "{}: {words:?}",
@@ -95,10 +95,10 @@ fn a_workspace_step_names_no_feature() {
 
 /// A lint goes on past a crate that fails, so one run reports every crate's errors rather than the first's.
 #[test]
-fn a_workspace_lint_goes_on_past_a_crate_that_fails() {
+fn a_lint_goes_on_past_a_crate_that_fails() {
     let tree = tree();
 
-    for group in ["workspace", "native", "jig"] {
+    for group in ["compiler", "native", "jig"] {
         for (step, words) in commands_of(&tree, group) {
             if words.contains(&"clippy".to_string()) {
                 assert!(

@@ -27,4 +27,4 @@
 
 ## Verification and retirement
 
-Each stage's check, then `cargo xtask workspace lint`, `cargo xtask jig lint`, the suite and `cargo xtask docs build`. Once stage 2 lands, this file is deleted.
+Each stage's check, then `cargo xtask compiler lint`, `cargo xtask jig lint`, the suite and `cargo xtask docs build`. Once stage 2 lands, this file is deleted.

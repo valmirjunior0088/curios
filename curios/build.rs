@@ -1,6 +1,6 @@
 //! Supplies the runtime launcher's path to the `curios` binary.
 //!
-//! The launcher is produced by `cargo xtask launcher build`, which builds `curios-native` in its own Cargo invocation so that workspace feature unification cannot reach it — this crate enables `curios-native/cranelift`, and a launcher built alongside it would carry a compiler. That isolation needs a second invocation, so it cannot happen here; this script only locates what that invocation left behind, and refuses clearly when it is absent or stale.
+//! The launcher is produced by `cargo xtask compiler launcher`, which builds `curios-native` in its own Cargo invocation so that workspace feature unification cannot reach it — this crate enables `curios-native/cranelift`, and a launcher built alongside it would carry a compiler. That isolation needs a second invocation, so it cannot happen here; this script only locates what that invocation left behind, and refuses clearly when it is absent or stale.
 //!
 //! The path is `.artifacts/<triple>` beside this crate rather than anywhere under Cargo's target tree, so `cargo clean` does not delete it and no build script has to reconstruct Cargo's internal directory layout to find it. `CARGO_MANIFEST_DIR` is a documented interface; `OUT_DIR`'s ancestry is not.
 
@@ -63,20 +63,20 @@ fn main() {
 
     // The triple is the *file name* so two cross-target builds in one checkout cannot overwrite each other. A launcher of the wrong architecture passes both of `bundle.rs`'s guards — it is slim and carries no backend marker — so the failure would reach a user as a bundled executable that does not run, rather than as a build error here.
     //
-    // The dep-info is read and not watched: cargo writes it again on every build of the launcher, fresh or not, so watching it would run this script after every `launcher build`; the launcher's own time moves whenever what the dep-info lists does.
+    // The dep-info is read and not watched: cargo writes it again on every build of the launcher, fresh or not, so watching it would run this script after every `compiler launcher`; the launcher's own time moves whenever what the dep-info lists does.
     println!("cargo:rerun-if-changed={}", launcher.display());
 
     // `cargo::error` needs the *two*-colon form. `cargo:error` is parsed as an unknown metadata key and discarded without a word, so the single-colon spelling everywhere else in this file is not a style this line may be made to match.
     if !launcher.is_file() {
         println!(
-            "cargo::error=the {target_triple} runtime launcher is missing: run `cargo xtask compiler build` to build it and this crate together, or `cargo xtask launcher build` for the launcher alone"
+            "cargo::error=the {target_triple} runtime launcher is missing: run `cargo xtask distribution build` to build it and this crate together, or `cargo xtask compiler launcher` for the launcher alone"
         );
         return;
     }
 
     // Nothing rebuilds the launcher when its sources change, because it is produced by a separate Cargo invocation this build cannot trigger. Without this check that staleness is *silent*: the file is unchanged, so this script does not re-run, and the old bytes are embedded again. The guards do not catch it either — a stale launcher is still slim and still marker-free.
     //
-    // The sources are what cargo's dep-info for the binary lists — every file rustc read for it, across every workspace crate it embeds, and nothing rustc did not read — filed beside the launcher by `cargo xtask launcher build`. Both are filed with the times cargo gave them, so a launcher cargo built again after an edit is newer than what it read, whether or not its bytes moved, and the warning below is one `cargo xtask launcher build` always clears. The dep-info names no registry crate, so a dependency bump is not watched here: it reaches the launcher through `xtask`, where every step that builds this crate runs the launcher's build first, and only a bare `cargo build` of this crate after a bump embeds the old launcher without a word.
+    // The sources are what cargo's dep-info for the binary lists — every file rustc read for it, across every workspace crate it embeds, and nothing rustc did not read — filed beside the launcher by `cargo xtask compiler launcher`. Both are filed with the times cargo gave them, so a launcher cargo built again after an edit is newer than what it read, whether or not its bytes moved, and the warning below is one `cargo xtask compiler launcher` always clears. The dep-info names no registry crate, so a dependency bump is not watched here: it reaches the launcher through `xtask`, where every step that builds this crate runs the launcher's build first, and only a bare `cargo build` of this crate after a bump embeds the old launcher without a word.
     let workspace = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
         .parent()
         .expect("the workspace root is this crate's parent")
@@ -86,7 +86,7 @@ fn main() {
         .and_then(|text| dep_info_sources(&text, &workspace))
     else {
         println!(
-            "cargo::warning=the {target_triple} runtime launcher's dep-info is not filed beside it; run `cargo xtask launcher build` to file it"
+            "cargo::warning=the {target_triple} runtime launcher's dep-info is not filed beside it; run `cargo xtask compiler launcher` to file it"
         );
         println!("cargo:rustc-env=CURIOS_NATIVE_BIN={}", launcher.display());
         return;
@@ -103,7 +103,7 @@ fn main() {
         && built < newest
     {
         println!(
-            "cargo::warning=the {target_triple} runtime launcher is older than the sources it embeds; run `cargo xtask launcher build` to rebuild it"
+            "cargo::warning=the {target_triple} runtime launcher is older than the sources it embeds; run `cargo xtask compiler launcher` to rebuild it"
         );
     }
 

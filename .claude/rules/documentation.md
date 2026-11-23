@@ -38,7 +38,7 @@ The filing, refinement and retirement rules are [Pending work is owned by its sp
 
 An absolute Curios path leads with its slash — `/std/Tui/View` — while a file path such as `curios-prelude-build/std/Tui.crs` keeps its form.
 
-A command a document or a slash command tells the reader to run is spelled as its `cargo xtask` recipe wherever one exists, `cargo xtask workspace test --filterset 'test(~<name>)'` and never `cargo test -p …`; bare cargo stays only where no recipe covers the step.
+A command a document or a slash command tells the reader to run is spelled as its `cargo xtask` recipe wherever one exists, `cargo xtask compiler test --filterset 'test(~<name>)'` and never `cargo test -p …`; bare cargo stays only where no recipe covers the step.
 
 ## Retired words
 

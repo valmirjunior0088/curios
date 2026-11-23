@@ -4,14 +4,14 @@ description = "Every tree's formatting, written; the trees' lints hold it"
 description = "Format the workspace's Rust, the corpus's Rust twins included"
 run = [
     ["cargo", "fmt", "--all"],
-    ["rustfmt", "--edition", "{.workspace.variables.edition}", "{.workspace.variables.loose}"],
+    ["rustfmt", "--edition", "{.compiler.variables.edition}", "{.compiler.variables.loose}"],
 ]
 
 [curios]
 description = "Format the tree's Curios sources with this tree's compiler, each as the package that governs it states"
-consumes = [".launcher.build.produces.binary"]
+consumes = [".compiler.launcher.produces.binary"]
 run = [
-    ["cargo", "run", "--quiet", "--package", "curios", "--", "format", "{.workspace.variables.sources}"],
+    ["cargo", "run", "--quiet", "--package", "curios", "--", "format", "{.compiler.variables.sources}"],
 ]
 
 [biome]

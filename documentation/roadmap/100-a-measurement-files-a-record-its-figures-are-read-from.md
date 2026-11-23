@@ -51,4 +51,4 @@
 
 ## Verification and retirement
 
-Each stage's check, then `cargo xtask workspace lint`, `cargo xtask jig lint`, the suite and `cargo xtask docs build`. Once stage 5 lands, `.claude/rules/documentation.md`'s measured figure is restated to cite the decision and the record, and this file is deleted.
+Each stage's check, then `cargo xtask compiler lint`, `cargo xtask jig lint`, the suite and `cargo xtask docs build`. Once stage 5 lands, `.claude/rules/documentation.md`'s measured figure is restated to cite the decision and the record, and this file is deleted.
