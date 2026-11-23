@@ -1,12 +1,12 @@
 description = "The Rust workspace, as it ships"
-# Every member but the jig's, whose names start with x: they ship nothing, and selected beside the compiler their dependencies would give its dependencies features no shipped compiler has.
-variables.shipped = ["--workspace", "--exclude", "x*"]
 # The edition every member inherits from `Cargo.toml`, which `rustfmt` is handed for what belongs to no package.
 variables.edition = "2024"
 # The measurement corpus's Rust twins belong to no package, so `cargo fmt` never visits them.
 variables.loose.run = ["git", "ls-files", "--", "programs/*.rs"]
 # What Biome reads of the workspace, beside the editors' own trees: `biome.json` lists the same.
 variables.web = ["biome.json", ".claude/settings.json", "curios-browser/src", "curios-document/static"]
+variables.package.flag = ["-p", "--package"]
+variables.package.help = "Compile and run one shipped package's tests alone, as a mutation of a crate the standard library's build parses through asks; every shipped member's when omitted"
 variables.expression.flag = ["-E", "--filterset"]
 variables.expression.help = "Run only the tests nextest's filterset selects, as `test(~name)` or `binary(=name)`; every test when omitted"
 
@@ -30,7 +30,7 @@ run = [
 description = "Lint every target of the workspace as it ships, which elaborates, erases and certifies the whole standard library; alone refuses a loop over a hash's order"
 consumes = [".launcher.build.produces.binary"]
 run = [
-    ["cargo", "clippy", "{.workspace.variables.shipped}", "--all-targets", "--keep-going"],
+    ["cargo", "clippy", "--all-targets", "--keep-going"],
 ]
 
 [lint.biome-lint]
@@ -44,7 +44,7 @@ description = "Run the workspace's tests as it ships, the one compilation of the
 consumes = [".launcher.build.produces.binary"]
 run = [
     [
-        "{.tools.cargo-nextest}", "nextest", "run", "{.workspace.variables.shipped}",
+        "{.tools.cargo-nextest}", "nextest", "run", "{.workspace.variables.package}",
         "--all-targets", "--no-fail-fast", "--no-tests=warn",
         "{.workspace.variables.expression}",
     ],

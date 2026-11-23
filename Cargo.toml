@@ -41,6 +41,8 @@ members = [
     "xbench",
     "xtask",
 ]
+# The shipped members, which a cargo command naming no package selects: every member is named `curios` or `curios-…` but the jig's, named `x…` (`xtask/README.md`).
+default-members = ["curios*"]
 exclude = ["editors/zed"]
 
 [workspace.package]
