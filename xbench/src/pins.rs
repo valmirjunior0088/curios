@@ -19,6 +19,25 @@ fn channel(told: &str) -> Option<String> {
         .map(|value| value.trim().trim_matches('"').to_string())
 }
 
+/// The edition the root `Cargo.toml` states for the workspace's packages, `workspace.package.edition`.
+fn edition_of(manifest: &str) -> Option<String> {
+    let table: toml::Table = manifest.parse().ok()?;
+    table
+        .get("workspace")?
+        .get("package")?
+        .get("edition")?
+        .as_str()
+        .map(str::to_string)
+}
+
+/// The edition a twin is compiled under: the one the root `Cargo.toml` states, which the formatter holds every Rust file of the tree to, read from the file that owns it as the toolchain's channel is.
+pub fn edition(root: &Path) -> Result<String, String> {
+    let manifest = fs::read_to_string(root.join("Cargo.toml"))
+        .map_err(|error| format!("Cargo.toml cannot be read: {error}"))?;
+    edition_of(&manifest)
+        .ok_or_else(|| "Cargo.toml states no workspace.package.edition".to_string())
+}
+
 /// What `Cargo.lock` resolves `package` to.
 fn locked(told: &str, package: &str) -> Option<String> {
     told.split("[[package]]")

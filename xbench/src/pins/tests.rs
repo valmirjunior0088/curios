@@ -49,3 +49,11 @@ fn a_report_stating_no_version_answers_nothing() {
     assert_eq!(version("no version here"), "");
     assert_eq!(version(""), "");
 }
+
+/// The workspace's edition is the one its package table states, whatever another table beside it says.
+#[test]
+fn the_edition_is_the_workspace_package_s() {
+    let manifest = "[package]\nedition = \"2015\"\n\n[workspace.package]\nversion = \"0.1.0\"\nedition = \"2024\"\n";
+    assert_eq!(edition_of(manifest).as_deref(), Some("2024"));
+    assert_eq!(edition_of("[workspace]\nmembers = []\n"), None);
+}

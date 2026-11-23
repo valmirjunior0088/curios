@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    crate::{Pin, Size, Timed, Timing, capture, held, table},
+    crate::{Pin, Size, Timed, Timing, capture, edition, held, table},
     std::{
         env, fs, io,
         path::{Path, PathBuf},
@@ -260,10 +260,24 @@ fn build(workload: &Workload, root: &Path) -> Result<(), String> {
     eprintln!(">> building {name}");
 
     let rust = root.join(format!("{source}.rs")).display().to_string();
-    run("rustc", &["-O", &rust, "-o", &output("rust")], root)?;
+    let edition = edition(root)?;
     run(
         "rustc",
-        &["-O", "--target", TARGET, &rust, "-o", &output("rust-wasm")],
+        &["-O", "--edition", &edition, &rust, "-o", &output("rust")],
+        root,
+    )?;
+    run(
+        "rustc",
+        &[
+            "-O",
+            "--edition",
+            &edition,
+            "--target",
+            TARGET,
+            &rust,
+            "-o",
+            &output("rust-wasm"),
+        ],
         root,
     )?;
 
