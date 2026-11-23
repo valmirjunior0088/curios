@@ -10,7 +10,7 @@ hooks:
     - matcher: Bash
       hooks:
         - type: command
-          command: '"$CLAUDE_PROJECT_DIR"/.claude/agents/hunter/guard.sh'
+          command: '"$CLAUDE_PROJECT_DIR"/.claude/agents/hunter/judge.sh'
     - matcher: Write|Edit
       hooks:
         - type: command

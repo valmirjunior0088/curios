@@ -1,4 +1,4 @@
-# Where a hunter reads and writes: a snapshot of the tree, `.claude/snapshots/<commit>/`, its compiler and its board in `binaries/`, and a directory for each hunter in `hunters/hunter-<n>/`. Sourced by `guard.sh` and `write-guard.sh`, which judge every path by these tests. A path is resolved before it is judged, so `..` and a link reach nothing the tests would refuse spelled out.
+# Where a hunter reads and writes: a snapshot of the tree, `.claude/snapshots/<commit>/`, its compiler and its board in `binaries/`, and a directory for each hunter in `hunters/hunter-<n>/`. Sourced by `judge.sh` and `write-guard.sh`, which judge every path by these tests. A path is resolved before it is judged, so `..` and a link reach nothing the tests would refuse spelled out.
 resolve() {
     python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"
 }
