@@ -1268,7 +1268,7 @@ const CARRIERS: &[Carrier] = &[
             // An infinity, a NaN, or a negative `a`'s sign.
             "Eq()(a * 0.0, 0.0)",
             // A NaN, which no order relates to itself.
-            "Eq()(a == a, true)",
+            "Eq()(Flt/eql(a, a), true)",
             "Eq()(a <= a, true)",
             // A NaN on either side.
             "Eq()(a < b, Bool/not(a >= b))",
