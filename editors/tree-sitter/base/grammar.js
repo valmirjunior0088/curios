@@ -1,5 +1,3 @@
-/// <reference types="tree-sitter-cli/dsl" />
-
 // The surface grammar of `documentation/language.md`, mirrored from `curios-surface/src/parse/*.rs`. It exists for highlighting, so it is deliberately looser than the compiler where looseness costs nothing a highlighter would notice: it does not enforce whitespace around infix operators, the closed wire vocabulary of a `foreign` signature, a guard bind's refutability, or the default a match with no head closes with. Core text's grammar, in `core/`, extends this one, as the compiler reads a program and Core text by one grammar under a dialect.
 
 const {

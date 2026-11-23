@@ -1,5 +1,3 @@
-/// <reference types="tree-sitter-cli/dsl" />
-
 // Core text, the `.crsc` language: Core in the program's grammar with nothing left to an elaborator (`curios-surface`'s README), mirrored from `curios-surface/src/parse/core_text.rs`. It is the program's grammar with what only Core text writes — a decorator, an intrinsic, a witness by its identity, a declaration by its absolute name, nominal declarations each under its own word in a group, and the type the entry states — as the compiler reads both by one grammar under a dialect. Looser than the compiler where a highlighter would not notice, as the program's grammar is.
 
 const curios = require("../base/grammar");
