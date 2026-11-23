@@ -1269,9 +1269,9 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(a * 0.0, 0.0)",
             // A NaN, which no order relates to itself.
             "Eq()(Flt/eql(a, a), true)",
-            "Eq()(a <= a, true)",
+            "Eq()(Flt/le(a, a), true)",
             // A NaN on either side.
-            "Eq()(a < b, Bool/not(a >= b))",
+            "Eq()(Flt/lt(a, b), Bool/not(Flt/ge(a, b)))",
             // A signaling NaN is quieted, so `min` is not idempotent.
             "Eq()(Flt/min(a, a), a)",
             // Two directions are two operations: a sum rounded toward zero is not the swapped sum rounded up.

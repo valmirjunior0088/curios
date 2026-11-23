@@ -213,10 +213,10 @@ fn a_false_float_comparison_arm_learns_no_mirror() {
         use /std/{Nat, Bool};
         use /std/Bool/{True, Holds};
 
-        let mirror(a: Nat, b: Nat, h: Holds(Bool/not(a < b))) -> Holds(b <= a) =
-            match a < b | true => match h end | false => True/qed() end;
+        let mirror(a: Nat, b: Nat, h: Holds(Bool/not(Nat/lt(a, b)))) -> Holds(Nat/le(b, a)) =
+            match Nat/lt(a, b) | true => match h end | false => True/qed() end;
 
-        let _mirrored: Holds(1 <= 2) = mirror(2, 1, True/qed());
+        let _mirrored: Holds(Nat/le(1, 2)) = mirror(2, 1, True/qed());
 
         /std/print("ok")
         "#,
@@ -224,15 +224,19 @@ fn a_false_float_comparison_arm_learns_no_mirror() {
     )
     .refused(&[
         ("{Nat, Bool}", "{Flt, Bool}"),
-        ("(a: Nat, b: Nat,", "(a: Flt, b: Flt,"),
         (
-            "let _mirrored: Holds(1 <= 2) = mirror(2, 1, True/qed());",
-            "let _forged: Holds(1.0 <= +nan.0) = mirror(+nan.0, 1.0, True/qed());",
+            "(a: Nat, b: Nat, h: Holds(Bool/not(Nat/lt(a, b)))) -> Holds(Nat/le(b, a))",
+            "(a: Flt, b: Flt, h: Holds(Bool/not(Flt/lt(a, b)))) -> Holds(Flt/le(b, a))",
+        ),
+        ("match Nat/lt(a, b) |", "match Flt/lt(a, b) |"),
+        (
+            "let _mirrored: Holds(Nat/le(1, 2)) = mirror(2, 1, True/qed());",
+            "let _forged: Holds(Flt/le(1.0, +nan.0)) = mirror(+nan.0, 1.0, True/qed());",
         ),
     ])
     .by_elaborator_in(
         "/mirror",
-        |error| matches!(error, Error::TypeMismatch { expected, .. } if pinned(expected) == "/sys/Bool/Holds(b <= a)"),
+        |error| matches!(error, Error::TypeMismatch { expected, .. } if pinned(expected) == "/sys/Bool/Holds(Flt/le(b, a))"),
     );
 }
 
@@ -412,10 +416,10 @@ fn a_float_comparisons_mirror_is_not_read_under_its_false_arm() {
         use /std/Bool/{True, False, Holds};
 
         pub let M(b: Bool, x: Nat, y: Nat) -> Prop =
-            match b | true => True | false => Holds(y <= x) end;
+            match b | true => True | false => Holds(Nat/le(y, x)) end;
 
-        pub let f(x: Nat, y: Nat) -> M(x < y, x, y) =
-            match x < y | true => True/qed() | false => True/qed() end;
+        pub let f(x: Nat, y: Nat) -> M(Nat/lt(x, y), x, y) =
+            match Nat/lt(x, y) | true => True/qed() | false => True/qed() end;
 
         let forged = f;
 
@@ -426,7 +430,12 @@ fn a_float_comparisons_mirror_is_not_read_under_its_false_arm() {
     .refused(&[
         ("use /std/{Nat, Bool};", "use /std/{Flt, Bool};"),
         ("M(b: Bool, x: Nat, y: Nat)", "M(b: Bool, x: Flt, y: Flt)"),
-        ("f(x: Nat, y: Nat)", "f(x: Flt, y: Flt)"),
+        ("Holds(Nat/le(y, x))", "Holds(Flt/le(y, x))"),
+        (
+            "f(x: Nat, y: Nat) -> M(Nat/lt(x, y), x, y)",
+            "f(x: Flt, y: Flt) -> M(Flt/lt(x, y), x, y)",
+        ),
+        ("match Nat/lt(x, y) |", "match Flt/lt(x, y) |"),
         ("let forged = f;", "let forged: False = f(+nan.0, 0.0);"),
     ])
     .by_elaborator_in("/f", |error| matches!(error, Error::TypeMismatch { .. }));

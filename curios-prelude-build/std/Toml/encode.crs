@@ -44,8 +44,8 @@ let flt_str(f: Flt) -> Str =
     match Flt/is_finite(f)
     | false =>
         match
-        | f > +0.0 => "inf"
-        | f < +0.0 => "-inf"
+        | Flt/gt(f, +0.0) => "inf"
+        | Flt/lt(f, +0.0) => "-inf"
         | Flt/is_sign_minus(f) => "-nan"
         | _ => "nan"
         end

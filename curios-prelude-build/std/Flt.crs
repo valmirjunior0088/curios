@@ -47,7 +47,7 @@ use grammar/{of_decimal_in, of_str_in, of_hex_str_in};
 
 use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, Show, Spell, Fmt, Hash,
     Vec, Eq, proved};
-use /std/ops/{Cmp, Add, Sub, Mul, Div, Rem};
+use /std/ops/{Add, Sub, Mul, Div, Rem};
 
 --- That `b` is eight bytes long, decided.
 pub let EightBytes(b: Bytes) -> Prop =
@@ -55,15 +55,15 @@ pub let EightBytes(b: Bytes) -> Prop =
 
 --- Whether `f` is a number: neither infinity nor a NaN.
 pub let is_finite(f: Flt) -> Bool =
-    f > -inf.0 && f < +inf.0;
+    gt(f, -inf.0) && lt(f, +inf.0);
 
 --- That `f` is a number, decided: the domain `to_int` states.
 pub let Finite(f: Flt) -> Prop =
-    Bool/Holds(-inf.0 < f && f < +inf.0);
+    Bool/Holds(lt(-inf.0, f) && lt(f, +inf.0));
 
 --- That `f` is zero or above and a number, decided: the domain `to_nat` states. `-0.0` qualifies.
 pub let NonNeg(f: Flt) -> Prop =
-    Bool/Holds(+0.0 <= f && f < +inf.0);
+    Bool/Holds(le(+0.0, f) && lt(f, +inf.0));
 
 --- Whether `f` is a NaN, of either sign and kind.
 pub let is_nan(f: Flt) -> Bool =
@@ -143,7 +143,7 @@ pub let FiniteNonZero(f: Flt) -> Prop =
 
 --- `f` is finite, read off the evidence that it is finite and nonzero: the decision `Finite` states splits, and where it fails `FiniteNonZero(f)` is `Bool/False`.
 let finite_of_non_zero(f: Flt, @ok: FiniteNonZero(f)) -> Finite(f) =
-    match -inf.0 < f && f < +inf.0
+    match lt(-inf.0, f) && lt(f, +inf.0)
     | true => Bool/True/qed()
     | false => match ok end
     end;
@@ -295,8 +295,8 @@ pub let maximum_number(a: Flt, b: Flt) -> Flt =
 pub let minimum_magnitude(a: Flt, b: Flt) -> Flt =
     match
     | is_nan(a) || is_nan(b) => a + b
-    | abs(a) < abs(b) => a
-    | abs(b) < abs(a) => b
+    | lt(abs(a), abs(b)) => a
+    | lt(abs(b), abs(a)) => b
     | _ => min(a, b)
     end;
 
@@ -304,8 +304,8 @@ pub let minimum_magnitude(a: Flt, b: Flt) -> Flt =
 pub let maximum_magnitude(a: Flt, b: Flt) -> Flt =
     match
     | is_nan(a) || is_nan(b) => a + b
-    | abs(a) > abs(b) => a
-    | abs(b) > abs(a) => b
+    | gt(abs(a), abs(b)) => a
+    | gt(abs(b), abs(a)) => b
     | _ => max(a, b)
     end;
 
@@ -369,11 +369,11 @@ pub let try_of_le_bytes(b: Bytes) -> Option(Flt) =
 
 --- The procedure that decides `Finite(f)`: the evidence when `f` is a number, `none` otherwise.
 pub let finite(f: Flt) -> Option(Finite(f)) =
-    Bool/holds(-inf.0 < f && f < +inf.0);
+    Bool/holds(lt(-inf.0, f) && lt(f, +inf.0));
 
 --- The procedure that decides `NonNeg(f)`: the evidence when `f` is a non-negative number, `none` otherwise. `-0.0` qualifies.
 pub let non_neg(f: Flt) -> Option(NonNeg(f)) =
-    Bool/holds(f >= +0.0 && f < +inf.0);
+    Bool/holds(ge(f, +0.0) && lt(f, +inf.0));
 
 --- `f` truncated toward zero, or `none` unless it is a non-negative number.
 pub let try_to_nat(f: Flt) -> Option(Nat) =
@@ -391,13 +391,13 @@ pub let try_to_int(f: Flt) -> Option(Int) =
 
 --- The two in IEEE 754's total order, which tells every `Flt` apart: the negative NaNs, then `-inf` up through `-0`, then `+0` up through `+inf`, then the positive NaNs. NaNs order by their bits outward from the infinity of their sign, so a signaling NaN sits nearer it than a quiet one, as §5.10 orders them.
 ---
---- [`eql`] and `<` stay IEEE's comparisons, which call the two zeros equal and leave a NaN unordered. This is the order a sort of floats names, `List/sort_by(xs, Flt/ord)`, since `Flt` has no `==` and so no `Ord`, and the identity `Hash` already reads. It is also how this library spells IEEE's `totalOrder(x, y)`, as `ord(x, y) != gt`, and `totalOrderMag(x, y)`, as `ord(abs(x), abs(y)) != gt`.
+--- [`eql`] and [`lt`] stay IEEE's comparisons, which call the two zeros equal and leave a NaN unordered. This is the order a sort of floats names, `List/sort_by(xs, Flt/ord)`, since `Flt` has no `==` and so no `Ord`, and the identity `Hash` already reads. It is also how this library spells IEEE's `totalOrder(x, y)`, as `ord(x, y) != gt`, and `totalOrderMag(x, y)`, as `ord(abs(x), abs(y)) != gt`.
 ---
---- It compares [`total_key`]s, an injective encoding ([`total_key_injective`]), so the order is total and answers `eq` exactly at equality, by `Nat/ord`'s laws. That `ord` agrees with that order at every pair, including the comparisons it starts with, is not proved: no law ties `Flt`'s `<` to the bits.
+--- It compares [`total_key`]s, an injective encoding ([`total_key_injective`]), so the order is total and answers `eq` exactly at equality, by `Nat/ord`'s laws. That `ord` agrees with that order at every pair, including the comparisons it starts with, is not proved: no law ties [`lt`] to the bits.
 pub let ord(x: Flt, y: Flt) -> Ordering =
     match
-    | x < y => Ordering/lt()
-    | y < x => Ordering/gt()
+    | lt(x, y) => Ordering/lt()
+    | lt(y, x) => Ordering/gt()
     | _ => Nat/ord(total_key(x), total_key(y))
     end;
 
@@ -558,13 +558,6 @@ pub let to_str_significant(f: Flt, n: Nat, @ok: Bool/Holds(0 < n)) -> Str =
     | k + 1 => to_str_significant_in(Rounding/ties_to_even(), f, k + 1)
     end;
 
-satisfy Cmp(Flt) {
-    lt = lt,
-    le = le,
-    gt = gt,
-    ge = ge,
-}
-
 satisfy Add(Flt) {
     add = add,
 }
@@ -599,8 +592,8 @@ satisfy Spell(Flt) {
         match is_finite(f)
         | false =>
             match
-            | f > +0.0 => "+inf.0"
-            | f < +0.0 => "-inf.0"
+            | gt(f, +0.0) => "+inf.0"
+            | lt(f, +0.0) => "-inf.0"
             | exact/bits(f) == exact/bits(+nan.0) => "+nan.0"
             | exact/bits(f) == exact/bits(-nan.0) => "-nan.0"
             | _ =>

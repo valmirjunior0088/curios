@@ -1108,7 +1108,12 @@ fn a_comparison_guards_dual_is_answered_only_at_a_total_order() {
     );
 
     // Flt is not: `!(x < y)` is not `y <= x` at a NaN, so the equation answers nothing of the dual and the arm is refused.
-    let flt = guarded("Flt", "d: Flt, e: Flt", "10.0 <= e + d", "d + e < 10.0");
+    let flt = guarded(
+        "Flt",
+        "d: Flt, e: Flt",
+        "Flt/le(10.0, e + d)",
+        "Flt/lt(d + e, 10.0)",
+    );
     let refusal =
         typecheck(&flt).expect_err("the dual of a `Flt` comparison guard is not answered");
     assert!(

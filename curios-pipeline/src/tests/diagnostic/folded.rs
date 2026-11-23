@@ -160,8 +160,7 @@ fn every_intrinsic_holding_a_proof_reads_back_with_it() {
     const IMPORTS: &str = "use /std/{Nat, Int, Flt, Byte, Bytes, List, Bool, Eq, Io};";
     const DIVISOR: &str =
         "g: (Nat) -> Nat, h: (m: Nat) -> Bool/Holds(0 < g(m)), n: Nat, m: Nat, z: Nat";
-    const FINITE: &str =
-        "g: (Nat) -> Flt, h: (m: Nat) -> Bool/Holds(-inf.0 < g(m) && g(m) < +inf.0), m: Nat";
+    const FINITE: &str = "g: (Nat) -> Flt, h: (m: Nat) -> Bool/Holds(Flt/lt(-inf.0, g(m)) && Flt/lt(g(m), +inf.0)), m: Nat";
     const SAME: &str = "g: (Nat) -> Bytes, k: (Nat) -> Bytes, h: (m: Nat) -> Bool/Holds(Bytes/length(g(m)) == Bytes/length(k(m))), m: Nat, z: Bytes";
     // A statement's parameters, and the operation as a program writes it over them.
     let cases = [
@@ -189,7 +188,7 @@ fn every_intrinsic_holding_a_proof_reads_back_with_it() {
             "Int/to_nat(g(m), @h(m))",
         ),
         (
-            "g: (Nat) -> Flt, h: (m: Nat) -> Bool/Holds(+0.0 <= g(m) && g(m) < +inf.0), m: Nat, z: Nat".to_string(),
+            "g: (Nat) -> Flt, h: (m: Nat) -> Bool/Holds(Flt/le(+0.0, g(m)) && Flt/lt(g(m), +inf.0)), m: Nat, z: Nat".to_string(),
             "Flt/to_nat(g(m), @h(m))",
         ),
         (format!("{FINITE}, z: Int"), "Flt/to_int(g(m), @h(m))"),

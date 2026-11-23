@@ -127,8 +127,9 @@ let _fma_rounds_its_exact_value_toward_negative: Eq()(
 
 -- The directions part where the exact value falls between two floats, and meet where it doesn't.
 let _a_third_below_and_above: Eq()(
-    rounded/div(Rounding/toward_negative(), +1.0, +3.0)
-        < rounded/div(Rounding/toward_positive(), +1.0, +3.0),
+    Flt/lt(
+        rounded/div(Rounding/toward_negative(), +1.0, +3.0),
+        rounded/div(Rounding/toward_positive(), +1.0, +3.0)),
     true) =
     Eq/refl();
 
@@ -614,7 +615,7 @@ test reductions_round_once_and_signal_as_ieee_defines =
         Test/equal(show(Flt/sum_abs([-1.5, +2.5])), show(+4.0)),
         Test/equal(show(Flt/sum_square([+3.0, +4.0])), show(+25.0)),
         Test/equal(sf, +1993),
-        Test/equal(pr >= +1.0 && pr < +2.0, true),
+        Test/equal(Flt/ge(pr, +1.0) && Flt/lt(pr, +2.0), true),
         Test/equal(
             Spell/spell(Flt/scaled_prod_sum(Vec/of_list([+1.0, +2.0]), Vec/of_list([+2.0, +2.0]))),
             Spell/spell((+1.5, +3))),

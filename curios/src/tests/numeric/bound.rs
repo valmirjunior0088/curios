@@ -217,12 +217,12 @@ fn a_flt_narrowing_bound_discharges_behind_a_guard() {
         run(r#"
         use /std/{Flt, Nat, Int, Str, Option};
         let to_nat_or(f: Flt, fallback: Nat) -> Nat =
-            match f >= +0.0 && f < +inf.0
+            match Flt/ge(f, +0.0) && Flt/lt(f, +inf.0)
             | true => Flt/to_nat(f)
             | false => fallback
             end;
         let to_int_or(f: Flt, fallback: Int) -> Int =
-            match -inf.0 < f && f < +inf.0
+            match Flt/lt(-inf.0, f) && Flt/lt(f, +inf.0)
             | true => Flt/to_int(f)
             | false => fallback
             end;

@@ -164,15 +164,15 @@ fn syn_add_concept_resolves_everywhere() {
     assert_eq!(run(source), b"27");
 }
 
-// `Eql` and `Cmp` resolve across intrinsics with the witnesses homed beside each type — `Eql(Nat)`/`Cmp(Nat)` in `/std/Nat`, `Eql(Str)` in `/std/Str`, `Cmp(Flt)` in `/std/Flt` — rather than in the operator-concept facades, which keep only the concept re-exports.
+// `Eql` and `Cmp` resolve across intrinsics with the witnesses homed beside each type — `Eql(Nat)`/`Cmp(Nat)` in `/std/Nat`, `Eql(Str)` in `/std/Str`, `Cmp(Int)` in `/std/Int` — rather than in the operator-concept facades, which keep only the concept re-exports.
 #[test]
 fn eql_and_cmp_resolve_across_intrinsics() {
     let source = r#"
-        use /std/{Nat, Flt, Bool, Str};
+        use /std/{Nat, Int, Bool, Str};
         use /std/ops/{Eql, Cmp};
         let a : Bool = Eql/eql(2, 2);
         let b : Bool = Eql/eql("abc", "abc");
-        let c : Bool = Cmp/lt(1.0, 2.0);
+        let c : Bool = Cmp/lt(+1, +2);
         let d : Bool = Cmp/ge(3, 3);
         /std/print(Bool/to_str(Bool/and(Bool/and(a, b), Bool/and(c, d))))
         "#;

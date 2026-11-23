@@ -104,7 +104,7 @@ pub let sqrt(r: Rounding, a: Flt) -> Exceptions =
     match
     | Flt/is_signaling(a) => invalid
     | Flt/is_nan(a) => Exceptions/none
-    | a < +0.0 => invalid
+    | Flt/lt(a, +0.0) => invalid
     | Flt/is_zero(a) => Exceptions/none
     | (some(root), some(x)) = (Dyadic/try_of(rounded/sqrt(r, a)), Dyadic/try_of(a)) =>
         Exceptions { ..Exceptions/none, inexact = root * root != x }

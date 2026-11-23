@@ -12,7 +12,7 @@ let member(members: List({Str, Json}), key: Str) -> Option(Str) =
 
 --- Whether the floats `a` and `b` are one value as toml-test compares them: a NaN of either sign is a NaN, and any other float is compared as IEEE compares it.
 let same_float(a: Flt, b: Flt) -> Bool =
-    Flt/is_nan(a) && Flt/is_nan(b) || a <= b && b <= a;
+    Flt/is_nan(a) && Flt/is_nan(b) || Flt/le(a, b) && Flt/le(b, a);
 
 --- Whether the scalar `value` is what toml-test's tag `kind` and text `text` state, the text read by `/std`'s own reader of its kind rather than by the decoder under test.
 let scalar(value: Toml, kind: Str, text: Str) -> Bool =

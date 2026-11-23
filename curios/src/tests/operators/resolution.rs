@@ -63,13 +63,13 @@ fn infix_resolves_against_a_bound_variable_type() {
 
 #[test]
 fn infix_mixes_a_float_variable_with_an_integer_literal() {
-    // `x : Flt` pins the operand type, so the bare literal `1` in `x + 1` becomes a `Flt`; the comparison against the `Flt` literal `4.5` then type-checks.
+    // `x : Flt` pins the operand type, so the bare literal `1` in `x + 1` becomes a `Flt`, which `Flt/lt` then compares with the `Flt` literal `4.5`.
     assert_eq!(
         run(r#"
             use /std/{Str, Flt, Io};
             let x : Flt = 3.0;
             let entry() -> /std/Io({}) =
-                let _ = (match x + 1 < 4.5
+                let _ = (match Flt/lt(x + 1, 4.5)
                 | true => /std/print("less")
                 | false => /std/print("more")
                 end)!;
@@ -132,6 +132,29 @@ fn infix_add_on_a_user_record_resolves_its_witness() {
             entry()
         "#),
         b"8"
+    );
+}
+
+// `Flt` answers no comparison operator: IEEE's `<` is no total order, false between a NaN and anything, so `<` between two floats is refused for want of a witness, as `==` between them is, and the control compares them by name. Mutation-checked: with `Flt`'s witness of the comparisons put back, the refusal is gone.
+#[test]
+fn a_comparison_of_two_floats_is_refused_as_their_equality_is() {
+    let refusal = error(
+        r#"
+        use /std/{Flt, Bool};
+        let below(a: Flt, b: Flt) -> Bool = a < b;
+        /std/print("")
+        "#,
+    );
+    assert!(
+        refusal.contains("no witness") && refusal.contains("(Flt)"),
+        "{refusal}"
+    );
+    assert_eq!(
+        run(r#"
+            use /std/{Flt, Bool, print};
+            print(Bool/to_str(Flt/lt(1.0, 2.0)))
+        "#),
+        b"true"
     );
 }
 

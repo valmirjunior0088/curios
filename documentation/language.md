@@ -510,6 +510,8 @@ An operator is a call of its concept's method, resolved as any witness is, intri
 
 `==` is `Eql`'s method `eql`, and `a != b` is `Bool/not(a == b)`: a witness states equality once, so the two never disagree.
 
+`Flt` answers none of `==`, `!=`, `<`, `<=`, `>` and `>=`: IEEE's comparisons are no equality and no total order, false between a NaN and itself and true both ways between `+0.0` and `-0.0`, so a float is compared by name, `Flt/eql`, `Flt/lt`, `Flt/le`, `Flt/gt` and `Flt/ge`, or by its bit pattern, `Flt/identical`.
+
 `&&` and `||` are calls of `And/and` and `Or/or`, as `+` is of `Add/add`, and not conditionals: neither operand is a fact in the other. So `x != 0 && 10 / x > 1` is refused, and `match | x != 0, 10 / x > 1 => true | _ => false end` is how a guard reaches the division.
 
 `/` and `%` take an implicit proof of the precondition their concept declares, `Ok(divisor)`: on `Nat`, `Nat/NonZero(b)`, which is `Holds(b != 0)`, filled as any omitted bound is ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)).

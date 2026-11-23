@@ -1519,10 +1519,27 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
             explicits: vec![a, b, c],
         },
         Intrinsic::FltRem(l, r) => IntrinsicForm::Infix(operator("%"), l, r),
-        Intrinsic::FltEql(l, r) => IntrinsicForm::Infix(operator("=="), l, r),
-        Intrinsic::FltNeq(l, r) => IntrinsicForm::Infix(operator("!="), l, r),
-        Intrinsic::FltLt(l, r) => IntrinsicForm::Infix(operator("<"), l, r),
-        Intrinsic::FltLe(l, r) => IntrinsicForm::Infix(operator("<="), l, r),
+        // `Flt` answers no comparison operator, so a reader compares floats by name, IEEE's comparisons, and a report writes them so.
+        Intrinsic::FltEql(l, r) => IntrinsicForm::Call {
+            path: "Flt/eql".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::FltNeq(l, r) => IntrinsicForm::Call {
+            path: "Flt/neq".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::FltLt(l, r) => IntrinsicForm::Call {
+            path: "Flt/lt".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
+        Intrinsic::FltLe(l, r) => IntrinsicForm::Call {
+            path: "Flt/le".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
         Intrinsic::FltMin(l, r) => IntrinsicForm::Call {
             path: "Flt/min".into(),
             implicits: vec![],
