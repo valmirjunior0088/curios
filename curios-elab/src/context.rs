@@ -583,6 +583,47 @@ impl<'s> Context<'s> {
                 .unwrap_or_default();
             self.record_classified(name, type_, &filed);
         }
+        self.withhold_unfounded(item);
+    }
+
+    /// Bind each name of `item`, published and classified, to nothing where its verdict is `Unfounded`, as a proof's is: from here on no reduction unfolds a definition whose item's recursion does not descend.
+    ///
+    /// A rebinding, so both caches clear as for any redefinition: a reduct taken while the item was published and not yet classified may have unfolded it. Only an item that does not descend pays it, and its verdict is the whole item's, so every name it holds is withheld or none is.
+    pub(crate) fn withhold_unfounded(&mut self, item: &Item) {
+        let unfounded = |context: &Self, name: &Global| {
+            context
+                .definition_totality(name)
+                .is_some_and(curios_core::Totality::is_unfounded)
+        };
+        match item {
+            Item::Let(definition) => {
+                if unfounded(self, &definition.name) {
+                    self.define_published(
+                        &definition.name,
+                        &definition.body,
+                        Some(&definition.kind),
+                        true,
+                    );
+                    // The sort a value inhabits goes with the value, as a proof's does (`curios_core::Definition::published`).
+                    self.typing
+                        .program
+                        .record_definition_value_sort(&definition.name, None);
+                }
+            }
+            Item::Rec(rec) => {
+                for (index, definition) in rec.exports().iter().enumerate() {
+                    if unfounded(self, &definition.name) {
+                        self.define_published(
+                            &definition.name,
+                            &Term::rec_proj(rec.group().clone(), index),
+                            Some(&definition.kind),
+                            true,
+                        );
+                    }
+                }
+            }
+            Item::Nominal(_) => {}
+        }
     }
 
     /// Zonk every term recorded since `mark`, the finished item's, so the erasure obligations read them once the state they were recorded in is gone.

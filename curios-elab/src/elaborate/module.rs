@@ -1507,6 +1507,7 @@ fn settle_published(
     }
     context.restore_budget();
     classify_totality(context, &published.item)?;
+    context.withhold_unfounded(&published.item);
 
     context.restore_budget();
     let alone = Definitions {

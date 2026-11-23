@@ -677,3 +677,43 @@ fn a_partial_index_type_is_refused_as_an_index_of_its_family() {
         )
     });
 }
+
+// A proof standing as a match's scrutinee and naming a loop is refused by proof totality, by the loop's name, in both checkers: `spin` is `Unfounded`, so it is defined with no value, and the index unification the match asks of `Eq()(spin(0), spin(0))` reads `spin(0)` as it stands. Mutation-checked: with `spin` defined by its value, the elaborator unfolds `spin(0)` until the budget is spent and refuses the program for that. The control's lemma stands at a value that terminates.
+#[test]
+fn a_proof_scrutinee_naming_a_loop_is_refused_by_name_and_not_by_the_budget() {
+    control(
+        r#"
+        use /std/{Nat, Eq};
+
+        let fine(n: Nat) -> Nat = n;
+        let spin(n: Nat) -> Nat = spin(n);
+
+        let lemma(@n: Nat) -> Eq()(n, n) = Eq/refl();
+
+        let v() -> Nat = match lemma(@fine(0)) | refl() => 0 end;
+
+        /std/print(Nat/to_str(v()))
+        "#,
+        b"0",
+    )
+    .refused(&[("lemma(@fine(0))", "lemma(@spin(0))")])
+    .by_elaborator_in("/v", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Proof,
+                offender: Some(offender),
+                ..
+            } if *offender == global("/spin")
+        )
+    })
+    .by_certifier_in("/v", |error| {
+        matches!(
+            error,
+            curios_cert::Error::NotTotal {
+                erased: Erased::Proof,
+                ..
+            }
+        )
+    });
+}

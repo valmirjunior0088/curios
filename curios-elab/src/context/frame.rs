@@ -28,8 +28,8 @@ use {
 pub struct DefEntry {
     term: Term,
     kind: Option<DefinitionKind>,
-    /// Whether the name is a proof its item published ([`curios_core::Definition::proof`]): it stays bound to `term`, which is what says which group it is a member of, and unfolds to nothing.
-    proof: bool,
+    /// Whether the name is withheld: a proof its item published ([`curios_core::Definition::proof`]), or a name of an item whose recursion does not descend ([`curios_core::Totality::Unfounded`]). It stays bound to `term`, which is what says which group it is a member of, and unfolds to nothing.
+    withheld: bool,
     /// The depth of the frame that defines the name: what a settlement reading the definition rests on ([`Frames::begin_reads`](super::Frames::begin_reads)). No part of what the definition is, so two definitions alike in all else are one.
     depth: usize,
     /// What a local definition's term is by value, read where the name was defined; `None` for a published item's name, which is never read by value here. Derived from the term and the definitions it names, so no part of what the definition is either.
@@ -47,7 +47,7 @@ pub struct ByValue {
 
 impl PartialEq for DefEntry {
     fn eq(&self, other: &Self) -> bool {
-        self.term == other.term && self.kind == other.kind && self.proof == other.proof
+        self.term == other.term && self.kind == other.kind && self.withheld == other.withheld
     }
 }
 
@@ -57,18 +57,18 @@ impl DefEntry {
             by_value: None,
             term,
             kind,
-            proof: false,
+            withheld: false,
             depth: 0,
         }
     }
 
-    /// The entry a published item's name is bound by: `term`, and a proof where `proof`.
-    pub fn published(term: Term, kind: Option<DefinitionKind>, proof: bool) -> Self {
+    /// The entry a published item's name is bound by: `term`, withheld where `withheld`.
+    pub fn published(term: Term, kind: Option<DefinitionKind>, withheld: bool) -> Self {
         Self {
             by_value: None,
             term,
             kind,
-            proof,
+            withheld,
             depth: 0,
         }
     }
@@ -104,9 +104,9 @@ impl DefEntry {
         self.kind.as_ref()
     }
 
-    /// What the name unfolds to: its term, and nothing where it is a proof.
+    /// What the name unfolds to: its term, and nothing where it is withheld.
     pub fn reduct(&self) -> Option<&Term> {
-        (!self.proof).then_some(&self.term)
+        (!self.withheld).then_some(&self.term)
     }
 }
 

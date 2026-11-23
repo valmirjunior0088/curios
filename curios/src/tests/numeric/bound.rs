@@ -105,9 +105,9 @@ fn a_difference_over_a_folded_recursion_converts_with_its_unfolding() {
     );
 }
 
-// A bound whose subject genuinely diverges is refused by name, as the same subject in a declared type is before anything runs, rather than reported as exhaustion. The check runs — a subject that terminates discharges, whatever the analysis classified it — and only an exhausted one is re-read for the partial definition it names. `spin` recurses on `p + 1`, which no size-change order accepts.
+// A bound whose subject does not descend is refused by name, rather than reported as exhaustion or as a bound the facts do not imply: no checker unfolds such a subject, so the bound is decided by none, whether or not the subject would return at its input, and any proof of it would reach the subject, which proof totality refuses. `spin` recurses on `p + 1`, which no size-change order accepts. Mutation-checked: without the re-reading, the bound is reported undischarged, with a counterexample read at `spin(3)` as if it were a variable.
 //
-// The budget is stated rather than defaulted because `spin` exhausts whatever it is given, so the default would buy nothing but the wait. A hundred thousand is far more than the rest of the program elaborates in and still exhausts in well under a second.
+// The budget is stated rather than defaulted so that a checker unfolding `spin` again spends it in well under a second, where the default would buy nothing but the wait.
 #[test]
 fn a_bound_over_a_diverging_subject_is_refused_by_name() {
     let error = typecheck_within(

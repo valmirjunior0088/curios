@@ -275,17 +275,17 @@ impl<'s> Context<'s> {
         self.define_entry(*name, DefEntry::new(term.clone(), kind.cloned()));
     }
 
-    /// Define `name` as a published item binds it: [`Context::define`], under the kind it is written as, which a name its item makes rather than holds has none of, and where `proof`, to a term no reduction unfolds it to ([`curios_core::Definition::proof`]). Until its item is published a proof unfolds as any definition does, which is what its own check reads it by.
+    /// Define `name` as a published item binds it: [`Context::define`], under the kind it is written as, which a name its item makes rather than holds has none of, and where `withheld`, to a term no reduction unfolds it to — a proof's ([`curios_core::Definition::proof`]), or an `Unfounded` item's name's ([`Context::withhold_unfounded`]). Until its item is published a proof unfolds as any definition does, which is what its own check reads it by.
     pub(super) fn define_published(
         &mut self,
         name: &Global,
         term: &Term,
         kind: Option<&DefinitionKind>,
-        proof: bool,
+        withheld: bool,
     ) {
         self.define_declaration_entry(
             name,
-            DefEntry::published(term.clone(), kind.cloned(), proof),
+            DefEntry::published(term.clone(), kind.cloned(), withheld),
         );
     }
 

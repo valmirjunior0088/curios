@@ -88,8 +88,8 @@ use {
         Adopting, Certifier, Error, Filed, Globals, PositionVerdicts, Stated, Totals, Unvisited,
         bytes_of, carried_marks, check_case_counts, check_definition, check_entrypoint,
         check_induct_decl, check_positions, check_rec_group, check_struct_decl, define_as_stated,
-        held_digest, read_digest, state_definition, state_rec_group, stated_entrypoint,
-        stated_marks, universe_verdict, unstated_entry,
+        definition_unfounded, group_unfounded, held_digest, read_digest, state_definition,
+        state_rec_group, stated_entrypoint, stated_marks, universe_verdict, unstated_entry,
     },
     curios_analysis::{
         Declarations, PositivityRefusal, definition_applications, group_applications,
@@ -923,7 +923,12 @@ pub fn verdicts_visiting<'s>(
                 stored(candidates, globals, certifier, &now, *place, item)
             }
         {
-            let (taken_item, refusals) = take(certifier, item);
+            let unfounded = records.iter().any(|(_, record)| {
+                record
+                    .made()
+                    .is_some_and(|made| made.totality.is_unfounded())
+            });
+            let (taken_item, refusals) = take(certifier, item, unfounded);
             verdicts.extend(refusals);
             put(&mut stated, *place, taken_item);
             for (name, record) in records {
@@ -999,13 +1004,13 @@ pub fn verdicts_visiting<'s>(
                             name: Some(definition.name),
                             error,
                         });
-                        // A refused definition stands at its type with its body, and unfolds.
+                        // A refused definition stands at its type with its body, and unfolds, short of one whose recursion does not descend, which unfolds to nothing as an accepted one does.
                         if let Err(error) = define_as_stated(
                             certifier,
                             &definition.name,
                             &definition.type_,
                             &definition.body,
-                            false,
+                            definition_unfounded(certifier, &definition.name),
                             None,
                             &definition.universe_context,
                         ) {
@@ -1051,14 +1056,15 @@ pub fn verdicts_visiting<'s>(
                             name: item_name,
                             error,
                         });
-                        // The define `check_rec_group` performs on success: each export is the folded selection of the member it names.
+                        // The define `check_rec_group` performs on success: each export is the folded selection of the member it names, with no value where the group's recursion does not descend.
+                        let unfounded = group_unfounded(certifier, rec.group(), members.len());
                         for (member, (name, _)) in members.iter().enumerate() {
                             if let Err(error) = define_as_stated(
                                 certifier,
                                 name,
                                 &rec.group().member_type(member),
                                 &Term::rec_proj(rec.group().clone(), member),
-                                false,
+                                unfounded,
                                 None,
                                 &universes,
                             ) {
@@ -1720,7 +1726,7 @@ fn stands(
 }
 
 /// Take the verdict a cabinet's records hold of `item`: what the walk states of it, as it states what it judges, and each name standing at its type with its real body, as the walk leaves an item it does not judge; what the walk refuses of it is handed back with it.
-fn take(certifier: &mut Certifier, item: &Item) -> (Item, Vec<Refusal>) {
+fn take(certifier: &mut Certifier, item: &Item, unfounded: bool) -> (Item, Vec<Refusal>) {
     let mut refusals = Vec::new();
     certifier.restore_budget();
     let stated = stated_marks(certifier, item);
@@ -1737,6 +1743,7 @@ fn take(certifier: &mut Certifier, item: &Item) -> (Item, Vec<Refusal>) {
                 &definition.type_,
                 &definition.body,
                 &definition.universe_context,
+                unfounded,
             ) {
                 Ok(Stated { proof, value_sort }) => (proof, value_sort),
                 Err(error) => {
@@ -1760,14 +1767,20 @@ fn take(certifier: &mut Certifier, item: &Item) -> (Item, Vec<Refusal>) {
                 .iter()
                 .map(|definition| (definition.name, &definition.kind))
                 .collect::<Vec<_>>();
-            let proofs = state_rec_group(certifier, &members, rec.group(), rec.universe_context())
-                .unwrap_or_else(|error| {
-                    refusals.push(Refusal {
-                        name: members.first().map(|(name, _)| *name),
-                        error,
-                    });
-                    vec![false; members.len()]
+            let proofs = state_rec_group(
+                certifier,
+                &members,
+                rec.group(),
+                rec.universe_context(),
+                unfounded,
+            )
+            .unwrap_or_else(|error| {
+                refusals.push(Refusal {
+                    name: members.first().map(|(name, _)| *name),
+                    error,
                 });
+                vec![false; members.len()]
+            });
             for (definition, proof) in rec.exports_mut().iter_mut().zip(proofs) {
                 definition.proof = proof;
             }

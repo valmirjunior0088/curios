@@ -28,6 +28,17 @@ fn descends(certifier: &Certifier, group: &RecGroup) -> bool {
     certifier.group_verdict(group) == Some(Totality::Total)
 }
 
+/// Whether the recursion of the item `group` holds, with its `members`, does not descend: the group does not, or a member encloses a group that does not. Every definition of such an item is `Unfounded`, and unfolds to nothing, whether or not its check refused it.
+pub fn group_unfounded(certifier: &Certifier, group: &RecGroup, members: usize) -> bool {
+    !descends(certifier, group)
+        || (0..members).any(|index| certifier.member_encloses_partial(group, index))
+}
+
+/// [`group_unfounded`] of a `let`: it encloses a group that does not descend.
+pub fn definition_unfounded(certifier: &Certifier, name: &Global) -> bool {
+    certifier.definition_encloses_partial(name)
+}
+
 /// Whether a term calls a host row that diverges — partial in itself, with no name to blame.
 ///
 /// Post-order over the term's DAG on the shared [`Term::walk`] driver. The memo is structural and caller-owned, carried across the whole module rather than per walk — definitions share subterms heavily, and a node settled for one is settled for all.
@@ -115,12 +126,8 @@ impl<'g> Totals<'g> {
     ) {
         let definitions = item.definitions();
         let unfounded = match item {
-            Item::Rec(rec) => {
-                !descends(certifier, rec.group())
-                    || (0..definitions.len())
-                        .any(|index| certifier.member_encloses_partial(rec.group(), index))
-            }
-            Item::Let(definition) => certifier.definition_encloses_partial(&definition.name),
+            Item::Rec(rec) => group_unfounded(certifier, rec.group(), definitions.len()),
+            Item::Let(definition) => definition_unfounded(certifier, &definition.name),
             Item::Nominal(_) => false,
         };
 

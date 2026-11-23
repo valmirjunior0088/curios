@@ -628,25 +628,31 @@ fn a_match_or_a_projection_forces_the_call_a_fold_answers() {
     );
 }
 
-/// `f(n)` is `f(n) + 1`, a recursion that never descends, and `w` states a family at `f(0)` to be one at its own unfolding.
-const A_PARTIAL_CALL_COMPARED_WITH_ITS_UNFOLDING: &str = r#"
+/// `f(n)` counts `n` down through an intrinsic's operand, `f(k) + 1` at each successor, a recursion that descends, and `w` states a family at `f` of ten million to be one at one more.
+const A_DEEP_CALL_COMPARED_WITH_ONE_MORE: &str = r#"
 #{node = Rec}
 let /f : (n: #NatType) -> #NatType =
     (n: #NatType) =>
-        #NatAdd(/f(n), 1);
-let /w : (P: (n: #NatType) -> Type, p: P(/f(0))) -> P(#NatAdd(/f(0), 1)) =
-    (P: (n: #NatType) -> Type, p: P(/f(0))) =>
+        #{goal = #NatType}
+        match n
+        | 0 =>
+            0
+        | k + 1 =>
+            #NatAdd(/f(k), 1)
+        end;
+let /w : (P: (n: #NatType) -> Type, p: P(/f(10000000))) -> P(#NatAdd(/f(10000000), 1)) =
+    (P: (n: #NatType) -> Type, p: P(/f(10000000))) =>
         p;
 /std/Bool/True/qed()
 "#;
 
-// An operand a fold reads forced whose value is a folded recursive call is forced on the machine's own stack, so a recursion through an intrinsic's operand nests no native frame per level: `f(0) + 1` unfolds until the budget runs out, and `w` is refused by `Reduce`, as its open spelling at a variable `n` is, besides being refused for reading a partial `f` in a type. Forced through the host's own reduction instead, each level started a machine of its own on the native stack, and the run died of a stack overflow before the budget ran out.
+// An operand a fold reads forced whose value is a folded recursive call is forced on the machine's own stack, so a recursion through an intrinsic's operand nests no native frame per level: comparing `f(10000000)` with one more unfolds `f` through ten million operands until the budget runs out, and `w` is refused by `Reduce`. Forced through the host's own reduction instead, each level started a machine of its own on the native stack, and the run died of a stack overflow before the budget ran out. The recursion descends, since a checker unfolds no other.
 #[test]
 fn a_recursion_through_an_operand_runs_out_of_budget_and_not_of_stack() {
     let verdicts = core_text_refusals(&fill!(
-        "${PROPOSITIONS}\n${A_PARTIAL_CALL_COMPARED_WITH_ITS_UNFOLDING}",
+        "${PROPOSITIONS}\n${A_DEEP_CALL_COMPARED_WITH_ONE_MORE}",
         PROPOSITIONS,
-        A_PARTIAL_CALL_COMPARED_WITH_ITS_UNFOLDING
+        A_DEEP_CALL_COMPARED_WITH_ONE_MORE
     ));
 
     assert!(
@@ -654,9 +660,8 @@ fn a_recursion_through_an_operand_runs_out_of_budget_and_not_of_stack() {
             &verdicts[..],
             [
                 Refusal { name: Some(exhausted), error: Error::Reduce(ReduceError::Exhausted { .. }) },
-                Refusal { name: Some(partial), error: Error::NotTotal { .. } },
                 Refusal { name: None, .. },
-            ] if *exhausted == global("w") && *partial == global("w")
+            ] if *exhausted == global("w")
         ),
         "{verdicts:?}"
     );

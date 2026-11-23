@@ -84,7 +84,7 @@ fn partial_offender(context: &Context, term: &Term) -> Option<Global> {
     })
 }
 
-/// An exhausted discharge of `proposition`, re-reported by the partial definition it names when it names one, and the exhaustion itself otherwise. A bound whose subject does not terminate would otherwise spend the budget and report that, where the same subject in a declared type is refused by name before anything is reduced; the check still runs — a subject that terminates discharges, whatever the analysis classified it — and only a spent budget is re-read for a name. The obligation is `documentation/design/soundness/totality-of-the-erased-program.md`'s.
+/// An exhausted discharge of `proposition`, re-reported by the partial definition it names when it names one, and the exhaustion itself otherwise: a bound whose subject reaches a definition not known to terminate is refused by that name, as [`bound_over_a_loop`] refuses one a discharge stopped short of. The obligation is `documentation/design/soundness/totality-of-the-erased-program.md`'s.
 pub fn exhausted_bound(
     context: &Context,
     error: Error,
@@ -101,6 +101,17 @@ pub fn exhausted_bound(
         }
         _ => error,
     }
+}
+
+/// A bound no proof discharged, refused by the definition not known to terminate that its reduct `reduced` still names, where it names one.
+///
+/// No checker unfolds a definition whose recursion does not descend, so a bound over one is decided by none, whether or not the definition would have returned at that input, and any proof of it would reach the definition, which proof totality refuses. A bound whose reduction carried it past every such definition is reported as the undischarged bound it is.
+pub fn bound_over_a_loop(context: &Context, reduced: &Term, site: ErasedSite) -> Option<Error> {
+    partial_offender(context, reduced).map(|offender| Error::PartialInErasedPosition {
+        erased: Erased::Proof,
+        site,
+        offender: Some(offender),
+    })
 }
 
 /// Type totality, at the one point a non-productive type-level loop can still be diagnosed: before the type is reduced.

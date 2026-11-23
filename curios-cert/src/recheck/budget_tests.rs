@@ -7,15 +7,21 @@ use {
     curios_core::{Cost, Global, ReduceError, Variance},
 };
 
-/// `Alias : Type = Good`, `Spin : Type` a group that does not descend, `spent : Spin = 0`, which runs a judgment out unfolding `Spin`, and last `Good`, whose one case holds an `Alias`.
+/// `Alias : Type = Good`, `Spin : Type` a group that descends from a billion to `Nat`, `spent : Spin = 0`, which runs a judgment out unfolding `Spin`, and last `Good`, whose one case holds an `Alias`. A group that does not descend would spend nothing: it unfolds to nothing.
 const SPENT_BESIDE_AN_ALIASED_PAYLOAD: &str = r#"
 let /Alias: Type =
     #{node = InductType} /Good();
 
 let /Spin: Type =
     #{node = Rec}
-    (let x: Type = x;
-    x);
+    (let x: (n: #NatType) -> Type =
+        (n2: #NatType) =>
+            #{goal = Type}
+            match n2
+            | 0 => #NatType
+            | k + 1 => x(k)
+            end;
+    x(1000000000));
 
 let /spent: /Spin =
     0;
@@ -58,7 +64,7 @@ fn spent() -> Global {
 
 /// Strict positivity is judged on a budget of its own, not on what the item judged before it left.
 ///
-/// `spent` spends everything it has: checking `0` against `Spin` converts forever. `Good`'s payload is `Alias`, which the analysis has to unfold to read the strict occurrence of `Good` behind it. `Good`'s former is the module's last item, so its entry is accepted once every other item has been judged: on `spent`'s leftover the unfold would be refused, the alias read at `Mixed`, and `Good` refused for a budget it never spent.
+/// `spent` spends everything it has: checking `0` against `Spin` unfolds it a billion times. `Good`'s payload is `Alias`, which the analysis has to unfold to read the strict occurrence of `Good` behind it. `Good`'s former is the module's last item, so its entry is accepted once every other item has been judged: on `spent`'s leftover the unfold would be refused, the alias read at `Mixed`, and `Good` refused for a budget it never spent.
 ///
 /// `spent`'s own exhaustion is the control: without it the leftover would be most of a budget, and the fixture would pass whether or not positivity restores one.
 ///

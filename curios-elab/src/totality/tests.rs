@@ -99,3 +99,42 @@ fn a_filed_verdict_is_what_a_later_unit_reads_back() {
     );
     assert_eq!(read(&traces), Totality::Total);
 }
+
+#[test]
+fn an_unfounded_definition_of_another_unit_unfolds_to_nothing() {
+    // A unit's filed verdicts are what a later unit reads its definitions by: one filed `Unfounded` is defined with no value to unfold to, as a proof is, which is what keeps a loop of the prelude folded in a user unit, and one filed `Partial` keeps its value. Mutation-checked: establishing a definition by its mark alone leaves `looping` its body.
+    let module = definitions(vec![
+        mentioning("looping", "elsewhere"),
+        mentioning("reaching", "elsewhere"),
+    ]);
+    let mut traces = Traces::default();
+    for (path, totality) in [
+        ("looping", Totality::Unfounded),
+        ("reaching", Totality::Partial),
+    ] {
+        let classified = Classified {
+            totality,
+            ..Classified::default()
+        };
+        traces.share(
+            name(path),
+            Rc::new(TraceRecord::new(
+                Trace::default(),
+                Concluded {
+                    classified: vec![(name(path), classified)],
+                    ..Concluded::default()
+                },
+            )),
+        );
+    }
+    let established = Established::over(&[(&module, &[], &traces)]);
+    let body = |path: &str| {
+        established
+            .definition(&name(path))
+            .expect("the unit declares it")
+            .body
+    };
+
+    assert!(body("looping").is_none());
+    assert!(body("reaching").is_some());
+}

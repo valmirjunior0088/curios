@@ -2,9 +2,10 @@ use {
     super::{Misaligned, align, method_call, park_checking, trivially_inhabited},
     crate::{
         Context, Entailed, ErasedSite, Error, Expectation, FunctionTyped, HeldFrames, Mode,
-        ParkedWork, attempt_witness_goal, blocked_on_metavar, callee, check_as, check_is_sort,
-        dead_guard, elaborate, entail, exhausted_bound, expect_as, is_prop, reduce_with,
-        resolve_witness_goal, stuck_on_metavar, transitively_ground, zonk_solved_term_metas,
+        ParkedWork, attempt_witness_goal, blocked_on_metavar, bound_over_a_loop, callee, check_as,
+        check_is_sort, dead_guard, elaborate, entail, exhausted_bound, expect_as, is_prop,
+        reduce_with, resolve_witness_goal, stuck_on_metavar, transitively_ground,
+        zonk_solved_term_metas,
     },
     curios_common::{Plicity, Symbol},
     curios_core::{
@@ -179,6 +180,12 @@ pub fn insert_auto_argument(
                     Entailed::Proved(proof) => return Ok(proof),
                     Entailed::Refused(refused) => refusal = Some(refused),
                 }
+                if !waiting
+                    && let Some(refused) =
+                        bound_over_a_loop(context, &reduced, bound_site(context, &provenance))
+                {
+                    return Err(refused);
+                }
             }
             let reduct =
                 (proposition && matches!(&*reduced, Subterm::InductType(_))).then_some(reduced);
@@ -284,6 +291,9 @@ pub fn attempt_discharge(
     if waits_on_metavariable(context, &reduced) {
         return Ok(true);
     }
+    if let Some(refused) = bound_over_a_loop(context, &reduced, bound_site(context, provenance)) {
+        return Err(refused);
+    }
     note_dead_guard(context, slot);
     if matches!(&*reduced, Subterm::InductType(_)) {
         context.note_reduct(slot, reduced);
@@ -360,11 +370,15 @@ fn bound_exhausted(
     bound: &Term,
     provenance: &ArgumentSite,
 ) -> Error {
-    let site = ErasedSite::Bound {
+    exhausted_bound(context, error, bound, bound_site(context, provenance))
+}
+
+/// The site a bound's refusal names: the callee and the binder the bound stands for.
+fn bound_site(context: &Context, provenance: &ArgumentSite) -> ErasedSite {
+    ErasedSite::Bound {
         callee: callee(context, &provenance.callee),
         binder: provenance.parameter.map(|name| name.as_str().to_string()),
-    };
-    exhausted_bound(context, error, bound, site)
+    }
 }
 
 pub fn elaborate_apply(

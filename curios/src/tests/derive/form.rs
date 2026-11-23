@@ -23,7 +23,7 @@ fn the_stages_show_the_transient_and_its_expansion() {
 
 // --- Refusals, each at the declaration and naming what to write instead. ---
 
-// A derived body is a term judged as an authored one is, its termination included: over a recursive family it reaches its own entry through its method, as the body written out does, each call on a child below its argument, so a proof that reads either is admitted alike; and the written body that hands its method back its own arguments is refused where a proof reads it, so no derivation is a recursion graded total that a written one is not.
+// A derived body is a term judged as an authored one is, its termination included: over a recursive family it reaches its own entry through its method, as the body written out does, each call on a child below its argument, so a proof that reads either is admitted alike; and the written body that hands its method back its own arguments is `Unfounded`, so its witness unfolds to nothing and `Tree/leaf(1) == Tree/leaf(2)` stays as written, no `False` for `h` to be. No derivation is a recursion graded total that a written one is not.
 #[test]
 fn a_derived_body_reaching_a_proof_is_held_to_termination_as_its_written_body_is() {
     let derived = r#"
@@ -61,7 +61,8 @@ fn a_derived_body_reaching_a_proof_is_held_to_termination_as_its_written_body_is
     );
     let report = error(&looping);
     assert!(
-        report.contains("a proof in `_apart` reaches the witness of `Eql` for head `Tree`, which is not known to terminate"),
+        report.contains("inferred: `Holds(Tree/leaf(1) == Tree/leaf(2))`")
+            && report.contains("expected: `False`"),
         "{report}"
     );
 }

@@ -120,14 +120,21 @@ impl<'a> Standing<'a> {
 
                 Some(Defined {
                     type_: &definition.type_,
-                    body: definition.published().0,
+                    // What a proof's mark withholds, and what a verdict of `Unfounded` withholds besides.
+                    body: definition
+                        .published()
+                        .0
+                        .filter(|_| !totality.is_unfounded()),
                     universe_context: &definition.universe_context,
                     totality,
                     applications,
                     variances,
                     field_variances,
                     parameter_field,
-                    value_sort: definition.published().1,
+                    value_sort: definition
+                        .published()
+                        .1
+                        .filter(|_| !totality.is_unfounded()),
                     island: definition.island,
                 })
             }
@@ -138,7 +145,7 @@ impl<'a> Standing<'a> {
 
                 Some(Defined {
                     type_,
-                    body: (!definition.proof).then_some(body),
+                    body: (!definition.proof && !totality.is_unfounded()).then_some(body),
                     universe_context: rec.universe_context(),
                     totality,
                     applications,

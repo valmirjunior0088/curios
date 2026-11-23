@@ -34,11 +34,30 @@ use {
 #[derive(Clone, Copy)]
 pub struct Held<'a> {
     pub type_: &'a Term,
-    /// `None` for something with a type and no body: a definition marked a proof ([`curios_core::Definition::proof`]), whose body its own check read and no judgment after it does, and a fixture's opaque head.
+    /// `None` for something with a type and no body: a definition marked a proof ([`curios_core::Definition::proof`]), whose body its own check read and no judgment after it does, a definition whose item's recursion does not descend ([`Held::withheld`]), and a fixture's opaque head.
     pub value: Option<&'a Term>,
     /// The sort its value inhabits, where it is a definition whose value is a type and states it ([`curios_core::Definition::value_sort`]): checked where the definition was checked.
     pub value_sort: Option<&'a Term>,
     pub universes: &'a UniverseContext,
+}
+
+impl<'a> Held<'a> {
+    /// The same name with nothing to unfold to: a definition the record calls `Unfounded`, which no checker unfolds, its value sort going with its value as a proof's does.
+    pub fn withheld(self) -> Self {
+        Self {
+            value: None,
+            value_sort: None,
+            ..self
+        }
+    }
+
+    /// The name as `totality` has it read: withheld where it is `Unfounded`.
+    pub fn by(self, totality: Totality) -> Self {
+        match totality.is_unfounded() {
+            true => self.withheld(),
+            false => self,
+        }
+    }
 }
 
 /// What `module` holds `name` at, where it defines it, by the place its unit keeps for the name: a `let` at its declared type with its body, a group's member at its opened type with its folded selection, either with nothing to unfold to where it is marked a proof, and a former or a family's constructor as its entry makes it.
@@ -146,7 +165,7 @@ struct Mounted<'s> {
 
 impl<'s> Mounted<'s> {
     fn held(&self, name: &Global) -> Option<Held<'s>> {
-        held(self.unit.definitions, self.unit.places, name)
+        self.unit.held(name)
     }
 
     /// Whether this unit declares `name`. An entry is held by the item that declares it, so the names a unit declares are its items'.
@@ -414,7 +433,7 @@ impl<'s> Environment<'s> {
         let adopted = self
             .baseline
             .filter(|_| self.adopted.contains(name) || self.passed(name))
-            .and_then(|baseline| held(baseline.definitions, baseline.places, name));
+            .and_then(|baseline| baseline.held(name));
 
         adopted.or_else(|| self.scope.and_then(|scope| scope.held(name)))
     }

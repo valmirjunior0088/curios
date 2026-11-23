@@ -40,6 +40,11 @@ impl<'a> Filed<'a> {
         self.certification.totality(name).expect(ANSWERS)
     }
 
+    /// What this unit holds `name` at, read by its record's verdict: with nothing to unfold to where that is `Unfounded`.
+    pub(crate) fn held(&self, name: &Global) -> Option<Held<'a>> {
+        held(self.definitions, self.places, name).map(|held| held.by(self.totality(name)))
+    }
+
     /// The polarity vector of the family or record this unit holds under `name`: `None` where it holds none there.
     pub fn polarities(&self, name: &Global) -> Option<&'a [Polarity]> {
         self.vectored(name)
@@ -222,6 +227,7 @@ pub fn held_digest(
     let Some(held) = held(definitions, places, name) else {
         return Ok(None);
     };
+    let held = held.by(totality);
     let read = Readable {
         held,
         family: definitions.induct_decl(places, name),

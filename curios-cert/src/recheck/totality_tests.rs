@@ -236,3 +236,19 @@ let /held: #{node = InductType} /Vouched() =
         );
     }
 }
+
+/// A carried unit's definition its record calls `Unfounded` is held beneath that record with nothing to unfold to, and one it calls `Partial` with its body: what keeps a library's loop folded in every unit that reads it. `sink` encloses a group that does not descend, and `reaches` calls it. Mutation-checked: reading a carried unit's definitions without their record's verdict leaves `sink` its body.
+#[test]
+fn a_carried_units_unfounded_definition_unfolds_to_nothing() {
+    let library = text_certified(LIBRARY);
+    let sink = Global::Authored(Qualifier::from(["sink"]));
+    assert_eq!(
+        library.certification().totality(&sink),
+        Some(Totality::Unfounded)
+    );
+
+    let carried = AlreadyJudged::with(&reaching_library(false), library.certification());
+    let globals = carried.globals();
+    assert!(globals.held(&sink).expect("in scope").value.is_none());
+    assert!(globals.held(&reaches()).expect("in scope").value.is_some());
+}

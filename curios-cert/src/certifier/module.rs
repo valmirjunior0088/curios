@@ -84,13 +84,16 @@ pub fn check_definition(
     body: &Term,
     universes: &UniverseContext,
 ) -> Result<Stated, Error> {
+    let before = certifier.partial_groups();
     let stated = stating(certifier, kind, type_, body, true, universes)?;
+    // A definition enclosing a group that does not descend is `Unfounded` (`Totals::locally`), and unfolds to nothing from here on.
+    let unfounded = certifier.partial_groups() > before;
     define_as_stated(
         certifier,
         name,
         type_,
         body,
-        stated.proof,
+        stated.proof || unfounded,
         stated.value_sort.as_ref(),
         universes,
     )?;
@@ -98,7 +101,7 @@ pub fn check_definition(
     Ok(stated)
 }
 
-/// [`check_definition`]'s statements of a definition whose verdict a record vouches for, the walk judging nothing of it: the same questions, its body not checked, and the name defined by them.
+/// [`check_definition`]'s statements of a definition whose verdict a record vouches for, the walk judging nothing of it: the same questions, its body not checked, and the name defined by them, with no value where the record calls it `unfounded`.
 pub fn state_definition(
     certifier: &mut Certifier,
     name: &Global,
@@ -106,6 +109,7 @@ pub fn state_definition(
     type_: &Term,
     body: &Term,
     universes: &UniverseContext,
+    unfounded: bool,
 ) -> Result<Stated, Error> {
     let stated = stating(certifier, kind, type_, body, false, universes)?;
     define_as_stated(
@@ -113,7 +117,7 @@ pub fn state_definition(
         name,
         type_,
         body,
-        stated.proof,
+        stated.proof || unfounded,
         stated.value_sort.as_ref(),
         universes,
     )?;
@@ -169,17 +173,17 @@ fn agreed(reached: Vec<Option<Term>>) -> Option<Term> {
         .then_some(first)
 }
 
-/// Bring `name : type_` into scope as its definition states it: unfolding to `body`, or to nothing where it is marked a proof, whose body its own check read and no judgment after it does, with the sort its value inhabits where it states one. A refused definition stands the same way, so what a name is to the rest of a walk is what it is to a walk over a unit that mounts this one.
+/// Bring `name : type_` into scope as its definition states it: unfolding to `body`, with the sort its value inhabits where it states one, or to nothing where it is `withheld` — a proof, whose body its own check read and no judgment after it does, or a definition whose item's recursion does not descend, which no checker unfolds. A refused definition stands the same way, so what a name is to the rest of a walk is what it is to a walk over a unit that mounts this one.
 pub fn define_as_stated(
     certifier: &mut Certifier,
     name: &Global,
     type_: &Term,
     body: &Term,
-    proof: bool,
+    withheld: bool,
     value_sort: Option<&Term>,
     universes: &UniverseContext,
 ) -> Result<(), Error> {
-    match proof {
+    match withheld {
         true => certifier.declare(name, type_, universes),
         false => certifier.define_sorted(name, type_, body, value_sort, universes),
     }
@@ -367,6 +371,8 @@ pub fn check_rec_group(
 
         Ok(())
     })?;
+    // An item whose recursion does not descend is `Unfounded` whole (`Totals::locally`), every member unfolding to nothing from here on: a sibling's body reaches a looping member through the group's own spelling.
+    let unfounded = !totality.is_total() || enclosing.iter().any(|encloses| *encloses);
     if universes.quality_count != 0 {
         certifier.file_group(group, totality, enclosing);
     }
@@ -377,7 +383,7 @@ pub fn check_rec_group(
             name,
             &group.member_type(index),
             &Term::rec_proj(group.clone(), index),
-            *proof,
+            *proof || unfounded,
             None,
             universes,
         )?;
@@ -386,12 +392,13 @@ pub fn check_rec_group(
     Ok(proofs)
 }
 
-/// [`check_rec_group`]'s statements of a group whose verdict a record vouches for, the walk judging nothing of it: which members are proofs, at every assignment of its sorts, and each export defined by them.
+/// [`check_rec_group`]'s statements of a group whose verdict a record vouches for, the walk judging nothing of it: which members are proofs, at every assignment of its sorts, and each export defined by them, with no value where the record calls the group `unfounded`.
 pub fn state_rec_group(
     certifier: &mut Certifier,
     members: &[(Global, &DefinitionKind)],
     group: &RecGroup,
     universes: &UniverseContext,
+    unfounded: bool,
 ) -> Result<Vec<bool>, Error> {
     let mut proofs = members
         .iter()
@@ -411,7 +418,7 @@ pub fn state_rec_group(
             name,
             &group.member_type(index),
             &Term::rec_proj(group.clone(), index),
-            *proof,
+            *proof || unfounded,
             None,
             universes,
         )?;
