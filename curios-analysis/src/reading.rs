@@ -98,7 +98,7 @@ fn fresh<D: Driver, A: Arity>(driver: &mut D, scope: &Scope<A>, index: usize) ->
     Term::free_var(&driver.fresh(scope.hint(index)))
 }
 
-/// Whether a walk reads `group` by the least fixpoint of its unfolding: only where the group terminates ([`group_totality`]). Both checkers unfold only what terminates (`known_to_terminate`), and a walk opening a group that may not would spend its declaration's budget on an unfolding neither checker makes, before the declaration is refused for reaching it; such a group is read as written, as every form a walk cannot see through is. A reduction refused while deciding is the caller's to keep.
+/// Whether a walk reads `group` by the least fixpoint of its unfolding: only where the group terminates ([`group_totality`]). Both checkers unfold only what terminates — a member at its turn once `known_to_terminate` finds it so, and past its item's judgment no definition whose item's recursion does not descend, which each defines with no value — and a walk opening a group that may not would spend its declaration's budget on an unfolding neither checker makes, before the declaration is refused for reaching it; such a group is read as written, as every form a walk cannot see through is. A reduction refused while deciding is the caller's to keep.
 pub fn read_by_unfolding<D: Driver>(driver: &mut D, group: &RecGroup) -> Result<bool, D::Error> {
     Ok(group_totality(driver, group)?.is_total())
 }

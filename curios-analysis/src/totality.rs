@@ -1101,7 +1101,7 @@ pub fn spine(term: &Term) -> (Term, Vec<Term>) {
 
 /// Whether a member of a recursive group is known to terminate at its turn: `known` holds the members known to terminate so far and the member itself, each its name, type and body over the group's names, and every call among them descends. A name of the group outside `known` is no member of the group this closes, so a call to it is none and nothing here unfolds it: it stands for a member withheld or not yet reached.
 ///
-/// Both checkers take each member's turn by this, in the order the members are written, and read a member by value in its group's signatures and bodies once its turn finds it known (`curios-cert`'s `check_group`, `curios-elab`'s `Turns`). A member unfolds only where the members it reaches are known too or stand for nothing, so every unfolding either checker makes is of a definition that terminates.
+/// Both checkers take each member's turn by this, in the order the members are written, and read a member by value in its group's signatures and bodies once its turn finds it known (`curios-cert`'s `check_group`, `curios-elab`'s `Turns`). A member unfolds only where the members it reaches are known too or stand for nothing, so every unfolding either checker makes inside the group's judgment is of a definition that terminates, as every one past it is, an item whose recursion does not descend being defined with no value.
 pub fn known_to_terminate<D: Driver>(
     driver: &mut D,
     known: Vec<(Free, Term, Term)>,

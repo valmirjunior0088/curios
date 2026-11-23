@@ -143,7 +143,7 @@ impl Eraser<'_> {
 
     /// Erase a value held in a slot. A slot is there whatever it holds, but this instantiation can make what it holds a proof or a type, which carries no runtime content: proof irrelevance fills the slot with a content-free stand-in — the unit constant, or, for a *function* a callee may apply, a function of that type's arity returning it — rather than materializing a witness no runtime code reads.
     ///
-    /// A `let` binding is a kept slot too: the name stays bound for the tail, and a proof or a type bound to it is not computed. Nothing is lost by that. No term outside `Io` performs an effect, so the value performed nothing; the totality obligations make every proof and every type total, so it would have returned; and what it could still have done is refuse on a run-time carrier, which is a behaviour no proof should be able to give a program.
+    /// A `let` binding is a kept slot too: the name stays bound for the tail, and a proof or a type bound to it is not computed. Nothing is lost by that. No term outside `Io` performs an effect, so the value performed nothing; proof totality makes every proof total, and a type computes every unfolding of a definition that terminates, each one that may not left standing, so it would have returned; and what it could still have done is refuse on a run-time carrier, which is a behaviour no proof should be able to give a program.
     pub fn kept_operand(
         &mut self,
         context: &mut Reader,
