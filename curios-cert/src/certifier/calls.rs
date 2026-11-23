@@ -2,7 +2,7 @@
 //!
 //! Like the erased positions, this is the certifier's *output*, collected during the typing walk because that is the only place the answer is available. A group's members are assumed under fresh locals while its bodies are checked (`check_group`), so a recursive call, as the certifier types it, is an application whose spine head is one of those locals, and every such application the walk types is a call it records. What the walk types is every position it accepts, which is what makes the set fail closed where a separate traversal fails open: a position that traversal never visits contributes no edge, and a group with no edges is accepted.
 //!
-//! **Graded when recorded.** A call is graded by the shared [`grade`] once its arguments are typed, against the caller's parameters as the member's leading lambdas bound them, under a [`SizeContext`] the arms enclosing the call built: each arm's own case, where it scrutinizes a binder, its binders below the value it scrutinizes, where it scrutinizes an expression, and nothing its index inversion solved ([`Certifier::assume_arm`]) — its payload binders, the nonzero facts a boolean or switch arm establishes, and, where a lambda is applied on the spot, each of its binders standing for its argument. The context lives in the certifier's scope brackets: `Certifier::scoped` marks it and retracts it with the binders, so an arm's knowledge leaves with the arm on every path.
+//! **Graded when recorded.** A call is graded by the shared [`grade`] once its arguments are typed, against every parameter of the caller's part as the member's leading lambdas bind them — one typed in a binder's type, before the binders after it, hands those nothing it is graded against, so the shared walk's grading of the call is its own — under a [`SizeContext`] the arms enclosing the call built: each arm's own case, where it scrutinizes a binder, its binders below the value it scrutinizes, where it scrutinizes an expression, and nothing its index inversion solved ([`Certifier::assume_arm`]) — its payload binders, the nonzero facts a boolean or switch arm establishes, and, where a lambda is applied on the spot, each of its binders standing for its argument. The context lives in the certifier's scope brackets: `Certifier::scoped` marks it and retracts it with the binders, so an arm's knowledge leaves with the arm on every path.
 //!
 //! **Closed per group.** When `check_group` has checked every body, the group's calls close to a verdict through the shared [`decide`] — the local gate's, and the one type totality and proof totality read for the group, an inline one included. A group the walk never typed has no verdict, and a reader takes that as `Partial`.
 
@@ -17,7 +17,7 @@ use {
         refined_by_arm,
     },
     curios_common::Keyed,
-    curios_core::{Free, Global, Intrinsic, RecGroup, Subterm, Term, Totality},
+    curios_core::{CallMatrix, Free, Global, Intrinsic, RecGroup, Subterm, Term, Totality},
     std::{
         collections::{HashMap, HashSet},
         mem,
@@ -416,6 +416,7 @@ impl Certifier<'_> {
         let Some((caller, params)) = self.calls.frames[frame].caller.clone() else {
             return Ok(());
         };
+        let rows = self.calls.frames[frame].parts[caller].arity;
         for (callee, arguments) in part_calls(&self.calls.frames[frame].parts, callee, steps) {
             let arity = self.calls.frames[frame].parts[callee].arity;
             // A call is graded on what it passes, and a `let`-bound local passes what it stands for; a variable an arm's index inversion solved passes itself, since the size order reads nothing an inversion concluded, as the elaborator's discovery walk grades it.
@@ -428,7 +429,11 @@ impl Certifier<'_> {
             let context = mem::take(&mut self.calls.context);
             let call = grade(self, &context, caller, &params, callee, arity, &arguments);
             self.calls.context = context;
-            self.calls.frames[frame].calls.push(call?);
+            let call = call?;
+            self.calls.frames[frame].calls.push(Call {
+                matrix: over_every_parameter(call.matrix, rows),
+                ..call
+            });
         }
         Ok(())
     }
@@ -559,6 +564,7 @@ impl Certifier<'_> {
         };
         let base = base_part(&self.calls.frames[frame].parts, callee);
         let arity = self.calls.frames[frame].parts[base].arity;
+        let rows = self.calls.frames[frame].parts[caller].arity;
         let graded = match given {
             None => None,
             Some(given) if given.len() == arity => {
@@ -570,12 +576,12 @@ impl Certifier<'_> {
                 let context = mem::take(&mut self.calls.context);
                 let call = grade(self, &context, caller, &params, base, arity, &arguments);
                 self.calls.context = context;
-                Some(call?.matrix)
+                Some(over_every_parameter(call?.matrix, rows))
             }
             Some(_) => return self.record_call(member, &steps),
         };
         let open = &mut self.calls.frames[frame];
-        let calls = handed_member(&open.parts, callee, params.len(), graded.as_ref(), applied);
+        let calls = handed_member(&open.parts, callee, rows, graded.as_ref(), applied);
         open.calls
             .extend(calls.into_iter().map(|(part, matrix)| Call {
                 caller,
@@ -710,4 +716,18 @@ impl Certifier<'_> {
     pub(crate) fn note_enclosing_partial(&mut self, name: &Global) {
         self.calls.definitions_enclosing.insert(*name);
     }
+}
+
+/// `matrix`, graded against the parameters its caller part had bound where the call stands, over every parameter of the part: a call typed in the type of one of the part's own binders stands before the binders after it, which it hands nothing it is graded against, and the shared walk grades it against all of them, so the two checkers close one set of calls and the closure composes it with the part's other calls.
+fn over_every_parameter(matrix: CallMatrix, rows: usize) -> CallMatrix {
+    if matrix.rows() >= rows {
+        return matrix;
+    }
+    let mut padded = CallMatrix::unknown(rows, matrix.columns());
+    for row in 0..matrix.rows() {
+        for column in 0..matrix.columns() {
+            padded.set(row, column, matrix.entry(row, column));
+        }
+    }
+    padded
 }

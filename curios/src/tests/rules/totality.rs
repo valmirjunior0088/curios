@@ -754,3 +754,139 @@ fn splitting_an_applied_lambdas_binder_grades_the_successor_as_no_descent() {
         )
     });
 }
+
+/// A concept whose law states its method, witnessed for a family whose `same` recurses on the payloads through the witness's own key, as a lawful derived witness of a recursive family does, and whose `sound` recurses on them too. The law's binder `h` states the literal's own `same`, so its type holds a copy of the method whose calls are typed before `h` is bound.
+const A_LAW_THROUGH_ITS_OWN_WITNESS: &str = r#"
+    use /std/{Bool, Eq, Show, print};
+    concept Same(A : Type) : Type {
+        same(A, A) -> Bool,
+        sound(a : A, b : A, h : Bool/Holds(same(a, b))) -> Eq()(a, b),
+    }
+    induct Tree : Type
+    | leaf()
+    | node(Tree, Tree)
+    end
+    satisfy Same(Tree) {
+        same(a, b) =
+            match a
+            | leaf() => match b | leaf() => true | _ => false end
+            | node(l, r) => match b | node(m, s) => Same/same(l, m) && Same/same(r, s) | _ => false end
+            end,
+        sound(a, b, h) =
+            match a
+            | leaf() => match b | leaf() => Eq/refl() end
+            | node(l, r) =>
+                match b
+                | node(m, s) =>
+                    let left : Eq()(l, m) = Same/sound(l, m, Bool/and/first(Same/same(l, m), Same/same(r, s), h));
+                    let right : Eq()(r, s) = Same/sound(r, s, Bool/and/second(Same/same(l, m), Same/same(r, s), h));
+                    match left | refl() => match right | refl() => Eq/refl() end end
+                end
+            end,
+    }
+    let t : Tree = Tree/node(Tree/leaf(), Tree/leaf());
+    print(Show/show(Same/same(t, t)))
+    "#;
+
+/// The same law for a family that holds its children in a `List`: `sound` recurses through `List`'s witness, handed the family's own dictionary, so its descent is read through what `List`'s law applies.
+const A_LAW_THROUGH_A_LISTS_WITNESS: &str = r#"
+    use /std/{Bool, Eq, List, Show, print};
+    concept Same(A : Type) : Type {
+        same(A, A) -> Bool,
+        sound(a : A, b : A, h : Bool/Holds(same(a, b))) -> Eq()(a, b),
+    }
+    let list_same(@A : Type, use Same(A), a : List(A), b : List(A)) -> Bool =
+        match (a, b)
+        | ([], []) => true
+        | ([x, ..xs], [y, ..ys]) => Same/same(x, y) && list_same(xs, ys)
+        | _ => false
+        end;
+    let list_sound(@A : Type, use Same(A), a : List(A), b : List(A), h : Bool/Holds(list_same(a, b))) -> Eq()(a, b) =
+        match a
+        | [] => match b | [] => Eq/refl() end
+        | [x, ..xs] =>
+            match b
+            | [y, ..ys] =>
+                let head : Eq()(x, y) = Same/sound(x, y, Bool/and/first(Same/same(x, y), list_same(xs, ys), h));
+                let tail : Eq()(xs, ys) = list_sound(xs, ys, Bool/and/second(Same/same(x, y), list_same(xs, ys), h));
+                match head | refl() => match tail | refl() => Eq/refl() end end
+            end
+        end;
+    satisfy (@A : Type, use Same(A)) => Same(List(A)) {
+        same = list_same,
+        sound = list_sound,
+    }
+    induct Rose : Type
+    | node(List(Rose))
+    end
+    satisfy Same(Rose) {
+        same(a, b) = match a | node(xs) => match b | node(ys) => Same/same(xs, ys) end end,
+        sound(a, b, h) =
+            match a
+            | node(xs) =>
+                match b
+                | node(ys) =>
+                    let inner : Eq()(xs, ys) = Same/sound(xs, ys, h);
+                    match inner | refl() => Eq/refl() end
+                end
+            end,
+    }
+    let r : Rose = Rose/node([Rose/node([])]);
+    print(Show/show(Same/same(r, r)))
+    "#;
+
+/// A law beside a method that recurses through its own witness descends in both checkers, directly and through a container's witness at the family's own dictionary: each grades the calls the law's binder type makes, through its copy of the method, against every parameter of the law. Mutation-checked: with the certifier grading such a call against the parameters bound where it stands, both controls are refused by the certifier alone. Each refusal reads the method and the law through the witness at the values they were handed.
+#[test]
+fn a_law_beside_a_method_recursing_through_its_own_witness_descends() {
+    for (source, at, edits) in [
+        (
+            A_LAW_THROUGH_ITS_OWN_WITNESS,
+            "/witness~/Same(/Tree)",
+            vec![
+                (
+                    "Same/same(l, m) && Same/same(r, s) | _ => false",
+                    "Same/same(a, b) | _ => false",
+                ),
+                (
+                    "let left : Eq()(l, m) = Same/sound(l, m, Bool/and/first(Same/same(l, m), Same/same(r, s), h));\n",
+                    "",
+                ),
+                (
+                    "let right : Eq()(r, s) = Same/sound(r, s, Bool/and/second(Same/same(l, m), Same/same(r, s), h));\n",
+                    "",
+                ),
+                (
+                    "match left | refl() => match right | refl() => Eq/refl() end end",
+                    "Same/sound(a, b, h)",
+                ),
+            ],
+        ),
+        (
+            A_LAW_THROUGH_A_LISTS_WITNESS,
+            "/witness~/Same(/Rose)",
+            vec![
+                (
+                    "same(a, b) = match a | node(xs) => match b | node(ys) => Same/same(xs, ys) end end,",
+                    "same(a, b) = Same/same(a, b),",
+                ),
+                ("let inner : Eq()(xs, ys) = Same/sound(xs, ys, h);\n", ""),
+                (
+                    "match inner | refl() => Eq/refl() end",
+                    "Same/sound(a, b, h)",
+                ),
+            ],
+        ),
+    ] {
+        control(source, b"true")
+            .refused(&edits)
+            .by_elaborator_in(at, |error| {
+                matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+            })
+            .by_certifier_in(at, |error| {
+                matches!(
+                    error,
+                    curios_cert::Error::NotTotal { .. } | curios_cert::Error::NotDescending { .. }
+                )
+            });
+    }
+}
