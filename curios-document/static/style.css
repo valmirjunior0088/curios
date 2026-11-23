@@ -116,7 +116,7 @@ main {
   position: static;
 }
 
-/* The rail: the unit's mark and name, the search field pinned at its top, then the unit's paths that have a page, every row a link, the branch the page is on opened. While a query is live the results stand in for the tree, as rows of the same shape. The label and the checkbox it toggles exist for the narrow layout alone. */
+/* The rail: the unit's mark and name, then the unit's paths that have a page, every row a link, the branch the page is on opened. The label and the checkbox it toggles exist for the narrow layout alone. */
 .brand {
   display: flex;
   align-items: center;
@@ -126,64 +126,6 @@ main {
   font-size: 15px;
   color: var(--amber);
 }
-.search {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  padding: 12px 22px;
-  background: var(--rail);
-}
-.search input {
-  display: block;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 8px 36px 8px 12px;
-  border: 1px solid var(--edge);
-  border-radius: 6px;
-  background: var(--well);
-  color: var(--ink);
-  font-family: var(--mono);
-  font-size: 13px;
-  line-height: 1.3;
-  appearance: none;
-  -webkit-appearance: none;
-}
-.search input::-webkit-search-decoration,
-.search input::-webkit-search-cancel-button {
-  display: none;
-}
-.search input::placeholder {
-  color: var(--ink-57);
-}
-.search input:focus {
-  outline: none;
-  border-color: var(--amber-edge);
-  box-shadow: 0 0 0 3px var(--amber-ring);
-}
-/* The cross that empties the field, inside its right edge, present only while there is something to clear. */
-.search .clear {
-  position: absolute;
-  top: 50%;
-  right: 26px;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: none;
-  border-radius: 3px;
-  background: none;
-  color: var(--ink-57);
-  cursor: pointer;
-}
-.search .clear:hover {
-  color: var(--amber);
-}
-.search .clear[hidden] {
-  display: none;
-}
 .tree label,
 .tree .toggle {
   display: none;
@@ -191,14 +133,7 @@ main {
 .tree nav {
   display: flex;
   flex-direction: column;
-}
-/* Without script the field never shows, and the tree keeps the top edge the field would have carried. */
-.search[hidden] ~ nav {
   padding-top: 12px;
-}
-.results {
-  display: none;
-  flex-direction: column;
 }
 .tree .row {
   flex: none;
@@ -237,31 +172,6 @@ main {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-/* The path a hit lives under gives way before the hit's own name does. */
-.tree .where {
-  flex: 0 4 auto;
-  min-width: 0;
-  max-width: 50%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-  color: var(--ink-57);
-}
-.tree mark {
-  background: none;
-  color: var(--amber-bright);
-}
-.results .row[aria-current] {
-  background: var(--amber-wash);
-  color: var(--amber);
-}
-.results .none {
-  padding: 4px 22px;
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--ink-57);
 }
 
 /* The head of a page: the path it answers, each path above it a link and the separators dimmed, then what its module says of itself. */
@@ -600,7 +510,7 @@ footer {
   }
 }
 
-/* Below 860px the rail is a bar pinned above the main column, the mark, the field and a chevron on one row; the tree starts folded behind the chevron, which toggles the checkbox that shows it, and the tree or the results open as a flap over the content rather than pushing it down. A followed anchor keeps clear of the bar. */
+/* Below 860px the rail is a bar pinned above the main column, the mark and a chevron on one row; the tree starts folded behind the chevron, which toggles the checkbox that shows it, and opens as a flap over the content rather than pushing it down. A followed anchor keeps clear of the bar. */
 @media (max-width: 860px) {
   .frame {
     display: block;
@@ -628,15 +538,6 @@ footer {
     display: flex;
     align-items: center;
     justify-content: flex-end;
-  }
-  .search {
-    flex: 1 1 auto;
-    min-width: 0;
-    position: relative;
-    padding: 12px 8px 12px 12px;
-  }
-  .search .clear {
-    right: 12px;
   }
   .tree label {
     display: flex;
@@ -673,13 +574,9 @@ footer {
   .tree .toggle:checked ~ label svg {
     transform: rotate(180deg);
   }
+  /* The flap hangs from the bar, which is what the rail is pinned as. */
   .tree nav {
     display: none;
-  }
-  /* The flap hangs from the bar, which is what the rail is pinned as. */
-  .results,
-  .tree nav,
-  .search[hidden] ~ nav {
     position: absolute;
     top: 100%;
     left: 0;
@@ -718,12 +615,4 @@ footer {
   footer {
     justify-content: center;
   }
-}
-
-/* While a query is live the results stand in for the tree, whatever the width and whatever the toggle says: these come last so they outrank the toggle's rule above. */
-.tree.live .results {
-  display: flex;
-}
-.tree.live nav {
-  display: none;
 }

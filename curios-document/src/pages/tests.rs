@@ -253,79 +253,13 @@ fn a_referent_is_found_where_it_is_drawn_whole() {
 }
 
 #[test]
-fn the_index_lists_every_path_once() {
-    let record = record();
-    let bundle = Bundle::new(&record);
-
-    // The record's order. A page's row says what its path is, by the keyword of the declaration it opens on, and that declaration's members follow under the page's own path, a field as a projection writes it; a name that is a module too has its page's row alone, and a name another module declares its own row without its members. No row for the witnesses, the nameless constraint, or the constructors the root exposes beside their owner.
-    assert_eq!(
-        bundle.index(),
-        concat!(
-            "window.curiosIndex=[",
-            "[\"mod\",\"/shapes\",\"index.html\"],",
-            "[\"concept\",\"/shapes/Area\",\"index.html#Area\"],",
-            "[\"method\",\"/shapes/Area/area\",\"index.html#Area/area\"],",
-            "[\"induct\",\"/shapes/Token\",\"index.html#Token\"],",
-            "[\"case\",\"/shapes/Token/token\",\"index.html#Token/token\"],",
-            "[\"let\",\"/shapes/origin\",\"index.html#origin\"],",
-            "[\"induct\",\"/shapes/Shape\",\"Shape.crs.html\"],",
-            "[\"case\",\"/shapes/Shape/circle\",\"Shape.crs.html#/circle\"],",
-            "[\"case\",\"/shapes/Shape/square\",\"Shape.crs.html#/square\"],",
-            "[\"let\",\"/shapes/Shape/area\",\"Shape.crs.html#area\"],",
-            "[\"struct\",\"/shapes/Shape/Corner\",\"Shape/Corner.crs.html\"],",
-            "[\"field\",\"/shapes/Shape/Corner.x\",\"Shape/Corner.crs.html#.x\"],",
-            "[\"let\",\"/shapes/Shape/Corner/x\",\"Shape/Corner.crs.html#x\"],",
-            "[\"mod\",\"/shapes/geometry\",\"geometry.crs.html\"],",
-            "[\"let\",\"/shapes/geometry/origin\",\"geometry.crs.html#origin\"]",
-            "];\n"
-        )
-    );
-}
-
-#[test]
-fn a_name_another_page_draws_whole_is_one_row_of_the_index() {
-    let mut record = record();
-    // `geometry` exposes `Shape` too: a row of its own there, and its constructors under the page that draws it whole alone.
-    record.modules[3]
-        .entries
-        .push(Entry::Declaration(declaration(
-            Kind::Inductive,
-            "Shape",
-            &["shapes", "Shape", "Shape"],
-            &["circle", "square"],
-        )));
-    let index = Bundle::new(&record).index();
-
-    assert!(
-        index.contains("[\"induct\",\"/shapes/geometry/Shape\",\"geometry.crs.html#Shape\"]"),
-        "{index}"
-    );
-    assert!(!index.contains("/shapes/geometry/Shape/circle"), "{index}");
-}
-
-#[test]
-fn a_page_carries_the_field_and_the_units_paths() {
+fn a_page_carries_the_units_paths_and_no_script() {
     let record = record();
     let pages = pages(&record);
     let landing = pages("index.html");
 
-    // The page loads the index before the script, tells the script where the root is, and holds the field hidden.
-    assert!(
-        landing.contains("<html lang=\"en\" data-root=\"\">"),
-        "{landing}"
-    );
-    assert!(
-        landing.contains("<script src=\"static/index.js\" defer></script>"),
-        "{landing}"
-    );
-    assert!(
-        landing.contains("<form class=\"search\" role=\"search\" hidden>"),
-        "{landing}"
-    );
-    assert!(
-        landing.contains("<div class=\"results\" hidden></div>"),
-        "{landing}"
-    );
+    // The page runs nothing: the rail is its index.
+    assert!(!landing.contains("<script"), "{landing}");
     // The page names its icon; the checkbox behind the chevron is kept from sight by the stylesheet and never by the markup, so it stays in the tab order.
     assert!(
         landing.contains("<link rel=\"icon\" href=\"static/mark.svg\" type=\"image/svg+xml\">"),
@@ -358,10 +292,6 @@ fn a_page_carries_the_field_and_the_units_paths() {
     );
     // On a page beneath the root every link climbs to it, the branch the page is on is open with its own paths under it, and the page's own row is marked.
     let corner = pages("Shape/Corner.crs.html");
-    assert!(
-        corner.contains("<html lang=\"en\" data-root=\"../\">"),
-        "{corner}"
-    );
     assert!(
         corner.contains("<a class=\"brand\" href=\"../index.html\">"),
         "{corner}"

@@ -121,10 +121,11 @@ fn document_writes_the_bundle_among_the_products() {
     );
     assert!(bundle.join("static/style.css").is_file());
     assert!(bundle.join("static/fonts/geist.woff2").is_file());
-    let index = fs::read_to_string(bundle.join("static/index.js")).expect("the search index");
     assert!(
-        index.contains("\"/shapes/Shape/circle\",\"index.html#Shape/circle\"]"),
-        "a member is indexed at its anchor: {index}"
+        fs::read_dir(bundle.join("static"))
+            .expect("the static files")
+            .all(|entry| entry.expect("a static file").path().extension() != Some("js".as_ref())),
+        "a bundle holds no script"
     );
 }
 
@@ -178,8 +179,6 @@ fn the_standard_library_documents_into_the_directory_std_names() {
     let future = fs::read_to_string(site.join("Io/Future.crs.html")).expect("a nested page");
     assert!(
         future.contains("href=\"../static/style.css\"")
-            && future.contains("src=\"../static/index.js\"")
-            && future.contains("data-root=\"../\"")
             && future.contains("href=\"../index.html\""),
         "{future}"
     );

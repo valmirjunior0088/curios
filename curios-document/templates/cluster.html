@@ -43,11 +43,11 @@
             <span class="arrow">→</span></a></div>
     {%- endif %}
     {%- if let Some(home) = cluster.home %}
-        <div class="ways"><span class="home">declared at {% if let Some(href) = home.href -%}
+        <div class="ways">declared at {% if let Some(href) = home.href -%}
                 <a href="{{ href }}">{{ home.text }}</a>
             {%- else -%}
                 {{ home.text }}
             {%- endif -%}
-        </span></div>
+        </div>
     {%- endif %}
 </article>

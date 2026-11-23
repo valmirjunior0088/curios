@@ -5,7 +5,6 @@
       "biome.json",
       ".claude/settings.json",
       "curios-browser/src/**/*.mjs",
-      "curios-document/static/**/*.js",
       "curios-document/static/**/*.css",
       "editors/textmate/**/*.json",
       "editors/tree-sitter/**/*.js",

@@ -10,7 +10,7 @@ use curios_common::{Class, Keyword, Qualifier};
 pub struct Documentation {
     /// The prefix the unit mounts at — `/json` for the package `json` — which every module path below begins with.
     pub prefix: Qualifier,
-    /// What the unit is, in a sentence or a few, for its landing page: the manifest's `description` for a package, a constant for the standard library, nothing when neither said.
+    /// What the unit is, in a sentence or a few, for its landing page: the manifest's `description`, the standard library's among them, or for `/sys` the constant its roster states (`SYS_DESCRIPTION`), nothing when neither said.
     pub description: Option<String>,
     /// Every module a consumer can reach, the root first and each parent before its children.
     pub modules: Vec<ModuleDocumentation>,
@@ -147,7 +147,7 @@ pub struct Declaration {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct Member {
-    /// The label, or empty for a superclass edge: an anonymous member has no anchor, no address and no row in the search index.
+    /// The label, or empty for a superclass edge: an anonymous member has no anchor and no address.
     pub name: String,
     pub signature: Signature,
     pub prose: Option<Vec<String>>,

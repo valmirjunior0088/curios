@@ -757,16 +757,6 @@ pub fn keyword(kind: Kind) -> &'static str {
     .spelling()
 }
 
-/// What a member of a declaration of `kind` is called in the index: a constructor a case, a field a field, a concept's method a method. The other kinds expose no members, so the word for one is never shown.
-pub fn member_kind(kind: Kind) -> &'static str {
-    match kind {
-        Kind::Inductive => "case",
-        Kind::Structure => "field",
-        Kind::Concept => "method",
-        Kind::Definition | Kind::Witness | Kind::Foreign => "member",
-    }
-}
-
 /// `text` as a plain segment, joined to the plain segment before it when there is one.
 fn plain(text: &str, out: &mut Vec<Segment>) {
     if text.is_empty() {
