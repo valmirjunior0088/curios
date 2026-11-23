@@ -10,7 +10,7 @@ run = [
 [web]
 description = "Format the JavaScript, JSON and CSS of every tree, as `biome.json` lists them"
 run = [
-    ["biome", "format", "--write", "."],
+    ["{.tools.biome}", "format", "--write", "."],
 ]
 
 [zed]

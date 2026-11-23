@@ -14,6 +14,11 @@ pub fn root() -> &'static Path {
         .expect("xtask sits one level below the workspace root")
 }
 
+/// Where this crate keeps what outlives a run: the tools the steps run, and the installer a release renders.
+pub fn artifacts() -> PathBuf {
+    root().join("xtask").join(".artifacts")
+}
+
 /// Where cargo puts what it builds, honoring the same override cargo itself honors: the task files' `{!cargo_target_dir}`.
 pub fn target_directory() -> PathBuf {
     match env::var_os("CARGO_TARGET_DIR") {

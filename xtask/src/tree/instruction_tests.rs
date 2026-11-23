@@ -84,15 +84,3 @@ fn a_flag_that_is_no_short_or_long_spelling_is_refused() {
 fn an_instruction_neither_a_command_nor_a_write_is_refused() {
     assert!(run_refused("", "[\"true\"]").contains("an instruction is a command"));
 }
-
-/// A run asks a program its version before anything is filled, so a command names its program as written and never as a value.
-#[test]
-fn a_command_naming_its_program_through_braces_is_refused() {
-    assert!(
-        run_refused(
-            "variables.tool = \"true\"\n",
-            "[[\"FLAG=1\", \"{.a.variables.tool}\"]]"
-        )
-        .contains("a command names its program as written")
-    );
-}

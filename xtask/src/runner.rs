@@ -6,10 +6,10 @@
 
 use {
     crate::{
-        Fill, Given, Instruction, Name, Tree, Values, Variable, Word, check_version, launch,
-        launch_in, launched, root, schedule, spelled,
+        Fill, Given, Instruction, Name, Tree, Values, Variable, Word, check_version, directories,
+        fetch, launch, launch_in, launched, root, schedule, spelled,
     },
-    std::{collections::BTreeSet, fs, time::Instant},
+    std::{collections::BTreeSet, env, fs, time::Instant},
 };
 
 #[cfg(test)]
@@ -20,6 +20,7 @@ pub fn perform(tree: &Tree, asked: &Name, given: &Given) -> Result<(), String> {
     let values = Values::new(tree, given);
     let scheduled = schedule(tree, asked, given);
     check_pins(tree, &scheduled)?;
+    fetch(tree, &values, &scheduled)?;
     let mut failed = Vec::new();
     let mut unrun = Vec::new();
 
@@ -104,6 +105,19 @@ fn check_pins(tree: &Tree, scheduled: &[usize]) -> Result<(), String> {
 
 /// Run one step's instructions in order — each command launched, each write's file written whole, its directory made where it is not — then hold the step to what it produces.
 fn run(tree: &Tree, values: &Values<'_>, step: usize) -> Result<(), String> {
+    // Each tool the step names that ships beside others, found first by every launch the step makes, its own nested ones included.
+    let found = directories(tree, step);
+    let path = match found.is_empty() {
+        true => None,
+        false => Some(
+            env::join_paths(
+                found
+                    .into_iter()
+                    .chain(env::split_paths(&env::var_os("PATH").unwrap_or_default())),
+            )
+            .map_err(|error| format!("a tool's directory cannot stand on `PATH`: {error}"))?,
+        ),
+    };
     let step = &tree.steps[step];
     let directory = root().join(step.dir.as_deref().unwrap_or(""));
 
@@ -123,7 +137,10 @@ fn run(tree: &Tree, values: &Values<'_>, step: usize) -> Result<(), String> {
         let Some(words) = values.command(command)? else {
             continue;
         };
-        let launched = launch(&words)?;
+        let mut launched = launch(&words)?;
+        if let Some(path) = &path {
+            launched.command.env("PATH", path);
+        }
         let pin = tree.programs.get(&launched.program);
         launch_in(&directory, launched, pin)?;
     }

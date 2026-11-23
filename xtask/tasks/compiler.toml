@@ -21,13 +21,13 @@ consumes = [".compiler.build.produces.binary"]
 run = [
     [
         "CURIOS={.compiler.build.produces.binary}",
-        "node", "--test", "curios-browser/src/page.test.mjs", "curios-browser/src/runner.test.mjs",
+        "{.tools.node}", "--test", "curios-browser/src/page.test.mjs", "curios-browser/src/runner.test.mjs",
     ],
     [
         "CURIOS={.compiler.build.produces.binary}",
         "TARGET={!cargo_target_dir}",
         "CARGO_HOME={!cargo_home}",
         "SYSROOT={!rust_sysroot}",
-        "node", "--test", "curios-browser/src/released.test.mjs",
+        "{.tools.node}", "--test", "curios-browser/src/released.test.mjs",
     ],
 ]

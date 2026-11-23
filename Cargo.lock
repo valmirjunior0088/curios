@@ -2971,6 +2971,7 @@ dependencies = [
  "askama",
  "clap",
  "curios-common",
+ "curios-download",
  "toml_edit",
 ]
 

@@ -5,19 +5,19 @@ description = "Install the VS Code extension's tools from its lock file, exactly
 dir = "editors/vscode"
 produces.installed = "editors/vscode/node_modules"
 run = [
-    ["npm", "clean-install"],
+    ["{.tools.npm}", "clean-install"],
 ]
 
 [lint.biome-format]
 description = "Fail on formatting drift in the VS Code extension's JavaScript and JSON"
 run = [
-    ["biome", "format", "editors/vscode"],
+    ["{.tools.biome}", "format", "editors/vscode"],
 ]
 
 [lint.biome-lint]
 description = "Lint the VS Code extension's JavaScript and JSON"
 run = [
-    ["biome", "lint", "--error-on-warnings", "editors/vscode"],
+    ["{.tools.biome}", "lint", "--error-on-warnings", "editors/vscode"],
 ]
 
 [build]
@@ -25,5 +25,5 @@ description = "Bundle the VS Code extension and the TextMate grammars it ships, 
 dir = "editors/vscode"
 consumes = [".vscode.install.produces.installed"]
 run = [
-    ["npm", "run", "package"],
+    ["{.tools.npm}", "run", "package"],
 ]

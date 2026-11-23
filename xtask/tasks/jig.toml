@@ -9,5 +9,5 @@ run = [
 [test]
 description = "Run the jig's tests: these task files held to the command line and the check workflow, the runner's own, the bench's and the board's"
 run = [
-    ["cargo", "nextest", "run", "--package", "x*", "--all-targets", "--no-fail-fast"],
+    ["{.tools.cargo-nextest}", "nextest", "run", "--package", "x*", "--all-targets", "--no-fail-fast"],
 ]

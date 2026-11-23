@@ -45,7 +45,7 @@ description = "Run the prelude's build under a recorder, its stream filed where 
 consumes = [".launcher.build.produces.binary"]
 run = [
     [
-        "cargo", "nextest", "run", "--release", "--package", "curios", "--test", "profile",
+        "{.tools.cargo-nextest}", "nextest", "run", "--release", "--package", "curios", "--test", "profile",
         "--run-ignored", "only", "--no-capture", "--filterset", "test(=prelude_build_profile)",
     ],
 ]
@@ -55,7 +55,7 @@ description = "Ask a stream a question in Perfetto's SQL, through trace_processo
 # Perfetto's own reader answers, so what this says of a stream is what Perfetto's UI and its query page say of the same file, past what the summary states.
 run = [
     [
-        "trace_processor_shell", "--query-string", "{.profile.variables.sql}",
+        "{.tools.trace_processor_shell}", "--query-string", "{.profile.variables.sql}",
         "{.profile.variables.stream}",
     ],
 ]

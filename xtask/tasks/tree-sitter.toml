@@ -5,19 +5,19 @@ description = "Install the grammar's tools from its lock file, exactly, as every
 dir = "editors/tree-sitter"
 produces.installed = "editors/tree-sitter/node_modules"
 run = [
-    ["npm", "clean-install"],
+    ["{.tools.npm}", "clean-install"],
 ]
 
 [lint.biome-format]
 description = "Fail on formatting drift in the grammar's JavaScript and JSON"
 run = [
-    ["biome", "format", "editors/tree-sitter"],
+    ["{.tools.biome}", "format", "editors/tree-sitter"],
 ]
 
 [lint.biome-lint]
 description = "Lint the grammar's JavaScript and JSON"
 run = [
-    ["biome", "lint", "--error-on-warnings", "editors/tree-sitter"],
+    ["{.tools.biome}", "lint", "--error-on-warnings", "editors/tree-sitter"],
 ]
 
 [build]
@@ -26,7 +26,7 @@ dir = "editors/tree-sitter"
 consumes = [".tree-sitter.install.produces.installed"]
 produces.parser = "editors/tree-sitter/base/src"
 run = [
-    ["npm", "run", "generate"],
+    ["{.tools.npm}", "run", "generate"],
 ]
 
 [test]
@@ -34,5 +34,5 @@ description = "Regenerate the parsers, then parse the standard library, the corp
 dir = "editors/tree-sitter"
 consumes = [".tree-sitter.install.produces.installed"]
 run = [
-    ["npm", "test"],
+    ["{.tools.npm}", "test"],
 ]

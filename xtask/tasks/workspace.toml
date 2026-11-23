@@ -23,7 +23,7 @@ run = [
 [lint.biome-format]
 description = "Fail on formatting drift in the JavaScript, JSON and CSS the workspace holds"
 run = [
-    ["biome", "format", "{.workspace.variables.web}"],
+    ["{.tools.biome}", "format", "{.workspace.variables.web}"],
 ]
 
 [lint.clippy]
@@ -36,7 +36,7 @@ run = [
 [lint.biome-lint]
 description = "Lint the JavaScript, JSON and CSS the workspace holds: the browser harness, the documentation pages' script and stylesheet"
 run = [
-    ["biome", "lint", "--error-on-warnings", "{.workspace.variables.web}"],
+    ["{.tools.biome}", "lint", "--error-on-warnings", "{.workspace.variables.web}"],
 ]
 
 [test.suite]
@@ -44,7 +44,7 @@ description = "Run the workspace's tests as it ships, the one compilation of the
 consumes = [".launcher.build.produces.binary"]
 run = [
     [
-        "cargo", "nextest", "run", "{.workspace.variables.shipped}",
+        "{.tools.cargo-nextest}", "nextest", "run", "{.workspace.variables.shipped}",
         "--all-targets", "--no-fail-fast", "--no-tests=warn",
         "{.workspace.variables.expression}",
     ],

@@ -12,8 +12,14 @@ workspace = true
 [dependencies]
 # A refusal of the task files is a report, drawn as every other the toolchain makes is.
 curios-common = { workspace = true }
+# Every tool a step runs, fetched at its digest and kept unpacked or as an executable, by the protocol the build scripts fetch by.
+curios-download = { workspace = true }
 # `string` for a command line whose subcommands and flags are the task files' names, read when the program runs.
 clap = { workspace = true, features = ["string"] }
 askama = { workspace = true }
 # The task files, read with the place of every key and value for a refusal's caret, and for `release`, format-preserving edits of the workspace and standard-library manifests, so a bump sets only their version fields and the diff it produced can be read back and checked exactly.
 toml_edit = { workspace = true }
+
+[dev-dependencies]
+# `fill!`, by which a fixture splices a value into task files whose own braces stay single.
+curios-common = { workspace = true, features = ["test-support"] }

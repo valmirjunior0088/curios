@@ -15,6 +15,9 @@ const LOCK: &str = include_str!("../../Cargo.lock");
 
 const MANIFEST: &str = include_str!("../../Cargo.toml");
 
+/// `curios-profile`'s build script, which names the Perfetto release it takes the trace schema at.
+const PROFILE_BUILD: &str = include_str!("../../curios-profile/build.rs");
+
 const BIOME: &str = include_str!("../../biome.json");
 
 fn tree() -> Tree {
@@ -171,9 +174,17 @@ fn the_workspace_s_biome_steps_reach_every_file_biome_reads_of_it() {
     }
 }
 
-/// The generator must match the `wasm-bindgen` crate the bundle is built against exactly, so the task files pin it at the lock's version, and a bump of the crate fails here until the pin follows.
+/// The version the tool `name`, written from the top without its dot, is fetched at.
+fn version_of(tree: &Tree, name: &str) -> String {
+    match &tree.tools[&name.split('.').map(str::to_string).collect::<Name>()] {
+        Tool::Fetched(fetched) => fetched.version.clone(),
+        Tool::Shipped { .. } => panic!("`{name}` is fetched itself"),
+    }
+}
+
+/// The generator must match the `wasm-bindgen` crate the bundle is built against exactly, so the task files fetch it at the lock's version, and a bump of the crate fails here until the tool follows.
 #[test]
-fn the_bindings_generator_is_pinned_at_the_lock_s_version() {
+fn the_bindings_generator_is_fetched_at_the_lock_s_version() {
     let lock = LOCK.parse::<toml_edit::DocumentMut>().unwrap();
     let locked = lock["package"]
         .as_array_of_tables()
@@ -183,10 +194,21 @@ fn the_bindings_generator_is_pinned_at_the_lock_s_version() {
         .and_then(|package| package["version"].as_str())
         .unwrap();
 
-    assert_eq!(
-        tree().programs["wasm-bindgen"],
-        Pin::Exact(locked.to_string())
-    );
+    assert_eq!(version_of(&tree(), "tools.wasm-bindgen"), locked);
+}
+
+/// `profile query` asks Perfetto's own reader what a stream holds, so the task files fetch it at the release whose schema `curios-profile` generates its messages from, and a bump of the schema fails here until the reader follows.
+#[test]
+fn the_trace_reader_is_fetched_at_the_schema_s_release() {
+    let release = PROFILE_BUILD
+        .lines()
+        .find_map(|line| {
+            line.strip_prefix("const REVISION: &str = \"v")?
+                .strip_suffix("\";")
+        })
+        .expect("curios-profile's build script names the release it takes the schema at");
+
+    assert_eq!(version_of(&tree(), "tools.trace_processor_shell"), release);
 }
 
 /// A workflow installs a program at the pin `./.github/actions/pins` sets in its job's environment, named as the action names it, so every pin a job reads is one the task files hold, read before the step that installs at it.

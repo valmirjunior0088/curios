@@ -11,6 +11,64 @@ programs.wasm-bindgen = "0.2.129"
 # A minimum, since Perfetto publishes the reader a platform at a time and a contributor installs it: the release whose schema `curios-profile` generates its messages from.
 programs.trace_processor_shell = ">= 58.2"
 
+# The tools the steps run beside the Rust toolchain, which `rust-toolchain.toml` pins: each fetched at its digest for the host a run is on before the run's first step, and kept as `xtask/.artifacts/<name>-<version>`.
+
+# A process to a test, as every test step runs the suite.
+[tools.cargo-nextest]
+version = "0.9.151"
+url.x86_64-unknown-linux-gnu = "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-{.tools.cargo-nextest.version}/cargo-nextest-{.tools.cargo-nextest.version}-x86_64-unknown-linux-musl.tar.gz"
+url.aarch64-unknown-linux-gnu = "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-{.tools.cargo-nextest.version}/cargo-nextest-{.tools.cargo-nextest.version}-aarch64-unknown-linux-musl.tar.gz"
+url.aarch64-apple-darwin = "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-{.tools.cargo-nextest.version}/cargo-nextest-{.tools.cargo-nextest.version}-universal-apple-darwin.tar.gz"
+sha256.x86_64-unknown-linux-gnu = "6b284d6fde9670dfb6ee10ea9d9abbc85f95643d3f592472d420d82e257b3a6c"
+sha256.aarch64-unknown-linux-gnu = "a9ee2d53cf0711d879f068c0ff814b6fe3af3f9be8799f8ab484e47571087160"
+sha256.aarch64-apple-darwin = "d1d7d025d4bfc9fb154cd76aea3949bd78534829a0589abefa6e5dd4edb135dd"
+
+# Formats and lints every tree's JavaScript, JSON and CSS, at the one version whose output the checks hold; a bare binary a platform, published without sums, so its digests are GitHub's.
+[tools.biome]
+version = "2.6.2"
+url.x86_64-unknown-linux-gnu = "https://github.com/biomejs/biome/releases/download/%40biomejs%2Fbiome%40{.tools.biome.version}/biome-linux-x64-musl"
+url.aarch64-unknown-linux-gnu = "https://github.com/biomejs/biome/releases/download/%40biomejs%2Fbiome%40{.tools.biome.version}/biome-linux-arm64-musl"
+url.aarch64-apple-darwin = "https://github.com/biomejs/biome/releases/download/%40biomejs%2Fbiome%40{.tools.biome.version}/biome-darwin-arm64"
+sha256.x86_64-unknown-linux-gnu = "ebb3d0e80cbee503c4c19a70891dd7589e22e801412630a0cad402b19ca78c93"
+sha256.aarch64-unknown-linux-gnu = "5d697fea8f0cbb7364f995f16c219174b302ac5b68c868f2e87cb71dda9d1c4d"
+sha256.aarch64-apple-darwin = "be66b76dcb930b1e365bd36c4f5d8557c2dda70b31567f8bd15509e487753a69"
+
+# The JavaScript engine the browser's tests and the npm trees run under: the latest LTS line.
+[tools.node]
+version = "26.13.1"
+url.x86_64-unknown-linux-gnu = "https://nodejs.org/dist/v{.tools.node.version}/node-v{.tools.node.version}-linux-x64.tar.gz"
+url.aarch64-unknown-linux-gnu = "https://nodejs.org/dist/v{.tools.node.version}/node-v{.tools.node.version}-linux-arm64.tar.gz"
+url.aarch64-apple-darwin = "https://nodejs.org/dist/v{.tools.node.version}/node-v{.tools.node.version}-darwin-arm64.tar.gz"
+sha256.x86_64-unknown-linux-gnu = "518674de2b621728a5e4486f5fb3b7d2900bb3cc4aa97969edaa463db99f9778"
+sha256.aarch64-unknown-linux-gnu = "80a330b35415382878df18d41afbd106ea89bfb3be0087d6608e289a14c5cc7d"
+sha256.aarch64-apple-darwin = "aec2514ea1ceb2ba52455e9ec65986f6749a06dd759e5db2a72e6889668c9735"
+path = "bin/node"
+
+# The npm the Node above ships, which installs each npm tree from its lock file.
+[tools.npm]
+archive = ".tools.node"
+path = "bin/npm"
+
+# The bindings generator, at the version `Cargo.lock` gives the `wasm-bindgen` crate, which a test holds it to: it refuses a module built against another version.
+[tools.wasm-bindgen]
+version = "0.2.129"
+url.x86_64-unknown-linux-gnu = "https://github.com/wasm-bindgen/wasm-bindgen/releases/download/{.tools.wasm-bindgen.version}/wasm-bindgen-{.tools.wasm-bindgen.version}-x86_64-unknown-linux-musl.tar.gz"
+url.aarch64-unknown-linux-gnu = "https://github.com/wasm-bindgen/wasm-bindgen/releases/download/{.tools.wasm-bindgen.version}/wasm-bindgen-{.tools.wasm-bindgen.version}-aarch64-unknown-linux-musl.tar.gz"
+url.aarch64-apple-darwin = "https://github.com/wasm-bindgen/wasm-bindgen/releases/download/{.tools.wasm-bindgen.version}/wasm-bindgen-{.tools.wasm-bindgen.version}-aarch64-apple-darwin.tar.gz"
+sha256.x86_64-unknown-linux-gnu = "82d12bb940e2d4e72e0d5605387fc1b8ca179044e012b620f0ce4e7440e8320e"
+sha256.aarch64-unknown-linux-gnu = "2ed4351c35dd9440308bbb02767d47ea278efe851a52465300f3c94f5b6c2a87"
+sha256.aarch64-apple-darwin = "81d4a23d56b3c3eb8187658329116d50e0b228a93b343825fb71f70179051cd1"
+
+# Perfetto's own reader on the command line, at the release whose schema `curios-profile` generates its messages from, which a test holds it to. A bare binary a platform, whose digests Perfetto's launcher, `tools/trace_processor`, carries from the next release's tag on.
+[tools.trace_processor_shell]
+version = "58.2"
+url.x86_64-unknown-linux-gnu = "https://commondatastorage.googleapis.com/perfetto-luci-artifacts/v{.tools.trace_processor_shell.version}/linux-amd64/trace_processor_shell"
+url.aarch64-unknown-linux-gnu = "https://commondatastorage.googleapis.com/perfetto-luci-artifacts/v{.tools.trace_processor_shell.version}/linux-arm64/trace_processor_shell"
+url.aarch64-apple-darwin = "https://commondatastorage.googleapis.com/perfetto-luci-artifacts/v{.tools.trace_processor_shell.version}/mac-arm64/trace_processor_shell"
+sha256.x86_64-unknown-linux-gnu = "58042408e6cc861fb1a731c26bb082dc222285561eaa4e12a48a8b2b90dca7b9"
+sha256.aarch64-unknown-linux-gnu = "0e6e0c5452c505c8d46fe472fd196a0d17d963460727e2ce2013b02aa1309555"
+sha256.aarch64-apple-darwin = "d29864d1ba3b36855527bb1b0ca3aa7f703cdce338b9680bb922c5c151b358fa"
+
 [handoff]
 description = "Run every check the handoff holds work to: each subject's steps, each after what it requires and consumes"
 requires = [

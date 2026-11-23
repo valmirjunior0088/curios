@@ -5,19 +5,19 @@ description = "Install the TextMate grammars' tools from their lock file, exactl
 dir = "editors/textmate"
 produces.installed = "editors/textmate/node_modules"
 run = [
-    ["npm", "clean-install"],
+    ["{.tools.npm}", "clean-install"],
 ]
 
 [lint.biome-format]
 description = "Fail on formatting drift in the TextMate grammars and their table"
 run = [
-    ["biome", "format", "editors/textmate"],
+    ["{.tools.biome}", "format", "editors/textmate"],
 ]
 
 [lint.biome-lint]
 description = "Lint the TextMate grammars and their table"
 run = [
-    ["biome", "lint", "--error-on-warnings", "editors/textmate"],
+    ["{.tools.biome}", "lint", "--error-on-warnings", "editors/textmate"],
 ]
 
 [test]
@@ -25,5 +25,5 @@ description = "Hold the TextMate grammars to their snapshots"
 dir = "editors/textmate"
 consumes = [".textmate.install.produces.installed"]
 run = [
-    ["npm", "test"],
+    ["{.tools.npm}", "test"],
 ]

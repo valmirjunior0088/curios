@@ -1,6 +1,6 @@
 //! What a run reports, from task files of the test's own whose commands are `true` and `false`, which every platform this crate builds for has.
 
-use {super::*, crate::*};
+use {super::*, crate::*, curios_common::fill};
 
 fn tree(steps: &str) -> Tree {
     Tree::parse(&[
@@ -67,6 +67,49 @@ fn a_write_leaves_its_file_holding_its_contents() {
 
     assert_eq!(performed, Ok(()));
     assert_eq!(held.expect("the file is written"), "held");
+}
+
+/// A step runs with the directory of each tool it names that is kept as a directory first on its `PATH`, so a launch inside the tool finds what ships beside it: here a shell that finds the first directory on its `PATH` to be the one holding the tool's executable.
+#[test]
+fn a_step_runs_with_its_tools_directories_first_on_its_path() {
+    let name = format!("shelf-{}", std::process::id());
+    let kept = artifacts().join(format!("{name}-1.0"));
+    fs::create_dir_all(kept.join("bin")).unwrap();
+    let digest = "0".repeat(64);
+    let tree = Tree::parse(&[
+        (
+            "xtask/tasks.toml",
+            &fill!(
+                r#"description = "The top"
+[tools.${name}]
+version = "1.0"
+url.${HOST_TRIPLE} = "https://example.org/${name}.tar.gz"
+sha256.${HOST_TRIPLE} = "${digest}"
+path = "bin/${name}"
+"#,
+                name,
+                HOST_TRIPLE,
+                digest
+            ),
+        ),
+        (
+            "xtask/tasks/a.toml",
+            &fill!(
+                r#"description = "A"
+[s]
+description = "S"
+run = [["sh", "-c", 'test "$(echo "$PATH" | cut -d: -f1)" = "$(dirname "$0")"', "{.tools.${name}}"]]
+"#,
+                name
+            ),
+        ),
+    ])
+    .unwrap();
+
+    let outcome = perform(&tree, &group(), &Given::new());
+
+    fs::remove_dir_all(&kept).unwrap();
+    assert_eq!(outcome, Ok(()));
 }
 
 /// The task files `top` and `a` under a top of its own, where a pin is declared.

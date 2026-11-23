@@ -1,6 +1,6 @@
 //! The installer script a release attaches, rendered from `templates/install.sh` with the release's version baked in. The version is fixed when the script is rendered rather than discovered when it runs, so the script a release ships installs that release's binary and a pinned URL stays pinned; the release workflow renders it from the tag and attaches what this files. The template is rendered without an escaper, because the product is a shell script rather than markup, and the version is the one thing it substitutes: a placeholder the template names and the context does not supply fails the build, which a textual substitution could not promise.
 
-use {crate::root, askama::Template, std::fs};
+use {crate::artifacts, askama::Template, std::fs};
 
 #[cfg(test)]
 mod tests;
@@ -20,7 +20,7 @@ pub fn installer(version: &str) -> Result<(), String> {
     .render()
     .map_err(|error| format!("cannot render the installer: {error}"))?;
 
-    let directory = root().join("xtask").join(".artifacts");
+    let directory = artifacts();
     fs::create_dir_all(&directory)
         .map_err(|error| format!("cannot create {}: {error}", directory.display()))?;
     let filed = directory.join("install.sh");

@@ -1,11 +1,11 @@
 //! The task files read into one tree, and every refusal reading them can make.
 //!
-//! **A file is a group, and a key's meaning is where it sits.** `xtask/tasks.toml` is the group the files in `xtask/tasks/` belong to, each a group named after its file. A file's top level holds `description`, `variables`, `programs`, and its steps and groups; a group holds only steps and groups; a step holds `description`, `requires`, `consumes`, `produces`, `run` and `dir`, and no table of its own. So whether a key is an attribute or a child is read off its position, and one out of place is refused rather than guessed at.
+//! **A file is a group, and a key's meaning is where it sits.** `xtask/tasks.toml` is the group the files in `xtask/tasks/` belong to, each a group named after its file. A file's top level holds `description`, `variables`, `programs`, and its steps and groups, and the root's holds `tools` beside them; a group holds only steps and groups; a step holds `description`, `requires`, `consumes`, `produces`, `run` and `dir`, and no table of its own. So whether a key is an attribute or a child is read off its position, and one out of place is refused rather than guessed at.
 //!
-//! **A name is the path to where it is declared, written from the top with a leading `.`, and it names one thing.** Each segment is a key, read from the top one projection at a time: a step or a group is its tables, `.workspace.lint.clippy`; a variable sits under its file's `variables`, `.workspace.variables.edition`; and a produced file under its step's `produces`, `.launcher.build.produces.binary`. So a name reads the same wherever it is written, and says where to find what it names. `requires` names steps and groups, `consumes` produced files, and the braces in a command a variable or a produced file, or, with a `!` where the `.` stands, a value the runner fills ([`BUILT_INS`]). Each resolves as the tree is read, so a name that names nothing, one written without its `.`, or one naming the wrong kind of thing, is refused before anything runs, and so is a command that reads a file its step does not consume, which would run without the edge that orders it.
+//! **A name is the path to where it is declared, written from the top with a leading `.`, and it names one thing.** Each segment is a key, read from the top one projection at a time: a step or a group is its tables, `.workspace.lint.clippy`; a variable sits under its file's `variables`, `.workspace.variables.edition`; a tool under the root's `tools`, `.tools.node`, and its version beneath it, `.tools.node.version`; and a produced file under its step's `produces`, `.launcher.build.produces.binary`. So a name reads the same wherever it is written, and says where to find what it names. `requires` names steps and groups, `consumes` produced files, and the braces in a command a variable, a tool or a produced file, or, with a `!` where the `.` stands, a value the runner fills ([`BUILT_INS`]). Each resolves as the tree is read, so a name that names nothing, one written without its `.`, or one naming the wrong kind of thing, is refused before anything runs, and so is a command that reads a file its step does not consume, which would run without the edge that orders it.
 
 use {
-    crate::{launched, root},
+    crate::root,
     curios_common::{About, Report, Said, Source, Span},
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -28,6 +28,8 @@ mod layout_tests;
 mod name_tests;
 #[cfg(test)]
 mod program_tests;
+#[cfg(test)]
+mod tool_tests;
 
 /// The file whose group holds the files in [`DIRECTORY`], from the repository's root.
 const ROOT_FILE: &str = "xtask/tasks.toml";
@@ -83,6 +85,7 @@ pub struct Tree {
     pub groups: BTreeMap<Name, Group>,
     pub variables: BTreeMap<Name, Variable>,
     pub produced: BTreeMap<Name, Produced>,
+    pub tools: BTreeMap<Name, Tool>,
     /// What the steps' commands launch, by the program's name, where the files say what version a run needs or what installs it.
     pub programs: BTreeMap<String, Pin>,
 }
@@ -142,6 +145,49 @@ pub struct Produced {
     pub path: Word,
     pub producer: usize,
 }
+
+/// An executable a step names, `{.tools.node}`, kept under `xtask/.artifacts` before a run's first step.
+#[derive(Debug)]
+pub enum Tool {
+    /// One fetched itself, from a download of its own on each host.
+    Fetched(Fetched),
+    /// One another tool's download holds, at `path` inside it: npm in Node's.
+    Shipped { archive: Name, path: String },
+}
+
+/// A tool fetched from a download of its own.
+#[derive(Debug)]
+pub struct Fetched {
+    pub version: String,
+    /// Each host's download, by its triple.
+    pub downloads: BTreeMap<String, Published>,
+    /// Where the executable sits in a download kept as a directory: the tool's own name where the files write none.
+    pub path: String,
+}
+
+/// Where a host fetches a tool from, the digest its download has, and how it is kept.
+#[derive(Debug)]
+pub struct Published {
+    pub url: Word,
+    pub sha256: String,
+    pub shape: Shape,
+}
+
+/// How a download is kept, read off the end of its URL: a gzipped tarball, `.tar.gz`, is unpacked into a directory; a gzipped file, `.gz`, is decoded into the executable; anything else is the executable as it was downloaded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Shape {
+    Tarball,
+    Gzipped,
+    Bare,
+}
+
+/// Where a tool is declared: once, at the root's top, where every tool the steps run stands together.
+const TOOLS_AT_THE_ROOT: &str =
+    "`tools` belongs at the top of `xtask/tasks.toml`, where every tool is declared";
+
+/// The keys a tool fetched itself holds, and those of one shipped in another's download.
+const FETCHED_KEYS: [&str; 4] = ["version", "url", "sha256", "path"];
+const SHIPPED_KEYS: [&str; 2] = ["archive", "path"];
 
 /// The version of a program a run needs, as `programs` pins it by the name a step launches it as.
 #[derive(Debug, PartialEq, Eq)]
@@ -212,6 +258,8 @@ pub enum Fill {
     Variable(Name),
     /// A produced file's path.
     Produced(Name),
+    /// A tool's executable, kept for the host the run is on.
+    Tool(Name),
 }
 
 impl Word {
@@ -278,6 +326,7 @@ enum Kind {
     Task,
     Variable,
     Produced,
+    Tool,
 }
 
 impl Tree {
@@ -347,10 +396,12 @@ impl Tree {
             groups: BTreeMap::new(),
             variables: BTreeMap::new(),
             produced: BTreeMap::new(),
+            tools: BTreeMap::new(),
             programs: BTreeMap::new(),
         };
         let mut kinds = BTreeMap::<Name, Kind>::new();
         let mut written = Vec::new();
+        let mut tools = Vec::new();
 
         // The first pass declares every name, so the second resolves against the whole tree whatever order its files come in.
         for (index, (file, document)) in files.iter().zip(&documents).enumerate() {
@@ -369,6 +420,48 @@ impl Tree {
                             declare(&mut kinds, file, &name, Kind::Variable, value.span())?;
                             let variable = variable_of(file, value)?;
                             tree.variables.insert(name, variable);
+                        }
+                    }
+                    "tools" => {
+                        if !file.scope.is_empty() {
+                            return Err(file.refuse(span, TOOLS_AT_THE_ROOT.to_string()));
+                        }
+                        let table = item.as_table_like().ok_or_else(|| {
+                            file.refuse(
+                                item.span(),
+                                "`tools` is a table of tools by name".to_string(),
+                            )
+                        })?;
+                        for (key, value) in table.iter() {
+                            let name = scoped(&scoped(&file.scope, "tools"), key);
+                            let span = table.key(key).and_then(|key| key.span());
+                            declare(&mut kinds, file, &name, Kind::Tool, span)?;
+                            let entry = value.as_table_like().ok_or_else(|| {
+                                file.refuse(
+                                    value.span(),
+                                    format!("tool `{key}` is a table: its `version`, `url` and `sha256`, or the `archive` it ships in"),
+                                )
+                            })?;
+                            // A tool's version is a value its downloads' URLs write, `{.tools.node.version}`.
+                            if let Some(version) = entry.get("version") {
+                                let version_name = scoped(&name, "version");
+                                declare(
+                                    &mut kinds,
+                                    file,
+                                    &version_name,
+                                    Kind::Variable,
+                                    version.span(),
+                                )?;
+                                let version = text_of(file, version, "version")?;
+                                tree.variables
+                                    .insert(version_name, Variable::Words(vec![version]));
+                            }
+                            tools.push(Written {
+                                file: index,
+                                name,
+                                table: entry,
+                                span: value.span(),
+                            });
                         }
                     }
                     "programs" => {
@@ -469,6 +562,12 @@ impl Tree {
                 }
             }
         }
+
+        for tool in &tools {
+            let read = tool_of(&files[tool.file], tool, &kinds, &tree.variables)?;
+            tree.tools.insert(tool.name.clone(), read);
+        }
+        tree.refuse_tools(&files, &tools)?;
 
         // The second pass resolves each step's names against every declaration.
         let mut steps = Vec::new();
@@ -586,15 +685,6 @@ impl Tree {
                             )
                         })?;
                     let words = words.iter().map(&word).collect::<Result<Vec<_>, _>>()?;
-                    // A run asks its programs their versions before anything is filled, so the word naming one is read as written.
-                    if let Some((at, _)) = launched(&words)
-                        && words[at].fills().next().is_some()
-                    {
-                        return Err(file.refuse(
-                            instruction.span(),
-                            "a command names its program as written, which a value in braces is not".to_string(),
-                        ));
-                    }
                     run.push(Instruction::Command(words));
                 }
             }
@@ -692,6 +782,40 @@ impl Tree {
                 _ => None,
             })
             .collect()
+    }
+
+    /// Refuse a tool shipped in one kept as a lone executable, or in one shipped itself.
+    fn refuse_tools(&self, files: &[File<'_>], written: &[Written<'_>]) -> Result<(), Box<Report>> {
+        for tool in written {
+            let file = &files[tool.file];
+            let Tool::Shipped { archive, .. } = &self.tools[&tool.name] else {
+                continue;
+            };
+            match &self.tools[archive] {
+                Tool::Fetched(owner)
+                    if owner
+                        .downloads
+                        .values()
+                        .all(|published| published.shape == Shape::Tarball) => {}
+                Tool::Fetched(_) => {
+                    return Err(file.refuse(
+                        tool.span.clone(),
+                        format!("`{}` is kept as a lone executable on some host, so nothing ships beside it", from_top(archive)),
+                    ));
+                }
+                Tool::Shipped { .. } => {
+                    return Err(file.refuse(
+                        tool.span.clone(),
+                        format!(
+                            "`{}` ships in another tool's download itself",
+                            from_top(archive)
+                        ),
+                    ));
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// Refuse a step that runs after itself, through what it requires or consumes.
@@ -811,6 +935,7 @@ fn walk<'a>(
                     span,
                     match key {
                         "variables" | "programs" => format!("`{key}` belongs at a file's top"),
+                        "tools" => TOOLS_AT_THE_ROOT.to_string(),
                         _ if item.is_table() => {
                             format!("`{key}` is a table inside a step, which holds no tables")
                         }
@@ -952,6 +1077,147 @@ fn program_of(file: &File<'_>, item: &Item) -> Result<Pin, Box<Report>> {
     }
 
     Ok(pin)
+}
+
+/// The tool `written` declares, its URLs resolved against every declaration.
+fn tool_of(
+    file: &File<'_>,
+    written: &Written<'_>,
+    kinds: &BTreeMap<Name, Kind>,
+    variables: &BTreeMap<Name, Variable>,
+) -> Result<Tool, Box<Report>> {
+    let table = written.table;
+    let key = written.name.last().expect("a tool is named");
+    let only = |allowed: &[&str]| match table.iter().find(|(key, _)| !allowed.contains(key)) {
+        Some((other, _)) => Err(file.refuse(
+            table.key(other).and_then(|key| key.span()),
+            format!(
+                "`{other}` is no key of tool `{key}`, which holds {}",
+                allowed
+                    .iter()
+                    .map(|key| format!("`{key}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        )),
+        None => Ok(()),
+    };
+    let path = table
+        .get("path")
+        .map(|item| text_of(file, item, "path"))
+        .transpose()?;
+
+    if let Some(archive) = table.get("archive") {
+        only(&SHIPPED_KEYS)?;
+        let text = text_of(file, archive, "archive")?;
+        let name = resolved(&text).ok_or_else(|| file.refuse(archive.span(), unrooted(&text)))?;
+        if kinds.get(&name) != Some(&Kind::Tool) {
+            return Err(file.refuse(archive.span(), format!("`{text}` is no tool")));
+        }
+        let path = path.ok_or_else(|| {
+            file.refuse(
+                written.span.clone(),
+                format!("tool `{key}` ships in `{text}`, and names its `path` there"),
+            )
+        })?;
+
+        return Ok(Tool::Shipped {
+            archive: name,
+            path,
+        });
+    }
+
+    only(&FETCHED_KEYS)?;
+    let version = table.get("version").ok_or_else(|| {
+        file.refuse(
+            written.span.clone(),
+            format!("tool `{key}` states its `version`, or the `archive` it ships in"),
+        )
+    })?;
+    let urls = hosts_of(file, table.get("url"), "url")?;
+    let sums = hosts_of(file, table.get("sha256"), "sha256")?;
+    if urls.is_empty() {
+        return Err(file.refuse(
+            written.span.clone(),
+            format!("tool `{key}` states a `url` and a `sha256` for each host it runs on"),
+        ));
+    }
+    if let Some((triple, item)) = sums
+        .iter()
+        .find(|(triple, _)| !urls.iter().any(|(other, _)| other == triple))
+    {
+        return Err(file.refuse(
+            item.span(),
+            format!("`sha256.{triple}` has no `url.{triple}` beside it"),
+        ));
+    }
+
+    let mut downloads = BTreeMap::new();
+    for (triple, item) in urls {
+        let text = item
+            .as_str()
+            .ok_or_else(|| file.refuse(item.span(), format!("`url.{triple}` is a string")))?;
+        let url = word_of(file, text, item.span(), kinds, variables)?;
+        let shape = match url.0.last() {
+            Some(Piece::Text(tail)) if tail.ends_with(".tar.gz") => Shape::Tarball,
+            Some(Piece::Text(tail)) if tail.ends_with(".gz") => Shape::Gzipped,
+            Some(Piece::Text(_)) => Shape::Bare,
+            Some(Piece::Value(_)) | None => {
+                return Err(file.refuse(
+                    item.span(),
+                    "a download's URL ends in the file it names, which a value in braces is not"
+                        .to_string(),
+                ));
+            }
+        };
+        let sum = sums
+            .iter()
+            .find(|(other, _)| *other == triple)
+            .map(|(_, item)| *item)
+            .ok_or_else(|| {
+                file.refuse(
+                    item.span(),
+                    format!("`url.{triple}` has no `sha256.{triple}` beside it"),
+                )
+            })?;
+        let sha256 = text_of(file, sum, "sha256")?;
+        if sha256.len() != 64
+            || !sha256
+                .chars()
+                .all(|digit| matches!(digit, '0'..='9' | 'a'..='f'))
+        {
+            return Err(file.refuse(
+                sum.span(),
+                format!("`sha256.{triple}` is a SHA-256, 64 lowercase hexadecimal digits"),
+            ));
+        }
+        downloads.insert(triple.to_string(), Published { url, sha256, shape });
+    }
+
+    Ok(Tool::Fetched(Fetched {
+        version: text_of(file, version, "version")?,
+        downloads,
+        path: path.unwrap_or_else(|| key.clone()),
+    }))
+}
+
+/// The entries of the table `item` holds under `key`, a value a host, by its triple.
+fn hosts_of<'a>(
+    file: &File<'_>,
+    item: Option<&'a Item>,
+    key: &str,
+) -> Result<Vec<(&'a str, &'a Item)>, Box<Report>> {
+    let Some(item) = item else {
+        return Ok(Vec::new());
+    };
+    let table = item.as_table_like().ok_or_else(|| {
+        file.refuse(
+            item.span(),
+            format!("`{key}` is a table of hosts, each by its triple, as `{key}.x86_64-unknown-linux-gnu`"),
+        )
+    })?;
+
+    Ok(table.iter().collect())
 }
 
 /// The variable `item` declares.
@@ -1113,6 +1379,7 @@ fn word_of(
                 match kinds.get(&name) {
                     Some(Kind::Variable) => Fill::Variable(name),
                     Some(Kind::Produced) => Fill::Produced(name),
+                    Some(Kind::Tool) => Fill::Tool(name),
                     Some(Kind::Task) => {
                         return Err(refuse(format!(
                             "`{written}` is a step or group, which has no value"

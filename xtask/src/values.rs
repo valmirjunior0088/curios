@@ -5,7 +5,7 @@
 use {
     crate::{
         Fill, HOST_TRIPLE, Name, Piece, Tree, Variable, Word, ask, ask_launched, cargo_home,
-        from_top, launch, root, target_directory,
+        executable, from_top, launch, root, target_directory,
     },
     std::{
         cell::{OnceCell, RefCell},
@@ -93,7 +93,8 @@ impl<'a> Values<'a> {
             | Fill::CargoTargetDir
             | Fill::CargoHome
             | Fill::RustSysroot
-            | Fill::Produced(_) => self.text(word).map(|text| Some(vec![text])),
+            | Fill::Produced(_)
+            | Fill::Tool(_) => self.text(word).map(|text| Some(vec![text])),
         }
     }
 
@@ -111,6 +112,9 @@ impl<'a> Values<'a> {
                 Piece::Value(Fill::RustSysroot) => text.push_str(self.sysroot()?),
                 Piece::Value(Fill::Produced(name)) => {
                     text.push_str(&self.path(name)?.to_string_lossy())
+                }
+                Piece::Value(Fill::Tool(name)) => {
+                    text.push_str(&executable(self.tree, name).to_string_lossy())
                 }
                 Piece::Value(Fill::Variable(name)) => match &self.tree.variables[name] {
                     Variable::Words(words) => text.push_str(&words.concat()),
