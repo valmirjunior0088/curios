@@ -410,6 +410,266 @@ fn a_read_a_loop_comes_back_to_names_one_object_on_every_round() {
     assert_eq!(in_place(&read_beside_a_construction(true)).rows.len(), 0);
 }
 
+/// `main` hands a loop a one-element list of a `Pair` nothing else holds, which the loop hands itself at each back edge and reads the element of, handing the element on through a join borrowing it to the loop's accumulator; on its last round it rebuilds the element as a `Pair` and calls `reader` on what `read_accumulator` names: the accumulator, the element the round before handed on, or the `Pair` the rebuild made.
+fn element_handed_round_a_loop(read_accumulator: bool) -> Module {
+    let mut module = Module::new();
+    let pair = module.add_row(Row {
+        debug_name: Some("Pair".into()),
+        slots: vec![Slot::Tag, Slot::Opaque],
+    });
+    let main = module.reserve_function();
+    let main_return = module.reserve_continuation();
+    let reader = module.reserve_function();
+    let reader_return = module.reserve_continuation();
+    let [
+        v,
+        w,
+        inner,
+        dummy,
+        l,
+        base,
+        acc,
+        c,
+        h,
+        p,
+        c2,
+        e,
+        a2,
+        x,
+        y,
+        n,
+        z,
+        q,
+        r,
+        t,
+        t0,
+        t1,
+        s,
+    ] = [
+        "v", "w", "inner", "dummy", "l", "base", "acc", "c", "h", "p", "c2", "e", "a2", "x", "y",
+        "n", "z", "q", "r", "t", "t0", "t1", "s",
+    ]
+    .map(|name| module.add_value(Some(name.into())));
+
+    // Two reads, so no accessor: a call of it is no row read of what it is handed.
+    let answer = module.add_node(Node::ApplyCont(Edge {
+        target: reader_return,
+        args: vec![Atom::Value(s)],
+    }));
+    let sum = module.add_node(Node::LetIntrinsic {
+        result: s,
+        op: Intrinsic::NatAdd,
+        args: vec![Atom::Value(t0), Atom::Value(t1)],
+        next: answer,
+    });
+    let read_t1 = module.add_node(Node::LetIntrinsic {
+        result: t1,
+        op: Intrinsic::RowGet(pair, 1),
+        args: vec![Atom::Value(t)],
+        next: sum,
+    });
+    let read_t0 = module.add_node(Node::LetIntrinsic {
+        result: t0,
+        op: Intrinsic::RowGet(pair, 0),
+        args: vec![Atom::Value(t)],
+        next: read_t1,
+    });
+    module.define_function(
+        reader,
+        Function {
+            lineage: None,
+            debug_name: Some("reader".into()),
+            params: vec![t],
+            return_cont: reader_return,
+            body: read_t0,
+            droppable: Droppable::Never,
+            terminates: false,
+        },
+    );
+
+    let done = module.reserve_continuation();
+    let stop = module.add_node(halt(vec![Atom::Value(r)]));
+    let add = module.add_node(Node::LetIntrinsic {
+        result: r,
+        op: Intrinsic::NatAdd,
+        args: vec![Atom::Value(z), Atom::Value(q)],
+        next: stop,
+    });
+    let read_n = module.add_node(Node::LetIntrinsic {
+        result: q,
+        op: Intrinsic::RowGet(pair, 1),
+        args: vec![Atom::Value(n)],
+        next: add,
+    });
+    module.define_continuation(
+        done,
+        Continuation {
+            lineage: None,
+            debug_name: None,
+            params: vec![z],
+            body: read_n,
+            terminates: false,
+        },
+    );
+    let exit = module.reserve_continuation();
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(reader),
+        args: vec![Atom::Value(match read_accumulator {
+            true => a2,
+            false => n,
+        })],
+        return_to: done,
+    });
+    let call_scope = module.add_node(Node::LetCont {
+        continuations: vec![done],
+        body: call,
+    });
+    let build = module.add_node(Node::LetValue {
+        result: n,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(y)]),
+        next: call_scope,
+    });
+    let bump = module.add_node(Node::LetIntrinsic {
+        result: y,
+        op: Intrinsic::NatAdd,
+        args: vec![Atom::Value(x), nat(1)],
+        next: build,
+    });
+    let read_e = module.add_node(Node::LetIntrinsic {
+        result: x,
+        op: Intrinsic::RowGet(pair, 1),
+        args: vec![Atom::Value(e)],
+        next: bump,
+    });
+    module.define_continuation(
+        exit,
+        Continuation {
+            lineage: None,
+            debug_name: None,
+            params: vec![e, a2],
+            body: read_e,
+            terminates: false,
+        },
+    );
+    let round = module.reserve_continuation();
+    let join = module.reserve_continuation();
+    let back = module.add_node(Node::ApplyCont(Edge {
+        target: round,
+        args: vec![Atom::Value(base), Atom::Value(p), Atom::Value(c2)],
+    }));
+    let count_down = module.add_node(Node::LetIntrinsic {
+        result: c2,
+        op: Intrinsic::NatSub,
+        args: vec![Atom::Value(c), nat(1)],
+        next: back,
+    });
+    module.define_continuation(
+        join,
+        Continuation {
+            lineage: None,
+            debug_name: None,
+            params: vec![p],
+            body: count_down,
+            terminates: false,
+        },
+    );
+    let decide = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(c),
+        cases: std::collections::BTreeMap::from([(
+            0,
+            Edge {
+                target: exit,
+                args: vec![Atom::Value(h), Atom::Value(acc)],
+            },
+        )]),
+        default: Some(Edge {
+            target: join,
+            args: vec![Atom::Value(h)],
+        }),
+    });
+    let inner_scope = module.add_node(Node::LetCont {
+        continuations: vec![join, exit],
+        body: decide,
+    });
+    let read_h = module.add_node(Node::LetIntrinsic {
+        result: h,
+        op: Intrinsic::ListGet,
+        args: vec![Atom::Value(base), nat(0)],
+        next: inner_scope,
+    });
+    module.define_continuation(
+        round,
+        Continuation {
+            lineage: None,
+            debug_name: None,
+            params: vec![base, acc, c],
+            body: read_h,
+            terminates: false,
+        },
+    );
+    let enter = module.add_node(Node::ApplyCont(Edge {
+        target: round,
+        args: vec![Atom::Value(l), Atom::Value(dummy), nat(1)],
+    }));
+    let loop_scope = module.add_node(Node::LetCont {
+        continuations: vec![round],
+        body: enter,
+    });
+    let list = module.add_node(Node::LetValue {
+        result: l,
+        value: ValueExpr::List(vec![Atom::Value(inner)]),
+        next: loop_scope,
+    });
+    let built_dummy = module.add_node(Node::LetValue {
+        result: dummy,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(w)]),
+        next: list,
+    });
+    let built_inner = module.add_node(Node::LetValue {
+        result: inner,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(v)]),
+        next: built_dummy,
+    });
+    let computed_w = module.add_node(Node::LetIntrinsic {
+        result: w,
+        op: Intrinsic::NatAdd,
+        args: vec![nat(5), nat(6)],
+        next: built_inner,
+    });
+    let computed_v = module.add_node(Node::LetIntrinsic {
+        result: v,
+        op: Intrinsic::NatAdd,
+        args: vec![nat(3), nat(4)],
+        next: computed_w,
+    });
+    let body = module.add_node(Node::LetFun {
+        functions: vec![reader],
+        body: computed_v,
+    });
+    module.define_function(
+        main,
+        Function {
+            lineage: None,
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: main_return,
+            body,
+            droppable: Droppable::Never,
+            terminates: false,
+        },
+    );
+    module.set_entry(main);
+    module.verify().unwrap();
+    module
+}
+
+/// A borrowed continuation parameter outlives the jump that binds it, so the element a join borrowing it hands on to the accumulator is still what the accumulator names when the next round reads it again and rebuilds it: that rebuild writes what the accumulator is read for after it, and is refused. Where the call reads the rebuilt `Pair` instead, the element is rebuilt.
+#[test]
+fn a_borrowed_name_a_second_jump_hands_on_keeps_what_it_names_from_a_rebuild() {
+    assert_eq!(in_place(&element_handed_round_a_loop(false)).rows.len(), 1);
+    assert_eq!(in_place(&element_handed_round_a_loop(true)).rows.len(), 0);
+}
+
 /// `main` builds a `Pair` nothing else holds over a `Pair` it reads again afterwards, and hands the first to `bump`, which reads its slot and builds a `Pair` of what it read beside its parameter dying. Where `taken_apart`, `bump` also reads a slot of what it read.
 fn built_over_a_value_read_again(taken_apart: bool) -> Module {
     let mut module = Module::new();

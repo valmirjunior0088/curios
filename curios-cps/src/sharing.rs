@@ -8,7 +8,7 @@
 //!
 //! **Borrowing.** A parameter a function or a continuation only reads is borrowed, so whoever handed it the value keeps it: a call or a jump into a borrowed parameter is a read, and a read-only walk the optimizer made a loop leaves its caller's value unique for the rebuild after it, as Lean's borrow inference treats a join point as a local function whose parameters carry a borrow flag (`Lean.Compiler.IR.Borrow`). A parameter owns where it is rebuilt, captured or consumed, or where a field of it that a rebuild could write — one that may be a row or a tuple, read from no payload's slot — must be owned, as Lean's inference owns what it resets. An accessor, a function each return of which hands back at one position what one row read of one parameter binds, owns nothing for it: a call of it reads what it hands that parameter as a row read in the caller's own body would, at the call, and the value the call resumes with is judged as that field read is ([`Shape::read_through_accessors`]). Which parameters are rebuilt is the candidates' own answer, so the facts are found twice: owning every parameter, then borrowing what the first answer leaves.
 //!
-//! **A borrow is one name among several.** A borrowed parameter names an object its holder still holds, so nothing may write into that object while the parameter is live. A transfer handing it to a borrowed parameter and to an owned one, as itself or as a field of the other, owns both; a continuation's region building a row its parameter is read at keeps the parameter owned; and a continuation's parameter, which lives on past the jump that bound it where a function's lives within the call, owns where what it was handed is consumed, or a rebuild writes into it, while it is live. The last is read off the rebuilds the facts admit, so borrowing and rebuilding are decided again until no rebuild writes under a borrow.
+//! **A borrow is one name among several.** A borrowed parameter names an object its holder still holds, so nothing may write into that object while the parameter is live. A transfer handing it to a borrowed parameter and to an owned one, as itself or as a field of the other, owns both; a continuation's region building a row its parameter is read at keeps the parameter owned; and a continuation's parameter, which lives on past the jump that bound it where a function's lives within the call, owns where a name of what it holds is consumed, or a rebuild writes into one, while it is live: what it was handed, what a borrowed continuation parameter that handed it on was handed in turn, and every continuation parameter a jump hands one of those, the object going on under each of those names ([`Shape::named_with`]). The last is read off the rebuilds the facts admit, so borrowing and rebuilding are decided again until no rebuild writes under a borrow.
 
 use {
     super::{
@@ -2089,7 +2089,7 @@ impl Shape {
         })
     }
 
-    /// Whether a value a jump hands the continuation parameter `receiver` binds as `param`, or a field read off it, is consumed while `param` is live: a function's parameter lives within its call, while its caller waits, so it never is. Its consumer could rebuild in place what `param` still reads.
+    /// Whether a name of what the continuation parameter `receiver` binds as `param` holds ([`Shape::named_with`]) is consumed while `param` is live: a function's parameter lives within its call, while its caller waits, so it never is. Its consumer could rebuild in place what `param` still reads.
     fn consumed_under(
         &self,
         module: &Module,
@@ -2097,22 +2097,19 @@ impl Shape {
         param: ValueId,
         borrowed: &Borrowed,
     ) -> bool {
-        let Receiver::ContParam(_, index) = receiver else {
+        let Receiver::ContParam(..) = receiver else {
             return false;
         };
-        self.transfers(module, receiver).iter().any(|args| {
-            let Some(Atom::Value(handed)) = args.get(index) else {
-                return false;
-            };
-            self.with_fields(*handed).iter().any(|value| {
+        self.named_with(module, receiver, borrowed)
+            .iter()
+            .any(|value| {
                 self.consumed(*value, borrowed)
                     .iter()
                     .any(|point| self.live_after(module, *point, param))
             })
-        })
     }
 
-    /// Of the continuation parameters `borrowed` holds, those live where one of `rebuilds` writes into a value a jump hands them, or a field read off one: the rebuild would write what the parameter still reads.
+    /// Of the continuation parameters `borrowed` holds, those live where one of `rebuilds` writes into a name of what they hold ([`Shape::named_with`]): the rebuild would write what the parameter still reads.
     fn rebuilt_under(
         &self,
         module: &Module,
@@ -2124,23 +2121,53 @@ impl Shape {
             .filter(|receiver| matches!(receiver, Receiver::ContParam(..)))
             .filter(|receiver| {
                 let param = receiver.param(module);
-                let Receiver::ContParam(_, index) = **receiver else {
-                    return false;
-                };
-                let held = self
-                    .transfers(module, **receiver)
-                    .iter()
-                    .filter_map(|args| match args.get(index) {
-                        Some(Atom::Value(handed)) => Some(self.with_fields(*handed)),
-                        _ => None,
-                    })
-                    .flatten()
-                    .collect::<BTreeSet<_>>();
+                let held = self.named_with(module, **receiver, borrowed);
                 rebuilds
                     .iter()
                     .any(|rebuild| held.contains(&rebuild.of) && self.live_at(rebuild.node, param))
             })
             .copied()
+            .collect()
+    }
+
+    /// Every name the object the borrowed continuation parameter `receiver` holds may go by, each with the fields read off it: what each transfer into it hands, what a borrowed continuation parameter among those was handed in turn, and every continuation parameter a jump hands one of these. A borrowed parameter outlives the jump that binds it, so what the borrowed parameter that handed it its value was handed is still what it reads, and that object goes on under the name of every parameter a jump hands it to.
+    fn named_with(
+        &self,
+        module: &Module,
+        receiver: Receiver,
+        borrowed: &Borrowed,
+    ) -> BTreeSet<ValueId> {
+        let mut names = BTreeSet::new();
+        let mut holders = vec![receiver];
+        let mut seen = BTreeSet::from([receiver]);
+        while let Some(holder) = holders.pop() {
+            for args in self.transfers(module, holder) {
+                let Some(Atom::Value(handed)) = args.get(holder.place()) else {
+                    continue;
+                };
+                names.insert(*handed);
+                if let Some(Def::ContParam(continuation, index)) = self.defs.get(handed) {
+                    let handed_on = Receiver::ContParam(*continuation, *index);
+                    if borrowed.contains(&handed_on) && seen.insert(handed_on) {
+                        holders.push(handed_on);
+                    }
+                }
+            }
+        }
+        let mut pending = names.iter().copied().collect::<Vec<_>>();
+        while let Some(name) = pending.pop() {
+            for (_, site, _) in self.uses.get(&name).into_iter().flatten() {
+                if let Site::Jump(target, index) = site
+                    && let Some(continuation) = module.continuation(*target)
+                    && names.insert(continuation.params[*index])
+                {
+                    pending.push(continuation.params[*index]);
+                }
+            }
+        }
+        names
+            .iter()
+            .flat_map(|name| self.with_fields(*name))
             .collect()
     }
 
