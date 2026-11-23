@@ -1,6 +1,6 @@
 //! Which constructions of a row may write into a value of that row dying beside them: the proof [`rebuild_in_place`](super::rebuild_in_place) spends ([A value costs when it is kept, not when it is named](../../documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md)).
 //!
-//! **Three facts, each on a path.** Whether a value is consumed or only read, and where it is used last: a function's body and each continuation's are blocks, a node has a place along one, and a switch's edge is a path of its own, so a value one arm hands on and another returns is used once. Whether a value is unique: the greatest fixpoint the shared solver reaches as the least one of its dual, *shared*, over values and function returns, with every boundary the module does not see whole shared — an escaping function's or the entry's parameters, what a closure, a host, a cell or a box hands back, a value a nested function captures. A filler is null and a literal a number or bytes, neither a row a rebuild writes into, and constant data is kept from one by its tag, below, so none of the three makes what it is handed to shared: a parameter one call hands a constant and another a value nothing else holds is unique wherever it is no constant. A parameter is unique where every known call hands it a unique value dead after the call; a part read out of a unique value — a field, an element, what an accessor hands back — is unique where every path from the read that consumes that value before a run binds it again consumes it with the part dead and untouched: named no more there, and written by nothing between, no consumption of the part or of a field read off it and no construction a rebuild may become ([`Shape::part_kept_after`]), which is Perceus's rule read as One-Shot Bufferize reads a write in place, in conflict only between a value's definition and a later read of what it was, and what lets a path copy qualify; and where no run comes back to the read with that value still bound, each round's read naming the one object. The converse holds of the value: one consumed while a field read out of it is still live, or handed on beside such a read, is shared, since what it is handed to may take that field apart and rebuild it in place under the read. Past the block that binds a value its name is another round's value, so what a loop does to its parameter on a later round is done to another value than the one a read took a field of.
+//! **Three facts, each on a path.** Whether a value is consumed or only read, and where it is used last: a function's body and each continuation's are blocks, a node has a place along one, and a switch's edge is a path of its own, so a value one arm hands on and another returns is used once. Whether a value is unique: the greatest fixpoint the shared solver reaches as the least one of its dual, *shared*, over values and function returns, with every boundary the module does not see whole shared — an escaping function's or the entry's parameters, what a closure, a host, a cell or a box hands back, a value a nested function captures. A filler is null and a literal a number or bytes, neither a row a rebuild writes into, and constant data is kept from one by its tag, below, so none of the three makes what it is handed to shared: a parameter one call hands a constant and another a value nothing else holds is unique wherever it is no constant. A parameter is unique where every known call hands it a unique value dead after the call; a part read out of a unique value — a field, an element, what an accessor hands back — is unique where every path from the read that consumes that value before a run binds it again consumes it with the part dead and untouched: named no more there, and written by nothing between, no consumption of the part or of a field read off it and no construction a rebuild may become ([`Shape::part_kept_after`]), which is Perceus's rule read as One-Shot Bufferize reads a write in place, in conflict only between a value's definition and a later read of what it was, and what lets a path copy qualify; and where a run comes back to the read with that value still bound, each round's read naming the one object, only where the round leaves the part untouched on its way back: no consumption of it or of a field read off it, and no construction a rebuild may become, as a loop's back edge judges its parameter's part. A second read of its slot names the same object, and is a second name of it only where the part is still held there: live, handed on or touched since its own read ([`Shape::held_until`]). The converse holds of the value: one consumed while a field read out of it is still live, or handed on beside such a read, is shared, since what it is handed to may take that field apart and rebuild it in place under the read. Past the block that binds a value its name is another round's value, so what a loop does to its parameter on a later round is done to another value than the one a read took a field of.
 //!
 //! **Payloads by slot.** A construction holding what something else holds is shared with it, since a read of the construction hands that out; only a row, a tuple or a list counts, a number holding nothing a write lands in. A slot whose reads nothing takes apart, wherever what they hand out flows, is a payload's and carries the fact itself: a shared value stored in it shares the slot and leaves the construction one nothing else holds, and a read of a slot so shared is shared. So a leaf built over a payload read back out of another map is a leaf nothing else holds, and every fork over it is rebuilt; a child's slot stays shared with the construction that holds it, so one tree something else holds says nothing of another. Which slots are payloads decides what the facts prove and never whether they hold, a slot's fact covering every store into it.
 //!
@@ -1132,6 +1132,26 @@ struct Point {
     into: Edge,
 }
 
+/// What may take apart or write what a read of a part names: the consumptions of the part and of every field read off it, and the constructions of its function a rebuild may become.
+struct Touches {
+    consumed: Vec<Point>,
+    writes: Vec<NodeId>,
+}
+
+impl Touches {
+    /// Whether one of them runs after `read` on a path leading to `to`, a consumption along its own edge: a switch that hands the part on in one arm and goes on to `to` in another touches nothing on the second path.
+    fn between(&self, shape: &Shape, read: NodeId, to: NodeId) -> bool {
+        let between = |node: NodeId| node != to && shape.reaches(read, node);
+        self.consumed
+            .iter()
+            .any(|touch| between(touch.node) && shape.point_reaches(*touch, to))
+            || self
+                .writes
+                .iter()
+                .any(|write| between(*write) && shape.reaches(*write, to))
+    }
+}
+
 /// The module read once: where each node sits, how each value is defined and used, and what is live where.
 struct Shape {
     /// The block and the place along it of every node of a live function.
@@ -1585,15 +1605,39 @@ impl Shape {
             || self.slot_of.get(&a) == self.slot_of.get(&b)
     }
 
-    /// Whether a field read of `of` binding `value` names one object with another read of a slot it may read, either running after the other while `of` names one object, or with itself on a later round of a loop that binds `of` once.
-    fn read_again(&self, value: ValueId, of: ValueId) -> bool {
-        self.returns_without_rebinding(of, self.binder[&value])
+    /// Whether a field read of `of` binding `value` names one object with another read of a slot it may read, where the earlier of the two runs before the later while `of` names one object and its part is still held there ([`Shape::held_until`]), or with itself on a later round of a loop that binds `of` once, where the round touches what it read on its way back to the read ([`Touches::between`]): the later read names the object the earlier did, and finds what was done to it between them. That is the test a loop's back edge makes of its parameter's part ([`Shape::part_kept_after`]), taken where the read runs again, which nothing the read binds is live into.
+    fn read_again(&self, value: ValueId, of: ValueId, borrowed: &Borrowed) -> bool {
+        let read = self.binder[&value];
+        (self.returns_without_rebinding(of, read)
+            && self.touches(value, borrowed).between(self, read, read))
             || self.fields.get(&of).into_iter().flatten().any(|other| {
                 *other != value
                     && self.may_read_one_slot(*other, value)
-                    && (self.reaches_as_one(of, self.binder[&value], self.binder[other])
-                        || self.reaches_as_one(of, self.binder[other], self.binder[&value]))
+                    && [(value, *other), (*other, value)]
+                        .into_iter()
+                        .any(|(earlier, later)| {
+                            let (first, second) = (self.binder[&earlier], self.binder[&later]);
+                            self.reaches_as_one(of, first, second)
+                                && self.held_until(earlier, first, second, borrowed)
+                        })
             })
+    }
+
+    /// Whether `part`, read at `read`, is still held where `next` reads its slot again: it or a field read off it live there, or handed on between the two to anything, a borrowed name among them, since nothing follows a borrowed name from one read to the other; or touched between them ([`Touches::between`]). A part only read and dead by `next` leaves the later read the one name of its object.
+    fn held_until(&self, part: ValueId, read: NodeId, next: NodeId, borrowed: &Borrowed) -> bool {
+        self.with_fields(part).iter().any(|field| {
+            self.live_at(next, *field)
+                || self
+                    .uses
+                    .get(field)
+                    .into_iter()
+                    .flatten()
+                    .any(|(node, site, _)| {
+                        *site != Site::Read
+                            && self.reaches(read, *node)
+                            && self.reaches(*node, next)
+                    })
+        }) || self.touches(part, borrowed).between(self, read, next)
     }
 
     /// The read through an accessor binding `value`, where the accessor's parameter is borrowed: an owned one takes what it is handed, and a call to it is no read.
@@ -1789,33 +1833,33 @@ impl Shape {
         overwritten: Option<Option<&Atom>>,
         borrowed: &Borrowed,
     ) -> bool {
-        let parts = self.with_fields(part);
-        // A consumption is on the path to another only along its own edge: a switch that hands the part on in one arm and goes on to consume the whole in another touches nothing on the second path.
-        let consumed = parts
-            .iter()
-            .flat_map(|value| self.consumed(*value, borrowed))
-            .collect::<Vec<_>>();
-        let writes = self
-            .home
-            .get(&part)
-            .and_then(|function| self.writes.get(function))
-            .into_iter()
-            .flatten()
-            .copied()
-            .collect::<Vec<_>>();
+        let touches = self.touches(part, borrowed);
         self.consumed(of, borrowed).iter().any(|point| {
-            let between = |node: NodeId| node != point.node && self.reaches(read, node);
             self.reaches_holding(of, read, point.node)
                 && overwritten
                     .is_none_or(|index| !self.overwrites(module, point.node, of, index, read))
                 && (self.live_after(module, *point, part)
-                    || consumed
-                        .iter()
-                        .any(|touch| between(touch.node) && self.point_reaches(*touch, point.node))
-                    || writes
-                        .iter()
-                        .any(|write| between(*write) && self.reaches(*write, point.node)))
+                    || touches.between(self, read, point.node))
         })
+    }
+
+    /// What may take apart or write `part` ([`Touches`]).
+    fn touches(&self, part: ValueId, borrowed: &Borrowed) -> Touches {
+        Touches {
+            consumed: self
+                .with_fields(part)
+                .iter()
+                .flat_map(|value| self.consumed(*value, borrowed))
+                .collect(),
+            writes: self
+                .home
+                .get(&part)
+                .and_then(|function| self.writes.get(function))
+                .into_iter()
+                .flatten()
+                .copied()
+                .collect(),
+        }
     }
 
     /// Whether `node` is an update of `of` at the index `index` names at `read`: one literal, or one value bound once between the two.
@@ -2655,7 +2699,7 @@ impl<'s> Facts<'s> {
     }
 }
 
-/// The facts that hold whatever the others say: a value's own sharing — an operation's result, a parameter some call hands a value read after it or the module does not see the callers of, a value consumed twice or before its last use, one consumed while a field read out of it still names what it read ([`Shape::outlived_by_a_field`]), a captured one, a field another read on its path reads or its own read reads again on a later round —and a result a function hands back from where the module cannot follow. A parameter `assumed` lists is the reuse version's, unique as it receives it. What a call or a jump hands a parameter shares it only where it may be a row or a tuple, one of `aggregates`: a number handed at two parameters holds nothing a rebuild writes.
+/// The facts that hold whatever the others say: a value's own sharing — an operation's result, a parameter some call hands a value read after it or the module does not see the callers of, a value consumed twice or before its last use, one consumed while a field read out of it still names what it read ([`Shape::outlived_by_a_field`]), a captured one, a field another read on its path reads while it is still held or its own read reads again on a later round the round before touched it on —and a result a function hands back from where the module cannot follow. A parameter `assumed` lists is the reuse version's, unique as it receives it. What a call or a jump hands a parameter shares it only where it may be a row or a tuple, one of `aggregates`: a number handed at two parameters holds nothing a rebuild writes.
 fn sources(
     module: &Module,
     shape: &Shape,
@@ -2706,7 +2750,7 @@ fn sources(
                     })
             }
             Def::ContParam(_, _) if let Some(access) = shape.accessed_under(*value, borrowed) => {
-                shape.read_again(*value, access.of)
+                shape.read_again(*value, access.of, borrowed)
             }
             // A borrowed parameter reads what its holder keeps, so it is never the one name an object goes by.
             Def::ContParam(continuation, index) => {
@@ -2740,8 +2784,8 @@ fn sources(
                             )
                         })
             }
-            // Two reads of one slot name one object where one can run after the other while the value they read names one object, and so does one read on two rounds of a loop that binds what it reads once. Any two reads of a list's elements may read one index.
-            Def::Field(of) | Def::Element(of) => shape.read_again(*value, *of),
+            // Two reads of one slot name one object where one runs after the other while the value they read names one object and the earlier's part is still held there, and so does one read on two rounds of a loop that binds what it reads once, where the round touches what it read before the next. Any two reads of a list's elements may read one index.
+            Def::Field(of) | Def::Element(of) => shape.read_again(*value, *of, borrowed),
         };
         if source || twice || not_last || outlived || shape.captured.contains(value) {
             sources.insert(Key::Value(*value));

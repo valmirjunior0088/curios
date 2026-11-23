@@ -410,8 +410,19 @@ fn a_read_a_loop_comes_back_to_names_one_object_on_every_round() {
     assert_eq!(in_place(&read_beside_a_construction(true)).rows.len(), 0);
 }
 
-/// `main` hands a loop a one-element list of a `Pair` nothing else holds, which the loop hands itself at each back edge and reads the element of, handing the element on through a join borrowing it to the loop's accumulator; on its last round it rebuilds the element as a `Pair` and calls `reader` on what `read_accumulator` names: the accumulator, the element the round before handed on, or the `Pair` the rebuild made.
-fn element_handed_round_a_loop(read_accumulator: bool) -> Module {
+/// What a loop's round does with the element it reads, besides handing it to the exit.
+#[derive(Clone, Copy)]
+enum Round {
+    /// Nothing more: the exit rebuilds it and reads the `Pair` it made.
+    Exits,
+    /// Reads its slot, hands the accumulator on in its place and builds a `Pair` of nothing it read on the way back, which a rebuild may make of the element, dead there.
+    Writes,
+    /// The exit reads the accumulator after the rebuild, the element the round before handed on to it through a join borrowing it.
+    Borrows,
+}
+
+/// `main` builds a one-element list of a `Pair` nothing else holds, and a loop reads its element on every round: out of that list where `outside`, and otherwise out of a parameter its back edges hand on, the list handed to it at its entry. Each round but the last hands the element on through a join borrowing it to the loop's accumulator, and the last rebuilds it as a `Pair` and calls `reader`, each doing besides what `round` says.
+fn loop_over_an_element(outside: bool, round: Round) -> Module {
     let mut module = Module::new();
     let pair = module.add_row(Row {
         debug_name: Some("Pair".into()),
@@ -427,7 +438,6 @@ fn element_handed_round_a_loop(read_accumulator: bool) -> Module {
         inner,
         dummy,
         l,
-        base,
         acc,
         c,
         h,
@@ -446,10 +456,11 @@ fn element_handed_round_a_loop(read_accumulator: bool) -> Module {
         t1,
         s,
     ] = [
-        "v", "w", "inner", "dummy", "l", "base", "acc", "c", "h", "p", "c2", "e", "a2", "x", "y",
-        "n", "z", "q", "r", "t", "t0", "t1", "s",
+        "v", "w", "inner", "dummy", "l", "acc", "c", "h", "p", "c2", "e", "a2", "x", "y", "n", "z",
+        "q", "r", "t", "t0", "t1", "s",
     ]
     .map(|name| module.add_value(Some(name.into())));
+    let base = (!outside).then(|| module.add_value(Some("base".into())));
 
     // Two reads, so no accessor: a call of it is no row read of what it is handed.
     let answer = module.add_node(Node::ApplyCont(Edge {
@@ -514,9 +525,9 @@ fn element_handed_round_a_loop(read_accumulator: bool) -> Module {
     let exit = module.reserve_continuation();
     let call = module.add_node(Node::ApplyFun {
         callee: Callee::Known(reader),
-        args: vec![Atom::Value(match read_accumulator {
-            true => a2,
-            false => n,
+        args: vec![Atom::Value(match round {
+            Round::Borrows => a2,
+            Round::Exits | Round::Writes => n,
         })],
         return_to: done,
     });
@@ -551,11 +562,15 @@ fn element_handed_round_a_loop(read_accumulator: bool) -> Module {
             terminates: false,
         },
     );
-    let round = module.reserve_continuation();
+    let header = module.reserve_continuation();
     let join = module.reserve_continuation();
     let back = module.add_node(Node::ApplyCont(Edge {
-        target: round,
-        args: vec![Atom::Value(base), Atom::Value(p), Atom::Value(c2)],
+        target: header,
+        args: base
+            .map(Atom::Value)
+            .into_iter()
+            .chain([Atom::Value(p), Atom::Value(c2)])
+            .collect(),
     }));
     let count_down = module.add_node(Node::LetIntrinsic {
         result: c2,
@@ -563,13 +578,24 @@ fn element_handed_round_a_loop(read_accumulator: bool) -> Module {
         args: vec![Atom::Value(c), nat(1)],
         next: back,
     });
+    let joined = match round {
+        Round::Writes => {
+            let m = module.add_value(Some("m".into()));
+            module.add_node(Node::LetValue {
+                result: m,
+                value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(v)]),
+                next: count_down,
+            })
+        }
+        Round::Exits | Round::Borrows => count_down,
+    };
     module.define_continuation(
         join,
         Continuation {
             lineage: None,
             debug_name: None,
             params: vec![p],
-            body: count_down,
+            body: joined,
             terminates: false,
         },
     );
@@ -584,35 +610,53 @@ fn element_handed_round_a_loop(read_accumulator: bool) -> Module {
         )]),
         default: Some(Edge {
             target: join,
-            args: vec![Atom::Value(h)],
+            args: vec![Atom::Value(match round {
+                Round::Writes => acc,
+                Round::Exits | Round::Borrows => h,
+            })],
         }),
     });
     let inner_scope = module.add_node(Node::LetCont {
         continuations: vec![join, exit],
         body: decide,
     });
+    let after_read = match round {
+        Round::Writes => {
+            let g = module.add_value(Some("g".into()));
+            module.add_node(Node::LetIntrinsic {
+                result: g,
+                op: Intrinsic::RowGet(pair, 1),
+                args: vec![Atom::Value(h)],
+                next: inner_scope,
+            })
+        }
+        Round::Exits | Round::Borrows => inner_scope,
+    };
     let read_h = module.add_node(Node::LetIntrinsic {
         result: h,
         op: Intrinsic::ListGet,
-        args: vec![Atom::Value(base), nat(0)],
-        next: inner_scope,
+        args: vec![Atom::Value(base.unwrap_or(l)), nat(0)],
+        next: after_read,
     });
     module.define_continuation(
-        round,
+        header,
         Continuation {
             lineage: None,
             debug_name: None,
-            params: vec![base, acc, c],
+            params: base.into_iter().chain([acc, c]).collect(),
             body: read_h,
             terminates: false,
         },
     );
     let enter = module.add_node(Node::ApplyCont(Edge {
-        target: round,
-        args: vec![Atom::Value(l), Atom::Value(dummy), nat(1)],
+        target: header,
+        args: match outside {
+            true => vec![Atom::Value(dummy), nat(1)],
+            false => vec![Atom::Value(l), Atom::Value(dummy), nat(1)],
+        },
     }));
     let loop_scope = module.add_node(Node::LetCont {
-        continuations: vec![round],
+        continuations: vec![header],
         body: enter,
     });
     let list = module.add_node(Node::LetValue {
@@ -666,8 +710,145 @@ fn element_handed_round_a_loop(read_accumulator: bool) -> Module {
 /// A borrowed continuation parameter outlives the jump that binds it, so the element a join borrowing it hands on to the accumulator is still what the accumulator names when the next round reads it again and rebuilds it: that rebuild writes what the accumulator is read for after it, and is refused. Where the call reads the rebuilt `Pair` instead, the element is rebuilt.
 #[test]
 fn a_borrowed_name_a_second_jump_hands_on_keeps_what_it_names_from_a_rebuild() {
-    assert_eq!(in_place(&element_handed_round_a_loop(false)).rows.len(), 1);
-    assert_eq!(in_place(&element_handed_round_a_loop(true)).rows.len(), 0);
+    assert_eq!(
+        in_place(&loop_over_an_element(false, Round::Exits))
+            .rows
+            .len(),
+        1
+    );
+    assert_eq!(
+        in_place(&loop_over_an_element(false, Round::Borrows))
+            .rows
+            .len(),
+        0
+    );
+}
+
+/// A loop reading the element of a list bound outside it is judged as one reading it out of a list it takes as a parameter its back edges hand on, by what each round does on its way back to the read: an element only handed on where the loop exits is rebuilt there, and none is where a round builds a `Pair` a rebuild may make of it, or hands it round the loop to a borrowed name the exit reads after the rebuild.
+#[test]
+fn a_loop_judges_what_it_reads_alike_from_a_list_bound_outside_it_or_handed_on_as_its_parameter() {
+    for outside in [false, true] {
+        let verdicts = [Round::Exits, Round::Writes, Round::Borrows]
+            .map(|round| in_place(&loop_over_an_element(outside, round)).rows.len());
+        assert_eq!(
+            verdicts,
+            [1, 0, 0],
+            "the list bound outside the loop: {outside}"
+        );
+    }
+}
+
+/// `main` builds a one-element list of a `Pair` nothing else holds and reads its element twice, the first time for its tag, the second for its slot, which it builds a `Pair` of beside the element dying; where `held`, it reads the first part's slot after that construction too.
+fn element_read_twice(held: bool) -> Module {
+    let mut module = Module::new();
+    let pair = module.add_row(Row {
+        debug_name: Some("Pair".into()),
+        slots: vec![Slot::Tag, Slot::Opaque],
+    });
+    let main = module.reserve_function();
+    let main_return = module.reserve_continuation();
+    let [v, inner, l, first, tag, second, x, y, n, q] = [
+        "v", "inner", "l", "first", "tag", "second", "x", "y", "n", "q",
+    ]
+    .map(|name| module.add_value(Some(name.into())));
+    let exit = match held {
+        true => {
+            let [z, r] = ["z", "r"].map(|name| module.add_value(Some(name.into())));
+            let stop = module.add_node(halt(vec![Atom::Value(r)]));
+            let add = module.add_node(Node::LetIntrinsic {
+                result: r,
+                op: Intrinsic::NatAdd,
+                args: vec![Atom::Value(q), Atom::Value(z)],
+                next: stop,
+            });
+            module.add_node(Node::LetIntrinsic {
+                result: z,
+                op: Intrinsic::RowGet(pair, 1),
+                args: vec![Atom::Value(first)],
+                next: add,
+            })
+        }
+        false => module.add_node(halt(vec![Atom::Value(q)])),
+    };
+    let read_n = module.add_node(Node::LetIntrinsic {
+        result: q,
+        op: Intrinsic::RowGet(pair, 1),
+        args: vec![Atom::Value(n)],
+        next: exit,
+    });
+    let build = module.add_node(Node::LetValue {
+        result: n,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(y)]),
+        next: read_n,
+    });
+    let bump = module.add_node(Node::LetIntrinsic {
+        result: y,
+        op: Intrinsic::NatAdd,
+        args: vec![Atom::Value(x), nat(1)],
+        next: build,
+    });
+    let read_x = module.add_node(Node::LetIntrinsic {
+        result: x,
+        op: Intrinsic::RowGet(pair, 1),
+        args: vec![Atom::Value(second)],
+        next: bump,
+    });
+    let read_second = module.add_node(Node::LetIntrinsic {
+        result: second,
+        op: Intrinsic::ListGet,
+        args: vec![Atom::Value(l), nat(0)],
+        next: read_x,
+    });
+    let read_tag = module.add_node(Node::LetIntrinsic {
+        result: tag,
+        op: Intrinsic::RowGet(pair, 0),
+        args: vec![Atom::Value(first)],
+        next: read_second,
+    });
+    let read_first = module.add_node(Node::LetIntrinsic {
+        result: first,
+        op: Intrinsic::ListGet,
+        args: vec![Atom::Value(l), nat(0)],
+        next: read_tag,
+    });
+    let list = module.add_node(Node::LetValue {
+        result: l,
+        value: ValueExpr::List(vec![Atom::Value(inner)]),
+        next: read_first,
+    });
+    let built_inner = module.add_node(Node::LetValue {
+        result: inner,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(v)]),
+        next: list,
+    });
+    let body = module.add_node(Node::LetIntrinsic {
+        result: v,
+        op: Intrinsic::NatAdd,
+        args: vec![nat(3), nat(4)],
+        next: built_inner,
+    });
+    module.define_function(
+        main,
+        Function {
+            lineage: None,
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: main_return,
+            body,
+            droppable: Droppable::Never,
+            terminates: false,
+        },
+    );
+    module.set_entry(main);
+    module.verify().unwrap();
+    module
+}
+
+/// Two reads of one slot hand out one object, which the later read names alone once the earlier's part is dead and untouched: it is rebuilt there, as each of two loops reading one list would rebuild what it read out of its own window's base. Where the earlier part is read after the rebuild, the two name one object and neither is rebuilt.
+#[test]
+fn a_second_read_of_a_slot_names_its_object_alone_once_the_first_part_is_dead() {
+    assert_eq!(in_place(&element_read_twice(false)).rows.len(), 1);
+    assert_eq!(in_place(&element_read_twice(true)).rows.len(), 0);
 }
 
 /// `main` builds a `Pair` nothing else holds over a `Pair` it reads again afterwards, and hands the first to `bump`, which reads its slot and builds a `Pair` of what it read beside its parameter dying. Where `taken_apart`, `bump` also reads a slot of what it read.
