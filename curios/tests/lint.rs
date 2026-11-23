@@ -106,6 +106,34 @@ fn a_lint_is_reported_on_stdout_with_exit_one_and_a_clean_program_exits_zero() {
     assert!(narrated.ends_with("s\n0 lints\n"), "{narrated}");
 }
 
+/// Several subjects are one report: each file checked under its own name in the order named, their lints together on stdout, one count over all of them closing the narration, and the exit any one of them turns.
+#[test]
+fn several_subjects_are_linted_into_one_report() {
+    let root = temporary("several");
+    write(&root, "clean.crs", "/std/print(\"\")\n");
+    write(&root, "first.crs", "use /std/{Bool};\n/std/print(\"\")\n");
+    write(&root, "second.crs", "use /std/{Nat};\n/std/print(\"\")\n");
+
+    let linted = curios(&root, &["lint", "first.crs", "clean.crs", "second.crs"], "");
+    assert_eq!(linted.status.code(), Some(1));
+    let text = stdout(&linted);
+    let first = text.find("└─ [lint] first.crs:1:11").expect(&text);
+    let second = text.find("└─ [lint] second.crs:1:11").expect(&text);
+    assert!(first < second, "{text}");
+    let narrated = String::from_utf8_lossy(&linted.stderr);
+    let checked = ["first.crs", "clean.crs", "second.crs"].map(|file| {
+        narrated
+            .find(&format!("Checking `{file}`"))
+            .unwrap_or_else(|| panic!("{narrated}"))
+    });
+    assert!(checked.is_sorted(), "{narrated}");
+    assert!(narrated.ends_with("s\n\n2 lints\n"), "{narrated}");
+
+    let clean = curios(&root, &["lint", "clean.crs", "clean.crs"], "");
+    assert!(clean.status.success(), "{}", stdout(&clean));
+    assert!(clean.stdout.is_empty());
+}
+
 /// Goals alone are the incomplete state every subcommand exits 2 on; a goal beside a lint is 1, since the lint is what there is to act on.
 #[test]
 fn goals_alone_exit_two_and_a_lint_beside_one_exits_one() {

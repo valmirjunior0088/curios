@@ -22,54 +22,57 @@ pub struct Linted {
     pub goals: usize,
 }
 
-/// `curios lint [SUBJECT]`: every diagnostic, goal and lint of what `selection` selects rendered to stdout, each distinct fact once, and for the package entire every dependency nothing reached. `telling` is told of each subject's compile as it goes and why, where a cabinet took nothing of what the lint compiled, which changes neither the report nor what is returned.
+/// `curios lint [SUBJECT]...`: every diagnostic, goal and lint of what each of `selections` selects, in their order, rendered to stdout as one report, each distinct fact once, and for the package entire every dependency nothing reached. `telling` is told of each subject's compile as it goes and why, where a cabinet took nothing of what the lint compiled, which changes neither the report nor what is returned.
 pub fn lint(
     budget: u64,
-    selection: Selection,
+    selections: Vec<Selection>,
     telling: &mut dyn Telling,
 ) -> Result<Linted, Box<Report>> {
     let overlay = Overlay::default();
-    // A dependency is a fact of the package, so only the package entire is asked which of its dependencies nothing reached.
-    let dependencies = match &selection {
-        Selection::Entire(entire) => Some(
-            entire
-                .governing
-                .package
-                .dependencies
-                .keys()
-                .cloned()
-                .collect::<Vec<_>>(),
-        ),
-        Selection::Library(_) | Selection::Program(_) | Selection::Module(_) => None,
-    };
-
     let mut seen = Renderings::default();
     let reader = telling.reader();
-    let mut reached = BTreeSet::new();
     let mut linted = Linted::default();
-    for asked in Asked::every(selection)? {
-        let Diagnosed {
-            diagnostics,
-            reached: unit_reached,
-            ..
-        } = asked.diagnosed(budget, &overlay, telling);
-        reached.extend(unit_reached);
-        for diagnostic in diagnostics {
-            if seen.insert_rendered(diagnostic.rendered(&reader)) {
-                match diagnostic.severity {
-                    Severity::Lint => linted.lints += 1,
-                    Severity::Error => linted.errors += 1,
-                    Severity::Goal => linted.goals += 1,
+
+    for selection in selections {
+        // A dependency is a fact of the package, so only the package entire is asked which of its dependencies nothing reached.
+        let dependencies = match &selection {
+            Selection::Entire(entire) => Some(
+                entire
+                    .governing
+                    .package
+                    .dependencies
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<_>>(),
+            ),
+            Selection::Library(_) | Selection::Program(_) | Selection::Module(_) => None,
+        };
+
+        let mut reached = BTreeSet::new();
+        for asked in Asked::every(selection)? {
+            let Diagnosed {
+                diagnostics,
+                reached: unit_reached,
+                ..
+            } = asked.diagnosed(budget, &overlay, telling);
+            reached.extend(unit_reached);
+            for diagnostic in diagnostics {
+                if seen.insert_rendered(diagnostic.rendered(&reader)) {
+                    match diagnostic.severity {
+                        Severity::Lint => linted.lints += 1,
+                        Severity::Error => linted.errors += 1,
+                        Severity::Goal => linted.goals += 1,
+                    }
                 }
             }
         }
-    }
 
-    if let Some(dependencies) = dependencies {
-        for lint in unused_dependencies(&dependencies, &reached) {
-            let rendered = lint.report(&[]).rendered(Kind::Lint, &reader);
-            if seen.insert_rendered(rendered) {
-                linted.lints += 1;
+        if let Some(dependencies) = dependencies {
+            for lint in unused_dependencies(&dependencies, &reached) {
+                let rendered = lint.report(&[]).rendered(Kind::Lint, &reader);
+                if seen.insert_rendered(rendered) {
+                    linted.lints += 1;
+                }
             }
         }
     }

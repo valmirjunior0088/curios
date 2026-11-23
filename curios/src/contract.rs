@@ -381,21 +381,22 @@ impl Mode {
         }
     }
 
-    /// The argument the contract resolves: the subject, for a command that takes one — for `format`, the first of its subjects, each of which is admitted alone the same way.
+    /// The argument the contract resolves: the subject, for a command that takes one — for `format` and `lint`, the first of their subjects, each of which is admitted alone the same way.
     pub fn subject(&self) -> Option<&str> {
         match self {
             Mode::Run { subject, .. }
             | Mode::Compile { subject, .. }
             | Mode::Document { subject, .. }
-            | Mode::Test { subject, .. }
-            | Mode::Lint { subject, .. } => subject.as_deref(),
+            | Mode::Test { subject, .. } => subject.as_deref(),
             // A place names its file, which is the question's subject.
             Mode::Wonder {
                 query: Query::At(place),
                 ..
             } => Some(place.subject()),
             Mode::Wonder { subject, .. } => subject.as_deref(),
-            Mode::Format { subjects, .. } => subjects.first().map(String::as_str),
+            Mode::Format { subjects, .. } | Mode::Lint { subjects, .. } => {
+                subjects.first().map(String::as_str)
+            }
             // A directory to create is an argument, and no subject. So is a filed stream to read.
             Mode::Curate { .. } | Mode::New { .. } | Mode::Pin { .. } => None,
             Mode::Profile { .. } => None,

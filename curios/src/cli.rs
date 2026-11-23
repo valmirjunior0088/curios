@@ -258,13 +258,13 @@ pub enum Mode {
         directory: PathBuf,
     },
 
-    /// The gate over what `wonder` reports: every diagnostic, goal and lint of the subject, and — for the package entire — the dependencies nothing reached, with the exit code turning on them. The reasoning is `documentation/usage.md`'s Linting.
+    /// The gate over what `wonder` reports: every diagnostic, goal and lint of each subject, and — for the package entire — the dependencies nothing reached, with the exit code turning on them. Each subject is admitted alone, as `format`'s are, and what they report is one report. The reasoning is `documentation/usage.md`'s Linting.
     #[command(
         about = "Report every unused import, binder, declaration and dependency; exit 1 when any"
     )]
     Lint {
         #[arg(value_name = "SUBJECT", help = LINT.subject_help())]
-        subject: Option<String>,
+        subjects: Vec<String>,
 
         #[command(flatten)]
         elaboration: Elaboration,

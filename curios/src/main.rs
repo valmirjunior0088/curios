@@ -384,15 +384,35 @@ fn dispatch() -> Result<(), Failure> {
             }
         }
         // The tri-state `run` exits with, read off what was reported: a lint is as much a finding as an error, and a goal batch alone is the incomplete state it is everywhere else.
-        Mode::Lint { elaboration, .. } => {
-            let selection = contract.admit_any(subject, manifest, &here()?, cabinet, &stdin)?;
-            let root = selection.root().map(Path::to_path_buf);
+        Mode::Lint {
+            subjects,
+            elaboration,
+        } => {
+            let directory = here()?;
+            // No subject is the package entire, as for every command that takes one; several are each admitted before any is compiled, so a refusal compiles nothing.
+            let subjects = match subjects.is_empty() {
+                true => vec![None],
+                false => subjects
+                    .iter()
+                    .map(|subject| Some(subject.as_str()))
+                    .collect(),
+            };
+            let selections = subjects
+                .into_iter()
+                .map(|subject| contract.admit_any(subject, manifest, &directory, cabinet, &stdin))
+                .collect::<Result<Vec<_>, _>>()?;
+            let roots = selections
+                .iter()
+                .filter_map(|selection| selection.root().map(Path::to_path_buf))
+                .collect::<BTreeSet<_>>();
             let linted = lint(
                 elaboration.budget,
-                selection,
+                selections,
                 &mut Asking::checking(answered.clone()),
             );
-            contract.access.collect(root.as_deref(), cabinet);
+            for root in &roots {
+                contract.access.collect(Some(root), cabinet);
+            }
             let Linted {
                 lints,
                 errors,

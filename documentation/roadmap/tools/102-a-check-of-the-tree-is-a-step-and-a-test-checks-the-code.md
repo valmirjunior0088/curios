@@ -8,7 +8,6 @@
 - **Checks of the tree run among the tests of the code.** `editors/zed`'s whole suite is three: its pins publishing these grammars, Core text's query opening with the program's, and its lint table being the workspace's (`every_pinned_rev_publishes_this_grammar`, `the_core_text_query_opens_with_the_programs`, `the_lint_table_is_the_workspace_s`); `xtask/src/tests/agents.rs` holds the agent files' globs matching tracked files and their citations reaching the tree (`every_glob_of_a_rule_matches_a_tracked_file`, `every_citation_of_an_agent_file_is_in_the_tree`); and `curios/src/tests/programs.rs` holds `programs/` linting clean, the twin of the formatting `workspace lint curios-format` holds, under a doc comment saying it holds the formatting too.
 - **Biome's list is stated three times.** What `biome.json` lists is restated by `variables.web` and by the paths the editors' Biome steps hand it, held by `the_workspace_s_biome_steps_reach_every_file_biome_reads_of_it`.
 - **Biome runs as eight steps over four slices of one list.** `workspace`, `tree-sitter`, `textmate` and `vscode` each format and lint their part, 10, 4, 4 and 3 of the 21 files `biome format .` reads at `3a407eed0`, and `format web` writes all of it at once.
-- **`curios lint` takes one subject**, where `curios format` takes several, so no step can hand it the corpus's 31 programs.
 - **The subjects are named for a layout, a moment and a nesting.** `workspace` holds the shipped crates' lint, suite and caches, named for the Cargo workspace whose default members they are; `compiler` the build as it is released and its pages, which leaves no name for releasing it; `launcher` one step only the compiler consumes; and `workspace test` a group of one step, `suite`. `xtask`'s README names a `grammar` subject the files do not hold and leaves `textmate` out.
 - **Two topics of the documentation are named for what they are not.** `standard-library` holds `/std`'s capabilities and laws, which the documents call the prelude's, and `tools` every decision a programmer meets of the toolchain, which `.claude/rules/tooling.md` names tooling.
 - **Unicode's conformance files are built into every build.** `curios-unicode`'s build script fetches `GraphemeBreakTest.txt` and `NormalizationTest.txt`, 3.0 MB only tests read, beside the files its tables are built from, and writes their cases into `tables.rs`: 2.0 MB of its 2.5 MB at `3a407eed0`, counted, which rustc reads in every build of the crate, for every profile and target, though only a test or `test-support` compiles it.
@@ -17,7 +16,6 @@
 
 - `conformance`, a subject of two steps, `json` and `toml`: Curios programs, `curios run conformance/<suite>.crs -- {.corpora.<suite>}`, which list the corpus, decode each case and exit nonzero naming every case answered otherwise. A valid TOML document's value is held to the tagged JSON beside it as `toml-test` compares them, its scalars read by `/std`'s own readers, `Int/of_str`, `Flt/of_str` and `/std/time/rfc3339`.
 - `corpora`, a table of the root file beside `tools`: each a commit of a repository, fetched once a checkout as its forge's archive at that commit, of which one directory is kept as `xtask/.artifacts/<name>-<commit>`, checked by the digest of the files it holds, and trusted by its presence once kept, as a tool's copy is. A step names one as `{.corpora.<name>}`, the kept directory, which orders its fetch as a tool's name orders the tool's. The digest is the SHA-256 of the lines `<sha256>  <path>` of every file under the directory, sorted by path, as Go's `h1:` is defined, so a reader retakes it with `sha256sum`.
-- `curios lint` taking several subjects, each linted alone as `curios format` admits each, the count summed and the exit the worst of theirs.
 - Checks the runner holds: a step's `run` names one, `{ check = "<name>" }`, beside a command and a write, for a judgment of the tree no command states. `zed check`: each pin of `extension.toml` publishes its grammar, Core text's query opens with the program's, and the extension's lint table is the workspace's; `editors/zed`'s tests go, and `zed test` with them. `jig agents`: every glob of a rule matches a tracked file, and every citation of an agent file is in the tree; `agents.rs` goes.
 - `compiler`, today's `workspace` with the launcher folded in: `compiler launcher`, `compiler lint` (`rustfmt`, `curios-format`, `curios-lint`, `clippy`), `compiler test`, a step, and `compiler caches`. `curios-lint` runs `curios lint` over the tree's programs, `programs/` and `conformance/`, and `programs.rs` goes.
 - `distribution`, today's `compiler`: `distribution build`, the compiler as it is released, and `distribution test`, its pages; `release` stays free for the act of releasing it, as rust-analyzer's xtask keeps `dist` apart from `release`.
@@ -41,22 +39,20 @@
 
 ## Stages
 
-**1. `curios lint` takes several subjects.** Check: two files' lints reported each under its subject, the count summed, and the exit 1 where either has one; `documentation/usage.md` and the contract's tests restated.
+**1. Checks the runner holds**: the instruction, `zed check` and `jig agents`, `editors/zed`'s tests and `agents.rs` gone. Check: each passes, and fails where it is made to — a pin moved off its grammar, the Core text query cut, a lint dropped from the extension, a glob matching nothing, a citation of a moved file.
 
-**2. Checks the runner holds**: the instruction, `zed check` and `jig agents`, `editors/zed`'s tests and `agents.rs` gone. Check: each passes, and fails where it is made to — a pin moved off its grammar, the Core text query cut, a lint dropped from the extension, a glob matching nothing, a citation of a moved file.
+**2. The subjects reshaped**: `compiler`, `distribution`, `biome` and `curios-lint`, with `CLAUDE.md`, `.claude/`, the READMEs, the handoff's decision and both workflows restated. Check: each step passes, and fails where its check is made to — a program that lints, a file Biome would reformat — and `every_step_the_handoff_runs_has_a_job` holds the workflow's new jobs.
 
-**3. The subjects reshaped**: `compiler`, `distribution`, `biome` and `curios-lint`, with `CLAUDE.md`, `.claude/`, the READMEs, the handoff's decision and both workflows restated. Check: each step passes, and fails where its check is made to — a program that lints, a file Biome would reformat — and `every_step_the_handoff_runs_has_a_job` holds the workflow's new jobs.
+**3. Unicode's conformance files fetched for tests.** Check: a build fetches and writes only the tables' files, the tests read the two beside them, and a conformance file altered is refused at its digest.
 
-**4. Unicode's conformance files fetched for tests.** Check: a build fetches and writes only the tables' files, the tests read the two beside them, and a conformance file altered is refused at its digest.
+**4. The `corpora` table.** Check: a corpus fetched and kept as its one directory, and refused where what it unpacks differs from its digest; its digest retaken with `sha256sum` equal to the pinned one.
 
-**5. The `corpora` table.** Check: a corpus fetched and kept as its one directory, and refused where what it unpacks differs from its digest; its digest retaken with `sha256sum` equal to the pinned one.
+**5. `json`.** Check: the step passes, and fails naming a case `Json/decode` is made to answer otherwise.
 
-**6. `json`.** Check: the step passes, and fails naming a case `Json/decode` is made to answer otherwise.
+**6. `toml`.** Check: the same, and fails naming a valid document whose value is made to differ.
 
-**7. `toml`.** Check: the same, and fails naming a valid document whose value is made to differ.
-
-**8. The topics renamed**: `prelude` and `tooling`, every link restated, taken last, after any branch editing a file under either has landed. Check: `cargo xtask docs build` and `jig agents` hold every link.
+**7. The topics renamed**: `prelude` and `tooling`, every link restated, taken last, after any branch editing a file under either has landed. Check: `cargo xtask docs build` and `jig agents` hold every link.
 
 ## Verification and retirement
 
-Each stage's check, then `cargo xtask compiler lint`, the jig's lint, the suite, `cargo xtask docs build` and `cargo xtask handoff`'s new requirements. Once stage 8 lands, this file is deleted.
+Each stage's check, then `cargo xtask compiler lint`, the jig's lint, the suite, `cargo xtask docs build` and `cargo xtask handoff`'s new requirements. Once stage 7 lands, this file is deleted.

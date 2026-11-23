@@ -472,6 +472,7 @@ hello/
 ```sh
 curios lint              # the governing package entire: its library, then every executable, then its dependencies
 curios lint app.crs      # one file, placed in its unit
+curios lint a.crs b.crs  # each file, placed in its unit, in one report
 curios lint -            # the program on standard input
 ```
 
@@ -488,6 +489,8 @@ A lint is an exact finding the compilation already has and nothing stops on: `ru
 | `renaming-binder` | a final arm's name after arms that each take the scrutinee apart, or a match's one arm that binds the whole value, under a head written as a name: it names again what the head already names | reading the head, and writing `_` after arms, or nothing for the lone arm |
 
 Output is what `wonder` prints — each diagnostic, goal and lint rendered as `run` reports it, a blank line between — and the exit is the tri-state: 1 when a lint or an error was reported, 2 when only goals were, 0 when nothing was. A program that does not lower reports its error alone; one that lowers and is then refused reports its lints beside the refusal. Each unit is linted as `curios test` compiles it, its tests included, so a declaration only a test reads is reached.
+
+Several subjects are each admitted alone, as `format` admits its, every one before any is compiled, and linted in the order they are named into one report: each distinct diagnostic once, one count over all of them, and the exit read off that count. No subject is the governing package entire.
 
 Standard error narrates what had to be compiled, as [`wonder`](#wonder) does, and its last line counts what was found, the lints always and the errors and goals beside them where there were any — `2 lints`, `0 lints`, `1 lint, 1 error`, `0 lints, 1 goal`:
 
