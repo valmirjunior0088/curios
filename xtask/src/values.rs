@@ -1,6 +1,6 @@
 //! What a run fills a command's braces with.
 //!
-//! **A variable is a constant of the run.** Each has one value for the whole run: what its file writes, what the command line gave, or what a command printed, asked once and only where a step that runs uses it. The values the runner fills, each written after a `!`, are the triple `xtask` was built for, Cargo's target directory, Cargo's home and the toolchain's root, the last asked of the pinned `rustc` once a run; a tool stands for its executable's path, kept for the host the run is on; and a produced file stands for its path, from the repository's root wherever a step runs.
+//! **A variable is a constant of the run.** Each has one value for the whole run: what its file writes, what the command line gave, what a command printed, or what a key of another file holds, the last two asked once and only where a step that runs uses them. The values the runner fills, each written after a `!`, are the triple `xtask` was built for, Cargo's target directory, Cargo's home and the toolchain's root, the last asked of the pinned `rustc` once a run; a tool stands for its executable's path, kept for the host the run is on; and a produced file stands for its path, from the repository's root wherever a step runs.
 
 use {
     crate::{
@@ -10,9 +10,11 @@ use {
     std::{
         cell::{OnceCell, RefCell},
         collections::BTreeMap,
+        fs,
         path::PathBuf,
         process::Command,
     },
+    toml_edit::{DocumentMut, Item},
 };
 
 #[cfg(test)]
@@ -26,6 +28,7 @@ pub struct Values<'a> {
     tree: &'a Tree,
     given: &'a Given,
     printed: RefCell<BTreeMap<Name, Vec<String>>>,
+    read: RefCell<BTreeMap<Name, String>>,
     sysroot: OnceCell<String>,
 }
 
@@ -35,6 +38,7 @@ impl<'a> Values<'a> {
             tree,
             given,
             printed: RefCell::new(BTreeMap::new()),
+            read: RefCell::new(BTreeMap::new()),
             sysroot: OnceCell::new(),
         }
     }
@@ -88,6 +92,7 @@ impl<'a> Values<'a> {
                 Variable::Argument { otherwise, .. } => Ok(Some(vec![
                     self.given.get(name).unwrap_or(otherwise).clone(),
                 ])),
+                Variable::Read { path, key } => Ok(Some(vec![self.read(name, path, key)?])),
             },
             Fill::HostTriple
             | Fill::CargoTargetDir
@@ -121,6 +126,7 @@ impl<'a> Values<'a> {
                     Variable::Argument { otherwise, .. } => {
                         text.push_str(self.given.get(name).unwrap_or(otherwise))
                     }
+                    Variable::Read { path, key } => text.push_str(&self.read(name, path, key)?),
                     Variable::Output(_) | Variable::Flag { .. } => {
                         unreachable!("the reader keeps `{}` a word of its own", from_top(name))
                     }
@@ -141,6 +147,35 @@ impl<'a> Values<'a> {
         })?;
 
         Ok(self.sysroot.get_or_init(|| printed.trim().to_string()))
+    }
+
+    /// The string the key `key` of the TOML file at `path` holds, from the repository's root, read once a run.
+    fn read(&self, name: &Name, path: &str, key: &[String]) -> Result<String, String> {
+        if let Some(read) = self.read.borrow().get(name) {
+            return Ok(read.clone());
+        }
+
+        let refused = |why: String| {
+            format!(
+                "`{}` is what `{path}` holds at `{}`: {why}",
+                from_top(name),
+                key.join(".")
+            )
+        };
+        let text =
+            fs::read_to_string(root().join(path)).map_err(|error| refused(error.to_string()))?;
+        let document = text
+            .parse::<DocumentMut>()
+            .map_err(|error| refused(error.to_string()))?;
+        let read = key
+            .iter()
+            .try_fold(document.as_item(), |item, key| item.get(key))
+            .and_then(Item::as_str)
+            .ok_or_else(|| refused("no string stands there".to_string()))?
+            .to_string();
+        self.read.borrow_mut().insert(name.clone(), read.clone());
+
+        Ok(read)
     }
 
     /// What `command` prints, a word to a line, asked once a run, launched as a step's command is.

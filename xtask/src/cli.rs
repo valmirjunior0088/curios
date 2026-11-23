@@ -129,7 +129,7 @@ fn argument(tree: &Tree, name: &Name) -> Arg {
         } => Arg::new(id)
             .value_name(placeholder.clone())
             .help(help.clone()),
-        Variable::Words(_) | Variable::Output(_) => {
+        Variable::Words(_) | Variable::Output(_) | Variable::Read { .. } => {
             unreachable!("only a flag or an argument is given on the command line")
         }
     }

@@ -192,6 +192,8 @@ pub enum Variable {
     Words(Vec<String>),
     /// What a command prints, a word to a line, asked once a run and only where a step that uses it runs.
     Output(Vec<String>),
+    /// The string a key of a TOML file holds, `key` its keys from the file's top, read once a run and only where a step that uses it runs: a value another file owns, stated there alone.
+    Read { path: String, key: Vec<String> },
     /// Given on the command line with a value by any of `flags`, a short spelling, a long one or both: the flag and the value where it is given, nothing where it is not.
     Flag { flags: Vec<String>, help: String },
     /// Given on the command line as a positional argument, `otherwise` where it is not.
@@ -207,7 +209,7 @@ impl Variable {
     fn is_one_word(&self) -> bool {
         match self {
             Variable::Words(words) => words.len() == 1,
-            Variable::Argument { .. } => true,
+            Variable::Argument { .. } | Variable::Read { .. } => true,
             Variable::Output(_) | Variable::Flag { .. } => false,
         }
     }
@@ -1220,9 +1222,23 @@ fn variable_of(file: &File<'_>, item: &Item) -> Result<Variable, Box<Report>> {
         });
     }
 
+    if let Some(path) = text("read")? {
+        only(&["read", "key"])?;
+        let key = text("key")?.ok_or_else(|| {
+            file.refuse(
+                item.span(),
+                "a variable read from a file names the `key` it reads there".to_string(),
+            )
+        })?;
+        return Ok(Variable::Read {
+            path,
+            key: key.split('.').map(str::to_string).collect(),
+        });
+    }
+
     Err(file.refuse(
         item.span(),
-        "a variable's table is a command's output (`run`), a flag (`flag`) or an argument (`argument`)".to_string(),
+        "a variable's table is a command's output (`run`), a key of a file (`read`), a flag (`flag`) or an argument (`argument`)".to_string(),
     ))
 }
 

@@ -1,6 +1,7 @@
 description = "The Rust workspace, as it ships"
-# The edition every member inherits from `Cargo.toml`, which `rustfmt` is handed for what belongs to no package.
-variables.edition = "2024"
+# The edition every member inherits, read where `Cargo.toml` states it, which `rustfmt` is handed for what belongs to no package.
+variables.edition.read = "Cargo.toml"
+variables.edition.key = "workspace.package.edition"
 # The measurement corpus's Rust twins belong to no package, so `cargo fmt` never visits them.
 variables.loose.run = ["git", "ls-files", "--", "programs/*.rs"]
 # The Curios sources the formatter holds to canonical form: every tracked `.crs` but the editors' highlighting samples and the soundness board's archive, whose witnesses are written in forms the language no longer has.

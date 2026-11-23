@@ -10,8 +10,6 @@ const WORKFLOW: &str = include_str!("../../.github/workflows/check.yml");
 /// The lock file, which says what version of `wasm-bindgen` the bundle builds against.
 const LOCK: &str = include_str!("../../Cargo.lock");
 
-const MANIFEST: &str = include_str!("../../Cargo.toml");
-
 /// `curios-profile`'s build script, which names the Perfetto release it takes the trace schema at.
 const PROFILE_BUILD: &str = include_str!("../../curios-profile/build.rs");
 
@@ -52,14 +50,6 @@ fn commands_of<'a>(tree: &'a Tree, group: &str) -> Vec<(&'a Step, Vec<String>)> 
                 })
         })
         .collect()
-}
-
-/// The value the variable `name` writes, where it writes one word.
-fn written(tree: &Tree, name: &str) -> String {
-    match &tree.variables[&name.split('.').map(str::to_string).collect::<Name>()] {
-        Variable::Words(words) => words.concat(),
-        other => panic!("{name} is {other:?}"),
-    }
 }
 
 /// Every line of the check workflow that runs this program is a command the parser reads, and together they run every step the handoff runs: a step added to a subject and to no job fails here, and so does a job left spelling a task that is gone.
@@ -123,19 +113,6 @@ fn a_workspace_lint_goes_on_past_a_crate_that_fails() {
             }
         }
     }
-}
-
-/// `rustfmt` is handed the edition `cargo fmt` reads from the manifest, for the Rust no package holds.
-#[test]
-fn the_edition_handed_to_rustfmt_is_the_workspace_s() {
-    let manifest = MANIFEST.parse::<toml_edit::DocumentMut>().unwrap();
-
-    assert_eq!(
-        written(&tree(), "workspace.variables.edition"),
-        manifest["workspace"]["package"]["edition"]
-            .as_str()
-            .unwrap()
-    );
 }
 
 /// Every directory `biome.json` reads outside the editors' own trees is one the workspace's Biome steps hand it, so no file Biome reads is left to no step.

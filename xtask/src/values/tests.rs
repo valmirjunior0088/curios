@@ -159,3 +159,65 @@ fn a_variables_command_naming_a_missing_program_is_refused_naming_both() {
         "{refusal}"
     );
 }
+
+/// The file `contents` makes, in a directory of its own named for `test`, by its absolute path, which a step reads from the root as it stands.
+fn manifest(test: &str, contents: &str) -> std::path::PathBuf {
+    let directory =
+        std::env::temp_dir().join(format!("curios-xtask-{test}-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("manifest.toml");
+    std::fs::write(&path, contents).unwrap();
+
+    path
+}
+
+#[test]
+fn a_key_of_a_file_stands_for_the_string_it_holds() {
+    let path = manifest("read", "[workspace.package]\nedition = \"2024\"\n");
+    let tree = step(
+        &format!(
+            "variables.edition = {{ read = \"{}\", key = \"workspace.package.edition\" }}",
+            path.display()
+        ),
+        "[\"rustfmt\", \"--edition={.a.variables.edition}\"]",
+    );
+
+    let read = words(&tree, &[]);
+    let _ = std::fs::remove_dir_all(path.parent().expect("the file is in a directory"));
+    assert_eq!(read.unwrap(), ["rustfmt", "--edition=2024"]);
+}
+
+/// A key the file does not hold, or holds as something other than a string, is refused, naming the variable, the file and the key.
+#[test]
+fn a_key_a_file_does_not_hold_as_a_string_is_refused_naming_both() {
+    let path = manifest("unread", "[workspace.package]\nedition = 2024\n");
+    let refusal = |key: &str| {
+        let tree = step(
+            &format!(
+                "variables.edition = {{ read = \"{}\", key = \"{key}\" }}",
+                path.display()
+            ),
+            "[\"rustfmt\", \"{.a.variables.edition}\"]",
+        );
+        let Instruction::Command(command) = &tree.steps[0].run[0] else {
+            panic!("the step runs a command");
+        };
+
+        Values::new(&tree, &Given::new())
+            .command(command)
+            .unwrap_err()
+    };
+
+    let keys = ["workspace.package.edition", "workspace.edition"];
+    let refused = keys.map(refusal);
+    let _ = std::fs::remove_dir_all(path.parent().expect("the file is in a directory"));
+    for (refusal, key) in refused.iter().zip(keys) {
+        assert_eq!(
+            refusal,
+            &format!(
+                "`.a.variables.edition` is what `{}` holds at `{key}`: no string stands there",
+                path.display()
+            )
+        );
+    }
+}
