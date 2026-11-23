@@ -618,7 +618,9 @@ fn a_missing_case_reports_the_facts_it_read_and_none_where_it_read_none() {
         "#,
     );
     assert!(
-        plain.contains("no arm matches `none()`") && !plain.contains("facts in scope"),
+        plain.contains("no arm matches `none()`")
+            && !plain.contains("facts in scope")
+            && !plain.contains("the search"),
         "{plain}"
     );
 }

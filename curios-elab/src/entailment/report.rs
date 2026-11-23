@@ -35,8 +35,10 @@ pub enum Conclusion {
     /// Nothing was searched: the goal is no decision the fragment reads.
     #[default]
     Unsearched,
-    /// Every atom a value that satisfies the facts and falsifies the goal, written as an integer or a fraction. Empty where an unknown was a product, since the search reads a product as an unknown of its own, and a value it gives one may be no product of its factors'.
+    /// Every atom a value that satisfies the facts and falsifies the goal, written as an integer or a fraction: empty where the search read no atom, as a case no fact speaks of.
     Counterexample(Vec<(Term, String)>),
+    /// Values that satisfy the facts and falsify the goal, over an unknown that is a product: the search reads a product as an unknown of its own, and a value it gives one may be no product of its factors', so it decided nothing and names no value.
+    Undecided,
     /// The search ran out of its cap, a count of derived rows.
     Exhausted(usize),
     /// A certificate was found and a name its proof applies is not in scope: inside `/std`, an item compiled before the vocabulary.
@@ -174,7 +176,7 @@ impl Refusal {
         let considered = considered(facts);
         let outcome = match outcome {
             SearchOutcome::Counterexample(assignment) => {
-                Conclusion::Counterexample(counterexample(views, &assignment, refuted))
+                counterexample(views, &assignment, refuted)
             }
             SearchOutcome::Exhausted(cap) => Conclusion::Exhausted(cap),
             SearchOutcome::Unwritten => Conclusion::Unwritten,
@@ -254,17 +256,17 @@ impl Answer {
     }
 }
 
-/// Each atom's term and value, where every unknown is an atom; nothing where one is a product. An atom is the reduct the view read, written as its operands state it once every spelling a report has is known ([`Refusal::respelled`]). `refuted` says that no program takes the values, which every atom is then named to show.
+/// Each atom's term and value, where every unknown is an atom, and [`Conclusion::Undecided`] where one is a product. An atom is the reduct the view read, written as its operands state it once every spelling a report has is known ([`Refusal::respelled`]). `refuted` says that no program takes the values, which every atom is then named to show.
 fn counterexample(
     views: &LinearViews,
     assignment: &[(Monomial, Rational)],
     refuted: bool,
-) -> Vec<(Term, String)> {
+) -> Conclusion {
     if assignment
         .iter()
         .any(|(monomial, _)| monomial.atoms().len() != 1)
     {
-        return Vec::new();
+        return Conclusion::Undecided;
     }
     // In the order the atoms were read — the goal's first — rather than the order they were eliminated in.
     let mut values = assignment
@@ -284,11 +286,13 @@ fn counterexample(
                 .iter()
                 .any(|(other, _)| other != atom && atom.replace_term(other, atom) != *atom)
     };
-    values
-        .iter()
-        .filter(|(atom, _)| !held(atom))
-        .cloned()
-        .collect()
+    Conclusion::Counterexample(
+        values
+            .iter()
+            .filter(|(atom, _)| !held(atom))
+            .cloned()
+            .collect(),
+    )
 }
 
 /// Whether no program takes `outcome`'s values, where it is a counterexample: a value that is no integer, or an atom that, with each variable's value put in, reduces to a literal other than its own value. An assignment this cannot refute is read as the search read it: an atom that names a local given no value, or that reduces to no literal, is not checked.

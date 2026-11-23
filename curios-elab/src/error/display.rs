@@ -239,18 +239,22 @@ fn refused(said: &mut Said, refusal: &Refusal, spelling: &Rc<Spelling>) {
     if !refusal.considered().is_empty() {
         // A counterexample no program takes says what the search found, and nothing of the facts themselves.
         let heading = match refusal.conclusion() {
-            Conclusion::Counterexample(_) if refusal.absurd() && refusal.refuted() => {
+            Conclusion::Counterexample(_) | Conclusion::Undecided
+                if refusal.absurd() && refusal.refuted() =>
+            {
                 "the search finds no contradiction among the facts in scope:"
             }
-            Conclusion::Counterexample(_) | Conclusion::Unsearched if refusal.absurd() => {
+            Conclusion::Counterexample(_) | Conclusion::Undecided | Conclusion::Unsearched
+                if refusal.absurd() =>
+            {
                 "the facts in scope do not refute each other:"
             }
-            Conclusion::Counterexample(_) if refusal.refuted() => {
+            Conclusion::Counterexample(_) | Conclusion::Undecided if refusal.refuted() => {
                 "the search finds no proof from the facts in scope:"
             }
             Conclusion::Exhausted(_) => "the facts in scope the search ran over:",
             Conclusion::Unwritten | Conclusion::Rejected => "it follows from the facts in scope:",
-            Conclusion::Unsearched | Conclusion::Counterexample(_) => {
+            Conclusion::Unsearched | Conclusion::Counterexample(_) | Conclusion::Undecided => {
                 "it does not follow from the facts in scope:"
             }
         };
@@ -290,12 +294,12 @@ fn refused(said: &mut Said, refusal: &Refusal, spelling: &Rc<Spelling>) {
             said.stating("a proof was found and did not check");
             said.stating("that is the compiler's fault: please report it");
         }
-        // A product of unknowns is an unknown of its own to the search, so it may find no proof and no values that break the bound: what it says is that it could not decide.
-        Conclusion::Counterexample(_) if refusal.considered().is_empty() => {
+        // A product of unknowns is an unknown of its own to the search, so it may find no proof and no values that break the bound: what it says is that it could not decide. A search that read no atom at all found nothing to say, and says nothing past the headline.
+        Conclusion::Undecided if refusal.considered().is_empty() => {
             said.stating("the search finds no proof, and no values under which it fails");
             said.stating("it reads a product of unknowns as an unknown of its own");
         }
-        Conclusion::Unsearched | Conclusion::Counterexample(_) => {}
+        Conclusion::Unsearched | Conclusion::Counterexample(_) | Conclusion::Undecided => {}
     }
 }
 

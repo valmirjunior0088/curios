@@ -190,6 +190,12 @@ fn each_refusal_kind_reads_as_its_reader_wrote_at_its_place() {
             "undischarged bound\n│  the bound of the `/` operator was not discharged\n│  nothing discharged `/std/ops/Div/Ok(people)`\n│  it fails at `people = 0`\n│  an operator takes no written arguments\n│  guard the operation with `people != 0`\n│  or call `/std/ops/Div/div(@T, a, b, @proof)`\n",
             "│  2 │ let share(total: Nat, people: Nat) -> Nat = total / people;\n│    │                                             ^^^^^^^^^^^^^^",
         ),
+        // Undischarged bound over a product, which the search reads as an unknown of its own.
+        (
+            "use /std/{Nat};\nuse /std/Bool/{Holds};\nlet small(x: Nat, y: Nat, @_: Holds(x * y <= 10)) -> Nat = x;\nlet call(x: Nat, y: Nat) -> Nat = small(x, y);\n/std/print(\"\")\n",
+            "undischarged bound\n│  the bound of `small` was not discharged\n│  nothing discharged `Holds(x * y <= 10)`\n│  the search finds no proof, and no values under which it fails\n│  it reads a product of unknowns as an unknown of its own\n│  supply it explicitly, `small(@...)`\n",
+            "│  4 │ let call(x: Nat, y: Nat) -> Nat = small(x, y);\n│    │                                   ^^^^^^^^^^^",
+        ),
         // Argument count mismatch.
         (
             "use /std/{Nat};\nlet double(n: Nat) -> Nat = n + n;\nlet four: Nat = double(1, 2);\n/std/print(\"\")\n",
