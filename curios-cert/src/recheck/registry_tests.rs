@@ -118,7 +118,7 @@ let /held: #{level = v} Type =
     );
 }
 
-/// What typing a registry entry records is checked under the item that declares it. A constructor's payload type is a type position, and `Carrier`'s, `((g : (Nat) -> Nat) => Nat)(reaches)`, is `Nat` once reduced and names the partial `reaches` as written: refused under `Carrier`, whether a definition follows it or it is the module's last.
+/// What typing a registry entry records is checked under the item that declares it. A constructor's payload type is a type position, and `Carrier`'s, `((g : (Nat) -> Nat) => Nat)(rec x = (n2) => x(n2); x)`, is `Nat` once reduced and holds a group that does not descend, written inline, which type totality asks of the declaration that writes it: refused under `Carrier`, whether a definition follows it or it is the module's last.
 ///
 /// Mutation-checked: with an item's positions drained before its entries are accepted, the refusal names the definition after `Carrier`, and no name where `Carrier` is last.
 #[test]
@@ -126,16 +126,13 @@ fn an_entrys_obligation_is_reported_under_the_item_that_declares_it() {
     for (followed, after) in [(true, "\nlet /after: #NatType = 0;"), (false, "")] {
         let verdicts = text_refusals(&fill!(
             r#"
-let /sink: (n: #NatType) -> #NatType =
-    #{node = Rec}
-    (let x: (n: #NatType) -> #NatType = (n2: #NatType) => x(n2);
-    x);
-
-let /reaches: (m: #NatType) -> #NatType =
-    (m: #NatType) => /sink(m);
-
 induct /Carrier: pub Type
-| mk(x: ((g: (n: #NatType) -> #NatType) => #NatType)(/reaches))
+| mk(
+        x:
+            ((g: (n: #NatType) -> #NatType) => #NatType)(
+                #{node = Rec}
+                (let x: (n: #NatType) -> #NatType = (n2: #NatType) => x(n2);
+                x)))
 end
 ${after}"#,
             after
@@ -151,20 +148,18 @@ ${after}"#,
     }
 }
 
-/// A family's index types are type positions its entry's typing records, checked under the item that declares the family: `Indexed`'s one index is typed `((g : (Nat) -> Nat) => Nat)(reaches)`, which names the partial `reaches` as written, and is refused under `Indexed`. A former is made of its entry and checked as no definition, so the entry's typing is the one place an index type is read.
+/// A family's index types are type positions its entry's typing records, checked under the item that declares the family: `Indexed`'s one index is typed `((g : (Nat) -> Nat) => Nat)(rec x = (n2) => x(n2); x)`, which holds a group that does not descend, written inline, and is refused under `Indexed`. A former is made of its entry and checked as no definition, so the entry's typing is the one place an index type is read.
 #[test]
 fn a_partial_index_type_is_refused_under_its_family() {
     let verdicts = text_refusals(
         r#"
-let /sink: (n: #NatType) -> #NatType =
-    #{node = Rec}
-    (let x: (n: #NatType) -> #NatType = (n2: #NatType) => x(n2);
-    x);
-
-let /reaches: (m: #NatType) -> #NatType =
-    (m: #NatType) => /sink(m);
-
-induct /Indexed: (i: ((g: (n: #NatType) -> #NatType) => #NatType)(/reaches)) -> pub Type
+induct /Indexed: (
+    i:
+        ((g: (n: #NatType) -> #NatType) => #NatType)(
+            #{node = Rec}
+            (let x: (n: #NatType) -> #NatType = (n2: #NatType) => x(n2);
+            x)),
+) -> pub Type
 end
 "#,
     );

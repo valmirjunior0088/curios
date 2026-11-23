@@ -488,7 +488,8 @@ fn an_element_read_at_an_index_is_below_its_list() {
                 end
             end;
 
-        let Small(t: Rose) -> Prop = Bool/Holds(leftmost(t) == 0);
+        let Small(t: Rose) -> /std/Bool/True =
+            match leftmost(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,

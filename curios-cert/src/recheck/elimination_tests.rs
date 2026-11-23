@@ -644,3 +644,73 @@ let /forged: (d: #{node = InductType} /F()(0)) -> #NatType =
         "{verdicts:?}",
     );
 }
+
+/// `Shape(f: F) -> Type` is `{}` at `stop` and `Sink(Shape(rest))` past it, where `Sink(A)` holds a function from `A` to `False`; `/Trap(f)` holds a `Shape(f)`, and `/delta` takes a `Trap(instance)` apart twice, to hand its function a unit. `/inf` is `F/more(/inf)`, which does not descend.
+fn a_family_instantiated_at(instance: &str) -> String {
+    fill!(
+        r#"
+induct /F: pub Type
+| stop()
+| more(rest: #{node = InductType} /F())
+end
+
+induct /Sink(A: Type): pub Type
+| sink(f: (x: A) -> #{node = InductType} /std/Bool/False())
+end
+
+#{node = Rec}
+let /Shape: (f: #{node = InductType} /F()) -> Type =
+    (f: #{node = InductType} /F()) =>
+        #{goal = Type}
+        match f
+        | stop() => {}
+        | more(rest) => #{node = InductType} /Sink(/Shape(rest))
+        end;
+
+#{node = Rec}
+let /inf: #{node = InductType} /F() =
+    /F/more(/inf);
+
+induct /Trap(f: #{node = InductType} /F()): pub Type
+| mk(x: /Shape(f))
+end
+
+let /delta: (t: #{node = InductType} /Trap(${instance})) ->
+    #{node = InductType}
+    /std/Bool/False() =
+    (t: #{node = InductType} /Trap(${instance})) =>
+        #{goal = #{node = InductType} /std/Bool/False()}
+        match t
+        | mk(x) => #{goal = #{node = InductType} /std/Bool/False()} match x | sink(g) => g(()) end
+        end;
+
+/std/Bool/True/qed()
+"#,
+        instance
+    )
+}
+
+// A family whose payload is computed by a total type-level function, instantiated at a loop, ties no knot: `/inf` unfolds to nothing, so `Trap(/inf)`'s payload is `Shape(/inf)` standing as written, never `Sink(Shape(/inf))`, and the inner match finds no family to take it apart as. Mutation-checked: `/inf` unfolding, `Shape(/inf)` is `Sink(Shape(/inf))` and `/delta` is refused only at `g(())`, a mismatch. The control instantiates `/Trap` at a value that terminates, whose payload is `Sink({})`. `curios`'s `tests::rules::totality_partiality` puts the same declarations to the elaborator under this name. Rename both or neither.
+#[test]
+fn a_family_instantiated_at_a_loop_ties_no_knot() {
+    let refusals = |instance: &str| {
+        let module = a_family_instantiated_at(instance);
+        core_text_refusals(&fill!("${PROPOSITIONS}\n${module}", PROPOSITIONS, module))
+    };
+
+    // The closing term proves `True` and not `False`, so it is all the control has refused.
+    let control = refusals("/F/more(/F/stop())");
+    assert!(
+        control.iter().all(|verdict| verdict.name.is_none()),
+        "{control:?}"
+    );
+
+    let verdicts = refusals("/inf");
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("delta"))
+                && matches!(verdict.error, Error::Unclassified(_))),
+        "{verdicts:?}"
+    );
+}

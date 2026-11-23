@@ -334,9 +334,9 @@ fn a_proof_projecting_an_inner_group_that_does_not_call_back_is_accepted() {
     assert_eq!(run(source), b"kept");
 }
 
-// The control hands `ignore` a total application of `Shape`.
+// A type handed as an argument is a type position the settle records find, where no written position is: one holding a loop its own declaration writes is refused there, as written in an annotation it would be. A loop a finished declaration holds is withheld, so `Shape(inf)` would stand and be no fault. The control hands `ignore` a total application of `Shape`.
 #[test]
-fn a_partial_value_reaching_a_type_through_an_argument_is_rejected() {
+fn a_loop_written_in_a_type_argument_is_refused() {
     control(
         r#"
         use /std/{Nat};
@@ -361,7 +361,10 @@ fn a_partial_value_reaching_a_type_through_an_argument_is_rejected() {
         "#,
         b"",
     )
-    .refused(&[("ignore(@Shape(F/stop()), 5)", "ignore(@Shape(inf), 5)")])
+    .refused(&[(
+        "ignore(@Shape(F/stop()), 5)",
+        "ignore(@Shape(((u : {}) => let l : F = F/more(l); l)(())), 5)",
+    )])
     .by_elaborator_in("entry", |error| {
         matches!(
             error,

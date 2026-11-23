@@ -42,17 +42,18 @@ fn a_call_through_a_local_definition_that_does_not_descend_is_refused() {
     assert!(error(source).contains("not known to terminate"));
 }
 
-/// A type reaching two partial definitions is refused by the one written first, whichever spells first: renaming either moves nothing.
+/// A proof reaching two partial definitions is refused by the one written first, whichever spells first: renaming either moves nothing.
 #[test]
-fn a_type_reaching_two_partial_definitions_names_the_first_written() {
+fn a_proof_reaching_two_partial_definitions_names_the_first_written() {
     let refusal = |arguments: &str| {
         error(&fill!(
             r#"
             use /std/{Nat, Io};
             pub let zeta(n: Nat) -> Nat = zeta(n);
             pub let alpha(n: Nat) -> Nat = alpha(n);
-            pub let F(_a: Nat, _b: Nat) -> Type = Nat;
-            pub let x: F(${arguments}) = 0;
+            pub let F(_a: Nat, _b: Nat) -> Nat = 0;
+            pub let x: /std/Bool/True =
+                match F(${arguments}) | 0 => /std/Bool/True/qed() | _ => /std/Bool/True/qed() end;
             Io/pure(())
             "#,
             arguments,

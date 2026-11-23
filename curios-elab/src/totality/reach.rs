@@ -1,8 +1,8 @@
-//! What the erased half of a program names: type totality's seeding, and the seeds both obligations ask the verdicts of.
+//! What the erased half of a program names: type totality's seeding, and the positions both obligations ask the verdicts of.
 //!
-//! **Type totality** is seeded here, from every type position, and takes the *aggressive* reading: everything a type reaches must be total, not merely the values a type-level eliminator scrutinizes. The narrow reading is unsound, because a *total* type-level function applied to a *partial value* reties the negative knot that strict positivity exists to forbid.
+//! **Type totality** is seeded here, from every type position, and asks of each only the recursion its own declaration writes: a member of its own item that does not descend, which its signatures spell by the group's own selections, a group written inline that does not, and a host row that diverges. A finished declaration whose recursion does not descend is withheld from both checkers' reduction, so a type naming it, or naming one that reaches it, reaches nothing that loops: a *total* type-level function applied to a *partial value*, `Shape(inf)`, is a stuck application, never the negative knot that strict positivity exists to forbid.
 //!
-//! **Proof totality is not seeded here**, and the difference is the point. Type totality asks a *syntactic* question — which written positions are types — and its aggressive reading deliberately answers more generously than any typing judgment would: it seeds the body of every definition whose type ends in a sort, which is how it reaches through `/std/Cli/WellFormed` into `/std/Cli/check/problems`, a dependency no annotation records. A walk can answer that completely. Proof totality asks a *typing* question — which terms are propositions — and a walk can only re-derive it from the finished term, incompletely; elaboration already decided it for every term in the program. So proof totality is seeded where that answer is known, by [`Context::record_checked`](crate::Context), and arrives here as positions rather than being reconstructed. See [`super::checked_proof_positions`].
+//! **Proof totality is not seeded here**, and the difference is the point. Type totality asks a *syntactic* question — which written positions are types — and answers it more generously than any typing judgment would: it seeds the body of every definition whose type ends in a sort, which is where a declaration writes a type-level recursion of its own, `let Bad: Type = Sink(Bad)` among them. A walk can answer that completely. Proof totality asks a *typing* question — which terms are propositions — and a walk can only re-derive it from the finished term, incompletely; elaboration already decided it for every term in the program. So proof totality is seeded where that answer is known, by [`Context::record_checked`](crate::Context), and arrives here as positions rather than being reconstructed. See [`super::checked_proof_positions`].
 //!
 //! Neither obligation subsumes the other. The type-level `rec` route violates only type totality; the partial-carrier and `exit` routes violate only proof totality.
 //!
@@ -16,10 +16,7 @@ use {
         Bound, Declared, Definition, Definitions, Enter, Entrypoint, Func, Global, Intrinsic, Item,
         Match, Struct, Subterm, Telescope, Term, Variant,
     },
-    std::{
-        collections::{BTreeSet, HashSet},
-        rc::Rc,
-    },
+    std::{collections::HashSet, rc::Rc},
 };
 
 /// A term the erased half of the program must be total in, and what a diagnostic should call it.
@@ -41,7 +38,7 @@ fn push(positions: &mut Vec<Position>, site: &Rc<ErasedSite>, term: &Term) {
 
 /// Every term in a type position.
 ///
-/// "Type position" is read syntactically and generously: a declared type, a binder annotation, a match's goal, a declaration telescope, a nominal type former, an intrinsic type former, and the *body* of any definition whose own type ends in a sort — the last being what reaches through `/std/Cli/WellFormed` into `/std/Cli/check/problems`.
+/// "Type position" is read syntactically and generously: a declared type, a binder annotation, a match's goal, a declaration telescope, a nominal type former, an intrinsic type former, and the *body* of any definition whose own type ends in a sort — the last being where a declaration writes a type-level recursion of its own.
 pub fn type_positions(definitions: &Definitions, entry: Option<&Entrypoint>) -> Vec<Position> {
     let mut positions = Vec::new();
 
@@ -97,23 +94,9 @@ pub fn type_positions(definitions: &Definitions, entry: Option<&Entrypoint>) -> 
     positions
 }
 
-/// The definitions these positions name — the seeds of the reachability walk.
-pub fn seeds(positions: &[Position]) -> BTreeSet<Global> {
-    let mut seeds = BTreeSet::new();
-    for position in positions {
-        mark(&position.term, &mut seeds);
-    }
-    seeds
-}
-
 /// Every top-level definition in the module, `let` and `rec` alike.
 fn each_definition(definitions: &Definitions) -> impl Iterator<Item = Definition> + '_ {
     definitions.items.iter().flat_map(Item::definitions)
-}
-
-/// Record every definition this term names.
-fn mark(term: &Term, seeds: &mut BTreeSet<Global>) {
-    seeds.extend(term.mentions().declarations().copied());
 }
 
 /// Take every entry of a telescope.
@@ -150,7 +133,7 @@ fn annotations(term: &Term, site: &Rc<ErasedSite>, positions: &mut Vec<Position>
 /// One node's contribution to [`annotations`], and whether the walk descends below it.
 fn annotate_node(term: &Term, site: &Rc<ErasedSite>, positions: &mut Vec<Position>) -> Enter<()> {
     match &**term {
-        // A type former stands for its whole self; nothing inside it is a value position the aggressive reading would treat differently.
+        // A type former stands for its whole self; nothing inside it is a value position the reading would treat differently.
         Subterm::FuncType(_)
         | Subterm::TupleType(_)
         | Subterm::InductType(_)

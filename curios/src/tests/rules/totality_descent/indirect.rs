@@ -200,7 +200,8 @@ fn a_call_in_a_callback_descends_where_its_callee_applies_it_below() {
             match t
             | node(label, children) => label == 0 || List/any(children, (c) => has_zero(c))
             end;
-        let Zeroed(t : Rose) -> Prop = Bool/Holds(has_zero(t));
+        let Zeroed(t : Rose) -> /std/Bool/True =
+            match has_zero(t) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         /std/print("ok")
         "#,
         b"ok",
@@ -235,7 +236,8 @@ fn a_callback_its_callee_hands_on_is_graded_where_the_callee_applies_it() {
             match t
             | node(label, children) => label == 0 || any_kept(children, (c) => has_zero(c))
             end;
-        let Zeroed(t : Rose) -> Prop = Bool/Holds(has_zero(t));
+        let Zeroed(t : Rose) -> /std/Bool/True =
+            match has_zero(t) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         /std/print("ok")
         "#,
         b"ok",
@@ -300,13 +302,15 @@ fn a_recursion_through_a_std_callback_is_graded_alike_by_both_checkers() {
             | node(label, children) =>
                 label == 0 || match List/find(children, (c) => via_find(c)) | some(_) => true | none() => false end
             end;
-        let Found(t : Rose) -> Prop = Holds(via_find(t));
+        let Found(t : Rose) -> /std/Bool/True =
+            match via_find(t) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         let via_take_while(t : Rose) -> Nat =
             match t
             | node(label, children) => label + List/len(List/take_while(children, (c) => via_take_while(c) == 0))
             end;
-        let Taken(t : Rose) -> Prop = Holds(via_take_while(t) == 0);
+        let Taken(t : Rose) -> /std/Bool/True =
+            match via_take_while(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         let via_traverse(t : Rose) -> Option(Nat) =
             match t
@@ -316,7 +320,8 @@ fn a_recursion_through_a_std_callback_is_graded_alike_by_both_checkers() {
                 | none() => Option/none()
                 end
             end;
-        let Traversed(t : Rose) -> Prop = Holds(Option/is_some(via_traverse(t)));
+        let Traversed(t : Rose) -> /std/Bool/True =
+            match Option/is_some(via_traverse(t)) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -349,12 +354,14 @@ fn zero_ruled_out_of_an_applied_lambdas_binder_is_ruled_out_of_what_it_stands_fo
         let chained(n : Nat) -> Bool =
             ((x : Nat) => match x | 0 => false | 5 => true | _ => chained(x - 1) end)(n);
 
-        let Chained(n : Nat) -> Prop = Bool/Holds(chained(n));
+        let Chained(n : Nat) -> /std/Bool/True =
+            match chained(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         let guarded(n : Nat) -> Bool =
             ((x : Nat) => match x == 0 | true => false | false => guarded(x - 1) end)(n);
 
-        let Guarded(n : Nat) -> Prop = Bool/Holds(guarded(n));
+        let Guarded(n : Nat) -> /std/Bool/True =
+            match guarded(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -402,7 +409,8 @@ fn a_let_over_a_variable_an_inversion_solves_is_graded_as_the_variable() {
             | j + 1 => inlined(j, Q/c(j))
             end;
 
-        let Inlined(t : Nat, q : Q(t)) -> Prop = Bool/Holds(inlined(t, q));
+        let Inlined(t : Nat, q : Q(t)) -> /std/Bool/True =
+            match inlined(t, q) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         let bound(t : Nat, q : Q(t)) -> Bool =
             let u = t;
@@ -415,7 +423,8 @@ fn a_let_over_a_variable_an_inversion_solves_is_graded_as_the_variable() {
             | j + 1 => bound(j, Q/c(j))
             end;
 
-        let Bound(t : Nat, q : Q(t)) -> Prop = Bool/Holds(bound(t, q));
+        let Bound(t : Nat, q : Q(t)) -> /std/Bool/True =
+            match bound(t, q) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,

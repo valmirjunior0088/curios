@@ -27,7 +27,7 @@ use {
     },
 };
 
-/// Classify one definition against the verdicts already recorded, and record it, by the rule `classify_totality` states, while its declaration is still elaborating: what the rest of that declaration reads it by, so a written type or a bound that names it is refused by name before it is reduced. The verdict every other declaration reads is the one `classify_totality` records as the item is published.
+/// Classify one definition against the verdicts already recorded, and record it, by the rule `classify_totality` states, while its declaration is still elaborating: what the rest of that declaration reads it by, so a bound that names it is refused by name before it is reduced. The verdict every other declaration reads is the one `classify_totality` records as the item is published.
 ///
 /// Everything a definition mentions outside its own group has finished, so it is already classified and a single pass suffices. A name with no verdict is a member of the group currently elaborating, which [`group_totality`] settles for the group as a whole.
 pub fn record_definition_totality(
@@ -75,7 +75,7 @@ fn occurrence(term: &Term, name: &Global) -> Option<Extent> {
     }
 }
 
-/// The first declaration `term` references whose recorded totality is not total, first as written ([`Term::first_declaration`]) — the syntactic reading behind [`check_written_type_totality`], shared with the bound site that re-reports an exhausted discharge by the same name.
+/// The first declaration `term` references whose recorded totality is not total, first as written ([`Term::first_declaration`]): the name a bound's refusal is re-read by.
 fn partial_offender(context: &Context, term: &Term) -> Option<Global> {
     term.first_declaration(|name| {
         context
@@ -112,27 +112,6 @@ pub fn bound_over_a_loop(context: &Context, reduced: &Term, site: ErasedSite) ->
         site,
         offender: Some(offender),
     })
-}
-
-/// Type totality, at the one point a non-productive type-level loop can still be diagnosed: before the type is reduced.
-///
-/// The whole-module gate runs post-zonk, which is after elaboration has already performed the type-level reduction it exists to make safe. A type that reaches a partial definition and *is productive* survives elaboration and the gate rejects it; one that is not productive spins until the step budget dies, and the program is refused for apparently running out of a resource no amount of which would have helped. This refuses it first, by name, for the reason it is actually wrong.
-///
-/// It reads the *lowered* type, before elaboration touches it, so the mentions it sees are the written ones. That is why it is an early net rather than a replacement: the post-zonk gate still runs, and still sees everything elaboration produces.
-pub fn check_written_type_totality(
-    context: &mut Context,
-    type_: &Term,
-    site: ErasedSite,
-) -> Result<(), Error> {
-    match partial_offender(context, type_) {
-        None => Ok(()),
-        Some(offender) => Err(Error::PartialInErasedPosition {
-            erased: Erased::Type,
-            site,
-            offender: Some(offender),
-        }
-        .at_opt(occurrence(type_, &offender))),
-    }
 }
 
 /// Classify a published item and record each of its definitions' verdict: the one every other declaration reads, and the one the unit files ([`crate::Classified::totality`]).
@@ -205,20 +184,25 @@ pub fn classify_totality(context: &mut Context, item: &Item) -> Result<(), Error
 
 /// Every way the given positions fail to be total, with the site of each and where it was written, for a position that kept one.
 ///
-/// Two ways, and a position can fail either: it names a definition classified `Partial`, or it *is* partial with no name to blame — an inline `rec` that does not descend, or a call to a host row that diverges. A verdict is a closure already ([`classify_totality`]), so what a position reaches through a total definition is total, and the definitions it names are all there is to ask.
+/// Two ways, and a position can fail either: it names a definition whose verdict the obligation `reaches` holds to be a fault, or it *is* partial with no name to blame — an inline `rec` that does not descend, or a call to a host row that diverges. A verdict is a closure already ([`classify_totality`]), so what a position reaches through a total definition is total, and the definitions it names are all there is to ask.
 fn faults(
     context: &mut Context,
     positions: &[Position],
+    reaches: &dyn Fn(&Global, Totality) -> bool,
 ) -> Result<Vec<(ErasedSite, Fault, Option<Extent>)>, Error> {
     curios_common::sample!("totality::faults_positions", positions.len());
-    let named = seeds(positions)
-        .into_iter()
-        .filter(|name| {
-            context
-                .definition_totality(name)
-                .is_some_and(|totality| !totality.is_total())
-        })
-        .collect::<Vec<_>>();
+    // In the order the positions write them, each first where it is first written, so a refusal names the definition its reader wrote first whatever the names spell: each search leaves out what the ones before it found.
+    let mut named = Vec::<Global>::new();
+    for position in positions {
+        while let Some(found) = position.term.first_declaration(|name| {
+            !named.contains(name)
+                && context
+                    .definition_totality(name)
+                    .is_some_and(|totality| reaches(name, totality))
+        }) {
+            named.push(found);
+        }
+    }
 
     let mut faults = Vec::new();
     // One cache across every position: proof totality seeds a literal's derivation once per link, and those links share their tails. It is keyed by the positions' canonical nodes, so a type zonked apart from an equal one is that one's key and is found by identity.
@@ -233,7 +217,7 @@ fn faults(
             ));
         }
     }
-    // One named fault per offending definition, attributed to the first position that names it.
+    // One named fault per offending definition, attributed to the first position that names it, in the order they are first written.
     for name in named {
         let position = positions
             .iter()
@@ -279,9 +263,9 @@ fn zonked(context: &Context, cache: &mut Zonked, term: &Term) -> Result<Term, Er
     Ok(done)
 }
 
-/// **Type totality**: everything a type position reaches must be total.
+/// **Type totality**: a type position holds no recursion of its own declaration that does not descend.
 ///
-/// A divergent type breaks type formation, and — through `rec Bad : Type = Sink(Bad)` — ties the negative knot strict positivity exists to forbid without ever writing an `induct`. Decided for one declaration as it is published, over `module` holding its item and the entries it declares, and for the entry once the module is zonked; either way after [`classify_totality`], whose verdicts it reads, and over the terms recorded since `mark`.
+/// A divergent type breaks type formation, and — through `rec Bad : Type = Sink(Bad)` — ties the negative knot strict positivity exists to forbid without ever writing an `induct`. A finished declaration whose recursion does not descend is withheld from reduction ([`Context::withhold_unfounded`]), so a type naming it, or naming one that reaches it, reaches nothing that loops: `Shape(inf)` with `inf` withheld is a stuck application. What is left is the declaration being judged, whose verdict comes only after its elaboration: a member of its own item that does not descend, which its signatures spell by the group's own selections, and a group written inline in the position. Decided for one declaration as it is published, over `module` holding its item and the entries it declares, and for the entry once the module is zonked; either way after [`classify_totality`], whose verdicts it reads, and over the terms recorded since `mark`.
 pub fn check_type_totality(
     context: &mut Context,
     definitions: &Definitions,
@@ -292,7 +276,14 @@ pub fn check_type_totality(
     curios_common::profile!("check_type_totality");
     let mut positions = type_positions(definitions, entry);
     positions.extend(checked_type_positions(context, mark, cache)?);
-    report(context, &positions, Erased::Type)
+    let own = definitions
+        .items
+        .iter()
+        .flat_map(Item::declared_names)
+        .collect::<BTreeSet<_>>();
+    report(context, &positions, Erased::Type, &|name, totality| {
+        own.contains(name) && totality.is_unfounded()
+    })
 }
 
 /// The terms elaboration settled *at a sort* — a term whose type is `Type` or `Prop` is itself a type, wherever it was written.
@@ -368,7 +359,9 @@ pub fn check_proof_totality(
 ) -> Result<(), Error> {
     curios_common::profile!("check_proof_totality");
     let positions = checked_proof_positions(context, mark, cache)?;
-    report(context, &positions, Erased::Proof)
+    report(context, &positions, Erased::Proof, &|_, totality| {
+        !totality.is_total()
+    })
 }
 
 /// Proof totality's seed: every term elaboration settled at a `Prop`-sorted type.
@@ -445,8 +438,13 @@ fn checked_proof_positions(
     Ok(positions)
 }
 
-fn report(context: &mut Context, positions: &[Position], erased: Erased) -> Result<(), Error> {
-    match faults(context, positions)?.into_iter().next() {
+fn report(
+    context: &mut Context,
+    positions: &[Position],
+    erased: Erased,
+    reaches: &dyn Fn(&Global, Totality) -> bool,
+) -> Result<(), Error> {
+    match faults(context, positions, reaches)?.into_iter().next() {
         None => Ok(()),
         Some((site, fault, extent)) => Err(Error::PartialInErasedPosition {
             erased,

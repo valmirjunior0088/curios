@@ -72,7 +72,8 @@ fn a_callback_sequenced_with_a_bang_is_graded_where_the_bind_applies_it() {
 
         let spin(n: Nat) -> Option(Bool) = h(n, (c) => spin(c));
 
-        let Spun(n: Nat) -> Prop = Holds(match spin(n) | some(_) => true | none() => false end);
+        let Spun(n: Nat) -> /std/Bool/True =
+            match match spin(n) | some(_) => true | none() => false end | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -495,7 +496,8 @@ fn a_callback_handed_to_a_definition_of_no_group_is_graded_where_it_applies_it()
         let depth(t: Tree) -> Nat =
             match t | leaf(n) => n | node(o) => apply_some(o, (c) => depth(c)) end;
 
-        let Shallow(t: Tree) -> Prop = Bool/Holds(depth(t) == 0);
+        let Shallow(t: Tree) -> /std/Bool/True =
+            match depth(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -524,7 +526,8 @@ fn a_member_handed_to_a_list_map_is_called_below_the_list() {
         let total(t: Rose) -> Nat =
             match t | rose(n, cs) => n + List/len(List/map(cs, total)) end;
 
-        let Small(t: Rose) -> Prop = Bool/Holds(total(t) == 0);
+        let Small(t: Rose) -> /std/Bool/True =
+            match total(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -553,7 +556,8 @@ fn a_lambda_handed_to_a_list_fold_binds_its_element_below_the_list() {
         let total(t: Rose) -> Nat =
             match t | rose(n, cs) => List/fold(cs, n, (c, acc) => acc + total(c)) end;
 
-        let Small(t: Rose) -> Prop = Bool/Holds(total(t) == 0);
+        let Small(t: Rose) -> /std/Bool/True =
+            match total(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -582,7 +586,8 @@ fn a_callback_handed_at_two_places_is_applied_wherever_either_is() {
 
         let deep(n: Nat) -> Bool = twice(n, (c) => deep(c));
 
-        let Deep(n: Nat) -> Prop = Bool/Holds(deep(n));
+        let Deep(n: Nat) -> /std/Bool/True =
+            match deep(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -610,7 +615,8 @@ fn a_callback_typed_by_an_alias_is_summarized_as_a_function_typed_one() {
 
         let aliased(n: Nat) -> Bool = at(n, (c) => aliased(c));
 
-        let Aliased(n: Nat) -> Prop = Bool/Holds(aliased(n));
+        let Aliased(n: Nat) -> /std/Bool/True =
+            match aliased(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -639,7 +645,8 @@ fn a_lambda_handed_to_a_list_fold_binds_its_accumulator_below_nothing() {
         let total(t: Rose) -> Rose =
             match t | rose(n, cs) => List/fold(cs, t, (c, acc) => total(c)) end;
 
-        let Rooted(t: Rose) -> Prop = Bool/Holds(match total(t) | rose(n, _) => n == 0 end);
+        let Rooted(t: Rose) -> /std/Bool/True =
+            match match total(t) | rose(n, _) => n == 0 end | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -673,7 +680,8 @@ fn a_local_member_recurring_through_a_callback_is_graded_against_its_own_paramet
                 label == 0 || go(t)
             end;
 
-        let Zeroed(t: Rose) -> Prop = Bool/Holds(has_zero(t));
+        let Zeroed(t: Rose) -> /std/Bool/True =
+            match has_zero(t) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         let bare(t: Rose) -> Bool =
             match t
@@ -683,7 +691,8 @@ fn a_local_member_recurring_through_a_callback_is_graded_against_its_own_paramet
                 label == 0 || go(t)
             end;
 
-        let Bare(t: Rose) -> Prop = Bool/Holds(bare(t));
+        let Bare(t: Rose) -> /std/Bool/True =
+            match bare(t) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -722,7 +731,8 @@ fn a_callback_applied_through_an_applied_lambda_or_a_match_publishes_nothing() {
 
         let spin(n: Nat) -> Bool = h(n, (c) => spin(c));
 
-        let Spun(n: Nat) -> Prop = Bool/Holds(spin(n));
+        let Spun(n: Nat) -> /std/Bool/True =
+            match spin(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,

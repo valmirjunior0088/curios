@@ -1,8 +1,8 @@
-//! A partial definition's place: usable in a program and refused in a type, and the type-level loops diagnosed rather than aborted.
+//! A partial definition's place: usable in a program, kept folded where a checker reads a type, and refused in a proof; a type's own loops diagnosed rather than aborted.
 
 use {
     super::test_support::*, crate::tests::test_support::*, curios_analysis::Erased,
-    curios_core::Quality,
+    curios_common::fill, curios_core::Quality, curios_elab::Folded,
 };
 
 // The route no analysis of *value*-level partiality can see. The exploit has no value-level `rec`, no `exit`, and no negative occurrence in any declaration: a lambda, a constructor application, and one application. The knot is tied entirely by `rec Bad : Type`, which `check_positivity` never looks at, because a `rec` is neither an `induct` nor a `struct`. The control's alias is `Sink({})`, which ties nothing, and `delta` refutes a unit with it.
@@ -104,9 +104,9 @@ fn a_partial_type_behind_a_projection_is_still_a_type() {
     });
 }
 
-// Why type totality has to be the aggressive reading. Nothing here is a partial type former: `Shape` is structurally recursive and total, and `inf` is an ordinary partial *value* of an ordinary data type. The dangerous type exists only because a total function was applied to a bottom argument, so a rule that looks at what a type-level eliminator scrutinizes does not see it. The control applies `Shape` to a total value.
+// A total type-level function applied to a partial value ties no knot. Nothing here is a partial type former: `Shape` is structurally recursive and total, and `inf` an ordinary partial *value* of an ordinary data type, `Unfounded`, which no checker unfolds. So `Shape(inf)` is a stuck application and never `Sink(Shape(inf))`, and the match `delta` would take apart finds no family to take it apart as. The control applies `Shape` to a total value.
 #[test]
-fn a_total_type_function_applied_to_a_partial_value_is_rejected() {
+fn a_total_type_function_applied_to_a_partial_value_ties_no_knot() {
     control(
         r#"
         induct Sink(A : Type) : pub Type
@@ -146,7 +146,7 @@ fn a_total_type_function_applied_to_a_partial_value_is_rejected() {
         ),
     ])
     .by_elaborator_in("/delta", |error| {
-        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+        matches!(error, curios_elab::Error::NotAInductType { .. })
     });
 }
 
@@ -239,15 +239,9 @@ fn a_partial_definition_stays_usable_in_a_program() {
     assert_eq!(run(source), b"8");
 }
 
-// Type totality is seeded two ways, because neither reaches what the other does. The walk finds types where they are *written* — annotations, goals, telescopes, and the body of any definition whose type ends in a sort. It has no case for an application's arguments, so a type handed to a function is written nowhere it looks. The settle records find those, because a term whose own type is a sort is a type wherever it appears.
-//
-// The argument form is the one that reaches this gate at all. Written as an annotation, `Shape(inf)` is *forced* while the binder elaborates and the step budget stops it there — fail-closed, but before any whole-module pass runs. Passed as a type argument it is never forced, so elaboration succeeds and only the gate is left, which the settle records are what reach.
-//
-// Nothing here is `Prop`-typed, so proof totality cannot fire and type totality is on its own: `Shape` is total, descending structurally on `F`, and `inf` is an ordinary partial value of a data type. The whole-module gate runs post-zonk — after elaboration has already done the type-level reduction type totality exists to make safe. A type that reaches a partial definition and happens to be *productive* survives elaboration and the gate rejects it. One that is not productive would spin until the step budget dies and be refused for running out of a resource no amount of which would help. Refusing the written type up front is what makes both shapes report the same thing, which is the thing that is actually wrong.
-//
-// `Shape(inf)` here reduces to itself with no progress; the productive sibling is `a_total_type_function_applied_to_a_partial_value_is_rejected`. The control applies `Shape` to a total value.
+// A type-level loop that is not productive stays folded and spends nothing. `Shape` is total, descending structurally on `F`, and `inf` an `Unfounded` value no checker unfolds, so `Shape(inf)` is a stuck application at once: `here`'s signature forms, and the call that hands it a `Nat` is refused as a mismatch naming `inf`, where an unfolding `inf` would spin until the budget was spent. Type totality is seeded two ways, written type positions and the terms elaboration settled at a sort, and neither has anything to say of it: the declaration writes no recursion of its own. The control applies `Shape` to a total value.
 #[test]
-fn a_non_productive_type_level_loop_is_diagnosed_not_exhausted() {
+fn a_non_productive_type_level_loop_stays_folded_not_exhausted() {
     control(
         r#"
         use /std/{Nat};
@@ -272,28 +266,21 @@ fn a_non_productive_type_level_loop_is_diagnosed_not_exhausted() {
         b"0",
     )
     .refused(&[("here(x : Shape(F/stop()))", "here(x : Shape(inf))")])
-    .by_elaborator_in("/here", |error| {
+    .by_elaborator_in("entry", |error| {
         matches!(
             error,
-            curios_elab::Error::PartialInErasedPosition {
-                erased: Erased::Type,
+            curios_elab::Error::TypeMismatch {
+                folded: Some(Folded { definition: folded, through: None }),
                 ..
-            }
+            } if *folded == global("/inf")
         )
     });
 }
 
-// A struct *field* is the written type position type totality's early net reaches on its own, and the two fixtures below are its two halves, each derived from a control at a total application.
-//
-// The net exists so a type reaching a partial definition is refused by name before elaboration forces it — the post-zonk gate runs after the reduction type totality exists to make safe, so by then a productive type has already spun. It is applied to a *definition's* written type, and a parameter rides on one: an `induct` or `struct` parameter on the type former's own type. An `induct` payload is typed without being forced, so the gate over the registry entry reaches it by its payload. A struct field rides on nothing and is forced, a `concept` method being its record's field, so the net reads a field's written type itself.
-//
-// Neither half is a route to `False`; both fail closed, which is why this is coverage rather than a forgery. What they hold at a field is the claim `a_type_level_rec_through_an_arrow_is_diagnosed_not_aborted` makes for its own shape — that the compiler answers instead of dying — and the claim `a_non_productive_type_level_loop_is_diagnosed_not_exhausted` makes for its twin, that both shapes report the same thing.
-//
-// Without the net, on the default main-thread stack, the productive field aborts the compiler outright with a stack overflow, and the non-productive one is refused with "reduction ran out of steps on: Shape(inf)", naming neither the definition at fault nor the reason — where the same `Shape(inf)` written as an `induct` payload, an `induct` parameter, a `struct` parameter, or a `concept` method type is diagnosed by name. The control applies `Shape` to a total value.
+// A struct *field* is a written type position elaboration forces, and a type-level loop written there is no fault, the two fixtures below being its two halves. A productive field forms a structure nothing builds a value of, and the program runs, `Shape(inf)` with `inf` withheld being a stuck application; it runs with `inf` unfolding too, so the fold is not what this half rests on.
 #[test]
-fn a_productive_type_level_loop_in_a_struct_field_is_diagnosed_not_aborted() {
-    control(
-        r#"
+fn a_productive_type_level_loop_in_a_struct_field_stays_folded() {
+    let source = r#"
         induct Sink(A : Type) : pub Type
         | sink(f : (A) -> /std/Bool/False)
         end
@@ -311,27 +298,17 @@ fn a_productive_type_level_loop_in_a_struct_field_is_diagnosed_not_aborted() {
 
         let inf : F = F/more(inf);
 
-        struct Trap : pub Type { x : Shape(F/stop()) }
+        struct Trap : pub Type { x : Shape(inf) }
 
         /std/print("ok")
-        "#,
-        b"ok",
-    )
-    .refused(&[("{ x : Shape(F/stop()) }", "{ x : Shape(inf) }")])
-    .by_elaborator_in("/Trap", |error| {
-        matches!(
-            error,
-            curios_elab::Error::PartialInErasedPosition {
-                erased: Erased::Type,
-                ..
-            }
-        )
-    });
+        "#;
+
+    assert_eq!(run(source), b"ok");
 }
 
-// The control applies `Shape` to a total value, which must keep working in a field: a net that refused every struct field, or every field whose type mentions a `rec`, would fail there rather than pass quietly, and it runs, so the field type really did reduce to `Nat`.
+// The non-productive half: a field at `Shape(inf)` forms, and the projection that reads it where a `Nat` is wanted is refused as a mismatch naming `inf`, which an unfolding `inf` would have spent the budget on instead. The control applies `Shape` to a total value, which must keep working in a field: it runs, so the field type really did reduce to `Nat`.
 #[test]
-fn a_non_productive_type_level_loop_in_a_struct_field_is_diagnosed_too() {
+fn a_non_productive_type_level_loop_in_a_struct_field_stays_folded_too() {
     control(
         r#"
         use /std/{Nat};
@@ -358,13 +335,13 @@ fn a_non_productive_type_level_loop_in_a_struct_field_is_diagnosed_too() {
         b"7",
     )
     .refused(&[("{ x : Shape(F/more(F/stop())) }", "{ x : Shape(inf) }")])
-    .by_elaborator_in("/Holder", |error| {
+    .by_elaborator_in("/take", |error| {
         matches!(
             error,
-            curios_elab::Error::PartialInErasedPosition {
-                erased: Erased::Type,
+            curios_elab::Error::TypeMismatch {
+                folded: Some(Folded { definition: folded, through: None }),
                 ..
-            }
+            } if *folded == global("/inf")
         )
     });
 }
@@ -380,9 +357,9 @@ fn the_prelude_shapes_a_user_program_leans_on_still_elaborate() {
     assert_eq!(run(source), b"100000000-3");
 }
 
-// The payload-child rule at a type-level recursion: `Bad` recurses on `g(0)`, an application of the constructor payload `g`, which the size order reads as a child of the `c(g)` it was projected from — so `Bad` is graded total. Its soundness rests entirely on type totality: the only way `g(0)` can re-produce a `c(...)` that keeps `Bad` unfolding is for `g` to feed itself, which makes `g` non-descending, and a type reaching `g` is then refused. `loop` is exactly such a `g`, and the type of `held` reaches it; nothing in the totality grading refuses this — type totality does. `F` has a base case so that a total function can stand where `loop` does, which is the control.
+// The payload-child rule at a type-level recursion: `Bad` recurses on `g(0)`, an application of the constructor payload `g`, which the size order reads as a child of the `c(g)` it was projected from — so `Bad` is graded total. Its soundness rests on the fold: the only way `g(0)` can re-produce a `c(...)` that keeps `Bad` unfolding is for `g` to feed itself, which makes `g` a recursion that does not descend, and `loop` is exactly such a `g`, withheld from both checkers. So `Bad(F/c(loop))` unfolds once to `Bad(loop(0))` and stands, and `()` is no value of it. `F` has a base case so that a total function can stand where `loop` does, which is the control.
 #[test]
-fn a_payload_application_that_reaches_a_partial_function_is_a_partial_type() {
+fn a_payload_application_that_reaches_a_partial_function_stays_folded() {
     control(
         r#"
         use /std/{Nat};
@@ -408,13 +385,7 @@ fn a_payload_application_that_reaches_a_partial_function_is_a_partial_type() {
     )
     .refused(&[("Bad(F/c((n) => F/z()))", "Bad(F/c(loop))")])
     .by_elaborator_in("/held", |error| {
-        matches!(
-            error,
-            curios_elab::Error::PartialInErasedPosition {
-                erased: Erased::Type,
-                ..
-            }
-        )
+        matches!(error, curios_elab::Error::NotATupleType { .. })
     });
 }
 
@@ -452,9 +423,9 @@ fn a_payload_descent_is_sound_only_because_a_partial_producer_is_refused_as_a_pr
     });
 }
 
-// Type totality across the unit boundary: a partial definition in one unit is partial to every unit that mounts it. Every type totality fixture above builds its partiality in-unit, so none exercises the replay path's load-bearing half — that a definition the prelude's own walk classified `Partial` is read back as partial by a user suffix that only mentions it. `Json/decode` is that definition: a parser no size-change checker can show terminates, whose `Partial` verdict lives in the archived record alone. `Bad(s)` is a type that computes through that parse, so its body is a type position reaching `Json/decode`; a gate that read the archive's verdict as `Total`, or did not consult it, would form `Bad` over a diverging type and satisfy type totality by a classification it never read. The control computes through `Option/to_result`, which the prelude's walk found total.
+// The fold across the unit boundary: a definition the prelude's walk filed `Unfounded` is withheld in every unit that mounts it, read off the archived record alone. `Json/decode` reaches such a parser, `/std/Json/decode/value`, so `Bad("1")`, which would be `Nat` were the parser unfolded, since `"1"` parses, stands as written, and `0` is no value of it; a unit that read the archive's parser by its body would accept the call. The refusal names the parser through `Bad`, the name its side stands on as written. The control computes through `Option/to_result`, which the prelude's walk found total.
 #[test]
-fn a_type_reaching_a_partial_prelude_definition_is_rejected() {
+fn a_partial_prelude_definition_stays_folded_in_a_user_unit() {
     control(
         r#"
         use /std/{Nat, Json, Str, Option};
@@ -465,20 +436,23 @@ fn a_type_reaching_a_partial_prelude_definition_is_rejected() {
             | failure(_) => {}
             end;
 
-        let _held(s : Str, _x : Bad(s)) -> Nat = 0;
+        let held(s : Str, x : Bad(s)) -> Nat = 0;
 
-        /std/print("ok")
+        /std/print(Nat/to_str(held("1", 0)))
         "#,
-        b"ok",
+        b"0",
     )
     .refused(&[("Option/to_result(Option/some(s), 0)", "Json/decode(s)")])
-    .by_elaborator_in("/_held", |error| {
+    .by_elaborator_in("entry", |error| {
         matches!(
             error,
-            curios_elab::Error::PartialInErasedPosition {
-                erased: Erased::Type,
+            curios_elab::Error::TypeMismatch {
+                folded: Some(Folded {
+                    definition,
+                    through: Some(through),
+                }),
                 ..
-            }
+            } if *definition == global("/std/Json/decode/value") && *through == global("/Bad")
         )
     });
 }
@@ -542,14 +516,14 @@ fn a_proof_or_type_that_may_not_terminate_is_refused_wherever_it_stands() {
             )
         });
     }
-    refusals.by_elaborator_in("/in_a_signature", |error| {
+    // A signature naming a loop it never applies forms, `decide` withheld, and the call that hands it `qed` is refused, `Holds(decide(()))` standing as written.
+    refusals.by_elaborator_in("entry", |error| {
         matches!(
             error,
-            curios_elab::Error::PartialInErasedPosition {
-                erased: Erased::Type,
-                offender: Some(offender),
+            curios_elab::Error::TypeMismatch {
+                folded: Some(Folded { definition: folded, through: None }),
                 ..
-            } if *offender == global("/decide")
+            } if *folded == global("/decide")
         )
     });
     // A member named in its group's tail, or a binding whose value holds a group named in the binding's tail, stands there by its label, which is read as what it stands for, so the position holds the group.
@@ -637,19 +611,20 @@ fn a_ruled_out_arm_of_a_closed_match_on_data_is_reached_by_no_reduction() {
         ("pub let forged: True", "pub let forged: False"),
     ]);
 
-    for at in ["/T", "/typed"] {
+    // `T` forms, a type naming a loop its own declaration does not write; `typed` and `forged` are refused, neither type reducing past `loop`.
+    for at in ["/typed", "/forged"] {
         refusals.by_elaborator_in(at, |error| {
-            matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+            matches!(error, curios_elab::Error::TypeMismatch { .. })
         });
     }
-    refusals.by_elaborator_in("/forged", |error| {
-        matches!(error, curios_elab::Error::TypeMismatch { .. })
+    refusals.not_by_elaborator(|error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
     });
 }
 
-// A family's index types are positions of a type, read off its entry: `F`'s index is typed `Eq()(fine(0), 0)`, and the refusal turns `fine` into `spin`, which never descends, so type totality refuses it where it stands, as an index of `F`.
+// A family's index type naming a loop forms, the loop withheld: `F`'s index is typed `Eq()(spin(0), 0)` in the refusal, which stands as written, `spin` never descending, so `f`'s target `Eq/refl()` is no proof of it and is refused as a mismatch naming `spin`. The control types the index at `fine(0)`, which answers.
 #[test]
-fn a_partial_index_type_is_refused_as_an_index_of_its_family() {
+fn a_family_whose_index_type_names_a_loop_stays_folded() {
     control(
         r#"
         use /std/{Nat, Eq};
@@ -669,11 +644,10 @@ fn a_partial_index_type_is_refused_as_an_index_of_its_family() {
     .by_elaborator_in("/F", |error| {
         matches!(
             error,
-            curios_elab::Error::PartialInErasedPosition {
-                erased: Erased::Type,
-                site: curios_elab::ErasedSite::IndexOf(family),
+            curios_elab::Error::TypeMismatch {
+                folded: Some(Folded { definition: folded, through: None }),
                 ..
-            } if *family == global("/F")
+            } if *folded == global("/spin")
         )
     });
 }
@@ -715,5 +689,175 @@ fn a_proof_scrutinee_naming_a_loop_is_refused_by_name_and_not_by_the_budget() {
                 ..
             }
         )
+    });
+}
+
+// A type may name a loop it never applies: a finished declaration whose recursion does not descend unfolds to nothing in either checker, so a type naming it reaches nothing that loops, and type totality asks no more of it. `spin` is such a declaration, and so is the witness `Joint` resolves to for a pair of actions, whose method runs `Io/both`: a parameter type counting a list `spin` is mapped over, a pair's answers read through the witness's `Answers`, and a list of actions `spin` is mapped over counted through a function's result type, each formerly refused as a type reaching what may not terminate, are accepted, and run. Mutation-checked: reaching every name a type position mentions refuses each again.
+#[test]
+fn a_type_naming_a_loop_it_never_applies_is_accepted() {
+    let preamble = r#"
+        use /std/{Nat, List, Io, Vec};
+
+        let spin(n: Nat) -> Io(Nat) = Io/bind(Io/yield(), (()) => spin(n));
+    "#;
+    for program in [
+        r#"
+        let take(v: Vec(Io(Nat), List/len(List/map([1, 2, 3], spin)))) -> Nat = Vec/len(v);
+
+        /std/print(Nat/to_str(take(Vec/of_list(List/map([1, 2, 3], spin)))))
+        "#,
+        r#"
+        concept Joint(T: Type): Type {
+            Answers: Type,
+            run(T) -> Io(Answers),
+        }
+
+        satisfy (@A: Type, @B: Type) => Joint({Io(A), Io(B)}) {
+            Answers = {A, B},
+            run(t) = Io/both(t.0, t.1),
+        }
+
+        let all_of(@T: Type, use Joint(T), actions: T) -> Io(Joint/Answers(@T)) =
+            Joint/run(actions);
+
+        let main() -> Io({}) =
+            let (a, b) = all_of((Io/pure(1), Io/pure(2)))!;
+            /std/print(Nat/to_str(a + b));
+
+        main()
+        "#,
+        r#"
+        let all_counted(@A: Type, actions: List(Io(A))) -> Io(Vec(A, List/len(actions))) =
+            match actions
+            | [] => Io/pure(Vec/nil())
+            | [a, ..more] =>
+                let x = a!;
+                let rest = all_counted(more)!;
+                Io/pure(Vec/cons(x, rest))
+            end;
+
+        let counted() -> Nat = Vec/len(Vec/of_list(List/map([1, 2, 3], spin)));
+
+        let main() -> Io(Nat) =
+            let answers = all_counted(List/map([4, 5, 6], (n: Nat) => Io/pure(n)))!;
+            Io/pure(Vec/len(answers) + counted());
+
+        /std/print(Nat/to_str(main()!))
+        "#,
+    ] {
+        let source = fill!("${preamble}${program}", preamble, program);
+        assert!(!run(&source).is_empty(), "{source}");
+    }
+}
+
+// A type naming a loop is no fault once the loop is withheld, so what keeps a family from holding itself negatively behind one is positivity alone: `G` matches on a value of `F(1)`, which `loop` would be, and `B` holds itself as `G`'s second argument left of an arrow. `G(loop(()), B)` unfolds to a match stuck on `loop`, and positivity reads a stuck match as every arm it could reduce to, so `B`, which the arm puts left of the arrow, is refused. Mutation-checked: reading a stuck match's suppliers alone admits `B`. `curios-cert`'s `recheck::positivity_tests` puts the same declarations to the certifier under this name. Rename both or neither. The control hands `G` a type that is not `B`.
+#[test]
+fn a_family_behind_a_stuck_loop_is_held_to_positivity() {
+    control(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{False};
+
+        induct F: (n: Nat) -> Type
+        | c(): (0)
+        end
+
+        let loop(u: {}) -> F(1) = loop(u);
+
+        let G(x: F(1), A: Type) -> Type = match x | c() => A end;
+
+        induct B: Type
+        | mk(f: (G(loop(()), Nat)) -> False)
+        end
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("G(loop(()), Nat)", "G(loop(()), B)")])
+    .by_elaborator_in("/B", |error| {
+        matches!(error, curios_elab::Error::NotStrictlyPositive { .. })
+    });
+}
+
+// A type may name a loop, and a proof standing in it may not: `T`'s body is a type, and the scrutinee of its match is a proof, `lemma` instantiated at `spin(0)`, which proof totality refuses by name wherever it stands. The control instantiates `lemma` at a value that terminates.
+#[test]
+fn a_proof_standing_in_a_type_and_naming_a_loop_is_refused() {
+    control(
+        r#"
+        use /std/{Nat, Eq};
+        use /std/Bool/{True};
+
+        let fine(n: Nat) -> Nat = n;
+        let spin(n: Nat) -> Nat = spin(n);
+
+        let lemma(@n: Nat) -> Eq()(n, n) = Eq/refl();
+
+        let T: Prop = match lemma(@fine(0)) | refl() => True end;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("lemma(@fine(0))", "lemma(@spin(0))")])
+    .by_elaborator_in("/T", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Proof,
+                offender: Some(offender),
+                ..
+            } if *offender == global("/spin")
+        )
+    })
+    .by_certifier_in("/T", |error| {
+        matches!(
+            error,
+            curios_cert::Error::NotTotal {
+                erased: Erased::Proof,
+                ..
+            }
+        )
+    });
+}
+
+// A family indexing a payload by a type-level function and instantiated at a loop ties no knot: `Trap(inf)`'s payload is `Shape(inf)`, a stuck application with `inf` withheld, so the match `delta` would take it apart by finds no family. `curios-cert`'s `recheck::elimination_tests` puts the same declarations to the certifier under this name. Rename both or neither. The control instantiates `Trap` at a value that terminates, whose payload is `Sink({})`.
+#[test]
+fn a_family_instantiated_at_a_loop_ties_no_knot() {
+    control(
+        r#"
+        induct Sink(A : Type) : pub Type
+        | sink(f : (A) -> /std/Bool/False)
+        end
+
+        induct F : pub Type
+        | stop()
+        | more(rest : F)
+        end
+
+        let Shape(f : F) -> Type =
+            match f
+            | stop() => {}
+            | more(rest) => Sink(Shape(rest))
+            end;
+
+        let inf : F = F/more(inf);
+
+        induct Trap(f : F) : pub Type
+        | mk(x : Shape(f))
+        end
+
+        let delta(t : Trap(F/more(F/stop()))) -> /std/Bool/False =
+            match t
+            | mk(x) => match x | sink(g) => g(()) end
+            end;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("Trap(F/more(F/stop()))", "Trap(inf)")])
+    .by_elaborator_in("/delta", |error| {
+        matches!(error, curios_elab::Error::NotAInductType { .. })
     });
 }

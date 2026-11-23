@@ -157,6 +157,13 @@ impl fmt::Display for RecordKeyword {
     }
 }
 
+/// A definition whose recursion does not descend, which no checker unfolds, that a mismatch's side stands on: named where the side writes it, or reached through `through`, a definition the side writes that is not known to terminate and unfolds to a term reaching it.
+#[derive(Debug)]
+pub struct Folded {
+    pub definition: Global,
+    pub through: Option<Global>,
+}
+
 /// One written goal's entry in an [`Error::Goals`] batch: its occurrence extent, the local scope frozen at its birth, its expected type, and the solution unification committed (if any). Scope binders are free `Var` terms (not raw strings) for the same pretty-rename reason as [`Error::Goal`], an unnameable binder's line spelling `_` the way source does where no other term the report shows mentions it; every term is display-ready — tolerantly materialized, so committed substitutions appear while goal-origin and unsolved metavariables stay visible.
 #[derive(Debug)]
 pub struct GoalReport {
@@ -679,6 +686,8 @@ pub enum Error {
         declined: Option<Declined>,
         /// Whether the two are terms a type states at one position, where neither is a type and neither was inferred: the argument a call was written with against what its declared type holds in that argument's place. A report then says that two terms differ, and names the one the program wrote as that.
         terms: bool,
+        /// The definition kept folded that a side stands on: what a report names as why the side does not reduce, where one does.
+        folded: Option<Folded>,
     },
     /// A candidate conversion found for a metavariable that does not check where the metavariable was born: what a failed conversion reports in place of the pair it was comparing, which it did not find apart. What is refused is a solution, so the report names the metavariable, shows the candidate, and gives the check's own refusal beneath.
     RejectedCandidate {
@@ -1462,6 +1471,27 @@ impl Error {
             expected: Box::new(expected.into()),
             declined: None,
             terms: false,
+            folded: None,
+        }
+    }
+
+    /// This report with the definition kept folded its sides stand on, where it is a type mismatch; any other report says what it says already.
+    pub fn folded(self, folded: Option<Folded>) -> Self {
+        match self {
+            Self::TypeMismatch {
+                inferred,
+                expected,
+                declined,
+                terms,
+                ..
+            } => Self::TypeMismatch {
+                inferred,
+                expected,
+                declined,
+                terms,
+                folded,
+            },
+            other => other,
         }
     }
 
@@ -1472,6 +1502,7 @@ impl Error {
             expected: Box::new(expected.into()),
             declined: None,
             terms: true,
+            folded: None,
         }
     }
 
@@ -1482,12 +1513,14 @@ impl Error {
                 inferred,
                 expected,
                 terms,
+                folded,
                 ..
             } => Self::TypeMismatch {
                 inferred,
                 expected,
                 declined,
                 terms,
+                folded,
             },
             other => other,
         }

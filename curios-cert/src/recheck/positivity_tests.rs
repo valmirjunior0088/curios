@@ -524,3 +524,54 @@ fn a_recursive_definition_before_two_families_reaches_the_second_through_its_bod
         "{verdicts:?}"
     );
 }
+
+/// `G(x: F(1), A: Type) -> Type = match x | c() => A end`, where `c` builds only `F(0)`, beside a `/loop` at `F(1)` that does not descend, and `/B` holding a function from `G(loop(()), held)`: a family behind an application a folded loop leaves stuck.
+fn a_family_behind_a_stuck_loop(held: &str) -> String {
+    fill!(
+        r#"
+induct /F: (n: #NatType) -> Type
+| c(): (0)
+end
+
+let /G: (x: #{node = InductType} /F()(1), A: Type) -> Type =
+    (x: #{node = InductType} /F()(1), A: Type) =>
+        #{goal = Type} match x | c() => A end;
+
+#{node = Rec}
+let /loop: (u: {}) -> #{node = InductType} /F()(1) =
+    (u: {}) => /loop(u);
+
+induct /B: Type
+| mk(f: (h: /G(/loop(()), ${held})) -> #{node = InductType} /std/Bool/False())
+end
+
+/std/Bool/True/qed()
+"#,
+        held
+    )
+}
+
+// A type naming a loop is no fault once the loop is withheld, so what keeps a family from holding itself negatively behind one is positivity alone: `/loop` unfolds to nothing, so `/G(/loop(()), /B())` unfolds to a match stuck on it, and positivity reads a stuck match as every arm it could reduce to, so `/B`, which the arm puts left of the arrow, is refused. Mutation-checked: reading a stuck match's suppliers alone admits `/B`. The control hands `/G` a type that is not `/B`. `curios`'s `tests::rules::totality_partiality` puts the same declarations to the elaborator under this name. Rename both or neither.
+#[test]
+fn a_family_behind_a_stuck_loop_is_held_to_positivity() {
+    let refusals = |held: &str| {
+        let module = a_family_behind_a_stuck_loop(held);
+        core_text_refusals(&fill!("${PROPOSITIONS}\n${module}", PROPOSITIONS, module))
+    };
+
+    // The closing term proves `True` and not `False`, so it is all the control has refused.
+    let control = refusals("#NatType");
+    assert!(
+        control.iter().all(|verdict| verdict.name.is_none()),
+        "{control:?}"
+    );
+
+    let verdicts = refusals("#{node = InductType} /B()");
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("B"))
+                && matches!(verdict.error, Error::NotPositive { .. })),
+        "{verdicts:?}"
+    );
+}

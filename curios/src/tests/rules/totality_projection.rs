@@ -19,7 +19,8 @@ fn a_field_of_a_payload_tuple_is_below_its_value() {
         let size(e: Expr) -> Nat =
             match e | lit(n) => n | pair(p) => size(p.0) + size(p.1) end;
 
-        let Small(e: Expr) -> Prop = Bool/Holds(size(e) == 0);
+        let Small(e: Expr) -> /std/Bool/True =
+            match size(e) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -56,7 +57,8 @@ fn a_field_of_a_parameters_structure_is_below_the_parameter() {
         and eval_two(p: Two(Expr)) -> Nat =
             eval(p.first) + eval(p.second);
 
-        let Small(e: Expr) -> Prop = Bool/Holds(eval(e) == 0);
+        let Small(e: Expr) -> /std/Bool/True =
+            match eval(e) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -118,7 +120,8 @@ fn a_field_of_a_record_built_around_the_argument_is_no_descent() {
         and eval_both(b: {Expr, Expr}) -> Nat =
             eval(b.0) + eval(b.1);
 
-        let Small(e: Expr) -> Prop = Bool/Holds(eval(e) == 0);
+        let Small(e: Expr) -> /std/Bool/True =
+            match eval(e) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -150,7 +153,8 @@ fn a_field_of_a_binder_a_summary_bounds_is_below_what_the_binder_is_below() {
         let size(e: Expr) -> Nat =
             match e | lit(n) => n | pair(p) => apply(p, (b) => size(b.0) + size(b.1)) end;
 
-        let Small(e: Expr) -> Prop = Bool/Holds(size(e) == 0);
+        let Small(e: Expr) -> /std/Bool/True =
+            match size(e) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -185,7 +189,8 @@ fn a_chain_of_projections_of_record_literals_is_the_field_it_reaches() {
         let leaves(e: Expr) -> Nat =
             match e | lit(n) => n | pair(p) => leaves(Two { first = p.0, both = p }.both.1) + leaves(p.0) end;
 
-        let Small(e: Expr) -> Prop = Bool/Holds(leaves(e) == 0);
+        let Small(e: Expr) -> /std/Bool/True =
+            match leaves(e) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -298,7 +303,8 @@ fn the_librarys_json_encoder_is_reached_by_a_type() {
         r#"
         use /std/{Json, Str, Bool};
 
-        let Short(j: Json) -> Prop = Bool/Holds(Str/len(Json/encode(j)) == 0);
+        let Short(j: Json) -> /std/Bool/True =
+            match Str/len(Json/encode(j)) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,

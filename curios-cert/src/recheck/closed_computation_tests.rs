@@ -685,7 +685,7 @@ let /typed : #{goal = Prop} match /loop(()) | c() => #{node = InductType} /std/B
 /forged
 "#;
 
-// No value of `/F(1)` is `c`, and a match on data is taken by its scrutinee's value, a match reading nothing of its scrutinee being one that states the proposition it eliminates: so no reduction reaches the ruled-out arm, `/loop` unfolding to nothing. `/typed`'s type stands as the match on `/loop(())`, of which `qed` is no value, and type totality refuses the type besides, for reaching `/loop`; the proof that reaches `/loop` is refused by proof totality, and so is the closing term that reaches `/forged`. `curios`'s `tests::rules::totality_partiality` puts the program to the elaborator under this name.
+// No value of `/F(1)` is `c`, and a match on data is taken by its scrutinee's value, a match reading nothing of its scrutinee being one that states the proposition it eliminates: so no reduction reaches the ruled-out arm, `/loop` unfolding to nothing. `/typed`'s type stands as the match on `/loop(())`, of which `qed` is no value; the proof that reaches `/loop` is refused by proof totality, and so is the closing term that reaches `/forged`. `curios`'s `tests::rules::totality_partiality` puts the program to the elaborator under this name.
 #[test]
 fn a_ruled_out_arm_of_a_closed_match_on_data_is_reached_by_no_reduction() {
     let verdicts = core_text_refusals(&fill!(
@@ -700,13 +700,10 @@ fn a_ruled_out_arm_of_a_closed_match_on_data_is_reached_by_no_reduction() {
             [
                 Refusal { name: Some(forged), error: Error::NotTotal { reached: Some(first), .. } },
                 Refusal { name: Some(typed), error: Error::Mismatch { .. } },
-                Refusal { name: Some(typed_again), error: Error::NotTotal { reached: Some(second), .. } },
                 Refusal { name: None, error: Error::NotTotal { reached: Some(third), .. } },
             ] if *forged == global("forged")
                 && *first == global("loop")
                 && *typed == global("typed")
-                && *typed_again == global("typed")
-                && *second == global("loop")
                 && *third == global("forged")
         ),
         "{verdicts:?}"

@@ -1157,7 +1157,13 @@ pub fn verdicts_visiting<'s>(
                 error,
             });
         }
-        if let Err(error) = check_positions(certifier, &drained, &totals, &mut local_memo) {
+        if let Err(error) = check_positions(
+            certifier,
+            &drained,
+            &totals,
+            &item.declared_names(),
+            &mut local_memo,
+        ) {
             verdicts.push(Refusal {
                 name: item_name,
                 error,
@@ -1200,7 +1206,7 @@ pub fn verdicts_visiting<'s>(
     if let Some(error) = failure {
         verdicts.push(Refusal { name: None, error });
     }
-    if let Err(error) = check_positions(certifier, &drained, &totals, &mut local_memo) {
+    if let Err(error) = check_positions(certifier, &drained, &totals, &[], &mut local_memo) {
         verdicts.push(Refusal { name: None, error });
     }
 

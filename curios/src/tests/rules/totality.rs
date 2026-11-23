@@ -154,19 +154,20 @@ fn a_recursion_written_inline_under_a_carrier_is_still_partial() {
     });
 }
 
-// Type totality rather than proof totality: a *type* that reaches a definition not known to terminate. `spin` calling itself is legal — general recursion at a relevant type is the language's design — but a type mentioning it is not, because erasure deletes types too, and a type-level loop reties the negative knot strict positivity exists to forbid. The elaborator seeds this from written type positions; the certifier from its own typing, where the body of a definition whose type is a sort is checked against that sort. This row is the only coverage either seeding has for type totality. The control's `spin` hands its argument back.
+// Type totality rather than proof totality: a *type* holding a loop its own declaration writes. A loop a finished declaration holds is withheld from both checkers, so a type naming it reaches nothing that loops; one written in the type itself has no verdict to be withheld by until its declaration is judged, and a type-level loop reties the negative knot strict positivity exists to forbid. The elaborator seeds this from written type positions; the certifier from its own typing, where the body of a definition whose type is a sort is checked against that sort. This row is the only coverage either seeding has for type totality. The control's `spin` hands its argument back.
 #[test]
-fn a_type_reaching_a_partial_definition_is_refused() {
+fn a_type_holding_a_loop_it_writes_is_refused() {
     control(
         r#"
         use /std/{Nat, Vec};
-        let spin(n : Nat) -> Nat = n;
-        let Sized(n : Nat) -> Type = Vec(Nat, spin(n));
+        let Sized(n : Nat) -> Type =
+            let spin(k : Nat) -> Nat = k;
+            Vec(Nat, spin(n));
         /std/print("ok")
         "#,
         b"ok",
     )
-    .refused(&[("-> Nat = n;", "-> Nat = spin(n);")])
+    .refused(&[("-> Nat = k;", "-> Nat = spin(k);")])
     .by_elaborator_in("/Sized", |error| {
         matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
     })

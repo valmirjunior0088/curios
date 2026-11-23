@@ -11,16 +11,16 @@ mod tests;
 
 use {
     super::{
-        Beside, Context, DeadArm, Error, HeldFrames, Rejected, callee, decided_sort_of, is_monad,
-        monad_shape, normalize, numeral_default, quality_of, reduce_forced, refold_recs,
+        Beside, Context, DeadArm, Error, Folded, HeldFrames, Rejected, callee, decided_sort_of,
+        is_monad, monad_shape, normalize, numeral_default, quality_of, reduce_forced, refold_recs,
         settle_qualities, stuck_on_metavar, watched, zonk_solved_term_metas,
     },
     curios_core::{
         Apply, ArgumentSite, Bound, Global, Intrinsic, Metavar, MetavarOrigin, Method, Quality,
-        Sort, Subterm, Term, Transient, Visit,
+        Sort, Subterm, Term, Totality, Transient, Visit,
     },
     std::{
-        collections::BTreeMap,
+        collections::{BTreeMap, HashSet, VecDeque},
         fmt,
         ops::{Deref, DerefMut},
     },
@@ -285,7 +285,43 @@ fn display_mismatch(
         return report;
     }
 
-    Error::type_mismatch(this, that)
+    let folded = kept_folded(reporting, &this).or_else(|| kept_folded(reporting, &that));
+    Error::type_mismatch(this, that).folded(folded)
+}
+
+/// The definition kept folded that `side` stands on: the first it names whose record files it `Unfounded`, which no checker unfolds, and short of one the first that the first definition not known to terminate it names reaches, through the bodies of the definitions not known to terminate, each read once. Shown as a mismatch's side is, normalized, a name its unfolding stalled at stands as written, so such a name is one the side stands on, and the reason a reader looking for what the side reduces to is told. A definition that is partial only for calling a host row that diverges reaches none, and is no reason.
+fn kept_folded(reporting: &Reporting, side: &Term) -> Option<Folded> {
+    let verdict = |name: &Global| reporting.definition_totality(name);
+    let unfounded = |name: &Global| verdict(name).is_some_and(Totality::is_unfounded);
+    if let Some(definition) = side.first_declaration(unfounded) {
+        return Some(Folded {
+            definition,
+            through: None,
+        });
+    }
+
+    let through =
+        side.first_declaration(|name| verdict(name).is_some_and(|totality| !totality.is_total()))?;
+    let mut read = HashSet::from([through]);
+    let mut pending = VecDeque::from([through]);
+    while let Some(name) = pending.pop_front() {
+        let Some(body) = reporting.declaration_body(&name).cloned() else {
+            continue;
+        };
+        if let Some(definition) = body.first_declaration(unfounded) {
+            return Some(Folded {
+                definition,
+                through: Some(through),
+            });
+        }
+        while let Some(next) = body.first_declaration(|name| {
+            !read.contains(name) && verdict(name).is_some_and(|totality| !totality.is_total())
+        }) {
+            read.insert(next);
+            pending.push_back(next);
+        }
+    }
+    None
 }
 
 /// `report`, a mismatch's, with what conversion said beside the mismatch. The plain report of two sides notes what was left uncompared, and gives way to a rejected candidate's, its two sides not having been found apart. Any other report says what it says already: one that names the cause, an implicit handed a term of another sort among them, is not replaced by the check that refused the same thing.

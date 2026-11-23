@@ -23,7 +23,8 @@ fn a_callback_applied_through_a_lambda_whose_binder_shadows_a_payload_is_graded_
             match t
             | node(label, children) => label == 0 || some(children, (c) => has_zero(c))
             end;
-        let Zeroed(t : Rose) -> Prop = Bool/Holds(has_zero(t));
+        let Zeroed(t : Rose) -> /std/Bool/True =
+            match has_zero(t) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         /std/print("ok")
         "#,
         b"ok",
@@ -58,7 +59,8 @@ fn a_callback_applied_to_a_local_that_shadows_a_payload_is_graded_at_the_locals_
             match t
             | node(label, children) => label == 0 || some(children, (c) => has_zero(c))
             end;
-        let Zeroed(t : Rose) -> Prop = Bool/Holds(has_zero(t));
+        let Zeroed(t : Rose) -> /std/Bool/True =
+            match has_zero(t) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         /std/print("ok")
         "#,
         b"ok",
@@ -95,7 +97,8 @@ fn a_callback_applied_to_a_nested_members_parameter_that_shadows_a_payload_is_gr
             match t
             | node(label, children) => label == 1 || nested(children, (c) => has_one(c))
             end;
-        let Oned(t : Rose) -> Prop = Bool/Holds(has_one(t));
+        let Oned(t : Rose) -> /std/Bool/True =
+            match has_one(t) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         /std/print("ok")
         "#,
         b"ok",
@@ -126,7 +129,8 @@ fn what_an_arm_establishes_grades_no_callback_applied_outside_it() {
             | _ => p(n - 1) || upto(n - 1, p)
             end;
         let deep(n : Nat) -> Bool = upto(n, (m) => deep(m));
-        let Deep(n : Nat) -> Prop = Bool/Holds(deep(n));
+        let Deep(n : Nat) -> /std/Bool/True =
+            match deep(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         /std/print("ok")
         "#,
         b"ok",
@@ -147,7 +151,8 @@ fn what_an_arm_establishes_grades_no_callback_applied_outside_it() {
             | true => false
             end;
         let deep(n : Nat) -> Bool = down(n, (m) => deep(m));
-        let Deep(n : Nat) -> Prop = Bool/Holds(deep(n));
+        let Deep(n : Nat) -> /std/Bool/True =
+            match deep(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         /std/print("ok")
         "#,
         b"ok",
@@ -170,7 +175,8 @@ fn an_arm_splitting_an_applied_lambdas_binder_grades_no_callback_applied_past_it
         let chained(n : Nat, p : (Nat) -> Bool) -> Bool =
             ((x : Nat) => match x | 0 => false | k + 1 => p(k) || chained(k, p) end)(n);
         let deeper(n : Nat) -> Bool = chained(n, (m) => deeper(m));
-        let Deeper(n : Nat) -> Prop = Bool/Holds(deeper(n));
+        let Deeper(n : Nat) -> /std/Bool/True =
+            match deeper(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         /std/print("ok")
         "#,
         b"ok",
@@ -210,7 +216,8 @@ fn a_callback_a_sibling_applies_is_graded_through_what_the_call_hands_the_siblin
             match t
             | node(label, children) => label == 0 || walk(9, children, (c) => has_zero(c))
             end;
-        let Zeroed(t : Rose) -> Prop = Bool/Holds(has_zero(t));
+        let Zeroed(t : Rose) -> /std/Bool/True =
+            match has_zero(t) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         /std/print("ok")
         "#,
         b"ok",
@@ -241,13 +248,16 @@ fn each_member_of_a_group_publishes_how_it_applies_its_own_callback() {
             | [_, ..t] => p(l) || below(t, p)
             end;
         let zeros(l : List(Nat)) -> Bool = below(l, (c) => zeros(c));
-        let Zeros(l : List(Nat)) -> Prop = Bool/Holds(zeros(l));
+        let Zeros(l : List(Nat)) -> /std/Bool/True =
+            match zeros(l) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         let handed(l : List(Nat)) -> Bool = below(l, twice)
         and twice(l : List(Nat)) -> Bool = handed(l);
-        let Handed(l : List(Nat)) -> Prop = Bool/Holds(handed(l));
+        let Handed(l : List(Nat)) -> /std/Bool/True =
+            match handed(l) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         let sibling(l : List(Nat)) -> Bool = below(l, (c) => other(c))
         and other(l : List(Nat)) -> Bool = sibling(l);
-        let Sibling(l : List(Nat)) -> Prop = Bool/Holds(sibling(l));
+        let Sibling(l : List(Nat)) -> /std/Bool/True =
+            match sibling(l) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         /std/print("ok")
         "#,
         b"ok",
@@ -315,7 +325,8 @@ fn a_callback_applied_past_the_applications_limit_is_graded_as_fresh() {
                 end
             end;
         let deep(a : Nat, b : Nat, c : Nat) -> Bool = app(a, b, c, (p, q, r, s, t) => deep(p, p, p));
-        let Deep(a : Nat) -> Prop = Bool/Holds(deep(a, a, a));
+        let Deep(a : Nat) -> /std/Bool/True =
+            match deep(a, a, a) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         /std/print("ok")
         "#,
         b"ok",
@@ -341,9 +352,11 @@ fn a_binder_that_takes_a_parameters_name_stands_for_what_it_binds() {
             | n + 1 => f(n) || app(n, f)
             end;
         let deep(n : Nat) -> Bool = app(n, (m) => deep(m));
-        let Deep(n : Nat) -> Prop = Bool/Holds(deep(n));
+        let Deep(n : Nat) -> /std/Bool/True =
+            match deep(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         let shadowed(n : Nat) -> Bool = ((n : Nat) => app(n, (m) => shadowed(m)))(n);
-        let Shadowed(n : Nat) -> Prop = Bool/Holds(shadowed(n));
+        let Shadowed(n : Nat) -> /std/Bool/True =
+            match shadowed(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         /std/print("ok")
         "#,
         b"ok",
@@ -382,7 +395,8 @@ fn a_lambda_a_callback_answers_takes_none_of_the_callbacks_bounds() {
             | node(a, b) => p(a)(r) + apply_inner(b, r, p)
             end;
         let size(t : Tr) -> Nat = apply_inner(t, t, (c) => (e) => 1 + size(c));
-        let Sized(t : Tr) -> Prop = Bool/Holds(size(t) == 2);
+        let Sized(t : Tr) -> /std/Bool/True =
+            match size(t) == 2 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         /std/print("ok")
         "#,
         b"ok",
@@ -412,7 +426,8 @@ fn a_callbacks_sibling_is_bounded_by_its_own_applications() {
             | node(a, b) => p(a) + q(r) + split(b, r, p, q)
             end;
         let size(t : Tr) -> Nat = split(t, t, (c) => 1 + size(c), (e) => 0);
-        let Sized(t : Tr) -> Prop = Bool/Holds(size(t) == 2);
+        let Sized(t : Tr) -> /std/Bool/True =
+            match size(t) == 2 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         /std/print("ok")
         "#,
         b"ok",
@@ -447,7 +462,8 @@ fn a_lambda_a_callback_hands_on_is_bounded_through_the_call_that_hands_it() {
             | k + 1 => at(k, x, f)
             end;
         let size(t : Tr) -> Nat = each(t, (c) => 1 + at(0, c, (d) => size(d)));
-        let Sized(t : Tr) -> Prop = Bool/Holds(size(t) == 2);
+        let Sized(t : Tr) -> /std/Bool/True =
+            match size(t) == 2 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         /std/print("ok")
         "#,
         b"ok",
@@ -478,7 +494,8 @@ fn a_callback_reached_through_an_indirection_takes_no_bounds() {
             end;
         let twice(f : (Tr) -> Nat, x : Tr) -> (Tr) -> Nat = (y : Tr) => f(y) + f(x);
         let size(t : Tr) -> Nat = each(t, (c) => 1 + size(c));
-        let Sized(t : Tr) -> Prop = Bool/Holds(size(t) == 2);
+        let Sized(t : Tr) -> /std/Bool/True =
+            match size(t) == 2 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         /std/print("ok")
         "#,
         b"ok",
@@ -521,7 +538,8 @@ fn a_callback_is_bounded_by_every_application_its_callee_reaches() {
             | node(a, b) => p(a) + kids(p, a, a)
             end;
         let size(t : Tr) -> Nat = kids((c) => 1 + size(c), t, t);
-        let Sized(t : Tr) -> Prop = Bool/Holds(size(t) == 2);
+        let Sized(t : Tr) -> /std/Bool/True =
+            match size(t) == 2 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         /std/print("ok")
         "#,
         b"ok",
@@ -559,7 +577,8 @@ fn a_lambda_a_summarized_callback_answers_takes_none_of_its_bounds() {
             | node(a, b) => apply_inner(t, t, (x) => (y) => p(x)) + relay(b, p)
             end;
         let size(t : Tr) -> Nat = relay(t, (c) => 1 + size(c));
-        let Sized(t : Tr) -> Prop = Bool/Holds(size(t) == 2);
+        let Sized(t : Tr) -> /std/Bool/True =
+            match size(t) == 2 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         /std/print("ok")
         "#,
         b"ok",
@@ -595,7 +614,8 @@ fn a_callback_handed_through_two_callees_is_bounded_by_each_call() {
             end;
         let size(t : Tr) -> Nat = relay(t, (c) => 1 + size(c));
         let count(t : Tr) -> Nat = 1 + relay(t, count);
-        let Sized(t : Tr) -> Prop = Bool/Holds(size(t) == count(t));
+        let Sized(t : Tr) -> /std/Bool/True =
+            match size(t) == count(t) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         /std/print("ok")
         "#,
         b"ok",
@@ -637,7 +657,8 @@ fn a_callback_handed_inside_an_inner_group_stands_to_the_enclosing_members_param
                 label == 0 || scan(1)
             end;
 
-        let Zeroed(t : Rose) -> Prop = Bool/Holds(has_zero(t));
+        let Zeroed(t : Rose) -> /std/Bool/True =
+            match has_zero(t) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         let bare(t : Rose) -> Bool =
             match t
@@ -650,7 +671,8 @@ fn a_callback_handed_inside_an_inner_group_stands_to_the_enclosing_members_param
                 label == 0 || scan(1)
             end;
 
-        let Bare(t : Rose) -> Prop = Bool/Holds(bare(t));
+        let Bare(t : Rose) -> /std/Bool/True =
+            match bare(t) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -702,12 +724,14 @@ fn a_curried_spine_is_read_whole_as_an_uncurried_call_is() {
             | node(label, children) => label == 0 || any_c((c) => has_zero(c))(children)
             end;
 
-        let Zeroed(t : Rose) -> Prop = Bool/Holds(has_zero(t));
+        let Zeroed(t : Rose) -> /std/Bool/True =
+            match has_zero(t) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         let curried(n : Nat) -> Bool =
             ((x : Nat) => (y : Nat) => match y | 0 => false | k + 1 => curried(k) end)(0)(n);
 
-        let Curried(n : Nat) -> Prop = Bool/Holds(curried(n));
+        let Curried(n : Nat) -> /std/Bool/True =
+            match curried(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,

@@ -51,8 +51,9 @@ fn an_io_description_of_a_type_is_no_type() {
     );
 }
 
+// A type computed through a monadic loop stays folded: `chosen` does not descend, so `dependent`'s parameter type stands as `Option/unwrap_or(chosen(n), Nat)` and its declaration forms, and the call that hands it a `Nat` is refused, naming `chosen`.
 #[test]
-fn a_monadic_type_computation_still_must_terminate() {
+fn a_monadic_type_computation_that_does_not_descend_stays_folded() {
     let error = typecheck(
         r#"
         use /std/{Nat, Option};
@@ -60,12 +61,14 @@ fn a_monadic_type_computation_still_must_terminate() {
             let T = Option/some(Nat)!;
             chosen(n);
         let dependent(n: Nat, x: Option/unwrap_or(chosen(n), Nat)) -> Nat = 0;
-        /std/print("unreachable")
+        /std/print(Nat/to_str(dependent(0, 5)))
         "#,
     )
-    .expect_err("a type cannot depend on a partial computation");
+    .expect_err("a type over a loop does not reduce");
     assert!(
-        error.contains("type position") && error.contains("not known to terminate"),
+        error.contains("type mismatch")
+            && error.contains("`chosen` is kept folded")
+            && !error.contains("not known to terminate"),
         "{error}"
     );
 }

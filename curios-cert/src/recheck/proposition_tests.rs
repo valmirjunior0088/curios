@@ -469,11 +469,16 @@ let /in_a_groups_tail : #NatType =
         #{field = Struct(/Box, 0)}
         (h(())).0;
     0));
+let /in_a_type_in_a_groups_tail : #NatType =
+    #{node = Rec}
+    (let d: (u: {}) -> #BoolType = (u2: {}) => d(u2);
+    (let f: (h: /std/Bool/Holds(d(()))) -> #NatType = (h2: /std/Bool/Holds(d(()))) => 0;
+    0));
 #{field = Struct(/Box, 0)}
 (/spin(())).0
 "#;
 
-// The certifier records a position wherever it types a term at a proposition or a sort, so each is refused under the declaration that holds it: by the definition it reaches, or with no name to blame where it reaches a member of a group standing in a term, which it reads by value. `curios`'s `tests::rules::totality_partiality` puts the positions a program writes to the elaborator under this name.
+// The certifier records a position wherever it types a term at a proposition or a sort, so each is refused under the declaration that holds it: a proof by the definition it reaches, or with no name to blame where it reaches a member of a group standing in a term, which it reads by value; and a type where it holds such a group, a type naming a finished definition that does not descend, `in_a_signature`'s, being no fault, since the definition unfolds to nothing. `curios`'s `tests::rules::totality_partiality` puts the positions a program writes to the elaborator under this name.
 //
 // Mutation-checked at `Certifier::record_checked`: with every position dropped before it is recorded, nothing here is refused `NotTotal`.
 #[test]
@@ -503,15 +508,21 @@ fn a_proof_or_type_that_may_not_terminate_is_refused_wherever_it_stands() {
         );
     }
     assert!(
-        refused(
-            Some(global("in_a_signature")),
-            Erased::Type,
-            Some(global("decide"))
-        ),
+        verdicts
+            .iter()
+            .all(|verdict| verdict.name != Some(global("in_a_signature"))),
         "{verdicts:?}"
     );
     assert!(
         refused(Some(global("in_a_groups_tail")), Erased::Proof, None),
+        "{verdicts:?}"
+    );
+    assert!(
+        refused(
+            Some(global("in_a_type_in_a_groups_tail")),
+            Erased::Type,
+            None
+        ),
         "{verdicts:?}"
     );
     assert!(
@@ -774,11 +785,8 @@ fn a_signature_naming_a_member_that_does_not_descend_is_a_type_that_does_not_ter
     );
 }
 
-/// `T(b)`, `Type` at `true` and `Nat` at `false`, and `/d` splitting on `g(n)`: its `false` arm holds `5` at `T(g(n))`, a relevant position, and its `true` arm a type at `T(g(n))` that matches on `/loop(0)`, which does not descend. The `false` arm classifies `T(g(n))` first, under its own equation.
+/// `T(b)`, `Type` at `true` and `Nat` at `false`, and `/d` splitting on `g(n)`: its `false` arm holds `5` at `T(g(n))`, a relevant position, and its `true` arm a type at `T(g(n))` that matches on a group written inline that does not descend. The `false` arm classifies `T(g(n))` first, under its own equation.
 const AN_ERASED_HALF_UNDER_EACH_ARM: &str = r#"
-#{node = Rec}
-let /loop: (m: #NatType) -> #NatType = (m2: #NatType) => /loop(m2);
-
 let /T: (b: #BoolType) -> #{level = 1} Type =
     (b2: #BoolType) => #{goal = #{level = 1} Type} match b2 | false => #NatType | true => Type end;
 
@@ -791,12 +799,19 @@ let /d: (g: (x: #NatType) -> #BoolType, n: #NatType) -> #NatType =
             0
         | true =>
             let t: /T(g2(n2)) =
-                #{goal = Type} match /loop(0) | 0 => #NatType | k + 1 => #NatType end;
+                #{goal = Type}
+                match
+                    (#{node = Rec}
+                    (let l: (m: #NatType) -> #NatType = (m2: #NatType) => l(m2);
+                    l))(0)
+                | 0 => #NatType
+                | k + 1 => #NatType
+                end;
             1
         end;
 "#;
 
-// A position's erased half is remembered by its one door (`erased_half`) under the equations in force where it was classified, and goes where they do: the `true` arm classifies `T(g(n))` again, as a sort, and its term, a type reaching `/loop`, is refused by type totality, with the memos on as off. Answered from the `false` arm, the term would be classified relevant and pass unconstrained.
+// A position's erased half is remembered by its one door (`erased_half`) under the equations in force where it was classified, and goes where they do: the `true` arm classifies `T(g(n))` again, as a sort, and its term, a type holding a group that does not descend, is refused by type totality, with the memos on as off. Answered from the `false` arm, the term would be classified relevant and pass unconstrained.
 #[test]
 fn an_erased_half_read_under_one_arm_answers_nothing_under_its_sibling() {
     let definitions = core_text_module(AN_ERASED_HALF_UNDER_EACH_ARM);
@@ -821,7 +836,7 @@ fn an_erased_half_read_under_one_arm_answers_nothing_under_its_sibling() {
                     && verdict.error
                         == Error::NotTotal {
                             erased: Erased::Type,
-                            reached: Some(global("loop")),
+                            reached: None,
                         }
             }),
             "with the memos off: {uncached}: {verdicts:?}"

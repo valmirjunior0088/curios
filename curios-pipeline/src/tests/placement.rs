@@ -99,23 +99,17 @@ fn a_type_that_does_not_terminate_is_placed_at_its_name() {
     assert_eq!(placed(source), at("loop"));
 }
 
-// An erasure obligation is decided over a declaration's final terms, after its elaboration: it is reported under the declaration's name as a refusal of it is, at the name it blames.
+// An erasure obligation is decided over a declaration's final terms, after its elaboration: a type holding a loop it writes, which has no name to blame, is reported under the declaration's name as a refusal of it is, at that name.
 #[test]
-fn a_type_reaching_a_partial_definition_is_placed_at_the_name_it_reaches() {
+fn a_type_holding_a_loop_it_writes_is_placed_at_the_declarations_name() {
     let source = r#"
-        use /std/{Nat};
+        use /std/{Nat, Vec};
 
-        let spin(n: Nat) -> Nat = spin(n);
-
-        let T(n: Nat) -> Type =
-            match spin(n) == 0
-            | true => Nat
-            | false => {}
-            end;
+        let take(x: Nat, y: Vec(Nat, ((u: {}) => let spin(k: Nat) -> Nat = spin(k); spin(x))(()))) -> Nat = x;
 
         /std/print("x")
     "#;
-    assert_eq!(placed(source), at("spin"));
+    assert_eq!(placed(source), at("take"));
 }
 
 #[test]

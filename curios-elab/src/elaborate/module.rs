@@ -16,13 +16,13 @@ use {
         Context, Declared, ErasedSite, Error, Established, GoalReport, GoalSite, Published,
         Readers, RecordKeyword, Traces, Turns, Vectors, Zonked, body_levels, check,
         check_concept_registry, check_is_sort, check_proof_totality, check_type_totality,
-        check_written_type_totality, classify_totality, compared_levels, decide_polarities,
-        definition_variances, field_variances, finalize_definition, goal_sites, group_levels,
-        hold_prop, hold_variances, member_variances, parameter_field, record_definition_totality,
-        record_superclasses, record_variances, reduce_with, register_witness, report_goals,
-        result_sort_only_metas, sort_family_levels, state_proof_binders, superclass_targets,
-        test_program_tail, validate_entry_universes, validate_universes, zonk, zonk_arity,
-        zonk_entry, zonk_published, zonk_solved_term_metas,
+        classify_totality, compared_levels, decide_polarities, definition_variances,
+        field_variances, finalize_definition, goal_sites, group_levels, hold_prop, hold_variances,
+        member_variances, parameter_field, record_definition_totality, record_superclasses,
+        record_variances, reduce_with, register_witness, report_goals, result_sort_only_metas,
+        sort_family_levels, state_proof_binders, superclass_targets, test_program_tail,
+        validate_entry_universes, validate_universes, zonk, zonk_arity, zonk_entry, zonk_published,
+        zonk_solved_term_metas,
     },
     curios_abi::TEST_ANSWER,
     curios_analysis::{definition_applications, group_applications, group_totality},
@@ -266,25 +266,6 @@ fn elaborate_struct(
     let Some(struct_decl) = context.struct_decl(name).cloned() else {
         return Ok(());
     };
-
-    // Type totality's early net, on the one written type position that rides on no definition's type and that elaboration forces: a field, a concept's method among them as its record's. A parameter rides on the type former's own type, and a family's payload is typed without being forced, which leaves it to the gate over the registry entry (`totality::reach`). Without this the field type below would be elaborated with nothing having looked at it — a productive `Shape(inf)` would unfold without end.
-    //
-    // Read off the *lowered* telescope, before `check_telescope_entries` touches it, which is the whole point of an early net. Entries stay closed under the binders before them; only globals matter here, so nothing needs opening.
-    let mut written = &struct_decl.arity;
-    let fields = loop {
-        match written {
-            Telescope::Cons(_, entry, rest, ..) => {
-                check_written_type_totality(context, entry, ErasedSite::FieldOf(*name))?;
-                written = rest.body();
-            }
-            Telescope::Done(fields) => break &**fields,
-        }
-    };
-    let mut written = fields;
-    while let Telescope::Cons(_, entry, rest, ..) = written {
-        check_written_type_totality(context, entry, ErasedSite::FieldOf(*name))?;
-        written = rest.body();
-    }
 
     let owned = |labels: Vec<&str>| {
         labels
@@ -550,7 +531,6 @@ fn elaborate_module_let(
 ) -> Result<(Item, Vec<(Global, Vectors)>), Error> {
     let name = def.name;
     let outer_site = context.set_checked_site(def.name);
-    check_written_type_totality(context, &def.type_, ErasedSite::TypeOf(def.name))?;
     let checked = check_is_sort(context, &def.type_);
     let type_ = witness_head_checked(context, def, checked)?.0;
 
@@ -707,35 +687,6 @@ fn spelled(context: &Context, name: &Global, island: Qualifier) -> Made {
     Made::former(*name, island, &entry)
 }
 
-/// Type totality's early net over a nominal entry's telescope as it was lowered, before any of it is elaborated: its parameters, and a family's indices. A record's fields take theirs where they elaborate ([`elaborate_struct`]). Entries stay closed under the binders before them, and only the globals they name matter here, so nothing is opened.
-fn check_entry_totality(context: &mut Context, name: &Global) -> Result<(), Error> {
-    // A record's arity ends in its fields, a family's in its indices.
-    let (arity, indexed) = match registered(context, name) {
-        Some(Nominal::Inductive(family)) => (family.arity().clone(), true),
-        Some(Nominal::Struct(record) | Nominal::Concept { record, .. }) => (record.arity, false),
-        None => return Ok(()),
-    };
-    let mut written = &arity;
-    let indices = loop {
-        match written {
-            Telescope::Cons(_, entry, rest, ..) => {
-                check_written_type_totality(context, entry, ErasedSite::ParameterOf(*name))?;
-                written = rest.body();
-            }
-            Telescope::Done(indices) => break &**indices,
-        }
-    };
-    if indexed {
-        let mut written = indices;
-        while let Telescope::Cons(_, entry, rest, ..) = written {
-            check_written_type_totality(context, entry, ErasedSite::IndexOf(*name))?;
-            written = rest.body();
-        }
-    }
-
-    Ok(())
-}
-
 /// Type-check a nominal declaration — a family, a record or a concept, alone or in a group of one kind — by its entries alone, and return the item holding them as they came out.
 ///
 /// **An entry is elaborated once.** Its former's type, spelled from the entry ([`Made::former`]), is elaborated, and the entry takes the telescope that came out ([`share_former_telescope`]), so the two are one term. The member's name is then defined at that type and at the body its entry spells, so a domain written after it, a payload or a field reads it as any former's occurrence is read ([`reference`](super::reference)): no local stands for it and no body of its own is checked. Its constructors or fields follow once every member is defined, its levels close over its entries as a group's close over its signatures ([`close_group_levels`]), and each former is defined as its finished entry makes it.
@@ -756,7 +707,6 @@ fn elaborate_module_nominal(context: &mut Context, nominals: &Nominals) -> Resul
     let mut written = Vec::with_capacity(names.len());
     for name in &names {
         let outer_site = context.set_checked_site(*name);
-        check_entry_totality(context, name)?;
         // A member's type is that member's own: a proof written in it credits the member's binders, not those of the member the item was entered at.
         context.enter_declaration(Some(*name));
         let (type_, levels) = check_former_type(context, &spelled(context, name, island).type_)?;
@@ -1189,7 +1139,6 @@ fn elaborate_members(
 ) -> Result<(Vec<Term>, Vec<Term>), Error> {
     let mut types = Vec::with_capacity(defs.len());
     for (def, local) in defs.iter().zip(locals) {
-        check_written_type_totality(context, &def.type_, ErasedSite::TypeOf(def.name))?;
         // A member's type is that member's own: a proof written in it credits the member's binders, not those of the member the item was entered at.
         context.enter_declaration(Some(def.name));
         let checked = check_is_sort(context, &def.type_);

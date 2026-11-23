@@ -66,7 +66,8 @@ fn a_member_answering_another_members_record_states_what_its_fields_apply() {
 
         let size(t: Tree) -> Nat = call(outer(t, (c) => size(c)), 0);
 
-        let Small(t: Tree) -> Prop = Bool/Holds(size(t) == 0);
+        let Small(t: Tree) -> /std/Bool/True =
+            match size(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -100,7 +101,8 @@ fn a_field_lambda_applying_a_parameters_field_withholds_the_leading_lambdas_summ
 
         let size(t: Tree) -> Nat = call(sizes(t, ((c) => size(c),)), 0);
 
-        let Small(t: Tree) -> Prop = Bool/Holds(size(t) == 0);
+        let Small(t: Tree) -> /std/Bool/True =
+            match size(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -134,7 +136,8 @@ fn a_field_lambda_in_a_nested_record_withholds_the_leading_lambdas_summary_of_wh
 
         let size(t: Tree) -> Nat = call(sizes(t, (c) => size(c)), 0);
 
-        let Small(t: Tree) -> Prop = Bool/Holds(size(t) == 0);
+        let Small(t: Tree) -> /std/Bool/True =
+            match size(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -168,7 +171,8 @@ fn a_field_lambdas_summary_closes_over_the_calls_its_group_hands_the_parameter_o
 
         let size(t: Tree) -> Nat = sizes(t, (c) => size(c)).1(0);
 
-        let Small(t: Tree) -> Prop = Bool/Holds(size(t) == 0);
+        let Small(t: Tree) -> /std/Bool/True =
+            match size(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,

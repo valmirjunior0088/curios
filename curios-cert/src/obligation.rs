@@ -1,4 +1,4 @@
-//! Type totality and proof totality: everything the erased half of a program reaches must be total, decided here from the module alone.
+//! Type totality and proof totality: what the erased half of a program unfolds must be total — a proof reaching nothing not known to terminate, a type no recursion of its own declaration that does not descend — decided here from the module alone.
 //!
 //! Erasure deletes proofs and types. A proof that may not terminate therefore proves anything, and a type that may not terminate reties the negative knot strict positivity exists to forbid — so both halves carry a termination obligation that the halves the machine actually runs do not.
 //!
@@ -168,7 +168,6 @@ impl<'g> Totals<'g> {
     }
 }
 
-/// Type totality and proof totality over the positions one item's check recorded: each must reach nothing partial, and must not be partial in itself — enclose no group that does not descend, as the walk noted where it typed one, and call no host row that diverges.
 /// What [`calls_a_diverging_row`] found of each node of the positions a walk records, carried across the whole walk and keyed by the positions' canonical nodes: a position's term is recorded where it was typed, built there, so a type recorded at every level of a nesting is a copy at each, and two copies are compared node by node at every probe that finds one.
 #[derive(Default)]
 pub struct PositionVerdicts {
@@ -176,18 +175,23 @@ pub struct PositionVerdicts {
     verdicts: HashMap<Term, bool>,
 }
 
+/// Type totality and proof totality over the positions one item's check recorded: each must reach nothing its obligation holds partial, and must not be partial in itself — enclose no group that does not descend, as the walk noted where it typed one, and call no host row that diverges.
+///
+/// A proof reaches every definition it names, and a type only `own`'s, the names of the item whose check recorded it, where one does not descend: a finished declaration whose recursion does not descend unfolds to nothing ([`define_as_stated`](crate::define_as_stated)), so a type naming it reaches nothing that loops.
 pub fn check_positions(
     certifier: &Certifier,
     positions: &[Position],
     totals: &Totals<'_>,
+    own: &[Global],
     memo: &mut PositionVerdicts,
 ) -> Result<(), Error> {
     curios_common::profile!("check_positions");
     for position in positions {
-        if let Some(reached) = position
-            .term
-            .first_declaration(|name| totals.partial(certifier, name))
-        {
+        let reaches = |name: &Global| match position.erased {
+            Erased::Type => own.contains(name) && totals.totality(certifier, name).is_unfounded(),
+            Erased::Proof => totals.partial(certifier, name),
+        };
+        if let Some(reached) = position.term.first_declaration(reaches) {
             return Err(Error::NotTotal {
                 erased: position.erased,
                 reached: Some(reached),

@@ -24,7 +24,8 @@ fn a_witness_whose_method_recurses_on_its_argument_descends() {
             count(t) = match t | leaf(n) => n | node(l, r) => Count/count(l) + Count/count(r) end,
         }
 
-        let Small(t: Tree) -> Prop = Bool/Holds(Count/count(t) == 0);
+        let Small(t: Tree) -> /std/Bool/True =
+            match Count/count(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -59,7 +60,8 @@ fn a_derived_witness_on_a_recursive_type_is_reached_by_a_type() {
             ..
         }
 
-        let Same(a: Tree, b: Tree) -> Prop = Bool/Holds(a == b);
+        let Same(a: Tree, b: Tree) -> /std/Bool/True =
+            match a == b | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -91,7 +93,8 @@ fn a_witness_under_a_telescope_recurses_through_its_field_below_its_argument() {
             count(t) = match t | leaf(a) => Count/count(a) | node(l, r) => Count/count(l) + Count/count(r) end,
         }
 
-        let Small(t: Tree(Nat)) -> Prop = Bool/Holds(Count/count(t) == 0);
+        let Small(t: Tree(Nat)) -> /std/Bool/True =
+            match Count/count(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -121,7 +124,8 @@ fn a_tuple_of_handlers_calling_each_other_descends_field_by_field() {
             (n) => match n | 0 => 1 | k + 1 => handlers.0(k) end
         );
 
-        let Low(n: Nat) -> Prop = Bool/Holds(handlers.0(n) == 0);
+        let Low(n: Nat) -> /std/Bool/True =
+            match handlers.0(n) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -150,7 +154,8 @@ fn a_member_handed_bare_is_a_call_of_each_of_its_parts() {
 
         let W: {(Nat) -> Nat} = ((n) => match n | 0 => 0 | k + 1 => W.0(k) end,);
 
-        let Low(n: Nat) -> Prop = Bool/Holds(apply0(W, n) == 0);
+        let Low(n: Nat) -> /std/Bool/True =
+            match apply0(W, n) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -177,7 +182,8 @@ fn a_member_handed_where_its_callee_applies_it_is_a_call_of_each_of_its_parts() 
 
         let W(m: Nat) -> {(Nat) -> Nat} = ((x) => match x | 0 => m | k + 1 => W(m).0(k) end,);
 
-        let Low(n: Nat) -> Prop = Bool/Holds(go(W, n) == 0);
+        let Low(n: Nat) -> /std/Bool/True =
+            match go(W, n) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -209,7 +215,8 @@ fn a_witness_handed_to_a_container_operation_descends_where_the_operation_applie
             neq(a, b) = Bool/not(Eql/eql(a, b)),
         }
 
-        let Same(a: Rose, b: Rose) -> Prop = Bool/Holds(a == b);
+        let Same(a: Rose, b: Rose) -> /std/Bool/True =
+            match a == b | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -241,7 +248,8 @@ fn a_witness_applied_to_its_own_parameters_and_handed_to_a_container_operation_d
             neq(a, b) = Bool/not(Eql/eql(a, b)),
         }
 
-        let Same(a: Rose(Nat), b: Rose(Nat)) -> Prop = Bool/Holds(a == b);
+        let Same(a: Rose(Nat), b: Rose(Nat)) -> /std/Bool/True =
+            match a == b | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -272,7 +280,8 @@ fn a_structure_of_handlers_handed_to_a_walker_descends_where_the_walker_applies_
 
         let sizes: {(Rose) -> Nat} = ((t) => match t | rose(n, cs) => n + walk(sizes, cs) end,);
 
-        let Small(t: Rose) -> Prop = Bool/Holds(sizes.0(t) == 0);
+        let Small(t: Rose) -> /std/Bool/True =
+            match sizes.0(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -303,7 +312,8 @@ fn a_record_literal_handed_to_a_walker_binds_each_field_as_the_walker_applies_it
 
         let sizes: {(Rose) -> Nat} = ((t) => match t | rose(n, cs) => n + walk(((u) => sizes.0(u),), cs) end,);
 
-        let Small(t: Rose) -> Prop = Bool/Holds(sizes.0(t) == 0);
+        let Small(t: Rose) -> /std/Bool/True =
+            match sizes.0(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -334,7 +344,8 @@ fn a_structure_of_handlers_handed_where_nothing_is_summarized_is_graded_as_unrel
 
         let sizes: {(Rose) -> Nat} = ((t) => match t | rose(n, cs) => n + walk(sizes, cs) end,);
 
-        let Small(t: Rose) -> Prop = Bool/Holds(sizes.0(t) == 0);
+        let Small(t: Rose) -> /std/Bool/True =
+            match sizes.0(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -365,7 +376,8 @@ fn a_derived_witness_compares_children_held_in_a_container_through_the_container
             ..
         }
 
-        let Same(a: Rose, b: Rose) -> Prop = Bool/Holds(a == b);
+        let Same(a: Rose, b: Rose) -> /std/Bool/True =
+            match a == b | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -389,7 +401,8 @@ fn a_derived_witness_under_a_telescope_compares_children_held_in_a_container() {
             ..
         }
 
-        let Same(a: Rose(Nat), b: Rose(Nat)) -> Prop = Bool/Holds(a == b);
+        let Same(a: Rose(Nat), b: Rose(Nat)) -> /std/Bool/True =
+            match a == b | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -427,7 +440,8 @@ fn a_containers_witness_is_graded_by_the_summary_of_its_method() {
             neq(a, b) = Bool/not(Eql/eql(a, b)),
         }
 
-        let Same(a: Tree, b: Tree) -> Prop = Bool/Holds(a == b);
+        let Same(a: Tree, b: Tree) -> /std/Bool/True =
+            match a == b | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -464,7 +478,8 @@ fn a_field_lambda_is_the_part_at_its_slot_among_every_field() {
             down = (n) => match n | 0 => 0 | k + 1 => H.down(k) end,
         };
 
-        let Low(n: Nat) -> Prop = Bool/Holds(H.loop(n) == 0);
+        let Low(n: Nat) -> /std/Bool/True =
+            match H.loop(n) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -491,7 +506,8 @@ fn a_field_of_what_a_field_lambda_answers_is_no_part_of_the_member() {
             (n) => match n | 0 => 0 | k + 1 => W.1(k) end
         );
 
-        let Low(n: Nat) -> Prop = Bool/Holds(W.0(n).1(n) == 0);
+        let Low(n: Nat) -> /std/Bool/True =
+            match W.0(n).1(n) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -518,7 +534,8 @@ fn a_call_through_a_field_calls_the_fields_answered_beside_it() {
             n * 2
         );
 
-        let Low(n: Nat) -> Prop = Bool/Holds(W(n).0(n) == W(n).1);
+        let Low(n: Nat) -> /std/Bool/True =
+            match W(n).0(n) == W(n).1 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -546,7 +563,8 @@ fn a_record_that_escapes_is_a_call_of_every_part_under_where_it_stands() {
 
         let V: {{(Nat) -> Nat}} = (((m) => match m | 0 => 0 | k + 1 => V.0.0(k) end,),);
 
-        let Low(n: Nat) -> Prop = Bool/Holds(W(n).0(n) == V.0.0(n));
+        let Low(n: Nat) -> /std/Bool/True =
+            match W(n).0(n) == V.0.0(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -579,7 +597,8 @@ fn a_member_handed_bare_where_no_part_lies_at_the_field_applied_calls_its_leadin
 
         let W: {Nat, (Nat) -> Nat} = (0, (y) => match y | 0 => 1 | k + 1 => apply1(W, k) end);
 
-        let Low(n: Nat) -> Prop = Bool/Holds(W.1(n) == 0);
+        let Low(n: Nat) -> /std/Bool/True =
+            match W.1(n) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -612,7 +631,8 @@ fn a_definitions_field_call_is_graded_by_the_field_it_projects() {
 
         let spin(n: Nat) -> Bool = w(n, (c) => spin(c)).0(0);
 
-        let Spun(n: Nat) -> Prop = Bool/Holds(spin(n));
+        let Spun(n: Nat) -> /std/Bool/True =
+            match spin(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -639,7 +659,8 @@ fn a_definitions_nested_field_call_is_graded_by_the_path_it_projects() {
 
         let spin(n: Nat) -> Bool = w(n, (c) => spin(c)).0.0(0);
 
-        let Spun(n: Nat) -> Prop = Bool/Holds(spin(n));
+        let Spun(n: Nat) -> /std/Bool/True =
+            match spin(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
@@ -670,7 +691,8 @@ fn a_record_literal_hands_each_field_its_own_applications_alone() {
 
         let sizes(t: Rose) -> Nat = walk(((u) => sizes(u), (v) => 0), t);
 
-        let Small(t: Rose) -> Prop = Bool/Holds(sizes(t) == 0);
+        let Small(t: Rose) -> /std/Bool/True =
+            match sizes(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
