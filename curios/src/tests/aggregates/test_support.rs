@@ -18,7 +18,7 @@ pub struct Carrier {
 
 pub const BYTES: Carrier = Carrier {
     run: "Bytes",
-    open: "x[",
+    open: "0x[",
     len: "Bytes/len",
     slice: "Bytes/slice",
     at: "match Bytes/try_get(run, i) | some(byte) => Byte/to_nat(byte) + 1 | none() => 0 end",

@@ -112,7 +112,7 @@ fn an_arm_absent_where_a_carriers_index_may_meet_its_target_is_refused() {
         end
 
         induct By: (b: Bytes) -> Type
-        | e(): (x[])
+        | e(): (0x[])
         end
 
         pub let sum(a: Nat, b: Nat, v: Ix(0)) -> False = match v end;
@@ -124,10 +124,10 @@ fn an_arm_absent_where_a_carriers_index_may_meet_its_target_is_refused() {
             s: Nat,
             l: Nat,
             @p: Holds(s + l <= Bytes/len(xs)),
-            v: By(x[..Bytes/slice(xs, s, l), 1]),
+            v: By(0x[..Bytes/slice(xs, s, l), 1]),
         ) -> False =
             match v end;
-        pub let chunks(xs: Bytes, ys: Bytes, v: By(x[..xs, 1])) -> False = match v end;
+        pub let chunks(xs: Bytes, ys: Bytes, v: By(0x[..xs, 1])) -> False = match v end;
         pub let fill(n: Nat, c: Byte, v: By(Bytes/replicate(n + 1, c))) -> False = match v end;
 
         let forged = sum;
@@ -141,8 +141,8 @@ fn an_arm_absent_where_a_carriers_index_may_meet_its_target_is_refused() {
         ("Ix(a * 0)", "Ix(a * b)"),
         ("Ix(0 - b)", "Ix(a - b)"),
         ("pow(a, b + 1) + 1", "pow(a, b + 1)"),
-        ("x[..Bytes/slice(xs, s, l), 1]", "Bytes/slice(xs, s, l)"),
-        ("x[..xs, 1]", "x[..xs, ..ys]"),
+        ("0x[..Bytes/slice(xs, s, l), 1]", "Bytes/slice(xs, s, l)"),
+        ("0x[..xs, 1]", "0x[..xs, ..ys]"),
         ("Bytes/replicate(n + 1, c)", "Bytes/replicate(n, c)"),
         (
             "let forged = sum;",
@@ -178,12 +178,12 @@ fn an_arm_absent_where_a_carriers_index_clashes_with_its_target_is_excused() {
             end
 
             induct By: (b: Bytes) -> Type
-            | e(): (x[])
+            | e(): (0x[])
             end
 
             pub let successor(a: Nat, v: Iz(a + 1)) -> False = match v end;
-            pub let trailing(xs: Bytes, v: By(x[..xs, 1])) -> False = match v end;
-            pub let single(xs: Bytes, c: Byte, v: By(x[..xs, c])) -> False = match v end;
+            pub let trailing(xs: Bytes, v: By(0x[..xs, 1])) -> False = match v end;
+            pub let single(xs: Bytes, c: Byte, v: By(0x[..xs, c])) -> False = match v end;
             pub let filled(n: Nat, c: Byte, v: By(Bytes/replicate(n + 1, c))) -> False = match v end;
 
             /std/print("ok")
@@ -289,7 +289,7 @@ fn two_lists_that_meet_their_case_at_some_value_are_no_clash() {
         pub let window(xs: List(Nat), s: Nat, @p: Holds(s + 1 <= List/len(xs)), v: Ln([..List/slice(xs, s, 1), 0])) -> False =
             match v end;
         pub let twice(v: D([Pr/a()], [Pr/b()])) -> False = match v end;
-        pub let bytes(c: Byte, v: E(x[c, c], x[1])) -> False = match v end;
+        pub let bytes(c: Byte, v: E(0x[c, c], 0x[1])) -> False = match v end;
 
         let forged = swapped;
 
@@ -301,7 +301,7 @@ fn two_lists_that_meet_their_case_at_some_value_are_no_clash() {
         ("induct Pr: Type", "induct Pr: Prop"),
         ("| one(): ([])", "| one(): ([0])"),
         ("Ln([..List/slice(xs, s, 1), 0])", "Ln(List/slice(xs, s, 1))"),
-        ("E(x[c, c], x[1])", "E(x[c], x[1])"),
+        ("E(0x[c, c], 0x[1])", "E(0x[c], 0x[1])"),
         ("let forged = swapped;", "let forged: False = swapped(Ix/mk());"),
     ]);
 

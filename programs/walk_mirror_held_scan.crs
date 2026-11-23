@@ -51,8 +51,8 @@ let mstep(c: Byte, s: MScan) -> MScan =
 
 let walk2(sc: MScan, b: Bytes, acc: {Nat, Nat}) -> {Nat, Nat} =
     match b
-    | x[] => acc
-    | x[h, ..t] =>
+    | 0x[] => acc
+    | 0x[h, ..t] =>
         match sc
         | lead() =>
             walk2(

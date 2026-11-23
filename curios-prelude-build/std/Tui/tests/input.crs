@@ -14,11 +14,11 @@ let settled(b: Bytes) -> List(Input) =
     [..read.inputs, ..Input/flush(read.rest).inputs];
 
 test a_printable_byte_is_its_character =
-    Test/equal(inputs(x['a', 'Z']), [k(Key/Code/char('a')), k(Key/Code/char('Z'))]);
+    Test/equal(inputs(0x['a', 'Z']), [k(Key/Code/char('a')), k(Key/Code/char('Z'))]);
 
 test the_control_bytes_are_the_named_keys_and_ctrl_letters =
     Test/equal(
-        inputs(x[0x0D, 0x09, 0x7F, 0x01, 0x1A]),
+        inputs(0x[0x0D, 0x09, 0x7F, 0x01, 0x1A]),
         [
             k(Key/Code/enter()),
             k(Key/Code/tab()),
@@ -28,7 +28,7 @@ test the_control_bytes_are_the_named_keys_and_ctrl_letters =
 
 test the_legacy_sequences_name_their_keys =
     Test/equal(
-        inputs(x[0x1B, '[', 'A', 0x1B, '[', 'H', 0x1B, '[', '3', '~', 0x1B, '[', '1', '5', '~',
+        inputs(0x[0x1B, '[', 'A', 0x1B, '[', 'H', 0x1B, '[', '3', '~', 0x1B, '[', '1', '5', '~',
             0x1B, 'O', 'P', 0x1B, '[', '2', '5', '~']),
         [
             k(Key/Code/up()),
@@ -40,7 +40,7 @@ test the_legacy_sequences_name_their_keys =
 
 test a_modifier_parameter_sets_the_modifiers =
     Test/equal(
-        inputs(x[0x1B, '[', '1', ';', '5', 'C', 0x1B, '[', '3', ';', '2', '~']),
+        inputs(0x[0x1B, '[', '1', ';', '5', 'C', 0x1B, '[', '3', ';', '2', '~']),
         [
             Input/key(Key/with_ctrl(Key/Code/right())),
             Input/key(Key { ..Key/plain(Key/Code/delete()), shift = true })]);
@@ -48,12 +48,12 @@ test a_modifier_parameter_sets_the_modifiers =
 -- Shift with Tab is the back-tab sequence in the legacy encoding.
 test back_tab_is_tab_with_shift =
     Test/equal(
-        inputs(x[0x1B, '[', 'Z']),
+        inputs(0x[0x1B, '[', 'Z']),
         [Input/key(Key { ..Key/plain(Key/Code/tab()), shift = true })]);
 
 test the_kitty_form_reads_the_code_and_modifiers =
     Test/equal(
-        inputs(x[0x1B, '[', '9', '7', ';', '2', 'u', 0x1B, '[', '1', '3', ';', '5', 'u']),
+        inputs(0x[0x1B, '[', '9', '7', ';', '2', 'u', 0x1B, '[', '1', '3', ';', '5', 'u']),
         [
             Input/key(Key { ..Key/plain(Key/Code/char('a')), shift = true }),
             Input/key(Key/with_ctrl(Key/Code/enter()))]);
@@ -61,14 +61,14 @@ test the_kitty_form_reads_the_code_and_modifiers =
 -- A code's sub-parameters are read past, Super is a modifier, and a lock key's bit is no modifier at all: Caps Lock on leaves `a` plain.
 test the_kitty_form_reads_super_and_leaves_the_locks_out =
     Test/equal(
-        inputs(x[0x1B, '[', '9', '7', ':', '6', '5', ';', '9', 'u', 0x1B, '[', '9', '7', ';', '6',
+        inputs(0x[0x1B, '[', '9', '7', ':', '6', '5', ';', '9', 'u', 0x1B, '[', '9', '7', ';', '6',
             '5', 'u']),
         [Input/key(Key { ..Key/plain(Key/Code/char('a')), super = true }), k(Key/Code/char('a'))]);
 
 -- F13 to F35 and the keypad's keys are the protocol's private-use numbers, and a keypad key is the key it stands for.
 test the_kitty_form_names_the_high_function_keys_and_the_keypad =
     Test/equal(
-        inputs(x[0x1B, '[', '5', '7', '3', '7', '6', 'u', 0x1B, '[', '5', '7', '3', '9', '8', 'u',
+        inputs(0x[0x1B, '[', '5', '7', '3', '7', '6', 'u', 0x1B, '[', '5', '7', '3', '9', '8', 'u',
             0x1B, '[', '5', '7', '3', '9', '9', 'u', 0x1B, '[', '5', '7', '4', '1', '4', 'u', 0x1B,
             '[', '5', '7', '4', '1', '9', 'u']),
         [
@@ -80,49 +80,49 @@ test the_kitty_form_names_the_high_function_keys_and_the_keypad =
 
 -- The kitty form names its key by its first parameter, so a sequence with none names no key rather than the character zero.
 test a_kitty_sequence_without_a_code_names_no_key =
-    Test/equal(inputs(x[0x1B, '[', 'u', 'q']), [k(Key/Code/char('q'))]);
+    Test/equal(inputs(0x[0x1B, '[', 'u', 'q']), [k(Key/Code/char('q'))]);
 
 -- The `~` form names its key by its first parameter too, and an empty parameter before a separator is as absent as one left out: neither form reads it as 1.
 test a_sequence_whose_key_parameter_is_empty_names_no_key =
     Test/equal(
-        inputs(x[0x1B, '[', '~', 0x1B, '[', ';', '5', '~', 0x1B, '[', ';', '5', 'u', 'q']),
+        inputs(0x[0x1B, '[', '~', 0x1B, '[', ';', '5', '~', 0x1B, '[', ';', '5', 'u', 'q']),
         [k(Key/Code/char('q'))]);
 
 -- A cursor key is named by its final byte, so its modifier is read past a first parameter left empty.
 test a_cursor_key_reads_its_modifier_past_an_empty_parameter =
-    Test/equal(inputs(x[0x1B, '[', ';', '5', 'A']), [Input/key(Key/with_ctrl(Key/Code/up()))]);
+    Test/equal(inputs(0x[0x1B, '[', ';', '5', 'A']), [Input/key(Key/with_ctrl(Key/Code/up()))]);
 
 -- A byte no control sequence can hold ends the one it falls in, which names nothing, and is read on its own.
 test a_byte_a_sequence_cannot_hold_ends_it =
-    Test/equal(inputs(x[0x1B, '[', '1', 0x0D, 'q']), [k(Key/Code/enter()), k(Key/Code/char('q'))]);
+    Test/equal(inputs(0x[0x1B, '[', '1', 0x0D, 'q']), [k(Key/Code/enter()), k(Key/Code/char('q'))]);
 
 test an_escape_before_a_printable_byte_is_alt =
-    Test/equal(inputs(x[0x1B, 'x']), [Input/key(Key/with_alt(Key/Code/char('x')))]);
+    Test/equal(inputs(0x[0x1B, 'x']), [Input/key(Key/with_alt(Key/Code/char('x')))]);
 
 -- The control bytes past the letters stand beside the signs, and an Escape before a control byte adds Alt to its key.
 test a_control_byte_past_the_letters_and_one_under_escape =
     Test/equal(
-        inputs(x[0x1C, 0x1B, 0x01]),
+        inputs(0x[0x1C, 0x1B, 0x01]),
         [
             Input/key(Key/with_ctrl(Key/Code/char('\\'))),
             Input/key(Key { ..Key/with_ctrl(Key/Code/char('a')), alt = true })]);
 
 test a_bracketed_paste_is_one_input =
     Test/equal(
-        inputs(x[0x1B, '[', '2', '0', '0', '~', 'h', 'i', 0x1B, '[', '2', '0', '1', '~', 'q']),
+        inputs(0x[0x1B, '[', '2', '0', '0', '~', 'h', 'i', 0x1B, '[', '2', '0', '1', '~', 'q']),
         [Input/paste("hi"), k(Key/Code/char('q'))]);
 
 -- Focus reported, and a size reported in band: its parameters are rows before columns, and the pixels after them are read past.
 test a_change_of_focus_and_a_reported_size_are_inputs =
     Test/equal(
-        inputs(x[0x1B, '[', 'I', 0x1B, '[', 'O', 0x1B, '[', '4', '8', ';', '2', '4', ';', '8', '0',
+        inputs(0x[0x1B, '[', 'I', 0x1B, '[', 'O', 0x1B, '[', '4', '8', ';', '2', '4', ';', '8', '0',
             ';', '4', '8', '0', ';', '6', '4', '0', 't']),
         [Input/focus(true), Input/focus(false), Input/resize(Tty/Size { w = 80, h = 24 })]);
 
 -- What a terminal answers of itself is no input: a mode's report, supported where the terminal holds it set or reset and not where it knows it not, the keyboard protocol's flags, and the device attributes.
 test the_terminal_s_replies_are_read_apart_from_its_inputs =
     let read =
-        Input/decode(x[0x1B, '[', '?', '2', '0', '4', '8', ';', '2', '$', 'y', 0x1B, '[', '?', '2',
+        Input/decode(0x[0x1B, '[', '?', '2', '0', '4', '8', ';', '2', '$', 'y', 0x1B, '[', '?', '2',
             '0', '2', '7', ';', '0', '$', 'y', 0x1B, '[', '?', '1', 'u', 0x1B, '[', '?', '6', '2',
             ';', '2', '2', 'c', 'q']);
     Test/all([
@@ -134,17 +134,17 @@ test the_terminal_s_replies_are_read_apart_from_its_inputs =
         Test/equal(read.inputs, [k(Key/Code/char('q'))])]);
 
 test a_multi_byte_scalar_is_one_character =
-    Test/equal(inputs(x[0xC3, 0xA9]), [k(Key/Code/char('é'))]);
+    Test/equal(inputs(0x[0xC3, 0xA9]), [k(Key/Code/char('é'))]);
 
 test a_scalar_of_three_and_of_four_bytes_is_one_character =
     Test/equal(
-        inputs(x[0xE2, 0x82, 0xAC, 0xF0, 0x9F, 0x98, 0x80]),
+        inputs(0x[0xE2, 0x82, 0xAC, 0xF0, 0x9F, 0x98, 0x80]),
         [k(Key/Code/char('€')), k(Key/Code/char('😀'))]);
 
 -- A byte that begins no character is passed over alone, and so is a lead the bytes after it do not complete: what follows either is read on its own.
 test a_byte_that_begins_no_character_is_passed_over_alone =
     Test/equal(
-        inputs(x[0x80, 'a', 0xC3, 'b', 0xFF, 'c', 0xED, 0xA0, 0x80, 'd']),
+        inputs(0x[0x80, 'a', 0xC3, 'b', 0xFF, 'c', 0xED, 0xA0, 0x80, 'd']),
         [
             k(Key/Code/char('a')),
             k(Key/Code/char('b')),
@@ -153,20 +153,20 @@ test a_byte_that_begins_no_character_is_passed_over_alone =
 
 -- One keystroke is one key whichever encoding the terminal sends it in: the legacy bytes and the kitty protocol's, read once nothing more came.
 test a_keystroke_is_one_key_under_either_encoding =
-    let csi(body: Bytes) -> Bytes = x[0x1B, '[', ..body];
+    let csi(body: Bytes) -> Bytes = 0x[0x1B, '[', ..body];
     let pairs =
         [
-            (x[0x01], csi(x['9', '7', ';', '5', 'u'])),
-            (x[0x1B, 'a'], csi(x['9', '7', ';', '3', 'u'])),
-            (x[0x1B], csi(x['2', '7', 'u'])),
-            (x[0x0D], csi(x['1', '3', 'u'])),
-            (x[0x1B, 0x0D], csi(x['1', '3', ';', '3', 'u'])),
-            (x[0x09], csi(x['9', 'u'])),
-            (csi(x['Z']), csi(x['9', ';', '2', 'u'])),
-            (x[0x7F], csi(x['1', '2', '7', 'u'])),
-            (x[0x1B, 'O', 'P'], csi(x['P'])),
-            (x['5'], csi(x['5', '7', '4', '0', '4', 'u'])),
-            (x[0x0D], csi(x['5', '7', '4', '1', '4', 'u']))];
+            (0x[0x01], csi(0x['9', '7', ';', '5', 'u'])),
+            (0x[0x1B, 'a'], csi(0x['9', '7', ';', '3', 'u'])),
+            (0x[0x1B], csi(0x['2', '7', 'u'])),
+            (0x[0x0D], csi(0x['1', '3', 'u'])),
+            (0x[0x1B, 0x0D], csi(0x['1', '3', ';', '3', 'u'])),
+            (0x[0x09], csi(0x['9', 'u'])),
+            (csi(0x['Z']), csi(0x['9', ';', '2', 'u'])),
+            (0x[0x7F], csi(0x['1', '2', '7', 'u'])),
+            (0x[0x1B, 'O', 'P'], csi(0x['P'])),
+            (0x['5'], csi(0x['5', '7', '4', '0', '4', 'u'])),
+            (0x[0x0D], csi(0x['5', '7', '4', '1', '4', 'u']))];
     Test/all(
         List/map(pairs, (pair: {Bytes, Bytes}) => Test/equal(settled(pair.0), settled(pair.1))));
 
@@ -181,7 +181,7 @@ let cut_anywhere(b: Bytes) -> Test({}) =
                 | none() => Test/fail("the cut stands past the bytes")
                 | some(_) =>
                     let first = Input/decode(Bytes/slice(b, 0, at));
-                    let second = Input/decode(x[..first.rest, ..Bytes/drop(b, at)]);
+                    let second = Input/decode(0x[..first.rest, ..Bytes/drop(b, at)]);
                     Test/all([
                         Test/equal([..first.inputs, ..second.inputs], whole.inputs),
                         Test/equal([..first.replies, ..second.replies], whole.replies),
@@ -193,23 +193,23 @@ test every_cut_of_an_input_decodes_as_the_whole =
     Test/all(
         List/map(
             [
-                x['a', 0xC3, 0xA9, 0xF0, 0x9F, 0x98, 0x80],
-                x[0x1B, '[', '1', ';', '5', 'C', 0x1B, 'a'],
-                x[0x1B, 0x1B, '[', 'B'],
-                x[0x1B, '[', '2', '0', '0', '~', 'h', 'i', 0x1B, '[', '2', '0', '1', '~', 'q'],
-                x[0x1B, '[', '9', '7', ':', '6', '5', ';', '9', 'u'],
-                x[0x1B, '[', '?', '2', '0', '4', '8', ';', '2', '$', 'y', 0x1B, '[', '?', '6', '2',
+                0x['a', 0xC3, 0xA9, 0xF0, 0x9F, 0x98, 0x80],
+                0x[0x1B, '[', '1', ';', '5', 'C', 0x1B, 'a'],
+                0x[0x1B, 0x1B, '[', 'B'],
+                0x[0x1B, '[', '2', '0', '0', '~', 'h', 'i', 0x1B, '[', '2', '0', '1', '~', 'q'],
+                0x[0x1B, '[', '9', '7', ':', '6', '5', ';', '9', 'u'],
+                0x[0x1B, '[', '?', '2', '0', '4', '8', ';', '2', '$', 'y', 0x1B, '[', '?', '6', '2',
                     'c'],
-                x[0x1B, '[', '4', '8', ';', '2', '4', ';', '8', '0', ';', '0', ';', '0', 't', 0x1B,
+                0x[0x1B, '[', '4', '8', ';', '2', '4', ';', '8', '0', ';', '0', ';', '0', 't', 0x1B,
                     '[', 'I']],
             cut_anywhere));
 
 -- Once the clock says nothing more is coming, a lone Escape is the Escape key and what followed it is read as itself.
 test flush_reads_a_lone_escape_as_the_key =
     Test/all([
-        Test/equal(Input/flush(x[0x1B]).inputs, [k(Key/Code/escape())]),
+        Test/equal(Input/flush(0x[0x1B]).inputs, [k(Key/Code/escape())]),
         Test/equal(
-            Input/flush(x[0x1B, '[']).inputs,
+            Input/flush(0x[0x1B, '[']).inputs,
             [k(Key/Code/escape()), k(Key/Code/char('['))])]);
 
 -- `rest` is a suffix of the input: nothing is invented and nothing before the cut is kept. An open claim rather than a test, because the certifier does not settle it — the declaration below states it over the inputs whose branches it is worth stating over.
@@ -229,13 +229,13 @@ test the_rest_is_a_suffix_of_every_shape_the_decoder_cuts =
     Test/all(
         List/map(
             [
-                x[],
-                x['a'],
-                x[0x1B],
-                x[0x1B, '['],
-                x[0x1B, '[', 'A'],
-                x[0x1B, '[', '2', '0', '0', '~', 'a', 'b'],
-                x[0x1B, '[', '2', '0', '0', '~', 'a', 0x1B, '[', '2', '0', '1', '~'],
-                x['a', 0xC3],
-                x[0x1B, '[', '2', '0', '0', '~', 'a', 0x1B, '[', '2']],
+                0x[],
+                0x['a'],
+                0x[0x1B],
+                0x[0x1B, '['],
+                0x[0x1B, '[', 'A'],
+                0x[0x1B, '[', '2', '0', '0', '~', 'a', 'b'],
+                0x[0x1B, '[', '2', '0', '0', '~', 'a', 0x1B, '[', '2', '0', '1', '~'],
+                0x['a', 0xC3],
+                0x[0x1B, '[', '2', '0', '0', '~', 'a', 0x1B, '[', '2']],
             rest_is_a_suffix));

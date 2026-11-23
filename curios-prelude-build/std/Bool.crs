@@ -89,12 +89,12 @@ satisfy Ord(Bool) {
 }
 
 satisfy Hash(Bool) {
-    hash(b) = match b | true => x[0x1] | false => x[0x0] end,
+    hash(b) = match b | true => 0x[0x1] | false => 0x[0x0] end,
 }
 
 -- Which of the two one-byte encodings a run is, as a total function of any `Bytes`.
 let bool_of(z: Bytes) -> Bool =
-    z == x[0x1];
+    z == 0x[0x1];
 
 -- The encoding round-trips through it at both values, which is the whole of the injectivity below: two values encoding alike decode alike, and decoding is the identity.
 let bool_round(b: Bool) -> Eq()(bool_of(Hash/hash(b)), b) =

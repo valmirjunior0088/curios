@@ -413,7 +413,7 @@
     },
     "packed": {
       "name": "punctuation.definition.packed.curios",
-      "match": "(?<![\\w/])[bx]\\["
+      "match": "(?<![\\w/])0x\\["
     }
   }
 }

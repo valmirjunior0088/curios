@@ -145,12 +145,12 @@ let _a_tie_to_even: Eq()(rounded/to_integral(Rounding/ties_to_even(), +2.5), +2.
 
 let _half_the_least_subnormal_rounds_by_direction: Eq()(
     rounded/of_hex_str(Rounding/toward_positive(), "0x1p-1075"),
-    Option/some(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]))) =
+    Option/some(Flt/of_le_bytes(0x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]))) =
     Eq/refl();
 
 let _an_overflow_toward_zero_stops_at_the_largest: Eq()(
     rounded/of_hex_str(Rounding/toward_zero(), "0x1p+1024"),
-    Option/some(Flt/of_le_bytes(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]))) =
+    Option/some(Flt/of_le_bytes(0x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]))) =
     Eq/refl();
 
 let _an_exact_cancellation_is_negative_toward_negative: Eq()(
@@ -268,7 +268,7 @@ let _the_remainder_takes_the_nearest_quotient: Eq()(Flt/to_str(Flt/remainder(+7.
 
 let _next_up_steps_onto_negative_zero: Eq()(
     Flt/to_str(
-        Flt/next_up(Flt/neg(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])))),
+        Flt/next_up(Flt/neg(Flt/of_le_bytes(0x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])))),
     "-0") =
     Eq/refl();
 
@@ -309,8 +309,8 @@ test remainder_is_to_the_nearest_quotient =
 
 -- `nextUp` and `nextDown` at every place IEEE names: the zeros, the negative least subnormal, both infinities and the largest finite value.
 test next_up_and_down_at_the_edges =
-    let least = Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-    let largest = Flt/of_le_bytes(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]);
+    let least = Flt/of_le_bytes(0x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+    let largest = Flt/of_le_bytes(0x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]);
     Test/equal(
         List/map(
             [
@@ -366,9 +366,9 @@ test the_ten_classes =
             [
                 Flt/signaling_nan(+1.0),
                 +nan.0, -inf.0, -1.0,
-                Flt/neg(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])),
+                Flt/neg(Flt/of_le_bytes(0x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])),
                 -0.0, +0.0,
-                Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),
+                Flt/of_le_bytes(0x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),
                 +1.0, +inf.0],
             (f) => Spell/spell(Flt/class(f))),
         ["Class/signaling_nan()", "Class/quiet_nan()", "Class/negative_infinity()",
@@ -390,7 +390,7 @@ test to_int_rounds_in_its_direction =
                 (r) => rounded/to_int(r, -2.5, @True/qed())),
             [-2, -3, -2, -2, -3]),
         Test/equal(
-            Flt/try_log_b(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])),
+            Flt/try_log_b(Flt/of_le_bytes(0x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])),
             Option/some(-1074)),
         Test/equal(Flt/try_log_b(+inf.0), Option/none())]);
 
@@ -398,7 +398,7 @@ test to_int_rounds_in_its_direction =
 let rounds_and_records() -> Env(Flt) =
     let third = Env/with_rounding(Rounding/toward_positive(), Env/div(+1.0, +3.0))!;
     let after = Env/rounding!;
-    let _ = Env/mul(Flt/of_le_bytes(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]), +2.0)!;
+    let _ = Env/mul(Flt/of_le_bytes(0x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]), +2.0)!;
     let status = State/get()!;
     Env/pure(match after == status.rounding | true => third | false => +nan.0 end);
 
@@ -428,7 +428,7 @@ test a_nan_spells_its_pattern_and_toml_keeps_its_sign =
     Test/all([
         Test/equal(
             Spell/spell(Flt/quiet_nan(+5.0)),
-            "Flt/of_le_bytes(x[5, 0, 0, 0, 0, 0, 248, 127])"),
+            "Flt/of_le_bytes(0x[5, 0, 0, 0, 0, 0, 248, 127])"),
         Test/equal(Spell/spell(+nan.0), "+nan.0"),
         Test/equal(Spell/spell(-nan.0), "-nan.0"),
         Test/equal(
@@ -460,8 +460,8 @@ let reads_back(f: Flt) -> Bool =
     decimal && hex;
 
 test every_class_reads_back_from_its_text =
-    let least = Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-    let largest = Flt/of_le_bytes(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]);
+    let least = Flt/of_le_bytes(0x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+    let largest = Flt/of_le_bytes(0x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]);
     Test/equal(
         List/map(
             [
@@ -485,7 +485,7 @@ test nan_and_hex_text_spell_as_ieee_writes_them =
             List/map(
                 [
                     +3.0, -0.0,
-                    Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),
+                    Flt/of_le_bytes(0x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),
                     +1.0],
                 Flt/to_hex_str),
             ["+0x1.8p+1", "-0x0p+0", "+0x0.0000000000001p-1022", "+0x1p+0"]),
@@ -498,7 +498,8 @@ test nan_and_hex_text_spell_as_ieee_writes_them =
                 Option/none(),
                 Option/some("+nan(0x5)"),
                 Option/some(
-                    Flt/to_str(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]))),
+                    Flt/to_str(
+                        Flt/of_le_bytes(0x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]))),
                 Option/some("-3"),
                 Option/none()])]);
 
@@ -514,10 +515,10 @@ test text_reads_in_a_direction =
         Test/equal(read(Rounding/toward_negative(), "0.1"), Flt/to_str(Flt/next_down(+0.1))),
         Test/equal(
             read(Rounding/toward_zero(), "1e400"),
-            Flt/to_str(Flt/of_le_bytes(x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]))),
+            Flt/to_str(Flt/of_le_bytes(0x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]))),
         Test/equal(
             read(Rounding/toward_positive(), "1e-400"),
-            Flt/to_str(Flt/of_le_bytes(x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]))),
+            Flt/to_str(Flt/of_le_bytes(0x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]))),
         Test/equal(
             read(Rounding/toward_negative(), "-0x1.00000000000008p0"),
             Flt/to_str(Flt/neg(Flt/next_up(+1.0))))]);

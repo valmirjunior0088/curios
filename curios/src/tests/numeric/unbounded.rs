@@ -168,9 +168,9 @@ fn folded_and_executed_nans_agree() {
     };
     // A signaling NaN with a payload of one, positive, and a quiet one with a wider payload, negative.
     let signaling =
-        "Flt/of_le_bytes(x[Nat/to_byte((n + 1) % 256), 0x00, 0x00, 0x00, 0x00, 0x00, 0xf0, 0x7f])";
+        "Flt/of_le_bytes(0x[Nat/to_byte((n + 1) % 256), 0x00, 0x00, 0x00, 0x00, 0x00, 0xf0, 0x7f])";
     let quiet =
-        "Flt/of_le_bytes(x[Nat/to_byte((n + 2) % 256), 0x12, 0x00, 0x00, 0x00, 0x00, 0xf8, 0xff])";
+        "Flt/of_le_bytes(0x[Nat/to_byte((n + 2) % 256), 0x12, 0x00, 0x00, 0x00, 0x00, 0xf8, 0xff])";
     let zero = "Nat/to_flt(n)";
 
     let rows = [
@@ -198,7 +198,7 @@ fn folded_and_executed_nans_agree() {
         bytes(&format!("Flt/mul(Flt/add(+inf.0, {zero}), 0.0)")),
         bytes(&format!("Flt/sqrt(Flt/sub(-1.0, {zero}))")),
         bytes(&format!("Flt/rem(1.0, {zero})")),
-        "Flt/to_str(Flt/copysign(1.0, Flt/of_le_bytes(x[Nat/to_byte((n + 1) % 256), 0x00, 0x00, 0x00, \
+        "Flt/to_str(Flt/copysign(1.0, Flt/of_le_bytes(0x[Nat/to_byte((n + 1) % 256), 0x00, 0x00, 0x00, \
             0x00, 0x00, 0xf8, 0xff])))"
             .to_string(),
     ];
@@ -244,9 +244,9 @@ fn folded_and_executed_float_laws_hold_where_they_are_most_fragile() {
         )
     };
     let signaling =
-        "Flt/of_le_bytes(x[Nat/to_byte((n + 1) % 256), 0x00, 0x00, 0x00, 0x00, 0x00, 0xf0, 0x7f])";
+        "Flt/of_le_bytes(0x[Nat/to_byte((n + 1) % 256), 0x00, 0x00, 0x00, 0x00, 0x00, 0xf0, 0x7f])";
     let quiet =
-        "Flt/of_le_bytes(x[Nat/to_byte((n + 2) % 256), 0x12, 0x00, 0x00, 0x00, 0x00, 0xf8, 0xff])";
+        "Flt/of_le_bytes(0x[Nat/to_byte((n + 2) % 256), 0x12, 0x00, 0x00, 0x00, 0x00, 0xf8, 0xff])";
     let zero = "Nat/to_flt(n)";
     let negative_zero = "Flt/neg(Nat/to_flt(n))";
     let one = "Nat/to_flt(n + 1)";
@@ -497,8 +497,8 @@ fn nat_to_byte_inverts_to_nat_and_refuses_the_bound() {
         let entry() -> /std/Io({}) =
             let bytes = match Try/run(Io/read(Proc/stdin, 16))!
                 | success(bytes(b, @_)) => b
-                | success(ended()) => x[]
-                | failure(_) => x[]
+                | success(ended()) => 0x[]
+                | failure(_) => 0x[]
                 end;
             let n = Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 0), 0));
             match n < 256

@@ -3,7 +3,7 @@ use /std/Tui/{Color, Style, Mode};
 
 --- `ESC [` and `body`.
 pub let csi(body: Str) -> Bytes =
-    x[0x1B, '[', ..Str/to_bytes(body)];
+    0x[0x1B, '[', ..Str/to_bytes(body)];
 
 --- The cursor to column `x` of row `y`, both from zero.
 pub let move_to(x: Nat, y: Nat) -> Bytes =

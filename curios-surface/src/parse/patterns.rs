@@ -552,7 +552,7 @@ fn parse_numeral_match_pattern<'a, D: Grammar>(
         .parse(state)
 }
 
-// A run, the literal that builds a sequence: `[]`, `[a, b]` or `[a, b, ..rest]` after `open`, `[` for a list and `x[` for a packed sequence, each element a pattern and an open run's rest, after one element at least, a binder. Nothing but a run follows its bracket, so it commits there, and once `..` is read only a binder can follow: what fails inside is reported where it stands.
+// A run, the literal that builds a sequence: `[]`, `[a, b]` or `[a, b, ..rest]` after `open`, `[` for a list and `0x[` for a packed sequence, each element a pattern and an open run's rest, after one element at least, a binder. Nothing but a run follows its bracket, so it commits there, and once `..` is read only a binder can follow: what fails inside is reported where it stands.
 fn parse_run<'a, D: Grammar>(open: &'static str) -> impl Parser<'a, Elements<D>> {
     move |state: ParserState<'a>| {
         parse_literal(open)
@@ -598,14 +598,14 @@ pub fn parse_list_match_pattern<'a, D: Grammar>(
     parse_run::<D>("[").map(MatchPattern::List).parse(state)
 }
 
-// A run over a packed sequence, its bracket `x[` glued as a packed literal's is.
+// A run over a packed sequence, its bracket `0x[` glued as a packed literal's is.
 pub fn parse_bytes_match_pattern<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, MatchPattern<D>> {
-    parse_run::<D>("x[").map(MatchPattern::Bytes).parse(state)
+    parse_run::<D>("0x[").map(MatchPattern::Bytes).parse(state)
 }
 
-// A match-arm pattern: a plain binder, an inductive constructor applied to (possibly nested) sub-patterns, a tuple pattern, a struct pattern, a literal leaf — a `Bool`, a character, a string or a numeral — a successor, or a `List`/`Bytes` run — see `MatchPattern`. Struct and constructor forms are tried before the bare-name case for the same reason `parse_pattern` tries `Struct`/`Tuple` first: a plain identifier prefix (`Point` in `Point { z, w = ww }`, `some` in `some(x)`) would otherwise be consumed by the binder case before the disambiguating `{`/`(` is ever seen. The literal leaves are tried before `Tuple` (none of their prefixes — `[`, `x[`, a sign, a digit, `true`/`false` — overlap `Tuple`'s `(`) and, for the successor leaf (`parse_nat_succ_match_pattern`) specifically, before `Binder` (see its own doc comment). A run owns what follows its bracket. A qualified head is refused ahead of all of them, for the reason `parse_qualified_match_pattern` states.
+// A match-arm pattern: a plain binder, an inductive constructor applied to (possibly nested) sub-patterns, a tuple pattern, a struct pattern, a literal leaf — a `Bool`, a character, a string or a numeral — a successor, or a `List`/`Bytes` run — see `MatchPattern`. Struct and constructor forms are tried before the bare-name case for the same reason `parse_pattern` tries `Struct`/`Tuple` first: a plain identifier prefix (`Point` in `Point { z, w = ww }`, `some` in `some(x)`) would otherwise be consumed by the binder case before the disambiguating `{`/`(` is ever seen. The literal leaves are tried before `Tuple` (none of their prefixes — `[`, `0x[`, a sign, a digit, `true`/`false` — overlap `Tuple`'s `(`) and, for the successor leaf (`parse_nat_succ_match_pattern`) specifically, before `Binder` (see its own doc comment). A run owns what follows its bracket. A qualified head is refused ahead of all of them, for the reason `parse_qualified_match_pattern` states.
 pub fn parse_match_pattern<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, MatchPattern<D>> {
     recurse(|| memoize(MEMO_MATCH_PATTERN, parse_match_pattern_inner::<D>).parse(state))
 }

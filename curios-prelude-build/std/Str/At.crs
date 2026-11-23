@@ -11,8 +11,8 @@ use /std/ops/{Eql, Cmp};
 --- One byte decides it, which keeps a position cheap to check. One byte suffices because UTF-8 self-synchronizes: valid text cut where a character may begin is valid on both sides, as `Str/Valid/before` and `Str/Valid/after` prove.
 pub let starts(rest: Bytes) -> Bool =
     match rest
-    | x[] => true
-    | x[h, .._] => Bool/not(utf8/continues(h))
+    | 0x[] => true
+    | 0x[h, .._] => Bool/not(utf8/continues(h))
     end;
 
 --- A position in `s`: a byte offset at which a character may begin, with the bound and the boundary that say so, both erased.
@@ -81,7 +81,7 @@ pub let to_after(
 --- How many bytes continuing a character open `rest`.
 let run(rest: Bytes) -> Nat =
     match rest
-    | x[h, ..t], utf8/continues(h) => run(t) + 1
+    | 0x[h, ..t], utf8/continues(h) => run(t) + 1
     | _ => 0
     end;
 
@@ -89,8 +89,8 @@ let run(rest: Bytes) -> Nat =
 --- The continuing bytes that open `rest` lie within it.
 let run_within(rest: Bytes) -> Bool/Holds(run(rest) <= Bytes/len(rest)) =
     match rest
-    | x[] => Bool/True/qed()
-    | x[h, ..t] =>
+    | 0x[] => Bool/True/qed()
+    | 0x[h, ..t] =>
         match utf8/continues(h)
         | true => run_within(t)
         | false => Bool/True/qed()
@@ -100,8 +100,8 @@ let run_within(rest: Bytes) -> Bool/Holds(run(rest) <= Bytes/len(rest)) =
 --- Past the continuing bytes that open `rest`, a character may begin.
 let run_starts(rest: Bytes) -> Bool/Holds(starts(Bytes/drop(rest, run(rest), @run_within(rest)))) =
     match rest
-    | x[] => Bool/True/qed()
-    | x[h, ..t] =>
+    | 0x[] => Bool/True/qed()
+    | 0x[h, ..t] =>
         match utf8/continues(h)
         | true => run_starts(t)
         | false => Bool/True/qed()
@@ -118,8 +118,8 @@ let hop(
     within: Bool/Holds(width <= Bytes/len(b)),
     boundary: Bool/Holds(starts(Bytes/drop(b, width, @within)))} =
     match b
-    | x[] => match some end
-    | x[_, ..t] =>
+    | 0x[] => match some end
+    | 0x[_, ..t] =>
         (
             width = 1 + run(t),
             positive = Bool/True/qed(),
@@ -130,8 +130,8 @@ let hop(
 --- The first character of valid bytes that hold one.
 let lead(@b: Bytes, v: Str/Valid(b), some: Bool/Holds(0 < Bytes/len(b))) -> Char =
     match b
-    | x[] => match some end
-    | x[c, ..t] => Str/Valid/decode_head(c, @t, v)
+    | 0x[] => match some end
+    | 0x[c, ..t] => Str/Valid/decode_head(c, @t, v)
     end;
 
 --- The position past the character at `at`, found without decoding it, and the proof that it lies past — what a walk forward recurs with, through [`forward`].
@@ -306,13 +306,13 @@ let starts_before(
     within: Bool/Holds(k <= Bytes/len(a)),
     at: Bool/Holds(starts(Bytes/drop(a, k, @within))),
     begins: Bool/Holds(starts(rest)),
-) -> Bool/Holds(starts(Bytes/drop(x[..a, ..rest], k))) =
+) -> Bool/Holds(starts(Bytes/drop(0x[..a, ..rest], k))) =
     match k
-    | 0 => match a | x[] => begins | x[_, .._] => at end
+    | 0 => match a | 0x[] => begins | 0x[_, .._] => at end
     | j + 1 =>
         match a
-        | x[] => match within end
-        | x[_, ..r] => starts_before(@r, rest, j, within, at, begins)
+        | 0x[] => match within end
+        | 0x[_, ..r] => starts_before(@r, rest, j, within, at, begins)
         end
     end;
 

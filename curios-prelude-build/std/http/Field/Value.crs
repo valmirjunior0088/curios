@@ -25,7 +25,7 @@ satisfy Spell(Value) {
 
 --- The value with no octets.
 pub let empty: Value =
-    Value { bytes = x[] };
+    Value { bytes = 0x[] };
 
 --- The value the literal `s` spells.
 pub let lit(s: Str, @_: Bool/Holds(Bytes/all(Str/to_bytes(s), admits))) -> Value =
@@ -55,7 +55,7 @@ pub struct Octet: pub Type {
 --- `v` with `o` ahead of it: how a value is built an octet at a time, each carrying its own reason.
 pub let cons(o: Octet, v: Value) -> Value =
     Value {
-        bytes = x[o.byte, ..v.bytes],
+        bytes = 0x[o.byte, ..v.bytes],
         @Bool/and/both(admits(o.byte), Bytes/all(v.bytes, admits), o.clean, v.clean) };
 
 --- `a` then `b`: octets that may each stand in a value may stand in one together.
@@ -65,8 +65,8 @@ pub let append(a: Value, b: Value) -> Value =
 -- `m`'s octets ahead of `b`, each standing in a value by what `clean` says of them all.
 let prepended(m: Bytes, @clean: Bool/Holds(Bytes/all(m, admits)), b: Value) -> Value =
     match m
-    | x[] => b
-    | x[h, ..t] =>
+    | 0x[] => b
+    | 0x[h, ..t] =>
         cons(
             Octet { byte = h, @clean = Bool/and/first(admits(h), Bytes/all(t, admits), clean) },
             prepended(t, @Bool/and/second(admits(h), Bytes/all(t, admits), clean), b))

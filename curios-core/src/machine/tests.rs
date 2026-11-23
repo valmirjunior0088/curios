@@ -101,7 +101,7 @@ fn bytes(data: Vec<u8>) -> Term {
     Term::intrinsic(Intrinsic::Bytes(Binary::from_bytes(data)))
 }
 
-/// The non-tail form: a structural recursion whose cons arm combines the call at the tail, `count(x[]) = 0`, `count(x[h, ..t]) = count(t) + 1`. Its depth is the nesting of calls — the shape only an explicit stack can walk without a native frame per element — so the budget this passes under is the claim: about two hundred units per element where the recursive strategy's frame row alone is [`Cost::FRAME`].
+/// The non-tail form: a structural recursion whose cons arm combines the call at the tail, `count(0x[]) = 0`, `count(0x[h, ..t]) = count(t) + 1`. Its depth is the nesting of calls — the shape only an explicit stack can walk without a native frame per element — so the budget this passes under is the claim: about two hundred units per element where the recursive strategy's frame row alone is [`Cost::FRAME`].
 #[test]
 fn a_non_tail_recursion_costs_transitions_rather_than_frames() {
     let n = 2_000usize;
@@ -114,7 +114,7 @@ fn a_non_tail_recursion_costs_transitions_rather_than_frames() {
     assert_eq!(reduce_closed(&mut host, count, Demand::Forced), Ok(nat(n)));
 }
 
-/// The arm that calls itself and then calls itself again on the same tail — `let (taken, stopped) = count(t); match stopped | true => count(t) | …`, a recursion carrying a flag past the element it stopped at — spelled as `count(x[]) = 5`, `count(x[h, ..t]) = let c = count(t); count(t)`. The `let` evaluates the call and the tail demands the same term again; recorded, the second demand is a probe and the recursion is linear under the budget the single-call test passes under. Unrecorded, each level runs the level below twice, so the recursion doubles per element and runs out of steps a few dozen bytes in.
+/// The arm that calls itself and then calls itself again on the same tail — `let (taken, stopped) = count(t); match stopped | true => count(t) | …`, a recursion carrying a flag past the element it stopped at — spelled as `count(0x[]) = 5`, `count(0x[h, ..t]) = let c = count(t); count(t)`. The `let` evaluates the call and the tail demands the same term again; recorded, the second demand is a probe and the recursion is linear under the budget the single-call test passes under. Unrecorded, each level runs the level below twice, so the recursion doubles per element and runs out of steps a few dozen bytes in.
 #[test]
 fn a_call_demanded_twice_is_forced_once() {
     let n = 2_000usize;
@@ -128,7 +128,7 @@ fn a_call_demanded_twice_is_forced_once() {
     assert_eq!(reduce_closed(&mut host, count, Demand::Forced), Ok(nat(5)));
 }
 
-/// `count(x[]) = empty`, `count(x[h, ..t]) = cons(count(t))` over `data`.
+/// `count(0x[]) = empty`, `count(0x[h, ..t]) = cons(count(t))` over `data`.
 fn non_tail(data: Vec<u8>, empty: Term, cons: impl Fn(Term) -> Term) -> Term {
     let (count, b) = (binder(0, "count"), binder(1, "b"));
     let (h, t) = (binder(3, "h"), binder(4, "t"));
@@ -154,7 +154,7 @@ fn non_tail(data: Vec<u8>, empty: Term, cons: impl Fn(Term) -> Term) -> Term {
     )
 }
 
-/// The tail-accumulator fold `go(acc, x[h, ..t]) = go(acc + to_nat(h), t)`, built by `tail_fold`. Eager argument evaluation is what keeps the accumulator a literal at every step instead of a chain of unevaluated additions, and the per-element budget is the same claim as the non-tail recursion's above.
+/// The tail-accumulator fold `go(acc, 0x[h, ..t]) = go(acc + to_nat(h), t)`, built by `tail_fold`. Eager argument evaluation is what keeps the accumulator a literal at every step instead of a chain of unevaluated additions, and the per-element budget is the same claim as the non-tail recursion's above.
 #[test]
 fn a_tail_accumulator_fold_carries_values_not_chains() {
     let n = 2_000usize;
@@ -191,7 +191,7 @@ fn a_closed_neutral_accumulator_stays_linear() {
     ));
 }
 
-/// `go(acc, x[]) = acc`, `go(acc, x[h, ..t]) = go(combine(acc, h), t)` over `data`, applied to an accumulator of zero.
+/// `go(acc, 0x[]) = acc`, `go(acc, 0x[h, ..t]) = go(combine(acc, h), t)` over `data`, applied to an accumulator of zero.
 fn tail_fold(data: Vec<u8>, combine: impl Fn(Term, Term) -> Term) -> Term {
     let (go, acc, b) = (binder(0, "go"), binder(1, "acc"), binder(2, "b"));
     let (h, t) = (binder(3, "h"), binder(4, "t"));
@@ -270,7 +270,7 @@ fn whnf_keeps_a_recursive_application_folded() {
 ///
 /// The two probes are in one run because the memo is run-scoped. The `let` value is an intrinsic operand, which the machine evaluates at [`Demand::Forced`], so the bare selection takes the member-body path that records; the tail is an ordinary application at the run's plain demand, which must come back folded.
 ///
-/// Served, it would return `0` — the machine taking the recorded member body for the projection's plain value, beta-reducing the recursive call and running the whole fold — where the recursive strategy returns `go(x[0x01, 0x02, 0x03])` unopened. `curios-cert`'s `the_closed_machine_agrees_with_the_strategy` carries the same term and asks both demands of the strategy itself.
+/// Served, it would return `0` — the machine taking the recorded member body for the projection's plain value, beta-reducing the recursive call and running the whole fold — where the recursive strategy returns `go(0x[0x01, 0x02, 0x03])` unopened. `curios-cert`'s `the_closed_machine_agrees_with_the_strategy` carries the same term and asks both demands of the strategy itself.
 ///
 /// The forced probe on the same term is the control: answering a projection from its shape at *every* demand, or declining the machine for `rec` altogether, would pass the probe above and fail here, because the member's body still has to be stepped into when a value is what was asked for.
 #[test]

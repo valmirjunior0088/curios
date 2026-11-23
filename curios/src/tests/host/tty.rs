@@ -51,7 +51,7 @@ fn raw_mode_lasts_the_scope_and_is_restored_as_it_ends() {
         use /std/{Nat, Show, Try, Io, Tty};
         let taken(s: Io/Scope) -> Try(Io, Io/Error, Nat) =
             let t = Tty/open(s)!;
-            let _ = Tty/raw(s, t, x['<', 'l', '>'])!;
+            let _ = Tty/raw(s, t, 0x['<', 'l', '>'])!;
             Try/pure(7);
         let entry() -> /std/Io({}) =
             match Try/run(Try/scope(taken))!
@@ -76,7 +76,7 @@ fn raw_mode_is_restored_after_a_failing_body_and_refused_without_a_terminal() {
             Try/raise(Io/Error/connection_refused());
         let taken(s: Io/Scope) -> Try(Io, Io/Error, Nat) =
             let t = Tty/open(s)!;
-            let _ = Tty/raw(s, t, x[])!;
+            let _ = Tty/raw(s, t, 0x[])!;
             body;
         let entry() -> /std/Io({}) =
             match Try/run(Try/scope(taken))!
@@ -104,7 +104,7 @@ fn raw_mode_lasts_across_a_body_that_suspends() {
         use /std/{Nat, Show, Try, Io, Tty};
         let taken(s: Io/Scope) -> Try(Io, Io/Error, Nat) =
             let t = Tty/open(s)!;
-            let _ = Tty/raw(s, t, x[])!;
+            let _ = Tty/raw(s, t, 0x[])!;
             let _ = Io/yield()!;
             Try/pure(7);
         let program() -> Io({}) =
@@ -131,8 +131,8 @@ fn the_terminal_is_read_and_written_as_a_stream() {
             let t = Tty/open(s)!;
             let chunk = Io/read(t, 8)!;
             match chunk
-            | bytes(b) => Io/write(t, x['>', ..b])
-            | ended() => Io/write(t, x['.'])
+            | bytes(b) => Io/write(t, 0x['>', ..b])
+            | ended() => Io/write(t, 0x['.'])
             end;
         let entry() -> /std/Io({}) =
             match Try/run(Try/scope(echoed))!

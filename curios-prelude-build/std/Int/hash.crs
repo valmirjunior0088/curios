@@ -2,7 +2,10 @@ use /std/{Nat, Int, Byte, Bytes, Eq, Ordering, proved, Bool};
 
 -- A run with every byte complemented, a byte at a time so that conversion carries it across a cons.
 let flipped(b: Bytes) -> Bytes =
-    match b | x[] => x[] | x[h, ..t] => x[Byte/not(h), ..flipped(t)] end;
+    match b
+    | 0x[] => 0x[]
+    | 0x[h, ..t] => 0x[Byte/not(h), ..flipped(t)]
+    end;
 
 -- A complement reverses two runs that part at a byte.
 let reversed(
@@ -11,11 +14,11 @@ let reversed(
     parted: Bool/Holds(Bytes/ord/below(a, b)),
 ) -> Bool/Holds(Bytes/ord/below(flipped(b), flipped(a))) =
     match a
-    | x[] => match parted end
-    | x[h, ..t] =>
+    | 0x[] => match parted end
+    | 0x[h, ..t] =>
         match b
-        | x[] => match parted end
-        | x[k, ..r] =>
+        | 0x[] => match parted end
+        | 0x[k, ..r] =>
             let (hn, kn) = (Byte/to_nat(h), Byte/to_nat(k));
             match Nat/ord(hn, kn)
             | gt() => match parted end
@@ -46,15 +49,15 @@ let reversed(
 let halves(
     a: Bytes,
     b: Bytes,
-    upper_a: Bool/Holds(Bytes/ord/below(x[0x7F], a)),
-    upper_b: Bool/Holds(Bytes/ord/below(x[0x7F], b)),
+    upper_a: Bool/Holds(Bytes/ord/below(0x[0x7F], a)),
+    upper_b: Bool/Holds(Bytes/ord/below(0x[0x7F], b)),
 ) -> Bool/Holds(Bytes/ord/below(flipped(a), b)) =
     match a
-    | x[] => match upper_a end
-    | x[h, ..t] =>
+    | 0x[] => match upper_a end
+    | 0x[h, ..t] =>
         match b
-        | x[] => match upper_b end
-        | x[k, ..r] =>
+        | 0x[] => match upper_b end
+        | 0x[k, ..r] =>
             let (hn, kn) = (Byte/to_nat(h), Byte/to_nat(k));
             match Nat/ord(127, hn)
             | lt() =>

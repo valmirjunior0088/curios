@@ -13,7 +13,7 @@ let sent: Request =
                 Field/of("Cookie", "s=1"),
                 Field/of("Content-Type", "text/plain"),
                 Field/of("Accept", "*/*")],
-        body = x['h', 'i'] };
+        body = 0x['h', 'i'] };
 
 -- The method, the URL, the fields' names and the content's length a request carries.
 let carried(r: Request) -> Str =
@@ -40,7 +40,7 @@ test a_redirect_keeps_the_method_and_content_its_status_says =
             carried(redirected(sent, 308, next)),
             "POST https://a.example/next Authorization,Cookie,Content-Type,Accept 2"),
         Test/equal(
-            carried(redirected(Request { ..sent, method = Method/head(), body = x[] }, 303, next)),
+            carried(redirected(Request { ..sent, method = Method/head(), body = 0x[] }, 303, next)),
             "HEAD https://a.example/next Authorization,Cookie,Content-Type,Accept 0")]);
 
 -- Another host, another port and a fall from `https` to `http` are each another origin, and the credentials stay behind.

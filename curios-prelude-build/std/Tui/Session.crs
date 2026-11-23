@@ -35,7 +35,7 @@ pub struct Session: Type {
 
 -- Every mode a session may set, undone in reverse: what the host writes when the terminal is given back, however the program ends, whichever of them the terminal confirmed.
 let leaving: Bytes =
-    x[
+    0x[
         ..ansi/keyboard_pop,
         ..ansi/off(Mode/in_band_resize()),
         ..ansi/off(Mode/grapheme_clusters()),
@@ -46,7 +46,7 @@ let leaving: Bytes =
 
 -- What a session asks the terminal where it opens: the keyboard protocol's flags, each mode it uses where the terminal supports it, and last the device attributes, which every terminal answers.
 let asked: Bytes =
-    x[
+    0x[
         ..ansi/keyboard_ask,
         ..ansi/ask(Mode/synchronized_output()),
         ..ansi/ask(Mode/grapheme_clusters()),
@@ -55,8 +55,8 @@ let asked: Bytes =
 
 -- What a session sets once the terminal has answered: the alternate screen, the hidden cursor, bracketed paste and focus events, and the keyboard protocol, grapheme clusters and in-band resize where the terminal confirmed them.
 let entering(support: Support) -> Bytes =
-    let where(confirmed: Bool, b: Bytes) -> Bytes = match confirmed | true => b | false => x[] end;
-    x[
+    let where(confirmed: Bool, b: Bytes) -> Bytes = match confirmed | true => b | false => 0x[] end;
+    0x[
         ..ansi/on(Mode/alternate_screen()),
         ..ansi/cursor_hide,
         ..ansi/on(Mode/bracketed_paste()),
@@ -231,7 +231,7 @@ let arrived(s: Session) -> Try(Io, Io/Error, Option(List(Input))) =
                 let flushing: Io(Result(Reader/Stop({}, {}), List(Input))) =
                     Reader/take(
                         s.input,
-                        ((): {}, held: Bytes) => Reader/Step/took(Input/flush(held).inputs, x[]),
+                        ((): {}, held: Bytes) => Reader/Step/took(Input/flush(held).inputs, 0x[]),
                         ());
                 let flushed = flushing!;
                 Try/pure(

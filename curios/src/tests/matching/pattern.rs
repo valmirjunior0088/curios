@@ -69,15 +69,15 @@ fn nested_list_pattern_dispatches_by_shape() {
     assert_eq!(run(source), b"7");
 }
 
-// A `Bytes` literal leaf (`x[]`/`x[h, ..t]`) nested inside a tuple field.
+// A `Bytes` literal leaf (`0x[]`/`0x[h, ..t]`) nested inside a tuple field.
 #[test]
 fn nested_bytes_pattern_dispatches_by_shape() {
     let source = r#"
         use /std/{Nat, Byte, Bytes, Str};
         let f(p : { Nat, Bytes }) -> Nat =
             match p
-            | (x, x[]) => x
-            | (x, x[h, ..t]) => Byte/to_nat(h)
+            | (x, 0x[]) => x
+            | (x, 0x[h, ..t]) => Byte/to_nat(h)
             end;
         /std/print(Nat/to_str(f((0, Str/to_bytes("A")))))
         "#;

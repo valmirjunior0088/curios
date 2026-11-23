@@ -57,7 +57,7 @@ test a_request_is_written_and_reads_back =
             Option/some(
                 "POST / HTTP/1.1\r\nHost: h:81\r\nConnection: close\r\nContent-Length: 2\r\n\r\nhi")),
         Test/equal(
-            wire(Request/render(Request/post(Url/lit("http://h/"), x[]))),
+            wire(Request/render(Request/post(Url/lit("http://h/"), 0x[]))),
             Option/some(
                 "POST / HTTP/1.1\r\nHost: h\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")),
         Test/equal(
@@ -146,10 +146,10 @@ test a_json_body_that_is_not_text_is_refused_where_it_stops =
         end;
     Test/equal(
         Str/join("|", [
-            answer(x['[', '1', '2', '3', 0xE5, ']']),
-            answer(x['[', '1', 'e', '1', 0xE5, ']']),
-            answer(x['[', '0', 0xE5, ']', '\n']),
-            answer(x['[', '1', 'e', 0xE5, ']']),
+            answer(0x['[', '1', '2', '3', 0xE5, ']']),
+            answer(0x['[', '1', 'e', '1', 0xE5, ']']),
+            answer(0x['[', '0', 0xE5, ']', '\n']),
+            answer(0x['[', '1', 'e', 0xE5, ']']),
             answer(Str/to_bytes("[1, 2]"))]),
         Str/flatten(["a JSON body is text at byte 4|a JSON body is text at byte 4|",
             "a JSON body is text at byte 2|a JSON body is text at byte 3|read"]));
@@ -164,10 +164,10 @@ test a_field_met_at_run_time_is_read_or_refused =
         Test/equal(Field/Name/of_str(""), Option/none()),
         Test/equal(Field/Name/of_str("one\r\nX-Injected"), Option/none()),
         Test/equal(Field/Value/of_str("one\r\nX-Injected: two"), Option/none()),
-        Test/equal(Field/Value/of_bytes(x['o', 0, 'k']), Option/none()),
+        Test/equal(Field/Value/of_bytes(0x['o', 0, 'k']), Option/none()),
         Test/assert(
             "a value holding a byte past ASCII, a tab and a space is a value",
-            Option/is_some(Field/Value/of_bytes(x['c', 'a', 'f', 0xE9, '\t', ' ']))),
+            Option/is_some(Field/Value/of_bytes(0x['c', 'a', 'f', 0xE9, '\t', ' ']))),
         Test/assert(
             "a value of 65536 octets is a value",
             Option/is_some(Field/Value/of_str(Str/repeat("x", 65536)))),

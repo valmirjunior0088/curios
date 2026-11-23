@@ -59,7 +59,7 @@ const PAIR = `
 use /std/{Nat, Str, print};
 foreign pair(Nat, Bytes) -> {code: Nat, ok: Bool};
 let main() -> /std/Io({}) =
-    let r = pair(1, x[])!;
+    let r = pair(1, 0x[])!;
     print(Str/flatten([Nat/to_str(r.code), " ", match r.ok | true => "ok" | false => "not ok" end]));
 main()
 `;
@@ -68,7 +68,7 @@ const SPLIT = `
 use /std/{Bytes, List, Nat, Str, print};
 foreign split(Bytes) -> {head: Bytes, count: Nat, rest: List(Bytes)};
 let main() -> /std/Io({}) =
-    let r = split(x[1, 2, 3])!;
+    let r = split(0x[1, 2, 3])!;
     print(Str/flatten([Nat/to_str(Bytes/to_nat(r.head)), " ", Nat/to_str(r.count), " ", Str/join(",", List/map(r.rest, (b) => Nat/to_str(Bytes/to_nat(b))))]));
 main()
 `;
@@ -76,7 +76,7 @@ main()
 const TAKE = `
 foreign token() -> Handle;
 foreign take(Nat, Int, Bool, Byte, Flt, Bytes, List(Nat), List(Int), List(Bool), List(Bytes), List(Handle)) -> {};
-/std/Io/bind(token(), (h) => take(18446744073709551615, -5, true, 200, 1.5, x[1, 2], [1, 2], [-1, 3], [true, false], [x[7], x[]], [h]))
+/std/Io/bind(token(), (h) => take(18446744073709551615, -5, true, 200, 1.5, 0x[1, 2], [1, 2], [-1, 3], [true, false], [0x[7], 0x[]], [h]))
 `;
 
 const LISTS = `
@@ -93,7 +93,7 @@ use /std/{Nat, Str, Option, print};
 foreign maybe(Option(Nat), Option(Bytes)) -> Option(Nat);
 let main() -> /std/Io({}) =
     let a = maybe(Option/some(5), Option/none())!;
-    let b = maybe(Option/none(), Option/some(x[1, 2]))!;
+    let b = maybe(Option/none(), Option/some(0x[1, 2]))!;
     print(Str/flatten([Nat/to_str(Option/unwrap_or(a, 0)), " ", match b | some(_) => "some" | none() => "none" end]));
 main()
 `;
@@ -103,7 +103,7 @@ use /std/{Io, Proc};
 foreign keep(Bytes) -> Bytes;
 foreign poke() -> {};
 let main() -> /std/Try(Io, Io/Error, {}) =
-    let b = x[0x61, 0x62, 0x63];
+    let b = 0x[0x61, 0x62, 0x63];
     let r = keep(b)!;
     let _ = poke()!;
     let _ = Io/write(Proc/stdout, b)!;
@@ -121,7 +121,7 @@ use /std/{Io, Show, Try, print};
 foreign token() -> Handle;
 let main() -> /std/Io({}) =
     let h = token()!;
-    let r = Try/run(Io/write(h, x[0x68, 0x69]))!;
+    let r = Try/run(Io/write(h, 0x[0x68, 0x69]))!;
     match r
     | success(_) => print(" wrote")
     | failure(e) => print(Show/show(e))
@@ -139,7 +139,7 @@ let main() -> /std/Io({}) =
         match r | success(bytes(_, @_)) => "chunk" | success(ended()) => "eof" | failure(e) => Show/show(e) end;
     let stdin = input()!;
     let stdout = output()!;
-    let w = Try/run(Io/write(stdin, x[1]))!;
+    let w = Try/run(Io/write(stdin, 0x[1]))!;
     let out = Try/run(Io/read(stdout, 4))!;
     let rest = Try/run(Io/read(stdin, 4))!;
     let h = token()!;

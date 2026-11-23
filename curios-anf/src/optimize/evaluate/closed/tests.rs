@@ -306,7 +306,7 @@ fn folded(mut builder: Builder, value: ValueId) -> Constant {
     module.constant(constant).expect("live constant").clone()
 }
 
-/// `uncons s | x[] => 0 | x[_, ..t] => BytesLen(t)` over `x[1, 2, 3]`: the cons arm is handed the two bytes after the head, the suffix the runtime's peel hands it.
+/// `uncons s | 0x[] => 0 | 0x[_, ..t] => BytesLen(t)` over `0x[1, 2, 3]`: the cons arm is handed the two bytes after the head, the suffix the runtime's peel hands it.
 #[test]
 fn a_peel_hands_the_cons_arm_the_suffix_after_the_element() {
     let mut builder = Builder::new();

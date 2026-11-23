@@ -9,7 +9,7 @@ fn declaration_produces_a_wasm_import() {
         r#"
             foreign frobnicate(Nat, Bytes) -> Nat;
             let entry() -> /std/Io({}) =
-                let n = frobnicate(5, x[0x00, 0x01])!;
+                let n = frobnicate(5, 0x[0x00, 0x01])!;
                 /std/print(/std/Nat/to_str(n));
             entry()
         "#,
@@ -80,7 +80,7 @@ fn a_library_row_and_a_program_row_import_by_the_names_they_are_declared_under()
         r#"
             foreign frobnicate(Nat) -> Nat;
             let entry() -> /std/Io({}) =
-                let _ = /std/Try/run(/std/Io/write(/std/Proc/stdout, x[0x00]))!;
+                let _ = /std/Try/run(/std/Io/write(/std/Proc/stdout, 0x[0x00]))!;
                 let n = frobnicate(5)!;
                 /std/print(/std/Nat/to_str(n));
             entry()

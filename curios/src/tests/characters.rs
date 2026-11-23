@@ -65,7 +65,7 @@ fn a_packed_literal_takes_character_atoms() {
     assert_eq!(
         run(r#"
         use /std/{Bytes, Str, Result, Io};
-        /std/print(Result/unwrap_or(Str/of_bytes(x['H', 'i', '\n']), ""))
+        /std/print(Result/unwrap_or(Str/of_bytes(0x['H', 'i', '\n']), ""))
         "#),
         b"Hi\n"
     );

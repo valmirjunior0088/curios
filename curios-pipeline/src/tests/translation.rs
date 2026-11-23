@@ -328,12 +328,12 @@ fn literals_are_written_as_the_grammar_spells_them() {
         use /std/{Nat, Str, List, Bytes};
         pub let text: Str = "body";
         pub let items: List(Nat) = [1, 2, 3];
-        pub let bytes: Bytes = x[0x48, 0x69];
+        pub let bytes: Bytes = 0x[0x48, 0x69];
     "#;
 
     assert_eq!(body(source, "text"), "\"body\"");
     assert_eq!(body(source, "items"), "[1, 2, 3]");
-    assert_eq!(body(source, "bytes"), "x[0x48, 0x69]");
+    assert_eq!(body(source, "bytes"), "0x[0x48, 0x69]");
 }
 
 #[test]

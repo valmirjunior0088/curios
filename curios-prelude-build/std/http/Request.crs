@@ -21,7 +21,7 @@ satisfy Spell(Request) {
 
 --- A `GET` of `url`.
 pub let get(url: Url) -> Request =
-    Request { method = Method/get(), url = url, headers = [], body = x[] };
+    Request { method = Method/get(), url = url, headers = [], body = 0x[] };
 
 --- A `POST` of `body` to `url`.
 pub let post(url: Url, body: Bytes) -> Request =
@@ -67,12 +67,12 @@ let states_length(m: Method) -> Bool =
 let length_line(r: Request) -> Bytes =
     match Bytes/len(r.body) != 0 || states_length(r.method)
     | true => Str/to_bytes(Fmt/render("Content-Length: %\r\n")(Bytes/len(r.body)))
-    | false => x[]
+    | false => 0x[]
     end;
 
 --- The request as the bytes sent on the wire: the request line as HTTP/1.1, `Host`, `Connection: close` since a client keeps no connection, the length where there is a body or the method always states one, the headers the renderer does not own, then the body. The target and the host are percent-encoded wherever the wire cannot carry an octet of them, so every request can be sent and nothing is refused.
 pub let render(r: Request) -> Bytes =
-    x[
+    0x[
         ..Str/to_bytes(Method/to_str(r.method)),
         ' ',
         ..Url/escaped(target(r.url)).bytes,

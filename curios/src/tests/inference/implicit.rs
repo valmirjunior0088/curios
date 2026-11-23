@@ -183,8 +183,8 @@ fn a_solution_whose_reduct_does_not_recheck_is_committed_as_written() {
 
         let hop(@b: Bytes, some: Holds(0 < Bytes/len(b))) -> Nat =
             match b
-            | x[] => match some end
-            | x[_, .._] => 1
+            | 0x[] => match some end
+            | 0x[_, .._] => 1
             end;
 
         let reach(b: Bytes, k: Nat, @within: Holds(k <= Bytes/len(b)), @here: Holds(k < Bytes/len(b))) -> Nat =
@@ -194,7 +194,7 @@ fn a_solution_whose_reduct_does_not_recheck_is_committed_as_written() {
             -> Eq()(reach(b, k, @within, @here), reach(b, k, @within, @here)) =
             Eq/refl();
 
-        print(Nat/to_str(reach(x[1, 2], 0, @True/qed(), @True/qed())))
+        print(Nat/to_str(reach(0x[1, 2], 0, @True/qed(), @True/qed())))
         "#);
 
     assert_eq!(output, b"1");

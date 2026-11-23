@@ -18,22 +18,22 @@ let top_below(n: Nat) -> Bool/Holds(top(n) < 16) =
 -- The first byte of a number of rank `l` and top `t`, behind a `0xFF` for every seven of its rank past six.
 let first(l: Nat, t: Nat, @fits: Bool/Holds(t < 16)) -> Bytes =
     match l < 7
-    | true => x[Nat/to_byte(0x80 + 16 * l + t)]
-    | false => x[0xFF, ..first(l - 7, t)]
+    | true => 0x[Nat/to_byte(0x80 + 16 * l + t)]
+    | false => 0x[0xFF, ..first(l - 7, t)]
     end;
 
 -- The bytes after a number's first, most significant first.
 let rest(n: Nat) -> Bytes =
     match n < 16
-    | true => x[]
-    | false => x[..rest(n / 256), Nat/to_byte(n % 256)]
+    | true => 0x[]
+    | false => 0x[..rest(n / 256), Nat/to_byte(n % 256)]
     end;
 
 -- The encoding in one walk: the rank counted on the way down, the first byte written where the top is left, and the bytes appended on the way back.
 let from(n: Nat, l: Nat) -> Bytes =
     match n < 16
     | true => first(l, n)
-    | false => x[..from(n / 256, l + 1), Nat/to_byte(n % 256)]
+    | false => 0x[..from(n / 256, l + 1), Nat/to_byte(n % 256)]
     end;
 
 --- A natural's encoding, in the order of the numbers: a smaller number's is before a larger one's as `Bytes/ord` reads them, and no number's begins another's.
@@ -46,18 +46,20 @@ pub let hash(n: Nat) -> Bytes =
 let from_count(
     n: Nat,
     l: Nat,
-) -> Eq()(from(n, l), x[..first(l + rank(n), top(n), @top_below(n)), ..rest(n)]) =
+) -> Eq()(from(n, l), 0x[..first(l + rank(n), top(n), @top_below(n)), ..rest(n)]) =
     Nat/descend(
         (m: Nat) => m,
         (m) =>
-            (l: Nat) -> Eq()(from(m, l), x[..first(l + rank(m), top(m), @top_below(m)), ..rest(m)]),
+            (l: Nat) -> Eq()(
+                from(m, l),
+                0x[..first(l + rank(m), top(m), @top_below(m)), ..rest(m)]),
         (m, ih) =>
             (l) =>
                 match m < 16
                 | true => Eq/refl()
                 | false =>
                     Eq/cong(
-                        (z: Bytes) => x[..z, Nat/to_byte(m % 256)],
+                        (z: Bytes) => 0x[..z, Nat/to_byte(m % 256)],
                         ih(m / 256, proved())(l + 1))
                 end,
         n)(
@@ -123,12 +125,12 @@ let first_ranks(
     @fa: Bool/Holds(ta < 16),
     @fb: Bool/Holds(tb < 16),
     under: Bool/Holds(la < lb),
-) -> Bool/Holds(Bytes/ord/below(x[..first(la, ta), ..s], x[..first(lb, tb), ..u])) =
+) -> Bool/Holds(Bytes/ord/below(0x[..first(la, ta), ..s], 0x[..first(lb, tb), ..u])) =
     Nat/descend(
         (m: Nat) => m,
         (l) =>
             (lb: Nat, under: Bool/Holds(l < lb)) -> Bool/Holds(
-                Bytes/ord/below(x[..first(l, ta), ..s], x[..first(lb, tb), ..u])),
+                Bytes/ord/below(0x[..first(l, ta), ..s], 0x[..first(lb, tb), ..u])),
         (l, ih) =>
             (lb, under) =>
                 match l < 7
@@ -146,7 +148,7 @@ let first_ranks(
                             Nat/to_byte(0x80 + 16 * l + ta),
                             0xFF,
                             s,
-                            x[..first(lb - 7, tb), ..u],
+                            0x[..first(lb - 7, tb), ..u],
                             proved())
                     end
                 | false => match lb < 7 | false => ih(l - 7, proved())(lb - 7, proved()) end
@@ -167,12 +169,12 @@ let first_tops(
     @fb: Bool/Holds(tb < 16),
     ranks: Bool/Holds(la == lb),
     under: Bool/Holds(ta < tb),
-) -> Bool/Holds(Bytes/ord/below(x[..first(la, ta), ..s], x[..first(lb, tb), ..u])) =
+) -> Bool/Holds(Bytes/ord/below(0x[..first(la, ta), ..s], 0x[..first(lb, tb), ..u])) =
     Nat/descend(
         (m: Nat) => m,
         (l) =>
             (lb: Nat, ranks: Bool/Holds(l == lb)) -> Bool/Holds(
-                Bytes/ord/below(x[..first(l, ta), ..s], x[..first(lb, tb), ..u])),
+                Bytes/ord/below(0x[..first(l, ta), ..s], 0x[..first(lb, tb), ..u])),
         (l, ih) =>
             (lb, ranks) =>
                 match l < 7
@@ -214,12 +216,12 @@ let first_same(
     ranks: Bool/Holds(la == lb),
     tops: Bool/Holds(ta == tb),
     parted: Bool/Holds(Bytes/ord/below(s, u)),
-) -> Bool/Holds(Bytes/ord/below(x[..first(la, ta), ..s], x[..first(lb, tb), ..u])) =
+) -> Bool/Holds(Bytes/ord/below(0x[..first(la, ta), ..s], 0x[..first(lb, tb), ..u])) =
     Nat/descend(
         (m: Nat) => m,
         (l) =>
             (lb: Nat, ranks: Bool/Holds(l == lb)) -> Bool/Holds(
-                Bytes/ord/below(x[..first(l, ta), ..s], x[..first(lb, tb), ..u])),
+                Bytes/ord/below(0x[..first(l, ta), ..s], 0x[..first(lb, tb), ..u])),
         (l, ih) =>
             (lb, ranks) =>
                 match l < 7
@@ -291,26 +293,26 @@ let tails(
                         Bytes/ord/below/onto(
                             rest(m / 256),
                             rest(b / 256),
-                            x[Nat/to_byte(m % 256)],
-                            x[Nat/to_byte(b % 256)],
+                            0x[Nat/to_byte(m % 256)],
+                            0x[Nat/to_byte(b % 256)],
                             ih(m / 256, proved())(b / 256, Bool/True/qed(), proved(), tops))
                     | _ =>
                         Eq/subst(
                             (q: Nat) =>
                                 Bool/Holds(
                                     Bytes/ord/below(
-                                        x[..rest(m / 256), Nat/to_byte(m % 256)],
-                                        x[..rest(q), Nat/to_byte(b % 256)])),
+                                        0x[..rest(m / 256), Nat/to_byte(m % 256)],
+                                        0x[..rest(q), Nat/to_byte(b % 256)])),
                             Nat/le/antisym(m / 256, b / 256, proved(), proved()),
                             Bytes/ord/below/past(
                                 rest(m / 256),
-                                x[Nat/to_byte(m % 256)],
-                                x[Nat/to_byte(b % 256)],
+                                0x[Nat/to_byte(m % 256)],
+                                0x[Nat/to_byte(b % 256)],
                                 Bytes/ord/below/of_heads(
                                     Nat/to_byte(m % 256),
                                     Nat/to_byte(b % 256),
-                                    x[],
-                                    x[],
+                                    0x[],
+                                    0x[],
                                     proved())))
                     end
                 end,
@@ -330,8 +332,8 @@ let split(
     b: Nat,
     parted: Bool/Holds(
         Bytes/ord/below(
-            x[..first(rank(a), top(a), @top_below(a)), ..rest(a)],
-            x[..first(rank(b), top(b), @top_below(b)), ..rest(b)])),
+            0x[..first(rank(a), top(a), @top_below(a)), ..rest(a)],
+            0x[..first(rank(b), top(b), @top_below(b)), ..rest(b)])),
 ) -> Bool/Holds(Bytes/ord/below(hash(a), hash(b))) =
     Eq/subst(
         (z: Bytes) => Bool/Holds(Bytes/ord/below(z, hash(b))),
@@ -339,7 +341,7 @@ let split(
         Eq/subst(
             (z: Bytes) =>
                 Bool/Holds(
-                    Bytes/ord/below(x[..first(rank(a), top(a), @top_below(a)), ..rest(a)], z)),
+                    Bytes/ord/below(0x[..first(rank(a), top(a), @top_below(a)), ..rest(a)], z)),
             Eq/sym(from_count(b, 0)),
             parted));
 
@@ -420,24 +422,24 @@ pub let injective(a: Nat, b: Nat, same: Eq()(hash(a), hash(b))) -> Eq()(a, b) =
                 Bytes/ord/refl(hash(a)))));
 
 --- An encoding leads with a byte in the upper half: the one byte `0x7F` is below every encoding, which is what leaves the lower half to the complements an integer below zero is written as.
-pub let leads(n: Nat) -> Bool/Holds(Bytes/ord/below(x[0x7F], hash(n))) =
+pub let leads(n: Nat) -> Bool/Holds(Bytes/ord/below(0x[0x7F], hash(n))) =
     let fits: Bool/Holds(top(n) < 16) = top_below(n);
     Eq/subst(
-        (z: Bytes) => Bool/Holds(Bytes/ord/below(x[0x7F], z)),
+        (z: Bytes) => Bool/Holds(Bytes/ord/below(0x[0x7F], z)),
         Eq/sym(from_count(n, 0)),
         match rank(n) < 7
         | true =>
             Bytes/ord/below/of_heads(
                 0x7F,
                 Nat/to_byte(0x80 + 16 * rank(n) + top(n)),
-                x[],
+                0x[],
                 rest(n),
                 proved())
         | false =>
             Bytes/ord/below/of_heads(
                 0x7F,
                 0xFF,
-                x[],
-                x[..first(rank(n) - 7, top(n)), ..rest(n)],
+                0x[],
+                0x[..first(rank(n) - 7, top(n)), ..rest(n)],
                 Bool/True/qed())
         end);

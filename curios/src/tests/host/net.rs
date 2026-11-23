@@ -128,7 +128,7 @@ fn read_one_chunk(open: &str) -> String {
             let r = Try/run(Try/scope((scope) =>
                 let s = ${open}!;
                 let c = Io/read(s, 64)!;
-                Try/pure(match c | bytes(b, @_) => b | _ => x[] end)))!;
+                Try/pure(match c | bytes(b, @_) => b | _ => 0x[] end)))!;
             match r
             | success(bytes) => Io/bind(Try/run(Io/write(Proc/stdout, bytes)), (_) => Io/pure(()))
             | failure(e) => /std/print(Show/show(e))
@@ -173,7 +173,7 @@ fn echo_server(listener: &str, prefix: &str) -> String {
             let r = Try/run(Io/read(c, 64))!;
             match r
             | success(bytes(bytes, @_)) =>
-                let _ = Try/run(Io/write(c, x[..Str/to_bytes("${prefix}"), ..bytes]))!;
+                let _ = Try/run(Io/write(c, 0x[..Str/to_bytes("${prefix}"), ..bytes]))!;
                 Io/pure(())
             | _ => Io/pure(())
             end;
@@ -243,7 +243,7 @@ fn listen_and_accept_serve_one_connection_by_hand() {
                 let r = Io/read(c, 64)!;
                 let reply =
                     match r
-                    | bytes(bytes, @_) => Io/write(c, x[..Str/to_bytes("one: "), ..bytes])
+                    | bytes(bytes, @_) => Io/write(c, 0x[..Str/to_bytes("one: "), ..bytes])
                     | _ => Try/pure(())
                     end;
                 reply);
@@ -456,7 +456,7 @@ fn a_foreign_record_may_answer_references_in_any_slot() {
         use /std/{Bytes, List, Nat, Str};
         foreign split(Bytes) -> {head: Bytes, count: Nat, rest: List(Bytes)};
         let entry() -> /std/Io({}) =
-            let r = split(x[1, 2, 3])!;
+            let r = split(0x[1, 2, 3])!;
             /std/print(Str/flatten([
                 Nat/to_str(Bytes/to_nat(r.head)), " ",
                 Nat/to_str(r.count), " ",
@@ -542,7 +542,7 @@ fn an_option_crosses_both_ways() {
             let matched = Option/unwrap_or(a, 0) == 42
                 && Option/is_none(b)
                 && c.seen
-                && Option/unwrap_or(c.text, x[]) == Str/to_bytes("HI")
+                && Option/unwrap_or(c.text, 0x[]) == Str/to_bytes("HI")
                 && d.seen == false
                 && Option/is_none(d.text);
             let _ = /std/Proc/exit(@{}, match matched | true => 7 | false => 1 end)!;
@@ -576,7 +576,7 @@ fn a_list_element_past_the_wire_is_refused() {
         foreign nats(List(Nat)) -> List(Nat);
         let entry() -> /std/Io({}) =
             let v = /std/Proc/env("CURIOS_UNSET_LIST")!;
-            let _ = nats([1, Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, x[]))])!;
+            let _ = nats([1, Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, 0x[]))])!;
             /std/Io/pure(());
         entry()
         "#

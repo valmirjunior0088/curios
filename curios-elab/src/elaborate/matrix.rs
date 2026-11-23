@@ -3100,7 +3100,7 @@ fn instance(context: &Context, this: &Pattern, that: &Pattern) -> bool {
 fn opening(sequence: Sequence) -> &'static str {
     match sequence {
         Sequence::List => "[",
-        Sequence::Bytes => "x[",
+        Sequence::Bytes => "0x[",
     }
 }
 

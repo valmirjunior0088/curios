@@ -39,10 +39,10 @@ let seg_key(pre: Bytes, seg: Seg) -> Bytes =
     match seg
     | plain(name) =>
         let nb = Str/to_bytes(name);
-        x[..pre, 'p', ..Str/to_bytes(Nat/to_str(Bytes/len(nb))), ':', ..nb]
+        0x[..pre, 'p', ..Str/to_bytes(Nat/to_str(Bytes/len(nb))), ':', ..nb]
     | at(name, index) =>
         let nb = Str/to_bytes(name);
-        x[
+        0x[
             ..pre,
             'a',
             ..Str/to_bytes(Nat/to_str(Bytes/len(nb))),
@@ -291,7 +291,7 @@ pub let apply_assign(b: Build, path: List(Str), v: Toml) -> Result(Error, Build)
     match walk(
         b.root,
         b.side,
-        x[],
+        0x[],
         [..b.scope, ..plains(path)],
         List/len(b.scope),
         Act/act_value(v))
@@ -302,7 +302,7 @@ pub let apply_assign(b: Build, path: List(Str), v: Toml) -> Result(Error, Build)
 
 --- A `[table]` header: its path becomes the scope later pairs are written under, or the rule it broke.
 pub let apply_header(b: Build, path: List(Str)) -> Result(Error, Build) =
-    match walk(b.root, b.side, x[], plains(path), 0, Act/act_table())
+    match walk(b.root, b.side, 0x[], plains(path), 0, Act/act_table())
     | success((root2, side2, resolved)) =>
         Result/success(Build { root = root2, side = side2, scope = resolved })
     | failure(r) => Result/failure(Error/rule(path, r))
@@ -310,7 +310,7 @@ pub let apply_header(b: Build, path: List(Str)) -> Result(Error, Build) =
 
 --- A `[[table]]` header: one element is appended to the array at its path, which becomes the scope, or the rule it broke.
 pub let apply_aot(b: Build, path: List(Str)) -> Result(Error, Build) =
-    match walk(b.root, b.side, x[], plains(path), 0, Act/act_many())
+    match walk(b.root, b.side, 0x[], plains(path), 0, Act/act_many())
     | success((root2, side2, resolved)) =>
         Result/success(Build { root = root2, side = side2, scope = resolved })
     | failure(r) => Result/failure(Error/rule(path, r))

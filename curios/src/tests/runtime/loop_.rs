@@ -26,10 +26,10 @@ fn accumulation_loops_are_linear_by_construction() {
         let go(i : Nat, acc : Bytes) -> Bytes =
             match i
             | 0 => acc
-            | k + 1 => go(k, x[..acc, ..Str/to_bytes("0123456789")])
+            | k + 1 => go(k, 0x[..acc, ..Str/to_bytes("0123456789")])
             end;
         let entry() -> /std/Io({}) =
-            let built = go(25000, x[]);
+            let built = go(25000, 0x[]);
             let head = Bytes/slice(built, 0, 10);
             let _ = Try/run(Io/write(Proc/stdout, head))!;
             let _ = /std/print(Nat/to_str(Bytes/len(built)))!;
@@ -49,19 +49,19 @@ fn peel_loops_are_linear_by_construction() {
         let build(i : Nat, acc : Bytes) -> Bytes =
             match i
             | 0 => acc
-            | k + 1 => build(k, x[..acc, ..Str/to_bytes("0123456789")])
+            | k + 1 => build(k, 0x[..acc, ..Str/to_bytes("0123456789")])
             end;
         let entry() -> /std/Io({}) =
-            let built = build(10000, x[]);
+            let built = build(10000, 0x[]);
             let c = Cell/new()!;
             let _ = Cell/fill(c, built)!;
             let drain(c: Cell(Bytes), fuel : Nat, acc : Nat) -> Io(Nat) =
                 match fuel
                 | 0 => Io/pure(acc)
                 | f + 1 =>
-                    match Option/unwrap_or(Cell/poll(c)!, x[])
-                    | x[] => Io/pure(acc)
-                    | x[h, ..t] =>
+                    match Option/unwrap_or(Cell/poll(c)!, 0x[])
+                    | 0x[] => Io/pure(acc)
+                    | 0x[h, ..t] =>
                         let next = Cell/new()!;
                         let _ = Cell/fill(next, t)!;
                         drain(next, f, acc + (Byte/to_nat(h) - 48))
@@ -233,16 +233,16 @@ fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
         use /std/{Nat, Str, Bytes, Io};
         let count(b : Bytes) -> Nat =
             match b
-            | x[] => 0
-            | x[h, ..t] => count(t) + 1
+            | 0x[] => 0
+            | 0x[h, ..t] => count(t) + 1
             end;
         let build(n : Nat, acc : Bytes) -> Bytes =
             match n
             | 0 => acc
-            | p + 1 => build(p, x[0x61, ..acc])
+            | p + 1 => build(p, 0x[0x61, ..acc])
             end;
         let entry() -> /std/Io({}) =
-            let _ = /std/print(Nat/to_str(count(build(${depth}, x[]))))!;
+            let _ = /std/print(Nat/to_str(count(build(${depth}, 0x[]))))!;
             /std/Io/pure(());
         entry()
         "#,

@@ -181,7 +181,7 @@ pub struct Decoded: pub Type {
 
 --- A body's reading before it has decoded anything.
 pub let undecoded: Decoded =
-    Decoded { content = x[], at = Chunking/size_line(0, false) };
+    Decoded { content = 0x[], at = Chunking/size_line(0, false) };
 
 -- How many octets a carriage return the searched octets end with adds to what is known.
 let carried(ending: Bool) -> Nat =
@@ -244,7 +244,7 @@ and data_from(
         | true =>
             size_from(
                 limits,
-                x[..content, ..Bytes/slice(held, at + 2, size)],
+                0x[..content, ..Bytes/slice(held, at + 2, size)],
                 0,
                 false,
                 Bytes/drop(held, at + 4 + size))
@@ -304,7 +304,7 @@ pub let body(
     held: Bytes,
 ) -> Reader/Step(Decoded, Refusal, Bytes) =
     match framing
-    | none() => Reader/Step/took(x[], held)
+    | none() => Reader/Step/took(0x[], held)
     | length(n) =>
         match length(limits, n, held)
         | took(taken, rest) => Reader/Step/took(taken, rest)
@@ -326,7 +326,7 @@ pub let whole(limits: Limits, framing: Framing, held: Bytes) -> Result(Refusal, 
     | refused(why) => Result/failure(why)
     | more(_, kept) =>
         match framing
-        | close() => Result/success((kept, x[]))
+        | close() => Result/success((kept, 0x[]))
         | _ => Result/failure(Refusal/incomplete())
         end
     end;

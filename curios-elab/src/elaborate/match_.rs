@@ -444,7 +444,7 @@ impl SequenceSplit {
                 }
                 Atoms::Bytes => {
                     let atom_type = Subterm::Intrinsic(Intrinsic::ByteType);
-                    // The cons value `head :: tail`, encoded as the monoid operation on the singleton `[head]` and the tail. A `Bytes` literal holds only concrete bytes, so the singleton of the symbolic byte `head` is `append(x[], head)` (an atom appended to the empty packed sequence), not a literal run.
+                    // The cons value `head :: tail`, encoded as the monoid operation on the singleton `[head]` and the tail. A `Bytes` literal holds only concrete bytes, so the singleton of the symbolic byte `head` is `append(0x[], head)` (an atom appended to the empty packed sequence), not a literal run.
                     let singleton: Term = Subterm::Intrinsic(Intrinsic::BytesAppend {
                         bytes: Subterm::Intrinsic(Intrinsic::Bytes(Binary::empty())).into(),
                         element: Term::free_var(atom),

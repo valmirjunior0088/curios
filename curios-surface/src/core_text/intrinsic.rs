@@ -1,6 +1,6 @@
 //! An intrinsic node: `#` and its Core variant's name, then its operands in the order Core holds them; in a reader's spelling, as a program writes it.
 //!
-//! **A literal form builds its own node.** A numeral is the `Nat` it spells, a signed numeral the `Int`, `+0` its zero, a decimal or a non-finite literal the `Flt`, `true` and `false` the `Bool`s, and `x[…]` the `Bytes` holding those bytes, each the value a program's literal is where nothing pins its type; every other value of a carrier states its variant, `#Byte(7)`, `#Handle(2)`, and a NaN no literal spells its bits, `#Flt(0x7FF8000000000001)`. A `Nat` over a term is `#Nat(Succ(3, n))`. An operation's operands are its term operands, a rounding as its variant's name, a list of operands between brackets, and an instance as a decorator's universes are written: `#FltAdd(TiesToEven, a, b)`, `#BytesConcat([a, b])`. A `Flt` is the literal that reads back as it bit for bit, or its bits where no literal spells it: a NaN other than the default one of either sign.
+//! **A literal form builds its own node.** A numeral is the `Nat` it spells, a signed numeral the `Int`, `+0` its zero, a decimal or a non-finite literal the `Flt`, `true` and `false` the `Bool`s, and `0x[…]` the `Bytes` holding those bytes, each the value a program's literal is where nothing pins its type; every other value of a carrier states its variant, `#Byte(7)`, `#Handle(2)`, and a NaN no literal spells its bits, `#Flt(0x7FF8000000000001)`. A `Nat` over a term is `#Nat(Succ(3, n))`. An operation's operands are its term operands, a rounding as its variant's name, a list of operands between brackets, and an instance as a decorator's universes are written: `#FltAdd(TiesToEven, a, b)`, `#BytesConcat([a, b])`. A `Flt` is the literal that reads back as it bit for bit, or its bits where no literal spells it: a NaN other than the default one of either sign.
 
 use {
     super::{
@@ -1450,7 +1450,7 @@ fn flt_read(value: &CoreValue) -> Result<Floating, ReadError> {
     }
 }
 
-/// A packed literal, `x[0x01, 0x02]`: its bytes, each a numeral.
+/// A packed literal, `0x[0x01, 0x02]`: its bytes, each a numeral.
 pub fn packed_read(
     segments: &[BytesSegment<CoreText>],
     span: Option<&Span>,

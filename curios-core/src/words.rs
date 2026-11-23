@@ -173,7 +173,7 @@ impl Sequence for Bytes {
                     Subterm::Intrinsic(intrinsic) => pending.push(Pending::Intrinsic(intrinsic)),
                     _ => push(Segment::Chunk(term.clone())),
                 },
-                // A concrete byte is a one-element run, so it merges with an abutting run and meets `concat(base, x[b])`; a symbolic one is a single element, whose contents are unknown and whose length is one.
+                // A concrete byte is a one-element run, so it merges with an abutting run and meets `concat(base, 0x[b])`; a symbolic one is a single element, whose contents are unknown and whose length is one.
                 Pending::Appended(element) => push(generator(element)),
                 Pending::Intrinsic(intrinsic) => match intrinsic {
                     Intrinsic::Bytes(value) => push(Segment::Run(Packed {
@@ -220,7 +220,7 @@ impl Sequence for Bytes {
         word
     }
 
-    /// A run is a `Bytes` literal, a single element the one-byte `append(x[], b)`, and a window its `BytesSlice`.
+    /// A run is a `Bytes` literal, a single element the one-byte `append(0x[], b)`, and a window its `BytesSlice`.
     fn rebuild(&self, word: Word<Words<Bytes>>) -> Term {
         let into_term = |segment| match segment {
             Segment::Run(Packed { bytes }) => Term::intrinsic(Intrinsic::Bytes(bytes)),

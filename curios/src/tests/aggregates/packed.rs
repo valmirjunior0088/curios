@@ -65,12 +65,12 @@ fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
         use /std/{Nat, Byte, Bytes, Bool, Str, Option, Io};
 
         let front(b: Bytes) -> Bytes =
-            match b | x[] => x[] | x[h, ..t] => x[h, ..front(t)] end;
+            match b | 0x[] => 0x[] | 0x[h, ..t] => 0x[h, ..front(t)] end;
 
         let cut(b: Bytes, k: Nat) -> Bool =
             match k <= Bytes/len(b)
             | true =>
-                let joined = x[..Bytes/slice(b, 0, k), ..Bytes/drop(b, k)];
+                let joined = 0x[..Bytes/slice(b, 0, k), ..Bytes/drop(b, k)];
                 joined == b && Bytes/len(joined) == Bytes/len(b)
             | false => false
             end;
@@ -81,7 +81,7 @@ fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
         let thirds(b: Bytes, k: Nat) -> Bool =
             match 2 * k <= Bytes/len(b)
             | true =>
-                x[..Bytes/slice(b, 0, k), ..Bytes/slice(b, k, k), ..Bytes/drop(b, 2 * k)] == b
+                0x[..Bytes/slice(b, 0, k), ..Bytes/slice(b, k, k), ..Bytes/drop(b, 2 * k)] == b
             | false => true
             end;
 
@@ -101,8 +101,8 @@ fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
             match 2 <= Bytes/len(b)
             | true =>
                 let (h, k) = (Bytes/get(b, 0), Bytes/get(b, 1));
-                let short = x[0x02, h, k];
-                let long = x[0x02, h, k, h];
+                let short = 0x[0x02, h, k];
+                let long = 0x[0x02, h, k, h];
                 Bytes/len(short) == 3
                     && Bytes/get(short, 0) == 0x02
                     && Bytes/get(short, 1) == h
@@ -166,13 +166,13 @@ fn a_run_whose_payload_holds_room_crosses_to_a_host_as_its_run() {
             let arrived = Try/run(Io/read(Proc/stdin, 64))!;
             match arrived
             | success(bytes(leaf)) =>
-                let two = x[..leaf, ..leaf];
+                let two = 0x[..leaf, ..leaf];
                 let flat_two = settled(two);
-                let three = x[..two, ..leaf];
+                let three = 0x[..two, ..leaf];
                 let flat_three = settled(three);
-                let left = x[..three, ..leaf];
+                let left = 0x[..three, ..leaf];
                 let flat_left = settled(left);
-                let _ = Try/run(Io/write(Proc/stdout, x[..flat_two, ..flat_three, ..flat_left]))!;
+                let _ = Try/run(Io/write(Proc/stdout, 0x[..flat_two, ..flat_three, ..flat_left]))!;
                 let _ = Try/run(Io/write(Proc/stdout, left))!;
                 Io/pure(())
             | _ => Io/pure(())

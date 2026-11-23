@@ -33,26 +33,26 @@ fn a_metavariable_is_solved_through_the_cancellation() {
     );
 }
 
-// A metavariable is solved through the packed-literal view: `x[h]` is `append(x[], ?h)`, which no shape congruence relates to the folded literal `x[7]`, so the elaborator splits the literal at the spine's known lengths and solves `?h` from the last byte. The certifier then sees the solution, and the two spellings agree by reduction.
+// A metavariable is solved through the packed-literal view: `0x[h]` is `append(0x[], ?h)`, which no shape congruence relates to the folded literal `0x[7]`, so the elaborator splits the literal at the spine's known lengths and solves `?h` from the last byte. The certifier then sees the solution, and the two spellings agree by reduction.
 #[test]
 fn a_metavariable_is_solved_through_the_packed_literal_view() {
     assert_eq!(
         run(r#"
         use /std/{Byte, Bytes, Eq, Nat};
-        let head(@h: Byte, p: Eq()(x[7], x[h])) -> Byte = h;
+        let head(@h: Byte, p: Eq()(0x[7], 0x[h])) -> Byte = h;
         /std/print(Nat/to_str(Byte/to_nat(head(Eq/refl()))))
         "#),
         b"7"
     );
 }
 
-// The concatenation twin: `x[h, ..t]` is the one-byte `append(x[], ?h)` followed by `?t`. A symbolic head stops the prefix strip at once, so the view cuts the literal at the head's known length, the unknown tail taking the rest, and solves `?h` as `1` and `?t` as `x[2, 3]`.
+// The concatenation twin: `0x[h, ..t]` is the one-byte `append(0x[], ?h)` followed by `?t`. A symbolic head stops the prefix strip at once, so the view cuts the literal at the head's known length, the unknown tail taking the rest, and solves `?h` as `1` and `?t` as `0x[2, 3]`.
 #[test]
 fn a_metavariable_is_solved_as_the_rest_of_a_split_packed_literal() {
     assert_eq!(
         run(r#"
         use /std/{Byte, Bytes, Eq, Nat};
-        let tail(@h: Byte, @t: Bytes, p: Eq()(x[1, 2, 3], x[h, ..t])) -> Bytes = t;
+        let tail(@h: Byte, @t: Bytes, p: Eq()(0x[1, 2, 3], 0x[h, ..t])) -> Bytes = t;
         /std/print(Nat/to_str(Bytes/len(tail(Eq/refl()))))
         "#),
         b"2"

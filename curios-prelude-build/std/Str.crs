@@ -66,9 +66,9 @@ pub let to_bytes(s: Str) -> Bytes =
 --- How many of the bytes read so far are text once `rest` has been read from `sc`. On a byte UTF-8 does not admit, or at an end inside a character, it is `last`, the last offset that fell between characters. `read` counts the bytes before `rest`.
 let text_before(sc: Scan, rest: Bytes, read: Nat, last: Nat) -> Nat =
     match rest
-    | x[] => last
-    | x[h, ..t] =>
-        match scan_from(sc, x[h])
+    | 0x[] => last
+    | 0x[h, ..t] =>
+        match scan_from(sc, 0x[h])
         | lead() => text_before(Scan/lead(), t, read + 1, read + 1)
         | cont(rem, lo, hi) => text_before(Scan/cont(rem, lo, hi), t, read + 1, last)
         | bad() => last
@@ -96,7 +96,7 @@ pub let eq_of_bytes(a: Str, b: Str, p: Eq()(a.bytes, b.bytes)) -> Eq()(a, b) =
 
 --- `a` then `b`.
 pub let concat(a: Str, b: Str) -> Str =
-    Str { bytes = x[..a.bytes, ..b.bytes], @valid = Valid/concat(a.valid, b.valid) };
+    Str { bytes = 0x[..a.bytes, ..b.bytes], @valid = Valid/concat(a.valid, b.valid) };
 
 --- The text before `at`, cut in O(1).
 pub let before(s: Str, at: At(s)) -> Str =
@@ -147,7 +147,7 @@ let lower_ascii_byte(byte: Byte) -> Byte =
     end;
 
 let lower_ascii_bytes(b: Bytes) -> Bytes =
-    Bytes/fold(b, x[], (byte, acc) => x[..acc, lower_ascii_byte(byte)]);
+    Bytes/fold(b, 0x[], (byte, acc) => 0x[..acc, lower_ascii_byte(byte)]);
 
 --- Equality with ASCII letters compared regardless of case; every other character exactly.
 pub let eql_ignoring_ascii_case(a: Str, b: Str) -> Bool =
@@ -225,15 +225,15 @@ pub let repeat(s: Str, n: Nat) -> Str =
 pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
     let go(b: Bytes, v: Valid(b), acc: A) -> A =
         match b
-        | x[] => acc
-        | x[h, ..t] =>
+        | 0x[] => acc
+        | 0x[h, ..t] =>
             match classify(h)
             | ascii() => go(t, v, f(Char { code = Byte/to_nat(h) }, acc))
             | lead(rem, lo, hi, partial) =>
                 let p = begins_scalars_of(h);
                 match t
-                | x[] => match v end
-                | x[c1, ..t1] =>
+                | 0x[] => match v end
+                | 0x[c1, ..t1] =>
                     match Nat/in_range(Byte/to_nat(c1), lo, hi)
                     | false => match Valid/from_bad(@t1, v) end
                     | true =>
@@ -268,8 +268,8 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
                                     Bool/True/qed(),
                                     proved());
                             match t1
-                            | x[] => match v end
-                            | x[c2, ..t2] =>
+                            | 0x[] => match v end
+                            | 0x[c2, ..t2] =>
                                 match Nat/in_range(Byte/to_nat(c2), 0x80, 0xBF)
                                 | false => match Valid/from_bad(@t2, v) end
                                 | true =>
@@ -303,8 +303,8 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
                                                 Bool/True/qed(),
                                                 proved());
                                         match t2
-                                        | x[] => match v end
-                                        | x[c3, ..t3] =>
+                                        | 0x[] => match v end
+                                        | 0x[c3, ..t3] =>
                                             match Nat/in_range(Byte/to_nat(c3), 0x80, 0xBF)
                                             | false => match Valid/from_bad(@t3, v) end
                                             | true =>
@@ -357,7 +357,7 @@ let passing(
     @t: Bytes,
     taken: Nat,
     w: Bool/Holds(taken <= Bytes/len(whole)),
-    e: Eq()(Bytes/drop(whole, taken, @w), x[..passed, ..t]),
+    e: Eq()(Bytes/drop(whole, taken, @w), 0x[..passed, ..t]),
 ) -> {
     within: Bool/Holds(taken + Bytes/len(passed) <= Bytes/len(whole)),
     cut: Eq()(Bytes/drop(whole, taken + Bytes/len(passed), @within), t)} =
@@ -392,7 +392,7 @@ let stopped(
         stop = stop);
 
 --- How many bytes at the front of `b` hold characters `pred` accepts, counted on from `taken`, and the first character it refused. It decodes as [`fold`] does. Its place in `whole` is carried as proofs only, so the stop is a position of `whole` without a slice being made.
--- A stop passes the walk's own `b`: filled from the refined type, a hidden argument is `x[h, ..t]` rebuilt where the walk stands.
+-- A stop passes the walk's own `b`: filled from the refined type, a hidden argument is `0x[h, ..t]` rebuilt where the walk stands.
 let leading(
     b: Bytes,
     v: Valid(b),
@@ -403,22 +403,22 @@ let leading(
     @e: Eq()(Bytes/drop(whole, taken, @w), b),
 ) -> Leading(whole) =
     match b
-    | x[] => stopped(@whole, @b, v, taken, Option/none(), @w, @e)
-    | x[h, ..t] =>
+    | 0x[] => stopped(@whole, @b, v, taken, Option/none(), @w, @e)
+    | 0x[h, ..t] =>
         match classify(h)
         | ascii() =>
             let c = Char { code = Byte/to_nat(h) };
             match pred(c)
             | true =>
-                let step = passing(@whole, @x[h], @t, taken, w, e);
+                let step = passing(@whole, @0x[h], @t, taken, w, e);
                 leading(t, v, pred, taken + 1, @whole, @step.within, @step.cut)
             | false => stopped(@whole, @b, v, taken, Option/some(c), @w, @e)
             end
         | lead(rem, lo, hi, partial) =>
             let p = begins_scalars_of(h);
             match t
-            | x[] => match v end
-            | x[c1, ..t1] =>
+            | 0x[] => match v end
+            | 0x[c1, ..t1] =>
                 match Nat/in_range(Byte/to_nat(c1), lo, hi)
                 | false => match Valid/from_bad(@t1, v) end
                 | true =>
@@ -439,7 +439,7 @@ let leading(
                                         Bool/True/qed()) };
                         match pred(c)
                         | true =>
-                            let step = passing(@whole, @x[h, c1], @t1, taken, w, e);
+                            let step = passing(@whole, @0x[h, c1], @t1, taken, w, e);
                             leading(t1, v, pred, taken + 2, @whole, @step.within, @step.cut)
                         | false => stopped(@whole, @b, v, taken, Option/some(c), @w, @e)
                         end
@@ -455,8 +455,8 @@ let leading(
                                 Bool/True/qed(),
                                 proved());
                         match t1
-                        | x[] => match v end
-                        | x[c2, ..t2] =>
+                        | 0x[] => match v end
+                        | 0x[c2, ..t2] =>
                             match Nat/in_range(Byte/to_nat(c2), 0x80, 0xBF)
                             | false => match Valid/from_bad(@t2, v) end
                             | true =>
@@ -476,7 +476,8 @@ let leading(
                                                     Bool/True/qed()) };
                                     match pred(c)
                                     | true =>
-                                        let step = passing(@whole, @x[h, c1, c2], @t2, taken, w, e);
+                                        let step =
+                                            passing(@whole, @0x[h, c1, c2], @t2, taken, w, e);
                                         leading(
                                             t2,
                                             v,
@@ -499,8 +500,8 @@ let leading(
                                             Bool/True/qed(),
                                             proved());
                                     match t2
-                                    | x[] => match v end
-                                    | x[c3, ..t3] =>
+                                    | 0x[] => match v end
+                                    | 0x[c3, ..t3] =>
                                         match Nat/in_range(Byte/to_nat(c3), 0x80, 0xBF)
                                         | false => match Valid/from_bad(@t3, v) end
                                         | true =>
@@ -523,7 +524,7 @@ let leading(
                                                     let step =
                                                         passing(
                                                             @whole,
-                                                            @x[h, c1, c2, c3],
+                                                            @0x[h, c1, c2, c3],
                                                             @t3,
                                                             taken,
                                                             w,
@@ -570,14 +571,14 @@ let count_concat(
     b: Bytes,
     @s: Scan,
     w: Valid/from(s, a),
-) -> Eq()(count_scalars(s, x[..a, ..b]), count_scalars(s, a) + count_scalars(Scan/lead(), b)) =
+) -> Eq()(count_scalars(s, 0x[..a, ..b]), count_scalars(s, a) + count_scalars(Scan/lead(), b)) =
     match a
-    | x[] =>
+    | 0x[] =>
         match s
         | lead() => Eq/refl()
         | cont(_, _, _) | bad() => match w end
         end
-    | x[h, ..t] =>
+    | 0x[h, ..t] =>
         match s
         | lead() => Eq/cong((n: Nat) => n + 1, count_concat(t, b, @step(h, Scan/lead()), w))
         | cont(_, _, _) => count_concat(t, b, @step(h, s), w)
@@ -618,13 +619,13 @@ let split_at(
     b: Bytes,
     k: Nat,
     within: Bool/Holds(k <= Bytes/len(b)),
-) -> Eq()(b, x[..Bytes/slice(b, 0, k, @within), ..Bytes/drop(b, k, @within)]) =
+) -> Eq()(b, 0x[..Bytes/slice(b, 0, k, @within), ..Bytes/drop(b, k, @within)]) =
     match k
     | 0 => Eq/refl()
     | j + 1 =>
         match b
-        | x[] => match within end
-        | x[h, ..t] => Eq/cong((r: Bytes) => x[h, ..r], split_at(t, j, within))
+        | 0x[] => match within end
+        | 0x[h, ..t] => Eq/cong((r: Bytes) => 0x[h, ..r], split_at(t, j, within))
         end
     end;
 
@@ -644,7 +645,7 @@ pub let follows(
             Valid/after_prefix(
                 piece.valid,
                 Eq/subst(
-                    (p: Bytes) => Valid(x[..p, ..Bytes/drop(rest.bytes, n, @fits)]),
+                    (p: Bytes) => Valid(0x[..p, ..Bytes/drop(rest.bytes, n, @fits)]),
                     held,
                     Eq/subst((w: Bytes) => Valid(w), split_at(rest.bytes, n, fits), rest.valid)));
         Option/some((

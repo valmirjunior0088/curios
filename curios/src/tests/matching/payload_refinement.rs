@@ -111,8 +111,8 @@ fn an_immediate_arm_payload_survives_arithmetic_in_a_loop() {
         let entry() -> /std/Io({}) =
             let bytes = match Try/run(Io/read(Proc/stdin, 16))!
                 | success(bytes(b, @_)) => b
-                | success(ended()) => x[]
-                | failure(_) => x[]
+                | success(ended()) => 0x[]
+                | failure(_) => 0x[]
                 end;
             let n = Nat/sub(Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 0), 0)), 60);
             /std/print(Nat/to_str(total(build(n, L/stop(n)), 0)));

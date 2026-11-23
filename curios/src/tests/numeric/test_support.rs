@@ -27,8 +27,8 @@ pub fn table(rows: &[&str], taint: bool) -> String {
         let entry() -> /std/Io({}) =
         let bytes = match Try/run(Io/read(Proc/stdin, 16))!
             | success(bytes(b, @_)) => b
-            | success(ended()) => x[]
-            | failure(_) => x[]
+            | success(ended()) => 0x[]
+            | failure(_) => 0x[]
             end;
         let n = ${zero};
         let i = Nat/to_int(n);

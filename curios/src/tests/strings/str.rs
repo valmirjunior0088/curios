@@ -28,7 +28,7 @@ fn long_str_literal_compiles_on_the_default_test_stack() {
     assert_eq!(run(&source), literal.as_bytes());
 }
 
-// A literal in a report spells as the literal. A `Str` is its bytes beside the proof certifying them, and a report that spells one structurally — `Str { x[0x62, 0x6F, 0x64, 0x79], True/qed() }` for `"body"` — buries the one thing the author wrote under the representation that certifies it, which is what makes a decided proposition keyed by a written name unreadable at the moment it refuses one. Axis (f) of `Spelling`, whose identity for `Str` comes from the syntax registry rather than from a name this side of the prelude may spell.
+// A literal in a report spells as the literal. A `Str` is its bytes beside the proof certifying them, and a report that spells one structurally — `Str { 0x[0x62, 0x6F, 0x64, 0x79], True/qed() }` for `"body"` — buries the one thing the author wrote under the representation that certifies it, which is what makes a decided proposition keyed by a written name unreadable at the moment it refuses one. Axis (f) of `Spelling`, whose identity for `Str` comes from the syntax registry rather than from a name this side of the prelude may spell.
 #[test]
 fn a_string_literal_spells_as_itself_in_a_report() {
     let source = r#"

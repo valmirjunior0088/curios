@@ -159,8 +159,8 @@ Match with every leaf shape
 ================================================================================
 
 match (n, xs, bs)
-| (0, [], x[]) => 0
-| (p + 1, [h, ..t], x[y, ..ys]) => p
+| (0, [], 0x[]) => 0
+| (p + 1, [h, ..t], 0x[y, ..ys]) => p
 | (some(@k, v), Point { x, y = z }, true) => v
 | _ => 1
 end
@@ -738,7 +738,7 @@ Runs with element patterns
 match l
 | [a] => a
 | [none(), b, ..rest] => b
-| x[h, _, ..t] => h
+| 0x[h, _, ..t] => h
 | _ => 0
 end
 

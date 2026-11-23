@@ -53,10 +53,10 @@ fn a_bytes_case_split_is_erased_under_its_cons() {
     let source = r#"
         use /std/{Nat, Bytes};
         let Shape(b: Bytes) -> Type =
-            match b | x[] => Nat | x[_, ..t] => (Nat) -> Nat end;
+            match b | 0x[] => Nat | 0x[_, ..t] => (Nat) -> Nat end;
         let f(b: Bytes, g: Shape(b)) -> Nat =
-            match b | x[] => 0 | x[_, ..t] => g(Bytes/len(t)) end;
-        /std/print(Nat/to_str(f(x[1, 2, 3], (k) => k + 1)))
+            match b | 0x[] => 0 | 0x[_, ..t] => g(Bytes/len(t)) end;
+        /std/print(Nat/to_str(f(0x[1, 2, 3], (k) => k + 1)))
         "#;
     assert_eq!(run(source), b"3");
 }

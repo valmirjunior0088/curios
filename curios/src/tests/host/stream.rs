@@ -89,7 +89,7 @@ fn a_rest_surfaces_a_read_failure_instead_of_a_partial_prefix() {
             read(s, _) =
                 let first = Cell/fill(s.calls, ())!;
                 match first
-                | true => Try/pure(Io/Chunk/bytes(x[0x41, 0x42, 0x43]))
+                | true => Try/pure(Io/Chunk/bytes(0x[0x41, 0x42, 0x43]))
                 | false =>
                     match s.fails
                     | true => Try/raise(Io/Error/other(247))
@@ -142,9 +142,9 @@ fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
                 let c = Cell/new(@{})!;
                 Io/pure((c, b));
             let entry() -> /std/Io({}) =
-                let a = piece(x[])!;
+                let a = piece(0x[])!;
                 let b = piece(Str/to_bytes("a"))!;
-                let c = piece(x[])!;
+                let c = piece(0x[])!;
                 let d = piece(Str/to_bytes("\n"))!;
                 let input = Io/Reader/new(Pieces { [a, b, c, d] })!;
                 let r = Try/run(Io/Reader/until(input, '\n'))!;

@@ -225,7 +225,7 @@ fn every_node_written_reads_back_as_itself() {
                 },
             ],
         }),
-        // A run's elements are patterns of their own: a closed run ends where they do, an open one's rest follows them, and a packed run is a run under `x[`.
+        // A run's elements are patterns of their own: a closed run ends where they do, an open one's rest follows them, and a packed run is a run under `0x[`.
         Term::matrix(Matrix {
             head: one(),
             arms: vec![

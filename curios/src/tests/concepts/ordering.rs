@@ -10,7 +10,7 @@ fn strings_compare_by_code_point_and_bytes_and_booleans_bytewise() {
         /std/print(Str/join(",", [
             Bool/to_str("a" < "b"), Bool/to_str("b" < "a"), Bool/to_str("z" < "é"),
             Bool/to_str("ab" < "abc"), Bool/to_str("" <= "a"), Bool/to_str("abc" >= "abd"),
-            Bool/to_str(x[1, 2] < x[1, 3]), Bool/to_str(x[1, 2, 0] > x[1, 2]),
+            Bool/to_str(0x[1, 2] < 0x[1, 3]), Bool/to_str(0x[1, 2, 0] > 0x[1, 2]),
             Bool/to_str(false < true), Bool/to_str(true <= false)
         ]))
         "#;

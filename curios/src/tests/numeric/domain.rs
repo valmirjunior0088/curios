@@ -77,18 +77,18 @@ const EDGES: &[Edge] = &[
     },
     Edge {
         operation: "Flt/of_le_bytes",
-        inside: "let edge: Flt = Flt/of_le_bytes(x[0, 0, 0, 0, 0, 0, 0, 0]);",
-        outside: "let edge: Flt = Flt/of_le_bytes(x[0, 0, 0, 0, 0, 0, 0]);",
+        inside: "let edge: Flt = Flt/of_le_bytes(0x[0, 0, 0, 0, 0, 0, 0, 0]);",
+        outside: "let edge: Flt = Flt/of_le_bytes(0x[0, 0, 0, 0, 0, 0, 0]);",
     },
     Edge {
         operation: "Flt/of_le_bytes",
-        inside: "let edge: Flt = Flt/of_le_bytes(x[0, 0, 0, 0, 0, 0, 0, 0]);",
-        outside: "let edge: Flt = Flt/of_le_bytes(x[0, 0, 0, 0, 0, 0, 0, 0, 0]);",
+        inside: "let edge: Flt = Flt/of_le_bytes(0x[0, 0, 0, 0, 0, 0, 0, 0]);",
+        outside: "let edge: Flt = Flt/of_le_bytes(0x[0, 0, 0, 0, 0, 0, 0, 0, 0]);",
     },
     Edge {
         operation: "Bytes/get",
-        inside: "let edge: Byte = Bytes/get(x[7], 0);",
-        outside: "let edge: Byte = Bytes/get(x[7], 1);",
+        inside: "let edge: Byte = Bytes/get(0x[7], 0);",
+        outside: "let edge: Byte = Bytes/get(0x[7], 1);",
     },
     Edge {
         operation: "List/get",
@@ -103,8 +103,8 @@ const EDGES: &[Edge] = &[
     // A window may end at the end, and may be empty there: the bound is on where it ends.
     Edge {
         operation: "Bytes/slice",
-        inside: "let edge: Bytes = Bytes/slice(x[7], 1, 0);",
-        outside: "let edge: Bytes = Bytes/slice(x[7], 1, 1);",
+        inside: "let edge: Bytes = Bytes/slice(0x[7], 1, 0);",
+        outside: "let edge: Bytes = Bytes/slice(0x[7], 1, 1);",
     },
     Edge {
         operation: "List/slice",
@@ -113,18 +113,18 @@ const EDGES: &[Edge] = &[
     },
     Edge {
         operation: "Bytes/and",
-        inside: "let edge: Bytes = Bytes/and(x[7], x[7]);",
-        outside: "let edge: Bytes = Bytes/and(x[7], x[7, 7]);",
+        inside: "let edge: Bytes = Bytes/and(0x[7], 0x[7]);",
+        outside: "let edge: Bytes = Bytes/and(0x[7], 0x[7, 7]);",
     },
     Edge {
         operation: "Bytes/or",
-        inside: "let edge: Bytes = Bytes/or(x[7], x[7]);",
-        outside: "let edge: Bytes = Bytes/or(x[7, 7], x[7]);",
+        inside: "let edge: Bytes = Bytes/or(0x[7], 0x[7]);",
+        outside: "let edge: Bytes = Bytes/or(0x[7, 7], 0x[7]);",
     },
     Edge {
         operation: "Bytes/xor",
-        inside: "let edge: Bytes = Bytes/xor(x[], x[]);",
-        outside: "let edge: Bytes = Bytes/xor(x[], x[7]);",
+        inside: "let edge: Bytes = Bytes/xor(0x[], 0x[]);",
+        outside: "let edge: Bytes = Bytes/xor(0x[], 0x[7]);",
     },
 ];
 

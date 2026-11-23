@@ -161,7 +161,7 @@ impl IntrinsicDriver for Elaborating<'_, '_> {
         }
     }
 
-    /// Solving-side only. The packed-literal view undoes exactly the constant folding that removed the spine spelling from the literal side — `append(x[], 0x01)` folds to `x[0x01]`, and no shape congruence relates the folded form to `append(x[], ?h)` — and the list view pairs what two lists are written to lead with, where the congruence would compare a run of one length with a run of another. The reducer's laws are untouched, and once the goals commit their solutions the two spellings agree by plain reduction, so the certifier needs no matching rule.
+    /// Solving-side only. The packed-literal view undoes exactly the constant folding that removed the spine spelling from the literal side — `append(0x[], 0x01)` folds to `0x[0x01]`, and no shape congruence relates the folded form to `append(0x[], ?h)` — and the list view pairs what two lists are written to lead with, where the congruence would compare a run of one length with a run of another. The reducer's laws are untouched, and once the goals commit their solutions the two spellings agree by plain reduction, so the certifier needs no matching rule.
     fn solving_view(&mut self, this: &Intrinsic, that: &Intrinsic) -> Option<bool> {
         packed_literal_view(self.cmp, this, that).or_else(|| list_view(self.cmp, this, that))
     }

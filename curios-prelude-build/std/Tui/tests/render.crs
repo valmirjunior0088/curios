@@ -3,7 +3,7 @@ use /std/{Nat, Byte, Str, Bytes, List, Option, Result, Test, Tui};
 use /std/Tui/{Style, Line, Glyph, Frame, View};
 
 let esc: Str =
-    Result/unwrap_or(Str/of_bytes(x[0x1B]), "");
+    Result/unwrap_or(Str/of_bytes(0x[0x1B]), "");
 
 -- The bytes as text, with `ESC` shown as `^[`, so an expectation is readable.
 let spelled(b: Bytes) -> Str =
@@ -130,29 +130,29 @@ let replay(start: Screen, written: Bytes) -> Screen =
         List/map(cells, (r) => List/map(r, (_) => " "));
     let go(s: Screen, rest: Bytes, text: Bytes, params: Bytes, state: Nat) -> Screen =
         match rest
-        | x[] => flush(s, text)
-        | x[b, ..more] =>
+        | 0x[] => flush(s, text)
+        | 0x[b, ..more] =>
             let n = Byte/to_nat(b);
             match state
             | 0 =>
                 match n == 0x1B
-                | true => go(flush(s, text), more, x[], x[], 1)
-                | false => go(s, more, x[..text, b], params, 0)
+                | true => go(flush(s, text), more, 0x[], 0x[], 1)
+                | false => go(s, more, 0x[..text, b], params, 0)
                 end
-            | 1 => go(s, more, x[], x[], 2)
+            | 1 => go(s, more, 0x[], 0x[], 2)
             | _ =>
                 match n
                 | 'H' =>
                     let p = numbers(params);
                     let at = (k: Nat) => Option/unwrap_or(List/try_get(p, k), 1) - 1;
-                    go(Screen { ..s, x = at(1), y = at(0) }, more, x[], x[], 0)
-                | 'J' => go(Screen { ..s, cells = blanked(s.cells) }, more, x[], x[], 0)
-                | _, Nat/in_range(n, 0x40, 0x7E) => go(s, more, x[], x[], 0)
-                | _ => go(s, more, x[], x[..params, b], 2)
+                    go(Screen { ..s, x = at(1), y = at(0) }, more, 0x[], 0x[], 0)
+                | 'J' => go(Screen { ..s, cells = blanked(s.cells) }, more, 0x[], 0x[], 0)
+                | _, Nat/in_range(n, 0x40, 0x7E) => go(s, more, 0x[], 0x[], 0)
+                | _ => go(s, more, 0x[], 0x[..params, b], 2)
                 end
             end
         end;
-    go(start, written, x[], x[], 0);
+    go(start, written, 0x[], 0x[], 0);
 
 -- What the renderer writes takes a terminal showing the previous frame to the next one, whatever changed between them — a word for another, a wide glyph for two narrow ones, a style — and takes a terminal showing anything to the frame where there is no previous one.
 test what_the_renderer_writes_takes_a_terminal_to_the_frame =

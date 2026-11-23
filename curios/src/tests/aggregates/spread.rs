@@ -112,12 +112,12 @@ fn list_spread_operand_hoists_bangs() {
 
 #[test]
 fn bytes_spread_concats_segments() {
-    // `x[0x01, ..b, 0x04]` splices the bytes of `b` between the literal runs, and the glued suffix chain admits a call operand (`\..Bytes/slice(...)`).
+    // `0x[0x01, ..b, 0x04]` splices the bytes of `b` between the literal runs, and the glued suffix chain admits a call operand (`\..Bytes/slice(...)`).
     let source = r#"
         use /std/{Nat, Bytes, Io, Try, Proc};
-        let b : Bytes = x[0x02, 0x03];
+        let b : Bytes = 0x[0x02, 0x03];
         let entry() -> /std/Io({}) =
-            let _ = Try/run(Io/write(Proc/stdout, x[0x01, ..b, 0x04, ..Bytes/slice(b, 1, 1)]))!;
+            let _ = Try/run(Io/write(Proc/stdout, 0x[0x01, ..b, 0x04, ..Bytes/slice(b, 1, 1)]))!;
             /std/Io/pure(());
         entry()
         "#;
@@ -128,10 +128,10 @@ fn bytes_spread_concats_segments() {
 fn bytes_spread_identity_and_multi() {
     let source = r#"
         use /std/{Bytes, Io, Try, Proc};
-        let b : Bytes = x[0x48, 0x65];
-        let c : Bytes = x[..b];
+        let b : Bytes = 0x[0x48, 0x65];
+        let c : Bytes = 0x[..b];
         let entry() -> /std/Io({}) =
-            let _ = Try/run(Io/write(Proc/stdout, x[..c, ..c]))!;
+            let _ = Try/run(Io/write(Proc/stdout, 0x[..c, ..c]))!;
             /std/Io/pure(());
         entry()
         "#;
@@ -144,7 +144,7 @@ fn bytes_spread_of_non_bytes_is_rejected() {
     let source = r#"
         use /std/{Str, Nat, List, Bytes, Io};
         let xs : List(Nat) = [1, 2];
-        let bad : Bytes = x[0x00, ..xs];
+        let bad : Bytes = 0x[0x00, ..xs];
         let entry() -> /std/Io({}) =
             let _ = /std/print("unreachable")!;
             /std/Io/pure(());
@@ -160,7 +160,7 @@ fn bytes_spread_operand_hoists_bangs() {
         run(r#"
         use /std/{Bytes, Io, Try, Proc};
         let prog() -> Io({}) =
-            let out : Bytes = x[0x3e, ..Io/pure(x[0x68, 0x69])!, 0x3c];
+            let out : Bytes = 0x[0x3e, ..Io/pure(0x[0x68, 0x69])!, 0x3c];
             let wrote = Try/run(Io/write(Proc/stdout, out))!;
             Io/pure(());
         prog()

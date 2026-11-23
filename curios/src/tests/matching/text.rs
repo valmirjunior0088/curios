@@ -101,7 +101,7 @@ fn a_text_dispatch_refuses_what_its_type_does_not_take() {
             "takes a `Str` apart by its bytes",
         ),
         (
-            r#"let f(s: Str) -> Nat = match s | "a" => 1 | x[] => 0 | _ => 2 end;"#,
+            r#"let f(s: Str) -> Nat = match s | "a" => 1 | 0x[] => 0 | _ => 2 end;"#,
             "shape mismatch",
         ),
         (

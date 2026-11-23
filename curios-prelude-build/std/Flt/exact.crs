@@ -15,7 +15,7 @@ pub let bits(f: Flt) -> Nat =
 --- The float a 64-bit pattern spells, eight bytes least significant first.
 pub let of_bits(n: Nat) -> Flt =
     let at = (i: Nat) => Nat/to_byte(Nat/shr(n, 8 * i) % 256);
-    Flt/of_le_bytes(x[at(0), at(1), at(2), at(3), at(4), at(5), at(6), at(7)]);
+    Flt/of_le_bytes(0x[at(0), at(1), at(2), at(3), at(4), at(5), at(6), at(7)]);
 
 --- How a value rounds: in one of IEEE's five rounding directions, or ties toward zero (to nearest, a tie going to the smaller magnitude), which §9.5's augmented operations use and no rounding-direction attribute names, so it is not a `Rounding`.
 pub induct Mode: pub Type

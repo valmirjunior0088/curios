@@ -67,7 +67,7 @@ fn a_name_states_its_instance_and_a_call_parenthesizes_a_decorated_head() {
     );
 }
 
-/// An intrinsic is `#` and its variant's Core name over its operands, and a literal form builds its own node: a numeral its `Nat`, `true` its `Bool`, `x[…]` its `Bytes`.
+/// An intrinsic is `#` and its variant's Core name over its operands, and a literal form builds its own node: a numeral its `Nat`, `true` its `Bool`, `0x[…]` its `Bytes`.
 #[test]
 fn an_intrinsic_is_its_variant_and_a_literal_its_own_form() {
     let n = Term::free_var(&Free::local(0, Some("n")));

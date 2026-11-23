@@ -12,7 +12,7 @@ use {
     curios_num::Binary,
 };
 
-/// The one-step decode of a free-monoid scrutinee — a carrier's signature functor made concrete. `Empty` is the identity form (`x[]`, `[]`, `0`); `Cons` peels a generator: its `head` is the payload reflected into the element type — a `Byte` for `Bytes`, the element term itself for `List`, and `None` for `Nat`, whose unary successor carries no payload — over the symbolic tail the cons arm binds; `Stuck` is a scrutinee exposing neither form (a variable, a non-cons symbolic concatenation), where the eliminator rebuilds.
+/// The one-step decode of a free-monoid scrutinee — a carrier's signature functor made concrete. `Empty` is the identity form (`0x[]`, `[]`, `0`); `Cons` peels a generator: its `head` is the payload reflected into the element type — a `Byte` for `Bytes`, the element term itself for `List`, and `None` for `Nat`, whose unary successor carries no payload — over the symbolic tail the cons arm binds; `Stuck` is a scrutinee exposing neither form (a variable, a non-cons symbolic concatenation), where the eliminator rebuilds.
 pub enum Layer {
     Empty,
     Cons { head: Option<Term>, tail: Term },
@@ -83,7 +83,7 @@ impl FreeMonoid {
     }
 }
 
-/// A leading generator peeled off a `Bytes` value: a concrete byte (`LiteralByte`) or the symbolic byte of a cons `append(x[], c)`, the head `x[c, ..t]` lowers to (`Symbolic`). Kept abstract so each destructor reflects it into the shape its consumer wants — the eliminator into a `Byte`, `Bytes/get`/`Bytes/slice` into a one-byte `Bytes` chunk.
+/// A leading generator peeled off a `Bytes` value: a concrete byte (`LiteralByte`) or the symbolic byte of a cons `append(0x[], c)`, the head `0x[c, ..t]` lowers to (`Symbolic`). Kept abstract so each destructor reflects it into the shape its consumer wants — the eliminator into a `Byte`, `Bytes/get`/`Bytes/slice` into a one-byte `Bytes` chunk.
 enum Head {
     LiteralByte(u8),
     Symbolic(Term),
@@ -98,7 +98,7 @@ impl Head {
         }
     }
 
-    /// Reflect into a length-1 `Bytes` chunk — the cons head `Bytes/get`/`Bytes/slice` rebuild as `head ++ tail` (`get(head, 0)` is the byte; a symbolic cons head stays `append(x[], c)`).
+    /// Reflect into a length-1 `Bytes` chunk — the cons head `Bytes/get`/`Bytes/slice` rebuild as `head ++ tail` (`get(head, 0)` is the byte; a symbolic cons head stays `append(0x[], c)`).
     fn into_chunk(self) -> Term {
         match self {
             Head::LiteralByte(byte) => {
@@ -112,7 +112,7 @@ impl Head {
     }
 }
 
-/// One step of the `Bytes` front decode. `Empty` is the identity (`x[]`); `Cons` peels a leading generator and the residual tail; `Opaque` is a value exposing no leading generator (a variable, a slice, a non-`x[]`-based append, a fill whose count is neither zero nor a successor).
+/// One step of the `Bytes` front decode. `Empty` is the identity (`0x[]`); `Cons` peels a leading generator and the residual tail; `Opaque` is a value exposing no leading generator (a variable, a slice, a non-`0x[]`-based append, a fill whose count is neither zero nor a successor).
 enum Front {
     Empty,
     Cons { head: Head, tail: Term },
@@ -127,7 +127,7 @@ enum BytesLevel<'a> {
     Concat(&'a [Term]),
 }
 
-/// The structural traversal shared by both `Bytes` destructors ([`FreeMonoid::uncons`] for the eliminator, [`peel_first_atom`] for `Bytes/get`/`Bytes/slice`): peel the leading generator off an already-reduced value. A literal run yields its first byte; a cons `append(x[], c)` yields its symbolic byte; a fill yields its atom over a fill one shorter; a concatenation descends into its first operand so a literal- or cons-led `BytesConcat` decodes too, the residual first-operand tail rejoining the rest — normalised (an empty first-operand tail drops, a lone survivor collapses) so a cons-led concat decodes to the same tail the bare cons would. The empty bytestring is `Empty`; anything else (a variable, a slice, a non-`x[]`-based append, a fill of unknown count) is `Opaque`.
+/// The structural traversal shared by both `Bytes` destructors ([`FreeMonoid::uncons`] for the eliminator, [`peel_first_atom`] for `Bytes/get`/`Bytes/slice`): peel the leading generator off an already-reduced value. A literal run yields its first byte; a cons `append(0x[], c)` yields its symbolic byte; a fill yields its atom over a fill one shorter; a concatenation descends into its first operand so a literal- or cons-led `BytesConcat` decodes too, the residual first-operand tail rejoining the rest — normalised (an empty first-operand tail drops, a lone survivor collapses) so a cons-led concat decodes to the same tail the bare cons would. The empty bytestring is `Empty`; anything else (a variable, a slice, a non-`0x[]`-based append, a fill of unknown count) is `Opaque`.
 ///
 /// Two phases over a [`BytesLevel`] stack: descend the leading edge to the value that actually carries the first generator, then rebuild outward, each level rejoining what it was holding. `Opaque` propagates through both level kinds, and a concatenation whose first operand exposes no generator is itself opaque — a reduced `BytesConcat` has no empty operands, so that case is a leading variable or slice.
 fn peel_front(bytes: &Term) -> Front {
@@ -149,7 +149,7 @@ fn peel_front(bytes: &Term) -> Front {
                     },
                 };
             }
-            // `append(base, atom) = base ++ [atom]`: peel the base's leading generator, and the appended atom rejoins the residual. An empty base is the canonical one-atom chunk, which is where the symbolic head comes from; any other base decodes as far as it can, so a chained `append(append(x[], a), b)` and a run-based `append(x[0x48], b)` both expose their first generator instead of going opaque. `core::spine`'s two-value peel has always decoded an append this way, so without this level the same term was transparent to conversion and opaque to reduction.
+            // `append(base, atom) = base ++ [atom]`: peel the base's leading generator, and the appended atom rejoins the residual. An empty base is the canonical one-atom chunk, which is where the symbolic head comes from; any other base decodes as far as it can, so a chained `append(append(0x[], a), b)` and a run-based `append(0x[0x48], b)` both expose their first generator instead of going opaque. `core::spine`'s two-value peel has always decoded an append this way, so without this level the same term was transparent to conversion and opaque to reduction.
             Subterm::Intrinsic(Intrinsic::BytesAppend {
                 bytes: base,
                 element: atom,
@@ -227,7 +227,7 @@ fn peel_front(bytes: &Term) -> Front {
     front
 }
 
-/// Split the first byte off a reduced `Bytes` value, returning a length-1 head chunk and the residual tail. Where `peel_bytes` (`core::spine`) strips a common prefix of *two* values, this decomposes *one* — the operation-level destructors `Bytes/get` and `Bytes/slice` walk an atom at a time, exposing the cons structure a symbolic `x[h, ..t]` builds (`concat(append(x[], h), t)`) along with literal runs and concatenations. `None` for the empty bytestring or an opaque symbolic value, where no first byte is statically exposed.
+/// Split the first byte off a reduced `Bytes` value, returning a length-1 head chunk and the residual tail. Where `peel_bytes` (`core::spine`) strips a common prefix of *two* values, this decomposes *one* — the operation-level destructors `Bytes/get` and `Bytes/slice` walk an atom at a time, exposing the cons structure a symbolic `0x[h, ..t]` builds (`concat(append(0x[], h), t)`) along with literal runs and concatenations. `None` for the empty bytestring or an opaque symbolic value, where no first byte is statically exposed.
 pub fn peel_first_atom(bytes: &Term) -> Option<(Term, Term)> {
     match peel_front(bytes) {
         Front::Cons { head, tail } => Some((head.into_chunk(), tail)),
@@ -359,7 +359,7 @@ pub fn peel_first_elem(list: &Term) -> Option<(Term, Term)> {
     }
 }
 
-// `cons` injects a byte at the front as `append(x[], c)` (a one-byte `Bytes`); `peel_front` recognises that encoding to decode a symbolic cons head.
+// `cons` injects a byte at the front as `append(0x[], c)` (a one-byte `Bytes`); `peel_front` recognises that encoding to decode a symbolic cons head.
 fn is_empty_bytes(term: &Term) -> bool {
     matches!(&**term, Subterm::Intrinsic(Intrinsic::Bytes( bytes)) if bytes.is_empty())
 }
@@ -465,7 +465,7 @@ impl FreeMonoid {
 
     /// A value read as a concatenation's operands, flattened: a concatenation's own, and an append's base beside the one-generator run it adds. `None` for anything that is neither.
     ///
-    /// **An append *is* a concatenation, and the locator agrees.** `append(b, k) = b ++ append(x[], k)` is the peel's own law, conversion's spine flattens both spellings to one atom list, and `x[..p, k]` and `x[..p, ..x[k]]` are definitionally equal terms. A locator gated on the concatenation node alone would decline a window it had already decided for the other spelling of the same value — incompleteness with nothing on the refusing side to justify it. The law is the peel's, not one caller's, so a snoc has to locate.
+    /// **An append *is* a concatenation, and the locator agrees.** `append(b, k) = b ++ append(0x[], k)` is the peel's own law, conversion's spine flattens both spellings to one atom list, and `0x[..p, k]` and `0x[..p, ..0x[k]]` are definitionally equal terms. A locator gated on the concatenation node alone would decline a window it had already decided for the other spelling of the same value — incompleteness with nothing on the refusing side to justify it. The law is the peel's, not one caller's, so a snoc has to locate.
     ///
     /// **The reading flattens, so a seam is a seam however it is nested.** A carrier that flattened only its outermost node would present an inner seam as an operand's interior, which is a window it can already decide declined for the way it happens to be spelled.
     pub(crate) fn concatenated(self, value: &Term) -> Option<Vec<Term>> {
@@ -635,7 +635,7 @@ impl Run for Vec<Term> {
     }
 }
 
-/// The free monoid's normalising *product* — the constructor dual of [`FreeMonoid::uncons`] (the destructor) — shared by `BytesConcat` and `ListConcat` reduction. Collapse a concatenation's already-reduced `operands` to a normal form under the unit and associativity laws: drop the empty identity (`x[]`, `[]`), fuse an all-*fusible*-literal survivor set into one literal, and collapse a lone surviving operand to itself (an `n`-ary concat of one *is* that one). `literal` lends an operand's run when it is a literal this may fuse (`None` for a symbolic chunk *or* for a literal past [`FUSION_CAP`], which is how the cap is applied without this function knowing the carrier's size unit); `merge` fuses the runs in the carrier's own representation — `Binary::concat`'s bulk copy, `List`'s flatten — and must fuse zero runs to the empty literal; `into_concat` rebuilds the surviving mixed operands. Which operands are dropped, fused or kept is `curios-algebra`'s `join`, over what `literal` says each one is; this reads them for it and builds what it decides.
+/// The free monoid's normalising *product* — the constructor dual of [`FreeMonoid::uncons`] (the destructor) — shared by `BytesConcat` and `ListConcat` reduction. Collapse a concatenation's already-reduced `operands` to a normal form under the unit and associativity laws: drop the empty identity (`0x[]`, `[]`), fuse an all-*fusible*-literal survivor set into one literal, and collapse a lone surviving operand to itself (an `n`-ary concat of one *is* that one). `literal` lends an operand's run when it is a literal this may fuse (`None` for a symbolic chunk *or* for a literal past [`FUSION_CAP`], which is how the cap is applied without this function knowing the carrier's size unit); `merge` fuses the runs in the carrier's own representation — `Binary::concat`'s bulk copy, `List`'s flatten — and must fuse zero runs to the empty literal; `into_concat` rebuilds the surviving mixed operands. Which operands are dropped, fused or kept is `curios-algebra`'s `join`, over what `literal` says each one is; this reads them for it and builds what it decides.
 ///
 /// An over-cap operand therefore reads exactly like a symbolic one here: not droppable as empty, not fusible, and left standing by `into_concat`. That is the whole of the cap's implementation, and it is why the emptiness filter below is unaffected — an over-cap run is never empty.
 ///

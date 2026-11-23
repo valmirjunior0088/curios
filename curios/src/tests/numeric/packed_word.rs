@@ -6,7 +6,7 @@ use super::test_support::*;
 #[test]
 fn the_packed_bitwise_operations_agree_between_the_folder_and_the_backend() {
     let outputs = folded_matches_runtime(&[
-        "Nat/to_str(Byte/to_nat(Option/unwrap_or(Bytes/try_get(/std/Bytes/and(x[240, 15], x[Nat/to_byte(Nat/and(60 + n, 255)), 255]), 0), 0)))",
+        "Nat/to_str(Byte/to_nat(Option/unwrap_or(Bytes/try_get(/std/Bytes/and(0x[240, 15], 0x[Nat/to_byte(Nat/and(60 + n, 255)), 255]), 0), 0)))",
         "Nat/to_str(Byte/to_nat(Option/unwrap_or(Bytes/try_get(/std/Bytes/replicate(3 + n, Nat/to_byte(Nat/and(0xA5 + n, 255))), 1), 0)))",
     ]);
 
@@ -19,8 +19,8 @@ fn the_packed_bitwise_operations_agree_between_the_folder_and_the_backend() {
 #[test]
 fn the_derived_shifts_and_rotations_agree_between_the_folder_and_the_backend() {
     let outputs = folded_matches_runtime(&[
-        "Nat/to_str(Byte/to_nat(Option/unwrap_or(Bytes/try_get(/std/Bytes/not(x[240, 15]), 0), 0)))",
-        "Nat/to_str(Byte/to_nat(Option/unwrap_or(Bytes/try_get(/std/Bytes/rotl(x[1, 2, 3], 1 + n), 0), 0)))",
+        "Nat/to_str(Byte/to_nat(Option/unwrap_or(Bytes/try_get(/std/Bytes/not(0x[240, 15]), 0), 0)))",
+        "Nat/to_str(Byte/to_nat(Option/unwrap_or(Bytes/try_get(/std/Bytes/rotl(0x[1, 2, 3], 1 + n), 0), 0)))",
     ]);
 
     assert_eq!(outputs, [b"15".to_vec(), b"3".to_vec()]);

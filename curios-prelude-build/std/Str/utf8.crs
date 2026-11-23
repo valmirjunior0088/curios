@@ -43,13 +43,13 @@ pub let step(c: Byte, s: Scan) -> Scan =
 
 --- The state reading all of `b` leaves the scan in.
 pub let scan_from(s: Scan, b: Bytes) -> Scan =
-    match b | x[] => s | x[h, ..t] => scan_from(step(h, s), t) end;
+    match b | 0x[] => s | 0x[h, ..t] => scan_from(step(h, s), t) end;
 
 --- How many characters `b` holds from scan state `s`.
 pub let count_scalars(s: Scan, b: Bytes) -> Nat =
     match b
-    | x[] => 0
-    | x[h, ..t] =>
+    | 0x[] => 0
+    | 0x[h, ..t] =>
         match s
         | lead() => count_scalars(step(h, Scan/lead()), t) + 1
         | cont(_, _, _) => count_scalars(step(h, s), t)

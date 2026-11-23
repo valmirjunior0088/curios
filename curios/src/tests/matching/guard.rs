@@ -325,9 +325,9 @@ fn guards_read_a_recursive_call_projected_applied_and_over_bytes() {
             end;
         let high(b: Bytes) -> Nat =
             match b
-            | x[] => 0
-            | x[h, ..t], Byte/to_nat(h) > 127 => high(t) + 1
-            | x[_, ..t] => high(t)
+            | 0x[] => 0
+            | 0x[h, ..t], Byte/to_nat(h) > 127 => high(t) + 1
+            | 0x[_, ..t] => high(t)
             end;
         let entry() -> /std/Io({}) =
             let z = Bytes/len(rand/bytes(0)!);
@@ -336,7 +336,7 @@ fn guards_read_a_recursive_call_projected_applied_and_over_bytes() {
                 Nat/to_str(count),
                 Nat/to_str(total),
                 Nat/to_str(skip([3 + z, 20, 1])(0)),
-                Nat/to_str(high(x[0x80, 0x01, 0xFF, ..rand/bytes(0)!]))]));
+                Nat/to_str(high(0x[0x80, 0x01, 0xFF, ..rand/bytes(0)!]))]));
         entry()
         "#;
 

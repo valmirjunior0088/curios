@@ -16,12 +16,12 @@ fn canonical_within_width(source: &str) -> String {
 
 #[test]
 fn a_wire_literal_packs_byte_runs_and_separates_every_spread() {
-    let source = "let wire = x[0x00, 0x55, 0xFD, 0xFE, 0x02, 0xFD, 0x55, 0xFE, 0xFD, 0x01, 0x55, 0xFE, ..Bytes/replicate(36, 0), 0x55, 0xFE, 0x03, ..Bytes/drop(fixture, 2), 0xFE, 0x02, ..fixture];\n()\n";
+    let source = "let wire = 0x[0x00, 0x55, 0xFD, 0xFE, 0x02, 0xFD, 0x55, 0xFE, 0xFD, 0x01, 0x55, 0xFE, ..Bytes/replicate(36, 0), 0x55, 0xFE, 0x03, ..Bytes/drop(fixture, 2), 0xFE, 0x02, ..fixture];\n()\n";
     assert_eq!(
         canonical_within_width(source),
         concat!(
             "let wire =\n",
-            "    x[\n",
+            "    0x[\n",
             "        0x00, 0x55, 0xFD, 0xFE, 0x02, 0xFD, 0x55, 0xFE, 0xFD, 0x01, 0x55, 0xFE,\n",
             "        ..Bytes/replicate(36, 0),\n",
             "        0x55, 0xFE, 0x03,\n",
@@ -35,13 +35,13 @@ fn a_wire_literal_packs_byte_runs_and_separates_every_spread() {
 
 #[test]
 fn spread_calls_and_nested_packed_literals_remain_breakable() {
-    for open in ["[", "x["] {
+    for open in ["[", "0x["] {
         let source = format!(
-            "let out: Shape = f({open}1, 2, ..build(long_argument_one, long_argument_two, long_argument_three, long_argument_four, long_argument_five), x[3, 4, ..tail], 5, ..rest], another_argument);\n"
+            "let out: Shape = f({open}1, 2, ..build(long_argument_one, long_argument_two, long_argument_three, long_argument_four, long_argument_five), 0x[3, 4, ..tail], 5, ..rest], another_argument);\n"
         );
         let output = canonical_within_width(&source);
         assert!(output.contains("..build(\n"), "{output}");
-        assert!(output.contains("x[3, 4, ..tail]"), "{output}");
+        assert!(output.contains("0x[3, 4, ..tail]"), "{output}");
         assert!(
             output.lines().any(|line| line.trim() == "..rest],"),
             "{output}"
@@ -54,7 +54,7 @@ fn a_wrapped_argument_does_not_flatten_the_calls_later_arguments() {
     let output = canonical_within_width(
         "pub let spawn(cmd: Command) -> Try(Io, Io/Error, Child) =\n\
          let _ = env_checked(cmd.env)!;\n\
-         let reply = proc_spawn([Str/to_bytes(cmd.program), ..List/map(cmd.args, Str/to_bytes)], match cmd.cwd | some(p) => Path/to_bytes(p) | none() => x[] end, List/map(cmd.env, env_entry), stdio_of(cmd.stdin), stdio_of(cmd.stdout), stdio_of(cmd.stderr))!;\n\
+         let reply = proc_spawn([Str/to_bytes(cmd.program), ..List/map(cmd.args, Str/to_bytes)], match cmd.cwd | some(p) => Path/to_bytes(p) | none() => 0x[] end, List/map(cmd.env, env_entry), stdio_of(cmd.stdin), stdio_of(cmd.stdout), stdio_of(cmd.stderr))!;\n\
          reply;\n",
     );
     assert!(output.contains("proc_spawn(\n            ["), "{output}");
@@ -68,9 +68,9 @@ fn a_wrapped_argument_does_not_flatten_the_calls_later_arguments() {
 fn a_list_in_an_arm_does_not_hide_the_ladders_breaks() {
     let output = canonical_within_width(
         "let each_ready(reports: Bytes) -> List(Flag) =\n\
-         match reports | x[] => [] | x[r, ..rest] => [flagged(r, /sys/event/ready), ..each_ready(rest)] end;\n",
+         match reports | 0x[] => [] | 0x[r, ..rest] => [flagged(r, /sys/event/ready), ..each_ready(rest)] end;\n",
     );
-    assert!(output.contains("    match reports\n    | x[] => []\n    | x[r, ..rest] => [flagged(r, /sys/event/ready), ..each_ready(rest)]\n    end;"), "{output}");
+    assert!(output.contains("    match reports\n    | 0x[] => []\n    | 0x[r, ..rest] => [flagged(r, /sys/event/ready), ..each_ready(rest)]\n    end;"), "{output}");
 }
 
 #[test]
@@ -78,11 +78,11 @@ fn a_list_inside_a_tuple_and_lambda_does_not_flatten_the_enclosing_call() {
     let output = canonical_within_width(
         "let components(b: Bytes) -> {before: List(Bytes), last: Bytes} =\n\
          let (done, current): {List(Bytes), Bytes} =\n\
-         Bytes/fold(b, ([], x[]), (byte, (done, current)) => match byte == separator | true => ([..done, current], x[]) | false => (done, x[..current, byte]) end);\n\
+         Bytes/fold(b, ([], 0x[]), (byte, (done, current)) => match byte == separator | true => ([..done, current], 0x[]) | false => (done, 0x[..current, byte]) end);\n\
          (before = done, last = current);\n",
     );
     assert!(output.contains("Bytes/fold(\n"), "{output}");
-    assert!(output.contains("([..done, current], x[])"), "{output}");
+    assert!(output.contains("([..done, current], 0x[])"), "{output}");
 }
 
 #[test]
@@ -107,7 +107,7 @@ fn lists_in_witness_arms_do_not_hide_the_ladders_breaks() {
 fn packed_atoms_inside_a_list_do_not_flatten_the_calls_later_arguments() {
     let packed = ["alpha"; 24].join(", ");
     let source = format!(
-        "let out: Shape = f([x[{packed}]], long_argument_one, long_argument_two, long_argument_three, long_argument_four);\n"
+        "let out: Shape = f([0x[{packed}]], long_argument_one, long_argument_two, long_argument_three, long_argument_four);\n"
     );
     let output = canonical_within_width(&source);
     assert!(output.contains("f(\n"), "{output}");
@@ -118,7 +118,7 @@ fn packed_atoms_inside_a_list_do_not_flatten_the_calls_later_arguments() {
 fn a_packed_argument_does_not_flatten_a_call_inside_a_list() {
     let packed = ["alpha"; 24].join(", ");
     let source = format!(
-        "let out: Shape = [f(x[{packed}], long_argument_one, long_argument_two, long_argument_three, long_argument_four), other(value)];\n"
+        "let out: Shape = [f(0x[{packed}], long_argument_one, long_argument_two, long_argument_three, long_argument_four), other(value)];\n"
     );
     let output = canonical_within_width(&source);
     assert!(output.contains("f(\n"), "{output}");

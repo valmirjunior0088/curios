@@ -237,9 +237,9 @@ fn a_print_after_standard_output_is_finished_ends_the_program_saying_why() {
 const CUT_LAST: &str = r#"
 use /std/{Nat, Bytes, Str, Try, Io, Proc};
 use /std/time/{Duration};
-let grown(b: Bytes, n: Nat) -> Bytes = match n | 0 => b | m + 1 => grown(x[..b, ..b], m) end;
+let grown(b: Bytes, n: Nat) -> Bytes = match n | 0 => b | m + 1 => grown(0x[..b, ..b], m) end;
 let entry() -> Io({}) =
-    let timed = Io/timeout(Duration/of_millis(10), Try/run(Io/write(Proc/stdout, grown(x[0x61], 20))))!;
+    let timed = Io/timeout(Duration/of_millis(10), Try/run(Io/write(Proc/stdout, grown(0x[0x61], 20))))!;
     let said = match timed | none() => "cut\n" | some(_) => "all\n" end;
     let _ = Try/run(Io/write(Proc/stderr, Str/to_bytes(said)))!;
     Io/pure(());

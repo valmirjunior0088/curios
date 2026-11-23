@@ -446,7 +446,7 @@ fn widened(int: &Term, nat: &Term) -> bool {
 
 /// `Bytes` is the free monoid on its bytes: two values reduce by stripping their longest common prefix — `curios-algebra`'s `Word::strip_common_prefix` over the words `crate::words` reads — and the residual tails ride back on `Equivalent`, so the inverter can solve a flex binder forced to equal a leftover suffix and conversion can enqueue the rest. A definite element disagreement, or a residual with a positive segment facing the empty value, is `Impossible`; a chunk or window facing an unlike one is `Undecided`, and so is a residual of nothing but those facing the empty value, whose lengths are unknown. `None` means the pair is not two `Bytes` values, so the caller keeps its own handling.
 ///
-/// Prefix-only: a common *suffix* (`x ++ x[0x01] ~ y ++ x[0x01]`) is sound to cancel but not yet attempted. Chunks and single elements are matched as written, so two convertible-but-unequal elements (`append(x[], h1)` against `append(x[], h2)`) are left to the caller's structural comparison, and they reach it *flat*: see `regroup`.
+/// Prefix-only: a common *suffix* (`x ++ 0x[0x01] ~ y ++ 0x[0x01]`) is sound to cancel but not yet attempted. Chunks and single elements are matched as written, so two convertible-but-unequal elements (`append(0x[], h1)` against `append(0x[], h2)`) are left to the caller's structural comparison, and they reach it *flat*: see `regroup`.
 pub fn peel_bytes(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
     if !is_bytes_word(left) || !is_bytes_word(right) {
         return None;

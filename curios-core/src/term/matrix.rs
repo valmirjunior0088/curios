@@ -159,7 +159,7 @@ pub enum Pattern {
     Str(String),
     /// A run over a list: `[]`, `[a, b]` or `[a, b, ..rest]`.
     List(#[archived_omit_bounds] Elements),
-    /// A run over a packed sequence: `x[]`, `x[a, b]` or `x[a, b, ..rest]`.
+    /// A run over a packed sequence: `0x[]`, `0x[a, b]` or `0x[a, b, ..rest]`.
     Bytes(#[archived_omit_bounds] Elements),
 }
 

@@ -33,7 +33,7 @@ let fed(
     | more(next, kept) =>
         match segments
         | [] => Fed/wanting()
-        | [segment, ..later] => fed(piece, next, x[..kept, ..segment], later)
+        | [segment, ..later] => fed(piece, next, 0x[..kept, ..segment], later)
         end
     end;
 
@@ -46,7 +46,7 @@ let front(b: Bytes, k: Nat) -> Bytes =
 let past(b: Bytes, k: Nat) -> Bytes =
     match Bool/holds(k <= Bytes/len(b))
     | some(within) => Bytes/drop(b, k, @within)
-    | none() => x[]
+    | none() => 0x[]
     end;
 
 -- Whether `piece` reads `wire` as `expected` however `wire` is cut in two.
@@ -60,7 +60,7 @@ let alike_at_every_cut(
 ) -> Bool =
     List/all(
         List/range(0, Bytes/len(wire) + 1),
-        (k) => fed(piece, start, x[], [front(wire, k), past(wire, k)]) == expected);
+        (k) => fed(piece, start, 0x[], [front(wire, k), past(wire, k)]) == expected);
 
 -- Whether `piece` still wants more at every place short of `whole` that `wire` may stop.
 let wanting_at_every_stop(
@@ -73,7 +73,7 @@ let wanting_at_every_stop(
 ) -> Bool =
     List/all(
         List/range(0, whole),
-        (k) => fed(piece, start, x[], [front(wire, k)]) == Fed/wanting());
+        (k) => fed(piece, start, 0x[], [front(wire, k)]) == Fed/wanting());
 
 let line(limit: Nat) -> (Nat, Bytes) -> Reader/Step(Nat, Io/Error, Bytes) =
     (searched, held) => Reader/piece/line(limit, searched, held);
@@ -106,8 +106,8 @@ test a_line_reads_whole_at_every_cut =
             Fed/whole(Str/to_bytes("second"), Str/to_bytes("third"))),
         Test/equal(
             fed(line(64), 0, Str/to_bytes("a\rb\n"), []),
-            Fed/whole(Str/to_bytes("a\rb"), x[])),
-        Test/equal(fed(line(64), 0, Str/to_bytes("\n"), []), Fed/whole(x[], x[]))]);
+            Fed/whole(Str/to_bytes("a\rb"), 0x[])),
+        Test/equal(fed(line(64), 0, Str/to_bytes("\n"), []), Fed/whole(0x[], 0x[]))]);
 
 -- A line longer than its bound is refused wherever it is cut, its newline arrived or not, and one as long as its bound is read.
 test a_line_past_its_bound_is_refused_at_every_cut =
@@ -155,13 +155,13 @@ test a_stated_count_reads_whole_at_every_cut =
         Test/assert(
             "a stated count wants more at every stop short of it",
             wanting_at_every_stop(counted(64, 5), (), wire, 5)),
-        Test/equal(fed(counted(64, 0), (), x[], []), Fed/whole(x[], x[])),
-        Test/equal(fed(counted(4, 5), (), x[], []), Fed/refused())]);
+        Test/equal(fed(counted(64, 0), (), 0x[], []), Fed/whole(0x[], 0x[])),
+        Test/equal(fed(counted(4, 5), (), 0x[], []), Fed/refused())]);
 
 -- What is left is never taken, however much has arrived, and more than its bound is refused.
 test what_is_left_wants_more_up_to_its_bound =
     Test/all([
-        Test/equal(fed(left(4), (), x[], [Str/to_bytes("ab"), Str/to_bytes("cd")]), Fed/wanting()),
+        Test/equal(fed(left(4), (), 0x[], [Str/to_bytes("ab"), Str/to_bytes("cd")]), Fed/wanting()),
         Test/equal(
-            fed(left(4), (), x[], [Str/to_bytes("ab"), Str/to_bytes("cde")]),
+            fed(left(4), (), 0x[], [Str/to_bytes("ab"), Str/to_bytes("cde")]),
             Fed/refused())]);

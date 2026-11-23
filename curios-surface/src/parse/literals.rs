@@ -638,10 +638,10 @@ fn parse_bytes_entry<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Bytes
         .parse(state)
 }
 
-// A `Bytes` literal `x[0x48, b, ..rest]` (empty `x[]`) — the packed sibling of the `List` literal, told apart by the letter glued to the bracket. Only that junction is tight: past the `[` the literal lexes like any other bracketed list, so whitespace, a trailing comma, and arbitrary (unparenthesized) element and spread terms are all free. The glue is what keeps `x` usable as an ordinary binder — `x [1]` is the binder `x` followed by a list, not a `Bytes` literal — and an identifier merely ending in the letter never starts one, since the name parser reaches `nx[…]` first.
+// A `Bytes` literal `0x[0x48, b, ..rest]` (empty `0x[]`) — the packed sibling of the `List` literal, told apart by the prefix glued to the bracket, which no name can be and no numeral is, since a hexadecimal numeral takes a digit after its `0x`. Only that junction is tight: past the `[` the literal lexes like any other bracketed list, so whitespace, a trailing comma, and arbitrary (unparenthesized) element and spread terms are all free. A bracket glued to a name is no literal, so `0x[1]` is not one.
 pub fn parse_bytes_literal<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
-    parse_literal("x[")
-        // The glued letter and bracket are the discriminating prefix — `x [1]` is a binder and a list, `x[1]` can be nothing but this — so what follows is the diagnosis. Left to backtrack, a bad entry would send the grammar back to reading the letter as a bare name, which succeeds and throws the entry's report away: the enclosing form's own complaint would then stand at the bracket, asking for the `;` or `)` that follows the literal rather than naming the entry or the missing `]`. The `List` sibling below needs none of this only because nothing else consumes a bare `[`.
+    parse_literal("0x[")
+        // The prefix and bracket discriminate — `0x[1]` can be nothing but this — so what follows is the diagnosis. Left to backtrack, a bad entry would send the grammar back to reading the `0` as a numeral, which succeeds and throws the entry's report away: the enclosing form's own complaint would then stand at the bracket, asking for the `;` or `)` that follows the literal rather than naming the entry or the missing `]`. The `List` sibling below needs none of this only because nothing else consumes a bare `[`.
         .and_keep(commit(
             sep_by0_trailing(parse_bytes_entry, || parse_literal(",")).and_drop(parse_literal("]")),
         ))

@@ -510,7 +510,7 @@ fn an_int_successor_does_not_clash_with_zero() {
     });
 }
 
-// The same question at a sequence carrier, where the strip decides a residual against the empty value by whether anything left in it has a positive length. A window has none to state: `Bytes/slice(b, 0, n)` is the empty value at `n` zero, so a run or a single element clashes with `x[]` and a window does not. Counted positive, the arm would be excused and `absurd(x[], 0, Eq/refl())` would prove `False`. The control's window is followed by a byte, a positive segment that clashes with `x[]`.
+// The same question at a sequence carrier, where the strip decides a residual against the empty value by whether anything left in it has a positive length. A window has none to state: `Bytes/slice(b, 0, n)` is the empty value at `n` zero, so a run or a single element clashes with `0x[]` and a window does not. Counted positive, the arm would be excused and `absurd(0x[], 0, Eq/refl())` would prove `False`. The control's window is followed by a byte, a positive segment that clashes with `0x[]`.
 #[test]
 fn a_window_that_may_be_empty_does_not_clash_with_the_empty_value() {
     control(
@@ -522,7 +522,7 @@ fn a_window_that_may_be_empty_does_not_clash_with_the_empty_value() {
             b : Bytes,
             n : Nat,
             @ok : Holds(0 + n <= Bytes/len(b)),
-            h : Eq()(x[..Bytes/slice(b, 0, n), 0x01], x[]),
+            h : Eq()(0x[..Bytes/slice(b, 0, n), 0x01], 0x[]),
         ) -> False =
             match h end;
 
@@ -531,15 +531,15 @@ fn a_window_that_may_be_empty_does_not_clash_with_the_empty_value() {
         b"ok",
     )
     .refused(&[(
-        "Eq()(x[..Bytes/slice(b, 0, n), 0x01], x[])",
-        "Eq()(Bytes/slice(b, 0, n), x[])",
+        "Eq()(0x[..Bytes/slice(b, 0, n), 0x01], 0x[])",
+        "Eq()(Bytes/slice(b, 0, n), 0x[])",
     )])
     .by_elaborator_in("/absurd", |error| {
         matches!(error, Error::MatrixUncovered { indexed: true, .. })
     });
 }
 
-// The strip where a chunk faces a run: `x[..b, 0x01]` opens with an opaque operand and `x[0x01, ..c]` with a byte, so the two share no certain prefix and the pair is handed on rather than clashed. They are one value wherever `b` and `c` are both empty, which is what makes a clash here a `False` rather than imprecision. The control's two values each open with a byte, and the bytes differ.
+// The strip where a chunk faces a run: `0x[..b, 0x01]` opens with an opaque operand and `0x[0x01, ..c]` with a byte, so the two share no certain prefix and the pair is handed on rather than clashed. They are one value wherever `b` and `c` are both empty, which is what makes a clash here a `False` rather than imprecision. The control's two values each open with a byte, and the bytes differ.
 #[test]
 fn a_value_extended_at_one_end_does_not_clash_with_one_extended_at_the_other() {
     control(
@@ -547,14 +547,14 @@ fn a_value_extended_at_one_end_does_not_clash_with_one_extended_at_the_other() {
         use /std/{Eq, Bytes};
         use /std/Bool/{False};
 
-        let absurd(b : Bytes, c : Bytes, h : Eq()(x[0x02, ..b], x[0x01, ..c])) -> False =
+        let absurd(b : Bytes, c : Bytes, h : Eq()(0x[0x02, ..b], 0x[0x01, ..c])) -> False =
             match h end;
 
         /std/print("ok")
         "#,
         b"ok",
     )
-    .refused(&[("x[0x02, ..b]", "x[..b, 0x01]")])
+    .refused(&[("0x[0x02, ..b]", "0x[..b, 0x01]")])
     .by_elaborator_in("/absurd", |error| {
         matches!(error, Error::MatrixUncovered { indexed: true, .. })
     });

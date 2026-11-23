@@ -21,7 +21,7 @@ fn a_trailing_literal_or_lambda_after_atoms_hugs_the_call() {
         "f(alpha, [\n    bravo,\n    charlie])"
     );
     // A packed run of atoms wraps as it does anywhere, its first element riding the opener.
-    assert_eq!(render("f(x[1, 2, 3])", 8), "f(x[1,\n    2,\n    3])");
+    assert_eq!(render("f(0x[1, 2, 3])", 8), "f(0x[1,\n    2,\n    3])");
     assert_eq!(
         render("f((alpha, bravo))", 10),
         "f((\n    alpha,\n    bravo))"

@@ -6,30 +6,30 @@ use /std/Bool/{Holds};
 test atom_splice_builds_the_written_sequence =
     let i: Byte = 0x69;
     let bang: Byte = 0x21;
-    Test/equal(x[0x48, i, bang], Str/to_bytes("Hi!"));
+    Test/equal(0x[0x48, i, bang], Str/to_bytes("Hi!"));
 
--- An atom leading a spread lowers to the cons spelling the packed-match refinement builds — the singleton `append(x[], h)` concatenated with the tail — so a literal written that way *is* the cons spine rather than merely equal to one. Stated over symbolic operands through `len` and `try_get`, the two observations that reduce across that spine, so nothing here is reached by folding literals. These are proofs rather than tests: each is a claim about every `h` and `t`, so it is stated in a type and discharged by the certifier on every build, and there is nothing left for a run to decide.
+-- An atom leading a spread lowers to the cons spelling the packed-match refinement builds — the singleton `append(0x[], h)` concatenated with the tail — so a literal written that way *is* the cons spine rather than merely equal to one. Stated over symbolic operands through `len` and `try_get`, the two observations that reduce across that spine, so nothing here is reached by folding literals. These are proofs rather than tests: each is a claim about every `h` and `t`, so it is stated in a type and discharged by the certifier on every build, and there is nothing left for a run to decide.
 let _bytes_cons_has_the_length_of_its_tail_plus_one(
     h: Byte,
     t: Bytes,
-) -> Eq()(Bytes/len(x[h, ..t]), 1 + Bytes/len(t)) =
+) -> Eq()(Bytes/len(0x[h, ..t]), 1 + Bytes/len(t)) =
     Eq/refl();
 
 let _bytes_cons_decodes_its_head_first(
     h: Byte,
     t: Bytes,
-) -> Eq()(Bytes/try_get(x[h, ..t], 0), Option/some(h)) =
+) -> Eq()(Bytes/try_get(0x[h, ..t], 0), Option/some(h)) =
     Eq/refl();
 
 test list_fold_sums_elements =
     Test/equal(List/fold([10, 20, 30], 0, (e, acc) => acc + e), 60);
 
 test bytes_fold_sums_bytes =
-    Test/equal(Bytes/fold(x[0x0A, 0x14, 0x1E], 0, (byte, acc) => acc + Byte/to_nat(byte)), 60);
+    Test/equal(Bytes/fold(0x[0x0A, 0x14, 0x1E], 0, (byte, acc) => acc + Byte/to_nat(byte)), 60);
 
 -- Bytes show as two hexadecimal digits each, a leading zero kept, built from characters rather than decoded from bytes.
 test bytes_show_as_hexadecimal =
-    Test/equal(Show/show(x[0x0F, 0xA0, 0x00]), "0fa000");
+    Test/equal(Show/show(0x[0x0F, 0xA0, 0x00]), "0fa000");
 
 -- The orders of `Bytes` and `Str` walk both runs' structure, so a type may name them: each is stated reflexive here, a statement an index walked upward under a guard is refused for.
 let bytes_order_is_reflexive(a: Bytes) -> Eq()(Bytes/ord(a, a), Ordering/eq()) =
@@ -41,24 +41,24 @@ let _str_order_is_reflexive(a: Str) -> Eq()(Str/ord(a, a), Ordering/eq()) =
 -- A proper prefix first, then the first place the two differ.
 test packed_orders_compare_by_prefix_then_by_atom =
     Test/all([
-        Test/equal(Bytes/ord(x[], x[]), Ordering/eq()),
-        Test/equal(Bytes/ord(x[1], x[1, 0]), Ordering/lt()),
-        Test/equal(Bytes/ord(x[1, 0], x[1]), Ordering/gt()),
-        Test/equal(Bytes/ord(x[255], x[1, 0]), Ordering/gt()),
-        Test/equal(Bytes/ord(x[1, 2], x[1, 3]), Ordering/lt()),
+        Test/equal(Bytes/ord(0x[], 0x[]), Ordering/eq()),
+        Test/equal(Bytes/ord(0x[1], 0x[1, 0]), Ordering/lt()),
+        Test/equal(Bytes/ord(0x[1, 0], 0x[1]), Ordering/gt()),
+        Test/equal(Bytes/ord(0x[255], 0x[1, 0]), Ordering/gt()),
+        Test/equal(Bytes/ord(0x[1, 2], 0x[1, 3]), Ordering/lt()),
         Test/equal(Str/ord("ab", "b"), Ordering/lt()),
         Test/equal(Str/ord("b", "ab"), Ordering/gt())]);
 
 -- Two runs part at a byte where a byte decides their order, and not where one runs out or they are one run.
 test runs_part_at_a_byte_only_where_a_byte_decides =
     Test/all([
-        Test/assert("`x[1, 2]` is below `x[1, 3]`", Bytes/ord/below(x[1, 2], x[1, 3])),
-        Test/assert("`x[1, 2, 9]` is below `x[2]`", Bytes/ord/below(x[1, 2, 9], x[2])),
-        Test/assert("`x[1]` is not below `x[1, 0]`", Bool/not(Bytes/ord/below(x[1], x[1, 0]))),
+        Test/assert("`0x[1, 2]` is below `0x[1, 3]`", Bytes/ord/below(0x[1, 2], 0x[1, 3])),
+        Test/assert("`0x[1, 2, 9]` is below `0x[2]`", Bytes/ord/below(0x[1, 2, 9], 0x[2])),
+        Test/assert("`0x[1]` is not below `0x[1, 0]`", Bool/not(Bytes/ord/below(0x[1], 0x[1, 0]))),
         Test/assert(
-            "`x[1, 3]` is not below `x[1, 2]`",
-            Bool/not(Bytes/ord/below(x[1, 3], x[1, 2]))),
-        Test/assert("a run is not below itself", Bool/not(Bytes/ord/below(x[1, 2], x[1, 2])))]);
+            "`0x[1, 3]` is not below `0x[1, 2]`",
+            Bool/not(Bytes/ord/below(0x[1, 3], 0x[1, 2]))),
+        Test/assert("a run is not below itself", Bool/not(Bytes/ord/below(0x[1, 2], 0x[1, 2])))]);
 
 -- A run below another at a byte is before it behind any prefix and ahead of any two suffixes.
 let _a_run_below_another_is_before_it_wherever_the_two_stand(
@@ -68,14 +68,14 @@ let _a_run_below_another_is_before_it_wherever_the_two_stand(
     s: Bytes,
     u: Bytes,
     parted: Holds(Bytes/ord/below(a, b)),
-) -> Eq()(Bytes/ord(x[..p, ..a, ..s], x[..p, ..b, ..u]), Ordering/lt()) =
+) -> Eq()(Bytes/ord(0x[..p, ..a, ..s], 0x[..p, ..b, ..u]), Ordering/lt()) =
     Bytes/ord/below/lt(
-        x[..p, ..a, ..s],
-        x[..p, ..b, ..u],
+        0x[..p, ..a, ..s],
+        0x[..p, ..b, ..u],
         Bytes/ord/below/past(
             p,
-            x[..a, ..s],
-            x[..b, ..u],
+            0x[..a, ..s],
+            0x[..b, ..u],
             Bytes/ord/below/onto(a, b, s, u, parted)));
 
 -- The order of bytes carries across a middle run, and reads through a shared prefix.
@@ -86,7 +86,7 @@ let _the_order_of_bytes_reads_past_a_shared_prefix(
     p: Bytes,
     a: Bytes,
     b: Bytes,
-) -> Eq()(Bytes/ord(x[..p, ..a], x[..p, ..b]), Bytes/ord(a, b)) =
+) -> Eq()(Bytes/ord(0x[..p, ..a], 0x[..p, ..b]), Bytes/ord(a, b)) =
     Bytes/ord/past(p, a, b);
 
 -- A run of bytes read as a number: bounded by its width, and injective at one width.

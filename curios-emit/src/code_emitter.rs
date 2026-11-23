@@ -1734,7 +1734,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
 
     /// Lower a packed concatenation with the immediate split, pair by pair from the left. Two immediates whose lengths together fit the envelope join by arithmetic — the right payload shifted past the left's elements, the two lengths summed — with no box, no node and no normalisation; every other pair is the rope's: a node over its boxed operands, a side that is empty answering the other, normalised since that answer may be a boxed immediate. Fewer than two operands join nothing and take the rope's lowering whole.
     ///
-    /// **The split is here for what a cons costs.** `x[h, ..t]` is a chunk of one concatenated with `t`, so a short run built from the front is this lowering once an element; without the arithmetic arm each step boxes both operands, allocates their node and gathers it back into the immediate it was always going to be.
+    /// **The split is here for what a cons costs.** `0x[h, ..t]` is a chunk of one concatenated with `t`, so a short run built from the front is this lowering once an element; without the arithmetic arm each step boxes both operands, allocates their node and gathers it back into the immediate it was always going to be.
     fn emit_bytes_concat(
         &mut self,
         result_local: &curios_wasm::LocalName,

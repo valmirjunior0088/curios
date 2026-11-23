@@ -33,8 +33,8 @@ fn a_hypothesis_typed_by_the_scrutinee_needs_no_convoy() {
         use /std/Str/{Scan, step};
 
         induct Utf8: (Scan, Bytes) -> Prop
-        | stop(): (Scan/lead(), x[])
-        | more(c: Byte, st: Scan, t: Bytes, rest: Utf8(step(c, st), t)): (st, x[c, ..t])
+        | stop(): (Scan/lead(), 0x[])
+        | more(c: Byte, st: Scan, t: Bytes, rest: Utf8(step(c, st), t)): (st, 0x[c, ..t])
         end
 
         let dv(s : Scan, @b : Bytes, d : Utf8(s, b)) -> Eq()(0, 0) =
@@ -143,7 +143,7 @@ fn a_case_split_whose_goal_holds_a_proof_about_its_scrutinee_needs_no_convoy() {
         use /std/Bool/{Holds};
         let at_bytes(a : Bytes, i : Nat, q : Holds(i < Bytes/len(a)))
             -> Eq()(Bytes/get(a, i, @q), Bytes/get(a, i, @q)) =
-            match a | x[] => Eq/refl() | x[_, .._] => Eq/refl() end;
+            match a | 0x[] => Eq/refl() | 0x[_, .._] => Eq/refl() end;
         let at_list(@T : Type, xs : List(T), i : Nat, q : Holds(i < List/len(xs)))
             -> Eq()(List/get(@T, xs, i, @q), List/get(@T, xs, i, @q)) =
             match xs | [] => Eq/refl() | [_, .._] => Eq/refl() end;

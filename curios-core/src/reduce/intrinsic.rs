@@ -1205,7 +1205,7 @@ pub fn reduce_intrinsic(
                 return Ok(Subterm::Intrinsic(Intrinsic::Bool(true)));
             }
 
-            // A bare side — a variable, a projection, anything that is not an intrinsic — is read as the one-chunk spine it is: `x[..bs]` is `bs` on values, so the peel's verdict on the wrapped pair is its verdict on the original. What the wrap decides is the clash on a positive residual, `append(bs, k) ~ bs`; the peel reads a word off a head, and a variable has none. The fold's alone: conversion can only refuse such a pair, and inversion solves a bare side as a binder.
+            // A bare side — a variable, a projection, anything that is not an intrinsic — is read as the one-chunk spine it is: `0x[..bs]` is `bs` on values, so the peel's verdict on the wrapped pair is its verdict on the original. What the wrap decides is the clash on a positive residual, `append(bs, k) ~ bs`; the peel reads a word off a head, and a variable has none. The fold's alone: conversion can only refuse such a pair, and inversion solves a bare side as a binder.
             let spine = |side: &Term| match &**side {
                 Subterm::Intrinsic(intrinsic) => intrinsic.clone(),
                 _ => Intrinsic::BytesConcat {
@@ -1213,7 +1213,7 @@ pub fn reduce_intrinsic(
                 },
             };
 
-            // Structural decision via the free-monoid peel (`core::spine`): a peeled-equal pair is `true`, a definite generator or length clash is `false` (so `eql([1] ++ x, [2] ++ x) = false` regardless of `x`), and a pair with a common prefix is the pair of what follows it, which holds exactly when the pair does — `eql(x[1, ..a], x[1, ..b]) = eql(a, b)`, as `Nat`'s comparisons are read past their common floor. The residual is followed only where it is not the pair as given: a bare side is wrapped above and handed back bare, which a re-entry would wrap again. What is left is strictly smaller where a prefix came off, and flat where a nesting was regrouped, which the peel declines the round after, so the re-entry ends.
+            // Structural decision via the free-monoid peel (`core::spine`): a peeled-equal pair is `true`, a definite generator or length clash is `false` (so `eql([1] ++ x, [2] ++ x) = false` regardless of `x`), and a pair with a common prefix is the pair of what follows it, which holds exactly when the pair does — `eql(0x[1, ..a], 0x[1, ..b]) = eql(a, b)`, as `Nat`'s comparisons are read past their common floor. The residual is followed only where it is not the pair as given: a bare side is wrapped above and handed back bare, which a re-entry would wrap again. What is left is strictly smaller where a prefix came off, and flat where a nesting was regrouped, which the peel declines the round after, so the re-entry ends.
             match peel_bytes(&spine(&left), &spine(&right)) {
                 Some(Deduction::Equal) => return Ok(Subterm::Intrinsic(Intrinsic::Bool(true))),
                 Some(Deduction::Impossible) => {
@@ -1229,7 +1229,7 @@ pub fn reduce_intrinsic(
                 Some(Deduction::Equivalent(_)) | Some(Deduction::Undecided) | None => {}
             }
 
-            // Two runs that each open with a byte are equal exactly when the bytes are and the rest are, since the free monoid cancels and a byte is one generator: `eql(x[h, ..a], x[k, ..b]) = to_nat(h) == to_nat(k) && eql(a, b)`, the bytes compared as `/std/Byte`'s `==` compares them. A pair whose openings the peel already decided never reaches here, so this is the case of a byte it cannot read.
+            // Two runs that each open with a byte are equal exactly when the bytes are and the rest are, since the free monoid cancels and a byte is one generator: `eql(0x[h, ..a], 0x[k, ..b]) = to_nat(h) == to_nat(k) && eql(a, b)`, the bytes compared as `/std/Byte`'s `==` compares them. A pair whose openings the peel already decided never reaches here, so this is the case of a byte it cannot read.
             if let (
                 Layer::Cons {
                     head: Some(this_head),
@@ -1276,7 +1276,7 @@ pub fn reduce_intrinsic(
                     ))
                 }));
             }
-            // The cons head's generator: `get(append(x[], k), 0) = k` — the base case of the cons-peel below, and the partner of `BytesSlice`'s rules. Without it the peel's symbolic head chunk is this same `append(x[], k)`, so the `0`-index step would rebuild the redex it came from until the budget exhausted.
+            // The cons head's generator: `get(append(0x[], k), 0) = k` — the base case of the cons-peel below, and the partner of `BytesSlice`'s rules. Without it the peel's symbolic head chunk is this same `append(0x[], k)`, so the `0`-index step would rebuild the redex it came from until the budget exhausted.
             if let Subterm::Intrinsic(Intrinsic::BytesAppend {
                 bytes: base,
                 element,
@@ -1425,7 +1425,7 @@ pub fn reduce_intrinsic(
                 }
                 None => {}
             }
-            // A slice over a cons spine peels one generator per `0`/`succ` boundary step — the reduction partner of the `x[c, ..t]` cons `/std/Str/Valid`'s proofs walk:  `slice(cons(h, t), 0, succ n) = h ++ slice(t, 0, n)`  and  `slice(cons(h, t), succ s, n) = slice(t, s, n)`.
+            // A slice over a cons spine peels one generator per `0`/`succ` boundary step — the reduction partner of the `0x[c, ..t]` cons `/std/Str/Valid`'s proofs walk:  `slice(cons(h, t), 0, succ n) = h ++ slice(t, 0, n)`  and  `slice(cons(h, t), succ s, n) = slice(t, s, n)`.
             //
             // Advancing the start leaves the length alone: the count is invariant under peeling the base, so nothing about the window has to be recomputed to move it.
             if let Some((head, tail)) = peel_first_atom(&bytes) {
@@ -1489,7 +1489,7 @@ pub fn reduce_intrinsic(
                 .iter()
                 .map(|e| reducer.reduce_forced(e.clone()))
                 .collect::<Result<_, _>>()?;
-            // Normalise by the monoid unit/associativity laws — drop the empty identity (so `concat(x[], a)`/`concat(a, x[])` collapse to `a`), fuse an all-literal survivor set with `Binary::concat`, collapse a lone operand. The definitional partner of `peel_bytes`'s `x[]`-handling (`core::spine`); see `normalize_concat`.
+            // Normalise by the monoid unit/associativity laws — drop the empty identity (so `concat(0x[], a)`/`concat(a, 0x[])` collapse to `a`), fuse an all-literal survivor set with `Binary::concat`, collapse a lone operand. The definitional partner of `peel_bytes`'s `0x[]`-handling (`core::spine`); see `normalize_concat`.
             //
             // A run past `FUSION_CAP` declines to lend itself, so the concatenation keeps its node instead of copying both operands into a third.
             // The reduced operand vector, and the survivor vector the normalizer filters out of it — two collections whose length is the operand count, charged together before either exists.

@@ -131,7 +131,7 @@ let redirected(request: Request, code: Nat, target: Url) -> Request =
         List/filter(request.headers, (f) =>
             Bool/not(to_get && describes_content(f)) && (within || Bool/not(credential(f))));
     match to_get
-    | true => Request { method = Method/get(), url = target, headers = kept, body = x[] }
+    | true => Request { method = Method/get(), url = target, headers = kept, body = 0x[] }
     | false => Request { ..request, url = target, headers = kept }
     end;
 

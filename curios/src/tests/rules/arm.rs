@@ -456,7 +456,7 @@ fn a_character_dispatch_default_is_checked_at_its_scrutinee() {
     });
 }
 
-// A string's arm is checked at every byte it read and at its end: `"a"`'s arm is the string `x[0x61]`, where `s == "ab"` is `False`, and no prefix of `"ab"` that a longer string reaches too. Read as the run it begins, its `qed` would prove `"a" == "ab"`. `curios-cert`'s `recheck::case_tests` puts a run's cons arm to the certifier at the empty string. The control states what holds of every string.
+// A string's arm is checked at every byte it read and at its end: `"a"`'s arm is the string `0x[0x61]`, where `s == "ab"` is `False`, and no prefix of `"ab"` that a longer string reaches too. Read as the run it begins, its `qed` would prove `"a" == "ab"`. `curios-cert`'s `recheck::case_tests` puts a run's cons arm to the certifier at the empty string. The control states what holds of every string.
 #[test]
 fn a_string_arm_is_checked_at_the_bytes_it_read() {
     control(

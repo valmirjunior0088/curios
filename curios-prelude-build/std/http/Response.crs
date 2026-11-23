@@ -31,12 +31,12 @@ let length_line(n: Nat) -> Bytes =
 
 --- The reply's head as the bytes sent on the wire, stating the length of `body`: the status line as HTTP/1.1, `Connection: close`, since a server keeps no connection, `Content-Length` unless the status is 1xx, 204 or 304, then the headers the renderer does not own, and the blank line.
 pub let render_head(r: Response, body: Bytes) -> Bytes =
-    x[
+    0x[
         ..Str/to_bytes(Fmt/render("HTTP/1.1 % ")(r.status.code)),
         ..r.status.reason.bytes,
         ..Str/to_bytes("\r\nConnection: close\r\n"),
         ..match Status/bodiless(r.status.code)
-        | true => x[]
+        | true => 0x[]
         | false => length_line(Bytes/len(body))
         end,
         ..Field/lines(r.headers, owned),
@@ -44,7 +44,7 @@ pub let render_head(r: Response, body: Bytes) -> Bytes =
 
 --- The reply as the bytes sent on the wire: its head, then its body. Every reply is one a wire can carry, so there is nothing to refuse.
 pub let render(r: Response) -> Bytes =
-    x[..render_head(r, r.body), ..r.body];
+    0x[..render_head(r, r.body), ..r.body];
 
 --- The value of the first header named `name`, compared without case, or `none`.
 pub let header(r: Response, name: Str) -> Option(Field/Value) =
@@ -88,7 +88,7 @@ pub let of(
 
 --- A reply with `code`, its usual reason, and neither headers nor content: what a 204 or a 304 is.
 pub let empty(code: Nat, @_: Bool/Holds(100 <= code && code <= 999)) -> Response =
-    Response { status = Status/of(code), headers = [], body = x[] };
+    Response { status = Status/of(code), headers = [], body = 0x[] };
 
 --- Plain text, under a status that carries content.
 pub let of_text(
@@ -144,11 +144,11 @@ pub let redirect(url: Url) -> Response =
     Response {
         status = Status/of(303),
         headers = [Field { name = Field/Name { text = "Location" }, value = Url/to_value(url) }],
-        body = x[] };
+        body = 0x[] };
 
 --- A `404 Not Found` with an empty body.
 pub let not_found: Response =
-    Response { status = Status/of(404), headers = [], body = x[] };
+    Response { status = Status/of(404), headers = [], body = 0x[] };
 
 --- A reply's head as it is read: its status, the version it states and its headers.
 pub struct Head: pub Type {

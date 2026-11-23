@@ -19,7 +19,7 @@ fn args_indexes_the_argv_snapshot() {
     let (system, io) = MockHost::builder().args(["prog", "hello", "world"]).build();
     run_text(r#"
 let entry() -> /std/Io({}) =
-    let _ = /std/Try/run(std/Io/write(std/Proc/stdout, /std/Option/unwrap_or(/std/List/try_get(/std/Proc/args()!, 1), x[])))!;
+    let _ = /std/Try/run(std/Io/write(std/Proc/stdout, /std/Option/unwrap_or(/std/List/try_get(/std/Proc/args()!, 1), 0x[])))!;
     /std/Io/pure(());
 entry()
 "#,
@@ -207,7 +207,7 @@ fn child_program(body: &str) -> String {
 fn run_captures_both_outputs_and_the_exit() {
     let source = child_program(
         r#"
-            let out = Proc/run(Proc/new("greet", ["world"]), x[])!;
+            let out = Proc/run(Proc/new("greet", ["world"]), 0x[])!;
             Try/pure(Str/flatten([text(out.stdout), "|", text(out.stderr), "|", Show/show(out.exit)]))
         "#,
     );
@@ -296,7 +296,7 @@ fn a_piped_output_is_read_through_the_stream_witness() {
             let read =
                 match Proc/Child/stdout(child)
                 | some(p) => Try/bind(/std/Io/Reader/new(p), /std/Io/Reader/rest)
-                | none() => Try/pure(x[])
+                | none() => Try/pure(0x[])
                 end;
             let bytes = read!;
             let exit = Proc/Child/wait(child)!;

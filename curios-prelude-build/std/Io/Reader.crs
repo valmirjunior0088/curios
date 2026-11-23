@@ -63,7 +63,7 @@ pub struct Reader(S: Type): Type {
 
 --- A reader over `stream` whose named reads refuse a piece past `limit` bytes.
 pub let within(@S: Type, stream: S, limit: Nat) -> Io(Reader(S)) =
-    let ahead = Box/new(Held { cuts = 0, bytes = x[] })!;
+    let ahead = Box/new(Held { cuts = 0, bytes = 0x[] })!;
     Io/pure(Reader { stream = stream, limit = limit, ahead = ahead });
 
 --- A reader over `stream` whose named reads refuse a piece past 1 MiB.
@@ -76,7 +76,7 @@ pub let held(@S: Type, r: Reader(S)) -> Io(Bytes) =
 
 -- Everything `r` holds, taken as one piece.
 let drained(@S: Type, r: Reader(S)) -> Io(Bytes) =
-    Box/change(r.ahead, (now: Held) => (Held { cuts = now.cuts + 1, bytes = x[] }, now.bytes));
+    Box/change(r.ahead, (now: Held) => (Held { cuts = now.cuts + 1, bytes = 0x[] }, now.bytes));
 
 -- Whether `r` holds other than the `bytes` a piece left at `cuts`: what another reader cut or took in meanwhile, which the piece has not been asked of.
 let touched(@S: Type, r: Reader(S), cuts: Nat, bytes: Bytes) -> Io(Bool) =
@@ -133,7 +133,7 @@ pub let take(
             | success(bytes(fresh)) =>
                 let () =
                     Box/change(r.ahead, (then: Held) =>
-                        (Held { cuts = then.cuts, bytes = x[..then.bytes, ..fresh] }, ()))!;
+                        (Held { cuts = then.cuts, bytes = 0x[..then.bytes, ..fresh] }, ()))!;
                 go(next, cuts)
             | success(ended()) =>
                 let moved = touched(r, cuts, bytes)!;

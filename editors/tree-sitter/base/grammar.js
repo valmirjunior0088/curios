@@ -582,8 +582,9 @@ module.exports = grammar({
 
     list_literal: ($) => seq("[", commaList(choice($.spread, $._term)), "]"),
 
-    // The letter is glued to the bracket: `x[` is a single token, so `x [1]` stays the binder `x` before a list.
-    packed_literal: ($) => seq("x[", commaList(choice($.spread, $._term)), "]"),
+    // The prefix is glued to the bracket: `0x[` is a single token, which no name or numeral begins.
+    packed_literal: ($) =>
+      seq("0x[", commaList(choice($.spread, $._term)), "]"),
 
     tuple_type: ($) => seq("{", commaList($.field_declaration), "}"),
 
@@ -736,7 +737,7 @@ module.exports = grammar({
     // A run, written as the literal that builds the value: its elements, each a pattern, then an open run's rest.
     list_pattern: ($) => seq("[", optional($._run), "]"),
 
-    packed_pattern: ($) => seq("x[", optional($._run), "]"),
+    packed_pattern: ($) => seq("0x[", optional($._run), "]"),
 
     _run: ($) =>
       seq(

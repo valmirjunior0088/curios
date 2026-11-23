@@ -56,7 +56,7 @@ test equality_fails =
     let _ = /std/print_err("comparing\n")!; Test/equal(double(2), 5);
 
 test overflow_traps =
-    let v = /std/Proc/env("CURIOS_UNSET_OVERFLOW")!; let _ = /std/rand/bytes(Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, x[])))!; Test/assert("it holds", true);
+    let v = /std/Proc/env("CURIOS_UNSET_OVERFLOW")!; let _ = /std/rand/bytes(Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, 0x[])))!; Test/assert("it holds", true);
 
 test exits_seven =
     let _ = /std/Proc/exit(@{}, 7)!; Test/assert("it holds", true);

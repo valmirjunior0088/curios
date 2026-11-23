@@ -35,10 +35,10 @@ fn a_closed_length_past_what_a_fold_builds_is_left_to_the_runtime() {
         fill!(
             r#"
             use /std/{Nat, Bytes, print};
-            let d(b: Bytes) -> Bytes = x[..b, ..b];
+            let d(b: Bytes) -> Bytes = 0x[..b, ..b];
             print(Nat/to_str(Bytes/len(${doubled})))
             "#,
-            doubled = doubled("x[00, 01, 02, 03]")
+            doubled = doubled("0x[00, 01, 02, 03]")
         ),
         fill!(
             r#"

@@ -122,7 +122,7 @@ fn a_metavariable_blocked_match_comparison_parks_until_the_index_lands() {
 
         let proof_first(@b: Bytes, nz: Holds(0 < Bytes/len(b)), w: Valid(b)) -> {} = ();
 
-        let call(h: Byte, t: Bytes, valid: Valid(x[h, ..t])) -> {} =
+        let call(h: Byte, t: Bytes, valid: Valid(0x[h, ..t])) -> {} =
             proof_first(True/qed(), valid);
 
         Io/pure(())
@@ -132,13 +132,13 @@ fn a_metavariable_blocked_match_comparison_parks_until_the_index_lands() {
 
 #[test]
 fn a_packed_literal_decomposes_against_its_folded_spine() {
-    // The packed-literal view's acceptance shape: `raw(x[])` folds to the literal `x[1]`, so recovering the injectivity lemma's implicits needs `append(x[], ?h) ≡ x[1]` and the concat suffix against the same literal — the length-directed decomposition, since no shape congruence relates `Bytes` to `BytesAppend`/`BytesConcat`.
+    // The packed-literal view's acceptance shape: `raw(0x[])` folds to the literal `0x[1]`, so recovering the injectivity lemma's implicits needs `append(0x[], ?h) ≡ 0x[1]` and the concat suffix against the same literal — the length-directed decomposition, since no shape congruence relates `Bytes` to `BytesAppend`/`BytesConcat`.
     let source = r#"
         use /std/{Byte, Bytes, Eq, Io};
         use /std/Bool/{True, False, Holds};
 
         let head_of(x: Bytes) -> Byte =
-            match x | x[] => 0 | x[h, .._] => h end;
+            match x | 0x[] => 0 | 0x[h, .._] => h end;
 
         let heads_agree(@s: Bytes, @t: Bytes, p: Eq()(s, t)) -> Eq()(head_of(s), head_of(t)) =
             match p | refl(@z) => Eq/refl() end;
@@ -148,17 +148,17 @@ fn a_packed_literal_decomposes_against_its_folded_spine() {
             @t1: Bytes,
             @h2: Byte,
             @t2: Bytes,
-            p: Eq()(x[h1, ..t1], x[h2, ..t2]),
+            p: Eq()(0x[h1, ..t1], 0x[h2, ..t2]),
         ) -> Eq()(h1, h2) =
             heads_agree(p);
 
         let raw(x: Bytes) -> Bytes =
             match x
-            | x[] => x[1]
-            | x[h, ..t] => match h == 1 | true => x[0, ..raw(t)] | false => x[1, ..t] end
+            | 0x[] => 0x[1]
+            | 0x[h, ..t] => match h == 1 | true => 0x[0, ..raw(t)] | false => 0x[1, ..t] end
             end;
 
-        let probe(zt: Bytes, p: Eq()(raw(x[]), raw(x[1, ..zt]))) -> False =
+        let probe(zt: Bytes, p: Eq()(raw(0x[]), raw(0x[1, ..zt]))) -> False =
             Eq/subst((m: Byte) => Holds(m == 1), cons_inj_head(p), True/qed());
 
         Io/pure(())

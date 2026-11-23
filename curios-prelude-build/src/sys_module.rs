@@ -1121,7 +1121,7 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
         ),
         SysModule::carrier(
             "Bytes",
-            &["A packed run of bytes, written `x[…]`."],
+            &["A packed run of bytes, written `0x[…]`."],
             operation("Bytes", &[], syntax, Intrinsic::BytesType),
             items(bytes_ops(syntax)),
         ),

@@ -6823,6 +6823,10 @@
     "named": false
   },
   {
+    "type": "0x[",
+    "named": false
+  },
+  {
     "type": ":",
     "named": false
   },
@@ -6986,10 +6990,6 @@
   {
     "type": "witness_name",
     "named": true
-  },
-  {
-    "type": "x[",
-    "named": false
   },
   {
     "type": "{",

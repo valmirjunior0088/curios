@@ -20,7 +20,7 @@ fn a_colliding_key_witness_is_rejected() {
             ord(a, b) = Ordering/eq(),
         }
         satisfy Hash(Side) {
-            hash(s) = x[],
+            hash(s) = 0x[],
         }
         satisfy Map/Key(Side) {
             injective(a, b, same) = Eq/refl(),
@@ -48,7 +48,7 @@ fn a_key_witness_out_of_its_order_is_rejected() {
         satisfy Eql(Side) { .. }
         satisfy Ord(Side) { .. }
         satisfy Hash(Side) {
-            hash(s) = match s | left() => x[0x1] | right() => x[0x0] end,
+            hash(s) = match s | left() => 0x[0x1] | right() => 0x[0x0] end,
         }
         let apart(e: Eq(@Byte)(0x1, 0x0)) -> False =
             Eq/subst((m: Byte) => Holds(0x1 == m), e, True/qed());

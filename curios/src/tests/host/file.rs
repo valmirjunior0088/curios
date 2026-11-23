@@ -101,7 +101,7 @@ fn read_pulls_bytes_inside_the_scope() {
         let entry() -> /std/Io({}) =
             let bytes = Try/run(Try/scope((s) => Try/bind(File/open(s, Path/of_str("lines.txt"), File/Mode/read()), (f) =>
                 let c = Io/read(f, 1024)!;
-                Try/pure(match c | bytes(b, @_) => b | ended() => x[] end))))!;
+                Try/pure(match c | bytes(b, @_) => b | ended() => 0x[] end))))!;
             match bytes
             | success(b) => Io/bind(Try/run(Io/write(Proc/stdout, b)), (_) => Io/pure(()))
             | failure(_) => /std/print("error")
@@ -125,7 +125,7 @@ fn a_scoped_file_reads_through_its_stream_witness_across_a_suspension() {
             Try/scope((s) => Try/bind(File/open(s, Path/of_str("lines.txt"), File/Mode/read()), (f) =>
                 let _ = Io/yield()!;
                 let c = Io/read(f, 1024)!;
-                Try/pure(match c | bytes(b, @_) => b | _ => x[] end)));
+                Try/pure(match c | bytes(b, @_) => b | _ => 0x[] end)));
         let main() -> Io({}) =
             let r = Try/run(program)!;
             match r

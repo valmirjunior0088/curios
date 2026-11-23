@@ -5,11 +5,11 @@ use /std/{Nat, Byte, Bytes, Bool, Eq, Ordering, proved};
 --- It is `ord`'s `lt` decided at a byte rather than by one run ending first, so it holds whatever follows either run. That is what one value's encoding must guarantee against another's where encodings are concatenated, and what complementing every byte reverses.
 pub let below(a: Bytes, b: Bytes) -> Bool =
     match a
-    | x[] => false
-    | x[h, ..t] =>
+    | 0x[] => false
+    | 0x[h, ..t] =>
         match b
-        | x[] => false
-        | x[k, ..r] =>
+        | 0x[] => false
+        | 0x[k, ..r] =>
             match Nat/ord(Byte/to_nat(h), Byte/to_nat(k))
             | eq() => below(t, r)
             | lt() => true
@@ -25,7 +25,7 @@ pub let of_heads(
     t: Bytes,
     r: Bytes,
     under: Bool/Holds(h < k),
-) -> Bool/Holds(below(x[h, ..t], x[k, ..r])) =
+) -> Bool/Holds(below(0x[h, ..t], 0x[k, ..r])) =
     Eq/subst(
         (o: Ordering) =>
             Bool/Holds(match o | eq() => below(t, r) | lt() => true | gt() => false end),
@@ -39,11 +39,11 @@ pub let lt(
     parted: Bool/Holds(below(a, b)),
 ) -> Eq()(Bytes/ord(a, b), Ordering/lt()) =
     match a
-    | x[] => match parted end
-    | x[h, ..t] =>
+    | 0x[] => match parted end
+    | 0x[h, ..t] =>
         match b
-        | x[] => match parted end
-        | x[k, ..r] =>
+        | 0x[] => match parted end
+        | 0x[k, ..r] =>
             match Nat/ord(Byte/to_nat(h), Byte/to_nat(k))
             | eq() => lt(t, r, parted)
             | lt() => Eq/refl()
@@ -59,13 +59,13 @@ pub let onto(
     s: Bytes,
     u: Bytes,
     parted: Bool/Holds(below(a, b)),
-) -> Bool/Holds(below(x[..a, ..s], x[..b, ..u])) =
+) -> Bool/Holds(below(0x[..a, ..s], 0x[..b, ..u])) =
     match a
-    | x[] => match parted end
-    | x[h, ..t] =>
+    | 0x[] => match parted end
+    | 0x[h, ..t] =>
         match b
-        | x[] => match parted end
-        | x[k, ..r] =>
+        | 0x[] => match parted end
+        | 0x[k, ..r] =>
             match Nat/ord(Byte/to_nat(h), Byte/to_nat(k))
             | eq() => onto(t, r, s, u, parted)
             | lt() => Bool/True/qed()
@@ -80,5 +80,5 @@ pub let past(
     a: Bytes,
     b: Bytes,
     parted: Bool/Holds(below(a, b)),
-) -> Bool/Holds(below(x[..p, ..a], x[..p, ..b])) =
-    match p | x[] => parted | x[_, ..t] => past(t, a, b, parted) end;
+) -> Bool/Holds(below(0x[..p, ..a], 0x[..p, ..b])) =
+    match p | 0x[] => parted | 0x[_, ..t] => past(t, a, b, parted) end;

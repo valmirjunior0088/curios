@@ -196,7 +196,7 @@ fn peel_bytes_clashes_a_positive_run_behind_a_symbolic_chunk_against_the_identit
             peel_bytes(&suffixed, as_intrinsic(&bytes([]))),
             Some(Deduction::Impossible)
         ),
-        "`x ++ x[05]` is never empty"
+        "`x ++ 0x[05]` is never empty"
     );
 }
 

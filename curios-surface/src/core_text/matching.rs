@@ -1,6 +1,6 @@
 //! A match, in the surface's spellings of its cases.
 //!
-//! **A match is `match head` and one arm per case, closed by `end`**: a boolean match's `| false` and `| true`, a dispatch's literal keys and its `| _`, a family's arms by their constructors' tags with their payloads' binders under their marks and its catch-all `| _`, and a case split's `| 0` and `| p + 1`, `| []` and `| [h, ..t]`, `| x[]` and `| x[h, ..t]`. **A match states the goal its arms inhabit, `#{goal = T}`.** What a match's cases hold beside their arms is set in its `cases` field: the instance a family's match states, `#{cases = {stated = T}}`, and a list split's element type, `#{cases = {carrier = {elem = T}}}`, which no arm writes.
+//! **A match is `match head` and one arm per case, closed by `end`**: a boolean match's `| false` and `| true`, a dispatch's literal keys and its `| _`, a family's arms by their constructors' tags with their payloads' binders under their marks and its catch-all `| _`, and a case split's `| 0` and `| p + 1`, `| []` and `| [h, ..t]`, `| 0x[]` and `| 0x[h, ..t]`. **A match states the goal its arms inhabit, `#{goal = T}`.** What a match's cases hold beside their arms is set in its `cases` field: the instance a family's match states, `#{cases = {stated = T}}`, and a list split's element type, `#{cases = {carrier = {elem = T}}}`, which no arm writes.
 
 use {
     super::{
@@ -231,7 +231,7 @@ fn constructor_arm<D: Rendered>(
     )
 }
 
-/// A match: its head, its goal, and its cases, read off the spelling its arms are written in — a boolean match's `false` and `true`, a dispatch's keys and its `_`, a family's tags and its `_`, a case split's `0` and `p + 1`, `[]` and `[h, ..t]`, `x[]` and `x[h, ..t]`. A match states the goal its arms inhabit, `#{goal = T}`, and what its cases hold beside their arms is set in `cases`.
+/// A match: its head, its goal, and its cases, read off the spelling its arms are written in — a boolean match's `false` and `true`, a dispatch's keys and its `_`, a family's tags and its `_`, a case split's `0` and `p + 1`, `[]` and `[h, ..t]`, `0x[]` and `0x[h, ..t]`. A match states the goal its arms inhabit, `#{goal = T}`, and what its cases hold beside their arms is set in `cases`.
 pub fn match_read(
     crate::Match { head, arms }: &crate::Match<CoreText>,
     fields: &mut Fields<'_>,

@@ -522,7 +522,7 @@ impl<D: Layout> TreePrinter<D> {
                 pure(format_radix(&step, radix)),
             ]),
             MatchPattern::List(elements) => self.run("[", elements),
-            MatchPattern::Bytes(elements) => self.run("x[", elements),
+            MatchPattern::Bytes(elements) => self.run("0x[", elements),
         }
     }
 
@@ -1074,7 +1074,7 @@ impl<D: Layout> TreePrinter<D> {
             Literal::Bool(false) => keyword(Keyword::False),
             Literal::Bool(true) => keyword(Keyword::True),
             Literal::Flt(value) => print_flt(value),
-            // Entries are comma-delimited, so an operand is an ordinary term needing no parenthesization — a constant atom is a numeral term and prints as written. An empty segment list prints `x[]` on its own.
+            // Entries are comma-delimited, so an operand is an ordinary term needing no parenthesization — a constant atom is a numeral term and prints as written. An empty segment list prints `0x[]` on its own.
             Literal::Bytes(segments) => {
                 let entries = segments
                     .into_iter()
@@ -1083,7 +1083,7 @@ impl<D: Layout> TreePrinter<D> {
                         BytesSegment::Spread(operand) => ListEntry::Spread(operand),
                     })
                     .collect();
-                self.wrapped_list("x[", entries)
+                self.wrapped_list("0x[", entries)
             }
             Literal::List(entries) => self.wrapped_list("[", entries),
         }
@@ -1289,7 +1289,7 @@ impl<D: Layout> TreePrinter<D> {
                     "}",
                 ),
             ]),
-            // An arm ladder is width-adaptive: `match carry | true => x[\\1] | false => x[] end` is how the corpus writes a two-arm decision and how it reads best, and forcing every one of them onto five lines would make a proof-heavy module half again as tall as it was written.
+            // An arm ladder is width-adaptive: `match carry | true => 0x[\\1] | false => 0x[] end` is how the corpus writes a two-arm decision and how it reads best, and forcing every one of them onto five lines would make a proof-heavy module half again as tall as it was written.
             //
             // Two ladders are broken regardless of width, by [`is_ladder`]. Laid out at a width, a ladder stays on one line only within its printer's [`FlatMatch`], its span and its arms, and one with guards after an arm's patterns never does: they stand between a pattern and its body, crowding a line however short the line is. Arms sit at the ladder's own column when broken, never indented, so `| pattern =>` and the `end` that closes it line up.
             Subterm::Match(Match { head, arms }) => {

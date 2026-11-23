@@ -24,7 +24,7 @@ let page =
       one \u{20} "two" ""three\"""
     </p>
     """;
-let bytes = x[0x48, ..suffix];
+let bytes = 0x[0x48, ..suffix];
 let list = [1, ..more];
 let proj = pair.0 + pair.fst;
 let built = Pair(Nat, Bool) { ..base, snd = false };

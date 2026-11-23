@@ -1779,7 +1779,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
     /// Flush the pending elements onto `operands`.
     ///
-    /// A single element following an operand is an *append* onto it: the surface wrote one generator, and `ListAppend` is what one generator is — the same reading `\.` takes on the packed side, so `[..xs, y]` and `x[..xs, y]` lower alike. Two or more go into an `List` chunk, which the carrier holds directly; the packed literal chunks its atoms the same way whenever it can represent them, and reaches for `BytesAppend` only where it cannot.
+    /// A single element following an operand is an *append* onto it: the surface wrote one generator, and `ListAppend` is what one generator is — the same reading `\.` takes on the packed side, so `[..xs, y]` and `0x[..xs, y]` lower alike. Two or more go into an `List` chunk, which the carrier holds directly; the packed literal chunks its atoms the same way whenever it can represent them, and reaches for `BytesAppend` only where it cannot.
     fn flush_list_run(
         &self,
         span: Option<&Span>,
@@ -1873,9 +1873,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    /// The `Bytes` sibling of [`Self::lower_list_literal`]: a constant literal lowers to one packed value, and atom and spread segments splice into an n-ary `BytesConcat` (the shared internal intrinsic has no element-type slot). Adjacent constant atoms — the values [`Self::bytes_constant_atom`] recognizes — fold into packed runs as they are met, so `x[0x48, 0x69]` is the one packed value it is rather than a chain of appends.
+    /// The `Bytes` sibling of [`Self::lower_list_literal`]: a constant literal lowers to one packed value, and atom and spread segments splice into an n-ary `BytesConcat` (the shared internal intrinsic has no element-type slot). Adjacent constant atoms — the values [`Self::bytes_constant_atom`] recognizes — fold into packed runs as they are met, so `0x[0x48, 0x69]` is the one packed value it is rather than a chain of appends.
     ///
-    /// A non-constant atom is the free monoid's generator at a value lowering cannot know, so it lowers to a `BytesAppend` onto whatever precedes it, with no carve-out: `x[0x48, b]` is one append rather than a two-operand concatenation, `x[..acc, b]` is the append it spells out, and adjacent atoms chain. Leading a literal it appends onto the empty packed value — the singleton spelling `curios_elab`'s packed-match refinement builds for a cons scrutinee, so `x[h, ..t]` meets a refined goal without unfolding anything.
+    /// A non-constant atom is the free monoid's generator at a value lowering cannot know, so it lowers to a `BytesAppend` onto whatever precedes it, with no carve-out: `0x[0x48, b]` is one append rather than a two-operand concatenation, `0x[..acc, b]` is the append it spells out, and adjacent atoms chain. Leading a literal it appends onto the empty packed value — the singleton spelling `curios_elab`'s packed-match refinement builds for a cons scrutinee, so `0x[h, ..t]` meets a refined goal without unfolding anything.
     pub fn lower_bytes_literal(
         segments: &[BytesSegment],
         mut lower: impl FnMut(&Term) -> Result<curios_core::Term, Error>,
@@ -1920,7 +1920,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
         flush(&mut operands, &mut run);
 
-        // A lone packed-shaped operand is the value itself; wrapping it in a concatenation only leaves reduction something to normalise away. Only that family may collapse: any other lone operand keeps its wrapper, which is what makes elaboration check a spread (`x[..b]`) against the packed type instead of adopting the operand's own — `x[..true]` would collapse to `true`.
+        // A lone packed-shaped operand is the value itself; wrapping it in a concatenation only leaves reduction something to normalise away. Only that family may collapse: any other lone operand keeps its wrapper, which is what makes elaboration check a spread (`0x[..b]`) against the packed type instead of adopting the operand's own — `0x[..true]` would collapse to `true`.
         if operands.len() == 1
             && let curios_core::Subterm::Intrinsic(intrinsic) = &*operands[0]
             && matches!(

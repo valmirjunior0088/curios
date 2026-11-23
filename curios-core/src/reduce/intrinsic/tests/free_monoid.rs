@@ -6,7 +6,7 @@ use {
     curios_num::Binary,
 };
 
-// Regression: `get(append(x[], b), 0)` must reduce to `b` through its own base-case arm — the cons peel's symbolic head chunk IS `append(x[], b)`, so without that arm the rewrite would rebuild the redex it came from until the step budget exhausted.
+// Regression: `get(append(0x[], b), 0)` must reduce to `b` through its own base-case arm — the cons peel's symbolic head chunk IS `append(0x[], b)`, so without that arm the rewrite would rebuild the redex it came from until the step budget exhausted.
 #[test]
 fn a_get_of_a_symbolic_cons_head_is_the_head() {
     let byte = Term::free_var(&Free::local(0, Some("b")));
@@ -301,7 +301,7 @@ fn a_spine_against_a_bare_variable_clashes_on_a_positive_residual() {
     let folded = fold(Term::intrinsic(Intrinsic::bytes_eql(extended, bs)));
     assert!(
         matches!(&*folded, Subterm::Intrinsic(Intrinsic::BytesEql(..))),
-        "`x[..bs, ..cs] == bs` is undecided while `cs` may be empty"
+        "`0x[..bs, ..cs] == bs` is undecided while `cs` may be empty"
     );
 }
 
@@ -356,7 +356,7 @@ fn a_map_by_a_function_whose_body_is_an_index_past_its_binder_stays_a_map() {
     ));
 }
 
-/// `x[h, ..t]` as lowering spells a cons: `h` appended to no bytes, then the rest.
+/// `0x[h, ..t]` as lowering spells a cons: `h` appended to no bytes, then the rest.
 fn cons(head: Term, tail: Term) -> Term {
     let empty: Term = Subterm::Intrinsic(Intrinsic::Bytes(Binary::empty())).into();
     Term::intrinsic(Intrinsic::BytesConcat {
@@ -382,7 +382,7 @@ fn a_common_prefix_leaves_the_equality_of_what_follows_it() {
     assert_eq!(
         folded,
         Term::intrinsic(past.clone()),
-        "`x[1, ..a] == x[1, ..b]` is `a == b`"
+        "`0x[1, ..a] == 0x[1, ..b]` is `a == b`"
     );
 
     let folded = fold(Term::intrinsic(Intrinsic::bytes_eql(
@@ -392,7 +392,7 @@ fn a_common_prefix_leaves_the_equality_of_what_follows_it() {
     assert_eq!(
         folded,
         Term::intrinsic(past),
-        "`x[h, ..a] == x[h, ..b]` is `a == b`"
+        "`0x[h, ..a] == 0x[h, ..b]` is `a == b`"
     );
 }
 
@@ -411,7 +411,7 @@ fn two_runs_opening_with_a_byte_are_equal_when_the_bytes_and_the_rest_are() {
     ));
     assert_eq!(
         folded, expected,
-        "`x[h, ..a] == x[k, ..b]` is `h == k && a == b`"
+        "`0x[h, ..a] == 0x[k, ..b]` is `h == k && a == b`"
     );
 
     let opened = Term::intrinsic(Intrinsic::BytesConcat {
@@ -443,14 +443,14 @@ fn a_pair_no_byte_opens_stays_neutral() {
     assert_eq!(
         folded,
         Term::intrinsic(against_literal),
-        "`a == x[1]` stays as it is"
+        "`a == 0x[1]` stays as it is"
     );
 
     let against_cons = Intrinsic::bytes_eql(a, cons(h, b));
     let folded = fold(Term::intrinsic(against_cons.clone()));
     assert!(
         matches!(&*folded, Subterm::Intrinsic(Intrinsic::BytesEql(..))),
-        "`a == x[h, ..b]` stays a comparison while `a` shows no byte"
+        "`a == 0x[h, ..b]` stays a comparison while `a` shows no byte"
     );
 }
 

@@ -129,7 +129,7 @@ fn a_literals_law_is_stated_over_the_superclass_it_writes() {
     let source = r#"
         use /std/{Nat, Bytes, Hash};
         use /std/Map/{Key};
-        let flat: Hash(Nat) = Hash { hash(n) = x[] };
+        let flat: Hash(Nat) = Hash { hash(n) = 0x[] };
         let _forged: Key(Nat) = Key { use flat, use _, injective = Nat/hash/injective, monotone = Nat/hash/monotone };
         /std/print("")
         "#;
@@ -137,7 +137,7 @@ fn a_literals_law_is_stated_over_the_superclass_it_writes() {
     let report = error(source);
     assert!(
         report.contains(
-            "expected: `(a: Nat, b: Nat, same: /std/Eq(@Bytes)(x[], x[])) -> /std/Eq(@Nat)(a, b)`"
+            "expected: `(a: Nat, b: Nat, same: /std/Eq(@Bytes)(0x[], 0x[])) -> /std/Eq(@Nat)(a, b)`"
         ),
         "{report}"
     );

@@ -240,7 +240,7 @@ fn a_value_no_arm_matches_is_reported_as_its_pattern() {
         ("b: Bool", "match b | true => 1 end", "false"),
         ("b: List(Nat)", "match b | [] => 0 end", "[_, .._]"),
         ("b: Nat", "match b | p + 1 => p end", "0"),
-        ("b: Bytes", "match b | x[] => 0 end", "x[_, .._]"),
+        ("b: Bytes", "match b | 0x[] => 0 end", "0x[_, .._]"),
         ("b: Nat", "match b | 0 => 1 | 1 => 2 end", "2"),
         (
             "b: Option(Nat)",

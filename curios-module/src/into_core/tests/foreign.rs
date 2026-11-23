@@ -48,7 +48,7 @@ fn declaration_call_lowers() {
     // Declaring and calling a foreign function lowers end to end (`run` panics on failure) — the body the lowering builds for the declaration is typed by the same reading of the row the call site is checked against.
     let _ = run(r#"
         foreign frobnicate(Nat, Bytes) -> Nat;
-        frobnicate(5, x[0x00, 0x01])
+        frobnicate(5, 0x[0x00, 0x01])
     "#);
 }
 

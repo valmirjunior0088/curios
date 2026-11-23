@@ -75,7 +75,7 @@ fn a_stream_row_s_failure_is_the_error_it_names() {
             vec![(HostOp::HandleRead, denied(vec![bytes(b"")]))],
         ),
         (
-            "Io/write(/std/Proc/stdout, x[1])",
+            "Io/write(/std/Proc/stdout, 0x[1])",
             vec![(HostOp::HandleWrite, denied(vec![]))],
         ),
         (
@@ -132,7 +132,7 @@ fn a_device_row_s_failure_is_the_error_it_names() {
 
     each_fails(vec![
         (
-            "let t = Tty/open(s)!; Tty/raw(s, t, x[])",
+            "let t = Tty/open(s)!; Tty/raw(s, t, 0x[])",
             vec![
                 (HostOp::FileOpen, ok(vec![bytes(b"tty")])),
                 (HostOp::TtyTake, denied(vec![])),
@@ -243,7 +243,7 @@ fn a_network_row_s_failure_is_the_error_it_names() {
             ],
         ),
         (
-            r#"tcp/Listener/serve_tls("h", 80, x[], x[], (_) => Io/pure(()))"#,
+            r#"tcp/Listener/serve_tls("h", 80, 0x[], 0x[], (_) => Io/pure(()))"#,
             vec![(HostOp::TlsServerConfig, denied(vec![bytes(b"")]))],
         ),
         (

@@ -27,12 +27,12 @@ fn a_packed_run_takes_a_bytes_literals() {
         use /std/{Bytes, Nat};
         let escapes(b: Bytes) -> Nat =
             match b
-            | x[] => 0
-            | x['%', _, _, ..rest] => 1 + escapes(rest)
-            | x['%', .._] => 100
-            | x[_, ..rest] => escapes(rest)
+            | 0x[] => 0
+            | 0x['%', _, _, ..rest] => 1 + escapes(rest)
+            | 0x['%', .._] => 100
+            | 0x[_, ..rest] => escapes(rest)
             end;
-        /std/print(Nat/to_str(escapes(x['%', 1, 2, 'z', '%'])))
+        /std/print(Nat/to_str(escapes(0x['%', 1, 2, 'z', '%'])))
         "#;
 
     assert_eq!(run(source), b"101");

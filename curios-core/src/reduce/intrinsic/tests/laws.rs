@@ -149,7 +149,7 @@ fn every_nat_peel_verdict_holds_at_every_closed_instantiation() {
 
 // Soundness gate for the `Bytes` peel's verdicts over values — the `Bytes` half of what `every_nat_peel_verdict_holds_at_every_closed_instantiation` states for `Nat`, since these laws are otherwise argued only in code comments. The obligations are the same three. A `Deduction::Equal` reaches conversion as a definitional equation, and congruence carries a false one to `False`. A `Deduction::Impossible` reaches inversion as *impossible*, which excuses an omitted arm — the vacuous-elimination route. A `Deduction::Equivalent`'s residuals must be equi-satisfiable with the pair they replaced, since the caller compares the residuals and reports their verdict as the originals'. `Deduction::Undecided` promises nothing and is only tallied.
 //
-// The shapes reach the laws the code comments assert and nothing else stated: symbolic chunks cancelling by syntactic equality with a byte clash surviving past them, window fusion across a shared seam (`slice(w, s, l₁) ++ slice(w, s + l₁, l₂) = slice(w, s, l₁ + l₂)`), the empty-window drop (`slice(w, i, 0)` vanishing), append-as-concatenation (`append(b, c) = b ++ append(x[], c)`), and a near-miss control beside each: windows meeting at no seam must not fuse, and a one-byte symbolic cons against the identity clashes — as does a positive run behind a symbolic chunk, since the identity check reads the whole residual and not its head. Ground truth is the folded value at every closed instantiation of the symbols — instantiations respect `/sys/slice`'s `s + l <= len(b)` precondition, since a program outside them cannot be written, and that typing fact is exactly what makes the window laws unconditional.
+// The shapes reach the laws the code comments assert and nothing else stated: symbolic chunks cancelling by syntactic equality with a byte clash surviving past them, window fusion across a shared seam (`slice(w, s, l₁) ++ slice(w, s + l₁, l₂) = slice(w, s, l₁ + l₂)`), the empty-window drop (`slice(w, i, 0)` vanishing), append-as-concatenation (`append(b, c) = b ++ append(0x[], c)`), and a near-miss control beside each: windows meeting at no seam must not fuse, and a one-byte symbolic cons against the identity clashes — as does a positive run behind a symbolic chunk, since the identity check reads the whole residual and not its head. Ground truth is the folded value at every closed instantiation of the symbols — instantiations respect `/sys/slice`'s `s + l <= len(b)` precondition, since a program outside them cannot be written, and that typing fact is exactly what makes the window laws unconditional.
 //
 // Mutation-checked: fusing two windows of one base without the seam check (`*seam == lo` dropped from `push`) turns the no-seam control into a false `Equal` and this grid fails it at the first anchor whose seam bytes differ. The tally is the anti-inertness assertion the soundness board asks of a sole-reach fixture: `Undecided` is where a pair falls when nothing fires, so a grid that decided nothing would otherwise pass while checking nothing.
 #[test]
@@ -181,37 +181,37 @@ fn every_bytes_peel_verdict_holds_at_every_closed_instantiation() {
 
     let cases = [
         (
-            "x ++ x[05] ~ x ++ x[05]",
+            "x ++ 0x[05] ~ x ++ 0x[05]",
             cat(vec![x.clone(), run_bytes(&[5])]),
             cat(vec![x.clone(), run_bytes(&[5])]),
         ),
         (
-            "x[05] ++ x ~ x[09] ++ x",
+            "0x[05] ++ x ~ 0x[09] ++ x",
             cat(vec![run_bytes(&[5]), x.clone()]),
             cat(vec![run_bytes(&[9]), x.clone()]),
         ),
         (
-            "x ++ x[05] ~ x ++ x[09]",
+            "x ++ 0x[05] ~ x ++ 0x[09]",
             cat(vec![x.clone(), run_bytes(&[5])]),
             cat(vec![x.clone(), run_bytes(&[9])]),
         ),
         (
-            "x[05] ++ x ~ x[05] ++ y",
+            "0x[05] ++ x ~ 0x[05] ++ y",
             cat(vec![run_bytes(&[5]), x.clone()]),
             cat(vec![run_bytes(&[5]), y.clone()]),
         ),
         (
-            "x[0509] ~ x[05] ++ x",
+            "0x[0509] ~ 0x[05] ++ x",
             run_bytes(&[5, 9]),
             cat(vec![run_bytes(&[5]), x.clone()]),
         ),
         (
-            "x[05] ++ x ~ x ++ x[05]",
+            "0x[05] ++ x ~ x ++ 0x[05]",
             cat(vec![run_bytes(&[5]), x.clone()]),
             cat(vec![x.clone(), run_bytes(&[5])]),
         ),
         (
-            "append(x, c) ~ x ++ append(x[], c)",
+            "append(x, c) ~ x ++ append(0x[], c)",
             Term::intrinsic(Intrinsic::bytes_append(x.clone(), c.clone())),
             cat(vec![x.clone(), chunk.clone()]),
         ),
@@ -243,37 +243,37 @@ fn every_bytes_peel_verdict_holds_at_every_closed_instantiation() {
             cat(vec![x.clone(), window(2, 0)]),
         ),
         (
-            "append(x[], c) ++ x ~ append(x[], c) ++ y",
+            "append(0x[], c) ++ x ~ append(0x[], c) ++ y",
             cat(vec![chunk.clone(), x.clone()]),
             cat(vec![chunk.clone(), y.clone()]),
         ),
-        ("append(x[], c) ~ x[]", chunk.clone(), run_bytes(&[])),
+        ("append(0x[], c) ~ 0x[]", chunk.clone(), run_bytes(&[])),
         // A positive run behind a symbolic chunk: whatever `x` takes, the left side has a byte the empty bytestring does not.
         (
-            "x ++ x[05] ~ x[]",
+            "x ++ 0x[05] ~ 0x[]",
             cat(vec![x.clone(), run_bytes(&[5])]),
             run_bytes(&[]),
         ),
         // A nesting whose leading chunks the prefix step cannot match regroups: the residuals are both flat spellings, and regrouping is the identity on values, so they hold the same obligation as any `Equivalent`.
         (
-            "(x ++ x[05]) ++ y ~ y ++ x[05] ++ x",
+            "(x ++ 0x[05]) ++ y ~ y ++ 0x[05] ++ x",
             cat(vec![cat(vec![x.clone(), run_bytes(&[5])]), y.clone()]),
             cat(vec![y.clone(), run_bytes(&[5]), x.clone()]),
         ),
         // The flat twin — what the residuals above are — declines, which is what keeps a regroup from re-entering.
         (
-            "x ++ x[05] ++ y ~ y ++ x[05] ++ x",
+            "x ++ 0x[05] ++ y ~ y ++ 0x[05] ++ x",
             cat(vec![x.clone(), run_bytes(&[5]), y.clone()]),
             cat(vec![y.clone(), run_bytes(&[5]), x.clone()]),
         ),
         // A fill of a successor count is its atom over a fill one shorter — the one shape whose leading generator is known without its length being.
         (
-            "replicate(n + 1, c) ~ append(x[], c) ++ replicate(n, c)",
+            "replicate(n + 1, c) ~ append(0x[], c) ++ replicate(n, c)",
             fill(succ(n.clone())),
             cat(vec![chunk.clone(), fill(n.clone())]),
         ),
         // The control that keeps that admission honest: a fill whose count carries no floor may be empty, so it must not clash against the identity the way a `Single` does. The two sides agree at `n = 0`, so a clash here would be a false impossibility.
-        ("replicate(n, c) ~ x[]", fill(n.clone()), run_bytes(&[])),
+        ("replicate(n, c) ~ 0x[]", fill(n.clone()), run_bytes(&[])),
     ];
 
     let as_intrinsic = |term: &Term| match &**term {
@@ -905,7 +905,7 @@ fn every_truth_table_decision_holds_at_every_closed_instantiation() {
     );
 }
 
-// Soundness gate for the open-term reduction laws the code comments beside the folds assert and nothing else stated: the subtraction borrow within the floor, the literal-factor distribution of `·` on either side, the full-window collapse `slice(b, 0, len(b)) = b`, the empty window `slice(b, i, 0) = x[]` over a symbolic base and start, the cons peels of `get` and `slice` over a symbolic tail and symbolic bounds, and the `len`/`map` homomorphisms over an append and a concatenation. Each case states the law's own reduct and holds the pair to two obligations. The open fold must land on exactly that reduct — so the law demonstrably fired, and where its comment claims, which is what keeps a case from passing vacuously when a rule stops firing. And the original and the reduct must agree as values at every closed instantiation, which is what a definitional equation promises and the only thing a false one fails. Instantiations respect the operations' `/sys` preconditions (`i < len` for `get`, `s + l <= len` for `slice`), since a program outside them cannot be written.
+// Soundness gate for the open-term reduction laws the code comments beside the folds assert and nothing else stated: the subtraction borrow within the floor, the literal-factor distribution of `·` on either side, the full-window collapse `slice(b, 0, len(b)) = b`, the empty window `slice(b, i, 0) = 0x[]` over a symbolic base and start, the cons peels of `get` and `slice` over a symbolic tail and symbolic bounds, and the `len`/`map` homomorphisms over an append and a concatenation. Each case states the law's own reduct and holds the pair to two obligations. The open fold must land on exactly that reduct — so the law demonstrably fired, and where its comment claims, which is what keeps a case from passing vacuously when a rule stops firing. And the original and the reduct must agree as values at every closed instantiation, which is what a definitional equation promises and the only thing a false one fails. Instantiations respect the operations' `/sys` preconditions (`i < len` for `get`, `s + l <= len` for `slice`), since a program outside them cannot be written.
 //
 // `map`'s ground truth is structural rather than numeric: the mapped function stays a free symbol, so both sides fold to element runs of identical stuck applications, and their agreement says no element was dropped, duplicated or reordered — which is the whole of what the distribution law claims. Mutation-checked: misstating the append measure (`nat_add(2, base)` for `nat_add(1, base)` in the `BytesLen` slot) fails the length case on both obligations at once.
 #[test]
@@ -1167,7 +1167,7 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
         ),
         // Decided on the *length* alone, where a `(start, end)` window would compare two subjects — which is what a count buys.
         (
-            "slice(b, e, 0) = x[]",
+            "slice(b, e, 0) = 0x[]",
             bytes_slice(b.clone(), e.clone(), lit(0)),
             run_bytes(&[]),
             vec![
@@ -1177,7 +1177,7 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
             ],
         ),
         (
-            "slice(cons(c, b), 0, e + 1) = cons(c, x[]) ++ slice(b, 0, e)",
+            "slice(cons(c, b), 0, e + 1) = cons(c, 0x[]) ++ slice(b, 0, e)",
             bytes_slice(
                 cat(vec![chunk.clone(), b.clone()]),
                 lit(0),
@@ -1242,7 +1242,7 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
             ],
         ),
         (
-            "get(cons(c, x[]), 0) = c",
+            "get(cons(c, 0x[]), 0) = c",
             bytes_get(chunk.clone(), lit(0)),
             c.clone(),
             vec![
@@ -1281,7 +1281,7 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
             ],
         ),
         (
-            "len(b ++ x[0509] ++ t) = len(b) + len(t) + 2",
+            "len(b ++ 0x[0509] ++ t) = len(b) + len(t) + 2",
             bytes_len(cat(vec![b.clone(), run_bytes(&[5, 9]), t.clone()])),
             plus(plus(bytes_len(b.clone()), bytes_len(t.clone())), lit(2)),
             vec![

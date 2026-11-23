@@ -204,13 +204,13 @@ fn a_description_is_taken_apart_by_no_elimination() {
     );
 }
 
-/// Two byte runs of two symbolic bytes and of literal bytes: the fold of `==` reads them apart where their lengths differ, `/apart`, and not where they are one length, `/together`, which at `c = 1` and `d = 2` are one value. The term the module closes with is `/together` at those bytes, `Holds(xor(x[1, 2] == x[1, 2], true))`, which is `False`.
+/// Two byte runs of two symbolic bytes and of literal bytes: the fold of `==` reads them apart where their lengths differ, `/apart`, and not where they are one length, `/together`, which at `c = 1` and `d = 2` are one value. The term the module closes with is `/together` at those bytes, `Holds(xor(0x[1, 2] == 0x[1, 2], true))`, which is `False`.
 const TWO_BYTE_RUNS_OF_ONE_LENGTH_AND_OF_TWO: &str = r#"
 let /apart : (c: #ByteType, d: #ByteType) ->
-    /std/Bool/Holds(#BoolXor(#BytesEql(#BytesAppend(#BytesAppend(x[], c), d), x[0x01, 0x02, 0x03]), true)) =
+    /std/Bool/Holds(#BoolXor(#BytesEql(#BytesAppend(#BytesAppend(0x[], c), d), 0x[0x01, 0x02, 0x03]), true)) =
     (c: #ByteType, d: #ByteType) => /std/Bool/True/qed();
 let /together : (c: #ByteType, d: #ByteType) ->
-    /std/Bool/Holds(#BoolXor(#BytesEql(#BytesAppend(#BytesAppend(x[], c), d), x[0x01, 0x02]), true)) =
+    /std/Bool/Holds(#BoolXor(#BytesEql(#BytesAppend(#BytesAppend(0x[], c), d), 0x[0x01, 0x02]), true)) =
     (c: #ByteType, d: #ByteType) => /std/Bool/True/qed();
 /together(#Byte(1), #Byte(2))
 "#;

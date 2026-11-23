@@ -5592,6 +5592,10 @@
     "named": false
   },
   {
+    "type": "0x[",
+    "named": false
+  },
+  {
     "type": ":",
     "named": false
   },
@@ -5747,10 +5751,6 @@
   {
     "type": "use_glob",
     "named": true
-  },
-  {
-    "type": "x[",
-    "named": false
   },
   {
     "type": "{",

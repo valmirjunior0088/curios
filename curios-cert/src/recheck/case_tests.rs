@@ -513,7 +513,7 @@ induct /Iz: (i: #NatType) -> pub Type
 | zero(): (0)
 end
 induct /By: (b: #BytesType) -> pub Type
-| e(): (x[])
+| e(): (0x[])
 end
 let /sum : (
     a: #NatType,
@@ -649,13 +649,13 @@ let /trailing : (
     xs: #BytesType,
     v:
         #{node = InductType}
-        /By()(#BytesConcat([xs, x[0x01]]))
+        /By()(#BytesConcat([xs, 0x[0x01]]))
 ) -> /std/Bool/False =
     (
         xs: #BytesType,
         v:
             #{node = InductType}
-            /By()(#BytesConcat([xs, x[0x01]]))
+            /By()(#BytesConcat([xs, 0x[0x01]]))
     ) =>
         #{goal = /std/Bool/False} match v
         end;
@@ -1184,8 +1184,8 @@ let /twice : (
     v: #{node = InductType} /D()(#List(#{node = InductType} /Pr(), [/Pr/a()]), #List(#{node = InductType} /Pr(), [/Pr/b()]))) -> /std/Bool/False =
     (v: #{node = InductType} /D()(#List(#{node = InductType} /Pr(), [/Pr/a()]), #List(#{node = InductType} /Pr(), [/Pr/b()]))) =>
         #{goal = /std/Bool/False} match v end;
-let /bytes : (c: #ByteType, v: #{node = InductType} /E()(#BytesAppend(x[], c), x[0x01])) -> /std/Bool/False =
-    (c: #ByteType, v: #{node = InductType} /E()(#BytesAppend(x[], c), x[0x01])) =>
+let /bytes : (c: #ByteType, v: #{node = InductType} /E()(#BytesAppend(0x[], c), 0x[0x01])) -> /std/Bool/False =
+    (c: #ByteType, v: #{node = InductType} /E()(#BytesAppend(0x[], c), 0x[0x01])) =>
         #{goal = /std/Bool/False} match v end;
 /swapped(#{node = Variant} /Ix/mk())
 "#;
@@ -1297,21 +1297,21 @@ fn a_character_dispatch_default_is_checked_at_its_scrutinee() {
     );
 }
 
-/// `/S` holds bytes, as `/std/Str` does, and `string` splits them, the projection a string pattern reads, with `qed` at `Holds(s.0 == x[])` in the cons arm. Read as no case of its own, the cons arm would hold it, and `string(S { x[0x61] })` would be a proof of `False`.
+/// `/S` holds bytes, as `/std/Str` does, and `string` splits them, the projection a string pattern reads, with `qed` at `Holds(s.0 == 0x[])` in the cons arm. Read as no case of its own, the cons arm would hold it, and `string(S { 0x[0x61] })` would be a proof of `False`.
 const A_STRING_RUNS_CONS_ARM: &str = r#"
 struct /S: pub Type { bytes: #BytesType }
 
 #{proof = true}
 let /string: (s: #{node = StructType} /S()) -> /std/Bool/Holds(
-    #BytesEql(#{field = Struct(/S, 0)} s.0, x[])) =
+    #BytesEql(#{field = Struct(/S, 0)} s.0, 0x[])) =
     (s: #{node = StructType} /S()) =>
-        #{goal = /std/Bool/Holds(#BytesEql(#{field = Struct(/S, 0)} s.0, x[]))}
+        #{goal = /std/Bool/Holds(#BytesEql(#{field = Struct(/S, 0)} s.0, 0x[]))}
         match #{field = Struct(/S, 0)} s.0
-        | x[] => /std/Bool/True/qed()
-        | x[b, ..rest] => /std/Bool/True/qed()
+        | 0x[] => /std/Bool/True/qed()
+        | 0x[b, ..rest] => /std/Bool/True/qed()
         end;
 
-/string(/S { x[0x61] })
+/string(/S { 0x[0x61] })
 "#;
 
 // A split of a projected run checks its cons arm at a byte ahead of a tail, where the bytes are no empty run: `qed` is refused there, under `string`, and the closing term is admitted.

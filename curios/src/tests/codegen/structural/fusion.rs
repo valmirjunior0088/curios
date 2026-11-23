@@ -11,8 +11,8 @@ fn tainted_packed_literals_fuse_to_flat_chunks() {
             let taint = List/len(Proc/args()!);
             let a: Byte = match taint | 0 => 7 | _ => 9 end;
             let y: Byte = match taint | 0 => 8 | _ => 10 end;
-            let bytes = x[a, y, 0x21];
-            match bytes == x[7, 8, 0x21]
+            let bytes = 0x[a, y, 0x21];
+            match bytes == 0x[7, 8, 0x21]
             | true => /std/print("ok\n")
             | false => /std/print("bad\n")
             end;

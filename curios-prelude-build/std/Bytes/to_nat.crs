@@ -3,15 +3,18 @@ use /std/{Nat, Byte, Bytes, proved, Bool};
 -- One structural recursion, because the least significant byte arrives first and carries a weight the rest's reading already knows. Reading a big-endian run back would need the length before it could weigh its first byte.
 --- The number a minimal encoding denotes, which is `of_nat`'s inverse.
 pub let to_nat(b: Bytes) -> Nat =
-    match b | x[] => 0 | x[h, ..t] => Byte/to_nat(h) + 256 * to_nat(t) end;
+    match b
+    | 0x[] => 0
+    | 0x[h, ..t] => Byte/to_nat(h) + 256 * to_nat(t)
+    end;
 
 --- The number a run denotes is below `256` to the run's length.
 ---
 --- What makes [`to_nat`] a bounded reading, so a fixed-width pattern has a fixed range: a float's eight bytes denote a number below `2^64`.
 pub let below(b: Bytes) -> Bool/Holds(to_nat(b) < Nat/pow(256, Bytes/len(b))) =
     match b
-    | x[] => Bool/True/qed()
-    | x[h, ..t] =>
+    | 0x[] => Bool/True/qed()
+    | 0x[h, ..t] =>
         let top: Bool/Holds(Byte/to_nat(h) <= 255) = Bool/True/qed();
         let _ = below(t);
         proved()

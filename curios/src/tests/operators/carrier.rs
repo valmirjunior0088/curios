@@ -63,8 +63,8 @@ fn nat_bitwise_ops_execute() {
         let entry() -> /std/Io({}) =
             let bytes = match Try/run(Io/read(Proc/stdin, 16))!
                 | success(bytes(b, @_)) => b
-                | success(ended()) => x[]
-                | failure(_) => x[]
+                | success(ended()) => 0x[]
+                | failure(_) => 0x[]
                 end;
             let x = Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 0), 0));
             let r = Str/flatten([
@@ -95,8 +95,8 @@ fn int_bitwise_ops_execute() {
         let entry() -> /std/Io({}) =
             let bytes = match Try/run(Io/read(Proc/stdin, 16))!
                 | success(bytes(b, @_)) => b
-                | success(ended()) => x[]
-                | failure(_) => x[]
+                | success(ended()) => 0x[]
+                | failure(_) => 0x[]
                 end;
             let x = Nat/to_int(Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 0), 0)));
             let neg = Int/sub(+0, x);

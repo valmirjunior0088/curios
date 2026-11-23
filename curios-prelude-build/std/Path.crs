@@ -41,11 +41,11 @@ let components(b: Bytes) -> {before: List(Bytes), last: Bytes} =
     let (done, current): {List(Bytes), Bytes} =
         Bytes/fold(
             b,
-            ([], x[]),
+            ([], 0x[]),
             (byte, (done, current)) =>
                 match byte == separator
-                | true => ([..done, current], x[])
-                | false => (done, x[..current, byte])
+                | true => ([..done, current], 0x[])
+                | false => (done, 0x[..current, byte])
                 end);
     (before = done, last = current);
 
@@ -54,8 +54,8 @@ pub let join(a: Path, b: Path) -> Path =
     match
     | is_empty(a) => b
     | is_empty(b) => a
-    | ends_with_separator(a.0) => Path { x[..a.0, ..b.0] }
-    | _ => Path { x[..a.0, separator, ..b.0] }
+    | ends_with_separator(a.0) => Path { 0x[..a.0, ..b.0] }
+    | _ => Path { 0x[..a.0, separator, ..b.0] }
     end;
 
 --- The last component; empty after a trailing separator.
@@ -68,11 +68,11 @@ pub let parent(p: Path) -> Option(Path) =
     match before
     | [] => Option/none()
     | _ =>
-        let above = Bytes/join(x[separator], before);
+        let above = Bytes/join(0x[separator], before);
         Option/some(
             Path {
                 match Bytes/len(above) == 0
-                | true => x[separator]
+                | true => 0x[separator]
                 | false => above
                 end })
     end;
@@ -83,11 +83,11 @@ pub let extension(p: Path) -> Option(Path) =
     let (_, seen, current): {Nat, Bool, Bytes} =
         Bytes/fold(
             name(p).0,
-            (0, false, x[]),
+            (0, false, 0x[]),
             (byte, (i, seen, current)) =>
                 match byte == dot && i > 0
-                | true => (i + 1, true, x[])
-                | false => (i + 1, seen, x[..current, byte])
+                | true => (i + 1, true, 0x[])
+                | false => (i + 1, seen, 0x[..current, byte])
                 end);
     match seen
     | true => Option/some(Path { current })

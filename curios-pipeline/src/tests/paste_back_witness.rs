@@ -253,7 +253,7 @@ fn a_method_reached_through_the_inner_of_two_binders_is_written_as_its_call() {
         use /std/Map/{Key};
         pub let outer(@K: Type, use Key(K), k: K) -> Nat =
             let inner(@J: Type, use Key(J), j: J) -> Nat =
-                let p: Eq()(Hash/hash(j), x[]) = Eq/refl();
+                let p: Eq()(Hash/hash(j), 0x[]) = Eq/refl();
                 0;
             0;
         Io/pure(())

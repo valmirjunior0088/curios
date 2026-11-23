@@ -100,7 +100,7 @@ fn every_direction_executes_as_the_model_rounds() {
             .map(|byte| format!("0x{byte:02X}"))
             .collect::<Vec<_>>()
             .join(", ");
-        format!("Flt/of_le_bytes(x[{bytes}])")
+        format!("Flt/of_le_bytes(0x[{bytes}])")
     };
     let operands = OPERANDS.map(spell).join(",\n            ");
     let naturals = NATURALS.join(",\n            ");
@@ -139,7 +139,7 @@ fn every_direction_executes_as_the_model_rounds() {
                 Rounding/toward_positive(),
                 Rounding/toward_negative(),
             ], direction);
-            let _ = Try/run(Io/write(Proc/stdout, Bytes/join(x[], List/map(results, Flt/to_le_bytes))))!;
+            let _ = Try/run(Io/write(Proc/stdout, Bytes/join(0x[], List/map(results, Flt/to_le_bytes))))!;
             Io/pure(());
         entry()
         "#,
@@ -227,7 +227,7 @@ fn the_exact_rounding_executes_as_the_model_rounds() {
                 Rounding/toward_positive(),
                 Rounding/toward_negative(),
             ], direction);
-            let _ = Try/run(Io/write(Proc/stdout, Bytes/join(x[], List/map(results, Flt/to_le_bytes))))!;
+            let _ = Try/run(Io/write(Proc/stdout, Bytes/join(0x[], List/map(results, Flt/to_le_bytes))))!;
             Io/pure(());
         entry()
         "#,
@@ -411,7 +411,7 @@ fn every_exception_is_raised_as_ieee_defines_it() {
             .map(|byte| format!("0x{byte:02X}"))
             .collect::<Vec<_>>()
             .join(", ");
-        format!("Flt/of_le_bytes(x[{bytes}])")
+        format!("Flt/of_le_bytes(0x[{bytes}])")
     };
     let operands = OPERANDS.map(spell).join(",\n            ");
     let scalings = SCALINGS.map(|n| format!("{n:+}")).join(", ");
@@ -422,7 +422,7 @@ fn every_exception_is_raised_as_ieee_defines_it() {
         let entry() -> /std/Io({}) =
             let one = Nat/to_flt(Bytes/len(/std/rand/bytes(3)!)) / +3.0;
             let tick = Nat/to_byte(Bytes/len(/std/rand/bytes(1)!) % 256);
-            let signaling = Flt/of_le_bytes(x[tick, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x7F]);
+            let signaling = Flt/of_le_bytes(0x[tick, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x7F]);
             let operands = [..List/map([
                 ${operands},
             ], (v) => v * one), signaling];
@@ -453,7 +453,7 @@ fn every_exception_is_raised_as_ieee_defines_it() {
                 Rounding/toward_positive(),
                 Rounding/toward_negative(),
             ], direction);
-            let _ = Try/run(Io/write(Proc/stdout, Bytes/flatten(List/map(results, (e) => x[code(e)]))))!;
+            let _ = Try/run(Io/write(Proc/stdout, Bytes/flatten(List/map(results, (e) => 0x[code(e)]))))!;
             Io/pure(());
         entry()
         "#,

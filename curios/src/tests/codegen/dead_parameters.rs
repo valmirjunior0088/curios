@@ -17,13 +17,13 @@ fn a_parameter_read_only_to_build_its_own_next_value_is_dead() {
         use /std/{Nat, Bytes, List, Option, Proc};
         let count(b: Bytes, k: Nat, @seen: Bytes) -> Nat =
             match b
-            | x[] => k
-            | x[h, ..t] => count(t, k + 1, @x[..seen, h])
+            | 0x[] => k
+            | 0x[h, ..t] => count(t, k + 1, @0x[..seen, h])
             end;
         let entry() -> /std/Io({}) =
             let arguments = Proc/args()!;
-            let bytes = Option/unwrap_or(List/try_get(arguments, 0), x[]);
-            /std/print(Nat/to_str(count(bytes, 0, @x[])));
+            let bytes = Option/unwrap_or(List/try_get(arguments, 0), 0x[]);
+            /std/print(Nat/to_str(count(bytes, 0, @0x[])));
         entry()
         "#;
     let entrypoint = source.parse::<Entrypoint>().unwrap();

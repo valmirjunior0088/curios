@@ -290,7 +290,7 @@ fn a_word_around_the_recursion_threads_both_sides() {
     );
 }
 
-/// `f(n) = x[0x61, ..f(n - 1)]`: a run of bytes built under its recursion is a loop too.
+/// `f(n) = 0x[0x61, ..f(n - 1)]`: a run of bytes built under its recursion is a loop too.
 #[test]
 fn a_run_of_bytes_built_under_its_recursion_gains_a_worker() {
     let printed = optimized(

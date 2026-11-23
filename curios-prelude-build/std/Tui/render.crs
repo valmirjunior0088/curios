@@ -20,12 +20,12 @@ let paint(pen: Pen, x: Nat, y: Nat, tile: Tile, before: Option(Tile)) -> Pen =
         | continuation() => pen
         | glyph(g, style) =>
             let there = match pen.at | some(p) => p.0 == x && p.1 == y | none() => false end;
-            let move = match there | true => x[] | false => ansi/move_to(x, y) end;
+            let move = match there | true => 0x[] | false => ansi/move_to(x, y) end;
             let kept = match pen.style | some(s) => s == style | none() => false end;
-            let sgr = match kept | true => x[] | false => ansi/sgr(style) end;
+            let sgr = match kept | true => 0x[] | false => ansi/sgr(style) end;
             let text = Str/to_bytes(Glyph/text(g));
             Pen {
-                out = x[..pen.out, ..move, ..sgr, ..text],
+                out = 0x[..pen.out, ..move, ..sgr, ..text],
                 style = Option/some(style),
                 at =
                     match agreed(text)
@@ -56,8 +56,8 @@ pub let render(
     cursor: Option(View/Point(w, h)),
     synchronized: Bool,
 ) -> Bytes =
-    let bracket(b: Bytes) -> Bytes = match synchronized | true => b | false => x[] end;
-    let clear = match previous | some(_) => x[] | none() => ansi/clear end;
+    let bracket(b: Bytes) -> Bytes = match synchronized | true => b | false => 0x[] end;
+    let clear = match previous | some(_) => 0x[] | none() => ansi/clear end;
     let rows = List/zip(List/range(0, h), next.list);
     let before =
         match previous
@@ -66,7 +66,7 @@ pub let render(
         end;
     let start =
         Pen {
-            out = x[..bracket(ansi/on(Mode/synchronized_output())), ..ansi/cursor_hide, ..clear],
+            out = 0x[..bracket(ansi/on(Mode/synchronized_output())), ..ansi/cursor_hide, ..clear],
             style = Option/none(),
             at = Option/none() };
     let painted =
@@ -76,7 +76,7 @@ pub let render(
             (entry, acc) => paint_row(acc, entry.0.0, entry.0.1, entry.1));
     let place =
         match cursor
-        | some(c) => x[..ansi/move_to(c.x, c.y), ..ansi/cursor_show]
-        | none() => x[]
+        | some(c) => 0x[..ansi/move_to(c.x, c.y), ..ansi/cursor_show]
+        | none() => 0x[]
         end;
-    x[..painted.out, ..ansi/reset, ..place, ..bracket(ansi/off(Mode/synchronized_output()))];
+    0x[..painted.out, ..ansi/reset, ..place, ..bracket(ansi/off(Mode/synchronized_output()))];

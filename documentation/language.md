@@ -193,27 +193,27 @@ Written as a pattern, a list literal is a [run](#list-case-split).
 
 ### Packed literals
 
-A packed literal builds `Bytes`. It is a [list literal](#list-literals) with the letter `x` glued to its bracket, `x[…]`; a bare `[…]` is a `List`.
+A packed literal builds `Bytes`. It is a [list literal](#list-literals) with the prefix `0x` glued to its bracket, `0x[…]`; a bare `[…]` is a `List`.
 
-An entry is a term giving one `Byte`, or a spread `..b` giving a whole `Bytes`. A constant entry is a [numeral](#numeric-literals) from `0` through `255` in any radix, or a [character literal](#character-and-string-literals) whose code point fits a byte: `x['H', 'i']`. The first entry written is the first byte.
+An entry is a term giving one `Byte`, or a spread `..b` giving a whole `Bytes`. A constant entry is a [numeral](#numeric-literals) from `0` through `255` in any radix, or a [character literal](#character-and-string-literals) whose code point fits a byte: `0x['H', 'i']`. The first entry written is the first byte.
 
 ```text
-x[]                -- empty Bytes
-x[0x48, 0x69]
+0x[]                -- empty Bytes
+0x[0x48, 0x69]
 ```
 
 ```text
-x[head, ..tail]
-x[0x48, ..suffix, 0x00]
-x[..header.bytes]
-x[..make_bytes(n)]
-x[..prefix, b]
-x[pick(flag, a, b)]
+0x[head, ..tail]
+0x[0x48, ..suffix, 0x00]
+0x[..header.bytes]
+0x[..make_bytes(n)]
+0x[..prefix, b]
+0x[pick(flag, a, b)]
 ```
 
-`x[h, ..t]` puts `h` before `t`, and `x[..acc, b]` appends `b` to `acc`; neither has another spelling.
+`0x[h, ..t]` puts `h` before `t`, and `0x[..acc, b]` appends `b` to `acc`; neither has another spelling.
 
-Only the `x` and the `[` are glued, so `x` is still an ordinary name: in `x [1]` the term ends at `x`, and a name that merely ends in `x` never opens a packed literal. Inside the brackets a packed literal reads as a list literal does: whitespace is free, one trailing comma is taken, and an entry is any term. Written as a pattern, it is a run under `x[` ([Packed case split](#packed-case-split)).
+Only the `0x` and the `[` are glued, and the prefix is the literal's alone: a [hexadecimal numeral](#numeric-literals) takes a digit after its `0x`, and no name begins with a digit. Inside the brackets a packed literal reads as a list literal does: whitespace is free, one trailing comma is taken, and an entry is any term. Written as a pattern, it is a run under `0x[` ([Packed case split](#packed-case-split)).
 
 ## Sorts and types
 
@@ -756,28 +756,28 @@ A run takes its elements from the front, so a rest written before an element is 
 
 ### Packed case split
 
-A `Bytes` pattern is a [run](#list-case-split) under the bracket `x[`, as the [packed literal](#packed-literals) is, with every rule of a list's, each element a pattern at `Byte`, a byte's literals among them ([Number patterns](#number-patterns)).
+A `Bytes` pattern is a [run](#list-case-split) under the bracket `0x[`, as the [packed literal](#packed-literals) is, with every rule of a list's, each element a pattern at `Byte`, a byte's literals among them ([Number patterns](#number-patterns)).
 
 ```crs
 use /std/{Byte, Bytes, Nat};
 
 pub let total(bytes: Bytes) -> Nat =
     match bytes
-    | x[] => 0
-    | x[head, ..tail] => Byte/to_nat(head) + total(tail)
+    | 0x[] => 0
+    | 0x[head, ..tail] => Byte/to_nat(head) + total(tail)
     end;
 
 pub let first_or_zero(bytes: Bytes) -> Byte =
-    match bytes | x[] => 0 | x[head, .._] => head end;
+    match bytes | 0x[] => 0 | 0x[head, .._] => head end;
 
 pub let second_or_zero(bytes: Bytes) -> Nat =
-    match bytes | x[_, second, .._] => Byte/to_nat(second) | _ => 0 end;
+    match bytes | 0x[_, second, .._] => Byte/to_nat(second) | _ => 0 end;
 
 pub let escapes(bytes: Bytes) -> Nat =
     match bytes
-    | x[] => 0
-    | x['%', _, _, ..rest] => 1 + escapes(rest)
-    | x[_, ..rest] => escapes(rest)
+    | 0x[] => 0
+    | 0x['%', _, _, ..rest] => 1 + escapes(rest)
+    | 0x[_, ..rest] => escapes(rest)
     end;
 ```
 
@@ -866,7 +866,7 @@ pub let or_zero(option: Option(Nat)) -> Nat =
     match option | some(value) => value | _ => 0 end;
 ```
 
-After arms that each take the scrutinee itself apart — constructors, `true` and `false`, `Nat` shapes, runs under `[` and `x[` — a final arm may bind a name, which names the value those arms leave: under a head that is an expression, `match n + 1 | 0 => … | m => … end`, it is that value's one name. A name that is a constructor of the family the arms take apart is refused there, since it binds every value they leave where the case was likely meant: `| none =>` after `| some(x) =>` is written `| none() =>`. A literal's dispatch names no constructor, so over one any name binds. Under a head that is itself a name, the final arm's name only renames it, which `renaming-binder` reports ([`curios lint`](usage.md#lint)). A lone `_` with no other arm binds rather than matches.
+After arms that each take the scrutinee itself apart — constructors, `true` and `false`, `Nat` shapes, runs under `[` and `0x[` — a final arm may bind a name, which names the value those arms leave: under a head that is an expression, `match n + 1 | 0 => … | m => … end`, it is that value's one name. A name that is a constructor of the family the arms take apart is refused there, since it binds every value they leave where the case was likely meant: `| none =>` after `| some(x) =>` is written `| none() =>`. A literal's dispatch names no constructor, so over one any name binds. Under a head that is itself a name, the final arm's name only renames it, which `renaming-binder` reports ([`curios lint`](usage.md#lint)). A lone `_` with no other arm binds rather than matches.
 
 ### A match with no head
 
@@ -1498,12 +1498,12 @@ A bound the facts do not imply is refused, the report naming the facts it read a
 | `?` | Goal — reports the scope, the type and the fits, and fails the compilation |
 | `term!` | Monadic bind through `Monad`, lifting an action of another monad through `Monad/Lift` |
 | `"""` … `"""` | Block string — the lines between the delimiters, their shared indentation removed |
-| `x[...]` | `Bytes` literal — the letter glued to the bracket |
+| `0x[...]` | `Bytes` literal — the prefix glued to the bracket |
 | `Name { ... }` | Structure or concept literal |
 | `Name { ..base, ... }` | Structure update |
 | `struct Slot(K: Type, use Key(K)): …` | A type declared under a premise — the dictionary is an argument of the type |
 | `match term ... end` | Typed elimination or dispatch |
-| `[a, b, ..rest]` / `x[a, ..rest]` | A run — a list or `Bytes` literal written as a pattern, its rest a binder |
+| `[a, b, ..rest]` / `0x[a, ..rest]` | A run — a list or `Bytes` literal written as a pattern, its rest a binder |
 | `\| pattern, guard, … =>` | An arm taken where its pattern matches and each guard passes: a `Bool`, or `pattern = term` |
 | `match \| guard, … => … \| _ => … end` | A match with no head: guards alone, closed by a default |
 | `test name = body;` | Test — a `/std/Test` description, run by `curios test` |

@@ -9,11 +9,11 @@ use /std/{Nat, Byte, Bytes, Bool, Eq, Ordering, Ord, proved};
 --- A walk over both runs' structure, so a type may name it and its laws are recursions of the same shape.
 pub let ord(a: Bytes, b: Bytes) -> Ordering =
     match a
-    | x[] => match b | x[] => Ordering/eq() | _ => Ordering/lt() end
-    | x[h, ..t] =>
+    | 0x[] => match b | 0x[] => Ordering/eq() | _ => Ordering/lt() end
+    | 0x[h, ..t] =>
         match b
-        | x[] => Ordering/gt()
-        | x[k, ..r] =>
+        | 0x[] => Ordering/gt()
+        | 0x[k, ..r] =>
             match Nat/ord(Byte/to_nat(h), Byte/to_nat(k))
             | eq() => ord(t, r)
             | lt() => Ordering/lt()
@@ -23,22 +23,22 @@ pub let ord(a: Bytes, b: Bytes) -> Ordering =
     end;
 
 pub let refl(a: Bytes) -> Eq()(ord(a, a), Ordering/eq()) =
-    match a | x[] => Eq/refl() | x[_, ..t] => refl(t) end;
+    match a | 0x[] => Eq/refl() | 0x[_, ..t] => refl(t) end;
 
 --- `ord` answers through a shared prefix as it does past it.
-pub let past(p: Bytes, a: Bytes, b: Bytes) -> Eq()(ord(x[..p, ..a], x[..p, ..b]), ord(a, b)) =
-    match p | x[] => Eq/refl() | x[_, ..t] => past(t, a, b) end;
+pub let past(p: Bytes, a: Bytes, b: Bytes) -> Eq()(ord(0x[..p, ..a], 0x[..p, ..b]), ord(a, b)) =
+    match p | 0x[] => Eq/refl() | 0x[_, ..t] => past(t, a, b) end;
 
 -- A recursion over both runs: where the two heads differ the answer is theirs, which `Nat/ord/flips` flips, and where they tie it is the tails'.
 --- `ord` answers the flipped answer with its operands swapped.
 pub let flips: Ord/Flips(ord) =
     (a, b) =>
         match a
-        | x[] => match b | x[] | x[_, .._] => Eq/refl() end
-        | x[h, ..t] =>
+        | 0x[] => match b | 0x[] | 0x[_, .._] => Eq/refl() end
+        | 0x[h, ..t] =>
             match b
-            | x[] => Eq/refl()
-            | x[k, ..r] =>
+            | 0x[] => Eq/refl()
+            | 0x[k, ..r] =>
                 let swapped = Nat/ord/flips(Byte/to_nat(h), Byte/to_nat(k));
                 match Nat/ord(Byte/to_nat(h), Byte/to_nat(k))
                 | lt() =>
@@ -95,14 +95,14 @@ let after(o: Ordering, t: Bytes, r: Bytes) -> Bool =
 pub let transitive: Ord/Transitive(Ord/le(ord)) =
     (a, b, c, p, q) =>
         match a
-        | x[] => match c | x[] | x[_, .._] => Bool/True/qed() end
-        | x[h, ..t] =>
+        | 0x[] => match c | 0x[] | 0x[_, .._] => Bool/True/qed() end
+        | 0x[h, ..t] =>
             match b
-            | x[] => match p end
-            | x[k, ..r] =>
+            | 0x[] => match p end
+            | 0x[k, ..r] =>
                 match c
-                | x[] => match q end
-                | x[j, ..s] =>
+                | 0x[] => match q end
+                | 0x[j, ..s] =>
                     let (hn, kn, jn) = (Byte/to_nat(h), Byte/to_nat(k), Byte/to_nat(j));
                     match Nat/ord(hn, kn)
                     | gt() => match p end

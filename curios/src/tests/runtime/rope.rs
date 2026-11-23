@@ -116,10 +116,10 @@ fn a_read_in_a_loop_answers_whatever_shape_each_turn_hands_it() {
         use /std/{Str, Nat, List, Bytes, Byte, Io, Proc, Option};
 
         let weigh(b: Bytes, acc: Nat) -> Nat =
-            match b | x[] => acc | x[h, ..t] => weigh(t, (acc * 31 + Byte/to_nat(h)) % 1000003) end;
+            match b | 0x[] => acc | 0x[h, ..t] => weigh(t, (acc * 31 + Byte/to_nat(h)) % 1000003) end;
 
         let head(b: Bytes) -> Nat =
-            match b | x[] => 0 | x[h, .._] => Byte/to_nat(h) end;
+            match b | 0x[] => 0 | 0x[h, .._] => Byte/to_nat(h) end;
 
         let heads(ps: List(Bytes), acc: Nat) -> Nat =
             match ps | [] => acc | [p, ..rest] => heads(rest, (acc * 31 + head(p)) % 1000003) end;
@@ -132,8 +132,8 @@ fn a_read_in_a_loop_answers_whatever_shape_each_turn_hands_it() {
 
         let entry() -> /std/Io({}) =
             let arguments = Proc/args()!;
-            let leaf = match List/try_get(arguments, 1) | some(b) => b | none() => x[] end;
-            let joined = x[..leaf, ..Str/to_bytes("-mid-"), ..leaf];
+            let leaf = match List/try_get(arguments, 1) | some(b) => b | none() => 0x[] end;
+            let joined = 0x[..leaf, ..Str/to_bytes("-mid-"), ..leaf];
             let text = Str/concat(Nat/to_str(List/len(arguments)), "\nalpha\nbeta gamma\ndelta");
             let viewed = List/map(Str/lines(text), Str/to_bytes);
             let parts = [leaf, joined, ..viewed, joined, leaf];
@@ -194,7 +194,7 @@ fn a_run_built_from_a_window_and_read_once_holds_no_room() {
                 end;
             let base = Bytes/replicate(mib * 1048576 + 1, 0x41);
             let window = Bytes/slice(base, 1, mib * 1048576);
-            let built = x[..window, ..Bytes/replicate(16, 0x42)];
+            let built = 0x[..window, ..Bytes/replicate(16, 0x42)];
             let cut = Bytes/drop(built, 1);
             /std/print(Nat/to_str(Bytes/len(cut)));
         entry()

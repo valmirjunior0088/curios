@@ -4,7 +4,7 @@ use {crate::tests::test_support::*, curios_common::fill};
 
 #[test]
 fn slice_proof_aligns_with_byte_walk() {
-    // A relevant byte walk (`to_lead_bytes`) and a proof walk mirroring it (`to_lead_proof : Valid(to_lead_bytes(s, b))`), over a local inductive validity family. The proof peels the derivation while the byte function reduces in lockstep, which rests on the `Bytes` eliminator decoding a *symbolic* cons: the `cont`/`bad` arms reduce `to_lead_bytes(cont, x[c, ..t])` to `to_lead_bytes(step(c, cont), t)`, matching the recursive proof's index.
+    // A relevant byte walk (`to_lead_bytes`) and a proof walk mirroring it (`to_lead_proof : Valid(to_lead_bytes(s, b))`), over a local inductive validity family. The proof peels the derivation while the byte function reduces in lockstep, which rests on the `Bytes` eliminator decoding a *symbolic* cons: the `cont`/`bad` arms reduce `to_lead_bytes(cont, 0x[c, ..t])` to `to_lead_bytes(step(c, cont), t)`, matching the recursive proof's index.
     let source = r#"
         use /std/{Byte, Bytes, Nat, Bool, Io, Try, Proc};
 
@@ -46,9 +46,9 @@ fn slice_proof_aligns_with_byte_walk() {
             end;
 
         induct Utf8 : (s : Scan, b : Bytes) -> Type
-        | stop() : (Scan/lead(), x[])
+        | stop() : (Scan/lead(), 0x[])
         | more(c : Byte, st : Scan, t : Bytes, rest : Utf8(step(Byte/to_nat(c), st), t))
-            : (st, x[c, ..t])
+            : (st, 0x[c, ..t])
         end
 
         let Valid(b : Bytes) -> Type = Utf8(Scan/lead(), b);
@@ -58,13 +58,13 @@ fn slice_proof_aligns_with_byte_walk() {
             | lead() => b
             | cont(rem, lo, hi) =>
                 match b
-                | x[] => x[]
-                | x[h, ..t] => to_lead_bytes(step(/std/Byte/to_nat(h), Scan/cont(rem, lo, hi)), t)
+                | 0x[] => 0x[]
+                | 0x[h, ..t] => to_lead_bytes(step(/std/Byte/to_nat(h), Scan/cont(rem, lo, hi)), t)
                 end
             | bad() =>
                 match b
-                | x[] => x[]
-                | x[h, ..t] => to_lead_bytes(step(/std/Byte/to_nat(h), Scan/bad()), t)
+                | 0x[] => 0x[]
+                | 0x[h, ..t] => to_lead_bytes(step(/std/Byte/to_nat(h), Scan/bad()), t)
                 end
             end;
 
@@ -81,7 +81,7 @@ fn slice_proof_aligns_with_byte_walk() {
                 end
             end;
         let entry() -> /std/Io({}) =
-            let _ = Try/run(Io/write(Proc/stdout, x[0x6F, 0x6B]))!;
+            let _ = Try/run(Io/write(Proc/stdout, 0x[0x6F, 0x6B]))!;
             /std/Io/pure(());
         entry()
         "#;
@@ -132,7 +132,7 @@ fn char_to_utf8_matches_rust_across_widths_and_boundaries() {
 
 #[test]
 fn utf8_inductive_spike() {
-    // A state-indexed inductive relation over a native `Bytes` index, whose cons target `x[c, ..t]` lowers to `concat(append(x[], c), t)`. `seq` is induction on the derivation, and its arms close only if the free-monoid laws hold *definitionally* — `concat(x[], b) ≡ b` in the `stop` arm and `concat(concat(single c, t), b) ≡ concat(single c, concat(t, b))` in the `more` arm — so this pins those laws, and that inverting a cons index does not block the proof. `step` is a stub; `concat_closed_holds_for_the_real_automaton` repeats the proof over a full automaton.
+    // A state-indexed inductive relation over a native `Bytes` index, whose cons target `0x[c, ..t]` lowers to `concat(append(0x[], c), t)`. `seq` is induction on the derivation, and its arms close only if the free-monoid laws hold *definitionally* — `concat(0x[], b) ≡ b` in the `stop` arm and `concat(concat(single c, t), b) ≡ concat(single c, concat(t, b))` in the `more` arm — so this pins those laws, and that inverting a cons index does not block the proof. `step` is a stub; `concat_closed_holds_for_the_real_automaton` repeats the proof over a full automaton.
     let source = r#"
         use /std/{Str, Nat, Bytes, Io};
 
@@ -150,16 +150,16 @@ fn utf8_inductive_spike() {
             end;
 
         induct Utf8 : (s : Scan, b : Bytes) -> Type
-        | stop() : (Scan/lead(), x[])
+        | stop() : (Scan/lead(), 0x[])
         | more(c : Nat, st : Scan, t : Bytes, rest : Utf8(step(c, st), t))
-            : (st, x[Nat/to_byte(c % 256), ..t])
+            : (st, 0x[Nat/to_byte(c % 256), ..t])
         end
 
         let seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Utf8(Scan/lead(), b))
-            -> Utf8(s, x[..a, ..b]) =
+            -> Utf8(s, 0x[..a, ..b]) =
             match va
             | stop() => vb
-            | more(c, st, t, rest) => Utf8/more(c, st, x[..t, ..b], seq(rest, vb))
+            | more(c, st, t, rest) => Utf8/more(c, st, 0x[..t, ..b], seq(rest, vb))
             end;
         let main() -> /std/Io({}) =
             let _ = /std/print("ok")!;
@@ -171,19 +171,19 @@ fn utf8_inductive_spike() {
 
 #[test]
 fn utf8_construction_spike() {
-    // The constructing side: a derivation whose index is the input `Bytes` is built by native `Bytes` recursion. That needs the elimination's goal to be dependent — refining `b` to `x[h, ..t]` in the cons arm, so the arm can return `All(x[h, ..t])` from the recursive call's `All(t)`. `All` accepts everything, which isolates that requirement from any decision procedure; `utf8_of_bytes_checker_decides_and_builds_derivations` is the one that decides.
+    // The constructing side: a derivation whose index is the input `Bytes` is built by native `Bytes` recursion. That needs the elimination's goal to be dependent — refining `b` to `0x[h, ..t]` in the cons arm, so the arm can return `All(0x[h, ..t])` from the recursive call's `All(t)`. `All` accepts everything, which isolates that requirement from any decision procedure; `utf8_of_bytes_checker_decides_and_builds_derivations` is the one that decides.
     let source = r#"
         use /std/{Str, Nat, Bytes, Io};
 
         induct All : (b : Bytes) -> Type
-        | empty() : (x[])
-        | snoc(c : Nat, t : Bytes, rest : All(t)) : (x[Nat/to_byte(c % 256), ..t])
+        | empty() : (0x[])
+        | snoc(c : Nat, t : Bytes, rest : All(t)) : (0x[Nat/to_byte(c % 256), ..t])
         end
 
         let build(b : Bytes) -> All(b) =
             match b
-            | x[] => All/empty()
-            | x[h, ..t] => All/snoc(/std/Byte/to_nat(h), t, build(t))
+            | 0x[] => All/empty()
+            | 0x[h, ..t] => All/snoc(/std/Byte/to_nat(h), t, build(t))
             end;
         let entry() -> /std/Io({}) =
             let _ = /std/print("ok")!;
@@ -195,7 +195,7 @@ fn utf8_construction_spike() {
 
 #[test]
 fn concat_closed_holds_for_the_real_automaton() {
-    // `seq` over a full, range-checking UTF-8 `Scan`/`classify`/`step` automaton, where `utf8_inductive_spike` uses a stub. `seq` threads `step(c, s)` without inspecting it, so the real automaton changes nothing in the proof: both arms still close by the definitional free-monoid laws (`concat(x[], b) ≡ b` and associativity). `concat_closed` is the result: `Valid(a) -> Valid(b) -> Valid(x[..a, ..b])`.
+    // `seq` over a full, range-checking UTF-8 `Scan`/`classify`/`step` automaton, where `utf8_inductive_spike` uses a stub. `seq` threads `step(c, s)` without inspecting it, so the real automaton changes nothing in the proof: both arms still close by the definitional free-monoid laws (`concat(0x[], b) ≡ b` and associativity). `concat_closed` is the result: `Valid(a) -> Valid(b) -> Valid(0x[..a, ..b])`.
     let source = r#"
         use /std/{Str, Nat, Byte, Bytes, Bool, Io};
 
@@ -251,22 +251,22 @@ fn concat_closed_holds_for_the_real_automaton() {
             end;
 
         induct Utf8 : (s : Scan, b : Bytes) -> Type
-        | stop() : (Scan/lead(), x[])
+        | stop() : (Scan/lead(), 0x[])
         | more(c : Byte, st : Scan, t : Bytes, rest : Utf8(step(Byte/to_nat(c), st), t))
-            : (st, x[c, ..t])
+            : (st, 0x[c, ..t])
         end
 
         let Valid(b : Bytes) -> Type = Utf8(Scan/lead(), b);
 
         let seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
-            -> Utf8(s, x[..a, ..b]) =
+            -> Utf8(s, 0x[..a, ..b]) =
             match va
             | stop() => vb
-            | more(c, st, t, rest) => Utf8/more(c, st, x[..t, ..b], seq(rest, vb))
+            | more(c, st, t, rest) => Utf8/more(c, st, 0x[..t, ..b], seq(rest, vb))
             end;
 
         let concat_closed(@a : Bytes, @b : Bytes, va : Valid(a), vb : Valid(b))
-            -> Valid(x[..a, ..b]) =
+            -> Valid(0x[..a, ..b]) =
             seq(va, vb);
         let entry() -> /std/Io({}) =
             let _ = /std/print("ok")!;
@@ -278,7 +278,7 @@ fn concat_closed_holds_for_the_real_automaton() {
 
 #[test]
 fn utf8_of_bytes_checker_decides_and_builds_derivations() {
-    // A decision procedure that both decides validity at run time and builds a `Utf8` derivation in the `some` case. The checker threads a changing `Scan` state through a recursion on `b`, so `check(b)` is a function `(s) -> Option(Utf8(s, b))` that hands the state each step computes to the check of the tail, and `of_bytes_valid(b)` is `check(b)(lead)`. `decide` shows the automaton runs: "hi" (ASCII) is accepted and a lone `x[0x80]` continuation byte is rejected, printing "yesno".
+    // A decision procedure that both decides validity at run time and builds a `Utf8` derivation in the `some` case. The checker threads a changing `Scan` state through a recursion on `b`, so `check(b)` is a function `(s) -> Option(Utf8(s, b))` that hands the state each step computes to the check of the tail, and `of_bytes_valid(b)` is `check(b)(lead)`. `decide` shows the automaton runs: "hi" (ASCII) is accepted and a lone `0x[0x80]` continuation byte is rejected, printing "yesno".
     let source = r#"
         use /std/{Str, Nat, Bytes, Bool, Option, Io, Try, Proc};
 
@@ -334,22 +334,22 @@ fn utf8_of_bytes_checker_decides_and_builds_derivations() {
             end;
 
         induct Utf8 : (s : Scan, b : Bytes) -> Type
-        | stop() : (Scan/lead(), x[])
+        | stop() : (Scan/lead(), 0x[])
         | more(c : Nat, st : Scan, t : Bytes, rest : Utf8(step(c, st), t))
-            : (st, x[Nat/to_byte(c % 256), ..t])
+            : (st, 0x[Nat/to_byte(c % 256), ..t])
         end
 
         let Valid(b : Bytes) -> Type = Utf8(Scan/lead(), b);
 
         let check(b : Bytes) -> ((s : Scan) -> Option(Utf8(s, b))) =
             match b
-            | x[] => (s) =>
+            | 0x[] => (s) =>
                 match s
                 | lead() => Option/some(Utf8/stop())
                 | cont(rem, lo, hi) => Option/none()
                 | bad() => Option/none()
                 end
-            | x[h, ..t] => (s) =>
+            | 0x[h, ..t] => (s) =>
                 match check(t)(step(/std/Byte/to_nat(h), s))
                 | some(rest) => Option/some(Utf8/more(/std/Byte/to_nat(h), s, t, rest))
                 | none() => Option/none()
@@ -365,7 +365,7 @@ fn utf8_of_bytes_checker_decides_and_builds_derivations() {
             | none() => Str/to_bytes("no")
             end;
         let entry() -> /std/Io({}) =
-            let _ = Try/run(Io/write(Proc/stdout, x[..decide(x[0x68, 0x69]), ..decide(x[0x80])]))!;
+            let _ = Try/run(Io/write(Proc/stdout, 0x[..decide(0x[0x68, 0x69]), ..decide(0x[0x80])]))!;
             /std/Io/pure(());
         entry()
         "#;
@@ -430,29 +430,29 @@ fn decimal_is_ascii_carries_its_proof() {
             end;
 
         induct Utf8 : (s : Scan, b : Bytes) -> Type
-        | stop() : (Scan/lead(), x[])
+        | stop() : (Scan/lead(), 0x[])
         | more(c : Nat, st : Scan, t : Bytes, rest : Utf8(step(c, st), t))
-            : (st, x[Nat/to_byte(c % 256), ..t])
+            : (st, 0x[Nat/to_byte(c % 256), ..t])
         end
 
         let Valid(b : Bytes) -> Type = Utf8(Scan/lead(), b);
 
         let seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
-            -> Utf8(s, x[..a, ..b]) =
+            -> Utf8(s, 0x[..a, ..b]) =
             match va
             | stop() => vb
-            | more(c, st, t, rest) => Utf8/more(c, st, x[..t, ..b], seq(rest, vb))
+            | more(c, st, t, rest) => Utf8/more(c, st, 0x[..t, ..b], seq(rest, vb))
             end;
 
         let concat_closed(@a : Bytes, @b : Bytes, va : Valid(a), vb : Valid(b))
-            -> Valid(x[..a, ..b]) =
+            -> Valid(0x[..a, ..b]) =
             seq(va, vb);
 
         let single(c : Nat, ok : Eq()(step(c, Scan/lead()), Scan/lead()))
-            -> Valid(x[Nat/to_byte(c % 256)]) =
-            let r : Utf8(step(c, Scan/lead()), x[]) =
-                Eq/subst((sc) => Utf8(sc, x[]), Eq/sym(ok), Utf8/stop());
-            Utf8/more(c, Scan/lead(), x[], r);
+            -> Valid(0x[Nat/to_byte(c % 256)]) =
+            let r : Utf8(step(c, Scan/lead()), 0x[]) =
+                Eq/subst((sc) => Utf8(sc, 0x[]), Eq/sym(ok), Utf8/stop());
+            Utf8/more(c, Scan/lead(), 0x[], r);
 
         let digit(d : Nat) -> { c : Nat, ok : Eq()(step(c, Scan/lead()), Scan/lead()) } =
             match Nat/eql(d, 0) | true => (48, Eq/refl()) | false =>
@@ -470,7 +470,7 @@ fn decimal_is_ascii_carries_its_proof() {
 
         let single_digit(d : Nat) -> { b : Bytes, v : Valid(b) } =
             let g = digit(d);
-            (x[Nat/to_byte(g.c % 256)], single(g.c, g.ok));
+            (0x[Nat/to_byte(g.c % 256)], single(g.c, g.ok));
 
         let decimal(n : Nat) -> { b : Bytes, v : Valid(b) } =
             match Nat/lt(n, 10)
@@ -478,7 +478,7 @@ fn decimal_is_ascii_carries_its_proof() {
             | false =>
                 let hi = decimal(Nat/div(n, 10));
                 let lo = single_digit(Nat/rem(n, 10));
-                (x[..hi.b, ..lo.b], concat_closed(@hi.b, @lo.b, hi.v, lo.v))
+                (0x[..hi.b, ..lo.b], concat_closed(@hi.b, @lo.b, hi.v, lo.v))
             end;
 
         let decimal_is_ascii(n : Nat) -> Valid(decimal(n).b) =
@@ -543,55 +543,55 @@ fn slice_closed_peels_codepoints() {
             end;
 
         induct Utf8 : (s : Scan, b : Bytes) -> Type
-        | stop() : (Scan/lead(), x[])
+        | stop() : (Scan/lead(), 0x[])
         | more(c : Byte, st : Scan, t : Bytes, rest : Utf8(step(Byte/to_nat(c), st), t))
-            : (st, x[c, ..t])
+            : (st, 0x[c, ..t])
         end
 
         let Valid(b : Bytes) -> Type = Utf8(Scan/lead(), b);
 
         let seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
-            -> Utf8(s, x[..a, ..b]) =
+            -> Utf8(s, 0x[..a, ..b]) =
             match va
             | stop() => vb
-            | more(c, st, t, rest) => Utf8/more(c, st, x[..t, ..b], seq(rest, vb))
+            | more(c, st, t, rest) => Utf8/more(c, st, 0x[..t, ..b], seq(rest, vb))
             end;
 
         let concat_closed(@a : Bytes, @b : Bytes, va : Valid(a), vb : Valid(b))
-            -> Valid(x[..a, ..b]) =
+            -> Valid(0x[..a, ..b]) =
             seq(va, vb);
 
         let take_to_lead(@s : Scan, @b : Bytes, d : Utf8(s, b))
             -> { mid : Bytes, tail : Bytes, midd : Utf8(s, mid), tv : Valid(tail) } =
             match s
-            | lead() => (x[], b, Utf8/stop(), d)
+            | lead() => (0x[], b, Utf8/stop(), d)
             | cont(rem, lo, hi) =>
                 match d
                 | more(c, st, t, rest) =>
                     let w = take_to_lead(rest);
-                    (x[c, ..w.mid], w.tail,
+                    (0x[c, ..w.mid], w.tail,
                      Utf8/more(c, st, w.mid, w.midd), w.tv)
                 end
             | bad() =>
                 match d
                 | more(c, st, t, rest) =>
                     let w = take_to_lead(rest);
-                    (x[c, ..w.mid], w.tail,
+                    (0x[c, ..w.mid], w.tail,
                      Utf8/more(c, st, w.mid, w.midd), w.tv)
                 end
             end;
 
         let take1(@b : Bytes, d : Valid(b)) -> { cp : Bytes, v : Valid(cp) } =
             match d
-            | stop() => (x[], Utf8/stop())
+            | stop() => (0x[], Utf8/stop())
             | more(c, st, t, rest) =>
                 let w = take_to_lead(rest);
-                (x[c, ..w.mid], Utf8/more(c, st, w.mid, w.midd))
+                (0x[c, ..w.mid], Utf8/more(c, st, w.mid, w.midd))
             end;
 
         let drop1(@b : Bytes, d : Valid(b)) -> { rest : Bytes, v : Valid(rest) } =
             match d
-            | stop() => (x[], Utf8/stop())
+            | stop() => (0x[], Utf8/stop())
             | more(c, st, t, rest) =>
                 let w = take_to_lead(rest);
                 (w.tail, w.tv)
@@ -607,12 +607,12 @@ fn slice_closed_peels_codepoints() {
 
         let take_n(n : Nat, @b : Bytes, d : Valid(b)) -> { r : Bytes, v : Valid(r) } =
             match Nat/eql(n, 0)
-            | true => (x[], Utf8/stop())
+            | true => (0x[], Utf8/stop())
             | false =>
                 let hd = take1(d);
                 let tl = drop1(d);
                 let tn = take_n(Nat/sub(n, 1), @tl.rest, tl.v);
-                (x[..hd.cp, ..tn.r], concat_closed(@hd.cp, @tn.r, hd.v, tn.v))
+                (0x[..hd.cp, ..tn.r], concat_closed(@hd.cp, @tn.r, hd.v, tn.v))
             end;
 
         let slice(@b : Bytes, d : Valid(b), x : Nat, n : Nat) -> { r : Bytes, v : Valid(r) } =
@@ -661,7 +661,7 @@ fn of_bytes_stops_where_rust_says_valid_text_ends() {
                 .map(|byte| format!("0x{byte:02X}"))
                 .collect::<Vec<_>>()
                 .join(", ");
-            format!("x[{bytes}]")
+            format!("0x[{bytes}]")
         })
         .collect::<Vec<_>>()
         .join(", ");

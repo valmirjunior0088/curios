@@ -48,8 +48,8 @@ foreign handle_ready(List(Handle)) -> Bytes;
 --- Whether each report says ready, in their order.
 let each_ready(reports: Bytes) -> List(Bool) =
     match reports
-    | x[] => []
-    | x[r, ..rest] => [flagged(r, /sys/event/ready), ..each_ready(rest)]
+    | 0x[] => []
+    | 0x[r, ..rest] => [flagged(r, /sys/event/ready), ..each_ready(rest)]
     end;
 
 --- Whether each handle of `on` is ready now, in its order, without waiting: a watch as its handle is, a deadline once the monotonic clock has reached it, and any other handle at once.
@@ -59,7 +59,10 @@ pub let ready_now(on: List(Handle)) -> Io(List(Bool)) =
 
 --- A successful read's bytes as the chunk they are, or the end of the stream where there are none: a read of a positive count that answers nothing is the end, as a zero-byte `read(2)` is.
 let answered(b: Bytes) -> Io/Chunk =
-    match b | x[] => Io/Chunk/ended() | x[_, .._] => Io/Chunk/bytes(b) end;
+    match b
+    | 0x[] => Io/Chunk/ended()
+    | 0x[_, .._] => Io/Chunk/bytes(b)
+    end;
 
 --- Read up to so many bytes: `ok` beside them, `eof` at the end of the stream, or the status of the failure.
 foreign handle_read(Handle, Nat) -> {status: Nat, bytes: Bytes};

@@ -79,7 +79,7 @@ pub let members(fields: List(Field), name: Str) -> List(Bytes) =
 
 --- The field as its line on the wire: the name, a colon and a space, the value, and the line's end.
 pub let line(f: Field) -> Bytes =
-    x[..Str/to_bytes(f.name.text), ':', ' ', ..f.value.bytes, '\r', '\n'];
+    0x[..Str/to_bytes(f.name.text), ':', ' ', ..f.value.bytes, '\r', '\n'];
 
 --- The lines of the `fields` whose name `owned` does not claim, in order: what a renderer writes of a caller's fields beside the ones it writes itself.
 pub let lines(fields: List(Field), owned: (Name) -> Bool) -> Bytes =

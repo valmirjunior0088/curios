@@ -183,9 +183,9 @@ pub let main(tests: List(() -> Test({}))) -> Io(Bytes) =
         | some(index) =>
             match List/try_get(tests, index)
             | some(body) => answer(body())
-            | none() => Io/pure(x[])
+            | none() => Io/pure(0x[])
             end
-        | none() => Io/pure(x[])
+        | none() => Io/pure(0x[])
         end
-    | none() => Io/pure(x[])
+    | none() => Io/pure(0x[])
     end;

@@ -24,7 +24,7 @@ let digit(byte: Byte) -> Option(Nat) =
 --- The version `b` spells, `HTTP/` then a digit, a dot and a digit (RFC 9112 §2.3): malformed where it spells none, and not supported where its major number is not 1.
 pub let version(b: Bytes) -> Result(Refusal, Version) =
     match b
-    | x['H', 'T', 'T', 'P', '/', m, '.', n]
+    | 0x['H', 'T', 'T', 'P', '/', m, '.', n]
     , some(major) = digit(m)
     , some(minor) = digit(n)
     , minor <= 9 =>
@@ -93,11 +93,11 @@ let field(line: Bytes) -> Result(Refusal, Field) =
 
 -- Whether `line` begins with a space or a tab: a fold of the line before it, or nothing a head may hold.
 let indented(line: Bytes) -> Bool =
-    match line | x[byte, .._] => octets/is_ows(byte) | x[] => false end;
+    match line | 0x[byte, .._] => octets/is_ows(byte) | 0x[] => false end;
 
 -- `f` with the fold `line` read as a space and what follows it, as RFC 9112 §5.2 has a user agent read one.
 let folded(f: Field, line: Bytes) -> Result(Refusal, Field) =
-    match Field/Value/of_bytes(x[..f.value.bytes, ' ', ..octets/trim(line)])
+    match Field/Value/of_bytes(0x[..f.value.bytes, ' ', ..octets/trim(line)])
     | some(value) => Result/success(Field { name = f.name, value = value })
     | none() => Result/failure(Refusal/malformed("a field's value holds no control octet"))
     end;

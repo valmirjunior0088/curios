@@ -68,14 +68,14 @@ fn list_map_distributes_over_cons() {
 
 #[test]
 fn a_recursion_on_a_packed_tail_is_a_right_fold() {
-    // A `Bytes` case split, as a `List` one: the leading byte `h` is reflected as a `Nat`. Same non-commutative `foldr` probe as `a_recursion_on_a_lists_tail_is_a_right_fold`: the bytes `x[0x01, 0x02, 0x03, 0x04]` give `4321`, not `1234`, pinning head = first byte and the call at the tail.
+    // A `Bytes` case split, as a `List` one: the leading byte `h` is reflected as a `Nat`. Same non-commutative `foldr` probe as `a_recursion_on_a_lists_tail_is_a_right_fold`: the bytes `0x[0x01, 0x02, 0x03, 0x04]` give `4321`, not `1234`, pinning head = first byte and the call at the tail.
     let source = r#"
         use /std/{Str, Nat, Byte, Bytes, Io};
-        let bytes : Bytes = x[0x01, 0x02, 0x03, 0x04];
+        let bytes : Bytes = 0x[0x01, 0x02, 0x03, 0x04];
         let digits_of(b : Bytes) -> Nat =
             match b
-            | x[] => 0
-            | x[h, ..t] => Nat/add(Nat/mul(digits_of(t), 10), Byte/to_nat(h))
+            | 0x[] => 0
+            | 0x[h, ..t] => Nat/add(Nat/mul(digits_of(t), 10), Byte/to_nat(h))
             end;
         let digits : Nat = digits_of(bytes);
         let entry() -> /std/Io({}) =
@@ -88,16 +88,16 @@ fn a_recursion_on_a_packed_tail_is_a_right_fold() {
 
 #[test]
 fn bytes_concat_is_a_free_monoid() {
-    // `peel_bytes` (core::spine) makes `Bytes` a free monoid up to *definitional* equality: concatenation associates, the empty bytestring `x[]` is its identity, and a literal run re-segments freely — all provable by `refl` for SYMBOLIC operands, which `reduce` cannot fold. Each binding's declared type forces `convert` to peel the two `BytesConcat`s to a common normal form; without the peel these are stuck, distinct terms and `refl` would not check. A parenthesized spread operand is what keeps the two nestings apart: writing the operands flat would let the literal build one `BytesConcat` for both sides, and the `refl` would hold by syntax rather than by the peel.
+    // `peel_bytes` (core::spine) makes `Bytes` a free monoid up to *definitional* equality: concatenation associates, the empty bytestring `0x[]` is its identity, and a literal run re-segments freely — all provable by `refl` for SYMBOLIC operands, which `reduce` cannot fold. Each binding's declared type forces `convert` to peel the two `BytesConcat`s to a common normal form; without the peel these are stuck, distinct terms and `refl` would not check. A parenthesized spread operand is what keeps the two nestings apart: writing the operands flat would let the literal build one `BytesConcat` for both sides, and the `refl` would hold by syntax rather than by the peel.
     let source = r#"
         use /std/{Str, Eq, Bytes, Io};
         let assoc(a : Bytes, b : Bytes, c : Bytes)
-            -> Eq()(x[..a, ..(x[..b, ..c])], x[..(x[..a, ..b]), ..c]) =
+            -> Eq()(0x[..a, ..(0x[..b, ..c])], 0x[..(0x[..a, ..b]), ..c]) =
             Eq/refl();
-        let left_id(a : Bytes) -> Eq()(x[..(x[]), ..a], a) = Eq/refl();
-        let right_id(a : Bytes) -> Eq()(x[..a, ..(x[])], a) = Eq/refl();
+        let left_id(a : Bytes) -> Eq()(0x[..(0x[]), ..a], a) = Eq/refl();
+        let right_id(a : Bytes) -> Eq()(0x[..a, ..(0x[])], a) = Eq/refl();
         let resegment(x : Bytes)
-            -> Eq()(x[0x01, 0x02, ..x], x[0x01, ..(x[0x02, ..x])]) =
+            -> Eq()(0x[0x01, 0x02, ..x], 0x[0x01, ..(0x[0x02, ..x])]) =
             Eq/refl();
         let entry() -> /std/Io({}) =
             let _ = /std/print("ok")!;
@@ -109,10 +109,10 @@ fn bytes_concat_is_a_free_monoid() {
 
 #[test]
 fn bytes_concat_leading_byte_clash_is_rejected() {
-    // The dual: a leading-byte disagreement under a shared symbolic tail is a definite `Clash`, so `x[0x01] ++ x` and `x[0x02] ++ x` are never convertible and the `refl` is rejected. Guards `peel_bytes` against deciding unequal values equal.
+    // The dual: a leading-byte disagreement under a shared symbolic tail is a definite `Clash`, so `0x[0x01] ++ x` and `0x[0x02] ++ x` are never convertible and the `refl` is rejected. Guards `peel_bytes` against deciding unequal values equal.
     let source = r#"
         use /std/{Str, Eq, Bytes, Io};
-        let bad(x : Bytes) -> Eq()(x[0x01, ..x], x[0x02, ..x]) = Eq/refl();
+        let bad(x : Bytes) -> Eq()(0x[0x01, ..x], 0x[0x02, ..x]) = Eq/refl();
         let entry() -> /std/Io({}) =
             let _ = /std/print("ok")!;
             /std/Io/pure(());
@@ -131,7 +131,7 @@ fn a_literal_run_is_the_same_value_however_it_is_grouped() {
     let source = r#"
         use /std/{Str, Eq, Bytes, Bool, List, Io};
         let bytes_law(rest : Bytes)
-            -> Eq()(x[..x[0x30, 0x31], ..x[0x32, 0x33], ..rest], x[..x[0x30, 0x31, 0x32, 0x33], ..rest]) =
+            -> Eq()(0x[..0x[0x30, 0x31], ..0x[0x32, 0x33], ..rest], 0x[..0x[0x30, 0x31, 0x32, 0x33], ..rest]) =
             Eq/refl();
         let list_law(@T : Type, xs : List(T), p : T, q : T, r : T)
             -> Eq()([..[p, q], ..[r], ..xs], [..[p, q, r], ..xs]) =
@@ -150,7 +150,7 @@ fn a_regrouped_run_still_respects_its_order() {
     let source = r#"
         use /std/{Str, Eq, Bytes, Io};
         let bad(rest : Bytes)
-            -> Eq()(x[..x[0x30], ..x[0x31], ..rest], x[..x[0x31, 0x30], ..rest]) = Eq/refl();
+            -> Eq()(0x[..0x[0x30], ..0x[0x31], ..rest], 0x[..0x[0x31, 0x30], ..rest]) = Eq/refl();
         let entry() -> /std/Io({}) =
             let _ = /std/print("ok")!;
             /std/Io/pure(());
@@ -170,7 +170,7 @@ fn a_symbolic_run_is_the_same_value_however_it_is_grouped() {
             -> Eq()([..[..g(a + b), ..t], ..[h]], [..g(b + a), ..t, ..[h]]) =
             Eq/refl();
         let bytes_law(t : Bytes, g : (Nat) -> Bytes, a : Nat, b : Nat)
-            -> Eq()(x[..x[..g(a + b), ..t], 0], x[..g(b + a), ..t, 0]) =
+            -> Eq()(0x[..0x[..g(a + b), ..t], 0], 0x[..g(b + a), ..t, 0]) =
             Eq/refl();
         let rev(@T : Type, l : List(T)) -> List(T) =
             match l | [] => [] | [h, ..t] => [..rev(t), ..[h]] end;
@@ -192,15 +192,15 @@ fn a_length_and_a_window_do_not_depend_on_grouping() {
     // Each law puts the *same* run on both sides under different groupings, so what is being proven is precisely that grouping is invisible. `curios-core`'s `reduce::intrinsic` tests state the same thing against the folds directly and over more shapes; this is the both-checkers half.
     let source = r#"
         use /std/{Str, Eq, Bytes, Byte, Nat, List, Option, Io};
-        let split_length : Eq()(Bytes/len(x[..x[0x30, 0x31], ..x[0x32, 0x33, 0x34]]), 5) = Eq/refl();
-        let nested_length : Eq()(Bytes/len(x[..x[..x[0x30], ..x[0x31]], ..x[0x32, 0x33, 0x34]]), 5) =
+        let split_length : Eq()(Bytes/len(0x[..0x[0x30, 0x31], ..0x[0x32, 0x33, 0x34]]), 5) = Eq/refl();
+        let nested_length : Eq()(Bytes/len(0x[..0x[..0x[0x30], ..0x[0x31]], ..0x[0x32, 0x33, 0x34]]), 5) =
             Eq/refl();
         let split_window
-            : Eq()(Bytes/slice(x[..x[0x30, 0x31], ..x[0x32, 0x33, 0x34]], 1, 3), x[0x31, 0x32, 0x33]) =
+            : Eq()(Bytes/slice(0x[..0x[0x30, 0x31], ..0x[0x32, 0x33, 0x34]], 1, 3), 0x[0x31, 0x32, 0x33]) =
             Eq/refl();
         let third : Byte = 0x33;
         let split_index
-            : Eq()(Bytes/try_get(x[..x[0x30, 0x31], ..x[0x32, 0x33, 0x34]], 3), Option/some(third)) =
+            : Eq()(Bytes/try_get(0x[..0x[0x30, 0x31], ..0x[0x32, 0x33, 0x34]], 3), Option/some(third)) =
             Eq/refl();
         let list_length(p : Nat, q : Nat, r : Nat)
             -> Eq()(List/len([..[p, q], ..[r]]), 3) = Eq/refl();
@@ -219,7 +219,7 @@ fn a_pointwise_operation_over_runs_past_the_fusion_cap_is_the_operation_over_the
         use /std/{Str, Bool, Bytes, Io};
         use /std/Bool/{True, Holds};
         let run : Bytes = Bytes/replicate(65, 0);
-        let flipped : Holds(Bytes/eql(Bytes/not(x[..run, ..run]), Bytes/replicate(130, 0xFF))) =
+        let flipped : Holds(Bytes/eql(Bytes/not(0x[..run, ..run]), Bytes/replicate(130, 0xFF))) =
             True/qed();
         let entry() -> /std/Io({}) =
             let _ = /std/print("ok")!;
@@ -239,14 +239,14 @@ fn bytes_slice_is_a_monoid_citizen() {
         use /std/Bool/{Holds};
         let split(b : Bytes, s : Nat, l1 : Nat, l2 : Nat,
                   total : Holds((s + l1) + l2 <= Bytes/len(b)))
-            -> Eq()(x[
+            -> Eq()(0x[
                     ..Bytes/slice(
                         b, s, l1,
                         @Nat/le/trans(Nat/le/add_r(s + l1, l2), total)),
                     ..Bytes/slice(b, s + l1, l2, @total)], Bytes/slice(b, s, l1 + l2, @total)) =
             Eq/refl();
         let empty(b : Bytes, i : Nat, il : Holds(i <= Bytes/len(b)))
-            -> Eq()(Bytes/slice(b, i, 0, @il), x[]) = Eq/refl();
+            -> Eq()(Bytes/slice(b, i, 0, @il), 0x[]) = Eq/refl();
         let full(b : Bytes)
             -> Eq()(Bytes/slice(b, 0, Bytes/len(b), @Nat/le/refl(Bytes/len(b))), b) =
             Eq/refl();
@@ -267,7 +267,7 @@ fn bytes_slice_window_seam_mismatch_is_rejected() {
         let bad(b : Bytes, s : Nat, l1 : Nat, o : Nat, l2 : Nat,
                 w1 : Holds(s + l1 <= Bytes/len(b)), w2 : Holds(o + l2 <= Bytes/len(b)),
                 w3 : Holds(s + (l1 + l2) <= Bytes/len(b)))
-            -> Eq()(x[..Bytes/slice(b, s, l1, @w1), ..Bytes/slice(b, o, l2, @w2)], Bytes/slice(b, s, l1 + l2, @w3)) =
+            -> Eq()(0x[..Bytes/slice(b, s, l1, @w1), ..Bytes/slice(b, o, l2, @w2)], Bytes/slice(b, s, l1 + l2, @w3)) =
             Eq/refl();
         let entry() -> /std/Io({}) =
             let _ = /std/print("ok")!;
@@ -326,7 +326,7 @@ fn bytes_append_is_concat_with_a_single_byte() {
     let source = r#"
         use /std/{Str, Eq, Byte, Bytes, Io};
         let law(xs : Bytes, y : Byte)
-            -> Eq()(x[..xs, ..(x[y])], x[..xs, y]) =
+            -> Eq()(0x[..xs, ..(0x[y])], 0x[..xs, y]) =
             Eq/refl();
         let entry() -> /std/Io({}) =
             let _ = /std/print("ok")!;
@@ -363,11 +363,11 @@ fn bytes_len_reduces_across_a_cons_spine() {
     let source = r#"
         use /std/{Str, Eq, Byte, Bytes, Nat, Io};
         let len(h : Byte, t : Bytes)
-            -> Eq()(Bytes/len(x[h, ..t]), Nat/add(1, Bytes/len(t))) = Eq/refl();
+            -> Eq()(Bytes/len(0x[h, ..t]), Nat/add(1, Bytes/len(t))) = Eq/refl();
         let guard(h : Byte, t : Bytes)
-            -> Eq()(Nat/lt(0, Bytes/len(x[h, ..t])), true) = Eq/refl();
+            -> Eq()(Nat/lt(0, Bytes/len(0x[h, ..t])), true) = Eq/refl();
         let floor(h : Byte, t : Bytes)
-            -> Eq()(Nat/lt(Bytes/len(x[h, ..t]), 0), false) = Eq/refl();
+            -> Eq()(Nat/lt(Bytes/len(0x[h, ..t]), 0), false) = Eq/refl();
         let entry() -> /std/Io({}) =
             let _ = /std/print("ok")!;
             /std/Io/pure(());
@@ -378,13 +378,13 @@ fn bytes_len_reduces_across_a_cons_spine() {
 
 #[test]
 fn an_append_over_a_nonempty_base_still_decodes_its_first_atom() {
-    // `peel_front` (`core::free_monoid`) recognises an append over any base, as `core::spine`'s two-value peel does: `append(x[0x48], b)` — what `x[0x48, b]` lowers to — peels its first generator and rejoins the residual, as the `BytesConcat` arm beside it does. `get` at index 0 is the sharp probe: it reduces only where the leading generator is exposed, and every appended atom here is SYMBOLIC, so nothing is literal folding. `chained` is the recursive case — adjacent atoms lower to `append(append(...))`, whose first generator sits two bases down.
+    // `peel_front` (`core::free_monoid`) recognises an append over any base, as `core::spine`'s two-value peel does: `append(0x[0x48], b)` — what `0x[0x48, b]` lowers to — peels its first generator and rejoins the residual, as the `BytesConcat` arm beside it does. `get` at index 0 is the sharp probe: it reduces only where the leading generator is exposed, and every appended atom here is SYMBOLIC, so nothing is literal folding. `chained` is the recursive case — adjacent atoms lower to `append(append(...))`, whose first generator sits two bases down.
     let source = r#"
         use /std/{Str, Eq, Byte, Bytes, Bool, Option, Io};
         let lead : Byte = 0x48;
-        let byte_head(b : Byte) -> Eq()(Bytes/try_get(x[0x48, b], 0), Option/some(lead)) = Eq/refl();
-        let chained(a : Byte, b : Byte) -> Eq()(Bytes/try_get(x[0x48, a, b], 0), Option/some(lead)) = Eq/refl();
-        let chained_len(a : Byte, b : Byte) -> Eq()(Bytes/len(x[a, b]), 2) = Eq/refl();
+        let byte_head(b : Byte) -> Eq()(Bytes/try_get(0x[0x48, b], 0), Option/some(lead)) = Eq/refl();
+        let chained(a : Byte, b : Byte) -> Eq()(Bytes/try_get(0x[0x48, a, b], 0), Option/some(lead)) = Eq/refl();
+        let chained_len(a : Byte, b : Byte) -> Eq()(Bytes/len(0x[a, b]), 2) = Eq/refl();
         let entry() -> /std/Io({}) =
             let _ = /std/print("ok")!;
             /std/Io/pure(());
@@ -449,7 +449,7 @@ fn empty_bytes_literal_is_the_empty_sequence() {
     assert_eq!(
         run(r#"
 let entry() -> /std/Io({}) =
-    let _ = /std/Try/run(std/Io/write(std/Proc/stdout, x[../std/Str/to_bytes("ok")]))!;
+    let _ = /std/Try/run(std/Io/write(std/Proc/stdout, 0x[../std/Str/to_bytes("ok")]))!;
     /std/Io/pure(());
 entry()
 "#),
@@ -465,7 +465,7 @@ fn a_position_past_a_character_meets_the_operand_after_it() {
         use /std/{Nat, Bytes, Char, Str, Eq};
         use /std/Bool/{True};
         let _past(a: Bytes, b: Bytes, c: Char)
-            -> Eq()(Bytes/drop(x[..a, ..Str/of_char(c).bytes, ..b], Bytes/len(a) + Bytes/len(Char/to_utf8(c)), @True/qed()), b) =
+            -> Eq()(Bytes/drop(0x[..a, ..Str/of_char(c).bytes, ..b], Bytes/len(a) + Bytes/len(Char/to_utf8(c)), @True/qed()), b) =
             Eq/refl();
         /std/print("ok")
         "#),

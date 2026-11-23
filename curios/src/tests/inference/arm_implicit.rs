@@ -2,7 +2,7 @@
 
 use crate::tests::test_support::*;
 
-// An implicit solved from a projection of a local binding whose value discharges a bound inside a match arm. The candidate `t.0` reduces to the whole of `codes`'s fold, whose `x[h, ..t]` arm carries `Bytes/get(b, 0, @True/qed())` — a proof the arm's own refinement discharged where it was written. `Convert::solve` re-validates a candidate as an oracle, with suppression scoped to the depth it began at, so the ambient arm stays withheld and the validated term's own arms do not. Withholding *every* refinement would check the proof against the unreduced `Holds(0 < Bytes/len(b))`, reject a correct solution, and surface the implicit as a mismatch with the entire unfolded fold on its inferred side.
+// An implicit solved from a projection of a local binding whose value discharges a bound inside a match arm. The candidate `t.0` reduces to the whole of `codes`'s fold, whose `0x[h, ..t]` arm carries `Bytes/get(b, 0, @True/qed())` — a proof the arm's own refinement discharged where it was written. `Convert::solve` re-validates a candidate as an oracle, with suppression scoped to the depth it began at, so the ambient arm stays withheld and the validated term's own arms do not. Withholding *every* refinement would check the proof against the unreduced `Holds(0 < Bytes/len(b))`, reject a correct solution, and surface the implicit as a mismatch with the entire unfolded fold on its inferred side.
 #[test]
 fn an_implicit_solves_through_a_binding_whose_value_discharges_a_bound_in_an_arm() {
     assert_eq!(
@@ -34,8 +34,8 @@ fn an_implicit_solves_through_a_binding_whose_value_discharges_a_bound_in_an_arm
         let codes(s: Str) -> List(Char) =
             let go(b: Bytes, acc: List(Char)) -> List(Char) =
                 match b
-                | x[] => acc
-                | x[_, ..t] =>
+                | 0x[] => acc
+                | 0x[_, ..t] =>
                     let code = Byte/to_nat(Bytes/get(b, 0, @True/qed()));
                     go(t, [..acc, Option/unwrap_or(Char/of_nat(code), '?')])
                 end;
@@ -227,7 +227,7 @@ fn an_implicit_born_in_an_arm_is_solved_under_the_arms_guard() {
             | false => fallback
             end;
 
-        print(Nat/to_str(probe(x[1, 2], 1, 2, (_) => Nat, 5, 0, (_, n) => n)))
+        print(Nat/to_str(probe(0x[1, 2], 1, 2, (_) => Nat, 5, 0, (_, n) => n)))
         "#);
 
     assert_eq!(output, b"5");

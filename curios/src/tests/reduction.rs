@@ -26,10 +26,10 @@ fn bytes_opaque(n: usize) -> String {
         r#"
         use /std/{Bytes, Nat, Str};
         let go(i : Nat, acc : Bytes) -> Bytes =
-            match i | 0 => acc | k + 1 => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
+            match i | 0 => acc | k + 1 => go(k, 0x[..acc, ..Str/to_bytes("0123456789")]) end;
         let head_of(b : Bytes) -> Bytes =
-            match 10 <= Bytes/len(b) | true => Bytes/slice(b, 0, 10) | false => x[] end;
-        let built = go(${n}, x[]);
+            match 10 <= Bytes/len(b) | true => Bytes/slice(b, 0, 10) | false => 0x[] end;
+        let built = go(${n}, 0x[]);
         let head = head_of(built);
         /std/print("ok")
         "#,
@@ -44,7 +44,7 @@ fn bytes_fixed(n: usize) -> String {
         use /std/{Bytes, Nat, Str};
         let go(i : Nat, acc : Bytes) -> Bytes =
             match i | 0 => acc | k + 1 => go(k, Str/to_bytes("0123456789")) end;
-        let built = go(${n}, x[]);
+        let built = go(${n}, 0x[]);
         let head = Bytes/slice(built, 0, 10);
         /std/print("ok")
         "#,
@@ -58,8 +58,8 @@ fn bytes_growing(n: usize) -> String {
         r#"
         use /std/{Bytes, Nat, Str};
         let go(i : Nat, acc : Bytes) -> Bytes =
-            match i | 0 => acc | k + 1 => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
-        let built = go(${n}, x[]);
+            match i | 0 => acc | k + 1 => go(k, 0x[..acc, ..Str/to_bytes("0123456789")]) end;
+        let built = go(${n}, 0x[]);
         let head = Bytes/slice(built, 0, 10);
         /std/print("ok")
         "#,
@@ -374,7 +374,7 @@ fn bytes_literal(n: usize) -> String {
     fill!(
         r#"
         use /std/{Bytes, Nat};
-        let b : Bytes = x[${entries}];
+        let b : Bytes = 0x[${entries}];
         /std/print(Nat/to_str(Bytes/len(b)))
         "#,
         entries
@@ -688,14 +688,14 @@ fn ascii_refinement(n: usize) -> String {
         use /std/{Bytes, Byte, Nat, Bool, Eq};
         let all_ascii(b : Bytes) -> Bool =
             match b
-            | x[] => true
-            | x[h, ..t] =>
+            | 0x[] => true
+            | 0x[h, ..t] =>
                 match Byte/to_nat(h) < 0x80
                 | true => all_ascii(t)
                 | false => false
                 end
             end;
-        let ok : Eq()(all_ascii(x[${entries}]), true) = Eq/refl();
+        let ok : Eq()(all_ascii(0x[${entries}]), true) = Eq/refl();
         /std/print("ok")
         "#,
         entries
@@ -782,12 +782,12 @@ fn paired_fold(width: usize, paired: bool) -> String {
             use /std/{Nat, Byte, Bytes, Eq};
             let go(x: Bytes, c: Byte) -> {Bytes, Byte} =
                 match x
-                | x[] => (x[], c)
-                | x[h, ..t] =>
+                | 0x[] => (0x[], c)
+                | 0x[h, ..t] =>
                     let (rest, out) = go(t, Byte/xor(h, c));
-                    (x[Byte/xor(h, c), ..rest], out)
+                    (0x[Byte/xor(h, c), ..rest], out)
                 end;
-            let (bytes, _) = go(Bytes/slice(x[${ones}], 0, ${width}), 0);
+            let (bytes, _) = go(Bytes/slice(0x[${ones}], 0, ${width}), 0);
             let _counted: Eq()(Bytes/len(bytes), ${width}) = Eq/refl();
             /std/print("")
             "#,
@@ -799,10 +799,10 @@ fn paired_fold(width: usize, paired: bool) -> String {
             use /std/{Nat, Byte, Bytes, Eq};
             let go(x: Bytes, c: Byte) -> Bytes =
                 match x
-                | x[] => x[]
-                | x[h, ..t] => x[Byte/xor(h, c), ..go(t, Byte/xor(h, c))]
+                | 0x[] => 0x[]
+                | 0x[h, ..t] => 0x[Byte/xor(h, c), ..go(t, Byte/xor(h, c))]
                 end;
-            let _counted: Eq()(Bytes/len(go(Bytes/slice(x[${ones}], 0, ${width}), 0)), ${width}) = Eq/refl();
+            let _counted: Eq()(Bytes/len(go(Bytes/slice(0x[${ones}], 0, ${width}), 0)), ${width}) = Eq/refl();
             /std/print("")
             "#,
             ones,

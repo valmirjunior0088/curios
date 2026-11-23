@@ -61,10 +61,10 @@ test or_reports_the_refusal_that_reached_further =
 test a_bytes_literal_is_read_byte_by_byte =
     Test/all([
         Test/equal(
-            shown(Parse/run(Parse/bytes/literal("ab"), x['a', 'b', 'c']), (()) => "ok"),
+            shown(Parse/run(Parse/bytes/literal("ab"), 0x['a', 'b', 'c']), (()) => "ok"),
             "ok"),
         Test/equal(
-            shown(Parse/run(Parse/bytes/literal("ab"), x['a']), (()) => "ok"),
+            shown(Parse/run(Parse/bytes/literal("ab"), 0x['a']), (()) => "ok"),
             "expected \"ab\" at byte 0")]);
 
 let digit: Parse(Str, Char) =
@@ -142,4 +142,4 @@ test eof_accepts_only_the_end_of_the_input =
         | success(b) => Str/concat("ok:", Nat/to_str(Byte/to_nat(b)))
         | failure(_) => "rejected"
         end;
-    Test/equal([one(x[0x41]), one(x[0x41, 0x42]), one(x[])], ["ok:65", "rejected", "rejected"]);
+    Test/equal([one(0x[0x41]), one(0x[0x41, 0x42]), one(0x[])], ["ok:65", "rejected", "rejected"]);

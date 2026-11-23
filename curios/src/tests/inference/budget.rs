@@ -32,9 +32,9 @@ fn a_literal_depth_packed_recursion_refuses_within_a_small_budget() {
         let entry() -> /std/Io({}) =
             let taint = List/len(Proc/args()!);
             let t: Byte = match taint == 0 | true => 1 | false => 0 end;
-            let grown = x[t, 1];
+            let grown = 0x[t, 1];
             let widen(n: Nat, acc: Bytes) -> Bytes =
-                match n | 0 => acc | _ => widen(n - 1, x[..acc, t]) end;
+                match n | 0 => acc | _ => widen(n - 1, 0x[..acc, t]) end;
             let wide = widen(30, grown);
             match Bytes/len(wide) == 32
             | true => /std/print("ok\n")
@@ -53,9 +53,9 @@ fn a_literal_depth_packed_recursion_compiles_within_the_default_budget() {
         let entry() -> /std/Io({}) =
             let taint = List/len(Proc/args()!);
             let t: Byte = match taint == 0 | true => 1 | false => 0 end;
-            let grown = x[t, 1];
+            let grown = 0x[t, 1];
             let widen(n: Nat, acc: Bytes) -> Bytes =
-                match n | 0 => acc | _ => widen(n - 1, x[..acc, t]) end;
+                match n | 0 => acc | _ => widen(n - 1, 0x[..acc, t]) end;
             let wide = widen(30, grown);
             match Bytes/len(wide) == 32
             | true => /std/print("ok\n")
@@ -84,9 +84,9 @@ fn acceptance_is_upward_closed_in_the_budget() {
             let entry() -> /std/Io({}) =
                 let taint = List/len(Proc/args()!);
                 let t: Byte = match taint == 0 | true => 1 | false => 0 end;
-                let grown = x[t, 1];
+                let grown = 0x[t, 1];
                 let widen(n: Nat, acc: Bytes) -> Bytes =
-                    match n | 0 => acc | _ => widen(n - 1, x[..acc, t]) end;
+                    match n | 0 => acc | _ => widen(n - 1, 0x[..acc, t]) end;
                 let wide = widen(30, grown);
                 match Bytes/len(wide) == 32
                 | true => /std/print("ok\n")
@@ -100,14 +100,14 @@ fn acceptance_is_upward_closed_in_the_budget() {
             r#"
             use /std/{Str, Bytes, Nat};
             let head(b : Bytes) -> Bytes =
-                match 10 <= Bytes/len(b) | true => Bytes/slice(b, 0, 10) | false => x[] end;
+                match 10 <= Bytes/len(b) | true => Bytes/slice(b, 0, 10) | false => 0x[] end;
             let interior(b : Bytes, k : Nat) -> Bytes =
-                match 1 + k <= Bytes/len(b) | true => Bytes/slice(b, 1, k) | false => x[] end;
-            let named = x[0x61, 0x62, 0x63];
+                match 1 + k <= Bytes/len(b) | true => Bytes/slice(b, 1, k) | false => 0x[] end;
+            let named = 0x[0x61, 0x62, 0x63];
             let over_a_definition(k : Nat) -> Bytes =
                 match 1 + k <= Bytes/len(named)
                 | true => Bytes/slice(named, 1, k)
-                | false => x[]
+                | false => 0x[]
                 end;
             /std/print("ok")
             "#,

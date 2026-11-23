@@ -18,8 +18,8 @@ fn a_closure_built_by_a_call_inside_a_knot_reaches_a_later_member() {
             and helper(n: Nat) -> Nat = first(n);
             let f =
                 match bs
-                | x[b, ..rest] => match Byte/to_nat(b) % 2 | 0 => first | _ => second end
-                | x[] => first
+                | 0x[b, ..rest] => match Byte/to_nat(b) % 2 | 0 => first | _ => second end
+                | 0x[] => first
                 end;
             print(Nat/to_str(f(3)));
         main()
@@ -124,7 +124,7 @@ fn a_member_read_through_a_closure_the_verifier_cannot_see_is_forced() {
             let bs = rand/bytes(1)!;
             let p: Parse(Bytes, Nat) = Parse/map(Parse/bytes/byte, (b) => Byte/to_nat(b) + size)
             and n: Nat =
-                match Parse/run(p, x[0x01])
+                match Parse/run(p, 0x[0x01])
                 | success(v) => v
                 | failure(_) => 0
                 end

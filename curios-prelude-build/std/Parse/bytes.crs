@@ -71,8 +71,8 @@ pub let expect(expected: Byte) -> Parse(Bytes, Byte) =
 --- The position past `lit` read from `at`, byte by byte, or `none` where the input is not it.
 let literal_past(@input: Bytes, lit: Bytes, at: Pos(Bytes, input)) -> Option(Pos(Bytes, input)) =
     match lit
-    | x[] => Option/some(at)
-    | x[h, ..t] =>
+    | 0x[] => Option/some(at)
+    | 0x[h, ..t] =>
         match Bool/holds(at.offset < Bytes/len(input))
         | some(ok), Bytes/get(input, at.offset, @ok) == h => literal_past(t, step(at, ok))
         | _ => Option/none()
@@ -92,7 +92,7 @@ pub let literal(lit: Str) -> Parse(Bytes, {}) =
 --- `taken` and how many bytes at the front of `rest` `pred` accepts: a walk over the bytes it reads, which stops at the first one refused.
 let leading(rest: Bytes, pred: (Byte) -> Bool, taken: Nat) -> Nat =
     match rest
-    | x[h, ..t], pred(h) => leading(t, pred, taken + 1)
+    | 0x[h, ..t], pred(h) => leading(t, pred, taken + 1)
     | _ => taken
     end;
 
@@ -103,8 +103,8 @@ let leading_within(
     taken: Nat,
 ) -> Bool/Holds(leading(rest, pred, taken) <= taken + Bytes/len(rest)) =
     match rest
-    | x[] => proved()
-    | x[h, ..t] =>
+    | 0x[] => proved()
+    | 0x[h, ..t] =>
         match pred(h)
         | true => leading_within(t, pred, taken + 1)
         | false => proved()

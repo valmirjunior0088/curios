@@ -217,7 +217,7 @@ fn the_tests_a_text_writes_are_listed() {
     write(
         &root,
         "t.crsc",
-        "test /t/held = /std/Test/assert(/std/Str/Str { x[0x69], /sys/Bool/True/qed() }, true);\n",
+        "test /t/held = /std/Test/assert(/std/Str/Str { 0x[0x69], /sys/Bool/True/qed() }, true);\n",
     );
 
     let (listed, stderr, code) = said(&curios(&root, &["wonder", "--tests", "t.crsc"], ""));

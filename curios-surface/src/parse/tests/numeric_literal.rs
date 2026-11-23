@@ -235,7 +235,7 @@ fn nat_radix_round_trips_through_the_printer() {
 
 /// A numeral's written *width* round-trips with its base, so a padded literal prints back as written.
 ///
-/// The width is kept: printed at its natural one, `0x00` would come back as `0x0`. What that would cost is a table — `x[0x00, 0x48, 0x69]` is bytes in columns, and `curios format` would silently narrow it to `x[0x0, 0x48, 0x69]`.
+/// The width is kept: printed at its natural one, `0x00` would come back as `0x0`. What that would cost is a table — `0x[0x00, 0x48, 0x69]` is bytes in columns, and `curios format` would silently narrow it to `0x[0x0, 0x48, 0x69]`.
 #[test]
 fn a_padded_numeral_keeps_the_width_it_was_written_at() {
     for source in [
@@ -244,7 +244,7 @@ fn a_padded_numeral_keeps_the_width_it_was_written_at() {
         "0x00FF",
         "0b0001",
         "007",
-        "x[0x00, 0x48, 0x69, 0x0A]",
+        "0x[0x00, 0x48, 0x69, 0x0A]",
     ] {
         assert_eq!(source.parse::<Term>().unwrap().to_string(), source);
     }

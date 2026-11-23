@@ -72,8 +72,8 @@ fn a_hand_written_convoy_keeps_its_descent_visible() {
         use /std/Str/{Scan, step};
 
         induct Utf8: (Scan, Bytes) -> Prop
-        | stop(): (Scan/lead(), x[])
-        | more(c: Byte, st: Scan, t: Bytes, rest: Utf8(step(c, st), t)): (st, x[c, ..t])
+        | stop(): (Scan/lead(), 0x[])
+        | more(c: Byte, st: Scan, t: Bytes, rest: Utf8(step(c, st), t)): (st, 0x[c, ..t])
         end
 
         let dv(s: Scan, @b: Bytes, d: Utf8(s, b)) -> Eq()(0, 0) =
@@ -95,8 +95,8 @@ fn a_let_alias_keeps_its_descent_visible() {
         use /std/Str/{Scan, step};
 
         induct Utf8: (Scan, Bytes) -> Prop
-        | stop(): (Scan/lead(), x[])
-        | more(c: Byte, st: Scan, t: Bytes, rest: Utf8(step(c, st), t)): (st, x[c, ..t])
+        | stop(): (Scan/lead(), 0x[])
+        | more(c: Byte, st: Scan, t: Bytes, rest: Utf8(step(c, st), t)): (st, 0x[c, ..t])
         end
 
         let dv(s: Scan, @b: Bytes, d: Utf8(s, b)) -> Eq()(0, 0) =
@@ -118,8 +118,8 @@ fn a_proof_over_a_dependent_hypothesis_descends() {
         use /std/Str/{Scan, step};
 
         induct Utf8: (Scan, Bytes) -> Prop
-        | stop(): (Scan/lead(), x[])
-        | more(c: Byte, st: Scan, t: Bytes, rest: Utf8(step(c, st), t)): (st, x[c, ..t])
+        | stop(): (Scan/lead(), 0x[])
+        | more(c: Byte, st: Scan, t: Bytes, rest: Utf8(step(c, st), t)): (st, 0x[c, ..t])
         end
 
         let dv(s : Scan, @b : Bytes, d : Utf8(s, b)) -> Eq()(0, 0) =

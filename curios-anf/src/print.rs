@@ -1067,11 +1067,11 @@ fn fields(row: &[Field]) -> String {
         .join(", ")
 }
 
-/// The pattern prefix that selects a sequence carrier, exactly as the surface writes a packed pattern: bare for `List`, `x` for `Bytes`.
+/// The pattern prefix that selects a sequence carrier, exactly as the surface writes a packed pattern: bare for `List`, `0x` for `Bytes`.
 fn grain_prefix(grain: &SequenceGrain) -> &'static str {
     match grain {
         SequenceGrain::List => "",
-        SequenceGrain::Bytes => "x",
+        SequenceGrain::Bytes => "0x",
     }
 }
 

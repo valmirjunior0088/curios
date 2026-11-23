@@ -202,7 +202,7 @@ test("the program's arguments are its name, then each arg= of the query, percent
     "app/curios.toml": `compiler = "${version}"\nname = "app"\n`,
     "app/exe.crs": `let main() -> /std/Io({}) =
     let args = /std/Proc/args()!;
-    let _ = /std/Try/run(/std/Io/write(/std/Proc/stdout, /std/Bytes/join(x[124], args)))!;
+    let _ = /std/Try/run(/std/Io/write(/std/Proc/stdout, /std/Bytes/join(0x[124], args)))!;
     /std/Io/pure(());
 main()
 `,

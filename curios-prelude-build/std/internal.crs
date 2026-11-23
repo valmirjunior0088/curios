@@ -46,5 +46,8 @@ pub let until(@A: Type, attempt: Io(Option(A)), wait: Io(Waiting)) -> Io(A) =
 pub let read_to_end(@S: Type, use Io/Read(S), s: S) -> Try(Io, Io/Error, Bytes) =
     let go(acc: Bytes) -> Try(Io, Io/Error, Bytes) =
         let c = Io/read(@S, s, 4096)!;
-        match c | bytes(b) => go(x[..acc, ..b]) | ended() => Try/pure(acc) end;
-    go(x[]);
+        match c
+        | bytes(b) => go(0x[..acc, ..b])
+        | ended() => Try/pure(acc)
+        end;
+    go(0x[]);

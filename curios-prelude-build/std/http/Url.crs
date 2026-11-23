@@ -239,8 +239,8 @@ let hex_octet(n: Nat, @nibble: Bool/Holds(n < 16)) -> Field/Value/Octet =
 -- `b` with every octet that is not visible ASCII written as its `%XX`.
 let escaped_bytes(b: Bytes) -> Field/Value =
     match b
-    | x[] => Field/Value/empty
-    | x[h, ..t] =>
+    | 0x[] => Field/Value/empty
+    | 0x[h, ..t] =>
         let rest = escaped_bytes(t);
         let n = Byte/to_nat(h);
         let quoted =
@@ -305,21 +305,21 @@ let hex_value(byte: Byte) -> Option({v: Nat, ok: Bool/Holds(v < 16)}) =
 
 let decode_at(rest: Bytes, acc: Bytes) -> Option(Bytes) =
     match rest
-    | x[] => Option/some(acc)
-    | x['+', ..after] => decode_at(after, x[..acc, ' '])
-    | x['%', high, low, ..onward] =>
+    | 0x[] => Option/some(acc)
+    | 0x['+', ..after] => decode_at(after, 0x[..acc, ' '])
+    | 0x['%', high, low, ..onward] =>
         match (hex_value(high), hex_value(low))
-        | (some(hi), some(lo)) => decode_at(onward, x[..acc, Nat/to_byte(hi.v * 16 + lo.v)])
+        | (some(hi), some(lo)) => decode_at(onward, 0x[..acc, Nat/to_byte(hi.v * 16 + lo.v)])
         | (some(_), none()) | (none(), _) => Option/none()
         end
-    | x['%', .._] => Option/none()
-    | x[byte, ..after] => decode_at(after, x[..acc, byte])
+    | 0x['%', .._] => Option/none()
+    | 0x[byte, ..after] => decode_at(after, 0x[..acc, byte])
     end;
 
 --- `component` percent-decoded, `+` read as a space, or `none` when an escape is malformed or the result is not text.
 pub let decode(component: Str) -> Option(Str) =
     Option/bind(
-        decode_at(Str/to_bytes(component), x[]),
+        decode_at(Str/to_bytes(component), 0x[]),
         (decoded) => Result/to_option(Str/of_bytes(decoded)));
 
 --- The query as decoded pairs: `a=1&b=x+y` is `[("a", "1"), ("b", "x y")]`. A pair without `=` is a name with an empty value and an empty piece — `a=1&&b=2`, or a query that is empty — is no pair, as the form encoding reads them; `none` where a name or a value does not decode, since a query read short of a pair is not the query that was sent.

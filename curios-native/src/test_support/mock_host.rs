@@ -1803,7 +1803,7 @@ impl MockHostBuilder {
         self
     }
 
-    /// Append the chunks standard input delivers, verbatim: nothing is terminated for you, and each chunk is served only once a watch has armed it, so a reader waits between them. This is how a raw-mode program's keystrokes are scripted — one chunk per burst, `x[0x1b, 0x5b, 0x41]` for an arrow key — and the only way a read of standard input that waits is put under test. Whatever [`stdin_lines`](Self::stdin_lines) wrote precedes these, as the one chunk it is.
+    /// Append the chunks standard input delivers, verbatim: nothing is terminated for you, and each chunk is served only once a watch has armed it, so a reader waits between them. This is how a raw-mode program's keystrokes are scripted — one chunk per burst, `0x[0x1b, 0x5b, 0x41]` for an arrow key — and the only way a read of standard input that waits is put under test. Whatever [`stdin_lines`](Self::stdin_lines) wrote precedes these, as the one chunk it is.
     pub fn stdin_chunks<C: AsRef<[u8]>>(mut self, chunks: Vec<C>) -> Self {
         self.input_chunks.extend(chunk_list(chunks));
 

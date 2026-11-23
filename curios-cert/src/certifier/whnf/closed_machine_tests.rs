@@ -83,15 +83,15 @@ fn the_closed_machine_keeps_a_witness_named_at_an_instance_as_written() {
     );
 }
 
-/// The bytes `data` as a literal's text, `x[0x01, …]`.
+/// The bytes `data` as a literal's text, `0x[0x01, …]`.
 fn bytes(data: &[u8]) -> String {
     let written: Vec<String> = data.iter().map(|byte| format!("0x{byte:02X}")).collect();
 
-    format!("x[{}]", written.join(", "))
+    format!("0x[{}]", written.join(", "))
 }
 
 /// `go`, a member walking a `Bytes` to its end, as the projection out of its group a call names it by.
-const WALK: &str = "#{node = Rec} (let go: (b: #BytesType) -> #NatType = (b: #BytesType) => #{goal = #NatType} match b | x[] => 0 | x[h, ..t] => go(t) end; go)";
+const WALK: &str = "#{node = Rec} (let go: (b: #BytesType) -> #NatType = (b: #BytesType) => #{goal = #NatType} match b | 0x[] => 0 | 0x[h, ..t] => go(t) end; go)";
 
 /// `member`, which descends from `n` to its zero case, answering `${zero}` at `${result}` there and `${step}` at each successor over `pred`, as the projection out of its group a call names it by.
 const DESCENT: &str = "#{node = Rec} (let member: (n: #NatType) -> ${result} = (n: #NatType) => #{goal = ${result}} match n | 0 => ${zero} | pred + 1 => ${step} end; member)";
@@ -102,12 +102,12 @@ const DESCENT: &str = "#{node = Rec} (let member: (n: #NatType) -> ${result} = (
 #[test]
 fn the_closed_machine_agrees_with_the_strategy() {
     let non_tail = fill!(
-        "#{node = Rec} (let count: (b: #BytesType) -> #NatType = (b: #BytesType) => #{goal = #NatType} match b | x[] => 0 | x[h, ..t] => #NatAdd(count(t), 1) end; count(${bytes}))",
+        "#{node = Rec} (let count: (b: #BytesType) -> #NatType = (b: #BytesType) => #{goal = #NatType} match b | 0x[] => 0 | 0x[h, ..t] => #NatAdd(count(t), 1) end; count(${bytes}))",
         bytes = bytes(&[7; 40])
     );
 
     let tail_fold = fill!(
-        "#{node = Rec} (let go: (acc: #NatType, b: #BytesType) -> #NatType = (acc: #NatType, b: #BytesType) => #{goal = #NatType} match b | x[] => acc | x[h, ..t] => go(#NatAdd(acc, #ByteToNat(h)), t) end; go(0, ${bytes}))",
+        "#{node = Rec} (let go: (acc: #NatType, b: #BytesType) -> #NatType = (acc: #NatType, b: #BytesType) => #{goal = #NatType} match b | 0x[] => acc | 0x[h, ..t] => go(#NatAdd(acc, #ByteToNat(h)), t) end; go(0, ${bytes}))",
         bytes = bytes(&[3; 40])
     );
 
@@ -227,7 +227,7 @@ fn the_closed_machine_reads_runs_past_the_fusion_cap_as_the_strategy_does() {
         .sum::<usize>();
 
     let summed = fill!(
-        "#{node = Rec} (let sum: (b: #BytesType) -> #NatType = (b: #BytesType) => #{goal = #NatType} match b | x[] => 0 | x[h, ..t] => #NatAdd(#ByteToNat(h), sum(t)) end; sum(${xor}))",
+        "#{node = Rec} (let sum: (b: #BytesType) -> #NatType = (b: #BytesType) => #{goal = #NatType} match b | 0x[] => 0 | 0x[h, ..t] => #NatAdd(#ByteToNat(h), sum(t)) end; sum(${xor}))",
         xor
     );
 

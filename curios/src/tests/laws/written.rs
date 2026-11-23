@@ -1077,52 +1077,52 @@ const CARRIERS: &[Carrier] = &[
         name: "Bytes, the free monoid",
         binders: "bs: Bytes, cs: Bytes, ds: Bytes, h: Byte, k: Byte, s: Nat, l: Nat, ok: Holds(s + l <= Bytes/len(bs)), head: Holds(0 < Bytes/len(cs)), into: Holds(s < Bytes/len(cs)), fits: Holds(l <= Bytes/len(cs))",
         held: &[
-            "Eq()(x[..x[..bs, ..cs], ..ds], x[..bs, ..cs, ..ds])",
-            "Eq()(Bytes/len(x[k, ..bs]), Bytes/len(bs) + 1)",
-            "Eq()(Bytes/len(x[1, 2, ..bs]), Bytes/len(bs) + 2)",
+            "Eq()(0x[..0x[..bs, ..cs], ..ds], 0x[..bs, ..cs, ..ds])",
+            "Eq()(Bytes/len(0x[k, ..bs]), Bytes/len(bs) + 1)",
+            "Eq()(Bytes/len(0x[1, 2, ..bs]), Bytes/len(bs) + 2)",
             "Eq()(Bytes/slice(bs, 0, Bytes/len(bs)), bs)",
-            "Eq()(Bytes/slice(bs, 0, 0), x[])",
-            "Eq()(Bytes/slice(x[k, ..bs], 1, Bytes/len(bs)), bs)",
-            "Eq()(Bytes/get(x[k, ..bs], 0), k)",
+            "Eq()(Bytes/slice(bs, 0, 0), 0x[])",
+            "Eq()(Bytes/slice(0x[k, ..bs], 1, Bytes/len(bs)), bs)",
+            "Eq()(Bytes/get(0x[k, ..bs], 0), k)",
             "Eq()(Bytes/eql(bs, bs), true)",
-            "Eq()(Bytes/slice(x[..bs, ..cs], 0, Bytes/len(bs)), bs)",
-            "Eq()(Bytes/slice(x[..bs, ..cs], Bytes/len(bs), Bytes/len(cs)), cs)",
-            "Eq()(Bytes/slice(x[..bs, ..cs, ..ds], Bytes/len(bs), Bytes/len(cs)), cs)",
+            "Eq()(Bytes/slice(0x[..bs, ..cs], 0, Bytes/len(bs)), bs)",
+            "Eq()(Bytes/slice(0x[..bs, ..cs], Bytes/len(bs), Bytes/len(cs)), cs)",
+            "Eq()(Bytes/slice(0x[..bs, ..cs, ..ds], Bytes/len(bs), Bytes/len(cs)), cs)",
             // An index at a symbolic seam, which the same walk finds as a window of one. The operand beginning there carries a single generator, read out of it directly rather than through an inner `get` that would need a bound nothing states.
-            "Eq()(Bytes/get(x[..bs, k, ..cs], Bytes/len(bs)), k)",
-            "Eq()(Bytes/get(x[..bs, k], Bytes/len(bs)), k)",
+            "Eq()(Bytes/get(0x[..bs, k, ..cs], Bytes/len(bs)), k)",
+            "Eq()(Bytes/get(0x[..bs, k], Bytes/len(bs)), k)",
             // An append is the concatenation the peel's own law says it is, so a window at its seam locates like any other.
-            "Eq()(Bytes/slice(x[..bs, k], 0, Bytes/len(bs)), bs)",
+            "Eq()(Bytes/slice(0x[..bs, k], 0, Bytes/len(bs)), bs)",
             // A window's length is the count it was cut to: `slice` takes `s + l <= len(b)`, so the count is the measure at every well-typed instance. Taken where the homomorphism reads the window rather than in `free_monoid`'s measure, which counts only literal runs.
             "Eq()(Bytes/len(Bytes/slice(bs, s, l, @ok)), l)",
             // A window past every operand but the last is that window into the last operand, under the caller's own bound.
-            "Eq()(Bytes/get(x[..bs, ..cs], Bytes/len(bs), @head), Bytes/get(cs, 0, @head))",
-            "Eq()(Bytes/get(x[..bs, ..cs], Bytes/len(bs) + s, @into), Bytes/get(cs, s, @into))",
-            "Eq()(Bytes/slice(x[..bs, ..cs], Bytes/len(bs), l, @fits), Bytes/slice(cs, 0, l, @fits))",
+            "Eq()(Bytes/get(0x[..bs, ..cs], Bytes/len(bs), @head), Bytes/get(cs, 0, @head))",
+            "Eq()(Bytes/get(0x[..bs, ..cs], Bytes/len(bs) + s, @into), Bytes/get(cs, s, @into))",
+            "Eq()(Bytes/slice(0x[..bs, ..cs], Bytes/len(bs), l, @fits), Bytes/slice(cs, 0, l, @fits))",
             // A positive segment anywhere in a value decides it against the empty one, and against a value it extends.
-            "Eq()(x[..bs, k] == x[], false)",
-            "Eq()(x[..bs, 1] == x[], false)",
-            "Eq()(x[..bs, k] == bs, false)",
-            "Eq()(x[..bs, ..cs, 1] == bs, false)",
+            "Eq()(0x[..bs, k] == 0x[], false)",
+            "Eq()(0x[..bs, 1] == 0x[], false)",
+            "Eq()(0x[..bs, k] == bs, false)",
+            "Eq()(0x[..bs, ..cs, 1] == bs, false)",
             // Equality is read past what two runs share, as `Nat`'s comparisons are read past their common floor; and two runs that each open with a byte are equal exactly when the bytes and the rest are, which is what lets `/std/Bytes/eq_of_eql` take an equality apart a byte at a time.
-            "Eq()(x[1, ..bs] == x[1, ..cs], bs == cs)",
-            "Eq()(x[k, ..bs] == x[k, ..cs], bs == cs)",
-            "Eq()(x[h, ..bs] == x[k, ..cs], h == k && bs == cs)",
-            "Eq()(x[2, 3, ..bs] == x[k, ..cs], 2 == Byte/to_nat(k) && x[3, ..bs] == cs)",
+            "Eq()(0x[1, ..bs] == 0x[1, ..cs], bs == cs)",
+            "Eq()(0x[k, ..bs] == 0x[k, ..cs], bs == cs)",
+            "Eq()(0x[h, ..bs] == 0x[k, ..cs], h == k && bs == cs)",
+            "Eq()(0x[2, 3, ..bs] == 0x[k, ..cs], 2 == Byte/to_nat(k) && 0x[3, ..bs] == cs)",
             // A fill of a successor count is its generator consed onto the shorter fill, which is how two fills meet without either being unrolled; its length is its count, and a positive fill is not the empty one.
-            "Eq()(Bytes/replicate(l + 1, k), x[k, ..Bytes/replicate(l, k)])",
+            "Eq()(Bytes/replicate(l + 1, k), 0x[k, ..Bytes/replicate(l, k)])",
             "Eq()(Bytes/len(Bytes/replicate(l, k)), l)",
-            "Eq()(Bytes/replicate(l + 1, k) == x[], false)",
+            "Eq()(Bytes/replicate(l + 1, k) == 0x[], false)",
         ],
         refused: &[
             // Controls, and neither is a law: a count carrying no floor may be zero, where the fill is empty. The first is the peel's side of that line and the second the equality fold's.
-            "Eq()(Bytes/replicate(l, k), x[k, ..Bytes/replicate(l - 1, k)])",
-            "Eq()(Bytes/replicate(l, k) == x[], false)",
+            "Eq()(Bytes/replicate(l, k), 0x[k, ..Bytes/replicate(l - 1, k)])",
+            "Eq()(Bytes/replicate(l, k) == 0x[], false)",
             // Controls, and neither is a law: two runs that open with two bytes are not equal for their tails alone, and a run that shows no byte may be the cons it is compared with.
-            "Eq()(x[h, ..bs] == x[k, ..cs], bs == cs)",
-            "Eq()(bs == x[k, ..cs], false)",
+            "Eq()(0x[h, ..bs] == 0x[k, ..cs], bs == cs)",
+            "Eq()(bs == 0x[k, ..cs], false)",
             // A candidate: a fill of a successor count ends in its generator as surely as it begins with one, but the peel emits only the leading one.
-            "Eq()(Bytes/replicate(l + 1, k), x[..Bytes/replicate(l, k), k])",
+            "Eq()(Bytes/replicate(l + 1, k), 0x[..Bytes/replicate(l, k), k])",
         ],
     },
     Carrier {
@@ -1170,15 +1170,15 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Bytes, through a concatenation",
-        binders: "bs: Bytes, cs: Bytes, i: Nat, s: Nat, l: Nat, joined: Holds(i < Bytes/len(x[..bs, ..cs])), left: Holds(i < Bytes/len(bs)), right: Holds(i < Bytes/len(cs)), spans: Holds(s + l <= Bytes/len(x[..bs, ..cs])), inside: Holds(s + l <= Bytes/len(bs))",
+        binders: "bs: Bytes, cs: Bytes, i: Nat, s: Nat, l: Nat, joined: Holds(i < Bytes/len(0x[..bs, ..cs])), left: Holds(i < Bytes/len(bs)), right: Holds(i < Bytes/len(cs)), spans: Holds(s + l <= Bytes/len(0x[..bs, ..cs])), inside: Holds(s + l <= Bytes/len(bs))",
         held: &[
             // The `List` rows, over `Bytes`.
-            "Eq()(Bytes/get(x[..bs, ..cs], i, @joined), Bytes/get(bs, i, @left))",
-            "Eq()(Bytes/slice(x[..bs, ..cs], s, l, @spans), Bytes/slice(bs, s, l, @inside))",
+            "Eq()(Bytes/get(0x[..bs, ..cs], i, @joined), Bytes/get(bs, i, @left))",
+            "Eq()(Bytes/slice(0x[..bs, ..cs], s, l, @spans), Bytes/slice(bs, s, l, @inside))",
         ],
         refused: &[
             // The `List` control, over `Bytes`.
-            "Eq()(Bytes/get(x[..bs, ..cs], i, @joined), Bytes/get(cs, i, @right))",
+            "Eq()(Bytes/get(0x[..bs, ..cs], i, @joined), Bytes/get(cs, i, @right))",
         ],
     },
     Carrier {
@@ -1584,9 +1584,9 @@ fn a_float_law_carried_to_where_it_is_most_fragile_carries_only_true() {
     // Each law conversion takes of a float, proved by `refl` over symbols, instantiated at the patterns it is most fragile at and carried along the bytes of its two sides: were the fold to compute the sides apart there, what is carried would be `False`. A quiet NaN with a payload of one, positive; a signaling one with a payload of two, negative; and a signaling one with a payload of one, positive.
     //
     // Mutation-checked: with the model's NaN rule answering its first NaN operand quieted, as x86 does, the first attack is admitted at `False`.
-    let quiet = "Flt/of_le_bytes(x[1, 0, 0, 0, 0, 0, 0xf8, 0x7f])";
-    let signaling = "Flt/of_le_bytes(x[2, 0, 0, 0, 0, 0, 0xf0, 0xff])";
-    let positive = "Flt/of_le_bytes(x[1, 0, 0, 0, 0, 0, 0xf0, 0x7f])";
+    let quiet = "Flt/of_le_bytes(0x[1, 0, 0, 0, 0, 0, 0xf8, 0x7f])";
+    let signaling = "Flt/of_le_bytes(0x[2, 0, 0, 0, 0, 0, 0xf0, 0xff])";
+    let positive = "Flt/of_le_bytes(0x[1, 0, 0, 0, 0, 0, 0xf0, 0x7f])";
     let attacks = [
         // The greatest quieted pattern, read unsigned, whatever the operands' order: the negative one.
         ("a + b", "b + a", quiet, signaling, "0.0"),

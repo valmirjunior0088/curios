@@ -148,12 +148,12 @@ test a_request_field_line_is_refused_or_read_as_it_is =
                 Request/of_bytes(
                     Limits/server,
                     Url/Scheme/http(),
-                    x[
+                    0x[
                         ..Str/to_bytes("GET / HTTP/1.1\r\nHost: h\r\nX-A: \t caf"),
                         0xE9,
                         ..Str/to_bytes(" \r\n\r\n")]),
                 (r) => Request/header(r, "x-a")),
-            Result/success(Field/Value/of_bytes(x['c', 'a', 'f', 0xE9])))]);
+            Result/success(Field/Value/of_bytes(0x['c', 'a', 'f', 0xE9])))]);
 
 -- A request line past its bound is answered 414, a head past its own 431, and content past its own 413, the last before any of it is read.
 test a_request_past_a_bound_is_refused_by_the_bound =

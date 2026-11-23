@@ -27,7 +27,7 @@ fn a_message_no_wire_carries_is_refused_where_it_is_written() {
     for accepted in [
         format!(r#"Request/with_header({get}, "X-A", "one")"#),
         r#"Response/of_text(200, "hello")"#.to_string(),
-        r#"Response/of(204, "text/plain", x[])"#.to_string(),
+        r#"Response/of(204, "text/plain", 0x[])"#.to_string(),
         "Response/empty(304)".to_string(),
     ] {
         assert_eq!(typecheck(&making(&accepted)), Ok(()), "{accepted}");
@@ -368,7 +368,7 @@ const CLIENT: &str = r#"
         Result/unwrap_or(Str/of_bytes(b), "not text");
     let told(method: Method, url: Url) -> Io(Str) =
         let r =
-            Try/run(http/perform(Request { method = method, url = url, headers = [], body = x[] }))!;
+            Try/run(http/perform(Request { method = method, url = url, headers = [], body = 0x[] }))!;
         Io/pure(
             match r
             | success(response) =>

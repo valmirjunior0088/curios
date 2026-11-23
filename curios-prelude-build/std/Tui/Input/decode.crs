@@ -189,7 +189,7 @@ induct Step: Type
 end
 
 let paste_end: Bytes =
-    x[0x1B, '[', '2', '0', '1', '~'];
+    0x[0x1B, '[', '2', '0', '1', '~'];
 
 --- `bytes` as the inputs and the replies they encode, up to the first sequence the chunk ends inside; that tail is `rest`, for the next chunk to complete.
 pub let decode(bytes: Bytes) -> {inputs: List(Input), replies: List(Reply), rest: Bytes} =
@@ -334,7 +334,7 @@ pub let decode(bytes: Bytes) -> {inputs: List(Input), replies: List(Reply), rest
         let read(rest: Bytes) -> {inputs: List(Input), replies: List(Reply), rest: Bytes} =
             (inputs = List/reverse(inputs), replies = List/reverse(replies), rest = rest);
         match Bool/holds(i < Bytes/len(bytes))
-        | none() => read(x[])
+        | none() => read(0x[])
         | some(inside) =>
             let head = Bytes/get(bytes, i, @inside);
             let n = Byte/to_nat(head);
@@ -361,8 +361,8 @@ pub let decode(bytes: Bytes) -> {inputs: List(Input), replies: List(Reply), rest
 --- `rest` once nothing more came: a leading Escape is the Escape key, and what follows it is read again on its own.
 pub let flush(rest: Bytes) -> {inputs: List(Input), replies: List(Reply)} =
     match rest
-    | x[] => (inputs = [], replies = [])
-    | x[head, ..tail] =>
+    | 0x[] => (inputs = [], replies = [])
+    | 0x[head, ..tail] =>
         let first: List(Input) =
             match head
             | 0x1B => [Input/key(Key/plain(Key/Code/escape()))]

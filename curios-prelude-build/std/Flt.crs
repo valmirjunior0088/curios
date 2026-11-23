@@ -614,7 +614,7 @@ satisfy Spell(Flt) {
                             | true => atom
                             | false => Str/concat(Str/concat(acc, ", "), atom)
                             end);
-                Fmt/render("Flt/of_le_bytes(x[%])")(atoms)
+                Fmt/render("Flt/of_le_bytes(0x[%])")(atoms)
             end
         | true =>
             let raw = to_str(f);

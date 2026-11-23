@@ -425,7 +425,7 @@ pub const A_POSITIVE_SEGMENT_STILL_CLASHES_WITH_THE_EMPTY_VALUE: &str = r#"
     use /std/{Eq, Bytes};
     use /std/Bool/{False};
 
-    let absurd(b : Bytes, h : Eq()(x[..b, 0x01], x[])) -> False =
+    let absurd(b : Bytes, h : Eq()(0x[..b, 0x01], 0x[])) -> False =
         match h end;
 
     /std/print("ok")

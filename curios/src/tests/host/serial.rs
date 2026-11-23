@@ -57,7 +57,7 @@ fn a_command_lands_whole_and_its_reply_line_is_read_across_arrivals() {
             let input = Io/Reader/new(s)!;
             let line = Io/Reader/line(input)!;
             let _ = Serial/drain(s)!;
-            Try/pure(Option/unwrap_or(line, x[]));
+            Try/pure(Option/unwrap_or(line, 0x[]));
         let program() -> Io({}) =
             let r = Try/run(Try/scope((scope) => Try/bind(Serial/open(scope, Path/of_str("/dev/ttyUSB0"), Serial/config(115200)), exchange)))!;
             match r
@@ -114,7 +114,7 @@ fn the_lines_are_driven_in_order_and_a_discard_drops_the_boot_banner() {
             let _ = Serial/discard_input(s)!;
             let input = Io/Reader/new(s)!;
             let line = Io/Reader/line(input)!;
-            Try/pure(Option/unwrap_or(line, x[]));
+            Try/pure(Option/unwrap_or(line, 0x[]));
         let program() -> Io({}) =
             let r = Try/run(Try/scope((scope) => Try/bind(Serial/open(scope, Path/of_str("/dev/ttyUSB0"), Serial/config(115200)), reset)))!;
             match r

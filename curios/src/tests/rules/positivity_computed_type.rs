@@ -419,8 +419,8 @@ fn a_refinement_field_over_a_self_calling_fold_is_admitted() {
 
         let always(b : Bytes) -> Bool =
             match b
-            | x[] => true
-            | x[h, ..t] => always(t)
+            | 0x[] => true
+            | 0x[h, ..t] => always(t)
             end;
 
         let Certified(b : Bytes) -> Prop =
@@ -431,7 +431,7 @@ fn a_refinement_field_over_a_self_calling_fold_is_admitted() {
             ok : Certified(bytes),
         }
 
-        let w : Wrapped = Wrapped { bytes = x[0x61], ok = True/qed() };
+        let w : Wrapped = Wrapped { bytes = 0x[0x61], ok = True/qed() };
 
         /std/print("certified")
         "#;

@@ -18,7 +18,7 @@ fn run_drains_a_real_child_through_the_scheduler() {
         use /std/{Str, Bytes, Option, Result, Show, Try, Io, Path, File, Proc};
         let text(b: Bytes) -> Str = Result/unwrap_or(Str/of_bytes(b), "?");
         let program() -> Try(Io, Io/Error, {}) =
-            let e = Proc/run(Proc/new("/bin/echo", ["hi"]), x[])!;
+            let e = Proc/run(Proc/new("/bin/echo", ["hi"]), 0x[])!;
             let c = Proc/run(Proc/new("/bin/cat", []), Str/to_bytes("fed"))!;
             let first = Str/flatten([text(e.stdout), ":", Show/show(e.exit)]);
             let second = Str/flatten([text(c.stdout), ":", Show/show(c.exit)]);
@@ -44,8 +44,8 @@ fn run_drains_a_real_child_through_the_scheduler() {
 const PIPED: &str = r#"
     use /std/{Nat, Bytes, Str, Option, Result, Show, Try, Io, Path, File, Proc};
     use /std/time/{Duration};
-    let grown(b: Bytes, n: Nat) -> Bytes = match n | 0 => b | m + 1 => grown(x[..b, ..b], m) end;
-    let mebibyte: Bytes = grown(x[0x61], 20);
+    let grown(b: Bytes, n: Nat) -> Bytes = match n | 0 => b | m + 1 => grown(0x[..b, ..b], m) end;
+    let mebibyte: Bytes = grown(0x[0x61], 20);
     let started(s: Io/Scope, script: Str, stdin: Proc/Stdio, stdout: Proc/Stdio) -> Try(Io, Io/Error, Proc/Child) =
         Proc/Child/spawn(s, Proc { ..Proc/new("/bin/sh", ["-c", script]), stdin = stdin, stdout = stdout });
     let input(c: Proc/Child) -> Try(Io, Io/Error, Proc/Output) =
@@ -99,7 +99,7 @@ fn a_write_a_timeout_cuts_reaches_its_reader_whole() {
                     let () = Io/finish(into)!;
                     Try/pure(cut(timed));
                 let (how, echoed) = Try/both(writes(), Io/Reader/rest(echo))!;
-                File/write_all(Path/of_str("${path}"), x[..Str/to_bytes(how), ..Str/to_bytes("|"), ..echoed]));
+                File/write_all(Path/of_str("${path}"), 0x[..Str/to_bytes(how), ..Str/to_bytes("|"), ..echoed]));
         "#,
     );
 
@@ -130,7 +130,7 @@ fn a_copy_a_timeout_cuts_loses_nothing() {
                 let back = output(sink)!;
                 let counted = Io/Reader/new(back)!;
                 let count = Io/Reader/rest(counted)!;
-                File/write_all(Path/of_str("${path}"), x[..Str/to_bytes(cut(timed)), ..Str/to_bytes("|"), ..count]));
+                File/write_all(Path/of_str("${path}"), 0x[..Str/to_bytes(cut(timed)), ..Str/to_bytes("|"), ..count]));
         "#,
     );
 
@@ -175,7 +175,7 @@ fn a_rest_a_timeout_cuts_loses_nothing() {
                 let r = Io/Reader/new(out)!;
                 let timed = Io/timeout(Duration/of_millis(100), Try/run(Io/Reader/rest(r)))!;
                 let read = Io/Reader/rest(r)!;
-                File/write_all(Path/of_str("${path}"), x[..Str/to_bytes(cut(timed)), ..Str/to_bytes("|"), ..read]));
+                File/write_all(Path/of_str("${path}"), 0x[..Str/to_bytes(cut(timed)), ..Str/to_bytes("|"), ..read]));
         "#,
     );
 

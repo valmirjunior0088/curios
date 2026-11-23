@@ -129,7 +129,7 @@ fn a_write_the_host_answers_would_block_is_a_failure() {
         r#"
         use /std/{Io, Try, Proc};
         let entry() -> /std/Io({}) =
-            let r = Try/run(Io/write(Proc/stdout, x[0x41]))!;
+            let r = Try/run(Io/write(Proc/stdout, 0x[0x41]))!;
             match r | success(_) => Proc/exit(@{}, 0) | failure(_) => Proc/exit(@{}, 7) end;
         entry()
         "#,

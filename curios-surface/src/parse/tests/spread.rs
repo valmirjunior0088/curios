@@ -76,7 +76,7 @@ fn bytes_literal_spread_segments() {
 
     // Constant atoms are ordinary numeral terms around the spread segments: the surface keeps what was written, and lowering folds adjacent constants into packed runs.
     assert_eq!(
-        r"x[0, ..xs, 1]".parse::<Term>().unwrap(),
+        r"0x[0, ..xs, 1]".parse::<Term>().unwrap(),
         Subterm::Literal(Literal::Bytes(vec![
             BytesSegment::Atom(num_lit(0, Sign::Unmarked)),
             BytesSegment::Spread(name("xs")),
@@ -85,7 +85,7 @@ fn bytes_literal_spread_segments() {
         .into()
     );
     assert_eq!(
-        r"x[0, 1, ..x, 2, 3]".parse::<Term>().unwrap(),
+        r"0x[0, 1, ..x, 2, 3]".parse::<Term>().unwrap(),
         Subterm::Literal(Literal::Bytes(vec![
             BytesSegment::Atom(num_lit(0, Sign::Unmarked)),
             BytesSegment::Atom(num_lit(1, Sign::Unmarked)),
@@ -98,7 +98,7 @@ fn bytes_literal_spread_segments() {
 
     // A spread operand is an ordinary term: projections and absolute paths need no special grammar.
     assert_eq!(
-        r"x[..hdr.bytes]".parse::<Term>().unwrap(),
+        r"0x[..hdr.bytes]".parse::<Term>().unwrap(),
         Subterm::Literal(Literal::Bytes(vec![BytesSegment::Spread(
             Subterm::Proj(Proj {
                 head: name("hdr"),
@@ -108,7 +108,7 @@ fn bytes_literal_spread_segments() {
         )]))
         .into()
     );
-    let term = r"x[../std/x]".parse::<Term>().unwrap();
+    let term = r"0x[../std/x]".parse::<Term>().unwrap();
     let Subterm::Literal(Literal::Bytes(segments)) = term.as_subterm() else {
         panic!("expected a Bytes literal");
     };
@@ -118,7 +118,7 @@ fn bytes_literal_spread_segments() {
     assert!(matches!(operand.as_subterm(), Subterm::Name(name) if name.is_abs()));
 
     // Commas delimit, so an operand that a tight grammar could only take parenthesized — an infix chain — is written bare.
-    let term = r"x[..x + y, 0x01]".parse::<Term>().unwrap();
+    let term = r"0x[..x + y, 0x01]".parse::<Term>().unwrap();
     let Subterm::Literal(Literal::Bytes(segments)) = term.as_subterm() else {
         panic!("expected a Bytes literal");
     };
@@ -128,7 +128,7 @@ fn bytes_literal_spread_segments() {
     assert!(
         matches!(&segments[1], BytesSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::NumLit(_)))
     );
-    let term = r"x[..read()!, 0x01]".parse::<Term>().unwrap();
+    let term = r"0x[..read()!, 0x01]".parse::<Term>().unwrap();
     let Subterm::Literal(Literal::Bytes(segments)) = term.as_subterm() else {
         panic!("expected a Bytes literal");
     };
@@ -138,18 +138,18 @@ fn bytes_literal_spread_segments() {
 
     // The empty literal is spelled like `[]` behind its letter.
     assert_eq!(
-        "x[]".parse::<Term>().unwrap(),
+        "0x[]".parse::<Term>().unwrap(),
         Subterm::Literal(Literal::Bytes(vec![])).into()
     );
 
     // Past the `[` the literal lexes like any other bracketed list: interior whitespace is invisible and one trailing comma is admitted.
     assert_eq!(
-        r"x[ 0x00 , ..xs , 0x01 ]".parse::<Term>().unwrap(),
-        r"x[0x00, ..xs, 0x01]".parse::<Term>().unwrap()
+        r"0x[ 0x00 , ..xs , 0x01 ]".parse::<Term>().unwrap(),
+        r"0x[0x00, ..xs, 0x01]".parse::<Term>().unwrap()
     );
     assert_eq!(
-        r"x[0x00,]".parse::<Term>().unwrap(),
-        r"x[0x00]".parse::<Term>().unwrap()
+        r"0x[0x00,]".parse::<Term>().unwrap(),
+        r"0x[0x00]".parse::<Term>().unwrap()
     );
 
     // Only the prefix-to-bracket junction is tight. Spaced, `x` is an ordinary binder followed by a list (leaving trailing junk here), an identifier merely ending in the letter never starts a literal, and `b` is a name like any other.
@@ -158,7 +158,7 @@ fn bytes_literal_spread_segments() {
     assert!(r"b[1]".parse::<Term>().is_err());
 
     // The tight spelling and the escaped atom are both gone rather than deprecated.
-    for gone in [r"x\00", r"x\", r"x\..xs", r"x[\00]", r"x[\48, 0x69]"] {
+    for gone in [r"x\00", r"x\", r"x\..xs", r"0x[\00]", r"0x[\48, 0x69]"] {
         assert!(gone.parse::<Term>().is_err());
     }
 }
@@ -166,7 +166,7 @@ fn bytes_literal_spread_segments() {
 #[test]
 fn a_packed_literal_reports_its_own_entry_rather_than_the_form_around_it() {
     // The glued letter and bracket commit, so a bad entry or a missing `]` is the diagnosis. Left to backtrack, the letter read as a bare name and the enclosing form complained at the bracket about the `;` that follows the literal.
-    for source in ["x[0x48, )]", "x[0, ,]", "x[0x48, 0x69"] {
+    for source in ["0x[0x48, )]", "0x[0, ,]", "0x[0x48, 0x69"] {
         let report = source.parse::<Term>().unwrap_err().format();
         assert!(
             !report.contains("expected: `;`"),
@@ -181,7 +181,7 @@ fn bytes_literal_atom_segments() {
 
     // A bare term entry splices one generator; constant and non-constant atoms alike stay entries.
     assert_eq!(
-        r"x[72, b, 0]".parse::<Term>().unwrap(),
+        r"0x[72, b, 0]".parse::<Term>().unwrap(),
         Subterm::Literal(Literal::Bytes(vec![
             BytesSegment::Atom(num_lit(72, Sign::Unmarked)),
             BytesSegment::Atom(name("b")),
@@ -190,13 +190,13 @@ fn bytes_literal_atom_segments() {
         .into()
     );
     assert_eq!(
-        r"x[b]".parse::<Term>().unwrap(),
+        r"0x[b]".parse::<Term>().unwrap(),
         Subterm::Literal(Literal::Bytes(vec![BytesSegment::Atom(name("b"))])).into()
     );
 
     // `..` marks the spread; without it the same operand contributes a single atom.
     assert_eq!(
-        r"x[..xs, b]".parse::<Term>().unwrap(),
+        r"0x[..xs, b]".parse::<Term>().unwrap(),
         Subterm::Literal(Literal::Bytes(vec![
             BytesSegment::Spread(name("xs")),
             BytesSegment::Atom(name("b")),
@@ -205,7 +205,7 @@ fn bytes_literal_atom_segments() {
     );
 
     // An atom operand is an ordinary term, exactly as a spread operand is.
-    let term = r"x[hdr.byte, 0x01]".parse::<Term>().unwrap();
+    let term = r"0x[hdr.byte, 0x01]".parse::<Term>().unwrap();
     let Subterm::Literal(Literal::Bytes(segments)) = term.as_subterm() else {
         panic!("expected a Bytes literal");
     };
@@ -215,7 +215,7 @@ fn bytes_literal_atom_segments() {
     assert!(
         matches!(&segments[1], BytesSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::NumLit(_)))
     );
-    let term = r"x[f( x , y ), 0x01]".parse::<Term>().unwrap();
+    let term = r"0x[f( x , y ), 0x01]".parse::<Term>().unwrap();
     let Subterm::Literal(Literal::Bytes(segments)) = term.as_subterm() else {
         panic!("expected a Bytes literal");
     };
@@ -224,7 +224,7 @@ fn bytes_literal_atom_segments() {
     );
 
     // A numeral is the only constant spelling, and it stays an `Atom` here: the surface keeps what was written — radix included — and `into_core` folds constants into packed runs.
-    let term = r"x[0x48, 0x69]".parse::<Term>().unwrap();
+    let term = r"0x[0x48, 0x69]".parse::<Term>().unwrap();
     let Subterm::Literal(Literal::Bytes(segments)) = term.as_subterm() else {
         panic!("expected a Bytes literal");
     };
@@ -236,7 +236,7 @@ fn bytes_literal_atom_segments() {
     );
 
     // `\` spells nothing — in an atom position or anywhere else.
-    for malformed in [r"x[\]", r"x[\0]", r"x[\000]", r"x[\48]"] {
+    for malformed in [r"0x[\]", r"0x[\0]", r"0x[\000]", r"0x[\48]"] {
         assert!(malformed.parse::<Term>().is_err());
     }
 }
@@ -247,20 +247,20 @@ fn list_and_bytes_spreads_round_trip() {
     for source in [
         "[1, ..xs, 2]",
         "[..xs]",
-        "x[0x0, ..xs, 0x1]",
-        "x[..hdr.bytes]",
-        r"x[../std/x]",
-        r"x[..f(x)]",
-        "x[..Io/read!.bytes]",
-        r"x[..x + y]",
-        "x[]",
-        "x[0x48, b, 0x0]",
-        "x[b]",
-        r"x[..acc, b]",
-        "x[hdr.byte]",
-        "x[pick(f, a, b)]",
-        "x[h, ..t]",
-        "x[0x48, 0x69]",
+        "0x[0x0, ..xs, 0x1]",
+        "0x[..hdr.bytes]",
+        r"0x[../std/x]",
+        r"0x[..f(x)]",
+        "0x[..Io/read!.bytes]",
+        r"0x[..x + y]",
+        "0x[]",
+        "0x[0x48, b, 0x0]",
+        "0x[b]",
+        r"0x[..acc, b]",
+        "0x[hdr.byte]",
+        "0x[pick(f, a, b)]",
+        "0x[h, ..t]",
+        "0x[0x48, 0x69]",
     ] {
         assert_eq!(source.parse::<Term>().unwrap().to_string(), source);
     }

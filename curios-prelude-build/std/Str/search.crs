@@ -35,10 +35,10 @@ let starts_concat(
     r: Bytes,
     some: Bool/Holds(0 < Bytes/len(a)),
     at: Bool/Holds(At/starts(a)),
-) -> Bool/Holds(At/starts(x[..a, ..r])) =
+) -> Bool/Holds(At/starts(0x[..a, ..r])) =
     match a
-    | x[] => match some end
-    | x[_, .._] => at
+    | 0x[] => match some end
+    | 0x[_, .._] => at
     end;
 
 -- Searched as bytes, one walk over what follows `from`: a valid needle begins with a byte no character continues, so where its bytes stand they stand where a character begins, and valid text that holds them goes on past them as valid text. No character is decoded.
@@ -61,9 +61,9 @@ pub let occurrence(
         @e: Eq()(Bytes/drop(rest.bytes, k, @w), b),
     ) -> Option(Found(s, from)) =
         match b
-        | x[] => Option/none()
-        | x[h, ..t] =>
-            let onward = Str/passing(@rest.bytes, @x[h], @t, k, w, e);
+        | 0x[] => Option/none()
+        | 0x[h, ..t] =>
+            let onward = Str/passing(@rest.bytes, @0x[h], @t, k, w, e);
             match h == lead_byte
             | false => go(t, k + 1, @onward.within, @onward.cut)
             | true =>
@@ -88,10 +88,10 @@ pub let occurrence(
                                         needle.bytes,
                                         proved()))(
                                 fits);
-                        let split: Eq()(b, x[..needle.bytes, ..Bytes/drop(b, n, @fits)]) =
+                        let split: Eq()(b, 0x[..needle.bytes, ..Bytes/drop(b, n, @fits)]) =
                             Eq/trans(
                                 Str/split_at(b, n, fits),
-                                Eq/cong((p: Bytes) => x[..p, ..Bytes/drop(b, n, @fits)], held));
+                                Eq/cong((p: Bytes) => 0x[..p, ..Bytes/drop(b, n, @fits)], held));
                         let begins: Bool/Holds(At/starts(Bytes/drop(rest.bytes, k, @w))) =
                             Eq/subst(
                                 (w: Bytes) => Bool/Holds(At/starts(w)),

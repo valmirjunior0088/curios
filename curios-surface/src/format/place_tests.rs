@@ -86,7 +86,7 @@ const POSITIONS: [&str; 12] = [
         "\n",
         "concept Marker(A: Type): Type {}\n",
     ),
-    "let packed: Bytes =\n    x[\n        1, 2,\n        ..build(first_long_argument, second_long_argument, third_long_argument, fourth_long_argument),\n        3, 4,\n        ..tail];\n",
+    "let packed: Bytes =\n    0x[\n        1, 2,\n        ..build(first_long_argument, second_long_argument, third_long_argument, fourth_long_argument),\n        3, 4,\n        ..tail];\n",
     "let applied: Output =\n    match a\n    | true => (_) => True/qed()\n    | false => (h) => h\n    end\n    (\n        @A,\n        use witness,\n        argument)\n    (next)\n    .field\n    !;\n",
     "let applied: Output =\n    match\n    | a => (_) => first_long_function_name()\n    | _ => (h) => second_long_function_name(h)\n    end\n    (\n        @A,\n        use witness,\n        argument)\n    (next)\n    .field\n    !;\n",
 ];
@@ -456,7 +456,7 @@ fn a_comment_before_a_closer_stays_at_its_members_column() {
         "    ];\n",
         "\n",
         "let packed: Bytes =\n",
-        "    x[\n",
+        "    0x[\n",
         "        1, 2\n",
         "        -- 3,\n",
         "    ];\n",

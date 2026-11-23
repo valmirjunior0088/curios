@@ -108,23 +108,23 @@ fn a_runtime_dependent_tuple_width_is_split_into_fields() {
     }
 }
 
-/// An exit arm that builds a value nothing reads leaves the loop its window: the unread `x[h, ..t]` goes as a total operation does, so no arm reads the suffix as a value and the loop carries `(base, end, length)` instead of cutting a view at every byte. Mutation-checked: with an unread allocation kept, the arm reads `t` whole and the loop takes the bytes as one parameter.
+/// An exit arm that builds a value nothing reads leaves the loop its window: the unread `0x[h, ..t]` goes as a total operation does, so no arm reads the suffix as a value and the loop carries `(base, end, length)` instead of cutting a view at every byte. Mutation-checked: with an unread allocation kept, the arm reads `t` whole and the loop takes the bytes as one parameter.
 #[test]
 fn an_unread_construction_in_an_exit_arm_leaves_the_loop_its_window() {
     let source = r#"
         use /std/{Nat, Bytes, List, Option, Proc};
         let walk(b: Bytes, k: Nat) -> Nat =
             match b
-            | x[] => k
-            | x[h, ..t] =>
+            | 0x[] => k
+            | 0x[h, ..t] =>
                 match h == 46
-                | true => let _ = x[h, ..t]; k
+                | true => let _ = 0x[h, ..t]; k
                 | false => walk(t, k + 1)
                 end
             end;
         let entry() -> /std/Io({}) =
             let arguments = Proc/args()!;
-            let bytes = Option/unwrap_or(List/try_get(arguments, 0), x[]);
+            let bytes = Option/unwrap_or(List/try_get(arguments, 0), 0x[]);
             /std/print(Nat/to_str(walk(bytes, 0)));
         entry()
         "#;

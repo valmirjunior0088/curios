@@ -15,7 +15,7 @@ pub use Node/*;
 --- The encoding of the first key of the first twig that holds any; nothing where none does.
 pub let first_in(@K: Type, use Key(K), @V: Type, l: List(Node(K, V))) -> Bytes =
     match l
-    | [] => x[]
+    | [] => 0x[]
     | [h, ..r] =>
         match h
         | empty() => first_in(r)
@@ -27,7 +27,7 @@ pub let first_in(@K: Type, use Key(K), @V: Type, l: List(Node(K, V))) -> Bytes =
 --- The encoding of a node's first key, the one of its first twig that holds any; nothing for an empty node.
 pub let first(@K: Type, use Key(K), @V: Type, t: Node(K, V)) -> Bytes =
     match t
-    | empty() => x[]
+    | empty() => 0x[]
     | leaf(k, _) => Hash/hash(k)
     | branch(_, tw) => first_in(tw.list)
     end;

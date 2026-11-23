@@ -24,12 +24,13 @@ pub fn parse_intrinsic<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Ter
     parse_bool_intrinsic
         // A numeral's dangling dot is refused ahead of both numeral forms, and a number reads its decimal form first: `5.0` is a `Flt`, not the integer `5` projected.
         .or(refuse_dangling_dot)
+        // The packed literal is tried ahead of the numerals, whose decimal form would read the `0` of its `0x[` and leave the rest.
+        .or(parse_bytes_literal)
         .or(parse_number)
         .or(parse_char_lit)
         // The block form is tried first, since its opener begins with the one-line form's.
         .or(parse_block_string_literal)
         .or(parse_string_literal)
-        .or(parse_bytes_literal)
         .or(parse_list_literal)
         .parse(state)
 }

@@ -106,7 +106,7 @@ fn tower(first: Term, line: impl Fn(Term) -> Term, tail: impl FnOnce(Term) -> Te
 
 #[test]
 fn a_descent_on_either_argument_is_accepted_only_because_arms_refine_the_scrutinee() {
-    // The three call matrices of an addition of two packed words, `add(x, y, carry)`, which descends on either word by arm. In the empty-`x` arm the literal argument `x[]` grades `Same` against `x` *because* the arm refined `x` to `x[]`.
+    // The three call matrices of an addition of two packed words, `add(x, y, carry)`, which descends on either word by arm. In the empty-`x` arm the literal argument `0x[]` grades `Same` against `x` *because* the arm refined `x` to `0x[]`.
     let refined = [
         matrix(&[
             &[SAME, NONE, NONE],
@@ -202,7 +202,7 @@ fn a_ring_is_judged_whatever_its_size() {
 
 #[test]
 fn a_peeled_prefix_keeps_its_binder_tail() {
-    // A cons `x[h, ..t]` rebuilt from arm binders peels its head and sticks on the binder `t`. The remainder must take the full `shape_of` dispatch — a binder reads as its atom — not a force, which cannot move a local and would file the tail as unread, losing the suffix agreement the descent grades by.
+    // A cons `0x[h, ..t]` rebuilt from arm binders peels its head and sticks on the binder `t`. The remainder must take the full `shape_of` dispatch — a binder reads as its atom — not a force, which cannot move a local and would file the tail as unread, losing the suffix agreement the descent grades by.
     let mut certifier = Unreducing::default();
     let h = Free::local(2, Some("h"));
     let t = Free::local(3, Some("t"));

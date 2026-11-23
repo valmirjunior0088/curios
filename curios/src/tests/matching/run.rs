@@ -185,17 +185,17 @@ fn a_run_takes_guards_alternatives_and_a_bind() {
     assert_eq!(run(source), b"5 7 5 0 3");
 }
 
-/// A packed run is a run under `x[`, each element a byte.
+/// A packed run is a run under `0x[`, each element a byte.
 #[test]
 fn a_packed_run_reads_its_bytes_from_the_front() {
     let source = r#"
         use /std/{Byte, Bytes, Nat};
         let second(b: Bytes) -> Nat =
             match b
-            | x[_, s, .._] => Byte/to_nat(s)
+            | 0x[_, s, .._] => Byte/to_nat(s)
             | _ => 0
             end;
-        /std/print(Nat/to_str(second(x[1, 2, 3])))
+        /std/print(Nat/to_str(second(0x[1, 2, 3])))
         "#;
 
     assert_eq!(run(source), b"2");

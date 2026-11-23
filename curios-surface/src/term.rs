@@ -494,7 +494,7 @@ pub enum MatchPattern<D: Dialect = Program> {
     },
     /// A run over a list: `[]`, `[a, b]` or `[a, b, ..rest]`.
     List(Elements<D>),
-    /// A run over a packed sequence: `x[]`, `x[a, b]` or `x[a, b, ..rest]`.
+    /// A run over a packed sequence: `0x[]`, `0x[a, b]` or `0x[a, b, ..rest]`.
     Bytes(Elements<D>),
 }
 

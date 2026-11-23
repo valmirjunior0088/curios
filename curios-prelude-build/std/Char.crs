@@ -208,16 +208,16 @@ pub let to_ascii(c: Char) -> Option(Byte) =
 pub let to_utf8(c: Char) -> Bytes =
     let code = c.code;
     match
-    | code < 0x80 => x[Nat/to_byte(code)]
-    | code < 0x800 => x[Nat/to_byte(0xC0 + code / 0x40), Nat/to_byte(0x80 + code % 0x40)]
+    | code < 0x80 => 0x[Nat/to_byte(code)]
+    | code < 0x800 => 0x[Nat/to_byte(0xC0 + code / 0x40), Nat/to_byte(0x80 + code % 0x40)]
     | code < 0x10000 =>
-        x[
+        0x[
             Nat/to_byte(0xE0 + code / 0x1000),
             Nat/to_byte(0x80 + code % 0x1000 / 0x40),
             Nat/to_byte(0x80 + code % 0x40)]
     | _ =>
         let scalar = Valid/at_most(code, c.valid);
-        x[
+        0x[
             Nat/to_byte(0xF0 + code / 0x40000),
             Nat/to_byte(0x80 + code % 0x40000 / 0x1000),
             Nat/to_byte(0x80 + code % 0x1000 / 0x40),

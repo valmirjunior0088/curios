@@ -50,7 +50,7 @@ fn has_nat_operand(module: &curios_cps::Module, value: u32) -> bool {
     })
 }
 
-/// `match x[1, 2, 3] | x[] => 0 | x[h, ..t] => ...` over `Bytes`, its cons arm's answer built by `cons` from the element and the suffix.
+/// `match 0x[1, 2, 3] | 0x[] => 0 | 0x[h, ..t] => ...` over `Bytes`, its cons arm's answer built by `cons` from the element and the suffix.
 fn bytes_case_split(cons: impl FnOnce(&mut Builder, ValueId, ValueId) -> Atom) -> Module {
     let mut builder = Builder::new();
     builder.open_block();

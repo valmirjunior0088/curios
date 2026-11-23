@@ -125,11 +125,11 @@ test a_reply_head_is_read_as_its_grammar_spells_it =
                 Response/of_bytes(
                     Limits/client,
                     Method/get(),
-                    x[
+                    0x[
                         ..Str/to_bytes("HTTP/1.1 404 Introuvabl"),
                         0xE9,
                         ..Str/to_bytes("\r\nX-A: caf"),
                         0xE9,
                         ..Str/to_bytes("\r\nContent-Length: 2\r\n\r\nhi")]),
                 (r) => (Bytes/len(r.status.reason.bytes), Response/header(r, "X-A"))),
-            Result/success((11, Field/Value/of_bytes(x['c', 'a', 'f', 0xE9]))))]);
+            Result/success((11, Field/Value/of_bytes(0x['c', 'a', 'f', 0xE9]))))]);

@@ -2,9 +2,9 @@
 
 A program reads an element by a call: `List/get(xs, i)` and `Bytes/get(b, i)`, each under a bound `i < len` proved from the facts in scope, `Map/get(m, key)` under `Holds(Map/has(m, key))`, and `List/try_get` and `Bytes/try_get` answering an `Option` (`curios-prelude-build/std/List.crs`, `Bytes.crs`, `Map.crs`), where most languages write `xs[i]`. Counted on 2026-11-20 at `c39c0e8a5`: `/std` holds 51 bounded reads, `List/get` 28 and `Bytes/get` 23, beside 16 optional ones, and the corpus under `programs/` holds 33 optional reads and no bounded one, so a program reaches for the call that states no bound.
 
-An operator is a call of its concept's method (`curios-prelude-build/std/ops.crs`), and `/` takes the implicit proof its concept's `Ok` declares, filled from the facts in scope ([A bound that follows from the facts in scope is proved by the elaborator](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md)). Calls, projections and postfix `!` chain after an atom (`documentation/language.md`), and a bracket glued to a name is taken already: `x[…]` is the packed literal, its entries terms, so `x[foo]` builds a `Bytes` of the one byte `foo` (`parse_literal("x[")`, `curios-surface/src/parse/literals.rs`), until [the surface findings](000-findings.md)' entry on the packed literal moves it to `0x[…]`.
+An operator is a call of its concept's method (`curios-prelude-build/std/ops.crs`), and `/` takes the implicit proof its concept's `Ok` declares, filled from the facts in scope ([A bound that follows from the facts in scope is proved by the elaborator](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md)). Calls, projections and postfix `!` chain after an atom (`documentation/language.md`), and a bracket glued to a name is free: the packed literal is `0x[…]` ([A literal is realized by its expected type](../../design/surface/a-literal-is-realized-by-its-expected-type.md)), so `x[foo]` parses as nothing yet.
 
-The next step is the decision *Open* holds; stage 2 waits on the surface findings' entry on the packed literal.
+The next step is the decision *Open* holds.
 
 ## Decided
 

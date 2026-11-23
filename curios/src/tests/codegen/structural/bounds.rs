@@ -8,7 +8,7 @@ const READS_EVERY_CARRIER: &str = r#"
 
     Io/bind(Proc/args(), (args) =>
         let values = List/map(args, (a) => 1);
-        let bytes = Bytes/join(x[], args);
+        let bytes = Bytes/join(0x[], args);
         let from_list = Option/unwrap_or(List/try_get(values, 0), 0);
         let from_bytes = Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 0), 0));
         Proc/exit(Nat/to_byte((from_list + from_bytes) % 256)))

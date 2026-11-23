@@ -86,7 +86,7 @@ fn region_mixes_action_types() {
         let is_a : (Byte) -> Bool = (b) => b == 0x41;
 
         let parser() -> Parse/Parse(Bytes, Bytes) =
-            Parse/pure(x[..Parse/bytes/take_while(is_a)!, Parse/bytes/byte!]);
+            Parse/pure(0x[..Parse/bytes/take_while(is_a)!, Parse/bytes/byte!]);
 
         match Parse/run(parser(), /std/Str/to_bytes("AB"))
         | success(s) =>

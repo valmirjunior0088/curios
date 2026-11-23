@@ -105,7 +105,7 @@
   "]"
   "{"
   "}"
-  "x["
+  "0x["
   "/{"
   (use_glob)
 ] @punctuation.bracket

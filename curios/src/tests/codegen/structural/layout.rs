@@ -205,7 +205,7 @@ fn packed_unary_payload_declines_the_immediate_encoding() {
 
         let entry() -> /std/Io({}) =
             let taint = List/len(Proc/args()!);
-            let g = match taint | 0 => Gauge/tiny(x[7]) | _ => Gauge/pair(taint, taint) end;
+            let g = match taint | 0 => Gauge/tiny(0x[7]) | _ => Gauge/pair(taint, taint) end;
             match g
             | tiny(inner) => /std/print(Str/concat(Nat/to_str(Bytes/len(inner)), "\n"))
             | pair(a, b) => /std/print(Str/concat(Nat/to_str(a + b), "\n"))

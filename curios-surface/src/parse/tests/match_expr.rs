@@ -140,7 +140,7 @@ fn matrix_match_round_trips() {
         // List literal leaves nested inside a tuple field.
         "match p | (x, []) => x | (x, [h, ..t]) => h end",
         // Bytes literal leaves nested inside a constructor payload.
-        "match o | some(x[]) => y | some(x[h, ..t]) => y | none() => y end",
+        "match o | some(0x[]) => y | some(0x[h, ..t]) => y | none() => y end",
         // Bool literal leaves nested inside a constructor payload.
         "match p | pair(true, y) => y | pair(false, y) => y end",
         // The four hardcoded carriers as *headed* matches — no separate surface variants, just matrices over that carrier's own leaves. Each must survive print → re-parse identically to prove the collapse preserves their surface syntax.
@@ -149,10 +149,10 @@ fn matrix_match_round_trips() {
         // Nat literal dispatch: literal cases and the mandatory `| _ =>` default.
         "match d | 0 => a | 5 => b | _ => c end",
         "match a | [] => b | [h, ..t] => c end",
-        "match a | x[] => b | x[h, ..t] => c end",
+        "match a | 0x[] => b | 0x[h, ..t] => c end",
         // Runs: closed and open, their elements patterns of their own, under both brackets.
         "match a | [x] => x | [none(), y, ..rest] => y | [_, _] => z | _ => w end",
-        "match a | x[h, _, ..t] => h | x[p, q] => p | _ => c end",
+        "match a | 0x[h, _, ..t] => h | 0x[p, q] => p | _ => c end",
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
@@ -329,7 +329,7 @@ fn a_rest_that_is_no_binder_or_leads_its_run_fails_where_it_is_written() {
     for (source, place) in [
         ("match v | [head, ..some(t)] => 0 | _ => 1 end", "1:24"),
         ("match v | [a, ..[]] => 0 | _ => 1 end", "1:17"),
-        ("match v | x[h, ..x[]] => 0 | _ => 1 end", "1:19"),
+        ("match v | 0x[h, ..0x[]] => 0 | _ => 1 end", "1:21"),
         ("match v | [..t] => 0 | _ => 1 end", "1:12"),
         ("match v | [..t, a] => 0 | _ => 1 end", "1:12"),
     ] {
@@ -346,14 +346,14 @@ fn a_rest_that_is_no_binder_or_leads_its_run_fails_where_it_is_written() {
 fn every_run_parses() {
     for source in [
         "match v | [] => 0 | [head, ..tail] => 1 end",
-        "match v | x[] => 0 | x[head, ..tail] => 1 end",
+        "match v | 0x[] => 0 | 0x[head, ..tail] => 1 end",
         "match v | [] => 0 | [_, .._] => 1 end",
-        "match v | x[] => 0 | x[ head , ..tail ] => 1 end",
+        "match v | 0x[] => 0 | 0x[ head , ..tail ] => 1 end",
         "match v | some([head, ..tail]) => 1 | _ => 0 end",
         "match v | [a] => 0 | [a, b, ..t] => 1 | _ => 2 end",
         "match v | some([some(x), ..tail]) => 0 | _ => 1 end",
         "match v | [5, ..tail] => 0 | _ => 1 end",
-        "match v | x[0x01, ..tail] => 0 | _ => 1 end",
+        "match v | 0x[0x01, ..tail] => 0 | _ => 1 end",
         "match v | [a, b,] => 0 | [a, ..t,] => 1 | _ => 2 end",
     ] {
         if let Err(error) = source.parse::<Term>() {
