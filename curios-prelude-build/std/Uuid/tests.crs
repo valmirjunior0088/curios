@@ -1,0 +1,78 @@
+-- `/std/Uuid`: RFC 9562's test vectors, the canonical text read and written, the two versions minted, and the order and spelling of a UUID.
+use /std/{Uuid, Str, Byte, Bytes, Nat, Option, Bool, Test, Spell};
+use /std/Uuid/{versioned, at_time};
+
+-- The text `u` writes, or `none` for no UUID.
+let spelled(u: Option(Uuid)) -> Str =
+    match u | some(id) => Uuid/to_str(id) | none() => "none" end;
+
+-- The high bits of `u`'s byte at `at` above the lowest `low` of them: its version at byte 6 above four, its variant at byte 8 above six.
+let bits(u: Uuid, at: Nat, low: Nat) -> Option(Nat) =
+    Option/map(Bytes/try_get(Uuid/to_bytes(u), at), (b) => Byte/to_nat(b) / Nat/pow(2, low));
+
+-- RFC 9562's version 4 example (Appendix A.3), its random bits drawn as written: its version and variant are already set, so setting them changes nothing.
+test the_version_4_example_is_its_random_bits_versioned =
+    Test/equal(
+        Uuid/to_str(
+            versioned(
+                0x[0x91, 0x91, 0x08, 0xF7, 0x52, 0xD1, 0x43, 0x20, 0x9B, 0xAC, 0xF8, 0x47, 0xDB,
+                    0x41, 0x48, 0xA8],
+                0x40)),
+        "919108f7-52d1-4320-9bac-f847db4148a8");
+
+-- RFC 9562's version 7 example (Appendix A.6): 2022-02-22T19:22:22Z, 1645557742000 milliseconds after 1970, a fraction of the millisecond whose twelve bits are `0xCC3`, and its random bits drawn as written, the first of them under its variant.
+test the_version_7_example_is_its_moment_and_its_random_bits =
+    Test/equal(
+        Uuid/to_str(
+            at_time(+1645557742000797608, 0x[0x18, 0xC4, 0xDC, 0x0C, 0x0C, 0x07, 0x39, 0x8F])),
+        "017f22e2-79b0-7cc3-98c4-dc0c0c07398f");
+
+-- A moment before 1970 is read as 1970: its milliseconds and their fraction are zero.
+test a_moment_before_1970_is_read_as_1970 =
+    Test/equal(
+        Uuid/to_str(at_time(-5, 0x[0, 0, 0, 0, 0, 0, 0, 0])),
+        "00000000-0000-7000-8000-000000000000");
+
+-- The canonical text reads back as the UUID it writes, its digits in either case, and a text of another length, with a hyphen out of place or with a character that is no digit reads as none.
+test the_canonical_text_reads_back_in_either_case_and_nothing_else_does =
+    Test/all([
+        Test/equal(
+            spelled(Uuid/of_str("919108f7-52d1-4320-9bac-f847db4148a8")),
+            "919108f7-52d1-4320-9bac-f847db4148a8"),
+        Test/equal(
+            spelled(Uuid/of_str("919108F7-52D1-4320-9BAC-F847DB4148A8")),
+            "919108f7-52d1-4320-9bac-f847db4148a8"),
+        Test/equal(spelled(Uuid/of_str("919108f7-52d1-4320-9bac-f847db4148a")), "none"),
+        Test/equal(spelled(Uuid/of_str("919108f752d1-4320-9bac-f847db4148a8-")), "none"),
+        Test/equal(spelled(Uuid/of_str("919108f7-52d1-4320-9bac-f847db4148ag")), "none"),
+        Test/equal(spelled(Uuid/of_str("{919108f7-52d1-4320-9bac-f847db4148a8}")), "none")]);
+
+-- A UUID drawn at random is of version 4 and of the variant `10`, and two drawn are two.
+test a_random_uuid_is_of_version_4_and_two_are_two =
+    let a = Uuid/random()!;
+    let b = Uuid/random()!;
+    Test/all([
+        Test/equal(bits(a, 6, 4), Option/some(4)),
+        Test/equal(bits(a, 8, 6), Option/some(2)),
+        Test/assert("two are two", Bool/not(a == b))]);
+
+-- A UUID made now is of version 7 and of the variant `10`, and one made a quarter of a microsecond later sorts after one made before it, its milliseconds and their fraction first in its bytes, as the order of UUIDs reads them, whatever random bits each drew.
+test a_uuid_made_now_is_of_version_7_and_sorts_by_its_moment =
+    let made = Uuid/now()!;
+    let earlier = at_time(+1645557742000000000, 0x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+    let later = at_time(+1645557742000000250, 0x[0, 0, 0, 0, 0, 0, 0, 0]);
+    Test/all([
+        Test/equal(bits(made, 6, 4), Option/some(7)),
+        Test/equal(bits(made, 8, 6), Option/some(2)),
+        Test/assert("a quarter of a microsecond sorts later", earlier < later)]);
+
+-- A UUID is the sixteen bytes it is made of, and spells as the call over them that makes it.
+test a_uuid_is_its_bytes_and_spells_as_the_call_over_them =
+    let bytes = 0x[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+    let id = Uuid/of_bytes(bytes);
+    Test/all([
+        Test/equal(Uuid/to_bytes(id), bytes),
+        Test/equal(
+            Spell/spell(id),
+            "Uuid/of_bytes(0x[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])"),
+        Test/equal(Uuid/to_str(id), "01020304-0506-0708-090a-0b0c0d0e0f10")]);

@@ -43,6 +43,7 @@ claims! {
     channel => ["Channel"],
     box_ => ["Box"],
     rand => ["rand"],
+    uuid => ["Uuid"],
     json => ["Json"],
     toml => ["Toml"],
     html => ["Html"],
