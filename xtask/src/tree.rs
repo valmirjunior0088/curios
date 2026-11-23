@@ -357,15 +357,11 @@ impl Tree {
                     .map_err(|error| in_file(DIRECTORY, format!("cannot be read: {error}")))
             })
             .collect::<Result<Vec<_>, _>>()?;
+        // A task file is a `.toml`, and what else stands beside them, as the programs a subject's steps run do, is none of the runner's: a `.toml` that does not parse is still refused where it is read.
+        names.retain(|name| name.ends_with(".toml"));
         names.sort();
         for name in names {
             let path = format!("{DIRECTORY}/{name}");
-            if !name.ends_with(".toml") {
-                return Err(in_file(
-                    &path,
-                    "is no task file: the directory holds `.toml` files alone".to_string(),
-                ));
-            }
             let text = read(&path)?;
             files.push((path, text));
         }

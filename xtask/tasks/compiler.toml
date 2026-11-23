@@ -7,7 +7,7 @@ variables.loose.run = ["git", "ls-files", "--", "programs/*.rs"]
 # The Curios sources the formatter holds to canonical form: every tracked `.crs` but the editors' highlighting samples and the soundness board's archive, whose witnesses are written in forms the language no longer has.
 variables.sources.run = ["git", "ls-files", "--", "*.crs", ":!editors/**", ":!xboard/archive/**"]
 # The programs the tree ships, each loose, compiled against `/std` alone: the measurement corpus and the conformance programs.
-variables.programs.run = ["git", "ls-files", "--", "programs/*.crs", "conformance/*.crs"]
+variables.programs.run = ["git", "ls-files", "--", "programs/*.crs", "xtask/tasks/conformance/*.crs"]
 variables.package.flag = ["-p", "--package"]
 variables.package.help = "Compile and run one shipped package's tests alone, as a mutation of a crate the standard library's build parses through asks; every shipped member's when omitted"
 variables.expression.flag = ["-E", "--filterset"]
