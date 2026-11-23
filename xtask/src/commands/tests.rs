@@ -27,18 +27,3 @@ fn a_program_that_is_not_there_is_an_error_naming_it() {
         "{missing}"
     );
 }
-
-/// A missing program is told apart from one that ran and failed, which is what lets a launch name what installs it.
-#[test]
-fn a_program_that_is_not_there_is_missing_rather_than_failed() {
-    let missing = execute(
-        root(),
-        Command::new("curios-xtask-no-such-program"),
-        &[],
-        Output::Streamed,
-    );
-    let failed = execute(root(), Command::new("false"), &[], Output::Streamed);
-
-    assert!(matches!(missing, Err(Failure::Missing(_))));
-    assert!(matches!(failed, Err(Failure::Failed(_))));
-}

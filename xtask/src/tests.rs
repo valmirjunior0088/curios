@@ -7,9 +7,6 @@ mod agents;
 /// The check workflow, whose jobs are the machines the steps run on.
 const WORKFLOW: &str = include_str!("../../.github/workflows/check.yml");
 
-/// The release workflow, which builds the bundle a release ships.
-const RELEASE_WORKFLOW: &str = include_str!("../../.github/workflows/release.yml");
-
 /// The lock file, which says what version of `wasm-bindgen` the bundle builds against.
 const LOCK: &str = include_str!("../../Cargo.lock");
 
@@ -209,46 +206,4 @@ fn the_trace_reader_is_fetched_at_the_schema_s_release() {
         .expect("curios-profile's build script names the release it takes the schema at");
 
     assert_eq!(version_of(&tree(), "tools.trace_processor_shell"), release);
-}
-
-/// A workflow installs a program at the pin `./.github/actions/pins` sets in its job's environment, named as the action names it, so every pin a job reads is one the task files hold, read before the step that installs at it.
-#[test]
-fn every_pin_a_job_installs_at_is_read_from_the_task_files_first() {
-    let pinned = tree()
-        .programs
-        .keys()
-        .map(|name| name.to_uppercase().replace('-', "_"))
-        .collect::<BTreeSet<_>>();
-
-    for workflow in [WORKFLOW, RELEASE_WORKFLOW] {
-        let jobs = workflow
-            .split_once("\njobs:\n")
-            .expect("a workflow has jobs")
-            .1;
-        let mut starts = jobs
-            .match_indices("\n  ")
-            .filter(|(at, _)| !jobs[at + 3..].starts_with(' '))
-            .map(|(at, _)| at)
-            .collect::<Vec<_>>();
-        starts.insert(0, 0);
-        starts.push(jobs.len());
-
-        for job in starts.windows(2).map(|bounds| &jobs[bounds[0]..bounds[1]]) {
-            let read = job.find("uses: ./.github/actions/pins");
-            for (at, _) in job.match_indices("${{ env.") {
-                let name = job[at + "${{ env.".len()..]
-                    .split_once(" }}")
-                    .expect("an expression is closed")
-                    .0;
-                assert!(
-                    pinned.contains(name),
-                    "a job reads `{name}`, which the task files do not pin"
-                );
-                assert!(
-                    read.is_some_and(|read| read < at),
-                    "a job reads `{name}` before it reads the pins"
-                );
-            }
-        }
-    }
 }

@@ -28,7 +28,7 @@ Without one named, take the most urgent specification that can run beside the se
 
 ## 2. The worktree
 
-Branch from local `main`, never `origin/main`: `git worktree add -b <branch> .claude/worktrees/<branch> main`, the branch named for the specification's subject, then `EnterWorktree` by its `path` — by its name it would branch from `origin/main`. Copy what the main checkout has built and the worktree would otherwise build again, with `cp -a --reflink=auto`: `curios/.artifacts` (the launcher), `curios-binaryen/.artifacts`, `curios-js/.artifacts`, `curios-prelude/.artifacts` (the prelude's images), `curios-profile/.artifacts` (Perfetto's schema) and `curios-unicode/.artifacts`.
+Branch from local `main`, never `origin/main`: `git worktree add -b <branch> .claude/worktrees/<branch> main`, the branch named for the specification's subject, then `EnterWorktree` by its `path` — by its name it would branch from `origin/main`. Copy what the main checkout has built and the worktree would otherwise build again, with `cp -a --reflink=auto`: `curios/.artifacts` (the launcher), `curios-binaryen/.artifacts`, `curios-js/.artifacts`, `curios-prelude/.artifacts` (the prelude's images), `curios-profile/.artifacts` (Perfetto's schema), `curios-unicode/.artifacts` and `xtask/.artifacts` (the tools the steps run).
 
 Inside it, the harness refuses a command whose paths it cannot read off the command's text: write every path literally, run `git` from the worktree's root and never with `-C`, keep one kind of action to a command, and write a probe's source to the scratchpad with `Write` and feed it on standard input. The worktree's `target` grows without bound; clearing `target/debug/incremental` while no build of the session's runs is routine, mentioned in a line.
 

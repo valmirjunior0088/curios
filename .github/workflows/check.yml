@@ -16,7 +16,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
 
-# A job sets up a machine and runs tasks of one subject, each a `cargo xtask` line, which runs first what its steps require and consume. Which steps there are, and what each runs, is the task files' in `xtask/tasks.toml` and `xtask/tasks/`; `every_step_the_handoff_runs_has_a_job` there holds that these lines parse and together run every step the handoff runs. A subject's `lint` holds its formatting, so no line writes or checks it apart. The toolchain is the one `rust-toolchain.toml` pins, so no job names a version of it; every other program's version is the task files' `programs`, which `./.github/actions/pins` reads into a job's environment before the steps that install it.
+# A job sets up a machine and runs tasks of one subject, each a `cargo xtask` line, which runs first what its steps require and consume. Which steps there are, and what each runs, is the task files' in `xtask/tasks.toml` and `xtask/tasks/`; `every_step_the_handoff_runs_has_a_job` there holds that these lines parse and together run every step the handoff runs. A subject's `lint` holds its formatting, so no line writes or checks it apart. The toolchain is the one `rust-toolchain.toml` pins, so no job names a version of it, and it is the one thing a job installs: every other tool a step runs is fetched by the run at the digest the task files state and kept in `xtask/.artifacts`, which a job caches.
 jobs:
   workspace:
     name: Workspace
@@ -24,23 +24,15 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/pins
-      - uses: actions/setup-node@v7
-        with:
-          node-version: ${{ env.NODE }}
-      - name: Install Biome
-        run: npm install --global @biomejs/biome@${{ env.BIOME }}
       - name: Install the pinned toolchain
         run: rustup toolchain install
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: nextest@${{ env.NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: .
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
+            xtask/.artifacts
       - name: Lint
         run: cargo xtask workspace lint
       - name: Test
@@ -55,16 +47,14 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/pins
       - name: Install the pinned toolchain
         run: rustup toolchain install
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: nextest@${{ env.NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
           key: runtime-macos
           workspaces: .
+          cache-directories: |
+            xtask/.artifacts
       - name: Lint the runtime
         run: cargo xtask native lint
       - name: Test the runtime
@@ -76,15 +66,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/pins
-      - uses: actions/setup-node@v7
-        with:
-          node-version: ${{ env.NODE }}
       - name: Install the pinned toolchain
         run: rustup toolchain install
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: nextest@${{ env.NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
           key: compiler
@@ -92,6 +75,7 @@ jobs:
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
+            xtask/.artifacts
       - name: Build
         run: cargo xtask compiler build
       - name: Test
@@ -121,19 +105,14 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/pins
-      - uses: actions/setup-node@v7
-        with:
-          node-version: ${{ env.NODE }}
       - name: Install the pinned toolchain
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
           key: wasm32-unknown-unknown
           workspaces: .
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: wasm-bindgen@${{ env.WASM_BINDGEN }}
+          cache-directories: |
+            xtask/.artifacts
       - name: Build
         run: cargo xtask bundle build
       - name: Test
@@ -145,22 +124,15 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/pins
-      - uses: actions/setup-node@v7
-        with:
-          node-version: ${{ env.NODE }}
-          cache: npm
-          cache-dependency-path: editors/tree-sitter/package-lock.json
-      - name: Install npm
-        run: npm install --global npm@${{ env.NPM }}
-      - name: Install Biome
-        run: npm install --global @biomejs/biome@${{ env.BIOME }}
       - name: Install the pinned toolchain
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
           key: xtask
           workspaces: .
+          cache-directories: |
+            xtask/.artifacts
+            ~/.npm
       - name: Lint
         run: cargo xtask tree-sitter lint
       - name: Test
@@ -172,22 +144,15 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/pins
-      - uses: actions/setup-node@v7
-        with:
-          node-version: ${{ env.NODE }}
-          cache: npm
-          cache-dependency-path: editors/textmate/package-lock.json
-      - name: Install npm
-        run: npm install --global npm@${{ env.NPM }}
-      - name: Install Biome
-        run: npm install --global @biomejs/biome@${{ env.BIOME }}
       - name: Install the pinned toolchain
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
           key: xtask
           workspaces: .
+          cache-directories: |
+            xtask/.artifacts
+            ~/.npm
       - name: Lint
         run: cargo xtask textmate lint
       - name: Test
@@ -199,22 +164,15 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/pins
-      - uses: actions/setup-node@v7
-        with:
-          node-version: ${{ env.NODE }}
-          cache: npm
-          cache-dependency-path: editors/vscode/package-lock.json
-      - name: Install npm
-        run: npm install --global npm@${{ env.NPM }}
-      - name: Install Biome
-        run: npm install --global @biomejs/biome@${{ env.BIOME }}
       - name: Install the pinned toolchain
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
           key: xtask
           workspaces: .
+          cache-directories: |
+            xtask/.artifacts
+            ~/.npm
       - name: Lint
         run: cargo xtask vscode lint
       - name: Build
@@ -226,14 +184,6 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/pins
-      - uses: actions/setup-node@v7
-        with:
-          node-version: ${{ env.NODE }}
-          cache: npm
-          cache-dependency-path: editors/tree-sitter/package-lock.json
-      - name: Install npm
-        run: npm install --global npm@${{ env.NPM }}
       - name: Install the pinned toolchain
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
@@ -242,6 +192,9 @@ jobs:
           workspaces: |
             .
             editors/zed
+          cache-directories: |
+            xtask/.artifacts
+            ~/.npm
       - name: Lint
         run: cargo xtask zed lint
       - name: Build
@@ -255,16 +208,14 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/pins
       - name: Install the pinned toolchain
         run: rustup toolchain install
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: nextest@${{ env.NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
           key: jig
           workspaces: .
+          cache-directories: |
+            xtask/.artifacts
       - name: Lint
         run: cargo xtask jig lint
       - name: Test

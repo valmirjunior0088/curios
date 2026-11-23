@@ -35,8 +35,7 @@ The language server elaborates the sources in your workspace, which means runnin
 ## Building it from this repository
 
 ```sh
-npm ci
-npm run package         # writes .artifacts/curios-<version>.vsix, bundling first
+cargo xtask vscode build    # writes .artifacts/curios-<version>.vsix, bundling first
 ```
 
 Bundling copies in the TextMate grammars from [`editors/textmate`](https://github.com/valmirjunior0088/curios/tree/main/editors/textmate), where their snapshot tests run.

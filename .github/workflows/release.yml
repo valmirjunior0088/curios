@@ -62,7 +62,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/pins
 
       - name: Install the pinned toolchain
         run: rustup toolchain install
@@ -71,10 +70,9 @@ jobs:
         with:
           key: wasm32-unknown-unknown
           workspaces: .
+          cache-directories: |
+            xtask/.artifacts
 
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: wasm-bindgen@${{ env.WASM_BINDGEN }}
 
       - name: Build curios-js
         run: cargo xtask bundle build

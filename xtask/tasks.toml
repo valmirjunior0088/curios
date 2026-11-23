@@ -1,16 +1,5 @@
 description = "The repository's tasks: a group of steps for each file under `tasks/`, and the steps here"
 
-# The programs the steps launch beside the Rust toolchain, which `rust-toolchain.toml` pins, each at the version a run needs, held the first time a step launches it. The workflows read these pins to install each program on their runners.
-programs.nextest = "0.9.151"
-programs.biome = "2.6.2"
-# A minimum, since a contributor's system provides Node.
-programs.node = ">= 22"
-programs.npm = "11.17.0"
-# The generator must match the `wasm-bindgen` crate `Cargo.lock` gives the bundle, which a test holds this to.
-programs.wasm-bindgen = "0.2.129"
-# A minimum, since Perfetto publishes the reader a platform at a time and a contributor installs it: the release whose schema `curios-profile` generates its messages from.
-programs.trace_processor_shell = ">= 58.2"
-
 # The tools the steps run beside the Rust toolchain, which `rust-toolchain.toml` pins: each fetched at its digest for the host a run is on before the run's first step, and kept as `xtask/.artifacts/<name>-<version>`.
 
 # A process to a test, as every test step runs the suite.

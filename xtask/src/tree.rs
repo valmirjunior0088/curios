@@ -1,6 +1,6 @@
 //! The task files read into one tree, and every refusal reading them can make.
 //!
-//! **A file is a group, and a key's meaning is where it sits.** `xtask/tasks.toml` is the group the files in `xtask/tasks/` belong to, each a group named after its file. A file's top level holds `description`, `variables`, `programs`, and its steps and groups, and the root's holds `tools` beside them; a group holds only steps and groups; a step holds `description`, `requires`, `consumes`, `produces`, `run` and `dir`, and no table of its own. So whether a key is an attribute or a child is read off its position, and one out of place is refused rather than guessed at.
+//! **A file is a group, and a key's meaning is where it sits.** `xtask/tasks.toml` is the group the files in `xtask/tasks/` belong to, each a group named after its file. A file's top level holds `description`, `variables`, and its steps and groups, and the root's holds `tools` beside them; a group holds only steps and groups; a step holds `description`, `requires`, `consumes`, `produces`, `run` and `dir`, and no table of its own. So whether a key is an attribute or a child is read off its position, and one out of place is refused rather than guessed at.
 //!
 //! **A name is the path to where it is declared, written from the top with a leading `.`, and it names one thing.** Each segment is a key, read from the top one projection at a time: a step or a group is its tables, `.workspace.lint.clippy`; a variable sits under its file's `variables`, `.workspace.variables.edition`; a tool under the root's `tools`, `.tools.node`, and its version beneath it, `.tools.node.version`; and a produced file under its step's `produces`, `.launcher.build.produces.binary`. So a name reads the same wherever it is written, and says where to find what it names. `requires` names steps and groups, `consumes` produced files, and the braces in a command a variable, a tool or a produced file, or, with a `!` where the `.` stands, a value the runner fills ([`BUILT_INS`]). Each resolves as the tree is read, so a name that names nothing, one written without its `.`, or one naming the wrong kind of thing, is refused before anything runs, and so is a command that reads a file its step does not consume, which would run without the edge that orders it.
 
@@ -26,8 +26,6 @@ mod instruction_tests;
 mod layout_tests;
 #[cfg(test)]
 mod name_tests;
-#[cfg(test)]
-mod program_tests;
 #[cfg(test)]
 mod tool_tests;
 
@@ -86,8 +84,6 @@ pub struct Tree {
     pub variables: BTreeMap<Name, Variable>,
     pub produced: BTreeMap<Name, Produced>,
     pub tools: BTreeMap<Name, Tool>,
-    /// What the steps' commands launch, by the program's name, where the files say what version a run needs or what installs it.
-    pub programs: BTreeMap<String, Pin>,
 }
 
 #[derive(Debug)]
@@ -188,23 +184,6 @@ const TOOLS_AT_THE_ROOT: &str =
 /// The keys a tool fetched itself holds, and those of one shipped in another's download.
 const FETCHED_KEYS: [&str; 4] = ["version", "url", "sha256", "path"];
 const SHIPPED_KEYS: [&str; 2] = ["archive", "path"];
-
-/// The version of a program a run needs, as `programs` pins it by the name a step launches it as.
-#[derive(Debug, PartialEq, Eq)]
-pub enum Pin {
-    /// This version and no other: `version = "2.6.2"`.
-    Exact(String),
-    /// This version or a later one: `version = ">= 22"`.
-    Minimum(String),
-}
-
-impl Pin {
-    pub fn version(&self) -> &str {
-        match self {
-            Pin::Exact(version) | Pin::Minimum(version) => version,
-        }
-    }
-}
 
 /// A named value of a file, the same for the whole run.
 #[derive(Debug, PartialEq, Eq)]
@@ -397,7 +376,6 @@ impl Tree {
             variables: BTreeMap::new(),
             produced: BTreeMap::new(),
             tools: BTreeMap::new(),
-            programs: BTreeMap::new(),
         };
         let mut kinds = BTreeMap::<Name, Kind>::new();
         let mut written = Vec::new();
@@ -464,23 +442,6 @@ impl Tree {
                             });
                         }
                     }
-                    "programs" => {
-                        let table = item.as_table_like().ok_or_else(|| {
-                            file.refuse(
-                                item.span(),
-                                "`programs` is a table of pins by program".to_string(),
-                            )
-                        })?;
-                        for (name, value) in table.iter() {
-                            let program = program_of(file, value)?;
-                            if tree.programs.insert(name.to_string(), program).is_some() {
-                                return Err(file.refuse(
-                                    table.key(name).and_then(|key| key.span()),
-                                    format!("program `{name}` is declared twice"),
-                                ));
-                            }
-                        }
-                    }
                     _ => {
                         let name = scoped(&file.scope, key);
                         if file.scope.is_empty() && COMMANDS.contains(&key) {
@@ -493,7 +454,7 @@ impl Tree {
                         let table = item.as_table_like().ok_or_else(|| {
                             file.refuse(
                                 span.clone(),
-                                format!("`{key}` is out of place: a file's top holds `description`, `variables`, `programs`, and its steps and groups as tables"),
+                                format!("`{key}` is out of place: a file's top holds `description`, `variables`, and its steps and groups as tables"),
                             )
                         })?;
                         tree.groups
@@ -934,7 +895,7 @@ fn walk<'a>(
                 return Err(file.refuse(
                     span,
                     match key {
-                        "variables" | "programs" => format!("`{key}` belongs at a file's top"),
+                        "variables" => format!("`{key}` belongs at a file's top"),
                         "tools" => TOOLS_AT_THE_ROOT.to_string(),
                         _ if item.is_table() => {
                             format!("`{key}` is a table inside a step, which holds no tables")
@@ -1049,34 +1010,6 @@ fn words_of(file: &File<'_>, list: &Array) -> Result<Vec<String>, Box<Report>> {
                 .ok_or_else(|| file.refuse(value.span(), "a word is a string".to_string()))
         })
         .collect()
-}
-
-/// The pin `item` declares: the version a program must be, or reach where `>=` leads it.
-fn program_of(file: &File<'_>, item: &Item) -> Result<Pin, Box<Report>> {
-    let written = item.as_str().ok_or_else(|| {
-        file.refuse(
-            item.span(),
-            "a program is pinned at its version, a string".to_string(),
-        )
-    })?;
-    let pin = match written.strip_prefix(">=") {
-        Some(minimum) => Pin::Minimum(minimum.trim_start().to_string()),
-        None => Pin::Exact(written.to_string()),
-    };
-    if !pin
-        .version()
-        .split('.')
-        .all(|part| !part.is_empty() && part.chars().all(|character| character.is_ascii_digit()))
-    {
-        return Err(file.refuse(
-            item.span(),
-            format!(
-                "a version is numbers between dots, after `>=` for a minimum, and `{written}` is not"
-            ),
-        ));
-    }
-
-    Ok(pin)
 }
 
 /// The tool `written` declares, its URLs resolved against every declaration.

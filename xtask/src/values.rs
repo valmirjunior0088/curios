@@ -1,6 +1,6 @@
 //! What a run fills a command's braces with.
 //!
-//! **A variable is a constant of the run.** Each has one value for the whole run: what its file writes, what the command line gave, or what a command printed, asked once and only where a step that runs uses it. The values the runner fills, each written after a `!`, are the triple `xtask` was built for, Cargo's target directory, Cargo's home and the toolchain's root, the last asked of the pinned `rustc` once a run, and a produced file stands for its path, from the repository's root wherever a step runs.
+//! **A variable is a constant of the run.** Each has one value for the whole run: what its file writes, what the command line gave, or what a command printed, asked once and only where a step that runs uses it. The values the runner fills, each written after a `!`, are the triple `xtask` was built for, Cargo's target directory, Cargo's home and the toolchain's root, the last asked of the pinned `rustc` once a run; a tool stands for its executable's path, kept for the host the run is on; and a produced file stands for its path, from the repository's root wherever a step runs.
 
 use {
     crate::{
@@ -149,18 +149,13 @@ impl<'a> Values<'a> {
             return Ok(printed.clone());
         }
 
-        let output = launch(command)
-            .and_then(|launched| {
-                let pin = self.tree.programs.get(&launched.program);
-                ask_launched(launched, pin)
-            })
-            .map_err(|error| {
-                format!(
-                    "`{}` is what `{}` prints: {error}",
-                    from_top(name),
-                    command.join(" ")
-                )
-            })?;
+        let output = launch(command).and_then(ask_launched).map_err(|error| {
+            format!(
+                "`{}` is what `{}` prints: {error}",
+                from_top(name),
+                command.join(" ")
+            )
+        })?;
         let printed = output
             .lines()
             .filter(|line| !line.is_empty())
