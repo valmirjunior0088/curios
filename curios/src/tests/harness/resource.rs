@@ -44,10 +44,10 @@ fn a_scope_releases_before_its_successful_payload_continues() {
     );
 }
 
-/// `Test/main` raced inside `Io`, run at the index the runner would hand it.
+/// `Test/run` raced inside `Io`, as a program may race what a test does.
 #[test]
 fn an_external_race_cancels_a_suspended_test_and_runs_its_release() {
-    let (system, io) = MockHost::builder().args(["prog", "0"]).build();
+    let (system, io) = MockHost::builder().build();
     run_text(
         r#"
         use /std/{Io, Test, print};
@@ -62,7 +62,7 @@ fn an_external_race_cancels_a_suspended_test_and_runs_its_release() {
             let _ = Io/yield()!;
             Io/pure(());
         let entry() -> Io({}) =
-            let discarded = Io/bind(Test/main([protected]), (_) => Io/pure(()));
+            let discarded = Io/bind(Test/run(protected()), (_) => Io/pure(()));
             let _ = Io/select([discarded, competing()])!;
             print("done|");
         entry()

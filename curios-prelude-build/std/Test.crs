@@ -3,7 +3,7 @@ use /std/ops/{Eql};
 use /std/time/{Duration};
 
 --- What a check that failed found, as the runner presents it: the steps that reached it, the outermost first, what it states, and the values it compared, each behind its label and spelled as Curios writes it.
-struct Failure: Type {
+pub struct Failure: Type {
     steps: List(Str),
     statement: Str,
     facts: List({Str, Str}),
@@ -156,17 +156,22 @@ pub let timeout(@A: Type, d: Duration, body: () -> Test(A)) -> Test(A) =
     | none() => failing("timed out", [("after", Spell/spell(d))])
     end;
 
+--- Run `test` to its end and answer each check that failed, in the order it met them, and none where it held: what a runner reports of a test, since nothing else takes one apart.
+pub let run(@A: Type, test: Test(A)) -> Io(List(Failure)) =
+    let result = finish(test)!;
+    match result
+    | success(_) => Io/pure([])
+    | failure(failures) => Io/pure(failures)
+    end;
+
 -- What a test found, spelled for its runner to read back and present: the checks that failed, none where it held.
 let verdict(failures: List(Failure)) -> Bytes =
     Str/to_bytes(Spell/spell(failures));
 
 -- The one test a runner selected is named by the runner, which says how it ended and presents what it found: the test writes nothing of its own.
 let answer(test: Test({})) -> Io(Bytes) =
-    let result = finish(test)!;
-    match result
-    | success(()) => Io/pure(verdict([]))
-    | failure(failures) => Io/pure(verdict(failures))
-    end;
+    let failures = run(test)!;
+    Io/pure(verdict(failures));
 
 let parse_index(raw: Bytes) -> Option(Nat) =
     match Str/of_bytes(raw)
