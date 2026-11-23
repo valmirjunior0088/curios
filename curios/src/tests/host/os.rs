@@ -41,6 +41,36 @@ fn run_drains_a_real_child_through_the_scheduler() {
     assert_eq!(written, b"hi\n:exited(0)|fed:exited(0)");
 }
 
+// A name the system holds that is no text reaches a child as it is: `0xFF` begins no UTF-8 character, and `/bin/echo` writes back the argument it received.
+#[test]
+fn a_child_receives_an_argument_that_is_no_text_unchanged() {
+    let root = Temporary::new("host", "os-bytes");
+    std::fs::create_dir_all(&root).expect("a directory of its own");
+    let report = root.join("report");
+    let path = report.to_str().expect("a UTF-8 temporary path");
+    let source = fill!(
+        r#"
+        use /std/{Show, Try, Io, Path, File, Proc};
+        let program() -> Try(Io, Io/Error, {}) =
+            let e = Proc/run(Proc/of_bytes(Path/of_str("/bin/echo"), [0x[0xFF, 0x61]]), 0x[])!;
+            File/write_all(Path/of_str("${path}"), e.stdout);
+        let main() -> Io({}) =
+            let r = Try/run(program())!;
+            match r
+            | failure(e) => /std/print(Show/show(e))
+            | success(_) => Io/pure(())
+            end;
+        main()
+        "#,
+        path
+    );
+
+    run_text(&source, OsHost::with_args(vec![])).expect("expected result");
+
+    let written = std::fs::read(&report).expect("the program wrote what the child echoed");
+    assert_eq!(written, b"\xFFa\n");
+}
+
 /// The children the programs below wait on and write to, each through the stream its pipe gives, and a mebibyte of `a` to write: past what a pipe holds, so a write to a child that has not read yet waits.
 const PIPED: &str = r#"
     use /std/{Nat, Bytes, Str, Option, Result, Show, Try, Io, Path, File, Proc};

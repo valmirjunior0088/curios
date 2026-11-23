@@ -21,19 +21,24 @@ end
 
 --- A program to run, and how to run it: what a child is started from.
 pub struct Proc: pub Type {
-    program: Str,
-    args: List(Str),
+    program: Path,
+    --- The arguments, as the bytes the child receives.
+    args: List(Bytes),
     --- The working directory, or the parent's.
     cwd: Option(Path),
-    --- Entries laid over the inherited environment.
-    env: List({Str, Str}),
+    --- Entries laid over the inherited environment, each a name and its value as the bytes the child receives.
+    env: List({Bytes, Bytes}),
     stdin: Stdio,
     stdout: Stdio,
     stderr: Stdio,
 }
 
---- `program` with `args`, inheriting the working directory, the environment and every stream.
+--- `program` with `args`, the UTF-8 bytes of each text, inheriting the working directory, the environment and every stream: the door a program's own literals go through.
 pub let new(program: Str, args: List(Str)) -> Proc =
+    of_bytes(Path/of_str(program), List/map(args, Str/to_bytes));
+
+--- `program` with `args` as the bytes they are, inheriting the working directory, the environment and every stream: a name the system holds that is no text, as one `fs` lists or `Proc/args` answers, handed on unchanged.
+pub let of_bytes(program: Path, args: List(Bytes)) -> Proc =
     Proc {
         program = program,
         args = args,
