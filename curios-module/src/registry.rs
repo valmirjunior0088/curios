@@ -47,7 +47,6 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         div: field(&["std", "ops", "Div"], "div"),
         rem: field(&["std", "ops", "Rem"], "rem"),
         eql: field(&["std", "ops", "Eql"], "eql"),
-        neq: field(&["std", "ops", "Eql"], "neq"),
         lt: field(&["std", "ops", "Cmp"], "lt"),
         gt: field(&["std", "ops", "Cmp"], "gt"),
         le: field(&["std", "ops", "Cmp"], "le"),

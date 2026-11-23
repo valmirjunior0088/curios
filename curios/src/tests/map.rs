@@ -14,7 +14,6 @@ fn a_colliding_key_witness_is_rejected() {
         end
         satisfy Eql(Side) {
             eql(a, b) = true,
-            neq(a, b) = false,
         }
         satisfy Ord(Side) {
             ord(a, b) = Ordering/eq(),

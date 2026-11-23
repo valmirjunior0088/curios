@@ -721,6 +721,12 @@ impl<'a, D: Driver> Grader<'a, D> {
         if let Some(guard) = Guard::read(head) {
             return Ok(Some(guard));
         }
+        // `n != 0` elaborates to the negation of `n == 0`, `xor(n == 0, true)`, which is also what `Bool/not` unfolds to: read as the comparison it negates, its relation negated, as conversion reads a negated comparison as its dual.
+        if let Subterm::Intrinsic(Intrinsic::BoolXor(compared, negation)) = &**head
+            && negation.as_bool() == Some(true)
+        {
+            return Ok(self.guard(compared)?.map(Guard::negated));
+        }
         if !readable(head) {
             return Ok(None);
         }

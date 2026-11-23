@@ -1,7 +1,7 @@
 mod tests;
 
 pub use /sys/{let Int};
-pub use /sys/Int/{eql, neq, add, sub, div, rem, gt, ge, and, or, xor, shr, to_nat, to_flt};
+pub use /sys/Int/{eql, add, sub, div, rem, gt, ge, and, or, xor, shr, to_nat, to_flt};
 
 -- Each law names the difference a hypothesis makes non-negative as a natural, with `to_nat`, and concludes from `Nat`'s own floor read through the widening — the order on `Int` is `Nat`'s, carried along the embedding.
 --- The laws of `a < b`, and its crossings with `a <= b`.
@@ -148,7 +148,6 @@ pub let non_neg(n: Int) -> Option(NonNeg(n)) =
 
 satisfy Eql(Int) {
     eql = eql,
-    neq = neq,
 }
 
 satisfy Cmp(Int) {

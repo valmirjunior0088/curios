@@ -32,6 +32,18 @@ impl Relation {
             Relation::Neq => Relation::Neq,
         }
     }
+
+    /// The relation that holds exactly where this one fails, on the total order of `Nat`: `not(n < k)` is `n >= k`, and `not(n == k)` is `n != k`.
+    pub fn negated(self) -> Relation {
+        match self {
+            Relation::Lt => Relation::Ge,
+            Relation::Le => Relation::Gt,
+            Relation::Gt => Relation::Le,
+            Relation::Ge => Relation::Lt,
+            Relation::Eql => Relation::Neq,
+            Relation::Neq => Relation::Eql,
+        }
+    }
 }
 
 /// A boolean scrutinee read as a comparison between a tracked binder and a `Nat` literal — the only shape from which an arm can conclude that the binder is not zero.
@@ -42,6 +54,14 @@ pub struct Guard {
 }
 
 impl Guard {
+    /// The guard that holds exactly where this one fails: what a negation of the comparison it reads states.
+    pub fn negated(self) -> Guard {
+        Guard {
+            relation: self.relation.negated(),
+            ..self
+        }
+    }
+
     pub fn read(term: &Term) -> Option<Guard> {
         let (left, right, relation) = match &**term {
             Subterm::Intrinsic(Intrinsic::NatLt(left, right)) => (left, right, Relation::Lt),

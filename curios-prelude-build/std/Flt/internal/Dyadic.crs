@@ -84,10 +84,6 @@ pub let eql(a: Dyadic, b: Dyadic) -> Bool =
     let e = common(a, b);
     lowered(a, e) == lowered(b, e);
 
---- Whether the two are different numbers.
-pub let neq(a: Dyadic, b: Dyadic) -> Bool =
-    Bool/not(eql(a, b));
-
 --- Whether `a` is below `b`.
 pub let lt(a: Dyadic, b: Dyadic) -> Bool =
     let e = common(a, b);
@@ -117,7 +113,6 @@ pub let to_str(a: Dyadic) -> Str =
 
 satisfy Eql(Dyadic) {
     eql = eql,
-    neq = neq,
 }
 
 satisfy Cmp(Dyadic) {

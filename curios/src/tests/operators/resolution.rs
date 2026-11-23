@@ -135,6 +135,25 @@ fn infix_add_on_a_user_record_resolves_its_witness() {
     );
 }
 
+// `!=` is the negation of the `eql` a witness states, with no method of its own to disagree with it: a witness answering `true` at every pair answers `false` for `!=` at every pair. A `!=` reading `eql` as it stands breaks every bound `/std` states over `!=` before any test runs, so the claim is held here by the fixture alone, which the shape with a `neq` of its own refused for the method it did not write.
+#[test]
+fn a_disequality_is_the_negation_of_its_witness_s_equality() {
+    assert_eq!(
+        run(r#"
+            use /std/{Nat, Bool, print};
+            use /std/ops/{Eql};
+            struct Any : pub Type { x : Nat }
+            satisfy Eql(Any) {
+                eql(_, _) = true,
+            }
+            let a : Any = Any { x = 1 };
+            let b : Any = Any { x = 2 };
+            print(Bool/to_str(a != b))
+        "#),
+        b"false"
+    );
+}
+
 // In generic code, `x + x` resolves against the local `use Add(A)` premise, which resolution tries before the table — no extra machinery.
 #[test]
 fn infix_resolves_against_a_local_use_premise() {

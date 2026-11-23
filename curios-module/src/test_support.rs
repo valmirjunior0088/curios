@@ -45,7 +45,6 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         div: registry_field(&["std", "Divide"], "div"),
         rem: registry_field(&["std", "Remainder"], "rem"),
         eql: registry_field(&["std", "Equal", "Equal"], "eql"),
-        neq: registry_field(&["std", "Equal", "Equal"], "neq"),
         lt: registry_field(&["std", "Compare"], "lt"),
         gt: registry_field(&["std", "Compare"], "gt"),
         le: registry_field(&["std", "Compare"], "le"),

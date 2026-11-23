@@ -886,7 +886,6 @@ pub let pad_end(s: Str, n: Nat, c: Char) -> Str =
 
 satisfy Eql(Str) {
     eql = eql,
-    neq(a, b) = Bool/not(eql(a, b)),
 }
 
 satisfy Show(Str) {

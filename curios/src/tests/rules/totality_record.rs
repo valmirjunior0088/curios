@@ -212,7 +212,6 @@ fn a_witness_handed_to_a_container_operation_descends_where_the_operation_applie
 
         satisfy Eql(Rose) {
             eql(a, b) = match a | rose(n, cs) => match b | rose(m, ds) => n == m && List/eql(cs, ds) end end,
-            neq(a, b) = Bool/not(Eql/eql(a, b)),
         }
 
         let Same(a: Rose, b: Rose) -> /std/Bool/True =
@@ -245,7 +244,6 @@ fn a_witness_applied_to_its_own_parameters_and_handed_to_a_container_operation_d
 
         satisfy (@A: Type, use Eql(A)) => Eql(Rose(A)) {
             eql(a, b) = match a | rose(n, cs) => match b | rose(m, ds) => n == m && List/eql(cs, ds) end end,
-            neq(a, b) = Bool/not(Eql/eql(a, b)),
         }
 
         let Same(a: Rose(Nat), b: Rose(Nat)) -> /std/Bool/True =
@@ -424,7 +422,6 @@ fn a_containers_witness_is_graded_by_the_summary_of_its_method() {
 
         satisfy (@A: Type, use Eql(A)) => Eql(Wrap(A)) {
             eql(a, b) = Eql/eql(a.item, b.item),
-            neq(a, b) = Bool/not(Eql/eql(a.item, b.item)),
         }
 
         induct Tree: Type
@@ -437,7 +434,6 @@ fn a_containers_witness_is_graded_by_the_summary_of_its_method() {
                 | leaf(n) => match b | leaf(m) => n == m | _ => false end
                 | node(x) => match b | node(y) => x == y | _ => false end
                 end,
-            neq(a, b) = Bool/not(Eql/eql(a, b)),
         }
 
         let Same(a: Tree, b: Tree) -> /std/Bool/True =

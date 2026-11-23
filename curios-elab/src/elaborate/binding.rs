@@ -9,7 +9,7 @@ use {
         mismatch, read_by_value, reduce_with, resolve_witness_goal, resolve_witness_goal_or,
         stuck_on_metavar, written_monad, zonk_solved_term_metas,
     },
-    curios_common::{InfixOp, Plicity, Symbol, recurse},
+    curios_common::{InfixOp, MethodForm, OperatorMethod, Plicity, Symbol, recurse},
     curios_core::{
         Advance, ArgumentSite, Bang, Bound, CalleeId, Extent, Field, Free, Func, Global, HeadKey,
         Infix, Instance, Intrinsic, Label, Let, MetavarId, Names, Nat, NumLit, Numeral, Probe,
@@ -1163,7 +1163,7 @@ fn binder_key(
 
 /// Elaborate an infix operator ([`Infix`]) as a concept method call. Both operands are checked at a fresh operand-type metavar `?T`, which the operator awaits as a call awaits its implicits: an expected result type pins it for an operator whose method returns its operand type, an operand that is no literal pins it from its own type, and a literal read while it is open waits for it. So `1 + flt` resolves to `Flt` whichever side the literal is on, and literals nothing pins take their default together where the operator completes.
 ///
-/// Dispatch is then **one path**: every operator desugars to a projection of a witness of its `/std/ops` concept ([`OperatorSyntax::concept_field`](curios_common::OperatorSyntax::concept_field)) — `a + b` ≙ `Add/add(a, b)`, intrinsics included, resolved by the same engine that fills `use` slots (so `no witness of Add(Point)` is the single error vocabulary, and what an operator means at a type is entirely a question of which witnesses exist). There are no carved-out operators: `&&`/`||` project `And`/`Or`, and `!=` projects `Eql`'s `neq` rather than negating a rebuilt `eql`, so this function synthesizes no term of its own and reads every result type from the declaration. The node never survives elaboration; witness projections over the statically-known intrinsic witnesses collapse back to bare `Intrinsic` code in the backend (`And(Bool)`/`Or(Bool)` collapse to `BoolAnd`/`BoolOr` exactly as `Eql(Bool)` collapses to `BoolEql` — see the codegen parity tests).
+/// Dispatch is then **one path**: every operator desugars to a projection of a witness of its `/std/ops` concept ([`OperatorSyntax::method`](curios_common::OperatorSyntax::method)) — `a + b` ≙ `Add/add(a, b)`, intrinsics included, resolved by the same engine that fills `use` slots (so `no witness of Add(Point)` is the single error vocabulary, and what an operator means at a type is entirely a question of which witnesses exist). There are no carved-out operators: `&&`/`||` project `And`/`Or`, and `!=` projects `Eql`'s `eql` and negates it, written as the intrinsic `xor(·, true)` that `Bool/not` unfolds to, so the term names no declaration a scheduler would have to order the operator's item after, and conversion reads it as the comparison's negation. Every result type is read from the declaration. The node never survives elaboration; witness projections over the statically-known intrinsic witnesses collapse back to bare `Intrinsic` code in the backend (`And(Bool)`/`Or(Bool)` collapse to `BoolAnd`/`BoolOr` exactly as `Eql(Bool)` collapses to `BoolEql` — see the codegen parity tests).
 pub fn elaborate_infix(
     context: &mut Context,
     infix: &Infix,
@@ -1174,7 +1174,10 @@ pub fn elaborate_infix(
     let sort = context.universes_mut().fresh_sort();
     let operand_type = context.fresh_hole_metavar(sort, term.extent());
 
-    let target = context.syntax().operator.concept_field(infix.op);
+    let OperatorMethod {
+        method: target,
+        form,
+    } = context.syntax().operator.method(infix.op);
     let field_name = target.field;
     let concept_name = Global::Authored(target.concept.qualifier());
     let method = infix_method(
@@ -1233,7 +1236,14 @@ pub fn elaborate_infix(
         head: method.witness.clone(),
         field: method.field.clone(),
     });
-    let rebuilt = Term::apply_marked(Term::from(read), arguments);
+    let applied = Term::apply_marked(Term::from(read), arguments);
+    let rebuilt = match form {
+        MethodForm::Direct => applied,
+        MethodForm::Negated => Term::intrinsic(Intrinsic::BoolXor(
+            applied,
+            Term::intrinsic(Intrinsic::Bool(true)),
+        )),
+    };
 
     if let Mode::Check(expected) = &mode {
         expect_as(context, term, &result_type, expected)?;

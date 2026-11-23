@@ -508,7 +508,7 @@ Every infix operator needs whitespace on both sides, and associates to the left.
 
 An operator is a call of its concept's method, resolved as any witness is, intrinsic operands included. `/std` declares the witnesses for the intrinsic types and for some of its own, and a `satisfy` declares one for any other type. Both operands have one type. `+`, `-`, `*`, `/`, `%`, `&&` and `||` answer that type, and `==`, `!=`, `<`, `>`, `<=` and `>=` answer `Bool`.
 
-`==` and `!=` are two methods of `Eql`, `eql` and `neq`, so a witness supplies both, and `!=` is no negation of `eql`.
+`==` is `Eql`'s method `eql`, and `a != b` is `Bool/not(a == b)`: a witness states equality once, so the two never disagree.
 
 `&&` and `||` are calls of `And/and` and `Or/or`, as `+` is of `Add/add`, and not conditionals: neither operand is a fact in the other. So `x != 0 && 10 / x > 1` is refused, and `match | x != 0, 10 / x > 1 => true | _ => false end` is how a guard reaches the division.
 
@@ -1286,7 +1286,7 @@ satisfy (@A: Type, use Show(A)) => Show(Bag(A)) {
 
 A witness is keyed by its concept and by the head of each of the concept's arguments, which its signature spells: an inductive, a structure, an intrinsic type or a tuple type's shape, applied or not, or a family applied in part, written as a lambda, `(A: Type) => State(S, A)`. A function type has no key. One witness at most stands at a key in a whole program, declared where its concept or a head of its key is, and its `use` premises are smaller than its own application. Why: [Concepts resolve with global coherence](design/surface/concepts-resolve-with-global-coherence.md).
 
-Witnesses that resolve through one another are one group, joined by `and` ([Recursive groups](#recursive-groups)). A lone witness may resolve through its own key with nothing said. A method written by another method of its witness — `neq(a, b) = Bool/not(a == b)` — reads that method alone, so only a method that reaches itself makes its witness recursive.
+Witnesses that resolve through one another are one group, joined by `and` ([Recursive groups](#recursive-groups)). A lone witness may resolve through its own key with nothing said. A method written by another method of its witness — `gt(a, b) = b < a` — reads that method alone, so only a method that reaches itself makes its witness recursive.
 
 ```crs
 use /std/{Nat, Show, Str};

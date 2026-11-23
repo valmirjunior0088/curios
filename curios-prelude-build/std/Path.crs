@@ -96,7 +96,6 @@ pub let extension(p: Path) -> Option(Path) =
 
 satisfy Eql(Path) {
     eql(a, b) = a.0 == b.0,
-    neq(a, b) = a.0 != b.0,
 }
 
 --- The text when the bytes are UTF-8, the bytes otherwise.

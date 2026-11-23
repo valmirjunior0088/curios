@@ -26,25 +26,25 @@ fn declaration(elaborated: &str, name: &str) -> String {
     lines[start..=head].join("\n")
 }
 
-// A method stated by another of its witness's methods reads that method, not the witness: `neq` reads `eql`, which names nothing of the witness, so the body recurses nowhere and the witness is an ordinary definition — where a group of one is a knot forced at every `!=`.
+// A method stated by another of its witness's methods reads that method, not the witness: `apart` reads `same`, which names nothing of the witness, so the body recurses nowhere and the witness is an ordinary definition — where a group of one is a knot forced at every `apart`.
 
 #[test]
 fn a_witness_reading_another_of_its_methods_is_no_group() {
     let source = r#"
         use /std/{Nat, Bool};
-        use /std/ops/{Eql};
+        concept Same(A: Type): Type { same(A, A) -> Bool, apart(A, A) -> Bool, }
         pub struct Box: pub Type { value: Nat }
-        satisfy Eql(Box) {
-            eql(a, b) = a.value == b.value,
-            neq(a, b) = Bool/not(a == b),
+        satisfy Same(Box) {
+            same(a, b) = a.value == b.value,
+            apart(a, b) = Bool/not(Same/same(a, b)),
         }
-        /std/print(Bool/to_str(Box { value = 1 } != Box { value = 2 }))
+        /std/print(Bool/to_str(Same/apart(Box { value = 1 }, Box { value = 2 })))
         "#;
 
     assert_eq!(run(source), b"true");
     let elaborated = core_elab(source);
     assert!(
-        !declaration(&elaborated, "/witness~/std/ops/Eql(/Box)").contains("node = Rec"),
+        !declaration(&elaborated, "/witness~/Same(/Box)").contains("node = Rec"),
         "expected the witness as a definition, not a group of one:\n{elaborated}"
     );
 }
@@ -55,46 +55,47 @@ fn a_parameterized_witness_reading_another_of_its_methods_is_no_group() {
     let source = r#"
         use /std/{Nat, Bool};
         use /std/ops/{Eql};
+        concept Same(A: Type): Type { same(A, A) -> Bool, apart(A, A) -> Bool, }
         pub struct Wrap(A: Type): pub Type { value: A }
-        satisfy (@A: Type, use Eql(A)) => Eql(Wrap(A)) {
-            eql(a, b) = a.value == b.value,
-            neq(a, b) = Bool/not(a == b),
+        satisfy (@A: Type, use Eql(A)) => Same(Wrap(A)) {
+            same(a, b) = a.value == b.value,
+            apart(a, b) = Bool/not(Same/same(a, b)),
         }
-        /std/print(Bool/to_str(Wrap { value = 1 } != Wrap { value = 1 }))
+        /std/print(Bool/to_str(Same/apart(Wrap { value = 1 }, Wrap { value = 1 })))
         "#;
 
     assert_eq!(run(source), b"false");
     let elaborated = core_elab(source);
     assert!(
-        !declaration(&elaborated, "/witness~/std/ops/Eql(/Wrap)").contains("node = Rec"),
+        !declaration(&elaborated, "/witness~/Same(/Wrap)").contains("node = Rec"),
         "expected the witness as a definition, not a group of one:\n{elaborated}"
     );
 }
 
-// A method that reaches itself keeps its witness a group, and so does the one beside it that reads it: `eql` compares two chains link by link through its own entry, and `neq` reads that `eql`.
+// A method that reaches itself keeps its witness a group, and so does the one beside it that reads it: `same` compares two chains link by link through its own entry, and `apart` reads that `same`.
 #[test]
 fn a_method_reading_one_that_recurses_stays_in_its_group() {
     let source = r#"
         use /std/{Nat, Bool};
-        use /std/ops/{Eql};
+        concept Same(A: Type): Type { same(A, A) -> Bool, apart(A, A) -> Bool, }
         induct Chain: pub Type | end_of() | link(Nat, Chain) end
-        satisfy Eql(Chain) {
-            eql(a, b) =
+        satisfy Same(Chain) {
+            same(a, b) =
                 match a
                 | end_of() => match b | end_of() => true | link(_, _) => false end
-                | link(x, xs) => match b | end_of() => false | link(y, ys) => x == y && xs == ys end
+                | link(x, xs) => match b | end_of() => false | link(y, ys) => x == y && Same/same(xs, ys) end
                 end,
-            neq(a, b) = Bool/not(a == b),
+            apart(a, b) = Bool/not(Same/same(a, b)),
         }
         let one = Chain/link(1, Chain/link(2, Chain/end_of()));
         let other = Chain/link(1, Chain/link(3, Chain/end_of()));
-        /std/print(Bool/to_str(one != other))
+        /std/print(Bool/to_str(Same/apart(one, other)))
         "#;
 
     assert_eq!(run(source), b"true");
     let elaborated = core_elab(source);
     assert!(
-        declaration(&elaborated, "/witness~/std/ops/Eql(/Chain)").contains("node = Rec"),
+        declaration(&elaborated, "/witness~/Same(/Chain)").contains("node = Rec"),
         "expected the witness as a group of one:\n{elaborated}"
     );
 }

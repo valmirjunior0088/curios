@@ -337,7 +337,6 @@ pub let of_right(s: Str, t: Str, at: At(t)) -> At(Str/concat(s, t)) =
 --- Two positions are equal when their offsets are.
 satisfy (@s: Str) => Eql(At(s)) {
     eql(a, b) = a.offset == b.offset,
-    neq(a, b) = a.offset != b.offset,
 }
 
 --- Positions are ordered by their offsets, so a guard between two decides the bound [`Str/between`] takes.

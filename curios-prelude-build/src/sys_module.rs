@@ -160,10 +160,6 @@ fn nat_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
             &["Whether the two are equal."],
             binary("eql", syntax, Intrinsic::NatEql),
         ),
-        documented(
-            &["Whether the two differ."],
-            binary("neq", syntax, Intrinsic::NatNeq),
-        ),
         documented(&["Their sum."], binary("add", syntax, Intrinsic::NatAdd)),
         documented(
             &[
@@ -307,10 +303,6 @@ fn int_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
         documented(
             &["Whether the two are equal."],
             binary("eql", syntax, Intrinsic::IntEql),
-        ),
-        documented(
-            &["Whether the two differ."],
-            binary("neq", syntax, Intrinsic::IntNeq),
         ),
         documented(&["Their sum."], binary("add", syntax, Intrinsic::IntAdd)),
         documented(

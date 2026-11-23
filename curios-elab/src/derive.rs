@@ -10,7 +10,7 @@
 //!
 //! **The `Spell` body.** One match arm per constructor in declaration order, its goal a hole as a written match's is, and per arm a single renderer application over structured pieces: `Spell/call("Tree/node", [spell(l), …])` for a constructor, `Spell/record("Point", [("x", spell(x)), …])` for a struct, whose fields are projected. A value therefore spells as its type's name and constructor tag applied to its payloads, a hidden one under its mark (`Spell/hidden`), so the text re-parses wherever the type's name is visible unqualified; a struct spells labeled, or positionally where its field has no label; a proof payload spells as the written goal `"?"`.
 //!
-//! **The `Eql` body.** `eql` matches its two arguments in turn: an arm per constructor on the first, and inside it a one-arm match on the second at the same constructor — its payloads compared pairwise through `Eql/eql` under `&&`, `true` when there is nothing to compare — with a `| _ => false` default for every other constructor. A struct compares its projections the same way, with no match. Proofs do not take part. `neq` negates the same comparison, built a second time over binders of its own.
+//! **The `Eql` body.** `eql` matches its two arguments in turn: an arm per constructor on the first, and inside it a one-arm match on the second at the same constructor — its payloads compared pairwise through `Eql/eql` under `&&`, `true` when there is nothing to compare — with a `| _ => false` default for every other constructor. A struct compares its projections the same way, with no match. Proofs do not take part.
 //!
 //! **The `Ord` body.** The constructors decide before the payloads do, which that shape cannot express: its inner default is one *constant* for every mismatched tag, and a mismatched pair orders by which constructor is which. So `ord` matches each argument once for its constructor's declaration position and hands both ordinals, with the lockstep comparison, to `/std/Ord`'s `by_tag` — which answers the tag order unless they agree and the comparison otherwise. The lockstep half is then `compare`'s shape exactly, `Ordering/eq` filling a default the tag decision has already made unreachable, and the payload answers fold through `lexicographic` first-difference-wins. A proof contributes no piece, which under that fold is answering `eq`. Linear in the constructor count; an arm per pair would be quadratic. The concept's superclass slot is left unfilled, so the key's `Eql` witness is resolved as it would be for a written literal that omitted it.
 
@@ -708,38 +708,24 @@ fn hash_body(
     Ok(site.at(dictionary(site, [method])))
 }
 
-/// The `Eql` witness record: `eql` over the derived comparison, `neq` over its negation.
+/// The `Eql` witness record: `eql` over the derived comparison.
 fn eql_body(
     context: &mut Context,
     site: &Site<'_>,
     subject: &Subject,
     row: EqlDerivation,
 ) -> Result<Term, Error> {
-    let method = |context: &mut Context, negated: bool| -> Result<Term, Error> {
-        let left = context.fresh(None);
-        let right = context.fresh(None);
-        let compared = compare(context, site, subject, row.eql, &left, &right)?;
-        let body = match negated {
-            false => compared,
-            true => site.at(Term::bool_match(
-                compared,
-                goal(context),
-                Term::intrinsic(Intrinsic::Bool(true)),
-                Term::intrinsic(Intrinsic::Bool(false)),
-            )),
-        };
-        Ok(Term::func(
-            [
-                (left, Term::hole(context.mint_metavar())),
-                (right, Term::hole(context.mint_metavar())),
-            ],
-            body,
-        ))
-    };
-
-    let eql = method(context, false)?;
-    let neq = method(context, true)?;
-    Ok(site.at(dictionary(site, [eql, neq])))
+    let left = context.fresh(None);
+    let right = context.fresh(None);
+    let compared = compare(context, site, subject, row.eql, &left, &right)?;
+    let eql = Term::func(
+        [
+            (left, Term::hole(context.mint_metavar())),
+            (right, Term::hole(context.mint_metavar())),
+        ],
+        compared,
+    );
+    Ok(site.at(dictionary(site, [eql])))
 }
 
 /// Whether `left` and `right` are equal, as a `Bool`-valued term over the two binders.

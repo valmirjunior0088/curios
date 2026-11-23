@@ -1,8 +1,8 @@
 mod tests;
 
 pub use /sys/{let Nat};
-pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, gt, ge, and, or, xor, shr, to_int,
-    to_flt, to_byte};
+pub use /sys/Nat/{succ, eql, add, sub, mul, div, rem, gt, ge, and, or, xor, shr, to_int, to_flt,
+    to_byte};
 
 -- Proved by recursion on the numbers rather than on evidence: one more on each side of a decided comparison cancels, so the hypothesis about `a + 1` and `b + 1` already is the one about `a` and `b`.
 --- The laws of `a < b`, and its crossings with `a <= b`.
@@ -86,7 +86,6 @@ pub let NonZero(n: Nat) -> Prop =
 
 satisfy Eql(Nat) {
     eql = eql,
-    neq = neq,
 }
 
 satisfy Cmp(Nat) {

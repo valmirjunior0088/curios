@@ -1,4 +1,4 @@
-use /std/{Show, Spell, Fmt, Ord, Ordering, Str, Bool, List};
+use /std/{Show, Spell, Fmt, Ord, Ordering, Str, List};
 use /std/ops/{Eql};
 
 let parens(parts: List(Str)) -> Str =
@@ -273,22 +273,18 @@ satisfy (
 
 satisfy Eql({}) {
     eql((), ()) = true,
-    neq((), ()) = false,
 }
 
 satisfy (@A: Type, use Eql(A)) => Eql({A}) {
     eql(a, b) = a.0 == b.0,
-    neq(a, b) = Bool/not(a == b),
 }
 
 satisfy (@A: Type, @B: Type, use Eql(A), use Eql(B)) => Eql({A, B}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1,
-    neq(a, b) = Bool/not(a == b),
 }
 
 satisfy (@A: Type, @B: Type, @C: Type, use Eql(A), use Eql(B), use Eql(C)) => Eql({A, B, C}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2,
-    neq(a, b) = Bool/not(a == b),
 }
 
 satisfy (
@@ -302,7 +298,6 @@ satisfy (
     use Eql(D),
 ) => Eql({A, B, C, D}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3,
-    neq(a, b) = Bool/not(a == b),
 }
 
 satisfy (
@@ -318,7 +313,6 @@ satisfy (
     use Eql(E),
 ) => Eql({A, B, C, D, E}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4,
-    neq(a, b) = Bool/not(a == b),
 }
 
 satisfy (
@@ -336,7 +330,6 @@ satisfy (
     use Eql(F),
 ) => Eql({A, B, C, D, E, F}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5,
-    neq(a, b) = Bool/not(a == b),
 }
 
 satisfy (
@@ -358,7 +351,6 @@ satisfy (
     eql(a, b) =
         a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5
             && a.6 == b.6,
-    neq(a, b) = Bool/not(a == b),
 }
 
 satisfy (
@@ -383,7 +375,6 @@ satisfy (
         a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5
             && a.6 == b.6
             && a.7 == b.7,
-    neq(a, b) = Bool/not(a == b),
 }
 
 satisfy Ord({}) {

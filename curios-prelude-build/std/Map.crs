@@ -208,7 +208,6 @@ let same_entries(
 --- Entry by entry.
 satisfy (@K: Type, use Key(K), @V: Type, use Eql(V)) => Eql(Map(K, V)) {
     eql(a, b) = same_entries(to_list(a), to_list(b)),
-    neq(a, b) = Bool/not(same_entries(to_list(a), to_list(b))),
 }
 
 satisfy (@K: Type, use Key(K), @V: Type, use Show(K), use Show(V)) => Show(Map(K, V)) {

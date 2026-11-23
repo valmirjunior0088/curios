@@ -45,7 +45,6 @@ fn a_derived_body_reaching_a_proof_is_held_to_termination_as_its_written_body_is
                 | leaf(x) => match b | leaf(y) => x == y | _ => false end
                 | node(l, r) => match b | node(m, s) => Eql/eql(l, m) && Eql/eql(r, s) | _ => false end
                 end,
-            neq(a, b) = Bool/not(Eql/eql(a, b)),
         }
         let _apart(h: Holds(Tree/leaf(1) == Tree/leaf(2))) -> False = h;
         /std/print("")

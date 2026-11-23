@@ -1,15 +1,11 @@
 use /std/{Bool};
 
---- Equality as a decision, which `==` and `!=` dispatch through.
----
---- A witness supplies both methods, since `!=` is not the negation of `eql`.
+--- Equality as a decision, which `==` dispatches through, and `!=` as its negation.
 ---
 --- Distinct from `Eq`, which is the proposition that two values are the same: a witness here answers, and owes no proof that its answer agrees.
 pub concept Eql(A: Type): pub Type {
     --- Whether the two are equal.
     eql(A, A) -> Bool,
-    --- Whether the two differ, supplied in its own right rather than read off `eql`.
-    neq(A, A) -> Bool,
 }
 
 --- The four ordered comparisons, which `<`, `<=`, `>` and `>=` dispatch through, each answering a `Bool`.

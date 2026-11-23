@@ -203,7 +203,6 @@ pub struct OperatorSyntax {
     pub div: ConceptField,
     pub rem: ConceptField,
     pub eql: ConceptField,
-    pub neq: ConceptField,
     pub lt: ConceptField,
     pub gt: ConceptField,
     pub le: ConceptField,
@@ -213,30 +212,33 @@ pub struct OperatorSyntax {
 }
 
 impl OperatorSyntax {
-    /// The concept and method `op` dispatches through. `Neq` has its own slot rather than sharing `Eql`'s: it projects `neq`, so a carrier with a native disequality instruction names it instead of paying for an equality and a negation.
-    pub const fn concept_field(self, op: InfixOp) -> ConceptField {
-        match op {
-            InfixOp::Add => self.add,
-            InfixOp::Sub => self.sub,
-            InfixOp::Mul => self.mul,
-            InfixOp::Div => self.div,
-            InfixOp::Rem => self.rem,
-            InfixOp::Eql => self.eql,
-            InfixOp::Neq => self.neq,
-            InfixOp::Lt => self.lt,
-            InfixOp::Gt => self.gt,
-            InfixOp::Le => self.le,
-            InfixOp::Ge => self.ge,
-            InfixOp::And => self.and,
-            InfixOp::Or => self.or,
-        }
+    /// The method `op` dispatches through, and how it reads it: `!=` is the negation of `Eql`'s `eql`, so a witness states equality once and `a != b` cannot disagree with `a == b`.
+    pub const fn method(self, op: InfixOp) -> OperatorMethod {
+        let (method, form) = match op {
+            InfixOp::Add => (self.add, MethodForm::Direct),
+            InfixOp::Sub => (self.sub, MethodForm::Direct),
+            InfixOp::Mul => (self.mul, MethodForm::Direct),
+            InfixOp::Div => (self.div, MethodForm::Direct),
+            InfixOp::Rem => (self.rem, MethodForm::Direct),
+            InfixOp::Eql => (self.eql, MethodForm::Direct),
+            InfixOp::Neq => (self.eql, MethodForm::Negated),
+            InfixOp::Lt => (self.lt, MethodForm::Direct),
+            InfixOp::Gt => (self.gt, MethodForm::Direct),
+            InfixOp::Le => (self.le, MethodForm::Direct),
+            InfixOp::Ge => (self.ge, MethodForm::Direct),
+            InfixOp::And => (self.and, MethodForm::Direct),
+            InfixOp::Or => (self.or, MethodForm::Direct),
+        };
+        OperatorMethod { method, form }
     }
 
-    /// The operator dispatching through `concept`'s `field` — [`OperatorSyntax::concept_field`]'s reverse, for folding an elaborated projection back to operator syntax in a report. Exact rather than lossy: `Neq` has its own slot, so `!=` folds back to `!=` instead of to an equality the reader would have to un-negate.
+    /// The operator that reads `concept`'s `field` as it stands, for folding an elaborated projection back to operator syntax in a report: [`OperatorSyntax::method`]'s reverse at [`MethodForm::Direct`], since a form that negates is folded from the negation around the projection.
     pub fn operator_for(self, concept: &Qualifier, field: &str) -> Option<InfixOp> {
         InfixOp::ALL.into_iter().find(|op| {
-            let target = self.concept_field(*op);
-            target.concept.qualifier() == *concept && target.field == field
+            let OperatorMethod { method, form } = self.method(*op);
+            form == MethodForm::Direct
+                && method.concept.qualifier() == *concept
+                && method.field == field
         })
     }
 
@@ -252,7 +254,6 @@ impl OperatorSyntax {
             div,
             rem,
             eql,
-            neq,
             lt,
             gt,
             le,
@@ -261,8 +262,24 @@ impl OperatorSyntax {
             or,
         } = self;
 
-        [add, sub, mul, div, rem, eql, neq, lt, gt, le, ge, and, or].into_iter()
+        [add, sub, mul, div, rem, eql, lt, gt, le, ge, and, or].into_iter()
     }
+}
+
+/// What an operator calls: the method it projects and how it reads its answer.
+#[derive(Debug, Clone, Copy)]
+pub struct OperatorMethod {
+    pub method: ConceptField,
+    pub form: MethodForm,
+}
+
+/// How an operator reads the method it dispatches through.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MethodForm {
+    /// The method's answer over the operands as written: `a + b` is `add(a, b)`.
+    Direct,
+    /// The method's `Bool` answer negated: `a != b` is `eql(a, b)` negated.
+    Negated,
 }
 
 /// The name a character literal builds: `/std/Char`, whose decided `Valid` field the literal closes with [`ProofSyntax::true_qed`].

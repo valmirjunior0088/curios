@@ -51,7 +51,6 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         div: field(&["std", "Divide"], "div"),
         rem: field(&["std", "Remainder"], "rem"),
         eql: field(&["std", "Equal", "Equal"], "eql"),
-        neq: field(&["std", "Equal", "Equal"], "neq"),
         lt: field(&["std", "Compare"], "lt"),
         gt: field(&["std", "Compare"], "gt"),
         le: field(&["std", "Compare"], "le"),

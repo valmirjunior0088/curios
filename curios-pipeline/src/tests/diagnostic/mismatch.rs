@@ -348,7 +348,7 @@ fn a_term_that_is_no_type_where_one_is_wanted_is_located_at_itself() {
 
 #[test]
 fn goal_types_spell_negated_equality_as_neq() {
-    // `a != b` elaborates as a projection of `Eql`'s `neq` off the operand type's witness; the report folds it back to `!=`.
+    // `a != b` elaborates to the negation of `Eql`'s `eql`, projected off the operand type's witness; the report folds the negation back to `!=`.
     let source = r#"
         use /std/{Nat, Bool, Eq};
         let claim : Eq()(1 != 2, true) = ?;

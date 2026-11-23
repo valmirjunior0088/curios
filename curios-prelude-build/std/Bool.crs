@@ -50,7 +50,6 @@ pub let holds(b: Bool) -> Option(Holds(b)) =
 
 satisfy Eql(Bool) {
     eql = eql,
-    neq = xor,
 }
 
 satisfy Or(Bool) {

@@ -55,7 +55,6 @@ pub let difference(@K: Type, use Map/Key(K), a: Set(K), b: Set(K)) -> Set(K) =
 
 satisfy (@K: Type, use Map/Key(K), use Eql(K)) => Eql(Set(K)) {
     eql(a, b) = to_list(a) == to_list(b),
-    neq(a, b) = to_list(a) != to_list(b),
 }
 
 satisfy (@K: Type, use Map/Key(K), use Show(K)) => Show(Set(K)) {

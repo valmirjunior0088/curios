@@ -190,6 +190,12 @@ fn each_refusal_kind_reads_as_its_reader_wrote_at_its_place() {
             "undischarged bound\n│  the bound of the `/` operator was not discharged\n│  nothing discharged `/std/ops/Div/Ok(people)`\n│  it fails at `people = 0`\n│  an operator takes no written arguments\n│  guard the operation with `people != 0`\n│  or call `/std/ops/Div/div(@T, a, b, @proof)`\n",
             "│  2 │ let share(total: Nat, people: Nat) -> Nat = total / people;\n│    │                                             ^^^^^^^^^^^^^^",
         ),
+        // Undischarged bound over a disequality, written back as the `!=` that elaborates to its negation.
+        (
+            "use /std/{Nat};\nuse /std/Bool/{Holds};\nlet needs(b: Nat, @_: Holds(b != 0)) -> Nat = b;\nlet call(b: Nat) -> Nat = needs(b);\n/std/print(\"\")\n",
+            "undischarged bound\n│  the bound of `needs` was not discharged\n│  nothing discharged `Holds(b != 0)`\n│  it fails at `b = 0`\n│  guard the call with `b != 0`\n│  or supply it explicitly, `needs(@...)`\n",
+            "│  4 │ let call(b: Nat) -> Nat = needs(b);\n│    │                           ^^^^^^^^",
+        ),
         // Undischarged bound over a product, which the search reads as an unknown of its own.
         (
             "use /std/{Nat};\nuse /std/Bool/{Holds};\nlet small(x: Nat, y: Nat, @_: Holds(x * y <= 10)) -> Nat = x;\nlet call(x: Nat, y: Nat) -> Nat = small(x, y);\n/std/print(\"\")\n",

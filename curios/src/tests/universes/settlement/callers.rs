@@ -230,7 +230,7 @@ fn a_declarations_levels_do_not_follow_where_its_witnesses_are_written() {
     );
     let through_a_premise = (
         "let same(@A: Type, b: Box(A)) -> Test({}) = Test/equal(b, b);",
-        r#"satisfy (@A: Type) => Eql(Box(A)) { eql(_, _) = true, neq(_, _) = false, }
+        r#"satisfy (@A: Type) => Eql(Box(A)) { eql(_, _) = true, }
            satisfy (@A: Type) => Spell(Box(A)) { spell(_) = "box", }"#,
         "let big: Test({}) = same(Box { value = Nat });",
         "/same",

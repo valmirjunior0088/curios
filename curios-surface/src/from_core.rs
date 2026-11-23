@@ -202,6 +202,33 @@ pub fn numeral_pattern<D: Dialect>(value: curios_core::Numeral) -> MatchPattern<
     })
 }
 
+/// `xor(a == b, true)` as the `a != b` a reader writes: `!=` elaborates to the negation of `==`, so where the negated operand is an equality, written by the operator or reduced to the comparison it dispatches to, `!=` is what elaborates to this term again. `None` for any other negation, which is the call it is.
+fn written_disequality(intrinsic: &curios_core::Intrinsic, frame: Frame) -> Option<Term> {
+    let curios_core::Intrinsic::BoolXor(compared, negation) = intrinsic else {
+        return None;
+    };
+    if negation.as_bool() != Some(true) {
+        return None;
+    }
+    let (left, right) = match &**compared {
+        curios_core::Subterm::Transient(curios_core::Transient::Infix(curios_core::Infix {
+            op: InfixOp::Eql,
+            left,
+            right,
+        })) => (left.clone(), right.clone()),
+        curios_core::Subterm::Intrinsic(equality) => {
+            match intrinsic_form(equality.clone(), frame.spelling.keeps_grouping(), |proof| {
+                states(frame.spelling, proof)
+            }) {
+                IntrinsicForm::Infix(InfixOp::Eql, left, right) => (left, right),
+                _ => return None,
+            }
+        }
+        _ => return None,
+    };
+    Some(infix(InfixOp::Neq, sub(left, frame)?, sub(right, frame)?))
+}
+
 fn apply<D: Dialect>(head: Term<D>, arguments: Vec<Argument<D>>) -> Term<D> {
     Subterm::Apply(Apply { head, arguments }).into()
 }
@@ -238,6 +265,9 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
             frame,
         )?,
         curios_core::Subterm::Intrinsic(intrinsic) => {
+            if let Some(written) = written_disequality(&intrinsic, frame) {
+                return Some(written);
+            }
             let form = intrinsic_form(intrinsic, frame.spelling.keeps_grouping(), |proof| {
                 states(frame.spelling, proof)
             });

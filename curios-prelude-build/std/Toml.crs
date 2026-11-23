@@ -83,7 +83,6 @@ let same(a: Toml, b: Toml) -> Bool =
 
 satisfy Eql(Toml) {
     eql = same,
-    neq = (a, b) => Bool/not(same(a, b)),
 }
 
 satisfy Spell(Toml) {

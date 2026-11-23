@@ -3,6 +3,7 @@
 use {
     crate::tests::{rules::test_support::*, test_support::*},
     curios_analysis::Erased,
+    curios_common::fill,
 };
 
 // The arithmetic decrease is licensed by the *arm*, not by the operator. `n - 1` is smaller than `n` only where `n` is known nonzero — `Nat` subtraction saturates, so `0 - 1` is `0` and the "decrease" is a fixed point — and the arm a `Nat` match falls to past its literals establishes nonzero exactly when `0` is one of them: the successor's arm where `0` is the only literal, a dispatch's default otherwise. This fixture omits `0`, so nothing rules it out and the call may not be graded as descending.
@@ -131,6 +132,42 @@ fn a_boolean_guard_that_does_not_exclude_zero_licenses_no_decrease() {
             }
         )
     });
+}
+
+/// A recursion whose arm is guarded by `${guard}`, a negated comparison.
+const A_DESCENT_UNDER_A_NEGATED_GUARD: &str = r#"
+    use /std/{Nat, Bool};
+
+    let Down(n : Nat) -> Type =
+        match ${guard}
+        | true => Down(n - 1)
+        | false => {}
+        end;
+
+    let held : Down(2) = ();
+
+    /std/print("ok")
+    "#;
+
+// A negated comparison licenses what the comparison it negates licenses in its other arm. `n != 0` elaborates to the negation of `n == 0`, `xor(n == 0, true)`, which is what `Bool/not(n == 0)` unfolds to as well, and the reader reads it as that comparison under its negated relation, as conversion reads a negated comparison as its dual. Each refusal negates `n == 1`, which admits zero, so `n - 1` is a fixed point there. Mutation-checked: with the reader reading no negation, both controls are refused.
+#[test]
+fn a_negated_comparison_licenses_the_decrease_its_dual_does() {
+    for (guard, refused) in [
+        ("n != 0", "n != 1"),
+        ("Bool/not(n == 0)", "Bool/not(n == 1)"),
+    ] {
+        control(&fill!(A_DESCENT_UNDER_A_NEGATED_GUARD, guard), b"ok")
+            .refused(&[(guard, refused)])
+            .by_elaborator_in("/Down", |error| {
+                matches!(
+                    error,
+                    curios_elab::Error::PartialInErasedPosition {
+                        erased: Erased::Type,
+                        ..
+                    }
+                )
+            });
+    }
 }
 
 // The nonzero fact is only half of what licenses an arithmetic decrease; the other half is that the *right* operand must be a literal, and it must be at or above the smallest value that makes the operation strictly decreasing — `2` for division, because `n / 1` is `n`, and `1` for subtraction, because `n - 0` is `n`. Read the wrong way each is a fixed point graded as a descent, at which point the cost is the one `a_dispatch_that_does_not_enumerate_zero_licenses_no_decrease` spells out in full: a non-terminating type, type formation resting on a family that never forms, and type totality satisfied by a false premise.
