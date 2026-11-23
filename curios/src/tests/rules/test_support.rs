@@ -18,6 +18,8 @@ pub struct Refusals {
     certifier: Vec<Refusal>,
     /// Whether the certifier judged the program, which it does wherever the elaborator built it a module, its erasure obligations reported and not raised.
     judged: bool,
+    /// What the elaborator's refusal prints, where it refused the program before the certifier judged it.
+    reported: Option<String>,
 }
 
 /// A rule's sound neighbour: a program the rule admits, run as the program it is and checked by what it prints where it is made. A refusal of the rule is derived from it by the one thing the refusal turns on ([`Control::refused`]), so a rule that came to refuse everything of a shape fails at its control, which a refusal alone would pass: the soundness board's decision places each refusal beside its control.
@@ -62,11 +64,13 @@ fn refused(source: &str) -> Refusals {
         EntryTail::Program,
     ) {
         Err(Refused {
-            error: Some(error), ..
+            error: Some(error),
+            reported,
         }) => Refusals {
             elaborator: vec![*error],
             certifier: Vec::new(),
             judged: false,
+            reported: Some(reported.to_string()),
         },
         Err(Refused {
             error: None,
@@ -85,6 +89,7 @@ fn refused(source: &str) -> Refusals {
                 .map(|refuted| refuted.verdict)
                 .collect(),
             judged: true,
+            reported: None,
         },
     };
     assert!(
@@ -197,6 +202,21 @@ impl Refusals {
                 .iter()
                 .any(|verdict| place(verdict.name.as_ref()) == at && pattern(&verdict.error)),
             "not refused so by the certifier in `{at}`:\n{self}"
+        );
+
+        self
+    }
+
+    /// The elaborator's refusal of the program says `said` where it prints.
+    pub fn saying(&self, said: &str) -> &Self {
+        assert!(
+            self.reported
+                .as_deref()
+                .is_some_and(|reported| reported.contains(said)),
+            "the elaborator's refusal does not say `{said}`:\n{}",
+            self.reported
+                .as_deref()
+                .unwrap_or("(the certifier judged the program)")
         );
 
         self

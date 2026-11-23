@@ -195,7 +195,20 @@ impl Error {
                     .map(|error| error.shown(context))
                     .collect(),
             ),
-            error => error,
+            // A refusal is made ready once, so a type it states that stands on a definition kept folded is named here whatever refused it.
+            error => {
+                let reporting = Reporting(context);
+                let folded = stated_types(&error)
+                    .into_iter()
+                    .find_map(|stated| kept_folded(&reporting, stated));
+                match folded {
+                    Some(folded) => Self::KeptFolded {
+                        folded,
+                        error: Box::new(error),
+                    },
+                    None => error,
+                }
+            }
         }
     }
 }
@@ -285,8 +298,33 @@ fn display_mismatch(
         return report;
     }
 
-    let folded = kept_folded(reporting, &this).or_else(|| kept_folded(reporting, &that));
-    Error::type_mismatch(this, that).folded(folded)
+    Error::type_mismatch(this, that)
+}
+
+/// The types `error` states and expected to reduce to a shape they did not: a mismatch's two sides where they are types, the type a call's head, a projection, a match's scrutinee or a literal was read at, a struct's, and the type a lambda or a tuple was checked against.
+fn stated_types(error: &Error) -> Vec<&Term> {
+    match error {
+        Error::TypeMismatch {
+            inferred,
+            expected,
+            terms: false,
+            ..
+        } => vec![inferred, expected],
+        Error::NotAFunction { head_type, reduced } => vec![head_type, reduced],
+        Error::NotATuple { head_type, .. }
+        | Error::NotNatType { head_type }
+        | Error::NotIntType { head_type }
+        | Error::NotByteType { head_type }
+        | Error::NotBoolType { head_type }
+        | Error::NotListType { head_type }
+        | Error::NotBytesType { head_type, .. }
+        | Error::NotAInductType { head_type, .. } => vec![head_type],
+        Error::NotAFunctionType { expected, .. } | Error::NotATupleType { expected, .. } => {
+            vec![expected]
+        }
+        Error::NotAStructType { found } => vec![found],
+        _ => Vec::new(),
+    }
 }
 
 /// The definition kept folded that `side` stands on: the first it names whose record files it `Unfounded`, which no checker unfolds, and short of one the first that the first definition not known to terminate it names reaches, through the bodies of the definitions not known to terminate, each read once. Shown as a mismatch's side is, normalized, a name its unfolding stalled at stands as written, so such a name is one the side stands on, and the reason a reader looking for what the side reduces to is told. A definition that is partial only for calling a host row that diverges reaches none, and is no reason.

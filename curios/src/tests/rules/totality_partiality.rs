@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*, crate::tests::test_support::*, curios_analysis::Erased,
-    curios_common::fill, curios_core::Quality, curios_elab::Folded,
+    curios_common::fill, curios_core::Quality,
 };
 
 // The route no analysis of *value*-level partiality can see. The exploit has no value-level `rec`, no `exit`, and no negative occurrence in any declaration: a lambda, a constructor application, and one application. The knot is tied entirely by `rec Bad : Type`, which `check_positivity` never looks at, because a `rec` is neither an `induct` nor a `struct`. The control's alias is `Sink({})`, which ties nothing, and `delta` refutes a unit with it.
@@ -147,7 +147,8 @@ fn a_total_type_function_applied_to_a_partial_value_ties_no_knot() {
     ])
     .by_elaborator_in("/delta", |error| {
         matches!(error, curios_elab::Error::NotAInductType { .. })
-    });
+    })
+    .saying("`inf` is kept folded");
 }
 
 // The entrypoint's trailing expression is not a top-level item — lowering leaves it in `Module::body`. An obligation seeded only from `items` sees nothing here. The only items below are `Sink` and `consume`, and neither is partial; the offending `rec` lives entirely inside the final term. The control's local alias is `Sink({})`, which ties nothing.
@@ -267,14 +268,9 @@ fn a_non_productive_type_level_loop_stays_folded_not_exhausted() {
     )
     .refused(&[("here(x : Shape(F/stop()))", "here(x : Shape(inf))")])
     .by_elaborator_in("entry", |error| {
-        matches!(
-            error,
-            curios_elab::Error::TypeMismatch {
-                folded: Some(Folded { definition: folded, through: None }),
-                ..
-            } if *folded == global("/inf")
-        )
-    });
+        matches!(error, curios_elab::Error::TypeMismatch { .. })
+    })
+    .saying("`inf` is kept folded");
 }
 
 // A struct *field* is a written type position elaboration forces, and a type-level loop written there is no fault, the two fixtures below being its two halves. A productive field forms a structure nothing builds a value of, and the program runs, `Shape(inf)` with `inf` withheld being a stuck application; it runs with `inf` unfolding too, so the fold is not what this half rests on.
@@ -336,14 +332,9 @@ fn a_non_productive_type_level_loop_in_a_struct_field_stays_folded_too() {
     )
     .refused(&[("{ x : Shape(F/more(F/stop())) }", "{ x : Shape(inf) }")])
     .by_elaborator_in("/take", |error| {
-        matches!(
-            error,
-            curios_elab::Error::TypeMismatch {
-                folded: Some(Folded { definition: folded, through: None }),
-                ..
-            } if *folded == global("/inf")
-        )
-    });
+        matches!(error, curios_elab::Error::TypeMismatch { .. })
+    })
+    .saying("`inf` is kept folded");
 }
 
 // A prelude shape the design is keyed to, exercised through the replay path rather than the prelude build: `Fmt/print`'s result type is `format_type_with(parse(s))`, a type-level `rec` over a parsed format. The other, recursion that descends on *either* of two lists depending on the arm — a shape only match refinement can see — is `/std/List/sort_by`'s `merge`, which the prelude's own build exercises.
@@ -360,7 +351,7 @@ fn the_prelude_shapes_a_user_program_leans_on_still_elaborate() {
 // The payload-child rule at a type-level recursion: `Bad` recurses on `g(0)`, an application of the constructor payload `g`, which the size order reads as a child of the `c(g)` it was projected from — so `Bad` is graded total. Its soundness rests on the fold: the only way `g(0)` can re-produce a `c(...)` that keeps `Bad` unfolding is for `g` to feed itself, which makes `g` a recursion that does not descend, and `loop` is exactly such a `g`, withheld from both checkers. So `Bad(F/c(loop))` unfolds once to `Bad(loop(0))` and stands, and `()` is no value of it. `F` has a base case so that a total function can stand where `loop` does, which is the control.
 #[test]
 fn a_payload_application_that_reaches_a_partial_function_stays_folded() {
-    control(
+    let held = control(
         r#"
         use /std/{Nat};
 
@@ -382,11 +373,17 @@ fn a_payload_application_that_reaches_a_partial_function_stays_folded() {
         /std/print("ok")
         "#,
         b"ok",
-    )
-    .refused(&[("Bad(F/c((n) => F/z()))", "Bad(F/c(loop))")])
-    .by_elaborator_in("/held", |error| {
-        matches!(error, curios_elab::Error::NotATupleType { .. })
-    });
+    );
+    held.refused(&[("Bad(F/c((n) => F/z()))", "Bad(F/c(loop))")])
+        .by_elaborator_in("/held", |error| {
+            matches!(error, curios_elab::Error::NotATupleType { .. })
+        })
+        .saying("`loop` is kept folded");
+    held.refused(&[("Bad(F/c((n) => F/z())) = ()", "Bad(F/c(loop)) = (n) => n")])
+        .by_elaborator_in("/held", |error| {
+            matches!(error, curios_elab::Error::NotAFunctionType { .. })
+        })
+        .saying("`loop` is kept folded");
 }
 
 // The proof-side mirror of `a_payload_application_that_reaches_a_partial_function_is_a_partial_type`: here the payload-child rule grades a *proof*-returning group total, and proof totality — not the grading — is what keeps it from proving `False`. `drop` recurses on `f(0)`, an application of the constructor payload `f`, which the size order reads as a child of the `node(f)` it was projected from, so `drop` descends and is accepted at `(Fam) -> False`. That acceptance is sound only because every total `Fam` is a finite tree: the one inhabitant that would make `drop` loop is an infinite one, which no total definition builds. `grow` is that inhabitant, and it is non-descending — its self-call sits under a payload lambda, graded `Unknown` — so the proof `drop(grow(0))` is a proof position reaching `grow`, and proof totality refuses it there. A grading that refused `drop` would be rejecting the well-founded recursion `a_call_through_a_constructor_payload_descends` turns on; the obligation, not the grade, carries this. The control declares the same three and applies none.
@@ -444,17 +441,9 @@ fn a_partial_prelude_definition_stays_folded_in_a_user_unit() {
     )
     .refused(&[("Option/to_result(Option/some(s), 0)", "Json/decode(s)")])
     .by_elaborator_in("entry", |error| {
-        matches!(
-            error,
-            curios_elab::Error::TypeMismatch {
-                folded: Some(Folded {
-                    definition,
-                    through: Some(through),
-                }),
-                ..
-            } if *definition == global("/std/Json/decode/value") && *through == global("/Bad")
-        )
-    });
+        matches!(error, curios_elab::Error::TypeMismatch { .. })
+    })
+    .saying("`Bad` reaches `/std/Json/decode/value`, which is kept folded");
 }
 
 // The positions a program writes a proof or a type at, each reaching a definition not known to terminate: a `let` at a proposition, a structure's field, a case's payload, an implicit argument, a witness's method and the type a definition states. `curios_cert`'s `recheck::proposition_tests` puts the same positions to the certifier under this name, with the ones only Core text writes. The control states each position at `True` through `Claim`, its definitions answering at once.
@@ -517,15 +506,11 @@ fn a_proof_or_type_that_may_not_terminate_is_refused_wherever_it_stands() {
         });
     }
     // A signature naming a loop it never applies forms, `decide` withheld, and the call that hands it `qed` is refused, `Holds(decide(()))` standing as written.
-    refusals.by_elaborator_in("entry", |error| {
-        matches!(
-            error,
-            curios_elab::Error::TypeMismatch {
-                folded: Some(Folded { definition: folded, through: None }),
-                ..
-            } if *folded == global("/decide")
-        )
-    });
+    refusals
+        .by_elaborator_in("entry", |error| {
+            matches!(error, curios_elab::Error::TypeMismatch { .. })
+        })
+        .saying("`decide` is kept folded");
     // A member named in its group's tail, or a binding whose value holds a group named in the binding's tail, stands there by its label, which is read as what it stands for, so the position holds the group.
     for (at, erased) in [
         ("/in_a_groups_tail", Erased::Proof),
@@ -642,14 +627,9 @@ fn a_family_whose_index_type_names_a_loop_stays_folded() {
     )
     .refused(&[("Eq()(fine(0), 0)", "Eq()(spin(0), 0)")])
     .by_elaborator_in("/F", |error| {
-        matches!(
-            error,
-            curios_elab::Error::TypeMismatch {
-                folded: Some(Folded { definition: folded, through: None }),
-                ..
-            } if *folded == global("/spin")
-        )
-    });
+        matches!(error, curios_elab::Error::TypeMismatch { .. })
+    })
+    .saying("`spin` is kept folded");
 }
 
 // A proof standing as a match's scrutinee and naming a loop is refused by proof totality, by the loop's name, in both checkers: `spin` is `Unfounded`, so it is defined with no value, and the index unification the match asks of `Eq()(spin(0), spin(0))` reads `spin(0)` as it stands. Mutation-checked: with `spin` defined by its value, the elaborator unfolds `spin(0)` until the budget is spent and refuses the program for that. The control's lemma stands at a value that terminates.

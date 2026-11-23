@@ -8,8 +8,8 @@ mod tests;
 use {
     super::{
         BinderSite, Callee, CycleMember, DeadArm, Declined, ErasedSite, Error, FieldReading,
-        Folded, GoalReport, Need, PatternShape, RecordKeyword, ShapeDiagnosis, Underivable,
-        Watched, WrittenLiteral,
+        GoalReport, Need, PatternShape, RecordKeyword, ShapeDiagnosis, Underivable, Watched,
+        WrittenLiteral,
     },
     crate::{Answer, Conclusion, Origin, Refusal, ordinal, premise_label},
     curios_analysis::{DeclaredPart, Erased, MemberLabel},
@@ -718,7 +718,6 @@ impl Displayed<'_> {
                 expected,
                 declined,
                 terms,
-                folded,
             } => {
                 // Reports erase universe instances and splice nested concatenations, which reads better everywhere except here: when the instances or the grouping *are* the disagreement, both sides render as one string and the message states nothing. Detected on the rendering rather than on the terms, so it covers every axis that could collapse two sides into one spelling and not merely the ones that are known to. Grouping is tried first because it changes nothing where no nesting is present, whereas two polymorphic instances always differ once their levels are shown, so trying the universes first would answer with two metavariable ids where the nesting was the difference.
                 let plain = (
@@ -755,24 +754,6 @@ impl Displayed<'_> {
                 f.text(tag);
                 f.stating(format_args!("{side}: {}", Code(&shown_inferred)));
                 f.stating(format_args!("expected: {}", Code(&shown_expected)));
-                match folded {
-                    Some(Folded {
-                        definition,
-                        through: None,
-                    }) => f.stating(format_args!(
-                        "{} is kept folded: its recursion does not descend, so no type unfolds it",
-                        reached(definition, spelling)
-                    )),
-                    Some(Folded {
-                        definition,
-                        through: Some(through),
-                    }) => f.stating(format_args!(
-                        "{} reaches {}, which is kept folded: its recursion does not descend, so no type unfolds it",
-                        reached(through, spelling),
-                        reached(definition, spelling)
-                    )),
-                    None => {}
-                }
                 // The collision every beginner meets once: a type handed over where a value of it belonged — `Eq/cong(f, Eq()(a, b))` with the statement in the proof's seat. The mismatch line already says `Prop` against `Eq()(…)`, but only to a reader who knows a proposition is a type and a proof is its inhabitant, which is the very thing they have not learned yet. One sentence names the level confusion; the `Type` twin is the same mistake with a type where a value belonged.
                 let inferred_is_sort = matches!(&***inferred, Subterm::Sort(_));
                 let expected_is_sort = matches!(&***expected, Subterm::Sort(_));
@@ -2592,6 +2573,20 @@ impl Displayed<'_> {
             Error::CheckedAs { site, error } => {
                 Displayed(error, Rc::clone(spelling), anchors).say(f);
                 f.stating(site_said(site, spelling));
+            }
+            Error::KeptFolded { folded, error } => {
+                Displayed(error, Rc::clone(spelling), anchors).say(f);
+                match &folded.through {
+                    None => f.stating(format_args!(
+                        "{} is kept folded: its recursion does not descend, so no type unfolds it",
+                        reached(&folded.definition, spelling)
+                    )),
+                    Some(through) => f.stating(format_args!(
+                        "{} reaches {}, which is kept folded: its recursion does not descend, so no type unfolds it",
+                        reached(through, spelling),
+                        reached(&folded.definition, spelling)
+                    )),
+                }
             }
             Error::InAlternative { written, error } => {
                 Displayed(error, Rc::clone(spelling), anchors).say(f);

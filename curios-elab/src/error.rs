@@ -157,7 +157,7 @@ impl fmt::Display for RecordKeyword {
     }
 }
 
-/// A definition whose recursion does not descend, which no checker unfolds, that a mismatch's side stands on: named where the side writes it, or reached through `through`, a definition the side writes that is not known to terminate and unfolds to a term reaching it.
+/// A definition whose recursion does not descend, which no checker unfolds, that a type a refusal states stands on: named where the side writes it, or reached through `through`, a definition the side writes that is not known to terminate and unfolds to a term reaching it.
 #[derive(Debug)]
 pub struct Folded {
     pub definition: Global,
@@ -458,6 +458,7 @@ macro_rules! shown_terms {
             | Self::InDeclaration { error, .. }
             | Self::InAlternative { error, .. }
             | Self::CheckedAs { error, .. }
+            | Self::KeptFolded { error, .. }
             | Self::InScope { error, .. } => error.$recurse($visit),
             Self::InDeadArm { dead, error } => {
                 for term in dead.$terms() {
@@ -686,8 +687,6 @@ pub enum Error {
         declined: Option<Declined>,
         /// Whether the two are terms a type states at one position, where neither is a type and neither was inferred: the argument a call was written with against what its declared type holds in that argument's place. A report then says that two terms differ, and names the one the program wrote as that.
         terms: bool,
-        /// The definition kept folded that a side stands on: what a report names as why the side does not reduce, where one does.
-        folded: Option<Folded>,
     },
     /// A candidate conversion found for a metavariable that does not check where the metavariable was born: what a failed conversion reports in place of the pair it was comparing, which it did not find apart. What is refused is a solution, so the report names the metavariable, shows the candidate, and gives the check's own refusal beneath.
     RejectedCandidate {
@@ -1270,6 +1269,11 @@ pub enum Error {
         site: Box<ArgumentSite>,
         error: Box<Error>,
     },
+    /// A refusal stating a type that stands on a definition kept folded: the report names it, as why the type does not reduce to what the refusal expected of it.
+    KeptFolded {
+        folded: Folded,
+        error: Box<Error>,
+    },
     /// Where `error` arose, as its reader stands there (`ReaderScope`): the position its terms are settled for and spelled for. A sibling of [`Error::Located`], attached by the same drivers.
     InScope {
         scope: ReaderScope,
@@ -1402,6 +1406,7 @@ variants!(Error {
     InDeadArm,
     InAlternative,
     CheckedAs,
+    KeptFolded,
     InScope,
     Batch,
 });
@@ -1415,6 +1420,7 @@ impl Error {
         | Error::InDeadArm { error: inner, .. }
         | Error::InAlternative { error: inner, .. }
         | Error::CheckedAs { error: inner, .. }
+        | Error::KeptFolded { error: inner, .. }
         | Error::InScope { error: inner, .. } = error
         {
             error = inner;
@@ -1431,6 +1437,7 @@ impl Error {
             | Error::InDeadArm { error, .. }
             | Error::InAlternative { error, .. }
             | Error::CheckedAs { error, .. }
+            | Error::KeptFolded { error, .. }
             | Error::InScope { error, .. } => error.declared_in(),
             _ => None,
         }
@@ -1471,27 +1478,6 @@ impl Error {
             expected: Box::new(expected.into()),
             declined: None,
             terms: false,
-            folded: None,
-        }
-    }
-
-    /// This report with the definition kept folded its sides stand on, where it is a type mismatch; any other report says what it says already.
-    pub fn folded(self, folded: Option<Folded>) -> Self {
-        match self {
-            Self::TypeMismatch {
-                inferred,
-                expected,
-                declined,
-                terms,
-                ..
-            } => Self::TypeMismatch {
-                inferred,
-                expected,
-                declined,
-                terms,
-                folded,
-            },
-            other => other,
         }
     }
 
@@ -1502,7 +1488,6 @@ impl Error {
             expected: Box::new(expected.into()),
             declined: None,
             terms: true,
-            folded: None,
         }
     }
 
@@ -1513,14 +1498,12 @@ impl Error {
                 inferred,
                 expected,
                 terms,
-                folded,
                 ..
             } => Self::TypeMismatch {
                 inferred,
                 expected,
                 declined,
                 terms,
-                folded,
             },
             other => other,
         }
@@ -2205,6 +2188,7 @@ impl Error {
             | Self::InDeadArm { error, .. }
             | Self::InAlternative { error, .. }
             | Self::CheckedAs { error, .. }
+            | Self::KeptFolded { error, .. }
             | Self::InScope { error, .. } => error.is_incomplete(),
             Self::Batch(errors) => errors.iter().all(Error::is_incomplete),
             _ => false,
@@ -2382,6 +2366,7 @@ impl Error {
             | Self::InDeadArm { error, .. }
             | Self::InAlternative { error, .. }
             | Self::CheckedAs { error, .. }
+            | Self::KeptFolded { error, .. }
             | Self::InScope { error, .. } => error.owner(),
             _ => None,
         }
@@ -2430,7 +2415,8 @@ impl Error {
             | Self::InDeclaration { error, .. }
             | Self::InDeadArm { error, .. }
             | Self::InAlternative { error, .. }
-            | Self::CheckedAs { error, .. } => error.reader_scope(),
+            | Self::CheckedAs { error, .. }
+            | Self::KeptFolded { error, .. } => error.reader_scope(),
             _ => None,
         }
     }
@@ -2462,6 +2448,7 @@ impl Error {
             | Self::InDeadArm { error, .. }
             | Self::InAlternative { error, .. }
             | Self::CheckedAs { error, .. }
+            | Self::KeptFolded { error, .. }
             | Self::RejectedCandidate { error, .. } => error.let_go_of_frames(),
             Self::Batch(errors) => errors.iter_mut().for_each(Self::let_go_of_frames),
             _ => {}
@@ -2499,6 +2486,7 @@ impl Error {
             | Self::InDeclaration { error, .. }
             | Self::InAlternative { error, .. }
             | Self::CheckedAs { error, .. }
+            | Self::KeptFolded { error, .. }
             | Self::InScope { error, .. } => error.write_terms(context),
             Self::InDeadArm { dead, error } => {
                 for term in dead.terms_mut() {
@@ -2762,6 +2750,7 @@ impl Error {
             | Self::InDeadArm { error, .. }
             | Self::InAlternative { error, .. }
             | Self::CheckedAs { error, .. }
+            | Self::KeptFolded { error, .. }
             | Self::InScope { error, .. } => error.unwrapped(),
             error => error,
         }
@@ -2777,6 +2766,7 @@ impl Error {
             | Self::InDeadArm { error, .. }
             | Self::InAlternative { error, .. }
             | Self::CheckedAs { error, .. }
+            | Self::KeptFolded { error, .. }
             | Self::InScope { error, .. } => error.innermost_extent(),
             Self::UniverseInconsistency { path, .. } => {
                 path.iter().find_map(UniverseConstraintOrigin::extent)
@@ -2859,6 +2849,7 @@ impl Exhaustion for Error {
             | Self::InDeadArm { error, .. }
             | Self::InAlternative { error, .. }
             | Self::CheckedAs { error, .. }
+            | Self::KeptFolded { error, .. }
             | Self::InScope { error, .. } => error.refusal(),
             _ => None,
         }
