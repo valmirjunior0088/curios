@@ -4,3 +4,5 @@ mod utf8;
 mod str;
 
 mod decomposition;
+
+mod normalization;

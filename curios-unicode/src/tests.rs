@@ -244,3 +244,68 @@ fn check_records(packed: &[u8], records: &[(u32, u32, u8, &[u32])]) {
         );
     }
 }
+
+/// The decompositions are full and the composites primary: a scalar whose decomposition decomposes again is written as what it ends at, a compatibility decomposition other than the canonical one is written whole, however long, and a pair composes but where its composite is excluded — a singleton, a decomposition opening with a mark, or one the exclusions list.
+#[test]
+fn the_normalization_tables_hold_full_decompositions_and_primary_composites() {
+    let decomposition = |table: &[(u32, &'static [u32])], scalar: u32| {
+        table
+            .binary_search_by_key(&scalar, |&(from, _)| from)
+            .map(|found| table[found].1)
+            .ok()
+    };
+    let composite = |first: u32, second: u32| {
+        COMPOSITION
+            .iter()
+            .find(|&&(a, b, _)| (a, b) == (first, second))
+            .map(|&(_, _, composite)| composite)
+    };
+
+    assert_eq!(
+        decomposition(CANONICAL_DECOMPOSITION, 0x1E69),
+        Some(&[0x73, 0x323, 0x307][..])
+    );
+    assert_eq!(decomposition(COMPATIBILITY_DECOMPOSITION, 0x1E69), None);
+    assert_eq!(
+        decomposition(COMPATIBILITY_DECOMPOSITION, 0xFB01),
+        Some(&[0x66, 0x69][..])
+    );
+    assert_eq!(
+        decomposition(COMPATIBILITY_DECOMPOSITION, 0xFDFA).map(<[u32]>::len),
+        Some(18)
+    );
+    assert_eq!(decomposition(CANONICAL_DECOMPOSITION, 0xAC00), None);
+
+    assert_eq!(composite(0x41, 0x30A), Some(0xC5));
+    assert_eq!(composite(0x3A9, 0x301), Some(0x38F));
+    assert!(
+        COMPOSITION
+            .iter()
+            .all(|&(_, _, composite)| composite != 0x2126)
+    );
+    assert!(
+        COMPOSITION
+            .iter()
+            .all(|&(_, _, composite)| composite != 0x344)
+    );
+    assert!(
+        COMPOSITION
+            .iter()
+            .all(|&(_, _, composite)| composite != 0x958)
+    );
+    assert!(
+        COMPOSITION
+            .windows(2)
+            .all(|pair| (pair[0].0, pair[0].1) < (pair[1].0, pair[1].1))
+    );
+
+    let class = |scalar: u32| {
+        COMBINING_CLASS
+            .iter()
+            .find(|&&(first, last, _)| first <= scalar && scalar <= last)
+            .map_or(0, |&(_, _, class)| class)
+    };
+    assert_eq!(class(0x301), 230);
+    assert_eq!(class(0x323), 220);
+    assert_eq!(class(0x41), 0);
+}

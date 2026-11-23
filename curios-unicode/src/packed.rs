@@ -1,7 +1,8 @@
-//! The tables as `/sys` carries them: a property's a run of seven bytes a range, a mapping's a record of seventeen, and each class set the codes its classes are read by.
+//! The tables as `/sys` carries them: a property's a run of seven bytes a range, a mapping's a record of seventeen, a decomposition's an entry of seven naming a run of a table of scalars, three bytes each, a composite nine, and each class set the codes its classes are read by.
 
 use crate::{
-    ALPHABETIC, CASE_IGNORABLE, CASED, EAST_ASIAN_WIDTH, EAST_ASIAN_WIDTH_MISSING,
+    ALPHABETIC, CANONICAL_DECOMPOSITION, CASE_IGNORABLE, CASED, COMBINING_CLASS,
+    COMPATIBILITY_DECOMPOSITION, COMPOSITION, EAST_ASIAN_WIDTH, EAST_ASIAN_WIDTH_MISSING,
     EMOJI_PRESENTATION, EXTENDED_PICTOGRAPHIC, EastAsianWidth, FOLD, GRAPHEME_BREAK,
     GRAPHEME_BREAK_MISSING, GraphemeBreak, INDIC_CONJUNCT_BREAK, INDIC_CONJUNCT_BREAK_MISSING,
     IndicConjunctBreak, LOWER, LOWERCASE, UPPER, UPPERCASE, WHITE_SPACE,
@@ -12,6 +13,12 @@ pub const PACKED_RUN: usize = 7;
 
 /// How many bytes a mapping's record takes packed: its first scalar and its last, three bytes each, least significant first, the step between the scalars it covers, how many scalars each becomes, then three targets of three bytes each, a target the record does not have written as U+0000 so that every target is a scalar value.
 pub const PACKED_RECORD: usize = 17;
+
+/// How many bytes an entry of a decomposition takes packed: its scalar in three bytes, least significant first, the place the scalars it becomes start among the decomposition's scalars in three, then how many there are.
+pub const PACKED_ENTRY: usize = 7;
+
+/// How many bytes a composite takes packed: the first scalar of the pair it composes from in three bytes, least significant first, the second in three, then itself in three.
+pub const PACKED_COMPOSITE: usize = 9;
 
 /// One table packed for `/sys/unicode`.
 pub struct PackedTable {
@@ -52,12 +59,13 @@ fn binary(table: &[(u32, u32)]) -> Vec<u8> {
     pack(table.iter().map(|&(first, last)| (first, last, 1)))
 }
 
-fn records(table: &[(u32, u32, u8, &[u32])]) -> Vec<u8> {
-    let three = |scalar: u32| {
-        let [low, middle, high, _] = scalar.to_le_bytes();
-        [low, middle, high]
-    };
+/// A scalar, or a place among a table's scalars, in the three bytes a table spells it in, least significant first.
+fn three(number: u32) -> [u8; 3] {
+    let [low, middle, high, _] = number.to_le_bytes();
+    [low, middle, high]
+}
 
+fn records(table: &[(u32, u32, u8, &[u32])]) -> Vec<u8> {
     table
         .iter()
         .flat_map(|&(first, last, step, targets)| {
@@ -118,6 +126,60 @@ pub fn packed_tables() -> Vec<PackedTable> {
         PackedTable {
             name: "white_space",
             bytes: binary(WHITE_SPACE),
+        },
+    ]
+}
+
+/// A decomposition as its two tables: its entries, in the order of their scalars, each naming the place its scalars start among the second table's and how many there are, and those scalars, three bytes each.
+fn sequences(table: &[(u32, &[u32])]) -> (Vec<u8>, Vec<u8>) {
+    let mut entries = Vec::new();
+    let mut scalars = Vec::new();
+    for &(scalar, targets) in table {
+        let start =
+            u32::try_from(scalars.len() / 3).expect("a decomposition's scalars fit three bytes");
+        let count = u8::try_from(targets.len()).expect("a scalar decomposes to at most 255");
+        entries.extend(three(scalar).into_iter().chain(three(start)).chain([count]));
+        scalars.extend(targets.iter().flat_map(|&target| three(target)));
+    }
+    (entries, scalars)
+}
+
+/// Every table normalization reads, packed for `/sys/unicode`: the canonical combining classes as a property's runs, each decomposition as its entries and the scalars they name, and the primary composites in the order of their pairs.
+pub fn packed_normalization() -> Vec<PackedTable> {
+    let (canonical, canonical_scalars) = sequences(CANONICAL_DECOMPOSITION);
+    let (compatibility, compatibility_scalars) = sequences(COMPATIBILITY_DECOMPOSITION);
+    vec![
+        PackedTable {
+            name: "combining_class",
+            bytes: pack(COMBINING_CLASS.iter().copied()),
+        },
+        PackedTable {
+            name: "canonical_decomposition",
+            bytes: canonical,
+        },
+        PackedTable {
+            name: "canonical_decomposition_scalars",
+            bytes: canonical_scalars,
+        },
+        PackedTable {
+            name: "compatibility_decomposition",
+            bytes: compatibility,
+        },
+        PackedTable {
+            name: "compatibility_decomposition_scalars",
+            bytes: compatibility_scalars,
+        },
+        PackedTable {
+            name: "composition",
+            bytes: COMPOSITION
+                .iter()
+                .flat_map(|&(first, second, composite)| {
+                    three(first)
+                        .into_iter()
+                        .chain(three(second))
+                        .chain(three(composite))
+                })
+                .collect(),
         },
     ]
 }

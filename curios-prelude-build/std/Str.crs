@@ -27,6 +27,14 @@ pub use len/{let len};
 pub mod ord;
 pub use ord/{let ord};
 
+--- A normalization form of UAX #15, which `normalize` brings a text to.
+pub mod Form;
+pub use Form/{let Form};
+
+-- How a text is brought to a normalization form: each character decomposed, the marks put in canonical order, and the result composed again where the form composes.
+mod normalization;
+use normalization/{normalized};
+
 use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Result, Eq, Show, Spell, Ordering, Ord, Hash,
     Map, proved};
 use /std/ops/{Eql, Cmp};
@@ -160,6 +168,14 @@ pub let to_upper(s: Str) -> Str =
 --- `s` folded for caseless comparison, Unicode's `toCasefold`: each character by its full folding, `Char/to_casefold`, so `Straße` and `STRASSE` both become `strasse`.
 pub let to_casefold(s: Str) -> Str =
     fold(s, "", (c, written) => concat(written, Char/to_casefold(c)));
+
+--- `s` in the normalization form `form` (UAX #15), so the spellings Unicode calls equivalent become one: `é` written as one character or as `e` and a combining acute accent is the one character under `nfc()` and the two under `nfd()`, and `ﬁ` becomes `fi` under `nfkc()`. `==` stays a comparison of characters, so a program comparing text from a user, a file name or the web normalizes both sides to one form first.
+pub let normalize(s: Str, form: Form) -> Str =
+    normalized(s, form);
+
+--- Whether `s` is in the normalization form `form` already: whether normalizing it changes nothing.
+pub let is_normalized(s: Str, form: Form) -> Bool =
+    normalize(s, form) == s;
 
 --- Whether the two are equal regardless of case, Unicode's default caseless matching: their folds are equal, so `Straße` matches `STRASSE`. Every character's case is read, past ASCII too; `eql_ignoring_ascii_case` is the comparison a protocol that folds ASCII alone reads.
 pub let eql_ignoring_case(a: Str, b: Str) -> Bool =

@@ -4,8 +4,11 @@ mod tests;
 pub mod Valid;
 pub use Valid/{let Valid};
 
---- The tables of the Unicode Character Database the toolchain pins, as `/sys/unicode` holds them: the search that answers a character's class from one.
+--- The tables of the Unicode Character Database the toolchain pins, as `/sys/unicode` holds them: the searches that answer a character's class, its case mapping, its decomposition and the composite of a pair from one.
 mod unicode;
+
+-- The Hangul syllables' decomposition and composition, by arithmetic over their jamo.
+mod hangul;
 
 --- A character's `Grapheme_Cluster_Break` class (UAX #29).
 pub mod GraphemeBreak;
@@ -147,6 +150,73 @@ let fold_lands: Bool/Holds(unicode/every_record_lands(/sys/unicode/fold)) =
 --- `c` folded for caseless comparison, as text: its full folding, the database's `Case_Folding` common and full rows (`ß` and `ẞ` become `ss`, `Σ` and `ς` both become `σ`), or `c` itself where there is none. `Str/to_casefold` applies it to each character.
 pub let to_casefold(c: Char) -> Str =
     unicode/mapping(/sys/unicode/fold, fold_lands, c);
+
+-- Every place of the canonical decomposition's characters spells a scalar value, decided by reading each when `/std` is built.
+let canonical_lands: Bool/Holds(
+    unicode/every_scalar_lands(/sys/unicode/canonical_decomposition_scalars)) =
+    Bool/True/qed();
+
+-- Every entry of the canonical decomposition names places its characters hold, decided by reading each when `/std` is built.
+let canonical_within: Bool/Holds(
+    unicode/every_entry_within(
+        /sys/unicode/canonical_decomposition,
+        /sys/unicode/canonical_decomposition_scalars)) =
+    Bool/True/qed();
+
+-- Every place of the compatibility decomposition's characters spells a scalar value, decided by reading each when `/std` is built.
+let compatibility_lands: Bool/Holds(
+    unicode/every_scalar_lands(/sys/unicode/compatibility_decomposition_scalars)) =
+    Bool/True/qed();
+
+-- Every entry of the compatibility decomposition names places its characters hold, decided by reading each when `/std` is built.
+let compatibility_within: Bool/Holds(
+    unicode/every_entry_within(
+        /sys/unicode/compatibility_decomposition,
+        /sys/unicode/compatibility_decomposition_scalars)) =
+    Bool/True/qed();
+
+-- Every primary composite is a scalar value, decided by reading each when `/std` is built.
+let composites_land: Bool/Holds(unicode/every_composite_lands(/sys/unicode/composition)) =
+    Bool/True/qed();
+
+--- `c`'s canonical combining class (UAX #15): `0` for a starter, and for a combining mark the class that orders it among the marks beside it, a dot below's 220 before an acute accent's 230. What `Str/normalize` puts a text's marks in order by.
+pub let combining_class(c: Char) -> Nat =
+    unicode/class(/sys/unicode/combining_class, 0, c);
+
+--- `c` decomposed fully under canonical equivalence (UAX #15), as text: its base and its marks, `é` becoming `e` and a combining acute accent, a Hangul syllable its jamo, and `c` itself where it decomposes to no other. What `Str/normalize` writes for it under `nfd()`, before a text's marks are put in order.
+pub let canonical_decomposition(c: Char) -> Str =
+    match hangul/decomposed(c)
+    | some(jamo) => jamo
+    | none() =>
+        match unicode/decomposition(
+            /sys/unicode/canonical_decomposition,
+            /sys/unicode/canonical_decomposition_scalars,
+            canonical_lands,
+            canonical_within,
+            c)
+        | some(characters) => characters
+        | none() => Str/of_char(c)
+        end
+    end;
+
+--- `c` decomposed fully under compatibility equivalence (UAX #15), as text: what a ligature, a width variant or a superscript stands for, `ﬁ` becoming `fi` and `²` becoming `2`, and its canonical decomposition where it stands for nothing more. What `Str/normalize` writes for it under `nfkd()`, before a text's marks are put in order.
+pub let compatibility_decomposition(c: Char) -> Str =
+    match unicode/decomposition(
+        /sys/unicode/compatibility_decomposition,
+        /sys/unicode/compatibility_decomposition_scalars,
+        compatibility_lands,
+        compatibility_within,
+        c)
+    | some(characters) => characters
+    | none() => canonical_decomposition(c)
+    end;
+
+--- The primary composite of `first` then `second` (UAX #15): the one character whose canonical decomposition is the two and which no exclusion keeps from composing, a Hangul syllable of its jamo, or `none` where the two compose to none. What `Str/normalize` composes a text's characters by under `nfc()`.
+pub let primary_composite(first: Char, second: Char) -> Option(Char) =
+    match hangul/composed(first, second)
+    | some(syllable) => Option/some(syllable)
+    | none() => unicode/composite(/sys/unicode/composition, composites_land, first, second)
+    end;
 
 --- Whether `c` is `Lowercase`, as the database states: a lower letter of any script, or a character it counts among them; `is_ascii_lower` asks of `a`–`z` alone.
 pub let is_lower(c: Char) -> Bool =

@@ -244,6 +244,72 @@ fn every_test_stands_in_a_rostered_module() {
     );
 }
 
+/// Every case of Unicode's `NormalizationTest.txt`, at the version `curios-unicode` pins, normalizes through `/std/Str/normalize` as the database states: each of its five columns brought to each form is the column the file states for that form, one program reading every case from its standard input, a case a line and its columns a tab apart, and printing each one normalized otherwise.
+#[test]
+fn every_conformance_case_normalizes_through_the_library_as_the_database_states() {
+    let cases = normalization_cases()
+        .iter()
+        .map(|case| {
+            let columns = case.map(|column| {
+                let text: String = column
+                    .iter()
+                    .map(|&scalar| {
+                        char::from_u32(scalar).expect("a conformance case holds scalars")
+                    })
+                    .collect();
+                assert!(
+                    !text.contains(['\t', '\n']),
+                    "a column holds no separator: {text:?}"
+                );
+                text
+            });
+            columns.join("\t")
+        })
+        .collect::<Vec<_>>();
+    assert!(cases.len() > 10_000, "only {} cases", cases.len());
+    let program = r#"
+        use /std/{Str, List, Bool, Spell, Io, Proc, Try, print};
+        use /std/Str/{Form};
+        use /std/Io/{Reader, Error};
+
+        let all_become(columns: List(Str), form: Form, expected: Str) -> Bool =
+            Bool/not(List/any(columns, (column) => Bool/not(Str/normalize(column, form) == expected)));
+
+        let holds(columns: List(Str)) -> Bool =
+            match columns
+            | [source, nfc, nfd, nfkc, nfkd] =>
+                all_become([source, nfc, nfd], Form/nfc(), nfc)
+                    && all_become([nfkc, nfkd], Form/nfc(), nfkc)
+                    && all_become([source, nfc, nfd], Form/nfd(), nfd)
+                    && all_become([nfkc, nfkd], Form/nfd(), nfkd)
+                    && all_become([source, nfc, nfd, nfkc, nfkd], Form/nfkc(), nfkc)
+                    && all_become([source, nfc, nfd, nfkc, nfkd], Form/nfkd(), nfkd)
+            | _ => false
+            end;
+
+        let otherwise(@S: Type, use Io/Read(S), input: Reader(S), found: List(Str)) -> Try(Io, Error, List(Str)) =
+            match Reader/line_text(input)!
+            | none() => Try/pure(found)
+            | some(line) =>
+                match holds(Str/split(line, "\t"))
+                | true => otherwise(input, found)
+                | false => otherwise(input, [Spell/spell(line), ..found])
+                end
+            end;
+
+        let execute() -> Try(Io, Error, {}) =
+            let input = Reader/new(Proc/stdin)!;
+            let found = otherwise(input, [])!;
+            print(Str/flatten(List/map(found, (case) => Str/concat(case, "\n"))));
+
+        execute()
+        "#;
+
+    let otherwise = printed(program, cases);
+
+    assert!(otherwise.is_empty(), "normalized otherwise:\n{otherwise}");
+}
+
 /// What `program` prints, compiled against the prelude alone and run under the mock host with `stdin` on its standard input.
 fn printed(program: &str, stdin: impl IntoIterator<Item = String>) -> String {
     let entrypoint: Entrypoint = program.parse().expect("the program parses");

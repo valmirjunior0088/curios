@@ -1,0 +1,13 @@
+--- A normalization form of UAX #15: the equivalence a text is brought to one spelling under, and whether that spelling composes its characters or decomposes them.
+pub induct Form: pub Type
+--- Canonical equivalence, composed: a base and its marks as one character wherever one exists, the spelling text is most often exchanged in.
+| nfc()
+--- Canonical equivalence, decomposed: each character as its base and its marks, in canonical order, as macOS hands back a file's name.
+| nfd()
+--- Compatibility equivalence, composed: a ligature, a width variant or a superscript as the plain characters it stands for, so `ﬁ` is `fi` and `²` is `2`, for searching and for identifiers.
+| nfkc()
+--- Compatibility equivalence, decomposed.
+| nfkd()
+end
+
+pub use Form/*;

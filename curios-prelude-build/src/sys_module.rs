@@ -34,7 +34,10 @@ use {
         Doc, Intrinsic, Match, MatchPattern, MatrixArm, Module, Subterm, TopCase, TopInduct,
         TopItem, WordAt,
     },
-    curios_unicode::{PACKED_RECORD, PACKED_RUN, class_codes, packed_mappings, packed_tables},
+    curios_unicode::{
+        PACKED_COMPOSITE, PACKED_ENTRY, PACKED_RECORD, PACKED_RUN, class_codes, packed_mappings,
+        packed_normalization, packed_tables,
+    },
 };
 
 // Ordinary declarations use the parser's source identities: every repeated lowering of a written `Type` must share its universe seed, including the family and constructor signatures synthesized from it.
@@ -1052,17 +1055,22 @@ fn code_modules() -> Vec<SysModule> {
         .collect()
 }
 
-/// The Unicode Character Database `curios-unicode` pins, as `/std/Char` reads it: `/sys/unicode` holds each property's table as `Bytes`, in runs of `run` bytes as [`PACKED_RUN`] states them, and each mapping's in records of `record` bytes as [`PACKED_RECORD`] states them; each class set's codes are a module of their own, named as the property's table is, holding each class's code at its name, the code of the class a scalar no run names as `missing`, and every code as `codes` — what the standard library's cases are held to, as `/sys/status/failures` holds `/std/Io/Error`'s. Nothing here spells a class, a run or a record.
+/// The Unicode Character Database `curios-unicode` pins, as `/std/Char` reads it: `/sys/unicode` holds each property's table as `Bytes`, in runs of `run` bytes as [`PACKED_RUN`] states them, each mapping's in records of `record` bytes as [`PACKED_RECORD`] states them, each decomposition's in entries of `entry` bytes as [`PACKED_ENTRY`] states them beside the scalars they name, and the composites in records of `composite` bytes as [`PACKED_COMPOSITE`] states them; each class set's codes are a module of their own, named as the property's table is, holding each class's code at its name, the code of the class a scalar no run names as `missing`, and every code as `codes` — what the standard library's cases are held to, as `/sys/status/failures` holds `/std/Io/Error`'s. Nothing here spells a class, a run or a record.
 fn unicode_modules() -> Vec<SysModule> {
     let run = u64::try_from(PACKED_RUN).expect("a run's size fits a natural");
     let record = u64::try_from(PACKED_RECORD).expect("a record's size fits a natural");
+    let entry = u64::try_from(PACKED_ENTRY).expect("an entry's size fits a natural");
+    let composite = u64::try_from(PACKED_COMPOSITE).expect("a composite's size fits a natural");
     let tables = packed_tables()
         .into_iter()
         .chain(packed_mappings())
+        .chain(packed_normalization())
         .map(|table| pub_let(table.name, bytes(), bytes_lit(table.bytes)))
         .chain([
             pub_let("run", nat(), nat_lit(run)),
             pub_let("record", nat(), nat_lit(record)),
+            pub_let("entry", nat(), nat_lit(entry)),
+            pub_let("composite", nat(), nat_lit(composite)),
         ])
         .collect();
     let codes = class_codes().into_iter().map(|set| {

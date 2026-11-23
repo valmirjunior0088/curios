@@ -1,0 +1,122 @@
+use /std/{Nat, Bool, Char, Option, List, Str};
+use /std/Str/{Form};
+
+-- What `c` decomposes to, fully, under compatibility equivalence where `compatible` and under canonical equivalence otherwise.
+let decomposed(c: Char, compatible: Bool) -> Str =
+    match compatible
+    | true => Char/compatibility_decomposition(c)
+    | false => Char/canonical_decomposition(c)
+    end;
+
+-- `c` put into `reversed`, the characters before it latest first, as the canonical ordering puts it: a mark moved back past each mark before it of a greater class, and never past a starter.
+let ordered_into(reversed: List({Char, Nat}), c: Char, class: Nat) -> List({Char, Nat}) =
+    match class
+    | 0 => [(c, 0), ..reversed]
+    | _ =>
+        match reversed
+        | [] => [(c, class)]
+        | [(before, held), ..rest] =>
+            match class < held
+            | true => [(before, held), ..ordered_into(rest, c, class)]
+            | false => [(c, class), ..reversed]
+            end
+        end
+    end;
+
+-- How far a composition has come: what it has settled, latest first, the last starter, which a later character may still compose with, what follows that starter, latest first, and the class of the last of those, or `none` where nothing follows it.
+struct Composing: Type {
+    settled: List(Char),
+    starter: Option(Char),
+    after: List(Char),
+    last: Option(Nat),
+}
+
+-- What a composition holds once `c`, of class `class`, is kept as it is: a starter, the one later characters compose with from then on, and any other after the starter.
+let kept(state: Composing, c: Char, class: Nat) -> Composing =
+    match state.starter
+    | none() =>
+        match class
+        | 0 =>
+            Composing {
+                settled = state.settled,
+                starter = Option/some(c),
+                after = [],
+                last = Option/none() }
+        | _ =>
+            Composing {
+                settled = [c, ..state.settled],
+                starter = Option/none(),
+                after = [],
+                last = Option/none() }
+        end
+    | some(starter) =>
+        match class
+        | 0 =>
+            Composing {
+                settled = [..state.after, starter, ..state.settled],
+                starter = Option/some(c),
+                after = [],
+                last = Option/none() }
+        | _ =>
+            Composing {
+                settled = state.settled,
+                starter = state.starter,
+                after = [c, ..state.after],
+                last = Option/some(class) }
+        end
+    end;
+
+-- One step of the canonical composition: `c`, of class `class`, composed with the last starter where nothing between them blocks it — no character of class `0` or of a class no smaller than its own — and the two have a primary composite, and kept as it is otherwise.
+let step(state: Composing, c: Char, class: Nat) -> Composing =
+    match state.starter
+    | none() => kept(state, c, class)
+    | some(starter) =>
+        let blocked =
+            match state.last
+            | none() => false
+            | some(held) => held == 0 || class <= held
+            end;
+        match blocked
+        | true => kept(state, c, class)
+        | false =>
+            match Char/primary_composite(starter, c)
+            | some(composite) =>
+                Composing {
+                    settled = state.settled,
+                    starter = Option/some(composite),
+                    after = state.after,
+                    last = state.last }
+            | none() => kept(state, c, class)
+            end
+        end
+    end;
+
+-- The characters a composition holds, in order.
+let composition(state: Composing) -> List(Char) =
+    let starter = match state.starter | some(c) => [c] | none() => [] end;
+    List/reverse([..state.after, ..starter, ..state.settled]);
+
+--- `s` in `form`: every character decomposed, canonically or by compatibility as `form` asks, the marks put in canonical order, and composed again where `form` is a composed one.
+pub let normalized(s: Str, form: Form) -> Str =
+    let compatible = match form | nfkc() | nfkd() => true | nfc() | nfd() => false end;
+    let reversed =
+        Str/fold(
+            Str/flatten(List/map(Str/to_list(s), (c) => decomposed(c, compatible))),
+            [],
+            (c, written) => ordered_into(written, c, Char/combining_class(c)));
+    let ordered = List/reverse(reversed);
+    let characters =
+        match form
+        | nfd() | nfkd() => List/map(ordered, (pair) => pair.0)
+        | nfc() | nfkc() =>
+            composition(
+                List/fold(
+                    ordered,
+                    Composing {
+                        settled = [],
+                        starter = Option/none(),
+                        after = [],
+                        last = Option/none() },
+                    (pair, state) => step(state, pair.0, pair.1)))
+        end;
+    Str/flatten(List/map(characters, Str/of_char));

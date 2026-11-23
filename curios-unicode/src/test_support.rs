@@ -1,4 +1,4 @@
-//! What another crate's tests read of the database: the conformance cases a segmentation of text is held to, what each mapping maps a scalar to, as the database's rows state it rather than as the records `/sys` carries, and the properties no compiler code reads.
+//! What another crate's tests read of the database: the conformance cases a segmentation and a normalization of text are held to, what each mapping maps a scalar to, as the database's rows state it rather than as the records `/sys` carries, and the properties no compiler code reads.
 
 use crate::{
     CASE_IGNORABLE, CASED, FOLD_ROWS, LOWER_ROWS, LOWERCASE, UPPER_ROWS, UPPERCASE, property::held,
@@ -7,6 +7,11 @@ use crate::{
 /// Every case of `GraphemeBreakTest.txt`: a run of scalars as the clusters it segments into, each cluster its scalars.
 pub fn grapheme_break_cases() -> &'static [&'static [&'static [u32]]] {
     crate::GRAPHEME_BREAK_CASES
+}
+
+/// Every case of `NormalizationTest.txt`: its five columns, each its scalars, the source and its NFC, NFD, NFKC and NFKD forms.
+pub fn normalization_cases() -> &'static [[&'static [u32]; 5]] {
+    crate::NORMALIZATION_CASES
 }
 
 /// The scalars `scalar` becomes in upper case, its full `Uppercase_Mapping`: `scalar` itself where it has none.

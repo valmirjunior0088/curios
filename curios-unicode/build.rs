@@ -5,6 +5,8 @@
 //! **The library's enums are the classes.** A run of one class is written as the variant it is, named from the database's own spelling (`Regional_Indicator` is `RegionalIndicator`, `CR` is `Cr`), so a class the database names and an enum lacks is refused where the library compiles, and this script holds no list of classes. The class a scalar no line names is the one the file's `@missing` line gives the whole range, and its runs are left out.
 //!
 //! **A mapping is written as records.** Each scalar a mapping changes is read off the database's rows, and the scalars are gathered in order into records, each covering scalars a step of one or two apart that become the same scalars moved as far, as `README.md` decides.
+//!
+//! **A decomposition is written whole.** Each scalar a decomposition changes is written with every scalar it ends at, decomposed until nothing it becomes decomposes again, and the primary composites are the pairs a canonical decomposition of two scalars names but the excluded ones, as `README.md` decides.
 
 use {
     curios_download::Download,
@@ -21,7 +23,7 @@ use {
 const VERSION: &str = "18.0.0";
 
 /// Every file read, by its path under the version's `ucd/` directory, with its SHA-256.
-const FILES: [(&str, &str); 9] = [
+const FILES: [(&str, &str); 11] = [
     (
         "EastAsianWidth.txt",
         "a0cf29eacd00cfcaec4381c6b7c281685f18dbb4e7ff82b4076ccb342ca839aa",
@@ -57,6 +59,14 @@ const FILES: [(&str, &str); 9] = [
     (
         "CaseFolding.txt",
         "a004797658a457bec4dc11683e39f69249ea3b595b752dbea6721c4c9f587b0d",
+    ),
+    (
+        "DerivedNormalizationProps.txt",
+        "98ac7f67d985fe781e317f6182e885e94cabb0c314769e6dd73e48b226931ccd",
+    ),
+    (
+        "NormalizationTest.txt",
+        "25a50d816764b04abfb4a646d3eb2b2a803284c3873d9a06757b94fe4513dde3",
     ),
 ];
 
@@ -366,14 +376,6 @@ fn records(mapping: &Mapping) -> Vec<Record> {
 
 /// A mapping as the Rust it is written to: its records, and, for a crate testing a reading of them, each scalar it changes with what the database's rows map it to.
 fn mapping_table(out: &mut String, constant: &str, property: &str, mapping: &Mapping) {
-    let spelled = |targets: &[usize]| {
-        targets
-            .iter()
-            .map(|target| format!("0x{target:X}"))
-            .collect::<Vec<_>>()
-            .join(", ")
-    };
-
     let _ = writeln!(
         out,
         "/// Each record of the `{property}` mapping: the scalars `first`, `first + step`, … up to `last`, and what each becomes, the first target moved as far as the scalar is from `first`.\npub(crate) static {constant}: &[(u32, u32, u8, &[u32])] = &["
@@ -396,6 +398,160 @@ fn mapping_table(out: &mut String, constant: &str, property: &str, mapping: &Map
     );
     for (scalar, targets) in mapping {
         let _ = writeln!(out, "    (0x{scalar:X}, &[{}]),", spelled(targets));
+    }
+    out.push_str("];\n\n");
+}
+
+/// Scalars as the Rust that writes them, each in hexadecimal, a comma apart.
+fn spelled<T: std::fmt::UpperHex>(scalars: &[T]) -> String {
+    scalars
+        .iter()
+        .map(|scalar| format!("0x{scalar:X}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Every scalar's canonical combining class, field 3 of `UnicodeData.txt`: `0`, a starter's, where no row names another, and a range the file states as a pair of rows one class throughout.
+fn combining_classes(text: &str) -> Vec<usize> {
+    let mut each = vec![0; SCALARS];
+    let mut opened = None;
+
+    for line in text.lines().filter(|line| !line.is_empty()) {
+        let fields: Vec<&str> = line.split(';').collect();
+        let (scalar, _) = scalars(fields[0]);
+        let class = fields[3]
+            .parse::<usize>()
+            .unwrap_or_else(|error| panic!("{line:?}: {error}"));
+        if fields[1].ends_with(", First>") {
+            opened = Some(scalar);
+        } else {
+            let first = opened.take().unwrap_or(scalar);
+            each[first..=scalar].fill(class);
+        }
+    }
+
+    each
+}
+
+/// Each scalar's decomposition one level deep, field 5 of `UnicodeData.txt`: whether it is canonical, a mapping no `<tag>` opens, and the scalars it becomes. No range the file states as a pair of rows decomposes there; the Hangul syllables decompose by arithmetic, which the library does.
+fn decompositions(text: &str) -> BTreeMap<usize, (bool, Vec<usize>)> {
+    text.lines()
+        .filter(|line| !line.is_empty())
+        .filter_map(|line| {
+            let fields: Vec<&str> = line.split(';').collect();
+            let mut parts = fields[5].split_whitespace().peekable();
+            let canonical = !parts.peek()?.starts_with('<');
+            if !canonical {
+                parts.next();
+            }
+            let targets = parts.map(|target| scalars(target).0).collect();
+            Some((scalars(fields[0]).0, (canonical, targets)))
+        })
+        .collect()
+}
+
+/// `scalar` decomposed until nothing it becomes decomposes again: under the canonical mappings alone, or under every one where `compatible`.
+fn decomposed(
+    mappings: &BTreeMap<usize, (bool, Vec<usize>)>,
+    scalar: usize,
+    compatible: bool,
+) -> Vec<usize> {
+    match mappings.get(&scalar) {
+        Some((canonical, targets)) if *canonical || compatible => targets
+            .iter()
+            .flat_map(|&target| decomposed(mappings, target, compatible))
+            .collect(),
+        _ => vec![scalar],
+    }
+}
+
+/// The full canonical decomposition: each scalar a canonical mapping changes, with every scalar it becomes.
+fn canonical_decomposition(mappings: &BTreeMap<usize, (bool, Vec<usize>)>) -> Mapping {
+    mappings
+        .iter()
+        .filter(|(_, (canonical, _))| *canonical)
+        .map(|(&scalar, _)| (scalar, decomposed(mappings, scalar, false)))
+        .collect()
+}
+
+/// The full compatibility decomposition where it is other than the canonical one: each scalar whose decomposition under every mapping differs from its decomposition under the canonical ones, with every scalar it becomes.
+fn compatibility_decomposition(mappings: &BTreeMap<usize, (bool, Vec<usize>)>) -> Mapping {
+    mappings
+        .keys()
+        .filter_map(|&scalar| {
+            let compatible = decomposed(mappings, scalar, true);
+            (compatible != decomposed(mappings, scalar, false)).then_some((scalar, compatible))
+        })
+        .collect()
+}
+
+/// The primary composites: each canonical mapping of two scalars, as the pair and the scalar the pair composes to, in the order of the pairs, but a scalar `Full_Composition_Exclusion` keeps out of every composition.
+fn compositions(
+    mappings: &BTreeMap<usize, (bool, Vec<usize>)>,
+    excluded: &[usize],
+) -> Vec<(usize, usize, usize)> {
+    let mut pairs: Vec<(usize, usize, usize)> = mappings
+        .iter()
+        .filter(|&(&scalar, (canonical, targets))| {
+            *canonical && targets.len() == 2 && excluded[scalar] == 0
+        })
+        .map(|(&scalar, (_, targets))| (targets[0], targets[1], scalar))
+        .collect();
+    pairs.sort_unstable();
+    pairs
+}
+
+/// Every case of `NormalizationTest.txt`: its five columns, each the scalars it holds.
+fn normalization_cases(text: &str) -> Vec<[Vec<u32>; 5]> {
+    text.lines()
+        .map(|line| line.split('#').next().unwrap_or("").trim())
+        .filter(|content| !content.is_empty() && !content.starts_with('@'))
+        .map(|content| {
+            let columns: Vec<Vec<u32>> = content
+                .split(';')
+                .take(5)
+                .map(|column| {
+                    column
+                        .split_whitespace()
+                        .map(|hex| u32::from_str_radix(hex, 16).expect("a scalar in hexadecimal"))
+                        .collect()
+                })
+                .collect();
+            columns.try_into().expect("a case has five columns")
+        })
+        .collect()
+}
+
+/// The canonical combining classes as the Rust they are written to: each run of scalars of one class but `0`.
+fn combining_class_table(out: &mut String, each: &[usize]) {
+    out.push_str(
+        "/// Each run of scalars of one `Canonical_Combining_Class` but `0`, a starter's.\npub(crate) static COMBINING_CLASS: &[(u32, u32, u8)] = &[\n",
+    );
+    for (first, last, class) in runs(each) {
+        let _ = writeln!(out, "    (0x{first:X}, 0x{last:X}, {class}),");
+    }
+    out.push_str("];\n\n");
+}
+
+/// A decomposition as the Rust it is written to: each scalar it changes, with every scalar that scalar becomes.
+fn decomposition_table(out: &mut String, constant: &str, what: &str, mapping: &Mapping) {
+    let _ = writeln!(
+        out,
+        "/// Each scalar the {what} changes, with every scalar it becomes.\npub(crate) static {constant}: &[(u32, &[u32])] = &["
+    );
+    for (scalar, targets) in mapping {
+        let _ = writeln!(out, "    (0x{scalar:X}, &[{}]),", spelled(targets));
+    }
+    out.push_str("];\n\n");
+}
+
+/// The primary composites as the Rust they are written to: each pair, and the scalar it composes to.
+fn composition_table(out: &mut String, pairs: &[(usize, usize, usize)]) {
+    out.push_str(
+        "/// Each primary composite: the pair of scalars it composes from, in the order of the pairs, and itself.\npub(crate) static COMPOSITION: &[(u32, u32, u32)] = &[\n",
+    );
+    for (first, second, composite) in pairs {
+        let _ = writeln!(out, "    (0x{first:X}, 0x{second:X}, 0x{composite:X}),");
     }
     out.push_str("];\n\n");
 }
@@ -436,6 +592,8 @@ fn main() {
         properties,
         special,
         folded,
+        normalization,
+        normalization_conformance,
     ] = FILES.map(|(path, sha256)| text(path, sha256));
 
     let second = |fields: &[&str]| fields.get(1).map(|class| (*class).to_string());
@@ -541,6 +699,27 @@ fn main() {
         &full(simple(&unicode_data, 13), &special, 1),
     );
     mapping_table(&mut out, "FOLD", "Case_Folding", &folding(&folded));
+    combining_class_table(&mut out, &combining_classes(&unicode_data));
+    let mappings = decompositions(&unicode_data);
+    decomposition_table(
+        &mut out,
+        "CANONICAL_DECOMPOSITION",
+        "full canonical decomposition",
+        &canonical_decomposition(&mappings),
+    );
+    decomposition_table(
+        &mut out,
+        "COMPATIBILITY_DECOMPOSITION",
+        "full compatibility decomposition, where it is other than the canonical one,",
+        &compatibility_decomposition(&mappings),
+    );
+    composition_table(
+        &mut out,
+        &compositions(
+            &mappings,
+            &binary(&normalization, "Full_Composition_Exclusion"),
+        ),
+    );
 
     out.push_str(
         "/// Every case of `GraphemeBreakTest.txt`: a run of scalars as the clusters it segments into.\n#[cfg(any(test, feature = \"test-support\"))]\npub(crate) static GRAPHEME_BREAK_CASES: &[&[&[u32]]] = &[\n",
@@ -557,6 +736,18 @@ fn main() {
             })
             .collect();
         let _ = writeln!(out, "    &[{}],", clusters.join(", "));
+    }
+    out.push_str("];\n\n");
+
+    out.push_str(
+        "/// Every case of `NormalizationTest.txt`: its five columns, each the scalars it holds, which another crate's tests hold its normalization to.\n#[cfg(feature = \"test-support\")]\npub(crate) static NORMALIZATION_CASES: &[[&[u32]; 5]] = &[\n",
+    );
+    for case in normalization_cases(&normalization_conformance) {
+        let columns: Vec<String> = case
+            .iter()
+            .map(|column| format!("&[{}]", spelled(column)))
+            .collect();
+        let _ = writeln!(out, "    [{}],", columns.join(", "));
     }
     out.push_str("];\n");
 
