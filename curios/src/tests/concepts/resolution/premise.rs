@@ -271,7 +271,7 @@ fn an_operator_under_a_local_premise_decides_nothing_the_carriers_witness_would(
         "#;
     let report = error(guarded);
     assert!(
-        report.contains("nothing discharged `/std/Bool/Holds(y - x < List/len(@Nat, [1]))`")
+        report.contains("nothing discharged `/std/Bool/Holds(y - x < List/length(@Nat, [1]))`")
             && report.contains("not read: a guard, `x == y`"),
         "{report}"
     );

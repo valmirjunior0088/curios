@@ -8,7 +8,7 @@ pub struct Focus(P: Type): pub Type {
     --- Where in `labels` the part that holds the keys is.
     at: Nat,
     --- Why `at` is one of them.
-    @inside: Bool/Holds(at < List/len(labels)),
+    @inside: Bool/Holds(at < List/length(labels)),
 }
 
 --- `first` holding the keys, and `rest` after it in the ring.
@@ -25,7 +25,7 @@ pub let holds(@P: Type, use Eql(P), f: Focus(P), p: P) -> Bool =
 
 --- The keys on to the next label, and from the last to the first.
 pub let next(@P: Type, f: Focus(P)) -> Focus(P) =
-    match f.at + 1 < List/len(f.labels)
+    match f.at + 1 < List/length(f.labels)
     | true => Focus { labels = f.labels, at = f.at + 1 }
     | false => Focus { labels = f.labels, at = 0 }
     end;
@@ -33,7 +33,7 @@ pub let next(@P: Type, f: Focus(P)) -> Focus(P) =
 --- The keys back to the label before, and from the first to the last.
 pub let prev(@P: Type, f: Focus(P)) -> Focus(P) =
     match f.at
-    | 0 => Focus { labels = f.labels, at = List/len(f.labels) - 1 }
+    | 0 => Focus { labels = f.labels, at = List/length(f.labels) - 1 }
     | k + 1 => Focus { labels = f.labels, at = k }
     end;
 

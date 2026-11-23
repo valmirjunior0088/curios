@@ -36,18 +36,18 @@ let agree(value: Toml, expected: Json) -> Bool =
     match (value, expected)
     | (table(entries), obj(members)) =>
         let pairs = Map/to_list(entries);
-        List/len(pairs) == List/len(members)
+        List/length(pairs) == List/length(members)
             && List/all(pairs, (pair: {Str, Toml}) =>
                 match List/find(members, (m: {Str, Json}) => m.0 == pair.0)
                 | some(m) => agree(pair.1, m.1)
                 | none() => false
                 end)
     | (arr(items), arr(wanted)) =>
-        List/len(items) == List/len(wanted)
+        List/length(items) == List/length(wanted)
             && List/all(List/zip(items, wanted), (pair: {Toml, Json}) => agree(pair.0, pair.1))
     | (_, obj(members)) =>
         match (member(members, "type"), member(members, "value"))
-        | (some(kind), some(text)) => List/len(members) == 2 && scalar(value, kind, text)
+        | (some(kind), some(text)) => List/length(members) == 2 && scalar(value, kind, text)
         | _ => false
         end
     | _ => false
@@ -95,8 +95,8 @@ let execute() -> Try(Io, Str, {}) =
     let cases = List/filter(Str/split(listed, "\n"), (line: Str) => Str/ends_with(line, ".toml"));
     let answers = List/traverse(cases, (name: Str) => judged(root, name))!;
     let wrong = List/filter_map(answers, (answer: Option(Str)) => answer);
-    let () = Monad/lift(Fmt/print("% cases\n")(List/len(cases)))!;
-    match List/len(wrong)
+    let () = Monad/lift(Fmt/print("% cases\n")(List/length(cases)))!;
+    match List/length(wrong)
     | 0 => Try/pure(())
     | count => Try/raise(Str/join("\n", [Fmt/render("% answered otherwise:")(count), ..wrong]))
     end;

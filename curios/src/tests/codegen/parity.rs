@@ -22,7 +22,7 @@ fn concept_method_call_matches_direct_intrinsic_codegen() {
         use /std/ops/{Add};
         pub let bump(x : Nat) -> Nat = Add/add(x, 1);
         let entry() -> /std/Io({}) =
-            let taint = List/len(Proc/args()!);
+            let taint = List/length(Proc/args()!);
             let n : Nat = taint;
             /std/print(Nat/to_str(bump(n)));
         entry()
@@ -31,7 +31,7 @@ fn concept_method_call_matches_direct_intrinsic_codegen() {
         use /std/{Nat, List, Str, Proc};
         pub let bump(x : Nat) -> Nat = Nat/add(x, 1);
         let entry() -> /std/Io({}) =
-            let taint = List/len(Proc/args()!);
+            let taint = List/length(Proc/args()!);
             let n : Nat = taint;
             /std/print(Nat/to_str(bump(n)));
         entry()
@@ -40,13 +40,13 @@ fn concept_method_call_matches_direct_intrinsic_codegen() {
     assert_eq!(operations(through_concept), operations(direct),);
 }
 
-/// A match with no head whose arms each take one condition compiles to exactly the nested boolean matches a user would hand-write: `match | c0 => b0 | c1 => b1 | _ => d end` is `match c0 | true => b0 | false => match c1 | true => b1 | false => d end end`. Both reach the same core `bool_match` nesting, so they emit the same intrinsic operations — the two forms mint metavars in a slightly different order, which only permutes the emission order of the top-level specialized closures (their bodies are identical), so `operations()` is the exact comparison. A runtime operand (`List/len(/std/Proc/args()!)`) keeps the ladder from folding to a constant.
+/// A match with no head whose arms each take one condition compiles to exactly the nested boolean matches a user would hand-write: `match | c0 => b0 | c1 => b1 | _ => d end` is `match c0 | true => b0 | false => match c1 | true => b1 | false => d end end`. Both reach the same core `bool_match` nesting, so they emit the same intrinsic operations — the two forms mint metavars in a slightly different order, which only permutes the emission order of the top-level specialized closures (their bodies are identical), so `operations()` is the exact comparison. A runtime operand (`List/length(/std/Proc/args()!)`) keeps the ladder from folding to a constant.
 #[test]
 fn a_match_with_no_head_matches_hand_nested_bool_codegen() {
     let ladder = r#"
         use /std/{Nat, List, Str, Proc};
         let entry() -> /std/Io({}) =
-            let taint = List/len(Proc/args()!);
+            let taint = List/length(Proc/args()!);
             let n : Nat = taint;
             let result =
                 match
@@ -60,7 +60,7 @@ fn a_match_with_no_head_matches_hand_nested_bool_codegen() {
     let nested = r#"
         use /std/{Nat, List, Str, Proc};
         let entry() -> /std/Io({}) =
-            let taint = List/len(Proc/args()!);
+            let taint = List/length(Proc/args()!);
             let n : Nat = taint;
             let result =
                 match n <= 0
@@ -89,7 +89,7 @@ fn a_bind_guard_matches_headed_catch_all_codegen() {
             | _ => 99
             end;
         let entry() -> /std/Io({}) =
-            let taint = List/len(Proc/args()!);
+            let taint = List/length(Proc/args()!);
             let n : Nat = taint;
             /std/print(Nat/to_str(f(Option/some(n))));
         entry()
@@ -102,7 +102,7 @@ fn a_bind_guard_matches_headed_catch_all_codegen() {
             | _ => 99
             end;
         let entry() -> /std/Io({}) =
-            let taint = List/len(Proc/args()!);
+            let taint = List/length(Proc/args()!);
             let n : Nat = taint;
             /std/print(Nat/to_str(f(Option/some(n))));
         entry()
@@ -119,7 +119,7 @@ fn concept_comparison_matches_direct_intrinsic_codegen() {
         use /std/ops/{Cmp};
         pub let small(x : Nat) -> Bool = Cmp/lt(x, 10);
         let entry() -> /std/Io({}) =
-            let taint = List/len(Proc/args()!);
+            let taint = List/length(Proc/args()!);
             let n : Nat = taint;
             /std/print(Bool/to_str(small(n)));
         entry()
@@ -128,7 +128,7 @@ fn concept_comparison_matches_direct_intrinsic_codegen() {
         use /std/{Nat, Bool, List, Str, Proc};
         pub let small(x : Nat) -> Bool = Nat/lt(x, 10);
         let entry() -> /std/Io({}) =
-            let taint = List/len(Proc/args()!);
+            let taint = List/length(Proc/args()!);
             let n : Nat = taint;
             /std/print(Bool/to_str(small(n)));
         entry()

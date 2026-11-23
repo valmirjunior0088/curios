@@ -68,7 +68,7 @@ let number() -> Parse(Str, Json) =
     let exponent = exp_part()!;
     let magnitude = Nat/to_int(digits_value(Str/concat(whole, fraction)));
     let mantissa = match minus | some(_) => +0 - magnitude | none() => magnitude end;
-    Parse/pure(Json/num(Json/Number/of(mantissa, exponent - Nat/to_int(Str/len(fraction)))));
+    Parse/pure(Json/num(Json/Number/of(mantissa, exponent - Nat/to_int(Str/length(fraction)))));
 
 --- Whether `c` may stand in a string as written: any but the quote, the backslash and the control characters below `U+0020`, which the grammar has escaped.
 let is_unescaped(c: Char) -> Bool =

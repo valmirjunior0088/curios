@@ -187,13 +187,13 @@ fn a_symbolic_run_is_the_same_value_however_it_is_grouped() {
 
 #[test]
 fn a_length_and_a_window_do_not_depend_on_grouping() {
-    // **The law the measure adds, stated where both checkers see it.** `Bytes/len` answers a wholly-literal spine by folding the operands' own lengths, and `Bytes/get`/`Bytes/slice` locate their position the same way, rather than rebuilding a `len` per operand or peeling one generator at a time. A length is a definitional equation, so a measure that disagreed with the run would be a false one and congruence carries a false equation to `False` — which is why this is stated as a checked proof rather than an observed result.
+    // **The law the measure adds, stated where both checkers see it.** `Bytes/length` answers a wholly-literal spine by folding the operands' own lengths, and `Bytes/get`/`Bytes/slice` locate their position the same way, rather than rebuilding a `len` per operand or peeling one generator at a time. A length is a definitional equation, so a measure that disagreed with the run would be a false one and congruence carries a false equation to `False` — which is why this is stated as a checked proof rather than an observed result.
     //
     // Each law puts the *same* run on both sides under different groupings, so what is being proven is precisely that grouping is invisible. `curios-core`'s `reduce::intrinsic` tests state the same thing against the folds directly and over more shapes; this is the both-checkers half.
     let source = r#"
         use /std/{Str, Eq, Bytes, Byte, Nat, List, Option, Io};
-        let split_length : Eq()(Bytes/len(0x[..0x[0x30, 0x31], ..0x[0x32, 0x33, 0x34]]), 5) = Eq/refl();
-        let nested_length : Eq()(Bytes/len(0x[..0x[..0x[0x30], ..0x[0x31]], ..0x[0x32, 0x33, 0x34]]), 5) =
+        let split_length : Eq()(Bytes/length(0x[..0x[0x30, 0x31], ..0x[0x32, 0x33, 0x34]]), 5) = Eq/refl();
+        let nested_length : Eq()(Bytes/length(0x[..0x[..0x[0x30], ..0x[0x31]], ..0x[0x32, 0x33, 0x34]]), 5) =
             Eq/refl();
         let split_window
             : Eq()(Bytes/slice(0x[..0x[0x30, 0x31], ..0x[0x32, 0x33, 0x34]], 1, 3), 0x[0x31, 0x32, 0x33]) =
@@ -203,7 +203,7 @@ fn a_length_and_a_window_do_not_depend_on_grouping() {
             : Eq()(Bytes/try_get(0x[..0x[0x30, 0x31], ..0x[0x32, 0x33, 0x34]], 3), Option/some(third)) =
             Eq/refl();
         let list_length(p : Nat, q : Nat, r : Nat)
-            -> Eq()(List/len([..[p, q], ..[r]]), 3) = Eq/refl();
+            -> Eq()(List/length([..[p, q], ..[r]]), 3) = Eq/refl();
         let entry() -> /std/Io({}) =
             let _ = /std/print("ok")!;
             /std/Io/pure(());
@@ -238,17 +238,17 @@ fn bytes_slice_is_a_monoid_citizen() {
         use /std/{Str, Eq, Bytes, Nat, Io};
         use /std/Bool/{Holds};
         let split(b : Bytes, s : Nat, l1 : Nat, l2 : Nat,
-                  total : Holds((s + l1) + l2 <= Bytes/len(b)))
+                  total : Holds((s + l1) + l2 <= Bytes/length(b)))
             -> Eq()(0x[
                     ..Bytes/slice(
                         b, s, l1,
                         @Nat/le/trans(Nat/le/add_r(s + l1, l2), total)),
                     ..Bytes/slice(b, s + l1, l2, @total)], Bytes/slice(b, s, l1 + l2, @total)) =
             Eq/refl();
-        let empty(b : Bytes, i : Nat, il : Holds(i <= Bytes/len(b)))
+        let empty(b : Bytes, i : Nat, il : Holds(i <= Bytes/length(b)))
             -> Eq()(Bytes/slice(b, i, 0, @il), 0x[]) = Eq/refl();
         let full(b : Bytes)
-            -> Eq()(Bytes/slice(b, 0, Bytes/len(b), @Nat/le/refl(Bytes/len(b))), b) =
+            -> Eq()(Bytes/slice(b, 0, Bytes/length(b), @Nat/le/refl(Bytes/length(b))), b) =
             Eq/refl();
         let entry() -> /std/Io({}) =
             let _ = /std/print("ok")!;
@@ -265,8 +265,8 @@ fn bytes_slice_window_seam_mismatch_is_rejected() {
         use /std/{Str, Eq, Bytes, Nat, Io};
         use /std/Bool/{Holds};
         let bad(b : Bytes, s : Nat, l1 : Nat, o : Nat, l2 : Nat,
-                w1 : Holds(s + l1 <= Bytes/len(b)), w2 : Holds(o + l2 <= Bytes/len(b)),
-                w3 : Holds(s + (l1 + l2) <= Bytes/len(b)))
+                w1 : Holds(s + l1 <= Bytes/length(b)), w2 : Holds(o + l2 <= Bytes/length(b)),
+                w3 : Holds(s + (l1 + l2) <= Bytes/length(b)))
             -> Eq()(0x[..Bytes/slice(b, s, l1, @w1), ..Bytes/slice(b, o, l2, @w2)], Bytes/slice(b, s, l1 + l2, @w3)) =
             Eq/refl();
         let entry() -> /std/Io({}) =
@@ -284,17 +284,17 @@ fn list_slice_is_a_monoid_citizen() {
         use /std/{Str, Eq, List, Nat, Io};
         use /std/Bool/{Holds};
         let split(@T : Type, a : List(T), s : Nat, l1 : Nat, l2 : Nat,
-                  total : Holds((s + l1) + l2 <= List/len(a)))
+                  total : Holds((s + l1) + l2 <= List/length(a)))
             -> Eq()([
                     ..List/slice(
                         @T, a, s, l1,
                         @Nat/le/trans(Nat/le/add_r(s + l1, l2), total)),
                     ..List/slice(@T, a, s + l1, l2, @total)], List/slice(@T, a, s, l1 + l2, @total)) =
             Eq/refl();
-        let empty(@T : Type, a : List(T), i : Nat, il : Holds(i <= List/len(a)))
+        let empty(@T : Type, a : List(T), i : Nat, il : Holds(i <= List/length(a)))
             -> Eq()(List/slice(@T, a, i, 0, @il), []) = Eq/refl();
         let full(@T : Type, a : List(T))
-            -> Eq()(List/slice(@T, a, 0, List/len(a), @Nat/le/refl(List/len(a))), a) =
+            -> Eq()(List/slice(@T, a, 0, List/length(a), @Nat/le/refl(List/length(a))), a) =
             Eq/refl();
         let entry() -> /std/Io({}) =
             let _ = /std/print("ok")!;
@@ -343,8 +343,8 @@ fn list_slice_window_seam_mismatch_is_rejected() {
         use /std/{Str, Eq, List, Nat, Io};
         use /std/Bool/{Holds};
         let bad(@T : Type, a : List(T), s : Nat, m : Nat, n : Nat, e : Nat,
-                sm : Holds(s <= m), ml : Holds(m <= List/len(a)),
-                ne : Holds(n <= e), el : Holds(e <= List/len(a)), se : Holds(s <= e))
+                sm : Holds(s <= m), ml : Holds(m <= List/length(a)),
+                ne : Holds(n <= e), el : Holds(e <= List/length(a)), se : Holds(s <= e))
             -> Eq()([
                     ..List/slice(@T, a, s, m, @sm, @ml),
                     ..List/slice(@T, a, n, e, @ne, @el)], List/slice(@T, a, s, e, @se, @el)) =
@@ -359,15 +359,15 @@ fn list_slice_window_seam_mismatch_is_rejected() {
 
 #[test]
 fn bytes_len_reduces_across_a_cons_spine() {
-    // The `Bytes/len` partner of the slice/get cons-reduction: length distributes over concatenation and an `append` is one byte longer, so a cons spine's length reduces to a `succ` over the tail's — `len(cons(h, t)) = succ(len t)`. `Nat/lt` then discharges the codepoint walk's bounds guard on that spine: `lt(0, succ _) = true` (the left literal is below the successor floor) and `lt(succ _, 0) = false` (the left is at least the floor). All by `refl` for a SYMBOLIC tail, the pair that lets the codepoint walk step a symbolic cons.
+    // The `Bytes/length` partner of the slice/get cons-reduction: length distributes over concatenation and an `append` is one byte longer, so a cons spine's length reduces to a `succ` over the tail's — `len(cons(h, t)) = succ(len t)`. `Nat/lt` then discharges the codepoint walk's bounds guard on that spine: `lt(0, succ _) = true` (the left literal is below the successor floor) and `lt(succ _, 0) = false` (the left is at least the floor). All by `refl` for a SYMBOLIC tail, the pair that lets the codepoint walk step a symbolic cons.
     let source = r#"
         use /std/{Str, Eq, Byte, Bytes, Nat, Io};
         let len(h : Byte, t : Bytes)
-            -> Eq()(Bytes/len(0x[h, ..t]), Nat/add(1, Bytes/len(t))) = Eq/refl();
+            -> Eq()(Bytes/length(0x[h, ..t]), Nat/add(1, Bytes/length(t))) = Eq/refl();
         let guard(h : Byte, t : Bytes)
-            -> Eq()(Nat/lt(0, Bytes/len(0x[h, ..t])), true) = Eq/refl();
+            -> Eq()(Nat/lt(0, Bytes/length(0x[h, ..t])), true) = Eq/refl();
         let floor(h : Byte, t : Bytes)
-            -> Eq()(Nat/lt(Bytes/len(0x[h, ..t]), 0), false) = Eq/refl();
+            -> Eq()(Nat/lt(Bytes/length(0x[h, ..t]), 0), false) = Eq/refl();
         let entry() -> /std/Io({}) =
             let _ = /std/print("ok")!;
             /std/Io/pure(());
@@ -384,7 +384,7 @@ fn an_append_over_a_nonempty_base_still_decodes_its_first_atom() {
         let lead : Byte = 0x48;
         let byte_head(b : Byte) -> Eq()(Bytes/try_get(0x[0x48, b], 0), Option/some(lead)) = Eq/refl();
         let chained(a : Byte, b : Byte) -> Eq()(Bytes/try_get(0x[0x48, a, b], 0), Option/some(lead)) = Eq/refl();
-        let chained_len(a : Byte, b : Byte) -> Eq()(Bytes/len(0x[a, b]), 2) = Eq/refl();
+        let chained_len(a : Byte, b : Byte) -> Eq()(Bytes/length(0x[a, b]), 2) = Eq/refl();
         let entry() -> /std/Io({}) =
             let _ = /std/print("ok")!;
             /std/Io/pure(());
@@ -465,7 +465,7 @@ fn a_position_past_a_character_meets_the_operand_after_it() {
         use /std/{Nat, Bytes, Char, Str, Eq};
         use /std/Bool/{True};
         let _past(a: Bytes, b: Bytes, c: Char)
-            -> Eq()(Bytes/drop(0x[..a, ..Str/of_char(c).bytes, ..b], Bytes/len(a) + Bytes/len(Char/to_utf8(c)), @True/qed()), b) =
+            -> Eq()(Bytes/drop(0x[..a, ..Str/of_char(c).bytes, ..b], Bytes/length(a) + Bytes/length(Char/to_utf8(c)), @True/qed()), b) =
             Eq/refl();
         /std/print("ok")
         "#),

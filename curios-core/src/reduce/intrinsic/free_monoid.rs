@@ -32,7 +32,7 @@ pub enum Shape<L> {
 
 /// Classify a reduced `Bytes` value into its product shape (generators are bytes).
 ///
-/// **The literal arm materializes the whole run**, one `u8` per generator. An operation whose result is a single `Nat` therefore allocates its entire subject to compute it, and that is why this takes a reducer: the buffer is charged before it is filled. `Bytes/len` of a wholly-literal value answers from the free monoid's measure without reaching here, but every symbolic shape falls through to the homomorphism and pays this.
+/// **The literal arm materializes the whole run**, one `u8` per generator. An operation whose result is a single `Nat` therefore allocates its entire subject to compute it, and that is why this takes a reducer: the buffer is charged before it is filled. `Bytes/length` of a wholly-literal value answers from the free monoid's measure without reaching here, but every symbolic shape falls through to the homomorphism and pays this.
 pub fn bytes_shape(reducer: &mut impl Reducer, value: Term) -> Result<Shape<u8>, ReduceError> {
     Ok(match Term::unwrap_or_clone(value) {
         Subterm::Intrinsic(Intrinsic::Bytes(value)) => {

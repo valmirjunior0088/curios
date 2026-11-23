@@ -89,7 +89,7 @@ pub let try_push(@A: Type, c: Channel(A), a: A) -> Io(Push) =
         Box/change(c.held, (h: Held(A)) =>
             match
             | h.finished => (h, (Push/closed(), Option/none()))
-            | Queue/len(h.queue) >= c.capacity => (h, (Push/full(), Option/none()))
+            | Queue/length(h.queue) >= c.capacity => (h, (Push/full(), Option/none()))
             | _ =>
                 (
                     Held { ..h, queue = Queue/push(h.queue, a), readers = Option/none() },
@@ -122,9 +122,9 @@ pub let finish(@A: Type, c: Channel(A)) -> Io({}) =
     woken(writers);
 
 --- How many values the channel holds. The count holds until the caller next waits, so that many takes go through without waiting.
-pub let len(@A: Type, c: Channel(A)) -> Io(Nat) =
+pub let length(@A: Type, c: Channel(A)) -> Io(Nat) =
     let h = Box/held(c.held)!;
-    Io/pure(Queue/len(h.queue));
+    Io/pure(Queue/length(h.queue));
 
 --- The most values the channel holds, as it was made.
 pub let capacity(@A: Type, c: Channel(A)) -> Io(Nat) =

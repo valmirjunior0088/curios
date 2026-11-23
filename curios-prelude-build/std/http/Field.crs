@@ -52,9 +52,9 @@ let pieces(b: Bytes) -> List(Bytes) =
         escaped: Bool,
         found: List(Bytes),
         @ordered: Bool/Holds(from <= at),
-        @reached: Bool/Holds(at <= Bytes/len(b)),
+        @reached: Bool/Holds(at <= Bytes/length(b)),
     ) -> List(Bytes) =
-        match Bool/holds(at < Bytes/len(b))
+        match Bool/holds(at < Bytes/length(b))
         | none() => List/reverse([Bytes/slice(b, from, at - from), ..found])
         | some(inside) =>
             let n = Byte/to_nat(Bytes/get(b, at, @inside));
@@ -75,7 +75,7 @@ pub let members(fields: List(Field), name: Str) -> List(Bytes) =
             List/map(
                 List/filter(fields, (f: Field) => Name/is(f.name, name)),
                 (f: Field) => List/map(pieces(f.value.bytes), octets/trim))),
-        (member) => Bytes/len(member) != 0);
+        (member) => Bytes/length(member) != 0);
 
 --- The field as its line on the wire: the name, a colon and a space, the value, and the line's end.
 pub let line(f: Field) -> Bytes =

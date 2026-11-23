@@ -30,7 +30,7 @@ Settled by the user on 2026-11-20.
 
 ## Verification
 
-- Stage 2: `xs[i]` under a guard on `i < List/len(xs)` checks, and outside one is refused as an undischarged bound naming the concept's `Ok`; `x[foo]` reads `x` at `foo` under a binder named `x`; a program's own type indexed by a type of its choosing; each mutation-checked.
+- Stage 2: `xs[i]` under a guard on `i < List/length(xs)` checks, and outside one is refused as an undischarged bound naming the concept's `Ok`; `x[foo]` reads `x` at `foo` under a binder named `x`; a program's own type indexed by a type of its choosing; each mutation-checked.
 - Stage 3: `/std`'s tests and the lint, which elaborates, erases and certifies all of it.
 
 ## Retirement

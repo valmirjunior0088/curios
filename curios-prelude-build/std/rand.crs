@@ -25,7 +25,7 @@ pub let below(n: Nat, @ok: Bool/Holds(0 < n)) -> Io(Nat) =
     Io/pure(d.value);
 
 -- Fisher–Yates from the last place down: the element at `i` trades places with one drawn from the first `i + 1`, so each order of `l` is as likely as any other.
-let shuffled(@T: Type, l: List(T), i: Nat, @within: Bool/Holds(i < List/len(l))) -> Io(List(T)) =
+let shuffled(@T: Type, l: List(T), i: Nat, @within: Bool/Holds(i < List/length(l))) -> Io(List(T)) =
     match i
     | 0 => Io/pure(l)
     | k + 1 =>
@@ -38,7 +38,7 @@ let shuffled(@T: Type, l: List(T), i: Nat, @within: Bool/Holds(i < List/len(l)))
 
 --- `l` in an order drawn from the operating system's generator, each order as likely as any other.
 pub let shuffle(@T: Type, l: List(T)) -> Io(List(T)) =
-    match List/len(l)
+    match List/length(l)
     | 0 => Io/pure(l)
     | n + 1 => shuffled(l, n, @proved())
     end;

@@ -79,7 +79,7 @@ fn two_windows_across_a_gap_are_not_one_window() {
             b: Bytes,
             m: Nat,
             n: Nat,
-            @ok: Holds(m + 1 + n <= Bytes/len(b)),
+            @ok: Holds(m + 1 + n <= Bytes/length(b)),
         ) -> Holds(Bytes/eql(0x[..Bytes/slice(b, 0, m), ..Bytes/slice(b, m, n)], Bytes/slice(b, 0, m + n))) =
             True/qed();
 
@@ -105,9 +105,9 @@ fn an_index_past_the_wrong_operand_is_no_seam() {
         let shifted(
             b: Bytes,
             c: Bytes,
-            @inside: Holds(Bytes/len(b) < Bytes/len(0x[..b, ..c])),
-            @first: Holds(0 < Bytes/len(c)),
-        ) -> Eq()(Bytes/get(0x[..b, ..c], Bytes/len(b)), Bytes/get(c, 0)) =
+            @inside: Holds(Bytes/length(b) < Bytes/length(0x[..b, ..c])),
+            @first: Holds(0 < Bytes/length(c)),
+        ) -> Eq()(Bytes/get(0x[..b, ..c], Bytes/length(b)), Bytes/get(c, 0)) =
             Eq/refl();
 
         let read: Eq()(Byte/to_nat(Bytes/get(0x[1, 2, 3], 1)), Byte/to_nat(Bytes/get(0x[2, 3], 0))) =
@@ -118,14 +118,14 @@ fn an_index_past_the_wrong_operand_is_no_seam() {
         b"ok",
     )
     .refused(&[
-        ("Holds(Bytes/len(b) < Bytes/len(0x[..b, ..c]))", "Holds(Bytes/len(c) < Bytes/len(0x[..b, ..c]))"),
-        ("Bytes/get(0x[..b, ..c], Bytes/len(b))", "Bytes/get(0x[..b, ..c], Bytes/len(c))"),
+        ("Holds(Bytes/length(b) < Bytes/length(0x[..b, ..c]))", "Holds(Bytes/length(c) < Bytes/length(0x[..b, ..c]))"),
+        ("Bytes/get(0x[..b, ..c], Bytes/length(b))", "Bytes/get(0x[..b, ..c], Bytes/length(c))"),
         ("Bytes/get(0x[1, 2, 3], 1)", "Bytes/get(0x[1, 2, 3], 2)"),
     ])
-    .by_elaborator_in("/shifted", |error| matches!(error, curios_elab::Error::TypeMismatch { expected, .. } if pinned(expected) == "/std/Eq/Eq(Byte)(Bytes/get(0x[..b, ..c], Bytes/len(c)), Bytes/get(c, 0))"));
+    .by_elaborator_in("/shifted", |error| matches!(error, curios_elab::Error::TypeMismatch { expected, .. } if pinned(expected) == "/std/Eq/Eq(Byte)(Bytes/get(0x[..b, ..c], Bytes/length(c)), Bytes/get(c, 0))"));
 }
 
-// A bound is discharged by the folds its proposition reduces through, and a length past an operand that may be empty is not strictly past it: the sum's shared summand cancels, and `0 < Bytes/len(c)` is what is left. Discharged anyway, `longer(0x[], 0x[])` would be a closed proof of `0 < 0`. The control's bound is not strict, and what is left, `0 <= Bytes/len(c)`, holds.
+// A bound is discharged by the folds its proposition reduces through, and a length past an operand that may be empty is not strictly past it: the sum's shared summand cancels, and `0 < Bytes/length(c)` is what is left. Discharged anyway, `longer(0x[], 0x[])` would be a closed proof of `0 < 0`. The control's bound is not strict, and what is left, `0 <= Bytes/length(c)`, holds.
 #[test]
 fn a_length_past_an_operand_that_may_be_empty_is_no_strict_bound() {
     control(
@@ -133,7 +133,7 @@ fn a_length_past_an_operand_that_may_be_empty_is_no_strict_bound() {
         use /std/{Bytes};
         use /std/Bool/{True, Holds};
 
-        let longer(b: Bytes, c: Bytes) -> Holds(Bytes/len(b) <= Bytes/len(0x[..b, ..c])) =
+        let longer(b: Bytes, c: Bytes) -> Holds(Bytes/length(b) <= Bytes/length(0x[..b, ..c])) =
             True/qed();
 
         let at = longer(0x[], 0x[]);
@@ -142,9 +142,9 @@ fn a_length_past_an_operand_that_may_be_empty_is_no_strict_bound() {
         b"ok",
     )
     .refused(&[
-        ("Bytes/len(b) <= Bytes/len(", "Bytes/len(b) < Bytes/len("),
+        ("Bytes/length(b) <= Bytes/length(", "Bytes/length(b) < Bytes/length("),
     ])
-    .by_elaborator_in("/longer", |error| matches!(error, curios_elab::Error::TypeMismatch { expected, .. } if pinned(expected) == "/sys/Bool/Holds(0 < Bytes/len(c))"));
+    .by_elaborator_in("/longer", |error| matches!(error, curios_elab::Error::TypeMismatch { expected, .. } if pinned(expected) == "/sys/Bool/Holds(0 < Bytes/length(c))"));
 }
 
 // `map` by a function whose body reduces to its binder is the list itself, and only then: `v - 1 + 1` is `v` everywhere but at `0`, where truncation makes it `1`. Read as the identity, `moved([0])` would hold `[1]` one value with `[0]`. The control maps by `v + 1 - 1`, which is `v` everywhere.

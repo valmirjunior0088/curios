@@ -22,9 +22,9 @@ let walk(b: Bytes, i: Nat, remaining: Nat, acc: Nat) -> Option(Nat) =
     end;
 
 let decode(s: Str) -> Option(Nat) =
-    match Bytes/len(Str/to_bytes(s)) == 0
+    match Bytes/length(Str/to_bytes(s)) == 0
     | true => Option/none()
-    | false => walk(Str/to_bytes(s), 0, Bytes/len(Str/to_bytes(s)), 0)
+    | false => walk(Str/to_bytes(s), 0, Bytes/length(Str/to_bytes(s)), 0)
     end;
 
 let loop(k: Nat, digits: Str, acc: Nat) -> Nat =

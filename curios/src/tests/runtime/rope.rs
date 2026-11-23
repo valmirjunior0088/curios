@@ -134,10 +134,10 @@ fn a_read_in_a_loop_answers_whatever_shape_each_turn_hands_it() {
             let arguments = Proc/args()!;
             let leaf = match List/try_get(arguments, 1) | some(b) => b | none() => 0x[] end;
             let joined = 0x[..leaf, ..Str/to_bytes("-mid-"), ..leaf];
-            let text = Str/concat(Nat/to_str(List/len(arguments)), "\nalpha\nbeta gamma\ndelta");
+            let text = Str/concat(Nat/to_str(List/length(arguments)), "\nalpha\nbeta gamma\ndelta");
             let viewed = List/map(Str/lines(text), Str/to_bytes);
             let parts = [leaf, joined, ..viewed, joined, leaf];
-            let n = Bytes/len(leaf);
+            let n = Bytes/length(leaf);
             let grown = [..List/range(0, n), ..List/range(n, 2 * n), ..List/range(0, 3)];
             /std/print(Str/join(" ", List/map([heads(parts, 0), weigh_all(parts, 0), sum(grown, 0)], Nat/to_str)));
 
@@ -196,7 +196,7 @@ fn a_run_built_from_a_window_and_read_once_holds_no_room() {
             let window = Bytes/slice(base, 1, mib * 1048576);
             let built = 0x[..window, ..Bytes/replicate(16, 0x42)];
             let cut = Bytes/drop(built, 1);
-            /std/print(Nat/to_str(Bytes/len(cut)));
+            /std/print(Nat/to_str(Bytes/length(cut)));
         entry()
         "#,
     )

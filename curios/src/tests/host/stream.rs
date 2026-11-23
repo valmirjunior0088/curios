@@ -77,7 +77,7 @@ fn a_rest_surfaces_a_read_failure_instead_of_a_partial_prefix() {
         use /std/{Nat, Bytes, Bool, Result, Cell, Str, Try, Io, print};
         let show(r : Result(Io/Error, Bytes)) -> Str =
             match r
-            | success(bytes) => Str/concat("ok:", Nat/to_str(Bytes/len(bytes)))
+            | success(bytes) => Str/concat("ok:", Nat/to_str(Bytes/length(bytes)))
             | failure(_) => "error"
             end;
         struct Failing: Type { code: Nat }
@@ -163,7 +163,7 @@ fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
     assert!(refused.contains("nothing discharged"), "{refused}");
 
     let decided = stream(
-        "match Bool/holds(0 < Bytes/len(p.1)) | some(q) => Try/pure(Io/Chunk/bytes(p.1, @q)) | none() => next(more) end",
+        "match Bool/holds(0 < Bytes/length(p.1)) | some(q) => Try/pure(Io/Chunk/bytes(p.1, @q)) | none() => next(more) end",
     );
     assert_eq!(run(&decided), b"a");
 }

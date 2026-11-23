@@ -657,7 +657,7 @@ fn a_proof_reaching_a_partial_prelude_definition_is_rejected() {
     });
 }
 
-// A proof carrying a loop its reduction discards proves its proposition by a total term: the bound `List/get(answers.list, 2)` owes over a vector counted by `List/len([spin(1), Io/pure(2), Io/pure(3)])` is discharged by a proof whose arguments spell that count, and the count reduces to `3` whatever `spin` does. Both checkers read the proof as they reduce it, so `spin` is no reach. Mutation-checked: reading a proof by the names it writes refuses `first` as reaching `spin`.
+// A proof carrying a loop its reduction discards proves its proposition by a total term: the bound `List/get(answers.list, 2)` owes over a vector counted by `List/length([spin(1), Io/pure(2), Io/pure(3)])` is discharged by a proof whose arguments spell that count, and the count reduces to `3` whatever `spin` does. Both checkers read the proof as they reduce it, so `spin` is no reach. Mutation-checked: reading a proof by the names it writes refuses `first` as reaching `spin`.
 #[test]
 fn a_proof_carrying_a_loop_its_reduction_discards_is_accepted() {
     let source = r#"
@@ -665,7 +665,7 @@ fn a_proof_carrying_a_loop_its_reduction_discards_is_accepted() {
 
         let spin(n: Nat) -> Io(Nat) = Io/bind(Io/yield(), (()) => spin(n));
 
-        let all_counted(@A: Type, actions: List(Io(A))) -> Io(Vec(A, List/len(actions))) =
+        let all_counted(@A: Type, actions: List(Io(A))) -> Io(Vec(A, List/length(actions))) =
             match actions
             | [] => Io/pure(Vec/nil())
             | [a, ..more] =>

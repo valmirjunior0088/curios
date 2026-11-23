@@ -20,7 +20,7 @@ fn a_get_of_a_symbolic_cons_head_is_the_head() {
     assert_eq!(Term::from(reduced), byte);
 }
 
-/// **What `Bytes/len` answers from has to agree with what the run actually is.** A length is a definitional equation, so a measure that disagreed with the run would be a false one, and congruence carries a false equation to `False`. Ground truth here is the fused literal's own byte count, so this pins the measure to the representation rather than to itself — and it varies the grouping, including the left-nested shape an accumulation builds, because grouping is exactly what the measure must not be able to see.
+/// **What `Bytes/length` answers from has to agree with what the run actually is.** A length is a definitional equation, so a measure that disagreed with the run would be a false one, and congruence carries a false equation to `False`. Ground truth here is the fused literal's own byte count, so this pins the measure to the representation rather than to itself — and it varies the grouping, including the left-nested shape an accumulation builds, because grouping is exactly what the measure must not be able to see.
 #[test]
 fn a_length_does_not_depend_on_how_its_run_is_grouped() {
     let whole: &[u8] = &[0x30, 0x31, 0x32, 0x33, 0x34];

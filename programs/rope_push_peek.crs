@@ -9,7 +9,7 @@ let run(k: Nat, s: Nat, built: List(Nat), acc: Nat) -> Nat =
         let n = 75 * s % 65537;
         let grown = [..built, n];
         let peeked =
-            match List/try_get(grown, List/len(built))
+            match List/try_get(grown, List/length(built))
             | some(x) => x
             | none() => 0
             end;

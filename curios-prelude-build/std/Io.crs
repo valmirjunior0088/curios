@@ -140,7 +140,7 @@ let using(@A: Type, release: (Ended) -> Io({}), body: Io(A)) -> Io(A) =
 --- A chunk holds at least one byte, and says so: a read asks for a positive count, and a stream with nothing more to give has ended. So a reader takes a chunk's first byte by its proof rather than by a default, and a loop over chunks advances with every one.
 pub induct Chunk: pub Type
 --- Bytes were read: at least one.
-| bytes(bytes: Bytes, @some: Bool/Holds(0 < Bytes/len(bytes)))
+| bytes(bytes: Bytes, @some: Bool/Holds(0 < Bytes/length(bytes)))
 --- The stream is finished.
 | ended()
 end
@@ -267,7 +267,7 @@ let pass(branches: List(Branch), flags: List(Bool), settled: Io(Bool)) -> Io({Li
                 let (after, _) = pass(more, flags, settled)!;
                 pure((kept(stepped, after), true))
             | waiting(on, filled, _, rest) =>
-                let (ready, later) = split(flags, List/len(on));
+                let (ready, later) = split(flags, List/length(on));
                 let woken = any_filled(filled)!;
                 match ready || woken
                 | true =>
@@ -337,7 +337,7 @@ pub let both(@A: Type, @B: Type, a: Io(A), b: Io(B)) -> Io({A, B}) =
     pure((x, y));
 
 -- A future for each action of `actions`, beside it.
-let promised(@A: Type, actions: List(Io(A))) -> Io(Vec({Io(A), Future(A)}, List/len(actions))) =
+let promised(@A: Type, actions: List(Io(A))) -> Io(Vec({Io(A), Future(A)}, List/length(actions))) =
     match actions
     | [] => pure(Vec/nil())
     | [a, ..more] =>
@@ -347,7 +347,7 @@ let promised(@A: Type, actions: List(Io(A))) -> Io(Vec({Io(A), Future(A)}, List/
     end;
 
 -- The answer of each future of `fs`, in their order.
-let awaited(@A: Type, fs: List(Future(A))) -> Io(Vec(A, List/len(fs))) =
+let awaited(@A: Type, fs: List(Future(A))) -> Io(Vec(A, List/length(fs))) =
     match fs
     | [] => pure(Vec/nil())
     | [f, ..more] =>
@@ -357,7 +357,7 @@ let awaited(@A: Type, fs: List(Future(A))) -> Io(Vec(A, List/len(fs))) =
     end;
 
 --- Every action of `actions` side by side, and their answers in their order once all have them, one for each action: an answer is read by its position, with no case for one missing, whatever the actions do.
-pub let all(@A: Type, actions: List(Io(A))) -> Io(Vec(A, List/len(actions))) =
+pub let all(@A: Type, actions: List(Io(A))) -> Io(Vec(A, List/length(actions))) =
     let pairs = promised(actions)!;
     let () =
         drive(

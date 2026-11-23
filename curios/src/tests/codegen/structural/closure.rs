@@ -187,7 +187,7 @@ fn a_convoy_in_a_hot_loop_allocates_no_closure() {
         let loop(k: Nat, x: Nat) -> Nat =
             match k | 0 => x | kp + 1 => loop(kp, step(x) % 65537) end;
         let entry() -> /std/Io({}) =
-            let taint = List/len(Proc/args()!);
+            let taint = List/length(Proc/args()!);
             /std/print(Nat/to_str(loop(taint, 7)));
         entry()
         "#;
@@ -217,7 +217,7 @@ fn a_closure_of_one_arity_reaches_its_call_with_nothing_to_cast() {
         let repeat(k: Nat, f: (Nat) -> Nat, x: Nat) -> Nat =
             match k | 0 => x | kp + 1 => repeat(kp, f, f(x) % 65537) end;
         let entry() -> /std/Io({}) =
-            let taint = List/len(Proc/args()!);
+            let taint = List/length(Proc/args()!);
             let step: (Nat) -> Nat =
                 match taint % 2 | 0 => (y) => y * 3 + taint | _ => (y) => y * 5 + taint end;
             /std/print(Nat/to_str(repeat(taint, step, 7)));

@@ -496,7 +496,7 @@ fn a_head_whose_result_is_its_own_parameter_is_offered_only_with_its_arguments_w
     let source = r#"
         use /std/{Nat, List};
         let row(xs: List(Nat), i: Nat) -> Nat =
-            match i < List/len(xs) | true => List/get(xs, i, @?) | false => 0 end;
+            match i < List/length(xs) | true => List/get(xs, i, @?) | false => 0 end;
         /std/Io/pure(())
     "#;
 
@@ -521,7 +521,7 @@ fn a_fit_whose_bound_nothing_proves_writes_the_bound_open() {
         use /std/{Nat, List};
         struct Name: Type { Nat }
         let pick(names: List(Name), i: Nat) -> Name =
-            match i < List/len(names) | true => ? | false => Name { 0 } end;
+            match i < List/length(names) | true => ? | false => Name { 0 } end;
         /std/Io/pure(())
     "#;
 

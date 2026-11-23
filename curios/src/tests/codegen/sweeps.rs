@@ -62,7 +62,7 @@ fn a_returned_closure_and_aggregate_survive_a_suspension_between_calls() {
             | k + 1 => (side) => combine(k, (pair.1, pair.0 + 1))(side) + 1
             end;
         let entry() -> Io({}) =
-            let n = List/len(Proc/args()!);
+            let n = List/length(Proc/args()!);
             let f = combine(n, (n, 1));
             let _ = Io/yield()!;
             let side = match n % 2 | 0 => Side/left(n) | _ => Side/right(n) end;

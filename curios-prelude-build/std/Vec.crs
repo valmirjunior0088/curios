@@ -5,7 +5,7 @@ use /std/ops/{Eql};
 
 --- That `l` holds exactly `n` elements.
 pub let Counted(@T: Type, l: List(T), n: Nat) -> Prop =
-    Eq()(List/len(l), n);
+    Eq()(List/length(l), n);
 
 --- A list of exactly `n` elements.
 pub struct Vec(T: Type, n: Nat): pub Type {
@@ -24,11 +24,11 @@ let succ_cancel(@a: Nat, @b: Nat, e: Eq()(a + 1, b + 1)) -> Eq()(a, b) =
     Eq/cong((w: Nat) => w - 1, e);
 
 --- The length, read off the type.
-pub let len(@T: Type, @n: Nat, _: Vec(T, n)) -> Nat =
+pub let length(@T: Type, @n: Nat, _: Vec(T, n)) -> Nat =
     n;
 
 --- The list as a vector, at the length it turns out to have.
-pub let of_list(@T: Type, l: List(T)) -> Vec(T, List/len(l)) =
+pub let of_list(@T: Type, l: List(T)) -> Vec(T, List/length(l)) =
     Vec { list = l, counted = Eq/refl() };
 
 --- Equal elements are equal vectors, since the count is a proof and proofs do not differ.
@@ -70,7 +70,7 @@ pub let append(@T: Type, @n: Nat, @m: Nat, v: Vec(T, n), w: Vec(T, m)) -> Vec(T,
         list = [..v.list, ..w.list],
         counted =
             Eq/subst(
-                (x: Nat) => Eq()(x + List/len(w.list), n + m),
+                (x: Nat) => Eq()(x + List/length(w.list), n + m),
                 Eq/sym(v.counted),
                 Eq/subst((y: Nat) => Eq()(n + y, n + m), Eq/sym(w.counted), Eq/refl())) };
 
@@ -79,15 +79,15 @@ pub let map(@A: Type, @B: Type, @n: Nat, v: Vec(A, n), f: (A) -> B) -> Vec(B, n)
     Vec { list = List/map(v.list, f), counted = v.counted };
 
 -- A run of one value is as long as the count it was built from, which the recursion's own shape gives.
-let replicate_len(@T: Type, n: Nat, x: T) -> Counted(List/replicate(n, x), n) =
+let replicate_length(@T: Type, n: Nat, x: T) -> Counted(List/replicate(n, x), n) =
     match n
     | 0 => Eq/refl()
-    | k + 1 => Eq/cong((w: Nat) => w + 1, replicate_len(k, x))
+    | k + 1 => Eq/cong((w: Nat) => w + 1, replicate_length(k, x))
     end;
 
 --- `n` copies of `x`.
 pub let replicate(@T: Type, n: Nat, x: T) -> Vec(T, n) =
-    Vec { list = List/replicate(n, x), counted = replicate_len(n, x) };
+    Vec { list = List/replicate(n, x), counted = replicate_length(n, x) };
 
 --- Pairs, position by position.
 pub let zip(@A: Type, @B: Type, @n: Nat, v: Vec(A, n), w: Vec(B, n)) -> Vec({A, B}, n) =

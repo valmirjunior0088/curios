@@ -141,10 +141,10 @@ fn a_case_split_whose_goal_holds_a_proof_about_its_scrutinee_needs_no_convoy() {
     let source = r#"
         use /std/{Nat, Bytes, List, Eq};
         use /std/Bool/{Holds};
-        let at_bytes(a : Bytes, i : Nat, q : Holds(i < Bytes/len(a)))
+        let at_bytes(a : Bytes, i : Nat, q : Holds(i < Bytes/length(a)))
             -> Eq()(Bytes/get(a, i, @q), Bytes/get(a, i, @q)) =
             match a | 0x[] => Eq/refl() | 0x[_, .._] => Eq/refl() end;
-        let at_list(@T : Type, xs : List(T), i : Nat, q : Holds(i < List/len(xs)))
+        let at_list(@T : Type, xs : List(T), i : Nat, q : Holds(i < List/length(xs)))
             -> Eq()(List/get(@T, xs, i, @q), List/get(@T, xs, i, @q)) =
             match xs | [] => Eq/refl() | [_, .._] => Eq/refl() end;
         let byte_of(n : Nat, q : Holds(n < 256)) -> Eq()(Nat/to_byte(n, @q), Nat/to_byte(n, @q)) =

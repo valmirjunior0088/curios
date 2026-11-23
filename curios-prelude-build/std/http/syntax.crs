@@ -6,7 +6,7 @@ pub let lines(head: Bytes) -> List(Bytes) =
     let go(
         from: Nat,
         found: List(Bytes),
-        @reached: Bool/Holds(from <= Bytes/len(head)),
+        @reached: Bool/Holds(from <= Bytes/length(head)),
     ) -> List(Bytes) =
         match read/line_end(head, from)
         | some(ended) => go(ended.at + 2, [Bytes/slice(head, from, ended.at - from), ..found])
@@ -47,7 +47,7 @@ pub let request_line(
     , [target, ..after_target] = after_method
     , [version, ..after_version] = after_target
     , [] = after_version
-    , Bytes/len(method) != 0 && Bytes/len(target) != 0 =>
+    , Bytes/length(method) != 0 && Bytes/length(target) != 0 =>
         Result/success((method = method, target = target, version = version))
     | _ => unspelled
     end;
@@ -60,12 +60,12 @@ pub let status_line(line: Bytes) -> Result(Refusal, {Version, Status}) =
                 "a status line is a version, a three-digit code and a reason phrase"));
     -- A line shorter than a version is read as one whole, which it is not.
     let stated =
-        match Bool/holds(8 <= Bytes/len(line))
+        match Bool/holds(8 <= Bytes/length(line))
         | some(long) => version(Bytes/slice(line, 0, 8, @long))
         | none() => version(line)
         end!;
     -- A version, a space, three digits and a space stand ahead of the reason: thirteen octets.
-    match Bool/holds(13 <= Bytes/len(line))
+    match Bool/holds(13 <= Bytes/length(line))
     | some(long)
     , octets/at(line, 8, ' ') && octets/at(line, 12, ' ')
     , some(code) = octets/number(Bytes/slice(line, 9, 3))

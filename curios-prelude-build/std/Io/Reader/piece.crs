@@ -7,8 +7,8 @@ let index_from(
     b: Bytes,
     byte: Byte,
     i: Nat,
-) -> Option({at: Nat, within: Bool/Holds(at < Bytes/len(b))}) =
-    match Bool/holds(i < Bytes/len(b))
+) -> Option({at: Nat, within: Bool/Holds(at < Bytes/length(b))}) =
+    match Bool/holds(i < Bytes/length(b))
     | none() => Option/none()
     | some(inside) =>
         match Bytes/get(b, i, @inside) == byte
@@ -19,10 +19,10 @@ let index_from(
 
 -- `b` without the carriage return it ends with, where it ends with one.
 let without_return(b: Bytes) -> Bytes =
-    match Bool/holds(0 < Bytes/len(b))
+    match Bool/holds(0 < Bytes/length(b))
     | none() => b
     | some(nonempty) =>
-        let last = Bytes/len(b) - 1;
+        let last = Bytes/length(b) - 1;
         match Byte/to_nat(Bytes/get(b, last)) == '\r'
         | true => Bytes/slice(b, 0, last)
         | false => b
@@ -38,8 +38,8 @@ pub let until(limit: Nat, delimiter: Byte, searched: Nat, held: Bytes) -> Step(N
         | false => Step/refused(Error/too_long())
         end
     | none() =>
-        match Bytes/len(held) <= limit
-        | true => Step/more(Bytes/len(held), held)
+        match Bytes/length(held) <= limit
+        | true => Step/more(Bytes/length(held), held)
         | false => Step/refused(Error/too_long())
         end
     end;
@@ -56,13 +56,13 @@ pub let line(limit: Nat, searched: Nat, held: Bytes) -> Step(Nat, Error, Bytes) 
 pub let exactly(limit: Nat, n: Nat, held: Bytes) -> Step({}, Error, Bytes) =
     match
     | n > limit => Step/refused(Error/too_long())
-    | n <= Bytes/len(held) => Step/took(Bytes/slice(held, 0, n), Bytes/drop(held, n))
+    | n <= Bytes/length(held) => Step/took(Bytes/slice(held, 0, n), Bytes/drop(held, n))
     | _ => Step/more((), held)
     end;
 
 --- Everything a stream yields: never taken, only its stream's end saying there is no more. More than `limit` bytes are refused.
 pub let rest(limit: Nat, held: Bytes) -> Step({}, Error, Bytes) =
-    match Bytes/len(held) <= limit
+    match Bytes/length(held) <= limit
     | true => Step/more((), held)
     | false => Step/refused(Error/too_long())
     end;

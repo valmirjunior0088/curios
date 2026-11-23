@@ -53,7 +53,7 @@ fn a_metavariable_is_solved_as_the_rest_of_a_split_packed_literal() {
         run(r#"
         use /std/{Byte, Bytes, Eq, Nat};
         let tail(@h: Byte, @t: Bytes, p: Eq()(0x[1, 2, 3], 0x[h, ..t])) -> Bytes = t;
-        /std/print(Nat/to_str(Bytes/len(tail(Eq/refl()))))
+        /std/print(Nat/to_str(Bytes/length(tail(Eq/refl()))))
         "#),
         b"2"
     );

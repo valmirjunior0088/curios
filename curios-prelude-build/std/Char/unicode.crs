@@ -17,7 +17,7 @@ struct Span(records: Nat): Type {
 }
 
 -- The number the three bytes of `t` from `at` spell, least significant first.
-let number(t: Bytes, at: Nat, @fits: Bool/Holds(at + 3 <= Bytes/len(t))) -> Nat =
+let number(t: Bytes, at: Nat, @fits: Bool/Holds(at + 3 <= Bytes/length(t))) -> Nat =
     Byte/to_nat(Bytes/get(t, at)) + 256 * Byte/to_nat(Bytes/get(t, at + 1))
         + 65536 * Byte/to_nat(Bytes/get(t, at + 2));
 
@@ -55,14 +55,14 @@ let find(
 
 --- The code `table`'s run holding `c` gives it, or `missing` where no run does: a search by halves over the runs of a table `/sys/unicode` holds, which ascend and never meet.
 pub let class(table: Bytes, missing: Nat, c: Char) -> Nat =
-    let runs = Bytes/len(table) / 7;
+    let runs = Bytes/length(table) / 7;
     match find(
         runs,
         (i, _) => number(table, 7 * i),
         (i, _) => number(table, 7 * i + 3),
         Char/to_nat(c))
     | some(found) =>
-        let room: Bool/Holds(7 * found.index + 7 <= Bytes/len(table)) = proved();
+        let room: Bool/Holds(7 * found.index + 7 <= Bytes/length(table)) = proved();
         Byte/to_nat(Bytes/get(table, 7 * found.index + 6))
     | none() => missing
     end;
@@ -84,7 +84,7 @@ struct Record: Type {
 
 -- The record of `table` at `i`, or `none` past its last. A fact about a record is stated as a match on this one call, so that where a lookup matches on the same call the fact is about the record its arm binds, and nothing is unfolded to read it.
 let record_at(table: Bytes, i: Nat) -> Option(Record) =
-    match 17 * i + 17 <= Bytes/len(table)
+    match 17 * i + 17 <= Bytes/length(table)
     | true =>
         Option/some(
             Record {
@@ -102,9 +102,9 @@ let record_at(table: Bytes, i: Nat) -> Option(Record) =
 let present(
     table: Bytes,
     i: Nat,
-    fits: Bool/Holds(17 * i + 17 <= Bytes/len(table)),
+    fits: Bool/Holds(17 * i + 17 <= Bytes/length(table)),
 ) -> Bool/Holds(Option/is_some(record_at(table, i))) =
-    match 17 * i + 17 <= Bytes/len(table)
+    match 17 * i + 17 <= Bytes/length(table)
     | true => Bool/True/qed()
     | false => match fits end
     end;
@@ -128,7 +128,7 @@ let record_lands(table: Bytes, i: Nat) -> Bool =
 
 --- Whether every record of `table`, a mapping's, lands among the scalars: decided by reading each, so `Bool/Holds(every_record_lands(table))` at a table `/sys/unicode` holds is discharged by reduction when `/std` is built.
 pub let every_record_lands(table: Bytes) -> Bool =
-    Nat/all_below(Bytes/len(table) / 17, (i) => record_lands(table, i));
+    Nat/all_below(Bytes/length(table) / 17, (i) => record_lands(table, i));
 
 -- Whether `code` is one of the scalars a record covering it from `first`, stepping by `step`, steps through.
 let stepped(code: Nat, first: Nat, step: Nat, _: Bool/Holds(1 <= step)) -> Bool =
@@ -247,7 +247,7 @@ let onto(c: Char, r: Record, fact: Bool/Holds(lands(r))) -> Str =
 
 --- What `c` becomes under the mapping `table` packs, every record of which lands among the scalars: the characters of the record that covers it, or `c` itself where none does.
 pub let mapping(table: Bytes, landing: Bool/Holds(every_record_lands(table)), c: Char) -> Str =
-    let records = Bytes/len(table) / 17;
+    let records = Bytes/length(table) / 17;
     match find(
         records,
         (i, _) => number(table, 17 * i),
@@ -278,46 +278,46 @@ let _a_composite_is_nine_bytes: Bool/Holds(/sys/unicode/composite == 9) =
 
 -- Whether the three bytes at the `i`th place of `scalars` spell a scalar value.
 let scalar_lands(scalars: Bytes, i: Nat) -> Bool =
-    match 3 * i + 3 <= Bytes/len(scalars)
+    match 3 * i + 3 <= Bytes/length(scalars)
     | true => Valid/scalars(number(scalars, 3 * i), number(scalars, 3 * i))
     | false => false
     end;
 
 --- Whether every place of `scalars`, three bytes each, spells a scalar value: decided by reading each, so `Bool/Holds(every_scalar_lands(scalars))` at a table `/sys/unicode` holds is discharged by reduction when `/std` is built.
 pub let every_scalar_lands(scalars: Bytes) -> Bool =
-    Nat/all_below(Bytes/len(scalars) / 3, (i) => scalar_lands(scalars, i));
+    Nat/all_below(Bytes/length(scalars) / 3, (i) => scalar_lands(scalars, i));
 
 -- The character at the `i`th place of `scalars`, every place of which spells a scalar value.
 let scalar_at(
     scalars: Bytes,
     landing: Bool/Holds(every_scalar_lands(scalars)),
     i: Nat,
-    inside: Bool/Holds(i < Bytes/len(scalars) / 3),
+    inside: Bool/Holds(i < Bytes/length(scalars) / 3),
 ) -> Char =
     let fact =
         Nat/all_below/at(
-            Bytes/len(scalars) / 3,
+            Bytes/length(scalars) / 3,
             (j) => scalar_lands(scalars, j),
             i,
             landing,
             inside);
-    match 3 * i + 3 <= Bytes/len(scalars)
+    match 3 * i + 3 <= Bytes/length(scalars)
     | true => Char { code = number(scalars, 3 * i), @valid = fact }
     | false => match fact end
     end;
 
 -- Whether the entry of `entries` at `i` names places of `scalars` alone: it starts at one and runs no further than the last.
 let entry_within(entries: Bytes, scalars: Bytes, i: Nat) -> Bool =
-    match 7 * i + 7 <= Bytes/len(entries)
+    match 7 * i + 7 <= Bytes/length(entries)
     | true =>
         number(entries, 7 * i + 3) + Byte/to_nat(Bytes/get(entries, 7 * i + 6))
-            <= Bytes/len(scalars) / 3
+            <= Bytes/length(scalars) / 3
     | false => false
     end;
 
 --- Whether every entry of `entries` names places of `scalars` alone: decided by reading each, so it is discharged by reduction at the tables `/sys/unicode` holds when `/std` is built.
 pub let every_entry_within(entries: Bytes, scalars: Bytes) -> Bool =
-    Nat/all_below(Bytes/len(entries) / 7, (i) => entry_within(entries, scalars, i));
+    Nat/all_below(Bytes/length(entries) / 7, (i) => entry_within(entries, scalars, i));
 
 -- The `length` characters of `scalars` from its place `start`, which run no further than its last.
 let spelled(
@@ -325,7 +325,7 @@ let spelled(
     landing: Bool/Holds(every_scalar_lands(scalars)),
     start: Nat,
     length: Nat,
-    within: Bool/Holds(start + length <= Bytes/len(scalars) / 3),
+    within: Bool/Holds(start + length <= Bytes/length(scalars) / 3),
 ) -> Str =
     match length
     | 0 => ""
@@ -343,7 +343,7 @@ pub let decomposition(
     within: Bool/Holds(every_entry_within(entries, scalars)),
     c: Char,
 ) -> Option(Str) =
-    let count = Bytes/len(entries) / 7;
+    let count = Bytes/length(entries) / 7;
     match find(
         count,
         (i, _) => number(entries, 7 * i),
@@ -358,7 +358,7 @@ pub let decomposition(
                 found.index,
                 within,
                 found.inside);
-        match 7 * found.index + 7 <= Bytes/len(entries)
+        match 7 * found.index + 7 <= Bytes/length(entries)
         | true =>
             Option/some(
                 spelled(
@@ -373,17 +373,17 @@ pub let decomposition(
 
 -- Whether the composite of `table` at `i` is a scalar value.
 let composite_lands(table: Bytes, i: Nat) -> Bool =
-    match 9 * i + 9 <= Bytes/len(table)
+    match 9 * i + 9 <= Bytes/length(table)
     | true => Valid/scalars(number(table, 9 * i + 6), number(table, 9 * i + 6))
     | false => false
     end;
 
 --- Whether every composite of `table` is a scalar value: decided by reading each, so it is discharged by reduction at the table `/sys/unicode` holds when `/std` is built.
 pub let every_composite_lands(table: Bytes) -> Bool =
-    Nat/all_below(Bytes/len(table) / 9, (i) => composite_lands(table, i));
+    Nat/all_below(Bytes/length(table) / 9, (i) => composite_lands(table, i));
 
 -- The pair of the composite of `table` at `i` as one number, its first character's code point the more significant: the order the composites ascend in.
-let pair_key(table: Bytes, i: Nat, @fits: Bool/Holds(9 * i + 9 <= Bytes/len(table))) -> Nat =
+let pair_key(table: Bytes, i: Nat, @fits: Bool/Holds(9 * i + 9 <= Bytes/length(table))) -> Nat =
     number(table, 9 * i) * 0x110000 + number(table, 9 * i + 3);
 
 --- The character `a` then `b` compose to under the composites `table` packs, every one of which is a scalar value: the composite the pair names, or `none` where it names none.
@@ -393,7 +393,7 @@ pub let composite(
     a: Char,
     b: Char,
 ) -> Option(Char) =
-    let count = Bytes/len(table) / 9;
+    let count = Bytes/length(table) / 9;
     match find(
         count,
         (i, _) => pair_key(table, i),
@@ -408,7 +408,7 @@ pub let composite(
                 found.index,
                 landing,
                 found.inside);
-        match 9 * found.index + 9 <= Bytes/len(table)
+        match 9 * found.index + 9 <= Bytes/length(table)
         | true => Option/some(Char { code = number(table, 9 * found.index + 6), @valid = fact })
         | false => match fact end
         end

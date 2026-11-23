@@ -18,7 +18,7 @@ let execute() -> Try(Io, Str, {}) =
     let n = Option/to_result(Nat/of_str(Str/trim(s)), "bad input")!;
     let document = Str/join("", List/map(List/range(0, n), table));
     let decoded = Result/map_failure(Toml/decode(document), (_) => "bad toml")!;
-    let () = Fmt/print("%\n")(Str/len(Toml/encode(decoded)))!;
+    let () = Fmt/print("%\n")(Str/length(Toml/encode(decoded)))!;
     Try/pure(());
 
 execute()

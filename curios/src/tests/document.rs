@@ -380,7 +380,7 @@ fn an_adopted_signature_marks_its_carriers_and_operations() {
             "/std/Bytes",
             "/std/Nat",
             "/std/Bool/Holds",
-            "/std/Bytes/len",
+            "/std/Bytes/length",
             "/std/Byte"
         ]
     );
@@ -524,7 +524,7 @@ fn an_adopted_signature_spells_its_names_below_their_root() {
     let (get, _) = shown(&documentation, "/std/Bytes", "get");
     assert_eq!(
         get,
-        "pub let get(b: Bytes, i: Nat, @ok: Bool/Holds(i < Bytes/len(b))) -> Byte"
+        "pub let get(b: Bytes, i: Nat, @ok: Bool/Holds(i < Bytes/length(b))) -> Byte"
     );
 
     let in_full = documentation

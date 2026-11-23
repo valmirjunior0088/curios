@@ -73,7 +73,7 @@ let section(heading: Str, rows: List({Str, Str})) -> Str =
     match rows
     | [] => ""
     | [_, .._] =>
-        let width = List/fold(rows, 0, ((left, _), held) => Nat/max(Str/len(left), held));
+        let width = List/fold(rows, 0, ((left, _), held) => Nat/max(Str/length(left), held));
         Str/flatten([
             heading, "\n",
             ..List/map(rows, ((left, right)) =>

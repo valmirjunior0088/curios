@@ -8,7 +8,7 @@ let width(s: Str) -> Nat =
 let shown(lines: List(Line)) -> Str =
     Str/join("/", List/map(lines, Line/text));
 
--- A line takes the columns a terminal draws it in: a mark none of its own, so `e` with a combining accent is one column where `Str/len` counts two; an ideograph and every emoji a terminal draws wide two, the rocket, the hourglass and the newest hearts among them; a sequence joined by ZWJs and a flag two, as the one glyph each is.
+-- A line takes the columns a terminal draws it in: a mark none of its own, so `e` with a combining accent is one column where `Str/length` counts two; an ideograph and every emoji a terminal draws wide two, the rocket, the hourglass and the newest hearts among them; a sequence joined by ZWJs and a flag two, as the one glyph each is.
 test a_line_is_as_wide_as_a_terminal_draws_it =
     Test/equal(
         List/map(["hello", "é", "日本", "🚀", "⌛", "🩷", "👨\u{200D}👩", "🇫🇷", ""], width),

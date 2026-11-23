@@ -1,7 +1,7 @@
 mod tests;
 
 pub use /sys/{let List};
-pub use /sys/List/{get, len, slice, map, fold};
+pub use /sys/List/{get, length, slice, map, fold};
 
 --- A list with one element replaced, with its laws: the length kept, the element written read back, every other read as before.
 pub mod set;
@@ -40,14 +40,14 @@ use /std/ops/{Eql, Cmp};
 
 --- The element at `i`, or `none` past the end.
 pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =
-    match i < len(a)
+    match i < length(a)
     | true => Option/some(get(a, i))
     | false => Option/none()
     end;
 
 --- Everything from `k` on, under the evidence that `k` is within the length.
-pub let drop(@T: Type, a: List(T), k: Nat, @ok: Bool/Holds(k <= len(a))) -> List(T) =
-    slice(@T, a, k, len(a) - k);
+pub let drop(@T: Type, a: List(T), k: Nat, @ok: Bool/Holds(k <= length(a))) -> List(T) =
+    slice(@T, a, k, length(a) - k);
 
 --- The concatenation, in order.
 pub let flatten(@T: Type, parts: List(List(T))) -> List(T) =
@@ -267,5 +267,5 @@ satisfy (@T: Type, use Ord(T)) => Ord(List(T)) {
 }
 
 satisfy (@A: Type, use Hash(A)) => Hash(List(A)) {
-    hash(values) = Hash/tagged(len(values), map(values, (value) => Hash/hash(value))),
+    hash(values) = Hash/tagged(length(values), map(values, (value) => Hash/hash(value))),
 }

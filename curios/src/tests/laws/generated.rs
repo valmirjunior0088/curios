@@ -211,7 +211,7 @@ impl Spelling<'_> {
                 if let (Carrier::List, Operation::Length, [Expr::Constant { .. }]) =
                     (carrier, operation, operands.as_slice())
                 {
-                    return "List/len(@Nat, [])".to_owned();
+                    return "List/length(@Nat, [])".to_owned();
                 }
                 let operands = operands
                     .iter()
@@ -273,8 +273,8 @@ impl Spelling<'_> {
             (Carrier::List, Operation::Concat) => concat("["),
             (Carrier::Bytes, Operation::Append) => append("0x["),
             (Carrier::List, Operation::Append) => append("["),
-            (Carrier::Bytes, Operation::Length) => call("Bytes/len"),
-            (Carrier::List, Operation::Length) => call("List/len"),
+            (Carrier::Bytes, Operation::Length) => call("Bytes/length"),
+            (Carrier::List, Operation::Length) => call("List/length"),
             (
                 Carrier::Natural,
                 Operation::Conversion {
@@ -321,7 +321,7 @@ impl Spelling<'_> {
             ) => self.narrowing(
                 "Flt/of_le_bytes",
                 &operands[0],
-                format!("Nat/eql(Bytes/len({}), 8)", operands[0]),
+                format!("Nat/eql(Bytes/length({}), 8)", operands[0]),
             ),
             _ => panic!("no spelling for {operation:?} at {carrier:?}"),
         }

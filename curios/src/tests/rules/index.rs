@@ -521,7 +521,7 @@ fn a_window_that_may_be_empty_does_not_clash_with_the_empty_value() {
         let absurd(
             b : Bytes,
             n : Nat,
-            @ok : Holds(0 + n <= Bytes/len(b)),
+            @ok : Holds(0 + n <= Bytes/length(b)),
             h : Eq()(0x[..Bytes/slice(b, 0, n), 0x01], 0x[]),
         ) -> False =
             match h end;

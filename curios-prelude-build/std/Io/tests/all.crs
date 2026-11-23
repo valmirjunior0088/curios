@@ -10,7 +10,7 @@ let _an_answer_is_read_by_its_position_past_a_loop() -> Io(Nat) =
     let answers = Io/all([spin(1), Io/pure(2), Io/pure(3)])!;
     Io/pure(List/get(answers.list, 2));
 
--- The count of a list of loops a function maps is the mapped list's, which `List/len` reads whatever the function does.
+-- The count of a list of loops a function maps is the mapped list's, which `List/length` reads whatever the function does.
 let _the_count_of_a_mapped_loop_is_its_lists() -> Io(Nat) =
     let answers = Io/all(List/map([1, 2, 3], spin))!;
     Io/pure(List/get(answers.list, 2));

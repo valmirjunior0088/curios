@@ -1625,7 +1625,7 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
         Intrinsic::BytesType => IntrinsicForm::Named("Bytes"),
         Intrinsic::Bytes(bytes) => IntrinsicForm::Bytes(packed_atoms(&bytes)),
         Intrinsic::BytesLen(b) => IntrinsicForm::Call {
-            path: "Bytes/len".into(),
+            path: "Bytes/length".into(),
             implicits: vec![],
             explicits: vec![b],
         },
@@ -1685,7 +1685,7 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
             items: elems,
         } => IntrinsicForm::List(elems.into_iter().map(LiteralEntry::Item).collect()),
         Intrinsic::ListLen { element: ty, list } => IntrinsicForm::Call {
-            path: "List/len".into(),
+            path: "List/length".into(),
             implicits: vec![ty],
             explicits: vec![list],
         },

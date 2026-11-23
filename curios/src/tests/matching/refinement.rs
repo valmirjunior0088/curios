@@ -253,12 +253,12 @@ fn a_guard_discharges_a_bound_across_the_successor_seam() {
         use /std/{Nat, List};
 
         let one_at(@T : Type, l : List(T), i : Nat) -> List(T) =
-            match i < List/len(l)
+            match i < List/length(l)
             | false => []
             | true => List/slice(l, i, 1)
             end;
 
-        /std/print(Nat/to_str(List/len(one_at([1, 2, 3], 1))))
+        /std/print(Nat/to_str(List/length(one_at([1, 2, 3], 1))))
         "#;
     assert_eq!(run(source), b"1");
 }
@@ -270,7 +270,7 @@ fn a_bound_below_a_length_is_decided_by_the_successor_guard() {
         use /std/{Nat, List, Option};
 
         let get_at(@T : Type, l : List(T), i : Nat) -> Option(T) =
-            match i + 1 <= List/len(l)
+            match i + 1 <= List/length(l)
             | false => Option/none()
             | true => Option/some(List/get(l, i))
             end;
@@ -293,7 +293,7 @@ fn a_bound_the_guards_do_not_imply_is_still_stuck() {
             match i < n
             | false => []
             | true =>
-                match List/len(l) == n * k
+                match List/length(l) == n * k
                 | false => []
                 | true => List/slice(l, i * k + 1, k)
                 end
@@ -318,12 +318,12 @@ fn a_guards_fact_holds_under_a_match_on_a_variable_it_names() {
         use /std/Bool/{Holds, True};
 
         let first_or(xs : List(Nat), i : Nat) -> Str =
-            match i < List/len(xs)
+            match i < List/length(xs)
             | true =>
                 match i
                 | 0 =>
-                    let _ : Holds(i < List/len(xs)) = True/qed();
-                    let _ : Holds(0 < List/len(xs)) = True/qed();
+                    let _ : Holds(i < List/length(xs)) = True/qed();
+                    let _ : Holds(0 < List/length(xs)) = True/qed();
                     "first"
                 | _ => "later"
                 end

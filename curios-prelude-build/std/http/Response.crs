@@ -10,7 +10,7 @@ pub struct Response: pub Type {
     headers: List(Field),
     body: Bytes,
     --- Why the body is one the status carries.
-    @bodied: Bool/Holds(Status/carries_content(status.code) || Bytes/len(body) == 0),
+    @bodied: Bool/Holds(Status/carries_content(status.code) || Bytes/length(body) == 0),
 }
 
 satisfy Eql(Response) {
@@ -37,7 +37,7 @@ pub let render_head(r: Response, body: Bytes) -> Bytes =
         ..Str/to_bytes("\r\nConnection: close\r\n"),
         ..match Status/bodiless(r.status.code)
         | true => 0x[]
-        | false => length_line(Bytes/len(body))
+        | false => length_line(Bytes/length(body))
         end,
         ..Field/lines(r.headers, owned),
         '\r', '\n'];
@@ -82,7 +82,7 @@ pub let of(
     body: Bytes,
     @_: Bool/Holds(100 <= code && code <= 999),
     @_: Bool/Holds(Bytes/all(Str/to_bytes(kind), Field/Value/admits)),
-    @_: Bool/Holds(Status/carries_content(code) || Bytes/len(body) == 0),
+    @_: Bool/Holds(Status/carries_content(code) || Bytes/length(body) == 0),
 ) -> Response =
     Response { status = Status/of(code), headers = [Field/of("Content-Type", kind)], body = body };
 
@@ -181,7 +181,7 @@ pub let framing(method: Method, head: Head) -> Result(Refusal, Framing) =
 
 --- The reply `head` and `body` make. A 205 reply that carries content is malformed, since its server sends none (RFC 9110 §15.3.6), and a 1xx, 204 or 304 reply has no body to be given.
 pub let from_head(head: Head, body: Bytes) -> Result(Refusal, Response) =
-    match Status/carries_content(head.status.code) || Bytes/len(body) == 0
+    match Status/carries_content(head.status.code) || Bytes/length(body) == 0
     | true => Result/success(Response { status = head.status, headers = head.headers, body = body })
     | false => Result/failure(Refusal/malformed("a reply of this status carries no content"))
     end;

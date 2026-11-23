@@ -41,7 +41,7 @@ fn a_list_case_split_is_erased_under_its_cons() {
         let Shape(l: List(Nat)) -> Type =
             match l | [] => Nat | [_, ..t] => (Nat) -> Nat end;
         let f(l: List(Nat), g: Shape(l)) -> Nat =
-            match l | [] => 0 | [_, ..t] => g(List/len(t)) end;
+            match l | [] => 0 | [_, ..t] => g(List/length(t)) end;
         /std/print(Nat/to_str(f([1, 2, 3], (k) => k + 1)))
         "#;
     assert_eq!(run(source), b"3");
@@ -55,7 +55,7 @@ fn a_bytes_case_split_is_erased_under_its_cons() {
         let Shape(b: Bytes) -> Type =
             match b | 0x[] => Nat | 0x[_, ..t] => (Nat) -> Nat end;
         let f(b: Bytes, g: Shape(b)) -> Nat =
-            match b | 0x[] => 0 | 0x[_, ..t] => g(Bytes/len(t)) end;
+            match b | 0x[] => 0 | 0x[_, ..t] => g(Bytes/length(t)) end;
         /std/print(Nat/to_str(f(0x[1, 2, 3], (k) => k + 1)))
         "#;
     assert_eq!(run(source), b"3");

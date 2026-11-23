@@ -76,7 +76,7 @@ fn a_postponement_reports_the_bound_its_blocker_never_discharged() {
     );
 }
 
-// Two metavariables a conversion holds to one another and nothing else pins are solved one as the other where the completing term holds them, and the one left reports as what it is, the implicit never inferred, as the `List/len([])` report does: never `between: ?` and `and: ?`, which name nothing a reader can act on.
+// Two metavariables a conversion holds to one another and nothing else pins are solved one as the other where the completing term holds them, and the one left reports as what it is, the implicit never inferred, as the `List/length([])` report does: never `between: ?` and `and: ?`, which name nothing a reader can act on.
 #[test]
 fn two_holes_held_to_one_another_report_only_the_implicit_left() {
     let report = error(

@@ -57,7 +57,7 @@ const WALKS: &str = r#"
         n + 2;
     let entry() -> /std/Io({}) =
         let arguments = Proc/args()!;
-        let n = List/len(arguments);
+        let n = List/length(arguments);
         let l = [n, 0, n + 1];
         let ops = Ops { f = (x) => x * 3 };
         Fmt/print("% %\n")(dead_field(ops, l, n))(dead_param((x) => x * 5, l, n));
@@ -88,7 +88,7 @@ fn a_total_walk_whose_partial_step_cycles_through_a_total_loop_stays() {
         let g(n: Nat) -> Nat = match h(n) == 0 | true => 0 | false => g(n + 1) end;
         let entry() -> /std/Io({}) =
             let arguments = Proc/args()!;
-            let _ = f(g, List/len(arguments) + 3);
+            let _ = f(g, List/length(arguments) + 3);
             /std/print("done");
         entry()
         "#,
@@ -105,7 +105,7 @@ fn a_walk_not_known_to_terminate_stays() {
         let settle(n: Nat) -> Nat = match n | 0 => 0 | 1 => 1 | _ => settle(match n % 2 | 0 => n / 2 | _ => 3 * n + 1 end) end;
         let entry() -> /std/Io({}) =
             let arguments = Proc/args()!;
-            let a = settle(List/len(arguments) + 7);
+            let a = settle(List/length(arguments) + 7);
             /std/print("done");
         entry()
         "#,

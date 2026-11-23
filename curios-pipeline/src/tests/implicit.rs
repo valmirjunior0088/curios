@@ -47,7 +47,7 @@ fn interleaved_implicit_with_partial_override() {
     let source = r#"
         use /std/{Nat, Bytes};
         let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
-        let subject : /std/Nat = std/Bytes/len(second(@Nat, 1, /std/Str/to_bytes("abc")));
+        let subject : /std/Nat = std/Bytes/length(second(@Nat, 1, /std/Str/to_bytes("abc")));
         /std/Io/pure(())
     "#;
 
@@ -60,13 +60,13 @@ fn a_hidden_argument_is_written_before_the_plain_one_it_precedes() {
     let at_first = r#"
         use /std/{Nat, Bytes};
         let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
-        let subject : /std/Nat = std/Bytes/len(second(@Nat, 1, /std/Str/to_bytes("abc")));
+        let subject : /std/Nat = std/Bytes/length(second(@Nat, 1, /std/Str/to_bytes("abc")));
         /std/Io/pure(())
     "#;
     let at_last = r#"
         use /std/{Nat, Bytes};
         let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
-        let subject : /std/Nat = std/Bytes/len(second(1, /std/Str/to_bytes("abc"), @Nat));
+        let subject : /std/Nat = std/Bytes/length(second(1, /std/Str/to_bytes("abc"), @Nat));
         /std/Io/pure(())
     "#;
 
@@ -208,7 +208,7 @@ fn bare_polymorphic_function_inserts_implicits_in_value_position() {
         let pairwise(f : (List(Nat), List(Nat)) -> List(Nat), a : List(Nat)) -> List(Nat) =
             f(a, a);
         let result : List(Nat) = pairwise(cat, [1]);
-        /std/print(/std/Nat/to_str(List/len(result)))
+        /std/print(/std/Nat/to_str(List/length(result)))
     "#;
 
     assert!(compile(source).is_ok());
@@ -223,7 +223,7 @@ fn polymorphic_value_assignment_keeps_its_implicit() {
         let cat(@T : Type, a : List(T), b : List(T)) -> List(T) = [..a, ..b];
         let g : (@T : Type, List(T), List(T)) -> List(T) = cat;
         let result : List(Nat) = g(@Nat, [1], [2]);
-        /std/print(/std/Nat/to_str(List/len(result)))
+        /std/print(/std/Nat/to_str(List/length(result)))
     "#;
 
     assert!(compile(source).is_ok());

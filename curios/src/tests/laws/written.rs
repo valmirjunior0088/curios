@@ -1020,43 +1020,43 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "List, the free monoid",
-        binders: "xs: List(Nat), ys: List(Nat), zs: List(Nat), a: Nat, f: (Nat) -> Nat, s: Nat, l: Nat, ok: Holds(s + l <= List/len(xs)), at: Holds(s < List/len(xs)), head: Holds(0 < List/len(ys)), into: Holds(s < List/len(ys)), fits: Holds(l <= List/len(ys)), z: Nat, g: (Nat, Nat) -> Nat, h: (Nat) -> Nat",
+        binders: "xs: List(Nat), ys: List(Nat), zs: List(Nat), a: Nat, f: (Nat) -> Nat, s: Nat, l: Nat, ok: Holds(s + l <= List/length(xs)), at: Holds(s < List/length(xs)), head: Holds(0 < List/length(ys)), into: Holds(s < List/length(ys)), fits: Holds(l <= List/length(ys)), z: Nat, g: (Nat, Nat) -> Nat, h: (Nat) -> Nat",
         held: &[
             "Eq()([..[..xs, ..ys], ..zs], [..xs, ..ys, ..zs])",
             "Eq()([..xs, ..[..ys, ..zs]], [..xs, ..ys, ..zs])",
-            "Eq()(List/len([a, ..xs]), List/len(xs) + 1)",
-            "Eq()(List/len([1, 2, ..xs]), List/len(xs) + 2)",
+            "Eq()(List/length([a, ..xs]), List/length(xs) + 1)",
+            "Eq()(List/length([1, 2, ..xs]), List/length(xs) + 2)",
             "Eq()(List/map(@Nat, @Nat, [], f), [])",
             // The identity is beta, not extensionality: `map` sends every element to itself and the list is returned whole. It is recognised by what the function's body reduces to under its binder, as conversion reads it, and not by how the lambda is spelled.
             "Eq()(List/map(xs, (v) => v), xs)",
             "Eq()(List/map(xs, (v) => v + 0), xs)",
             "Eq()(List/map(xs, (v) => ((w: Nat) => w)(v)), xs)",
-            "Eq()(List/len(List/map(xs, (v) => v * 1)), List/len(xs))",
+            "Eq()(List/length(List/map(xs, (v) => v * 1)), List/length(xs))",
             // An index into a map is the function at the index into its argument; the bound is the argument's, since `len(map(xs, f))` is `len(xs)`.
             "Eq()(List/get(@Nat, List/map(xs, f), s, @at), f(List/get(@Nat, xs, s, @at)))",
             "Eq()(List/map([a, ..xs], f), [f(a), ..List/map(xs, f)])",
             "Eq()(List/map([..xs, ..ys], f), [..List/map(xs, f), ..List/map(ys, f)])",
-            "Eq()(List/slice(xs, 0, List/len(xs)), xs)",
+            "Eq()(List/slice(xs, 0, List/length(xs)), xs)",
             "Eq()(List/slice(xs, 0, 0), [])",
-            "Eq()(List/slice([a, ..xs], 1, List/len(xs)), xs)",
+            "Eq()(List/slice([a, ..xs], 1, List/length(xs)), xs)",
             "Eq()(List/get([a, ..xs], 0), a)",
-            "Eq()(List/len(List/map(xs, f)), List/len(xs))",
-            "Eq()(List/slice([..xs, ..ys], 0, List/len(xs)), xs)",
-            "Eq()(List/slice([..xs, ..ys], List/len(xs), List/len(ys)), ys)",
-            "Eq()(List/slice([..xs, ..ys, ..zs], List/len(xs), List/len(ys)), ys)",
-            "Eq()(List/slice([..xs, ..ys, ..zs], 0, List/len(xs) + List/len(ys)), [..xs, ..ys])",
+            "Eq()(List/length(List/map(xs, f)), List/length(xs))",
+            "Eq()(List/slice([..xs, ..ys], 0, List/length(xs)), xs)",
+            "Eq()(List/slice([..xs, ..ys], List/length(xs), List/length(ys)), ys)",
+            "Eq()(List/slice([..xs, ..ys, ..zs], List/length(xs), List/length(ys)), ys)",
+            "Eq()(List/slice([..xs, ..ys, ..zs], 0, List/length(xs) + List/length(ys)), [..xs, ..ys])",
             // An append is the concatenation the peel's own law says it is, so a window at its seam locates like any other — held here as it is at `Bytes`.
-            "Eq()(List/slice([..xs, a], 0, List/len(xs)), xs)",
+            "Eq()(List/slice([..xs, a], 0, List/length(xs)), xs)",
             // An index at a symbolic seam, where the operand beginning there carries exactly one element. The same walk that locates the window above, asked for a window of one.
-            "Eq()(List/get([..xs, a, ..ys], List/len(xs)), a)",
-            "Eq()(List/get([..xs, a], List/len(xs)), a)",
+            "Eq()(List/get([..xs, a, ..ys], List/length(xs)), a)",
+            "Eq()(List/get([..xs, a], List/length(xs)), a)",
             // A window's length is the count it was cut to, and a map moves inside a window with the same bound, since `len(map(xs, f))` is `len(xs)`. Both rest on `slice`'s own precondition, which the binder `ok` states.
-            "Eq()(List/len(List/slice(@Nat, xs, s, l, @ok)), l)",
+            "Eq()(List/length(List/slice(@Nat, xs, s, l, @ok)), l)",
             "Eq()(List/map(List/slice(@Nat, xs, s, l, @ok), f), List/slice(@Nat, List/map(xs, f), s, l, @ok))",
             // A window past every operand but the last is that window into the last operand. The bound cancels the consumed prefix off both sides, so the same proof places the narrowed operation.
-            "Eq()(List/get(@Nat, [..xs, ..ys], List/len(xs), @head), List/get(@Nat, ys, 0, @head))",
-            "Eq()(List/get(@Nat, [..xs, ..ys], List/len(xs) + s, @into), List/get(@Nat, ys, s, @into))",
-            "Eq()(List/slice(@Nat, [..xs, ..ys], List/len(xs), l, @fits), List/slice(@Nat, ys, 0, l, @fits))",
+            "Eq()(List/get(@Nat, [..xs, ..ys], List/length(xs), @head), List/get(@Nat, ys, 0, @head))",
+            "Eq()(List/get(@Nat, [..xs, ..ys], List/length(xs) + s, @into), List/get(@Nat, ys, s, @into))",
+            "Eq()(List/slice(@Nat, [..xs, ..ys], List/length(xs), l, @fits), List/slice(@Nat, ys, 0, l, @fits))",
             // A left fold reduces over the shape: the empty run is the seed, a cons steps once and folds the tail from there, and a concatenation folds its operands in order.
             "Eq()(List/fold(@Nat, @Nat, [], z, g), z)",
             "Eq()(List/fold([a], z, g), g(a, z))",
@@ -1075,30 +1075,30 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Bytes, the free monoid",
-        binders: "bs: Bytes, cs: Bytes, ds: Bytes, h: Byte, k: Byte, s: Nat, l: Nat, ok: Holds(s + l <= Bytes/len(bs)), head: Holds(0 < Bytes/len(cs)), into: Holds(s < Bytes/len(cs)), fits: Holds(l <= Bytes/len(cs))",
+        binders: "bs: Bytes, cs: Bytes, ds: Bytes, h: Byte, k: Byte, s: Nat, l: Nat, ok: Holds(s + l <= Bytes/length(bs)), head: Holds(0 < Bytes/length(cs)), into: Holds(s < Bytes/length(cs)), fits: Holds(l <= Bytes/length(cs))",
         held: &[
             "Eq()(0x[..0x[..bs, ..cs], ..ds], 0x[..bs, ..cs, ..ds])",
-            "Eq()(Bytes/len(0x[k, ..bs]), Bytes/len(bs) + 1)",
-            "Eq()(Bytes/len(0x[1, 2, ..bs]), Bytes/len(bs) + 2)",
-            "Eq()(Bytes/slice(bs, 0, Bytes/len(bs)), bs)",
+            "Eq()(Bytes/length(0x[k, ..bs]), Bytes/length(bs) + 1)",
+            "Eq()(Bytes/length(0x[1, 2, ..bs]), Bytes/length(bs) + 2)",
+            "Eq()(Bytes/slice(bs, 0, Bytes/length(bs)), bs)",
             "Eq()(Bytes/slice(bs, 0, 0), 0x[])",
-            "Eq()(Bytes/slice(0x[k, ..bs], 1, Bytes/len(bs)), bs)",
+            "Eq()(Bytes/slice(0x[k, ..bs], 1, Bytes/length(bs)), bs)",
             "Eq()(Bytes/get(0x[k, ..bs], 0), k)",
             "Eq()(Bytes/eql(bs, bs), true)",
-            "Eq()(Bytes/slice(0x[..bs, ..cs], 0, Bytes/len(bs)), bs)",
-            "Eq()(Bytes/slice(0x[..bs, ..cs], Bytes/len(bs), Bytes/len(cs)), cs)",
-            "Eq()(Bytes/slice(0x[..bs, ..cs, ..ds], Bytes/len(bs), Bytes/len(cs)), cs)",
+            "Eq()(Bytes/slice(0x[..bs, ..cs], 0, Bytes/length(bs)), bs)",
+            "Eq()(Bytes/slice(0x[..bs, ..cs], Bytes/length(bs), Bytes/length(cs)), cs)",
+            "Eq()(Bytes/slice(0x[..bs, ..cs, ..ds], Bytes/length(bs), Bytes/length(cs)), cs)",
             // An index at a symbolic seam, which the same walk finds as a window of one. The operand beginning there carries a single generator, read out of it directly rather than through an inner `get` that would need a bound nothing states.
-            "Eq()(Bytes/get(0x[..bs, k, ..cs], Bytes/len(bs)), k)",
-            "Eq()(Bytes/get(0x[..bs, k], Bytes/len(bs)), k)",
+            "Eq()(Bytes/get(0x[..bs, k, ..cs], Bytes/length(bs)), k)",
+            "Eq()(Bytes/get(0x[..bs, k], Bytes/length(bs)), k)",
             // An append is the concatenation the peel's own law says it is, so a window at its seam locates like any other.
-            "Eq()(Bytes/slice(0x[..bs, k], 0, Bytes/len(bs)), bs)",
+            "Eq()(Bytes/slice(0x[..bs, k], 0, Bytes/length(bs)), bs)",
             // A window's length is the count it was cut to: `slice` takes `s + l <= len(b)`, so the count is the measure at every well-typed instance. Taken where the homomorphism reads the window rather than in `free_monoid`'s measure, which counts only literal runs.
-            "Eq()(Bytes/len(Bytes/slice(bs, s, l, @ok)), l)",
+            "Eq()(Bytes/length(Bytes/slice(bs, s, l, @ok)), l)",
             // A window past every operand but the last is that window into the last operand, under the caller's own bound.
-            "Eq()(Bytes/get(0x[..bs, ..cs], Bytes/len(bs), @head), Bytes/get(cs, 0, @head))",
-            "Eq()(Bytes/get(0x[..bs, ..cs], Bytes/len(bs) + s, @into), Bytes/get(cs, s, @into))",
-            "Eq()(Bytes/slice(0x[..bs, ..cs], Bytes/len(bs), l, @fits), Bytes/slice(cs, 0, l, @fits))",
+            "Eq()(Bytes/get(0x[..bs, ..cs], Bytes/length(bs), @head), Bytes/get(cs, 0, @head))",
+            "Eq()(Bytes/get(0x[..bs, ..cs], Bytes/length(bs) + s, @into), Bytes/get(cs, s, @into))",
+            "Eq()(Bytes/slice(0x[..bs, ..cs], Bytes/length(bs), l, @fits), Bytes/slice(cs, 0, l, @fits))",
             // A positive segment anywhere in a value decides it against the empty one, and against a value it extends.
             "Eq()(0x[..bs, k] == 0x[], false)",
             "Eq()(0x[..bs, 1] == 0x[], false)",
@@ -1111,7 +1111,7 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(0x[2, 3, ..bs] == 0x[k, ..cs], 2 == Byte/to_nat(k) && 0x[3, ..bs] == cs)",
             // A fill of a successor count is its generator consed onto the shorter fill, which is how two fills meet without either being unrolled; its length is its count, and a positive fill is not the empty one.
             "Eq()(Bytes/replicate(l + 1, k), 0x[k, ..Bytes/replicate(l, k)])",
-            "Eq()(Bytes/len(Bytes/replicate(l, k)), l)",
+            "Eq()(Bytes/length(Bytes/replicate(l, k)), l)",
             "Eq()(Bytes/replicate(l + 1, k) == 0x[], false)",
         ],
         refused: &[
@@ -1127,7 +1127,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "List, through a window",
-        binders: "xs: List(Nat), ys: List(Nat), s: Nat, l: Nat, i: Nat, t: Nat, m: Nat, ok: Holds(s + l <= List/len(xs)), first: Holds(0 < l), at: Holds(s < List/len(xs)), inside: Holds(i < l), deep: Holds(s + i < List/len(xs)), next: Holds(s + 1 < List/len(xs)), other: Holds(s < List/len(ys)), inner: Holds(t + m <= l), whole: Holds(s + t + m <= List/len(xs))",
+        binders: "xs: List(Nat), ys: List(Nat), s: Nat, l: Nat, i: Nat, t: Nat, m: Nat, ok: Holds(s + l <= List/length(xs)), first: Holds(0 < l), at: Holds(s < List/length(xs)), inside: Holds(i < l), deep: Holds(s + i < List/length(xs)), next: Holds(s + 1 < List/length(xs)), other: Holds(s < List/length(ys)), inner: Holds(t + m <= l), whole: Holds(s + t + m <= List/length(xs))",
         held: &[
             // A position inside a window is the position it names in the base, and a window of a window is the window it names there. Decided where two are compared, never by rewriting one: the rewritten node would owe a bound no term in hand proves, and a comparison builds nothing, so the two bounds are never read. A carrier of its own because these rows take more binders than the monoid's do, and every goal's candidate search pays for the whole scope.
             "Eq()(List/get(@Nat, List/slice(@Nat, xs, s, l, @ok), 0, @first), List/get(@Nat, xs, s, @at))",
@@ -1142,7 +1142,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Bytes, through a window",
-        binders: "bs: Bytes, cs: Bytes, s: Nat, l: Nat, i: Nat, t: Nat, m: Nat, ok: Holds(s + l <= Bytes/len(bs)), first: Holds(0 < l), at: Holds(s < Bytes/len(bs)), inside: Holds(i < l), deep: Holds(s + i < Bytes/len(bs)), next: Holds(s + 1 < Bytes/len(bs)), other: Holds(s < Bytes/len(cs)), inner: Holds(t + m <= l), whole: Holds(s + t + m <= Bytes/len(bs))",
+        binders: "bs: Bytes, cs: Bytes, s: Nat, l: Nat, i: Nat, t: Nat, m: Nat, ok: Holds(s + l <= Bytes/length(bs)), first: Holds(0 < l), at: Holds(s < Bytes/length(bs)), inside: Holds(i < l), deep: Holds(s + i < Bytes/length(bs)), next: Holds(s + 1 < Bytes/length(bs)), other: Holds(s < Bytes/length(cs)), inner: Holds(t + m <= l), whole: Holds(s + t + m <= Bytes/length(bs))",
         held: &[
             // The `List` rows, over `Bytes`.
             "Eq()(Bytes/get(Bytes/slice(bs, s, l, @ok), 0, @first), Bytes/get(bs, s, @at))",
@@ -1157,7 +1157,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "List, through a concatenation",
-        binders: "xs: List(Nat), ys: List(Nat), i: Nat, s: Nat, l: Nat, joined: Holds(i < List/len([..xs, ..ys])), left: Holds(i < List/len(xs)), right: Holds(i < List/len(ys)), spans: Holds(s + l <= List/len([..xs, ..ys])), inside: Holds(s + l <= List/len(xs))",
+        binders: "xs: List(Nat), ys: List(Nat), i: Nat, s: Nat, l: Nat, joined: Holds(i < List/length([..xs, ..ys])), left: Holds(i < List/length(xs)), right: Holds(i < List/length(ys)), spans: Holds(s + l <= List/length([..xs, ..ys])), inside: Holds(s + l <= List/length(xs))",
         held: &[
             // A position inside an operand of a concatenation is that operand's position, and so is a window inside one. Decided where two are compared, as a position through a window is: the concatenation's bound reaches past the operand, so rewriting the read would owe a bound no term in hand proves, while the operand's own read is typed by the bound that places the position inside it.
             "Eq()(List/get(@Nat, [..xs, ..ys], i, @joined), List/get(@Nat, xs, i, @left))",
@@ -1170,7 +1170,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Bytes, through a concatenation",
-        binders: "bs: Bytes, cs: Bytes, i: Nat, s: Nat, l: Nat, joined: Holds(i < Bytes/len(0x[..bs, ..cs])), left: Holds(i < Bytes/len(bs)), right: Holds(i < Bytes/len(cs)), spans: Holds(s + l <= Bytes/len(0x[..bs, ..cs])), inside: Holds(s + l <= Bytes/len(bs))",
+        binders: "bs: Bytes, cs: Bytes, i: Nat, s: Nat, l: Nat, joined: Holds(i < Bytes/length(0x[..bs, ..cs])), left: Holds(i < Bytes/length(bs)), right: Holds(i < Bytes/length(cs)), spans: Holds(s + l <= Bytes/length(0x[..bs, ..cs])), inside: Holds(s + l <= Bytes/length(bs))",
         held: &[
             // The `List` rows, over `Bytes`.
             "Eq()(Bytes/get(0x[..bs, ..cs], i, @joined), Bytes/get(bs, i, @left))",
@@ -1187,7 +1187,7 @@ const CARRIERS: &[Carrier] = &[
         held: &[
             // Decoding what `to_le_bytes` wrote is the float it was given. The decoding owes an eight-byte bound, discharged by the length the second row states; the law table's rows state each direction under a bound handed in.
             "Eq()(Flt/of_le_bytes(Flt/to_le_bytes(f)), f)",
-            "Eq()(Bytes/len(Flt/to_le_bytes(f)), 8)",
+            "Eq()(Bytes/length(Flt/to_le_bytes(f)), 8)",
         ],
         refused: &[],
     },
@@ -1308,7 +1308,7 @@ const CARRIERS: &[Carrier] = &[
         held: &[
             "Eq()(Str/concat(s, \"\"), s)",
             "Eq()(Str/concat(\"\", s), s)",
-            "Eq()(Str/len(\"\"), 0)",
+            "Eq()(Str/length(\"\"), 0)",
             "Eq()(s == s, true)",
             // The bytes decide a suffix as they decide a prefix: a string with a character appended is not the empty one.
             "Eq()(Str/concat(s, \"a\") == \"\", false)",

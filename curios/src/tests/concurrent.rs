@@ -279,7 +279,7 @@ fn heterogeneous_existential_task_list_through_a_generic_map() {
                     | later(k) => (b.A, k())
                     end;
                 next);
-            let _ = /std/print(Nat/to_str(List/len(stepped)))!;
+            let _ = /std/print(Nat/to_str(List/length(stepped)))!;
             /std/Io/pure(());
         entry()
         "#),

@@ -210,7 +210,7 @@ pub let setup(f_mant: Nat, exp_field: Nat) -> Start =
 
 --- The digits `ds` with the decimal point `k` places into them: before them, after zeros, when `k` is not positive; between two of them when it falls inside; and after them, behind zeros, when it falls past the end.
 pub let layout(ds: List(Nat), k: Int) -> Str =
-    let len = List/len(ds);
+    let length = List/length(ds);
     let leading = (pad: Nat) => Str/flatten(["0.", Str/repeat("0", pad), digits_to_str(ds)]);
     match k >= +0
     | false => leading(Int/abs(k))
@@ -219,12 +219,12 @@ pub let layout(ds: List(Nat), k: Int) -> Str =
         match kn == 0
         | true => leading(0)
         | false =>
-            match Bool/holds(kn < len)
+            match Bool/holds(kn < length)
             | some(inside) =>
                 Fmt/render("%.%")(
                     digits_to_str(List/take(ds, kn)))(
                     digits_to_str(List/drop(@Nat, ds, kn)))
-            | none() => Str/concat(digits_to_str(ds), Str/repeat("0", kn - len))
+            | none() => Str/concat(digits_to_str(ds), Str/repeat("0", kn - length))
             end
         end
     end;
@@ -267,7 +267,7 @@ pub let significant(r: Rounding, d: Dyadic, n: Nat) -> Str =
     let negative = d.mantissa < +0;
     let magnitude = Int/abs(d.mantissa);
     let sign = match negative | true => "-" | false => "+" end;
-    let p = d.exponent + Nat/to_int(exact/bit_len(magnitude)) - +1;
+    let p = d.exponent + Nat/to_int(exact/bit_length(magnitude)) - +1;
     let scaled = p * +30103;
     let log10 =
         match scaled >= +0

@@ -2,7 +2,7 @@
 
 use crate::tests::test_support::*;
 
-// An implicit solved from a projection of a local binding whose value discharges a bound inside a match arm. The candidate `t.0` reduces to the whole of `codes`'s fold, whose `0x[h, ..t]` arm carries `Bytes/get(b, 0, @True/qed())` — a proof the arm's own refinement discharged where it was written. `Convert::solve` re-validates a candidate as an oracle, with suppression scoped to the depth it began at, so the ambient arm stays withheld and the validated term's own arms do not. Withholding *every* refinement would check the proof against the unreduced `Holds(0 < Bytes/len(b))`, reject a correct solution, and surface the implicit as a mismatch with the entire unfolded fold on its inferred side.
+// An implicit solved from a projection of a local binding whose value discharges a bound inside a match arm. The candidate `t.0` reduces to the whole of `codes`'s fold, whose `0x[h, ..t]` arm carries `Bytes/get(b, 0, @True/qed())` — a proof the arm's own refinement discharged where it was written. `Convert::solve` re-validates a candidate as an oracle, with suppression scoped to the depth it began at, so the ambient arm stays withheld and the validated term's own arms do not. Withholding *every* refinement would check the proof against the unreduced `Holds(0 < Bytes/length(b))`, reject a correct solution, and surface the implicit as a mismatch with the entire unfolded fold on its inferred side.
 #[test]
 fn an_implicit_solves_through_a_binding_whose_value_discharges_a_bound_in_an_arm() {
     assert_eq!(
@@ -76,7 +76,7 @@ fn an_implicit_solves_in_an_arm_that_specializes_the_hypothesis_it_names() {
 
         let tree: Shape = Shape/node(Shape/leaf(), Shape/node(Shape/leaf(), Shape/leaf()));
 
-        /std/print(Nat/to_str(Vec/len(build(tree, (2, (3, 4))))))
+        /std/print(Nat/to_str(Vec/length(build(tree, (2, (3, 4))))))
         "#),
         b"9"
     );
@@ -119,7 +119,7 @@ fn an_implicit_solves_in_an_arm_that_learns_the_hypothesis_from_inside_an_index(
 
         let pair: Shape = Shape/node(Shape/leaf(), Shape/leaf());
         let x : W(Shape/node(pair, Shape/leaf())) = W/w(Shape/leaf(), Shape/leaf());
-        /std/print(Nat/to_str(Vec/len(built(pair, (2, 3), x))))
+        /std/print(Nat/to_str(Vec/length(built(pair, (2, 3), x))))
         "#
     );
     assert_eq!(run(&source), b"5");
@@ -152,7 +152,7 @@ fn an_implicit_solves_in_an_arm_over_a_let_bound_scrutinee() {
             let built(s: Shape, z: Sizes(s)) -> Vec(Nat, Total(s, z)) =
                 {arms};
 
-            /std/print(Nat/to_str(Vec/len(built(tree, (2, (3, 4))))))
+            /std/print(Nat/to_str(Vec/length(built(tree, (2, (3, 4))))))
             "#
         );
         assert_eq!(run(&source), b"9", "{label}");
@@ -208,7 +208,7 @@ fn an_implicit_solves_through_an_arm_whose_guard_it_meets_respelled() {
     );
 }
 
-/// An implicit born inside an arm is solved under the refinements it was born under, so its solution may rest on the arm's guard: `Eq/sym`'s `@x` is `Bytes/get(b, k)`, whose bound `k < Bytes/len(b)` holds only in the arm. Mutation-checked: re-validating with every refinement withheld refuses the program at `found`.
+/// An implicit born inside an arm is solved under the refinements it was born under, so its solution may rest on the arm's guard: `Eq/sym`'s `@x` is `Bytes/get(b, k)`, whose bound `k < Bytes/length(b)` holds only in the arm. Mutation-checked: re-validating with every refinement withheld refuses the program at `found`.
 #[test]
 fn an_implicit_born_in_an_arm_is_solved_under_the_arms_guard() {
     let output = run(r#"
@@ -216,7 +216,7 @@ fn an_implicit_born_in_an_arm_is_solved_under_the_arms_guard() {
         use /std/Bool/{True};
 
         let probe(b: Bytes, k: Nat, f: Byte, P: (Byte) -> Type, lead: P(f), fallback: Nat, consume: (x: Byte, P(x)) -> Nat) -> Nat =
-            match k < Bytes/len(b)
+            match k < Bytes/length(b)
             | true =>
                 match Bytes/get(b, k) == f
                 | true =>

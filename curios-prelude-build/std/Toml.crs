@@ -69,12 +69,12 @@ let same(a: Toml, b: Toml) -> Bool =
     | (local_date(x), local_date(y)) => x == y
     | (local_time(x), local_time(y)) => x == y
     | (arr(xs), arr(ys)) =>
-        List/len(xs) == List/len(ys)
+        List/length(xs) == List/length(ys)
             && List/all(List/zip(xs, ys), (p: {Toml, Toml}) => same(p.0, p.1))
     | (table(x), table(y)) =>
         let xs = Map/to_list(x);
         let ys = Map/to_list(y);
-        List/len(xs) == List/len(ys)
+        List/length(xs) == List/length(ys)
             && List/all(
                 List/zip(xs, ys),
                 (p: {{Str, Toml}, {Str, Toml}}) => p.0.0 == p.1.0 && same(p.0.1, p.1.1))

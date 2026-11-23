@@ -489,14 +489,14 @@ let work(mode: Str, n: Nat) -> Nat =
     match
     | Str/eql(mode, "json") =>
         match Json/decode(Str/flatten(["[", Str/repeat("1, ", n), "1]"]))
-        | success(value) => match value | arr(items) => List/len(items) | _ => 0 end
+        | success(value) => match value | arr(items) => List/length(items) | _ => 0 end
         | failure(_) => 0
         end
     | Str/eql(mode, "html") =>
         match Html/decode(Str/repeat("<p>x</p>", n)) | success(_) => n | failure(_) => 0 end
     | Str/eql(mode, "tokens") =>
         match Parse/run(token_walk, Str/to_bytes(Str/repeat("abcdefgh,", n)))
-        | success(runs) => List/len(runs)
+        | success(runs) => List/length(runs)
         | failure(_) => 0
         end
     | _ => 0

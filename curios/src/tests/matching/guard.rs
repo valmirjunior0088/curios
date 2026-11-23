@@ -14,7 +14,7 @@ fn a_value_whose_guards_fail_goes_on_to_the_arms_after_it() {
             | _ => 0
             end;
         let entry() -> /std/Io({}) =
-            let z = Bytes/len(rand/bytes(0)!);
+            let z = Bytes/length(rand/bytes(0)!);
             let a = size(Option/some(10 + z));
             let b = size(Option/some(3 + z));
             let c = size(Option/some(z));
@@ -38,7 +38,7 @@ fn a_bind_guard_binds_for_the_guards_after_it_and_the_body() {
             | _ => 0
             end;
         let entry() -> /std/Io({}) =
-            let z = Bytes/len(rand/bytes(0)!);
+            let z = Bytes/length(rand/bytes(0)!);
             let a = inner(Option/some(Option/some(7 + z)));
             let b = inner(Option/some(Option/some(z)));
             let c = inner(Option/some(Option/none()));
@@ -214,7 +214,7 @@ fn guards_run_at_every_level_of_a_recursion() {
             | k + 1 => shares(k) + 10 / k
             end;
         let entry() -> /std/Io({}) =
-            let z = Bytes/len(rand/bytes(0)!);
+            let z = Bytes/length(rand/bytes(0)!);
             /std/print(Str/join(" ", [
                 Nat/to_str(count(6 + z)),
                 Nat/to_str(capped(10 + z)),
@@ -240,7 +240,7 @@ fn a_guard_may_call_the_recursion_its_arm_stands_in() {
             end;
         let shown(b: Bool) -> Str = match b | true => "even" | false => "odd" end;
         let entry() -> /std/Io({}) =
-            let z = Bytes/len(rand/bytes(0)!);
+            let z = Bytes/length(rand/bytes(0)!);
             /std/print(Str/join(" ", [shown(even(7 + z)), shown(even(4 + z)), shown(even(z))]));
         entry()
         "#;
@@ -262,7 +262,7 @@ fn a_bind_guard_takes_a_recursive_call_apart() {
             end;
         let shown(o: Option(Nat)) -> Str = match o | some(v) => Nat/to_str(v) | none() => "-" end;
         let entry() -> /std/Io({}) =
-            let z = Bytes/len(rand/bytes(0)!);
+            let z = Bytes/length(rand/bytes(0)!);
             /std/print(Str/join(" ", [
                 shown(last_big([5 + z, 1, 3, 0])),
                 shown(last_big([1 + z, 2])),
@@ -291,7 +291,7 @@ fn a_chain_failing_at_a_level_falls_through_the_arms_after_it() {
             | _ => 7
             end;
         let entry() -> /std/Io({}) =
-            let z = Bytes/len(rand/bytes(0)!);
+            let z = Bytes/length(rand/bytes(0)!);
             /std/print(Str/join(" ", [
                 Nat/to_str(ramp(6 + z)),
                 Nat/to_str(ramp(7 + z)),
@@ -330,7 +330,7 @@ fn guards_read_a_recursive_call_projected_applied_and_over_bytes() {
             | 0x[_, ..t] => high(t)
             end;
         let entry() -> /std/Io({}) =
-            let z = Bytes/len(rand/bytes(0)!);
+            let z = Bytes/length(rand/bytes(0)!);
             let (count, total) = tally([1 + z, 5, 3, 7, 2]);
             /std/print(Str/join(" ", [
                 Nat/to_str(count),
@@ -370,7 +370,7 @@ fn a_guard_holds_a_match_and_reads_the_columns_beside_one() {
             | _ => 1
             end;
         let entry() -> /std/Io({}) =
-            let z = Bytes/len(rand/bytes(0)!);
+            let z = Bytes/length(rand/bytes(0)!);
             /std/print(Str/join(" ", [
                 Nat/to_str(evens([1 + z, 2, 3, 4, 6])),
                 Nat/to_str(over([1 + z, 5, 3, 9], 2)),

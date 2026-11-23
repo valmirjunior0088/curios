@@ -162,7 +162,7 @@ fn every_intrinsic_holding_a_proof_reads_back_with_it() {
         "g: (Nat) -> Nat, h: (m: Nat) -> Bool/Holds(0 < g(m)), n: Nat, m: Nat, z: Nat";
     const FINITE: &str =
         "g: (Nat) -> Flt, h: (m: Nat) -> Bool/Holds(-inf.0 < g(m) && g(m) < +inf.0), m: Nat";
-    const SAME: &str = "g: (Nat) -> Bytes, k: (Nat) -> Bytes, h: (m: Nat) -> Bool/Holds(Bytes/len(g(m)) == Bytes/len(k(m))), m: Nat, z: Bytes";
+    const SAME: &str = "g: (Nat) -> Bytes, k: (Nat) -> Bytes, h: (m: Nat) -> Bool/Holds(Bytes/length(g(m)) == Bytes/length(k(m))), m: Nat, z: Bytes";
     // A statement's parameters, and the operation as a program writes it over them.
     let cases = [
         (DIVISOR.to_string(), "Nat/div(n, g(m), @h(m))"),
@@ -196,30 +196,30 @@ fn every_intrinsic_holding_a_proof_reads_back_with_it() {
         (format!("{FINITE}, z: Int"), "Flt/mantissa(g(m), @h(m))"),
         (format!("{FINITE}, z: Int"), "Flt/exponent(g(m), @h(m))"),
         (
-            "g: (Nat) -> Bytes, h: (m: Nat) -> Bool/Holds(Bytes/len(g(m)) == 8), m: Nat, z: Flt".to_string(),
+            "g: (Nat) -> Bytes, h: (m: Nat) -> Bool/Holds(Bytes/length(g(m)) == 8), m: Nat, z: Flt".to_string(),
             "Flt/of_le_bytes(g(m), @h(m))",
         ),
         (
-            "g: (Nat) -> Bytes, h: (m: Nat) -> Bool/Holds(m < Bytes/len(g(m))), m: Nat, z: Byte".to_string(),
+            "g: (Nat) -> Bytes, h: (m: Nat) -> Bool/Holds(m < Bytes/length(g(m))), m: Nat, z: Byte".to_string(),
             "Bytes/get(g(m), m, @h(m))",
         ),
         (
-            "g: (Nat) -> Bytes, h: (m: Nat) -> Bool/Holds(m + m <= Bytes/len(g(m))), m: Nat, z: Bytes".to_string(),
+            "g: (Nat) -> Bytes, h: (m: Nat) -> Bool/Holds(m + m <= Bytes/length(g(m))), m: Nat, z: Bytes".to_string(),
             "Bytes/slice(g(m), m, m, @h(m))",
         ),
         (SAME.to_string(), "Bytes/and(g(m), k(m), @h(m))"),
         (SAME.to_string(), "Bytes/or(g(m), k(m), @h(m))"),
         (SAME.to_string(), "Bytes/xor(g(m), k(m), @h(m))"),
         (
-            "g: (Nat) -> List(Nat), h: (m: Nat) -> Bool/Holds(m < List/len(g(m))), m: Nat, z: Nat".to_string(),
+            "g: (Nat) -> List(Nat), h: (m: Nat) -> Bool/Holds(m < List/length(g(m))), m: Nat, z: Nat".to_string(),
             "List/get(g(m), m, @h(m))",
         ),
         (
-            "g: (Nat) -> List(Nat), h: (m: Nat) -> Bool/Holds(m + m <= List/len(g(m))), m: Nat, z: List(Nat)".to_string(),
+            "g: (Nat) -> List(Nat), h: (m: Nat) -> Bool/Holds(m + m <= List/length(g(m))), m: Nat, z: List(Nat)".to_string(),
             "List/slice(g(m), m, m, @h(m))",
         ),
         (
-            "g: (Nat) -> List(Nat), h: (m: Nat) -> Bool/Holds(m < List/len(g(m))), m: Nat, z: List(Nat)".to_string(),
+            "g: (Nat) -> List(Nat), h: (m: Nat) -> Bool/Holds(m < List/length(g(m))), m: Nat, z: List(Nat)".to_string(),
             "List/set(g(m), m, 7, @h(m))",
         ),
     ];

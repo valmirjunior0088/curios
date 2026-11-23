@@ -31,7 +31,7 @@ test the_compatibility_forms_replace_what_the_canonical_ones_keep =
         Test/equal(Str/normalize("\u{FB01}", Form/nfkc()), "fi"),
         Test/equal(Str/normalize("\u{FB01}", Form/nfc()), "\u{FB01}"),
         Test/equal(Str/normalize("x\u{B2}", Form/nfkd()), "x2"),
-        Test/equal(Str/len(Str/normalize("\u{FDFA}", Form/nfkd())), 18),
+        Test/equal(Str/length(Str/normalize("\u{FDFA}", Form/nfkd())), 18),
         Test/equal(Str/normalize("\u{2126}", Form/nfc()), "\u{3A9}")]);
 
 -- A text normalizing to itself is in that form, and one that changes is not: plain ASCII is in every form, and a decomposed accent in the decomposed ones alone.

@@ -303,7 +303,7 @@ let spin(n: Nat) -> Nat =
 let subject : /std/Nat = double(2) + spin(0);
 
 let entry() -> /std/Io({}) =
-    let _ = List/len(Proc/args()!);
+    let _ = List/length(Proc/args()!);
     /std/print(Nat/to_str(subject));
 
 entry()

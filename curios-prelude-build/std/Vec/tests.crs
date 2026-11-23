@@ -12,10 +12,10 @@ test set_writes_an_element_at_the_same_length =
     let w: Vec(Nat, 3) = Vec/set(v, 1, 25);
     Test/all([Test/equal(w.list, [10, 25, 30]), Test/equal(List/get(w.list, 1), 25)]);
 
--- A list is already counted by `List/len`, so `of_list` keeps the list it was given and takes that length as the index.
+-- A list is already counted by `List/length`, so `of_list` keeps the list it was given and takes that length as the index.
 test of_list_keeps_its_list_at_the_lists_own_length =
     let v = Vec/of_list([1, 2, 3]);
-    Test/all([Test/equal(Vec/len(v), 3), Test/equal(v.list, [1, 2, 3])]);
+    Test/all([Test/equal(Vec/length(v), 3), Test/equal(v.list, [1, 2, 3])]);
 
 -- Equal lengths are in the types, so `zip` demands no proof and `replicate` builds the second operand at exactly the first's length.
 test zip_pairs_two_vectors_of_one_length_position_by_position =

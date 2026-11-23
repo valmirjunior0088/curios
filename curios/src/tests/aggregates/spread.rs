@@ -53,7 +53,7 @@ fn list_spread_borrows_expected_element_type() {
         let xs : List(Int) = [-1, +2];
         let ys : List(Int) = [1, ..xs];
         let entry() -> /std/Io({}) =
-            let _ = /std/print(Nat/to_str(List/len(ys)))!;
+            let _ = /std/print(Nat/to_str(List/length(ys)))!;
             /std/Io/pure(());
         entry()
         "#;

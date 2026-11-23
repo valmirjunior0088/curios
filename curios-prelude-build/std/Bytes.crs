@@ -1,7 +1,7 @@
 mod tests;
 
 pub use /sys/{let Bytes};
-pub use /sys/Bytes/{get, len, eql, slice, replicate, and, or, xor};
+pub use /sys/Bytes/{get, length, eql, slice, replicate, and, or, xor};
 
 --- The number a minimal encoding denotes, which is `of_nat`'s inverse, with the bound a run's length puts on it.
 pub mod to_nat;
@@ -17,7 +17,7 @@ use /std/ops/{Eql, Cmp};
 
 --- The byte at `i`, or `none` past the end.
 pub let try_get(b: Bytes, i: Nat) -> Option(Byte) =
-    match i < len(b)
+    match i < length(b)
     | true => Option/some(get(b, i))
     | false => Option/none()
     end;
@@ -31,7 +31,7 @@ pub let of_nat(n: Nat) -> Bytes =
     end;
 
 -- A cons has no length of zero: the comparison that decides the two lengths refutes the equation.
-let no_cons(k: Byte, p: Bytes, e: Eq()(0, len(0x[k, ..p]))) -> Bool/False =
+let no_cons(k: Byte, p: Bytes, e: Eq()(0, length(0x[k, ..p]))) -> Bool/False =
     Eq/subst((m: Nat) => Bool/Holds(0 == m), e, Bool/True/qed());
 
 -- By induction on both runs: the tails' numbers are the quotients by `256` and the heads the remainders, each of which conversion reads off a byte beside a multiple.
@@ -41,7 +41,7 @@ let no_cons(k: Byte, p: Bytes, e: Eq()(0, len(0x[k, ..p]))) -> Bool/False =
 pub let to_nat_injective(
     a: Bytes,
     b: Bytes,
-    same: Eq()(len(a), len(b)),
+    same: Eq()(length(a), length(b)),
     e: Eq()(to_nat(a), to_nat(b)),
 ) -> Eq()(a, b) =
     match a
@@ -56,7 +56,7 @@ pub let to_nat_injective(
         | 0x[k, ..p] =>
             let tails: Eq()(to_nat(t), to_nat(p)) = Eq/cong((n: Nat) => n / 256, e);
             let heads: Eq()(h, k) = Eq/cong((n: Nat) => Nat/to_byte(n % 256), e);
-            let lens: Eq()(len(t), len(p)) = Eq/cong((n: Nat) => n - 1, same);
+            let lens: Eq()(length(t), length(p)) = Eq/cong((n: Nat) => n - 1, same);
             let rest: Eq()(t, p) = to_nat_injective(t, p, lens, tails);
             Eq/trans(
                 Eq/cong((y: Byte) => 0x[y, ..t], heads),
@@ -121,7 +121,7 @@ pub let eq_of_eql(a: Bytes, b: Bytes, h: Bool/Holds(a == b)) -> Eq()(a, b) =
 
 -- An empty encoding is no encoding of a positive number: the lengths differ, and a length of zero against a successor is refuted by the comparison that decides it.
 let no_empty(k: Byte, p: Bytes, e: Eq()(0x[], 0x[k, ..p])) -> Bool/False =
-    Eq/subst((m) => Bool/Holds(0 == m), Eq/cong(len, e), Bool/True/qed());
+    Eq/subst((m) => Bool/Holds(0 == m), Eq/cong(length, e), Bool/True/qed());
 
 -- Course-of-values induction, because the recursion divides rather than decrements. Each step takes the encoding apart at its first byte, the digit and the rest by the cons's two injections, recovers the two numbers' high parts from the induction hypothesis and their low digits from the byte round trip, and rejoins both by Euclid's recombination.
 --- Distinct numbers encode distinctly.
@@ -180,13 +180,13 @@ pub let of_nat_injective(a: Nat, b: Nat, same: Eq()(of_nat(a), of_nat(b))) -> Eq
         same);
 
 --- Everything from `k` on, under the evidence that `k` is within the length.
-pub let drop(b: Bytes, k: Nat, @ok: Bool/Holds(k <= len(b))) -> Bytes =
-    slice(b, k, len(b) - k);
+pub let drop(b: Bytes, k: Nat, @ok: Bool/Holds(k <= length(b))) -> Bytes =
+    slice(b, k, length(b) - k);
 
--- An `xor` against a run of all-ones bytes as long as this one, so the width is a fact about the operand rather than a number written here. `Bytes/len` reduces a fill to its own count, so the equal-length bound the `xor` states discharges without a guard.
+-- An `xor` against a run of all-ones bytes as long as this one, so the width is a fact about the operand rather than a number written here. `Bytes/length` reduces a fill to its own count, so the equal-length bound the `xor` states discharges without a guard.
 --- Every bit of every byte flipped.
 pub let not(b: Bytes) -> Bytes =
-    xor(b, replicate(len(b), 0xFF));
+    xor(b, replicate(length(b), 0xFF));
 
 --- `b` moved `count` bytes toward the high end, zero bytes entering at the low end and whatever passes the top discarded.
 ---
@@ -194,33 +194,33 @@ pub let not(b: Bytes) -> Bytes =
 ---
 --- Whole bytes, not bits: a byte string has no finer position, and a bit shift is `Nat`'s.
 pub let shl(b: Bytes, count: Nat) -> Bytes =
-    match count <= len(b)
-    | true => 0x[..replicate(count, 0x00), ..slice(b, 0, len(b) - count)]
-    | false => replicate(len(b), 0x00)
+    match count <= length(b)
+    | true => 0x[..replicate(count, 0x00), ..slice(b, 0, length(b) - count)]
+    | false => replicate(length(b), 0x00)
     end;
 
 --- `b` moved `count` bytes toward the low end, zero bytes entering at the high end.
 pub let shr(b: Bytes, count: Nat) -> Bytes =
-    match count <= len(b)
+    match count <= length(b)
     | true => 0x[..drop(b, count), ..replicate(count, 0x00)]
-    | false => replicate(len(b), 0x00)
+    | false => replicate(length(b), 0x00)
     end;
 
 -- The count is taken modulo the width, which is what makes this total without a guard on the count itself; the empty run is the one case with no width to take it modulo.
 --- `b` rotated `count` bytes toward the high end, what passes the top re-entering at the bottom; rotating the empty run is the identity.
 pub let rotl(b: Bytes, count: Nat) -> Bytes =
-    match 0 < len(b)
+    match 0 < length(b)
     | true =>
-        let keep = len(b) - count % len(b);
+        let keep = length(b) - count % length(b);
         0x[..drop(b, keep), ..slice(b, 0, keep)]
     | false => b
     end;
 
 --- `b` rotated `count` bytes toward the low end.
 pub let rotr(b: Bytes, count: Nat) -> Bytes =
-    match 0 < len(b)
+    match 0 < length(b)
     | true =>
-        let places = count % len(b);
+        let places = count % length(b);
         0x[..drop(b, places), ..slice(b, 0, places)]
     | false => b
     end;
@@ -238,12 +238,12 @@ pub let fold(@A: Type, b: Bytes, init: A, f: (Byte, A) -> A) -> A =
 pub let find_index(
     b: Bytes,
     pred: (Byte) -> Bool,
-) -> Option({at: Nat, within: Bool/Holds(at < len(b))}) =
+) -> Option({at: Nat, within: Bool/Holds(at < length(b))}) =
     Nat/descend(
-        (i: Nat) => len(b) - i,
-        (_) => Option({at: Nat, within: Bool/Holds(at < len(b))}),
+        (i: Nat) => length(b) - i,
+        (_) => Option({at: Nat, within: Bool/Holds(at < length(b))}),
         (i, ih) =>
-            match Bool/holds(i < len(b))
+            match Bool/holds(i < length(b))
             | none() => Option/none()
             | some(inside) =>
                 match pred(get(b, i, @inside))
@@ -254,7 +254,7 @@ pub let find_index(
         0);
 
 --- Where the first `x` is, with the proof that it lies within `b`, or `none`.
-pub let index_of(b: Bytes, x: Byte) -> Option({at: Nat, within: Bool/Holds(at < len(b))}) =
+pub let index_of(b: Bytes, x: Byte) -> Option({at: Nat, within: Bool/Holds(at < length(b))}) =
     find_index(b, (y) => y == x);
 
 --- Whether `x` occurs in `b`.
@@ -268,7 +268,7 @@ pub let all(b: Bytes, pred: (Byte) -> Bool) -> Bool =
 --- `parts` with `sep` between each pair.
 pub let join(sep: Bytes, parts: List(Bytes)) -> Bytes =
     List/balanced(
-        List/len(parts),
+        List/length(parts),
         0x[],
         (i, ok) => List/get(@Bytes, parts, i, @ok),
         (l, r) => 0x[..l, ..sep, ..r]);
@@ -282,7 +282,7 @@ struct Cutting: Type {
 --- The pieces of `b` between each `sep`, in order: one more than the separators it holds.
 pub let split(b: Bytes, sep: Byte) -> List(Bytes) =
     Nat/descend(
-        (c: Cutting) => len(c.rest),
+        (c: Cutting) => length(c.rest),
         (_) => List(Bytes),
         (c, ih) =>
             match index_of(c.rest, sep)

@@ -83,7 +83,7 @@ let value_str(v: Toml) -> Str =
         let parts = List/fold(items, start, (item, parts) => [..parts, value_str(item)]);
         Fmt/render("[%]")(Str/join(", ", parts))
     | table(m) =>
-        match List/len(Map/to_list(m)) == 0
+        match List/length(Map/to_list(m)) == 0
         | true => "{}"
         | false => Fmt/render("{ % }")(pairs_str(Map/to_list(m)))
         end

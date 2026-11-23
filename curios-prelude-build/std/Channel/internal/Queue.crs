@@ -11,32 +11,32 @@ end
 pub struct Queue(A: Type): Type {
     front: Stack(A),
     back: Stack(A),
-    len: Nat,
+    length: Nat,
 }
 
 --- A queue holding nothing.
 pub let empty(@A: Type) -> Queue(A) =
-    Queue { front = Stack/bottom(), back = Stack/bottom(), len = 0 };
+    Queue { front = Stack/bottom(), back = Stack/bottom(), length = 0 };
 
 --- `q` with `a` put in last.
 pub let push(@A: Type, q: Queue(A), a: A) -> Queue(A) =
-    Queue { ..q, back = Stack/on(a, q.back), len = q.len + 1 };
+    Queue { ..q, back = Stack/on(a, q.back), length = q.length + 1 };
 
 --- The oldest value `q` holds, beside `q` without it; `none` where `q` holds nothing.
 pub let take(@A: Type, q: Queue(A)) -> Option({A, Queue(A)}) =
     match q.front
-    | on(a, rest) => Option/some((a, Queue { ..q, front = rest, len = q.len - 1 }))
+    | on(a, rest) => Option/some((a, Queue { ..q, front = rest, length = q.length - 1 }))
     | bottom() =>
         match turned(q.back, Stack/bottom())
         | on(a, rest) =>
-            Option/some((a, Queue { front = rest, back = Stack/bottom(), len = q.len - 1 }))
+            Option/some((a, Queue { front = rest, back = Stack/bottom(), length = q.length - 1 }))
         | bottom() => Option/none()
         end
     end;
 
 --- How many values `q` holds.
-pub let len(@A: Type, q: Queue(A)) -> Nat =
-    q.len;
+pub let length(@A: Type, q: Queue(A)) -> Nat =
+    q.length;
 
 -- `s` turned over onto `onto`, so its top ends deepest.
 let turned(@A: Type, s: Stack(A), onto: Stack(A)) -> Stack(A) =

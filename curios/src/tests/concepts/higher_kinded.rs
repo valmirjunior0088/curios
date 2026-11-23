@@ -88,7 +88,7 @@ fn monad_over_intrinsic_constructor_resolves_by_imitation() {
         use /std/{Nat, List, Str, Monad};
         let a : List(Nat) = [1];
         let b : List(Nat) = Monad/bind(a, (x) => a);
-        /std/print(Nat/to_str(List/len(b)))
+        /std/print(Nat/to_str(List/length(b)))
         "#;
 
     assert_eq!(run(source), b"1");

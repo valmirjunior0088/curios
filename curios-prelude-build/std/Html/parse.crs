@@ -59,7 +59,7 @@ let reference(body: Str) -> Option(Str) =
 --- The reference at the start of a piece that followed an `&`, when it is one.
 let decoded_reference(piece: Str) -> Option(Str) =
     let (body, rest) = Str/split_once(piece, ";")!;
-    match Str/len(body) <= 8 && Bool/not(Str/is_empty(body))
+    match Str/length(body) <= 8 && Bool/not(Str/is_empty(body))
     | false => Option/none()
     | true =>
         let s = reference(body)!;

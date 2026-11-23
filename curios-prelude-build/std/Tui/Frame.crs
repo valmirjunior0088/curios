@@ -18,20 +18,20 @@ let padded(@T: Type, fill: T, m: Nat) -> (List(T)) -> List(T) =
     end;
 
 -- Either arm adds exactly one element to a run the shorter padding already counted, so the count is the one asked for whatever the input was.
-let padded_len(@T: Type, fill: T, m: Nat) -> (l: List(T)) -> Vec/Counted(padded(fill, m)(l), m) =
+let padded_length(@T: Type, fill: T, m: Nat) -> (l: List(T)) -> Vec/Counted(padded(fill, m)(l), m) =
     match m
     | 0 => (_) => Eq/refl()
     | k + 1 =>
         (l) =>
             match l
-            | [] => Eq/cong((w: Nat) => w + 1, padded_len(fill, k)([]))
-            | [_, ..t] => Eq/cong((w: Nat) => w + 1, padded_len(fill, k)(t))
+            | [] => Eq/cong((w: Nat) => w + 1, padded_length(fill, k)([]))
+            | [_, ..t] => Eq/cong((w: Nat) => w + 1, padded_length(fill, k)(t))
             end
     end;
 
 -- The elements at exactly `m`, which is where a frame's index is re-established after a list has carried it.
 let resize(@T: Type, fill: T, m: Nat, l: List(T)) -> Vec(T, m) =
-    Vec { list = padded(fill, m)(l), counted = padded_len(fill, m)(l) };
+    Vec { list = padded(fill, m)(l), counted = padded_length(fill, m)(l) };
 
 let drop_upto(@T: Type, l: List(T), k: Nat) -> List(T) =
     match k
@@ -112,7 +112,7 @@ let overlay(
             match List/try_get(patches, index - y)
             | none() => under
             | some(patch) =>
-                List/flatten([List/take(under, x), patch, drop_upto(under, x + List/len(patch))])
+                List/flatten([List/take(under, x), patch, drop_upto(under, x + List/length(patch))])
             end
         end;
     resize(

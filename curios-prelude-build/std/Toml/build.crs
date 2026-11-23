@@ -39,13 +39,13 @@ let seg_key(pre: Bytes, seg: Seg) -> Bytes =
     match seg
     | plain(name) =>
         let nb = Str/to_bytes(name);
-        0x[..pre, 'p', ..Str/to_bytes(Nat/to_str(Bytes/len(nb))), ':', ..nb]
+        0x[..pre, 'p', ..Str/to_bytes(Nat/to_str(Bytes/length(nb))), ':', ..nb]
     | at(name, index) =>
         let nb = Str/to_bytes(name);
         0x[
             ..pre,
             'a',
-            ..Str/to_bytes(Nat/to_str(Bytes/len(nb))),
+            ..Str/to_bytes(Nat/to_str(Bytes/length(nb))),
             ':',
             ..nb,
             '#',
@@ -59,7 +59,7 @@ let seg_name(seg: Seg) -> Str =
 let replace_at(
     items: List(Toml),
     index: Nat,
-    ok: Bool/Holds(index < List/len(items)),
+    ok: Bool/Holds(index < List/length(items)),
     value: Toml,
 ) -> List(Toml) =
     [..List/slice(items, 0, index), value, ..List/drop(@Toml, items, index + 1, @ok)];
@@ -128,7 +128,7 @@ let walk_final(
                     Result/success((
                         Map/insert(m, name, Toml/arr([..items, Toml/table(Map/empty())])),
                         side,
-                        [Seg/at(name, List/len(items))]))
+                        [Seg/at(name, List/length(items))]))
                 | _ => Result/failure(Rule/appends_to_static_array())
                 end
             | table(_) => Result/failure(Rule/redefines_table_as_array())
@@ -185,7 +185,7 @@ let walk(
                 | some(existing) =>
                     match existing
                     | arr(items) =>
-                        match Bool/holds(index < List/len(items))
+                        match Bool/holds(index < List/length(items))
                         | some(in_range) =>
                             match List/get(@Toml, items, index, @in_range)
                             | table(inner) =>
@@ -252,9 +252,9 @@ let walk(
                         match act
                         | act_value(_) => Result/failure(Rule/extends_array_with_dotted_keys())
                         | _ =>
-                            let index = List/len(items) - 1;
+                            let index = List/length(items) - 1;
                             let seg2 = Seg/at(name, index);
-                            match Bool/holds(index < List/len(items))
+                            match Bool/holds(index < List/length(items))
                             | some(in_range) =>
                                 match List/get(@Toml, items, index, @in_range)
                                 | table(inner) =>
@@ -292,7 +292,7 @@ pub let apply_assign(b: Build, path: List(Str), v: Toml) -> Result(Error, Build)
         b.side,
         0x[],
         [..b.scope, ..plains(path)],
-        List/len(b.scope),
+        List/length(b.scope),
         Act/act_value(v))
     | success((root2, side2, _)) =>
         Result/success(Build { root = root2, side = side2, scope = b.scope })

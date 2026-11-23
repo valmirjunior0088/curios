@@ -131,7 +131,7 @@ let counted(n: Nat, each: (Nat) -> Nat) -> List(Nat) =
 let whole_and_in_order(l: List(Nat)) -> Test({}) =
     let sorted = List/sort(l);
     Test/all([
-        Test/equal(List/len(sorted), List/len(l)),
+        Test/equal(List/length(sorted), List/length(l)),
         Test/assert("the sorted list is in order", List/ordered(sorted, Ord/le(Nat/ord)))]);
 
 -- A hundred thousand elements, which a sort as deep as its input or as costly as its square does not answer for: already in order, in reverse, and scattered.

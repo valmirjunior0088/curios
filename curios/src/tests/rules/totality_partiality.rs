@@ -682,7 +682,7 @@ fn a_type_naming_a_loop_it_never_applies_is_accepted() {
     "#;
     for program in [
         r#"
-        let take(v: Vec(Io(Nat), List/len(List/map([1, 2, 3], spin)))) -> Nat = Vec/len(v);
+        let take(v: Vec(Io(Nat), List/length(List/map([1, 2, 3], spin)))) -> Nat = Vec/length(v);
 
         /std/print(Nat/to_str(take(Vec/of_list(List/map([1, 2, 3], spin)))))
         "#,
@@ -707,7 +707,7 @@ fn a_type_naming_a_loop_it_never_applies_is_accepted() {
         main()
         "#,
         r#"
-        let all_counted(@A: Type, actions: List(Io(A))) -> Io(Vec(A, List/len(actions))) =
+        let all_counted(@A: Type, actions: List(Io(A))) -> Io(Vec(A, List/length(actions))) =
             match actions
             | [] => Io/pure(Vec/nil())
             | [a, ..more] =>
@@ -716,11 +716,11 @@ fn a_type_naming_a_loop_it_never_applies_is_accepted() {
                 Io/pure(Vec/cons(x, rest))
             end;
 
-        let counted() -> Nat = Vec/len(Vec/of_list(List/map([1, 2, 3], spin)));
+        let counted() -> Nat = Vec/length(Vec/of_list(List/map([1, 2, 3], spin)));
 
         let main() -> Io(Nat) =
             let answers = all_counted(List/map([4, 5, 6], (n: Nat) => Io/pure(n)))!;
-            Io/pure(Vec/len(answers) + counted());
+            Io/pure(Vec/length(answers) + counted());
 
         /std/print(Nat/to_str(main()!))
         "#,

@@ -322,7 +322,7 @@ fn a_tuple_of_proofs_is_a_proposition_where_it_takes_its_shape() {
         let listed = [(p, p)];
         let chosen = match c | true => (p, p) | false => (p, p) end;
         let beside = id((5, p));
-        print(Nat/to_str(gp((p, p), (p, p)) + List/len(listed) + beside.0))
+        print(Nat/to_str(gp((p, p), (p, p)) + List/length(listed) + beside.0))
         "#,
     );
 
@@ -365,13 +365,13 @@ fn a_tuple_of_functions_into_propositions_is_refused_where_a_type_is_declared() 
     );
 }
 
-// And at a sort left to inference, a list's element, the pair is a proposition as soon as it is read: the line after meets a list of propositions and takes its length, `List/len` standing over an element at any sort. Read as a type's there, the element would be held to a type by that call and the certifier would refuse it.
+// And at a sort left to inference, a list's element, the pair is a proposition as soon as it is read: the line after meets a list of propositions and takes its length, `List/length` standing over an element at any sort. Read as a type's there, the element would be held to a type by that call and the certifier would refuse it.
 #[test]
 fn a_pair_of_functions_into_propositions_is_a_proposition_on_the_next_line() {
     let source = program(
         r#"
         let functions = [((x: Nat) => p, (x: Nat) => p)];
-        print(Nat/to_str(List/len(functions)))
+        print(Nat/to_str(List/length(functions)))
         "#,
     );
 

@@ -143,7 +143,7 @@ fn no_judgment_inside_a_group_reads_a_member_withheld_from_it() {
         ));
         assert!(
             error.contains(&fill!(
-                "nothing discharged `/std/Bool/Holds(${member}(0) < List/len(@Nat, [1, 2, 3]))`",
+                "nothing discharged `/std/Bool/Holds(${member}(0) < List/length(@Nat, [1, 2, 3]))`",
                 member,
             )) && !error.contains("certifier refusal"),
             "{error}"

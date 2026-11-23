@@ -114,13 +114,13 @@ fn a_conversion_parked_under_refinements_notes_the_dependence() {
 
 #[test]
 fn a_metavariable_blocked_match_comparison_parks_until_the_index_lands() {
-    // The proof argument is checked before anything pins `@b`, against `Holds(0 < Bytes/len(?b))` — a match stuck on the metavariable. The goal must park and discharge once the witness argument solves `?b`, in either argument order.
+    // The proof argument is checked before anything pins `@b`, against `Holds(0 < Bytes/length(?b))` — a match stuck on the metavariable. The goal must park and discharge once the witness argument solves `?b`, in either argument order.
     let source = r#"
         use /std/Str/{Valid};
         use /std/{Nat, Byte, Bytes, Io};
         use /std/Bool/{True, Holds};
 
-        let proof_first(@b: Bytes, nz: Holds(0 < Bytes/len(b)), w: Valid(b)) -> {} = ();
+        let proof_first(@b: Bytes, nz: Holds(0 < Bytes/length(b)), w: Valid(b)) -> {} = ();
 
         let call(h: Byte, t: Bytes, valid: Valid(0x[h, ..t])) -> {} =
             proof_first(True/qed(), valid);
@@ -321,7 +321,7 @@ fn closure_returning_a_bare_projection_lowers() {
         use /std/{List};
         use /std/{Nat};
         let mapped : List(Nat) = List/map(@{ Nat, Nat }, @Nat, [], (pair) => pair.0);
-        /std/print(/std/Nat/to_str(List/len(mapped)))
+        /std/print(/std/Nat/to_str(List/length(mapped)))
     "#;
 
     assert!(compile(source).is_ok());

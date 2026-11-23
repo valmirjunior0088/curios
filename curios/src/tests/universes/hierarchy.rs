@@ -461,11 +461,11 @@ fn a_type_read_off_a_list_or_a_fold_is_classified_at_its_sort() {
         use /std/{List, Nat};
         use /std/Bool/{Holds};
 
-        pub struct Head(ts: List(Type), h: Holds(0 < List/len(ts))): Type {
+        pub struct Head(ts: List(Type), h: Holds(0 < List/length(ts))): Type {
             value: List/get(ts, 0, @h),
         }
 
-        pub let value(ts: List(Type), h: Holds(0 < List/len(ts)), head: Head(ts, h)) -> List/get(ts, 0, @h) =
+        pub let value(ts: List(Type), h: Holds(0 < List/length(ts)), head: Head(ts, h)) -> List/get(ts, 0, @h) =
             head.value;
 
         pub let Folded(xs: List(Nat)) -> Type = List/fold(xs, Nat, (_, acc: Type) => acc);

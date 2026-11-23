@@ -576,7 +576,7 @@ fn a_list_element_past_the_wire_is_refused() {
         foreign nats(List(Nat)) -> List(Nat);
         let entry() -> /std/Io({}) =
             let v = /std/Proc/env("CURIOS_UNSET_LIST")!;
-            let _ = nats([1, Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, 0x[]))])!;
+            let _ = nats([1, Nat/shl(1, 70) + Bytes/length(Option/unwrap_or(v, 0x[]))])!;
             /std/Io/pure(());
         entry()
         "#

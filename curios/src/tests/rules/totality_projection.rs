@@ -304,7 +304,7 @@ fn the_librarys_json_encoder_is_reached_by_a_type() {
         use /std/{Json, Str, Bool};
 
         let Short(j: Json) -> /std/Bool/True =
-            match Str/len(Json/encode(j)) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
+            match Str/length(Json/encode(j)) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,

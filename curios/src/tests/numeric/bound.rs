@@ -45,17 +45,17 @@ fn a_guard_discharges_a_window_bound_stated_over_a_sum() {
         run(r#"
         use /std/{Str, Bytes, Nat};
         let head(b : Bytes) -> Bytes =
-            match 10 <= Bytes/len(b) | true => Bytes/slice(b, 0, 10) | false => 0x[] end;
+            match 10 <= Bytes/length(b) | true => Bytes/slice(b, 0, 10) | false => 0x[] end;
         let interior(b : Bytes, k : Nat) -> Bytes =
-            match 1 + k <= Bytes/len(b) | true => Bytes/slice(b, 1, k) | false => 0x[] end;
+            match 1 + k <= Bytes/length(b) | true => Bytes/slice(b, 1, k) | false => 0x[] end;
         let named = 0x[0x61, 0x62, 0x63];
         let over_a_definition(k : Nat) -> Bytes =
-            match 1 + k <= Bytes/len(named)
+            match 1 + k <= Bytes/length(named)
             | true => Bytes/slice(named, 1, k)
             | false => 0x[]
             end;
         let indexed(b : Bytes, i : Nat) -> Bytes =
-            match i < Bytes/len(b) | true => 0x[Bytes/get(b, i)] | false => 0x[] end;
+            match i < Bytes/length(b) | true => 0x[Bytes/get(b, i)] | false => 0x[] end;
         /std/print("ok")
         "#),
         b"ok"
@@ -65,7 +65,7 @@ fn a_guard_discharges_a_window_bound_stated_over_a_sum() {
         r#"
         use /std/{Str, Bytes, Nat};
         let mismatched(b : Bytes, k : Nat) -> Bytes =
-            match 1 + k <= Bytes/len(b) | true => Bytes/slice(b, 2, k) | false => 0x[] end;
+            match 1 + k <= Bytes/length(b) | true => Bytes/slice(b, 2, k) | false => 0x[] end;
         /std/print("unreachable")
         "#,
     )
@@ -77,14 +77,14 @@ fn a_guard_discharges_a_window_bound_stated_over_a_sum() {
     );
 }
 
-// The guard records `n + n <= Bytes/len(b)` as written; the slice asks for `2 * n <= Bytes/len(b)`. The fold merges both to `2 · n` the moment they are built, so the refinement key matches; this pins that a sum keeps merging eagerly while a product of two sums does not.
+// The guard records `n + n <= Bytes/length(b)` as written; the slice asks for `2 * n <= Bytes/length(b)`. The fold merges both to `2 · n` the moment they are built, so the refinement key matches; this pins that a sum keeps merging eagerly while a product of two sums does not.
 #[test]
 fn a_guard_over_like_terms_discharges_a_bound_spelled_the_other_way() {
     assert_eq!(
         run(r#"
         use /std/{Str, Bytes, Nat};
         let doubled(b : Bytes, n : Nat) -> Bytes =
-            match n + n <= Bytes/len(b) | true => Bytes/slice(b, 0, 2 * n) | false => 0x[] end;
+            match n + n <= Bytes/length(b) | true => Bytes/slice(b, 0, 2 * n) | false => 0x[] end;
         /std/print("ok")
         "#),
         b"ok"
@@ -144,7 +144,7 @@ fn a_guard_spelled_the_other_way_discharges_a_bound() {
     );
 }
 
-// A bound whose subject is a *computed* value is discharged by evaluating that value, at elaboration time. `Bytes/slice` states `10 <= Bytes/len(b)`, so `Bytes/slice(built, 0, 10)` puts `go(100000, 0x[])` in a type and the compiler runs the loop. A hundred thousand iterations cost far more than the half-million budget these fixtures run at, though within the default, so the refusal below is the budget doing exactly its job, and the small figure stated here only makes the fixture cheap.
+// A bound whose subject is a *computed* value is discharged by evaluating that value, at elaboration time. `Bytes/slice` states `10 <= Bytes/length(b)`, so `Bytes/slice(built, 0, 10)` puts `go(100000, 0x[])` in a type and the compiler runs the loop. A hundred thousand iterations cost far more than the half-million budget these fixtures run at, though within the default, so the refusal below is the budget doing exactly its job, and the small figure stated here only makes the fixture cheap.
 //
 // **The refusal is a bounded computation exceeding its allowance, not the machine running out.** The budget prices what a reduction builds, and `curios-core`'s `FUSION_CAP` keeps an all-literal concatenation from recopying its whole accumulator every step, so the volume of construction stays linear in the iteration count; `curios`'s `tests::reduction` holds the figures.
 //
@@ -170,7 +170,7 @@ fn a_bound_on_a_computed_subject_evaluates_it() {
     );
 }
 
-// **The obvious spelling, at a size the ordinary budget admits.** No helper stands between the bound and its computed subject — the compiler runs the loop, measures what it built, and discharges `10 <= Bytes/len(built)` from the result. This is what a user reaching for `Bytes/slice` on a computed value writes, and what decides whether it works is the ordinary reduction budget, on a cost linear in the iteration count, rather than how much memory the host happens to have.
+// **The obvious spelling, at a size the ordinary budget admits.** No helper stands between the bound and its computed subject — the compiler runs the loop, measures what it built, and discharges `10 <= Bytes/length(built)` from the result. This is what a user reaching for `Bytes/slice` on a computed value writes, and what decides whether it works is the ordinary reduction budget, on a cost linear in the iteration count, rather than how much memory the host happens to have.
 #[test]
 fn a_bound_on_a_small_computed_subject_discharges() {
     typecheck_within(
@@ -199,7 +199,7 @@ fn a_bound_behind_a_parameter_evaluates_nothing() {
         let go(i : Nat, acc : Bytes) -> Bytes =
             match i | 0 => acc | k + 1 => go(k, 0x[..acc, ..Str/to_bytes("0123456789")]) end;
         let head_of(b : Bytes) -> Bytes =
-            match 10 <= Bytes/len(b) | true => Bytes/slice(b, 0, 10) | false => 0x[] end;
+            match 10 <= Bytes/length(b) | true => Bytes/slice(b, 0, 10) | false => 0x[] end;
         let built = go(100000, 0x[]);
         let head = head_of(built);
         /std/print("ok")
@@ -329,7 +329,7 @@ fn an_undischarged_bound_is_named_in_the_refusal() {
     .expect_err("nothing discharges the window bound");
 
     assert!(
-        error.contains("nothing discharged `Bool/Holds(2 + k <= Bytes/len(b))`"),
+        error.contains("nothing discharged `Bool/Holds(2 + k <= Bytes/length(b))`"),
         "expected the refusal to name the bound, got: {error}"
     );
 }
@@ -360,7 +360,7 @@ fn a_bound_over_one_length_reached_by_two_routes_discharges() {
         use /std/{Nat, Bytes, Char, Str};
         use /std/Bool/{True, Holds};
         let _within(c: Char, k: Nat)
-            -> Holds(k + Bytes/len(Char/to_utf8(c)) <= k + Bytes/len(Str/of_char(c).bytes) + 1) =
+            -> Holds(k + Bytes/length(Char/to_utf8(c)) <= k + Bytes/length(Str/of_char(c).bytes) + 1) =
             True/qed();
         /std/print("ok")
         "#),

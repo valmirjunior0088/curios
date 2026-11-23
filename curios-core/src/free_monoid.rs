@@ -493,7 +493,7 @@ impl FreeMonoid {
 
     /// The operands of an already-reduced value, left to right, each with the number of generators it carries — `None` where any operand's length is not statically known.
     ///
-    /// **The free monoid's measure, and the one thing `len`, `get` and `slice` all actually want.** A length is a homomorphism into `(ℕ, +, 0)`, and over a value already in normal form it is a *fold over the spine*: no reduction, no rebuilding, no budget. That is what this is, where building `Bytes/len(operand)` terms and handing them back to the reducer would cost a full re-walk of each sub-spine, so a spine of depth n would cost Σk = O(n²) where the answer is one linear pass.
+    /// **The free monoid's measure, and the one thing `len`, `get` and `slice` all actually want.** A length is a homomorphism into `(ℕ, +, 0)`, and over a value already in normal form it is a *fold over the spine*: no reduction, no rebuilding, no budget. That is what this is, where building `Bytes/length(operand)` terms and handing them back to the reducer would cost a full re-walk of each sub-spine, so a spine of depth n would cost Σk = O(n²) where the answer is one linear pass.
     ///
     /// **It takes no [`crate::Reducer`], and that is the enforcement rather than a comment.** A function that cannot reach the reducer cannot re-enter reduction, cannot spend budget, and cannot rebuild a term to ask about it. The audit is the signature.
     ///
@@ -542,7 +542,7 @@ impl FreeMonoid {
 ///
 /// Crediting it as a segment instead would be wrong twice over: locating an index would hand the node back to `Bytes/get` as the operand holding it, which re-enters this same node and never terminates, and [`FreeMonoid::measured_window`] would try to narrow a value it cannot read.
 ///
-/// The length is the one thing about such a node knowable without observing the float, and that is what this reads. `Flt` folds through the binary64 model, so a *literal* operand is answered by `reduce::intrinsic` before it ever reaches here; what reaches it is a **symbolic** operand, where `Bytes/len(Flt/to_le_bytes(x))` is still `8` because it is the arity of the result rather than anything about the float. Without it `Flt/of_le_bytes`'s length precondition is undischargeable over the very operation it inverts, so the pair's round trip could not be written at all.
+/// The length is the one thing about such a node knowable without observing the float, and that is what this reads. `Flt` folds through the binary64 model, so a *literal* operand is answered by `reduce::intrinsic` before it ever reaches here; what reaches it is a **symbolic** operand, where `Bytes/length(Flt/to_le_bytes(x))` is still `8` because it is the arity of the result rather than anything about the float. Without it `Flt/of_le_bytes`'s length precondition is undischargeable over the very operation it inverts, so the pair's round trip could not be written at all.
 fn bytes_measure(value: &Term) -> Option<usize> {
     let mut total = 0usize;
     let mut pending = vec![value];

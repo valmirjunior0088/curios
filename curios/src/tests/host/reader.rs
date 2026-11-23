@@ -46,7 +46,7 @@ const WIRE: &str = r#"
         match got
         | none() => Try/pure(Io/Chunk/ended())
         | some(bytes) =>
-            match Bool/holds(0 < Bytes/len(bytes))
+            match Bool/holds(0 < Bytes/length(bytes))
             | some(held) => Try/pure(Io/Chunk/bytes(bytes, @held))
             | none() => next(w)
             end

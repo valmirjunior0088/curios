@@ -630,7 +630,7 @@ use /std/{List, Nat, Option};
 
 pub let first_or_zero(value: Option(List(Nat))) -> Nat =
     match value
-    | some([head, ..tail]) => head + List/len(tail)
+    | some([head, ..tail]) => head + List/length(tail)
     | some([]) => 0
     | none() => 0
     end;
@@ -1470,7 +1470,7 @@ A bound that reduction does not decide is proved by the compiler where it follow
 use /std/{List, Nat};
 use /std/Bool/{Holds};
 
-pub let get(xs: List(Nat), i: Nat, m: Nat, p: Holds(i < m), q: Holds(m <= List/len(xs))) -> Nat =
+pub let get(xs: List(Nat), i: Nat, m: Nat, p: Holds(i < m), q: Holds(m <= List/length(xs))) -> Nat =
     List/get(xs, i);
 ```
 

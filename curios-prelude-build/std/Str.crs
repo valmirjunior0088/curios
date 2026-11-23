@@ -20,8 +20,8 @@ mod search;
 use search/{seek, occurrence, first_occurrence, back_over};
 
 --- How many characters, not bytes, with how a concatenation's count is its halves'.
-pub mod len;
-pub use len/{let len};
+pub mod length;
+pub use length/{let length};
 
 --- The order of two texts, by code point, and its laws.
 pub mod ord;
@@ -402,7 +402,7 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
 let Leading(whole: Bytes) -> Type =
     {
         taken: Nat,
-        within: Bool/Holds(taken <= Bytes/len(whole)),
+        within: Bool/Holds(taken <= Bytes/length(whole)),
         boundary: Bool/Holds(At/starts(Bytes/drop(whole, taken, @within))),
         stop: Option(Char)};
 
@@ -412,20 +412,23 @@ let passing(
     @passed: Bytes,
     @t: Bytes,
     taken: Nat,
-    w: Bool/Holds(taken <= Bytes/len(whole)),
+    w: Bool/Holds(taken <= Bytes/length(whole)),
     e: Eq()(Bytes/drop(whole, taken, @w), 0x[..passed, ..t]),
 ) -> {
-    within: Bool/Holds(taken + Bytes/len(passed) <= Bytes/len(whole)),
-    cut: Eq()(Bytes/drop(whole, taken + Bytes/len(passed), @within), t)} =
-    let room: Bool/Holds(Bytes/len(passed) <= Bytes/len(Bytes/drop(whole, taken, @w))) =
-        Eq/subst((b: Bytes) => Bool/Holds(Bytes/len(passed) <= Bytes/len(b)), Eq/sym(e), proved());
+    within: Bool/Holds(taken + Bytes/length(passed) <= Bytes/length(whole)),
+    cut: Eq()(Bytes/drop(whole, taken + Bytes/length(passed), @within), t)} =
+    let room: Bool/Holds(Bytes/length(passed) <= Bytes/length(Bytes/drop(whole, taken, @w))) =
+        Eq/subst(
+            (b: Bytes) => Bool/Holds(Bytes/length(passed) <= Bytes/length(b)),
+            Eq/sym(e),
+            proved());
     (
         within = proved(),
         cut =
             Eq/subst(
                 (b: Bytes) =>
-                    (q: Bool/Holds(Bytes/len(passed) <= Bytes/len(b))) -> Eq()(
-                        Bytes/drop(b, Bytes/len(passed), @q),
+                    (q: Bool/Holds(Bytes/length(passed) <= Bytes/length(b))) -> Eq()(
+                        Bytes/drop(b, Bytes/length(passed), @q),
                         t),
                 Eq/sym(e),
                 (_) => Eq/refl())(
@@ -438,7 +441,7 @@ let stopped(
     v: Valid(b),
     taken: Nat,
     stop: Option(Char),
-    @w: Bool/Holds(taken <= Bytes/len(whole)),
+    @w: Bool/Holds(taken <= Bytes/length(whole)),
     @e: Eq()(Bytes/drop(whole, taken, @w), b),
 ) -> Leading(whole) =
     (
@@ -455,7 +458,7 @@ let leading(
     pred: (Char) -> Bool,
     taken: Nat,
     @whole: Bytes,
-    @w: Bool/Holds(taken <= Bytes/len(whole)),
+    @w: Bool/Holds(taken <= Bytes/length(whole)),
     @e: Eq()(Bytes/drop(whole, taken, @w), b),
 ) -> Leading(whole) =
     match b
@@ -621,7 +624,7 @@ let leading(
 pub let to_list(s: Str) -> List(Char) =
     fold(s, [], (c, acc) => [..acc, c]);
 
--- `count_scalars` splits at the seam of a concatenation whose first half reads to the end, from whatever state the reading starts in — the strengthening `len/concat` needs to descend a byte, where the state has moved.
+-- `count_scalars` splits at the seam of a concatenation whose first half reads to the end, from whatever state the reading starts in — the strengthening `length/concat` needs to descend a byte, where the state has moved.
 let count_concat(
     a: Bytes,
     b: Bytes,
@@ -644,7 +647,7 @@ let count_concat(
 
 --- Whether there are no characters.
 pub let is_empty(s: Str) -> Bool =
-    Bytes/len(to_bytes(s)) == 0;
+    Bytes/length(to_bytes(s)) == 0;
 
 --- Where the first character `pred` accepts is, or `none`.
 pub let find_index(s: Str, pred: (Char) -> Bool) -> Option(At(s)) =
@@ -665,7 +668,7 @@ pub let contains(s: Str, target: Char) -> Bool =
 --- `parts` with `sep` between each pair.
 pub let join(sep: Str, parts: List(Str)) -> Str =
     List/balanced(
-        List/len(parts),
+        List/length(parts),
         "",
         (i, ok) => List/get(@Str, parts, i, @ok),
         (l, r) => concat(concat(l, sep), r));
@@ -674,7 +677,7 @@ pub let join(sep: Str, parts: List(Str)) -> Str =
 let split_at(
     b: Bytes,
     k: Nat,
-    within: Bool/Holds(k <= Bytes/len(b)),
+    within: Bool/Holds(k <= Bytes/length(b)),
 ) -> Eq()(b, 0x[..Bytes/slice(b, 0, k, @within), ..Bytes/drop(b, k, @within)]) =
     match k
     | 0 => Eq/refl()
@@ -693,8 +696,8 @@ pub let follows(
     piece: Str,
 ) -> Option({past: At(s), reach: Bool/Holds(from.offset <= past.offset)}) =
     let rest = after(s, from);
-    let n = Bytes/len(piece.bytes);
-    match Bool/holds(n <= Bytes/len(rest.bytes))
+    let n = Bytes/length(piece.bytes);
+    match Bool/holds(n <= Bytes/length(rest.bytes))
     | some(fits), Bytes/slice(rest.bytes, 0, n, @fits) == piece.bytes =>
         let held = Bytes/eq_of_eql(Bytes/slice(rest.bytes, 0, n, @fits), piece.bytes, proved());
         let onward: Valid(Bytes/drop(rest.bytes, n, @fits)) =
@@ -747,16 +750,16 @@ pub let strip_prefix(s: Str, prefix: Str) -> Option(Str) =
 
 --- `s` without `suffix` at its end, or `none` when it does not end with it: the bytes where it would begin compared with its own, a valid suffix beginning where a character may.
 pub let strip_suffix(s: Str, suffix: Str) -> Option(Str) =
-    let n = Bytes/len(suffix.bytes);
-    match Bool/holds(n <= Bytes/len(s.bytes))
-    | some(_), Bytes/drop(s.bytes, Bytes/len(s.bytes) - n) == suffix.bytes =>
+    let n = Bytes/length(suffix.bytes);
+    match Bool/holds(n <= Bytes/length(s.bytes))
+    | some(_), Bytes/drop(s.bytes, Bytes/length(s.bytes) - n) == suffix.bytes =>
         let held =
-            Bytes/eq_of_eql(Bytes/drop(s.bytes, Bytes/len(s.bytes) - n), suffix.bytes, proved());
+            Bytes/eq_of_eql(Bytes/drop(s.bytes, Bytes/length(s.bytes) - n), suffix.bytes, proved());
         Option/some(
             before(
                 s,
                 At {
-                    offset = Bytes/len(s.bytes) - n,
+                    offset = Bytes/length(s.bytes) - n,
                     @_,
                     @boundary =
                         Eq/subst(
@@ -875,11 +878,11 @@ pub let lines(s: Str) -> List(Str) =
 
 --- `s` widened to `n` characters with `c` at the front; a string already that wide is unchanged.
 pub let pad_start(s: Str, n: Nat, c: Char) -> Str =
-    concat(repeat(of_char(c), n - len(s)), s);
+    concat(repeat(of_char(c), n - length(s)), s);
 
 --- `s` widened to `n` characters with `c` at the end; a string already that wide is unchanged.
 pub let pad_end(s: Str, n: Nat, c: Char) -> Str =
-    concat(s, repeat(of_char(c), n - len(s)));
+    concat(s, repeat(of_char(c), n - length(s)));
 
 satisfy Eql(Str) {
     eql = eql,

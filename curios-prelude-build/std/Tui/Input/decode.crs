@@ -196,7 +196,7 @@ pub let decode(bytes: Bytes) -> {inputs: List(Input), replies: List(Reply), rest
     let key(k: Key, next: Nat) -> Step = Step/input(Input/key(k), next);
     -- The character the byte at `i` begins and `more` bytes continue. The bytes are decided text as the bytes they are, so the text is known to hold them and has a first character.
     let scalar(i: Nat, more: Nat) -> Step =
-        match Bool/holds(i + (more + 1) <= Bytes/len(bytes))
+        match Bool/holds(i + (more + 1) <= Bytes/length(bytes))
         | none() => Step/cut()
         | some(within) =>
             let piece = Bytes/slice(bytes, i, more + 1, @within);
@@ -217,8 +217,8 @@ pub let decode(bytes: Bytes) -> {inputs: List(Input), replies: List(Reply), rest
             {
                 at: Nat,
                 onward: Bool/Holds(start <= at),
-                room: Bool/Holds(at + 6 <= Bytes/len(bytes))}) =
-            match Bool/holds(j + 6 <= Bytes/len(bytes))
+                room: Bool/Holds(at + 6 <= Bytes/length(bytes))}) =
+            match Bool/holds(j + 6 <= Bytes/length(bytes))
             | none() => Option/none()
             | some(room) =>
                 match Bytes/slice(bytes, j, 6, @room) == paste_end
@@ -333,7 +333,7 @@ pub let decode(bytes: Bytes) -> {inputs: List(Input), replies: List(Reply), rest
     ) -> {inputs: List(Input), replies: List(Reply), rest: Bytes} =
         let read(rest: Bytes) -> {inputs: List(Input), replies: List(Reply), rest: Bytes} =
             (inputs = List/reverse(inputs), replies = List/reverse(replies), rest = rest);
-        match Bool/holds(i < Bytes/len(bytes))
+        match Bool/holds(i < Bytes/length(bytes))
         | none() => read(0x[])
         | some(inside) =>
             let head = Bytes/get(bytes, i, @inside);

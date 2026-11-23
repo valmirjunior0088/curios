@@ -180,9 +180,9 @@ fn each_refusal_kind_reads_as_its_reader_wrote_at_its_place() {
         ),
         // Undischarged bound under guards.
         (
-            "use /std/{Nat, List};\nlet pick(xs: List(Nat), i: Nat) -> Nat =\n    match i <= List/len(xs) | true => List/get(xs, i) | false => 0 end;\n/std/print(\"\")\n",
-            "undischarged bound\n│  the bound `ok` of `List/get` was not discharged\n│  nothing discharged `/std/Bool/Holds(i < List/len(xs))`\n│  it does not follow from the facts in scope:\n│    a guard, `i <= List/len(xs)`\n│  it fails at `i = 0`, `List/len(xs) = 0`\n│  guard the call with `i < List/len(xs)`\n│  or supply it explicitly, `List/get(@...)`\n",
-            "│  3 │     match i <= List/len(xs) | true => List/get(xs, i) | false => 0 end;\n│    │                                       ^^^^^^^^^^^^^^^",
+            "use /std/{Nat, List};\nlet pick(xs: List(Nat), i: Nat) -> Nat =\n    match i <= List/length(xs) | true => List/get(xs, i) | false => 0 end;\n/std/print(\"\")\n",
+            "undischarged bound\n│  the bound `ok` of `List/get` was not discharged\n│  nothing discharged `/std/Bool/Holds(i < List/length(xs))`\n│  it does not follow from the facts in scope:\n│    a guard, `i <= List/length(xs)`\n│  it fails at `i = 0`, `List/length(xs) = 0`\n│  guard the call with `i < List/length(xs)`\n│  or supply it explicitly, `List/get(@...)`\n",
+            "│  3 │     match i <= List/length(xs) | true => List/get(xs, i) | false => 0 end;\n│    │                                          ^^^^^^^^^^^^^^^",
         ),
         // Undischarged bound of an operator.
         (

@@ -44,7 +44,7 @@ pub let empty(@K: Type, use Key(K), @V: Type) -> Map(K, V) =
     Map { root = Node/empty(), @sound = Bool/True/qed() };
 
 --- How many entries, counted: the trie holds its entries and nothing beside them, so the count is a walk over every one.
-pub let len(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Nat =
+pub let length(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Nat =
     fold(m, 0, (_, _, n) => n + 1);
 
 --- Whether `key` has an entry.

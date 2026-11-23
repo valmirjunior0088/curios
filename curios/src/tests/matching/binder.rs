@@ -11,7 +11,7 @@ fn answers(function: &str, calls: &[&str]) -> [Vec<u8>; 2] {
         .collect::<Vec<_>>()
         .join(" + ");
 
-    ["0", "Bytes/len(rand/bytes(0)!)"].map(|zero| {
+    ["0", "Bytes/length(rand/bytes(0)!)"].map(|zero| {
         run(&fill!("use /std/{Bool, Bytes, List, Nat, Option, rand};\n${function}\nlet main() -> /std/Io({}) = let z = ${zero};\n/std/print(Nat/to_str(${answer}));\nmain()\n", function, zero, answer))
     })
 }

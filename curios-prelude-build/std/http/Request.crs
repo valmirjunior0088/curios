@@ -65,8 +65,8 @@ let states_length(m: Method) -> Bool =
     match m | post() | put() | patch() => true | _ => false end;
 
 let length_line(r: Request) -> Bytes =
-    match Bytes/len(r.body) != 0 || states_length(r.method)
-    | true => Str/to_bytes(Fmt/render("Content-Length: %\r\n")(Bytes/len(r.body)))
+    match Bytes/length(r.body) != 0 || states_length(r.method)
+    | true => Str/to_bytes(Fmt/render("Content-Length: %\r\n")(Bytes/length(r.body)))
     | false => 0x[]
     end;
 

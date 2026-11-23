@@ -170,7 +170,9 @@ let without_dots(path: Str) -> Str =
             match s
             | "." => walk(more, closed(kept))
             | ".." =>
-                walk(more, closed(match List/len(kept) | 0 => [] | n + 1 => List/take(kept, n) end))
+                walk(
+                    more,
+                    closed(match List/length(kept) | 0 => [] | n + 1 => List/take(kept, n) end))
             | _ => walk(more, [..kept, s])
             end
         end;
@@ -180,7 +182,7 @@ let without_dots(path: Str) -> Str =
 -- `reference` beside the last segment of `base`, as RFC 3986 §5.2.3 merges a relative path.
 let merged(base: Str, reference: Str) -> Str =
     let segments = Str/split(base, "/");
-    Str/flatten([Str/join("/", List/take(segments, List/len(segments) - 1)), "/", reference]);
+    Str/flatten([Str/join("/", List/take(segments, List/length(segments) - 1)), "/", reference]);
 
 --- `reference` read against `base`, as RFC 3986 §5.2 resolves one and a client follows a `Location`: a reference with a scheme of its own is a URL of its own, `//host…` takes `base`'s scheme, a path from `/` takes `base`'s host and port, a relative path is merged with `base`'s directory, and `?…` alone keeps `base`'s path. `.` and `..` segments are removed, a fragment is dropped, and an empty reference is `base`. What it resolves to is read as `of_str` reads a URL, so a scheme other than `http` and `https` is refused.
 pub let resolve(base: Url, reference: Str) -> Result(Parse/Error, Url) =

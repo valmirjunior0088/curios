@@ -653,7 +653,7 @@ pub fn reduce_forced(context: &mut Context, term: Term) -> Result<Term, ReduceEr
 
 /// The *cheap* refinement key: metavariable solutions materialized and universe instances erased, with every argument left exactly as written.
 ///
-/// Nothing is reduced to record a guard or to ask its key: reducing each argument would make *recording* a refinement cost whatever its operands cost to evaluate, so a guard over an expensive operand would pay for the very computation it was written to avoid, when the arm is entered and before any probe happens; `10 <= Bytes/len(built)` would force `built` to register a fact about it. An occurrence spelled otherwise than the guard was is met where the certifier meets it, at the stuck form reduction leaves it as, against the entry's reduced spelling ([`refined_reduct`]).
+/// Nothing is reduced to record a guard or to ask its key: reducing each argument would make *recording* a refinement cost whatever its operands cost to evaluate, so a guard over an expensive operand would pay for the very computation it was written to avoid, when the arm is entered and before any probe happens; `10 <= Bytes/length(built)` would force `built` to register a fact about it. An occurrence spelled otherwise than the guard was is met where the certifier meets it, at the stuck form reduction leaves it as, against the entry's reduced spelling ([`refined_reduct`]).
 ///
 /// Zonking and universe erasure stay eager because they are cheap by construction — the walk returns at a cached `has_metavar` bit — and because the key is wrong without them for the reason each states.
 ///
@@ -1091,7 +1091,7 @@ fn shallow_answer(context: &mut Context, spelling: &Term, negated: bool) -> Opti
 ///
 /// **Why one arm needs its own.** Each arm returns a [`Reduce`]: on progress it `Continue`s, the loop comes back around, and the probe at the top runs again on the new term. That is how a refinement keeps up with reduction. This arm answers a normal form in one step and breaks, so without this the store is asked exactly once, about a term whose operands have not been reduced yet.
 ///
-/// **The written keys alone, under the folded form's own spelling and its dual and successor spellings.** A guard is recorded as written (`shallow_scrutinee`), so `10 <= Bytes/len(b)` registers `10 <= /sys/Bytes/len(b)`, and a fold that turns the term into that spelling is answered here for one hash. Where the fold leaves another spelling of the guard — its `/sys` global unfolded to an intrinsic, a sum cancelled — nothing here reduces a key to find out: the stuck form goes on to [`refined_reduct`], which compares it with each entry's reduced spelling as the certifier does.
+/// **The written keys alone, under the folded form's own spelling and its dual and successor spellings.** A guard is recorded as written (`shallow_scrutinee`), so `10 <= Bytes/length(b)` registers `10 <= /sys/Bytes/length(b)`, and a fold that turns the term into that spelling is answered here for one hash. Where the fold leaves another spelling of the guard — its `/sys` global unfolded to an intrinsic, a sum cancelled — nothing here reduces a key to find out: the stuck form goes on to [`refined_reduct`], which compares it with each entry's reduced spelling as the certifier does.
 ///
 /// Suppression needs no arm: `scrutinee_reduct` withholds under it, and breaking on the folded term leaves standing the neutral a suppressed key wants.
 fn refined_after_fold(context: &mut Context, folded: &Term) -> Option<Term> {

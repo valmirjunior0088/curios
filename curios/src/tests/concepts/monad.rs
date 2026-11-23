@@ -12,7 +12,7 @@ fn prelude_monad_arr_binds() {
         use /std/{Nat, Str, List, Monad};
         let l : List(Nat) = [1, 2];
         let doubled : List(Nat) = Monad/bind(l, (x) => [x, x]);
-        /std/print(Nat/to_str(List/len(doubled)))
+        /std/print(Nat/to_str(List/length(doubled)))
         "#;
 
     assert_eq!(run(source), b"4");
@@ -72,7 +72,7 @@ fn bang_works_in_monad_generic_code() {
         let l : List(Nat) = add_both([1, 2], [10]);
         /std/print(Str/concat(
             Nat/to_str(Option/unwrap_or(o, 0)),
-            Nat/to_str(List/len(l))))
+            Nat/to_str(List/length(l))))
         "#;
 
     assert_eq!(run(source), b"422");

@@ -5,8 +5,8 @@ use {super::test_support::*, crate::tests::test_support::*, curios_common::fill}
 #[test]
 fn a_requested_length_past_the_runtime_bound_refuses_before_allocating() {
     let rows = [
-        "Nat/to_str(Bytes/len(Bytes/replicate(4294967296 + n, 0)))",
-        "Nat/to_str(Bytes/len(Bytes/replicate(18446744073709551616 + n, 0)))",
+        "Nat/to_str(Bytes/length(Bytes/replicate(4294967296 + n, 0)))",
+        "Nat/to_str(Bytes/length(Bytes/replicate(18446744073709551616 + n, 0)))",
     ];
     let compiled = compile(&table(&rows, true)).expect("the construction table compiles");
     for (index, row) in rows.iter().enumerate() {
@@ -29,14 +29,14 @@ fn a_closed_length_past_what_a_fold_builds_is_left_to_the_runtime() {
     let sources = [
         r#"
         use /std/{Nat, Bytes, print};
-        print(Nat/to_str(Bytes/len(Bytes/replicate(68719476736, 0))))
+        print(Nat/to_str(Bytes/length(Bytes/replicate(68719476736, 0))))
         "#
         .to_string(),
         fill!(
             r#"
             use /std/{Nat, Bytes, print};
             let d(b: Bytes) -> Bytes = 0x[..b, ..b];
-            print(Nat/to_str(Bytes/len(${doubled})))
+            print(Nat/to_str(Bytes/length(${doubled})))
             "#,
             doubled = doubled("0x[00, 01, 02, 03]")
         ),
@@ -44,7 +44,7 @@ fn a_closed_length_past_what_a_fold_builds_is_left_to_the_runtime() {
             r#"
             use /std/{Nat, List, print};
             let d(l: List(Nat)) -> List(Nat) = [..l, ..l];
-            print(Nat/to_str(List/len(${doubled})))
+            print(Nat/to_str(List/length(${doubled})))
             "#,
             doubled = doubled("[1, 2, 3, 4]")
         ),

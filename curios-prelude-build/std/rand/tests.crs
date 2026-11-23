@@ -4,7 +4,7 @@ use /std/{Bytes, Nat, Bool, List, Io, Test, rand};
 -- `bytes` answers as many bytes as it is asked for.
 test bytes_answers_as_many_as_it_is_asked_for =
     let drawn = rand/bytes(8)!;
-    Test/equal(Bytes/len(drawn), 8);
+    Test/equal(Bytes/length(drawn), 8);
 
 -- `below` answers every number under its bound and none past it: over six hundred draws of a die each face turns up, which misses one with a chance below one in `10^40`.
 test below_answers_every_number_under_its_bound_and_none_past_it =

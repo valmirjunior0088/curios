@@ -173,7 +173,7 @@ fn a_session_carries_incomplete_input_into_its_next_read() {
         let program() -> Io({}) =
             let outcome = Try/run(Try/scope((scope) => Try/bind(Session/open(scope), (s) =>
                 let first = Session/read(s)!;
-                let _ = print(match first | some(events) => Nat/to_str(List/len(events)) | none() => "eof" end)!;
+                let _ = print(match first | some(events) => Nat/to_str(List/length(events)) | none() => "eof" end)!;
                 let second = Session/read(s)!;
                 let _ = print(match second
                     | some(events) => match events

@@ -14,7 +14,7 @@ use {
 
 // -- fixtures ---------------------------------------------------------------
 //
-// Every fixture takes a runtime taint (`List/len(/std/Proc/args()!)`) so its result is not constant-folded away, and prints through `/std/print(Nat/to_str(...))` to keep the loop live.
+// Every fixture takes a runtime taint (`List/length(/std/Proc/args()!)`) so its result is not constant-folded away, and prints through `/std/print(Nat/to_str(...))` to keep the loop live.
 //
 // The runtime taint is read inside the entry function; its local annotations share that function's sequencing region.
 
@@ -26,7 +26,7 @@ pub const LCG: &str = r#"
         | kp + 1 => loop(kp, 75 * x % 65537)
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Proc/args()!);
+        let taint = List/length(Proc/args()!);
         let n : Nat = taint;
         /std/print(Nat/to_str(loop(n, 1)));
     entry()
@@ -49,7 +49,7 @@ pub const TREES: &str = r#"
         | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Proc/args()!);
+        let taint = List/length(Proc/args()!);
         let d : Nat = taint;
         /std/print(Nat/to_str(sum(build(d, 1))));
     entry()
@@ -63,7 +63,7 @@ pub const HIGHER_ORDER: &str = r#"
         | false => (y) => y * 2
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Proc/args()!);
+        let taint = List/length(Proc/args()!);
         let n : Nat = taint;
         let f = pick(n <= 0);
         /std/print(Nat/to_str(f(n)));
@@ -80,7 +80,7 @@ pub const DIRECT_ESCAPING: &str = r#"
         | false => (y) => y
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Proc/args()!);
+        let taint = List/length(Proc/args()!);
         let n : Nat = taint;
         let escaped = select(n <= 0, inc);
         /std/print(Nat/to_str(inc(n) + apply(escaped, n)));
@@ -95,7 +95,7 @@ pub const FUNCTION_ONLY: &str = r#"
         | p + 1 => down(p, acc + 1)
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Proc/args()!);
+        let taint = List/length(Proc/args()!);
         let n : Nat = taint;
         /std/print(Nat/to_str(down(n, 0)));
     entry()
@@ -109,7 +109,7 @@ pub const MUTUAL_RECURSION: &str = r#"
     and pong(n : Nat) -> Nat =
         match n | 0 => 1 | p + 1 => ping(p) end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Proc/args()!);
+        let taint = List/length(Proc/args()!);
         let n : Nat = taint;
         let start = n <= 0;
         /std/print(Nat/to_str(match start | true => ping(n) | false => pong(n) end));
@@ -145,7 +145,7 @@ pub const SPLIT_RETURN: &str = r#"
         | done(r, s) => (r * 3 + s) % 40009
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Proc/args()!);
+        let taint = List/length(Proc/args()!);
         let n : Nat = taint;
         /std/print(Nat/to_str(first(n) + second(n)));
     entry()
@@ -170,7 +170,7 @@ pub const UNCURRY: &str = r#"
             walk(m)(c)
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Proc/args()!);
+        let taint = List/length(Proc/args()!);
         let n : Nat = taint;
         /std/print(Nat/to_str(walk(n)(1)));
     entry()
@@ -188,7 +188,7 @@ pub const UNCURRY_CAPTURED: &str = r#"
             (m) => f(m) + w
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Proc/args()!);
+        let taint = List/length(Proc/args()!);
         let n : Nat = taint;
         let c = mk(n);
         let v = c(2);
@@ -209,7 +209,7 @@ pub const UNCURRY_THROUGH_A_CALL: &str = r#"
 
     let shown() -> Str =
         let d: Map(Str, Str) = Map/remove(build(80, Map/empty()), "80");
-        Str/concat(read("2.5e-3"), Nat/to_str(Map/len(d)));
+        Str/concat(read("2.5e-3"), Nat/to_str(Map/length(d)));
 
     print(Str/concat(shown(), "\n"))
     "#;
@@ -228,7 +228,7 @@ pub const LOOPED_PICK: &str = r#"
             spin(p, f(acc) % 40009)
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Proc/args()!);
+        let taint = List/length(Proc/args()!);
         let n : Nat = taint;
         /std/print(Nat/to_str(spin(n, 1)));
     entry()
@@ -244,7 +244,7 @@ pub const CONJUNCTION_CALL: &str = r#"
     let spin(n: Nat, acc: Nat) -> Nat =
         match n | 0 => acc | k + 1 => spin(k, (acc * 75 + 1) % 65537) end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Proc/args()!);
+        let taint = List/length(Proc/args()!);
         let held = taint == 4 && spin(taint, 1) == 20608;
         /std/print(Bool/to_str(held));
     entry()
@@ -259,7 +259,7 @@ pub const LIST_EQUALITY: &str = r#"
         | [x, ..xs] => match b | [] => false | [y, ..ys] => x == y && same(xs, ys) end
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Proc/args()!);
+        let taint = List/length(Proc/args()!);
         /std/print(Bool/to_str(same([taint, 1, 2], [1, taint, 2])));
     entry()
     "#;
@@ -281,7 +281,7 @@ pub const VARIANT_FILLER: &str = r#"
             spin(p, next)
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Proc/args()!);
+        let taint = List/length(Proc/args()!);
         let n : Nat = taint * 4 + 4;
         /std/print(Flt/to_str(spin(n, Option/none())));
     entry()
@@ -296,7 +296,7 @@ pub const FLOAT_LITERAL_LOOP: &str = r#"
         | j + 1 => go(acc * +1.25 + Nat/to_flt(j % 7919) * +0.375, j)
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Proc/args()!);
+        let taint = List/length(Proc/args()!);
         /std/print(Flt/to_str(go(Nat/to_flt(taint), taint + 10)));
     entry()
     "#;
@@ -317,7 +317,7 @@ pub const KNOWN_PARAMETER_SEED: &str = r#"
         let e = d * +0.5 + d * +0.25 + +1.0;
         e * +0.5 + e * +0.25 + +1.0;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Proc/args()!);
+        let taint = List/length(Proc/args()!);
         /std/print(Str/join(" | ", [Flt/to_str(spin(Nat/to_flt(taint) * +0.001, taint + 10)), Flt/to_str(spin(+0.002, taint + 20))]));
     entry()
     "#;
@@ -341,7 +341,7 @@ pub const CALL_RESULT_SEED: &str = r#"
         | j + 1 => go(acc * +1.5 + Nat/to_flt(j % 7919) * +0.25, j)
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Proc/args()!);
+        let taint = List/length(Proc/args()!);
         let seed = base(Nat/to_flt(taint) * +0.001);
         let other = base(Nat/to_flt(taint) * +0.002);
         /std/print(Str/join(" | ", [Flt/to_str(go(seed, taint + 10)), Flt/to_str(other)]));
@@ -370,7 +370,7 @@ pub const PAIR_STEP: &str = r#"
         | j + 1 => run(step(p, v, Nat/to_flt(j % 7919) * +0.01), v, j)
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Proc/args()!);
+        let taint = List/length(Proc/args()!);
         let t = Nat/to_flt(taint);
         let r = run(Vec2 { x = t, y = t * +0.5 }, Vec2 { x = +1.0, y = t }, taint + 10);
         let s = step(Vec2 { x = t * +2.0, y = t }, Vec2 { x = t, y = t }, t);
@@ -392,7 +392,7 @@ pub const CAPTURED_FLOAT: &str = r#"
         | j + 1 => outer(acc * +1.25 + Nat/to_flt(j % 6007) * +0.5, j)
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Proc/args()!);
+        let taint = List/length(Proc/args()!);
         let seed = Nat/to_flt(taint) * +0.001;
         let warp = (n : Nat) => inner(seed, n);
         let fs : List((Nat) -> Flt) = [warp, (m : Nat) => seed * Nat/to_flt(m)];
@@ -416,7 +416,7 @@ pub const STATED_SEEDS: &str = r#"
         | j + 1 => spin(acc * +1.25 + Nat/to_flt(j % 6007) * +0.5, j)
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Proc/args()!);
+        let taint = List/length(Proc/args()!);
         let fs : List((Flt) -> Flt) = [warp, (y : Flt) => y * +2.0];
         let f = match List/try_get(fs, taint % 2) | some(g) => g | none() => warp end;
         let seeded = f(Nat/to_flt(taint));
@@ -449,7 +449,7 @@ pub const SHARED_PAYLOAD: &str = r#"
         | failure(why) => why
         end;
     let entry() -> /std/Io({}) =
-        let taint = List/len(Proc/args()!);
+        let taint = List/length(Proc/args()!);
         /std/print(Str/join(" | ", [told(taint + 1), told(taint), told(taint + 3)]));
     entry()
     "#;
@@ -459,13 +459,13 @@ pub const PARSED_FLOAT: &str = r#"
     use /std/{Str, Flt, Parse, Nat, Char, List, Proc};
     let digits() -> Parse(Str, Flt) =
         let run = Parse/str/take_while(Char/is_ascii_digit)!;
-        Parse/pure(Nat/to_flt(Str/len(run)));
+        Parse/pure(Nat/to_flt(Str/length(run)));
     let whole() -> Parse(Str, Flt) =
         let value = digits()!;
         let _ = Parse/eof()!;
         Parse/pure(value);
     let entry() -> /std/Io({}) =
-        let taint = List/len(Proc/args()!);
+        let taint = List/length(Proc/args()!);
         let text = Str/concat(Nat/to_str(taint + 10), match taint > 99 | true => "x" | false => "" end);
         /std/print(match Parse/run(whole(), text) | success(f) => Flt/to_str(f) | failure(_) => "none" end);
     entry()
@@ -490,7 +490,7 @@ pub const COMPUTED_TYPE: &str = r#"
             end;
         tell(v);
     let entry() -> /std/Io({}) =
-        let taint = List/len(Proc/args()!);
+        let taint = List/length(Proc/args()!);
         /std/print(Str/join(" | ", [told(taint % 2 == 0, taint + 2), told(taint % 2 == 1, taint + 3)]));
     entry()
     "#;
@@ -501,7 +501,7 @@ pub const COMPUTED_TYPE: &str = r#"
 pub const STRING_WALK: &str = r#"
     use /std/{Nat, Str, Char, List, Proc};
     let entry() -> /std/Io({}) =
-        let taint = List/len(Proc/args()!);
+        let taint = List/length(Proc/args()!);
         let n : Nat = taint;
         let text : Str = Nat/to_str(n);
         /std/print(Nat/to_str(Str/fold(text, 0, (codepoint, acc) => acc + Char/to_nat(codepoint))));

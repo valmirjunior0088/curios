@@ -408,7 +408,7 @@ fn the_library_holds_proofs_where_it_holds_data() {
             let held = Cell/new(@True)!;
             let _ = Cell/fill(held, True/qed())!;
             let count = match found | some(_) => 1 | none() => 0 end;
-            /std/print(Nat/to_str(List/len(proofs) + count));
+            /std/print(Nat/to_str(List/length(proofs) + count));
         entry()
         "#;
 

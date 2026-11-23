@@ -17,7 +17,7 @@ const PROGRAM: &str = r#"
         let arguments = Proc/args()!;
         let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
         let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
-        let n = Str/len(s);
+        let n = Str/length(s);
         let _ = Fmt/print("%\n")(Bytes/to_nat(bytes) % 1000003)!;
         let _ = Fmt/print("%\n")(Flt/to_str(Flt/pow10(n)))!;
         let cropped = View/crop(View/text(Style/plain, s), n / 2, 0);

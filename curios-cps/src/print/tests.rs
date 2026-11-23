@@ -790,7 +790,7 @@ fn an_intrinsic_spells_its_carrier_and_operation() {
             "Flt/round",
         ),
         (Intrinsic::FltOfLeBytes, "Flt/of_le_bytes"),
-        (Intrinsic::BytesLen, "Bytes/len"),
+        (Intrinsic::BytesLen, "Bytes/length"),
         (Intrinsic::ListConcat(2), "List/concat"),
         (Intrinsic::WindowExtent, "Window/extent"),
         (Intrinsic::IsImmediate, "Immediate/is"),

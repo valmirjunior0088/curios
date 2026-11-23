@@ -614,7 +614,7 @@ fn bytes_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
     vec![
         documented(
             &["How many it holds."],
-            operation("len", &["b"], syntax, Intrinsic::BytesLen(name("b"))),
+            operation("length", &["b"], syntax, Intrinsic::BytesLen(name("b"))),
         ),
         documented(
             &["Whether the two hold the same, in the same order."],
@@ -737,7 +737,7 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
         documented(
             &["How many it holds."],
             operation(
-                "len",
+                "length",
                 &["T", "a"],
                 syntax,
                 Intrinsic::ListLen {

@@ -21,7 +21,7 @@ let carried(r: Request) -> Str =
         Method/to_str(r.method),
         Url/to_str(r.url),
         Str/join(",", List/map(r.headers, (f: Field) => f.name.text)),
-        Nat/to_str(Bytes/len(r.body))]);
+        Nat/to_str(Bytes/length(r.body))]);
 
 -- A `303` turns a `POST` into a `GET` without its content or the fields describing it, as does a `302`; a `307` and a `308` keep both; within the origin the credentials go on.
 test a_redirect_keeps_the_method_and_content_its_status_says =

@@ -90,7 +90,7 @@ let text_of(n: Nat) -> Bytes =
 let iterate(k: Nat, b: Bytes, acc: Nat) -> Nat =
     match k
     | 0 => acc
-    | m + 1 => iterate(m, b, (acc + walk4(b, 0, Bytes/len(b), MScan/lead(), (0, 0)).0) % 1000003)
+    | m + 1 => iterate(m, b, (acc + walk4(b, 0, Bytes/length(b), MScan/lead(), (0, 0)).0) % 1000003)
     end;
 
 let total(n: Nat) -> Nat =

@@ -21,7 +21,7 @@ test option_and_result_convert_into_each_other =
         Test/equal(Option/to_result(b, "missing"), Result/failure("missing")),
         Test/equal(Result/to_option(ok), Option/some(2)),
         Test/equal(Result/to_option(bad), Option/none()),
-        Test/equal(Result/unwrap_or_else(bad, (e: Str) => Str/len(e)), 2)]);
+        Test/equal(Result/unwrap_or_else(bad, (e: Str) => Str/length(e)), 2)]);
 
 -- `map` reaches the value a `some` and a `success` hold and leaves the others as they are, and `unwrap_or` falls back only where no value is held.
 test map_reaches_a_held_value_and_unwrap_or_falls_back_where_none_is =

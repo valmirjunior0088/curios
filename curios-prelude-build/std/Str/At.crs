@@ -20,7 +20,7 @@ pub struct At(s: Str): pub Type {
     --- The byte offset.
     offset: Nat,
     --- Why it lies within `s`.
-    @within: Bool/Holds(offset <= Bytes/len(s.bytes)),
+    @within: Bool/Holds(offset <= Bytes/length(s.bytes)),
     --- Why a character may begin there.
     @boundary: Bool/Holds(starts(Bytes/drop(s.bytes, offset, @within))),
 }
@@ -31,20 +31,20 @@ pub let start(s: Str) -> At(s) =
 
 --- The end of `s`, past its last character.
 pub let finish(s: Str) -> At(s) =
-    At { offset = Bytes/len(s.bytes) };
+    At { offset = Bytes/length(s.bytes) };
 
 --- The position `k` bytes into `s`, where `k` is known to lie within it and a character to begin there. Both discharge by reduction at a literal.
 pub let of_offset(
     s: Str,
     k: Nat,
-    @within: Bool/Holds(k <= Bytes/len(s.bytes)),
+    @within: Bool/Holds(k <= Bytes/length(s.bytes)),
     @boundary: Bool/Holds(starts(Bytes/drop(s.bytes, k, @within))),
 ) -> At(s) =
     At { offset = k };
 
 --- The position `k` bytes into `s`, or `none` when `k` is past the end or inside a character. Decided by the one byte at `k`.
 pub let try_of_offset(s: Str, k: Nat) -> Option(At(s)) =
-    match Bool/holds(k <= Bytes/len(s.bytes))
+    match Bool/holds(k <= Bytes/length(s.bytes))
     | some(within), starts(Bytes/drop(s.bytes, k, @within)) => Option/some(At { offset = k })
     | _ => Option/none()
     end;
@@ -72,7 +72,7 @@ pub let to_after(
         @boundary =
             Eq/subst(
                 (n: Nat) =>
-                    (within: Bool/Holds(n <= Bytes/len(s.bytes))) -> Bool/Holds(
+                    (within: Bool/Holds(n <= Bytes/length(s.bytes))) -> Bool/Holds(
                         starts(Bytes/drop(s.bytes, n, @within))),
                 back,
                 (_) => p.boundary)(
@@ -87,7 +87,7 @@ let run(rest: Bytes) -> Nat =
 
 -- Not grouped with `run_starts`: a group's signatures elaborate together, and `run_starts` would read this bound before its comparison is settled.
 --- The continuing bytes that open `rest` lie within it.
-let run_within(rest: Bytes) -> Bool/Holds(run(rest) <= Bytes/len(rest)) =
+let run_within(rest: Bytes) -> Bool/Holds(run(rest) <= Bytes/length(rest)) =
     match rest
     | 0x[] => Bool/True/qed()
     | 0x[h, ..t] =>
@@ -111,11 +111,11 @@ let run_starts(rest: Bytes) -> Bool/Holds(starts(Bytes/drop(rest, run(rest), @ru
 --- How many bytes the first character of `b` takes — its lead and the bytes continuing it — with the bound and the boundary past them. The character is not decoded: the one-byte rule is all a step needs.
 let hop(
     @b: Bytes,
-    some: Bool/Holds(0 < Bytes/len(b)),
+    some: Bool/Holds(0 < Bytes/length(b)),
 ) -> {
     width: Nat,
     positive: Bool/Holds(0 < width),
-    within: Bool/Holds(width <= Bytes/len(b)),
+    within: Bool/Holds(width <= Bytes/length(b)),
     boundary: Bool/Holds(starts(Bytes/drop(b, width, @within)))} =
     match b
     | 0x[] => match some end
@@ -128,7 +128,7 @@ let hop(
     end;
 
 --- The first character of valid bytes that hold one.
-let lead(@b: Bytes, v: Str/Valid(b), some: Bool/Holds(0 < Bytes/len(b))) -> Char =
+let lead(@b: Bytes, v: Str/Valid(b), some: Bool/Holds(0 < Bytes/length(b))) -> Char =
     match b
     | 0x[] => match some end
     | 0x[c, ..t] => Str/Valid/decode_head(c, @t, v)
@@ -138,7 +138,7 @@ let lead(@b: Bytes, v: Str/Valid(b), some: Bool/Holds(0 < Bytes/len(b))) -> Char
 pub let skip(
     s: Str,
     at: At(s),
-    @here: Bool/Holds(at.offset < Bytes/len(s.bytes)),
+    @here: Bool/Holds(at.offset < Bytes/length(s.bytes)),
 ) -> {past: At(s), progress: Bool/Holds(at.offset < past.offset)} =
     let rest = Str/after(s, at);
     let hopped = hop(@rest.bytes, proved());
@@ -150,7 +150,7 @@ pub let skip(
 pub let next(
     s: Str,
     at: At(s),
-    @here: Bool/Holds(at.offset < Bytes/len(s.bytes)),
+    @here: Bool/Holds(at.offset < Bytes/length(s.bytes)),
 ) -> {char: Char, past: At(s), progress: Bool/Holds(at.offset < past.offset)} =
     let rest = Str/after(s, at);
     let hopped = hop(@rest.bytes, proved());
@@ -164,7 +164,7 @@ pub let try_next(
     s: Str,
     at: At(s),
 ) -> Option({char: Char, past: At(s), progress: Bool/Holds(at.offset < past.offset)}) =
-    match at.offset < Bytes/len(s.bytes)
+    match at.offset < Bytes/length(s.bytes)
     | true => Option/some(next(s, at))
     | false => Option/none()
     end;
@@ -173,7 +173,7 @@ pub let try_next(
 let floor(
     s: Str,
     k: Nat,
-    within: Bool/Holds(k <= Bytes/len(s.bytes)),
+    within: Bool/Holds(k <= Bytes/length(s.bytes)),
 ) -> {at: At(s), below: Bool/Holds(at.offset <= k)} =
     match k
     | 0 => (at = start(s), below = Bool/True/qed())
@@ -213,7 +213,7 @@ pub let try_prev(
 pub let next_grapheme(
     s: Str,
     at: At(s),
-    @here: Bool/Holds(at.offset < Bytes/len(s.bytes)),
+    @here: Bool/Holds(at.offset < Bytes/length(s.bytes)),
 ) -> {past: At(s), progress: Bool/Holds(at.offset < past.offset)} =
     let first = next(s, at);
     let opening = GraphemeBreak/of_char(first.char);
@@ -248,7 +248,7 @@ pub let try_next_grapheme(
     s: Str,
     at: At(s),
 ) -> Option({past: At(s), progress: Bool/Holds(at.offset < past.offset)}) =
-    match at.offset < Bytes/len(s.bytes)
+    match at.offset < Bytes/length(s.bytes)
     | true => Option/some(next_grapheme(s, at))
     | false => Option/none()
     end;
@@ -283,7 +283,7 @@ pub let forward(
     at: At(s),
 ) -> P(at) =
     Nat/descend(
-        (p: At(s)) => Bytes/len(s.bytes) - p.offset,
+        (p: At(s)) => Bytes/length(s.bytes) - p.offset,
         P,
         (at, again) => step(at, (p, progress) => again(p, proved())),
         at);
@@ -303,7 +303,7 @@ let starts_before(
     @a: Bytes,
     rest: Bytes,
     k: Nat,
-    within: Bool/Holds(k <= Bytes/len(a)),
+    within: Bool/Holds(k <= Bytes/length(a)),
     at: Bool/Holds(starts(Bytes/drop(a, k, @within))),
     begins: Bool/Holds(starts(rest)),
 ) -> Bool/Holds(starts(Bytes/drop(0x[..a, ..rest], k))) =
@@ -332,7 +332,7 @@ pub let of_left(s: Str, t: Str, at: At(s)) -> At(Str/concat(s, t)) =
 
 --- A position in `t` as the position it is in `s` followed by `t`.
 pub let of_right(s: Str, t: Str, at: At(t)) -> At(Str/concat(s, t)) =
-    At { offset = Bytes/len(s.bytes) + at.offset };
+    At { offset = Bytes/length(s.bytes) + at.offset };
 
 --- Two positions are equal when their offsets are.
 satisfy (@s: Str) => Eql(At(s)) {

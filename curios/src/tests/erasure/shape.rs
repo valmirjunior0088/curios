@@ -123,7 +123,7 @@ fn a_structure_is_its_declarations_row_where_a_reading_erases_a_field() {
             | b() => 7
             end;
         let entry() -> /std/Io({}) =
-            let n = List/len(Proc/args()!);
+            let n = List/length(Proc/args()!);
             /std/print(Nat/to_str(pick(U/a(S(P) { x = P/p(), y = n + 40 }))));
         entry()
         "#;

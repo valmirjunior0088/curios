@@ -1169,7 +1169,7 @@ fn flt_rounded(rounding: Rounding, operation: &str) -> String {
 
 fn sequence_name(operation: SequenceOp) -> String {
     let (carrier, name) = match operation {
-        SequenceOp::BytesLen => ("Bytes", "len"),
+        SequenceOp::BytesLen => ("Bytes", "length"),
         SequenceOp::BytesEql => ("Bytes", "eql"),
         SequenceOp::BytesGet => ("Bytes", "get"),
         SequenceOp::BytesSlice => ("Bytes", "slice"),
@@ -1180,7 +1180,7 @@ fn sequence_name(operation: SequenceOp) -> String {
         SequenceOp::BytesOr => ("Bytes", "or"),
         SequenceOp::BytesXor => ("Bytes", "xor"),
         SequenceOp::ListBuild => ("List", "build"),
-        SequenceOp::ListLen => ("List", "len"),
+        SequenceOp::ListLen => ("List", "length"),
         SequenceOp::ListGet => ("List", "get"),
         SequenceOp::ListSlice => ("List", "slice"),
         SequenceOp::ListSet => ("List", "set"),

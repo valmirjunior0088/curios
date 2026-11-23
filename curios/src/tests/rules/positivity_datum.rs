@@ -12,7 +12,7 @@ fn a_list_beside_a_proof_of_its_length_is_strict_in_its_element() {
         r#"
         use /std/{Nat, List, Eq};
 
-        struct Box(T: Type): pub Type { items: List(T), k: Nat, @ok: Eq()(List/len(items), k) }
+        struct Box(T: Type): pub Type { items: List(T), k: Nat, @ok: Eq()(List/length(items), k) }
 
         induct N: pub Type
         | tip()
@@ -61,7 +61,7 @@ fn a_proposition_a_stuck_match_computes_over_a_list_is_read_past_its_element() {
         use /std/{Nat, List, Option, Bool};
 
         let Good(@V: Type, r: Option(List(V))) -> Prop =
-            match r | none() => Bool/True | some(l) => Bool/Holds(List/len(l) < 9) end;
+            match r | none() => Bool/True | some(l) => Bool/Holds(List/length(l) < 9) end;
 
         struct M(V: Type): pub Type { root: Option(List(V)), @ok: Good(root) }
 
@@ -132,7 +132,7 @@ fn what_is_no_datum_is_read_as_before() {
 
         pub struct Sorted(T: Type): pub Type { @ok: Eq()(Any/any(@List(T), []), Any/any(@List(T), [])) }
 
-        pub struct Counted(T: Type, n: Nat): pub Type { items: List(T), @ok: Eq()(List/len(items), n) }
+        pub struct Counted(T: Type, n: Nat): pub Type { items: List(T), @ok: Eq()(List/length(items), n) }
 
         pub struct Tupled(p: {Type, Nat}): pub Type { @ok: Eq()(p.1, p.1) }
 

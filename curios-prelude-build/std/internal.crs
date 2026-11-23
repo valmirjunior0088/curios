@@ -18,7 +18,7 @@ let temporary_directory() -> Io(Path) =
     let directory =
         match named
         | some(written) =>
-            match Bytes/len(written)
+            match Bytes/length(written)
             | 0 => Path/of_str("/tmp")
             | _ => Path/of_bytes(written)
             end

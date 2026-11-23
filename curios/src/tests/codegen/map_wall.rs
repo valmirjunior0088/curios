@@ -104,7 +104,7 @@ let walk(n: Nat, x: Nat, s: Nat) -> Nat =
     | 0 => s
     | k + 1 =>
         let y = 75 * x % 65537;
-        walk(k, y, (s + y + Bytes/len(Hash/hash(y)) + Bytes/len(Hash/hash(x))) % 1000003)
+        walk(k, y, (s + y + Bytes/length(Hash/hash(y)) + Bytes/length(Hash/hash(x))) % 1000003)
     end;
 
 let entry() -> /std/Io({}) =

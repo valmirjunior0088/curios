@@ -482,7 +482,7 @@ fn an_element_read_at_an_index_is_below_its_list() {
         let leftmost(t: Rose) -> Nat =
             match t
             | rose(n, cs) =>
-                match 0 < List/len(cs)
+                match 0 < List/length(cs)
                 | true => leftmost(List/get(cs, 0))
                 | false => n
                 end

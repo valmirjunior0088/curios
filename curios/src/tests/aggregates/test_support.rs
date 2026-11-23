@@ -19,20 +19,20 @@ pub struct Carrier {
 pub const BYTES: Carrier = Carrier {
     run: "Bytes",
     open: "0x[",
-    len: "Bytes/len",
+    len: "Bytes/length",
     slice: "Bytes/slice",
     at: "match Bytes/try_get(run, i) | some(byte) => Byte/to_nat(byte) + 1 | none() => 0 end",
     leaf: "l",
-    settled: "Bytes/xor(run, Bytes/replicate(Bytes/len(run), 0x00))",
+    settled: "Bytes/xor(run, Bytes/replicate(Bytes/length(run), 0x00))",
 };
 
 pub const LIST: Carrier = Carrier {
     run: "List(Nat)",
     open: "[",
-    len: "List/len",
+    len: "List/length",
     slice: "List/slice",
     at: "match List/try_get(run, i) | some(value) => value + 1 | none() => 0 end",
-    leaf: "List/map(List/range(0, Bytes/len(l)), (i: Nat) => i * 7 % 13)",
+    leaf: "List/map(List/range(0, Bytes/length(l)), (i: Nat) => i * 7 % 13)",
     settled: "List/map(run, (value: Nat) => value)",
 };
 

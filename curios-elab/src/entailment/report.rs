@@ -276,7 +276,7 @@ fn counterexample(
         .into_iter()
         .map(|(atom, value)| (views.term(&atom).clone(), value.to_string()))
         .collect::<Vec<_>>();
-    // An operation of the carriers' arithmetic over another atom — `List/len(xs) - 1` beside `List/len(xs)` — is what the operation makes of that one, and in values a program takes, its value follows from theirs: named beside them, the two read as a contradiction to a reader who does not know how the operation is defined. Where no program takes the values, the atom is what shows it, `Nat/pow(2, n) = 1` beside `n = 1`, and stays. A call is no such operation, whatever it names inside it: the search reads it as an unknown of its own, and so does its reader.
+    // An operation of the carriers' arithmetic over another atom — `List/length(xs) - 1` beside `List/length(xs)` — is what the operation makes of that one, and in values a program takes, its value follows from theirs: named beside them, the two read as a contradiction to a reader who does not know how the operation is defined. Where no program takes the values, the atom is what shows it, `Nat/pow(2, n) = 1` beside `n = 1`, and stays. A call is no such operation, whatever it names inside it: the search reads it as an unknown of its own, and so does its reader.
     let held = |atom: &Term| {
         !refuted
             && matches!(&**atom, Subterm::Intrinsic(_))

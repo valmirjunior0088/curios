@@ -98,12 +98,12 @@ const ROWS: &[Row] = &[
     ),
     // A strict bound composed with a loose one, from hypotheses and from a guard.
     body(
-        "xs: List(Nat), i: Nat, m: Nat, p: Holds(i < m), q: Holds(m <= List/len(xs))",
+        "xs: List(Nat), i: Nat, m: Nat, p: Holds(i < m), q: Holds(m <= List/length(xs))",
         "Nat",
         "List/get(xs, i)",
     ),
     body(
-        "xs: List(Nat), i: Nat, m: Nat, q: Holds(m <= List/len(xs))",
+        "xs: List(Nat), i: Nat, m: Nat, q: Holds(m <= List/length(xs))",
         "Nat",
         "match i < m | true => List/get(xs, i) | false => 0 end",
     ),
@@ -135,7 +135,7 @@ const ROWS: &[Row] = &[
     claim("v: {x: Nat, ok: Holds(x < 10)}", "Holds(v.x < 20)"),
     // An equation a hypothesis holds.
     body(
-        "xs: List(Nat), n: Nat, e: Eq()(List/len(xs), n), i: Nat, p: Holds(i < n)",
+        "xs: List(Nat), n: Nat, e: Eq()(List/length(xs), n), i: Nat, p: Holds(i < n)",
         "Nat",
         "List/get(xs, i)",
     ),
@@ -147,7 +147,7 @@ const ROWS: &[Row] = &[
     ),
     // A local definition bound to a call, `Str`'s `occurrence`: the facts over it are written over its name, where the call's reduct would carry the body it unfolds to, whose arms elaborate only where they were written.
     body(
-        "s: Str, at: Str/At(s), @here: Holds(at.offset < Bytes/len(s.bytes)), again: (p: Str/At(s)) -> Option({start: Str/At(s), ordered: Holds(p.offset <= start.offset)})",
+        "s: Str, at: Str/At(s), @here: Holds(at.offset < Bytes/length(s.bytes)), again: (p: Str/At(s)) -> Option({start: Str/At(s), ordered: Holds(p.offset <= start.offset)})",
         "Option({start: Str/At(s), ordered: Holds(at.offset <= start.offset)})",
         "let onward = Str/At/skip(s, at); match again(onward.past) | some(found) => Option/some((start = found.start, ordered = proved())) | none() => Option/none() end",
     ),
@@ -197,7 +197,7 @@ const ROWS: &[Row] = &[
     body(
         "total: Nat, xs: List(Nat)",
         "Nat",
-        "match List/len(xs) == 0 | true => 0 | false => total / List/len(xs) end",
+        "match List/length(xs) == 0 | true => 0 | false => total / List/length(xs) end",
     ),
     // The same stated by a hypothesis, in either spelling: the fact states the bound outright.
     body("total: Nat, n: Nat, p: Holds(n != 0)", "Nat", "total / n"),
@@ -236,12 +236,12 @@ const ROWS: &[Row] = &[
     body(
         "xs: List(Nat), i: Nat, n: Nat, p: Holds(i < n)",
         "Nat",
-        "match List/len(xs) != n | true => 0 | false => List/get(xs, i) end",
+        "match List/length(xs) != n | true => 0 | false => List/get(xs, i) end",
     ),
     body(
         "xs: List(Nat), i: Nat, n: Nat, p: Holds(i < n)",
         "Nat",
-        "match Bool/not(List/len(xs) == n) | true => 0 | false => List/get(xs, i) end",
+        "match Bool/not(List/length(xs) == n) | true => 0 | false => List/get(xs, i) end",
     ),
     // A disequality neither side bounds, split on the order of its sides: a hypothesis at `Nat` and at `Int`, a guard's false arm under a bound a hypothesis holds, and the same past a ladder of equalities over another variable.
     claim(
@@ -253,14 +253,14 @@ const ROWS: &[Row] = &[
         "Holds(i < n)",
     ),
     body(
-        "xs: List(Nat), i: Nat, within: Holds(i <= List/len(xs))",
+        "xs: List(Nat), i: Nat, within: Holds(i <= List/length(xs))",
         "Nat",
-        "match i == List/len(xs) | true => 0 | false => List/get(xs, i) end",
+        "match i == List/length(xs) | true => 0 | false => List/get(xs, i) end",
     ),
     body(
-        "xs: List(Nat), i: Nat, c: Nat, within: Holds(i <= List/len(xs))",
+        "xs: List(Nat), i: Nat, c: Nat, within: Holds(i <= List/length(xs))",
         "Nat",
-        "match | c == 32 => 0 | c == 10 => 0 | c == 9 => 0 | c == 13 => 0 | i == List/len(xs) => 0 | _ => List/get(xs, i) end",
+        "match | c == 32 => 0 | c == 10 => 0 | c == 9 => 0 | c == 13 => 0 | i == List/length(xs) => 0 | _ => List/get(xs, i) end",
     ),
     // A natural's bound read at `Int`.
     claim(
@@ -588,7 +588,7 @@ const ROWS: &[Row] = &[
     ),
     // An index a caller clamps by a `min`.
     body(
-        "xs: List(Nat), i: Nat, n: Nat, p: Holds(n <= List/len(xs)), q: Holds(i < Nat/min(n, 10))",
+        "xs: List(Nat), i: Nat, n: Nat, p: Holds(n <= List/length(xs)), q: Holds(i < Nat/min(n, 10))",
         "Nat",
         "List/get(xs, i)",
     ),
@@ -596,7 +596,7 @@ const ROWS: &[Row] = &[
     body(
         "n: Nat, k: Nat, l: List(Nat), i: Nat",
         "List(Nat)",
-        "match i < n | false => [] | true => match List/len(l) == n * k | false => [] | true => List/slice(l, i * k, k) end end",
+        "match i < n | false => [] | true => match List/length(l) == n * k | false => [] | true => List/slice(l, i * k, k) end end",
     ),
     // A call over an operator is one atom wherever it is stated. An operator's witness stands in a signature as the metavariable its resolution solved, and under a product, which a fold rebuilds, as the witness itself; the operands are read with the solutions substituted, at `+`, at `/` and `%`, and at `Int`.
     claim(
@@ -965,7 +965,7 @@ fn every_fact_of_a_filled_row_is_needed() {
     assert!(found.is_empty(), "{}", found.join("\n\n"));
 }
 
-/// `List/get(xs, i)` under `within: Holds(i <= List/len(xs))` and the guard it needs, `i != List/len(xs)`, written innermost or outermost of `unrelated` disequality guards over other variables.
+/// `List/get(xs, i)` under `within: Holds(i <= List/length(xs))` and the guard it needs, `i != List/length(xs)`, written innermost or outermost of `unrelated` disequality guards over other variables.
 fn guarded(unrelated: usize, innermost: bool) -> String {
     let binders = (0..unrelated)
         .map(|at| format!(", x{at}: Nat, y{at}: Nat"))
@@ -973,7 +973,7 @@ fn guarded(unrelated: usize, innermost: bool) -> String {
     let mut guards = (0..unrelated)
         .map(|at| format!("x{at} != y{at}"))
         .collect::<Vec<_>>();
-    let needed = "i != List/len(xs)".to_string();
+    let needed = "i != List/length(xs)".to_string();
     match innermost {
         true => guards.push(needed),
         false => guards.insert(0, needed),
@@ -985,7 +985,7 @@ fn guarded(unrelated: usize, innermost: bool) -> String {
             format!("match {guard} | true => {body} | false => 0 end")
         });
     format!(
-        "{HEADER}\nlet row(xs: List(Nat), i: Nat, within: Holds(i <= List/len(xs)){binders}) -> Nat = {body};\nIo/pure(())"
+        "{HEADER}\nlet row(xs: List(Nat), i: Nat, within: Holds(i <= List/length(xs)){binders}) -> Nat = {body};\nIo/pure(())"
     )
 }
 
@@ -1186,7 +1186,7 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
 #[test]
 fn a_refusal_names_a_hypothesis_its_arm_retypes_once() {
     let program = format!(
-        "{HEADER}\nlet first(l: List(Nat), q: Holds(List/len(l) <= 3)) -> Nat =\n    match l\n    | [] => match proved(@False) end\n    | [x, .._] => x\n    end;\nIo/pure(())"
+        "{HEADER}\nlet first(l: List(Nat), q: Holds(List/length(l) <= 3)) -> Nat =\n    match l\n    | [] => match proved(@False) end\n    | [x, .._] => x\n    end;\nIo/pure(())"
     );
 
     let refusal = typecheck(&program).expect_err("the empty case is no contradiction");
@@ -1314,13 +1314,13 @@ fn a_counterexample_names_a_call_whatever_a_fact_spells_inside_it() {
     }
 }
 
-/// A bound a callee's signature states is written as a program writes it: the length its index is bounded by is the call `List/len(xs)`, the type it was taken at left out, as elaboration infers it again from the list where the call is pasted; and a division's bound is its concept's method over the divisor, the concept's parameter left out as the divisor determines it.
+/// A bound a callee's signature states is written as a program writes it: the length its index is bounded by is the call `List/length(xs)`, the type it was taken at left out, as elaboration infers it again from the list where the call is pasted; and a division's bound is its concept's method over the divisor, the concept's parameter left out as the divisor determines it.
 #[test]
 fn a_bound_from_a_signature_leaves_out_the_type_its_operands_restore() {
     for (body, written) in [
         (
-            "let last(xs: List(Nat)) -> Nat = List/get(xs, List/len(xs) - 1);",
-            "List/len(xs) - 1 < List/len(xs)",
+            "let last(xs: List(Nat)) -> Nat = List/get(xs, List/length(xs) - 1);",
+            "List/length(xs) - 1 < List/length(xs)",
         ),
         (
             "let share(total: Nat, people: Nat) -> Nat = total / people;",
@@ -1352,35 +1352,35 @@ fn a_refused_bound_names_each_guard_once_and_a_guard_as_the_way_out() {
         )
     };
     let by_guard =
-        "guard the call with `i < List/len(xs)`\n│  or supply it explicitly, `List/get(@...)`";
+        "guard the call with `i < List/length(xs)`\n│  or supply it explicitly, `List/get(@...)`";
 
     // A guard one short of the bound: read as written, so named once, and a value it leaves — the atom spelled as the bound spells it, an implicit unification restores left out — with the guard that decides the bound as the way out.
-    let short = index("i <= List/len(xs)", "true", "false");
+    let short = index("i <= List/length(xs)", "true", "false");
     assert!(
         short.contains(
-            "    a guard, `i <= List/len(xs)`\n│  it fails at `i = 0`, `List/len(xs) = 0`\n"
+            "    a guard, `i <= List/length(xs)`\n│  it fails at `i = 0`, `List/length(xs) = 0`\n"
         ) && short.contains(by_guard),
         "{short}"
     );
 
     // A false arm is the other comparison, so both are named.
-    let dual = index("List/len(xs) < i", "false", "true");
+    let dual = index("List/length(xs) < i", "false", "true");
     assert!(
-        dual.contains("    a guard's false arm, `List/len(xs) < i`: `i <= List/len(xs)`\n"),
+        dual.contains("    a guard's false arm, `List/length(xs) < i`: `i <= List/length(xs)`\n"),
         "{dual}"
     );
 
     // A disequality the bound does not follow from is named as one, and the value the bound fails at is one it allows.
-    let apart = index("i == List/len(xs)", "false", "true");
+    let apart = index("i == List/length(xs)", "false", "true");
     assert!(
         apart.contains(
-            "    a guard's false arm, `i == List/len(xs)`: `i != List/len(xs)`\n│  it fails at `i = 1`, `List/len(xs) = 0`\n"
+            "    a guard's false arm, `i == List/length(xs)`: `i != List/length(xs)`\n│  it fails at `i = 1`, `List/length(xs) = 0`\n"
         ),
         "{apart}"
     );
-    let unequal = index("i != List/len(xs)", "true", "false");
+    let unequal = index("i != List/length(xs)", "true", "false");
     assert!(
-        unequal.contains("    a guard, `i != List/len(xs)`\n│  it fails at `i = 1`"),
+        unequal.contains("    a guard, `i != List/length(xs)`\n│  it fails at `i = 1`"),
         "{unequal}"
     );
 
@@ -1448,7 +1448,7 @@ fn a_written_goal_over_a_bound_shows_what_the_procedure_found() {
 
     // Where the facts prove the bound, the goal names them and is offered the call that proves it again where it is pasted, never the proof the procedure wrote.
     let proved =
-        goal("xs: List(Nat), i: Nat, m: Nat, p: Holds(i < m), q: Holds(m <= List/len(xs))");
+        goal("xs: List(Nat), i: Nat, m: Nat, p: Holds(i < m), q: Holds(m <= List/length(xs))");
     assert!(
         proved.contains("it follows from the facts in scope:")
             && proved.contains("a hypothesis, `p`: `i < m`")
@@ -1458,7 +1458,7 @@ fn a_written_goal_over_a_bound_shows_what_the_procedure_found() {
     );
 
     // Where they do not, the goal says what a refused bound says: the facts, and where the bound fails.
-    let refused = goal("xs: List(Nat), i: Nat, m: Nat, q: Holds(m <= List/len(xs))");
+    let refused = goal("xs: List(Nat), i: Nat, m: Nat, q: Holds(m <= List/length(xs))");
     assert!(
         refused.contains("it does not follow from the facts in scope")
             && refused.contains("it fails at"),

@@ -310,8 +310,8 @@ test holds_many_keys_with_shared_prefixes =
     let at(n: Nat) -> Str = Option/unwrap_or(Map/try_get(d, Nat/to_str(n)), "?");
     Test/equal(
         Str/join(",", [
-            Nat/to_str(Map/len(m)),
-            Nat/to_str(Map/len(d)),
+            Nat/to_str(Map/length(m)),
+            Nat/to_str(Map/length(d)),
             at(2),
             at(3),
             at(255),

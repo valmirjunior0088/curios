@@ -160,7 +160,7 @@ fn a_type_over_an_open_element_is_sized_by_the_level_the_element_is_born_at() {
         let bound(@T: Type, x: T) -> List(T) =
             let empty = id([]);
             first(empty, [x]);
-        /std/print(Nat/to_str(List/len(before(1)) + List/len(after("a")) + List/len(bound(Type))))
+        /std/print(Nat/to_str(List/length(before(1)) + List/length(after("a")) + List/length(bound(Type))))
         "#;
 
     assert_eq!(run(source), b"0");
@@ -239,13 +239,13 @@ fn a_bodys_cycle_of_levels_closes_at_its_least_solution() {
     assert_eq!(parameters.get("/read"), Some(&0), "{parameters:?}");
 }
 
-// **A stuck `match` holds the levels its arms reduce to.** `M` holds a proposition `Good` computes by a `match` on `M`'s own field, which no instance decides: read through its arms, opened and forced, `List/len`'s instance in the `some` arm is the `#ListLen` it reduces to and holds no level, so `M` keeps the one level a family stating the same would, and `Good`'s own vector holds none. Read closed, the instance held its level, and `M` took a second one, invariant. The control's arm answers a `Type`, which holds the level it stands at.
+// **A stuck `match` holds the levels its arms reduce to.** `M` holds a proposition `Good` computes by a `match` on `M`'s own field, which no instance decides: read through its arms, opened and forced, `List/length`'s instance in the `some` arm is the `#ListLen` it reduces to and holds no level, so `M` keeps the one level a family stating the same would, and `Good`'s own vector holds none. Read closed, the instance held its level, and `M` took a second one, invariant. The control's arm answers a `Type`, which holds the level it stands at.
 #[test]
 fn a_stuck_match_holds_the_levels_its_arms_reduce_to() {
     let source = r#"
         use /std/{Nat, List, Option, Bool};
         pub let Good(@V: Type, r: Option(List(V))) -> Prop =
-            match r | none() => Bool/True | some(l) => Bool/Holds(List/len(l) < 9) end;
+            match r | none() => Bool/True | some(l) => Bool/Holds(List/length(l) < 9) end;
         pub struct M(V: Type): pub Type { root: Option(List(V)), @ok: Good(root) }
         pub let Sized(@V: Type, r: Option(List(V))) -> Type =
             match r | none() => {} | some(_) => Type end;

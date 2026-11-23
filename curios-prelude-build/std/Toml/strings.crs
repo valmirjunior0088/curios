@@ -143,7 +143,7 @@ let skip_opening_newline() -> Parse(Str, {}) =
 --- A run of `quote` inside a multi-line string, read whole: fewer than three are text and the body goes on, three to five close the string with what is past the third kept as text, and six or more are refused. The text so far, and whether the string is closed.
 let quote_run(quote: Char, acc: Str) -> Parse(Str, {Str, Bool}) =
     let run = Parse/str/take_while((c) => c == quote)!;
-    let q = Str/len(run);
+    let q = Str/length(run);
     let mark = Str/of_char(quote);
     match
     | q >= 6 => Parse/fail("too many quotes")

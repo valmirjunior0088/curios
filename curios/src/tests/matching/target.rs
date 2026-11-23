@@ -130,7 +130,7 @@ fn inductive_match_catch_all_covers_unenumerated_constructors() {
             | _ => 99
             end;
         let entry() -> /std/Io({}) =
-            let z = Bytes/len(rand/bytes(0)!);
+            let z = Bytes/length(rand/bytes(0)!);
             /std/print(Nat/to_str((f(Option/some(5)) + f(Option/none())) + z));
         entry()
         "#;

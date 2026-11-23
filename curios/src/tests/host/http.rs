@@ -58,7 +58,7 @@ const SERVER: &str = r#"
         let said =
             Response/of_text(
                 200,
-                Str/flatten([Show/show(r.method), " ", r.url.path, " ", Nat/to_str(Bytes/len(r.body))]));
+                Str/flatten([Show/show(r.method), " ", r.url.path, " ", Nat/to_str(Bytes/length(r.body))]));
         match
         | r.url.path == "/fail" => Try/raise(Io/Error/connection_refused())
         | r.url.path == "/dated" =>

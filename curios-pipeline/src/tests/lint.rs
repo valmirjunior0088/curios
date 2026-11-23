@@ -124,7 +124,7 @@ fn a_wildcard_a_proof_reads_is_used() {
         "use /std/{Bytes, Nat, proved};
 use /std/Bool/{Holds};
 
-pub let bounded(t: Bytes) -> Holds(Bytes/to_nat(t) < Nat/pow(256, Bytes/len(t))) =
+pub let bounded(t: Bytes) -> Holds(Bytes/to_nat(t) < Nat/pow(256, Bytes/length(t))) =
     let _ = Bytes/to_nat/below(t);
     proved();
 ",

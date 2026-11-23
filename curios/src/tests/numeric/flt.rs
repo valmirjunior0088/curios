@@ -8,7 +8,7 @@ fn codec_round_trips_on_runtime_values() {
     let source = r#"
         use /std/{Str, Nat, Flt, Bytes, Option, List, Bool, Io};
         let entry() -> /std/Io({}) =
-            let one = Nat/to_flt(Bytes/len(/std/rand/bytes(3)!)) / +3.0;
+            let one = Nat/to_flt(Bytes/length(/std/rand/bytes(3)!)) / +3.0;
             let check(x : Flt) -> Str =
                 let back = Option/unwrap_or(Flt/of_str(Flt/to_str(x)), +nan.0);
                 match Bytes/eql(Flt/to_le_bytes(back), Flt/to_le_bytes(x))

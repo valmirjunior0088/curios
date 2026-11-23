@@ -4,7 +4,7 @@
 //!
 //! **Plicity is read off the row as well.** A type operand is one a call leaves to be inferred, a proof is one the elaborator discharges, and every other operand is written — except in a former, whose type operand is the one thing a reader writes, `List(Nat)`.
 //!
-//! A bound is read back over the nodes the row states it in, `Holds(Nat/lt(i, Bytes/len(b)))`, and not through the `/sys` wrappers a caller's guard is written with. A case equation answers its scrutinee's reduct, which is those nodes (`documentation/design/soundness/case-equations-and-their-key.md`), so a guard discharges the bound either way.
+//! A bound is read back over the nodes the row states it in, `Holds(Nat/lt(i, Bytes/length(b)))`, and not through the `/sys` wrappers a caller's guard is written with. A case equation answers its scrutinee's reduct, which is those nodes (`documentation/design/soundness/case-equations-and-their-key.md`), so a guard discharges the bound either way.
 
 use {
     super::{applied, fn_over, intrinsic, name, sort, type_, unit},

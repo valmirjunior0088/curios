@@ -101,7 +101,7 @@ let request(
             let held = Reader/held(r)!;
             Io/pure(
                 Result/failure(
-                    match Bytes/len(held)
+                    match Bytes/length(held)
                     | 0 => Unread/silent()
                     | _ => Unread/refused(Refusal/incomplete())
                     end))
@@ -146,7 +146,7 @@ let drain(c: Socket, quiet: Duration, left: Nat) -> Io({}) =
         | none() => Io/pure(())
         | some(read) =>
             match read
-            | success(bytes(b)) => drain(c, quiet, left - Nat/min(left, Bytes/len(b)))
+            | success(bytes(b)) => drain(c, quiet, left - Nat/min(left, Bytes/length(b)))
             | success(ended()) | failure(_) => Io/pure(())
             end
         end

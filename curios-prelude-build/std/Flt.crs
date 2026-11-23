@@ -51,7 +51,7 @@ use /std/ops/{Cmp, Add, Sub, Mul, Div, Rem};
 
 --- That `b` is eight bytes long, decided.
 pub let EightBytes(b: Bytes) -> Prop =
-    Bool/Holds(Bytes/len(b) == 8);
+    Bool/Holds(Bytes/length(b) == 8);
 
 --- Whether `f` is a number: neither infinity nor a NaN.
 pub let is_finite(f: Flt) -> Bool =
@@ -264,7 +264,7 @@ pub let scale(f: Flt, n: Int) -> Flt =
 --- IEEE's `logB` (§5.3.3): the exponent of `f`'s leading bit, `⌊log₂|f|⌋`, subnormals included. A zero, an infinity or a NaN has none, which the bound excludes.
 pub let log_b(f: Flt, @ok: FiniteNonZero(f)) -> Int =
     let finite = finite_of_non_zero(f, @ok);
-    exponent(f, @finite) + Nat/to_int(exact/bit_len(Int/abs(mantissa(f, @finite)))) - +1;
+    exponent(f, @finite) + Nat/to_int(exact/bit_length(Int/abs(mantissa(f, @finite)))) - +1;
 
 --- `log_b(f)`, or `none` for a zero, an infinity or a NaN.
 pub let try_log_b(f: Flt) -> Option(Int) =
@@ -362,7 +362,7 @@ pub let signaling_nan(p: Flt) -> Flt =
 
 --- The float whose little-endian bytes these are, or `none` unless there are exactly eight.
 pub let try_of_le_bytes(b: Bytes) -> Option(Flt) =
-    match Bytes/len(b) == 8
+    match Bytes/length(b) == 8
     | true => Option/some(of_le_bytes(b, @Bool/True/qed()))
     | false => Option/none()
     end;

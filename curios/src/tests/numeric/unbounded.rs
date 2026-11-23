@@ -342,7 +342,7 @@ fn a_reassociated_product_agrees_with_the_written_one() {
              let k(n: Nat) -> Nat = match n == 1 | true => 0 | false => 65536 end;\n\
              let prod(n: Nat) -> Nat =\n\
              match n | 0 => 1 | p + 1 => ${combine} end;\n\
-             let main() -> /std/Io({}) = Fmt/print(\"%\")(Nat/to_str(prod(List/len(/std/Proc/args()!))));\nmain()\n",
+             let main() -> /std/Io({}) = Fmt/print(\"%\")(Nat/to_str(prod(List/length(/std/Proc/args()!))));\nmain()\n",
             combine
         )
     };
@@ -529,7 +529,7 @@ fn bytes_of_nat_is_minimal_least_significant_first() {
         let probe(n: Nat) -> Str =
             let b = Bytes/of_nat(n);
             Str/concat(
-                Nat/to_str(Bytes/len(b)),
+                Nat/to_str(Bytes/length(b)),
                 Bytes/fold(b, "", (byte, acc) =>
                     Str/concat(acc, Str/concat(":", Nat/to_str(Byte/to_nat(byte))))));
         /std/print(List/fold(

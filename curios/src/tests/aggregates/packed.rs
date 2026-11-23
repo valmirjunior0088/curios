@@ -68,10 +68,10 @@ fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
             match b | 0x[] => 0x[] | 0x[h, ..t] => 0x[h, ..front(t)] end;
 
         let cut(b: Bytes, k: Nat) -> Bool =
-            match k <= Bytes/len(b)
+            match k <= Bytes/length(b)
             | true =>
                 let joined = 0x[..Bytes/slice(b, 0, k), ..Bytes/drop(b, k)];
-                joined == b && Bytes/len(joined) == Bytes/len(b)
+                joined == b && Bytes/length(joined) == Bytes/length(b)
             | false => false
             end;
 
@@ -79,7 +79,7 @@ fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
             match k | 0 => cut(b, 0) | j + 1 => cut(b, j + 1) && cuts(b, j) end;
 
         let thirds(b: Bytes, k: Nat) -> Bool =
-            match 2 * k <= Bytes/len(b)
+            match 2 * k <= Bytes/length(b)
             | true =>
                 0x[..Bytes/slice(b, 0, k), ..Bytes/slice(b, k, k), ..Bytes/drop(b, 2 * k)] == b
             | false => true
@@ -89,7 +89,7 @@ fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
             match n
             | 0 => true
             | j + 1 =>
-                match j + 1 <= Bytes/len(whole)
+                match j + 1 <= Bytes/length(whole)
                 | true =>
                     let b = Bytes/slice(whole, 0, j + 1);
                     cuts(b, j + 1) && front(b) == b && thirds(b, 1) && thirds(b, 2) && prefixes(whole, j)
@@ -98,16 +98,16 @@ fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
             end;
 
         let led(b: Bytes) -> Bool =
-            match 2 <= Bytes/len(b)
+            match 2 <= Bytes/length(b)
             | true =>
                 let (h, k) = (Bytes/get(b, 0), Bytes/get(b, 1));
                 let short = 0x[0x02, h, k];
                 let long = 0x[0x02, h, k, h];
-                Bytes/len(short) == 3
+                Bytes/length(short) == 3
                     && Bytes/get(short, 0) == 0x02
                     && Bytes/get(short, 1) == h
                     && Bytes/get(short, 2) == k
-                    && Bytes/len(long) == 4
+                    && Bytes/length(long) == 4
                     && Bytes/get(long, 0) == 0x02
                     && Bytes/get(long, 3) == h
             | false => false
@@ -120,7 +120,7 @@ fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
             | some(bytes) =>
                 /std/print(
                     Str/join(" ", [
-                        Bool/to_str(prefixes(bytes, Bytes/len(bytes))),
+                        Bool/to_str(prefixes(bytes, Bytes/length(bytes))),
                         Bool/to_str(led(bytes))]))
             | none() => /std/print("no input")
             end;
@@ -160,7 +160,7 @@ fn a_run_whose_payload_holds_room_crosses_to_a_host_as_its_run() {
         use /std/{Bytes, Io, Try, Proc};
 
         let settled(run: Bytes) -> Bytes =
-            Bytes/xor(run, Bytes/replicate(Bytes/len(run), 0x00));
+            Bytes/xor(run, Bytes/replicate(Bytes/length(run), 0x00));
 
         let main() -> Io({}) =
             let arrived = Try/run(Io/read(Proc/stdin, 64))!;

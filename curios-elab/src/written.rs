@@ -949,7 +949,7 @@ impl Writing {
             .then_some(slot)
     }
 
-    /// The type operands of `intrinsic` elaboration infers again where the walk stands, each by its position among the operands: one a later operand's type determines, which unification solves to it from that operand ([`typed_again`]) as it solves a call's hidden argument ([`determined`]). A program writes the operation by its call, `List/len(xs)`, and the type it was taken at is the elaborator's to fill.
+    /// The type operands of `intrinsic` elaboration infers again where the walk stands, each by its position among the operands: one a later operand's type determines, which unification solves to it from that operand ([`typed_again`]) as it solves a call's hidden argument ([`determined`]). A program writes the operation by its call, `List/length(xs)`, and the type it was taken at is the elaborator's to fill.
     fn typed_again_there(&self, context: &mut Context, intrinsic: &Intrinsic) -> Vec<usize> {
         if self.unrefined > 0 {
             return Vec::new();

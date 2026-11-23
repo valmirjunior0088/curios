@@ -109,8 +109,8 @@ fn every_direction_executes_as_the_model_rounds() {
         use /std/{Nat, Int, Flt, Bytes, List, Io, Try, Proc};
         use /std/Flt/{Rounding, rounded};
         let entry() -> /std/Io({}) =
-            let one = Nat/to_flt(Bytes/len(/std/rand/bytes(3)!)) / +3.0;
-            let zero = Bytes/len(/std/rand/bytes(0)!);
+            let one = Nat/to_flt(Bytes/length(/std/rand/bytes(3)!)) / +3.0;
+            let zero = Bytes/length(/std/rand/bytes(0)!);
             let operands = List/map([
                 ${operands},
             ], (v) => v * one);
@@ -216,7 +216,7 @@ fn the_exact_rounding_executes_as_the_model_rounds() {
         use /std/{Flt, Str, Bytes, List, Io, Option, Try, Proc};
         use /std/Flt/{Rounding, rounded};
         let entry() -> /std/Io({}) =
-            let unread = Str/repeat("0", Bytes/len(/std/rand/bytes(0)!));
+            let unread = Str/repeat("0", Bytes/length(/std/rand/bytes(0)!));
             let cases: List(Str) = List/map([${cases}], (s) => Str/concat(s, unread));
             let direction(r: Rounding) -> List(Flt) =
                 List/map(cases, (s) => Option/unwrap_or(rounded/of_hex_str(r, s), +nan.0));
@@ -420,8 +420,8 @@ fn every_exception_is_raised_as_ieee_defines_it() {
         use /std/{Nat, Int, Flt, Bytes, Byte, List, Io, Bool, Try, Proc};
         use /std/Flt/{Rounding, Exceptions, signals};
         let entry() -> /std/Io({}) =
-            let one = Nat/to_flt(Bytes/len(/std/rand/bytes(3)!)) / +3.0;
-            let tick = Nat/to_byte(Bytes/len(/std/rand/bytes(1)!) % 256);
+            let one = Nat/to_flt(Bytes/length(/std/rand/bytes(3)!)) / +3.0;
+            let tick = Nat/to_byte(Bytes/length(/std/rand/bytes(1)!) % 256);
             let signaling = Flt/of_le_bytes(0x[tick, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x7F]);
             let operands = [..List/map([
                 ${operands},

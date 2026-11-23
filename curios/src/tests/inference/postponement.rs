@@ -233,8 +233,8 @@ fn a_written_argument_solves_what_its_calls_type_leaves_open() {
             match b | box(z) => z end;
 
         /std/print(Str/join(" ", [
-            Nat/to_str(List/len(literal(1, 2))),
-            Nat/to_str(List/len(held(computed(5)))),
+            Nat/to_str(List/length(literal(1, 2))),
+            Nat/to_str(List/length(held(computed(5)))),
         ]))
         "#;
 

@@ -331,7 +331,7 @@ fn an_empty_variable_is_set_and_an_absent_one_is_not() {
         use /std/{Option, Bytes, Str, print};
         let said(v: Option(Bytes)) -> Str =
             match v
-            | some(b) => match Bytes/len(b) == 0 | true => "empty" | false => "set" end
+            | some(b) => match Bytes/length(b) == 0 | true => "empty" | false => "set" end
             | none() => "unset"
             end;
         let main() -> /std/Io({}) =

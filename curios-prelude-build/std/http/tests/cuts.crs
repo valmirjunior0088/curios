@@ -39,13 +39,13 @@ let fed(
     end;
 
 let front(b: Bytes, k: Nat) -> Bytes =
-    match Bool/holds(k <= Bytes/len(b))
+    match Bool/holds(k <= Bytes/length(b))
     | some(within) => Bytes/slice(b, 0, k, @within)
     | none() => b
     end;
 
 let past(b: Bytes, k: Nat) -> Bytes =
-    match Bool/holds(k <= Bytes/len(b))
+    match Bool/holds(k <= Bytes/length(b))
     | some(within) => Bytes/drop(b, k, @within)
     | none() => 0x[]
     end;
@@ -61,7 +61,7 @@ let whole_at_every_cut(
     expected: Fed(A),
 ) -> Bool =
     List/all(
-        List/range(0, Bytes/len(wire) + 1),
+        List/range(0, Bytes/length(wire) + 1),
         (k) => fed(piece, start, 0x[], [front(wire, k), past(wire, k)]) == expected);
 
 -- Whether `piece` still wants more at every place short of `whole` that `wire` may stop.
@@ -101,7 +101,7 @@ test a_head_reads_whole_at_every_cut =
                 Fed/whole(Str/to_bytes(lines), Str/to_bytes("the body")))),
         Test/assert(
             "the head wants more at every stop short of its end",
-            wanting_at_every_stop(head, read/unsearched, wire, Bytes/len(wire) - 8))]);
+            wanting_at_every_stop(head, read/unsearched, wire, Bytes/length(wire) - 8))]);
 
 -- A body of a stated length is that many octets, wherever the bytes are cut, and wants more until it has them.
 test a_stated_length_reads_whole_at_every_cut =
@@ -134,7 +134,7 @@ test a_chunked_body_reads_whole_at_every_cut =
                 Fed/whole(Str/to_bytes("Wikipedia in\r\n\r\nchunks."), Str/to_bytes("next")))),
         Test/assert(
             "the chunks want more at every stop short of their end",
-            wanting_at_every_stop(chunked, read/undecoded, wire, Bytes/len(wire) - 4)),
+            wanting_at_every_stop(chunked, read/undecoded, wire, Bytes/length(wire) - 4)),
         Test/equal(
             fed(chunked, read/undecoded, 0x[], [Str/to_bytes("0\r\n"), Str/to_bytes("\r\n")]),
             Fed/whole(0x[], 0x[]))]);

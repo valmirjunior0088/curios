@@ -38,13 +38,13 @@ let fed(
     end;
 
 let front(b: Bytes, k: Nat) -> Bytes =
-    match Bool/holds(k <= Bytes/len(b))
+    match Bool/holds(k <= Bytes/length(b))
     | some(within) => Bytes/slice(b, 0, k, @within)
     | none() => b
     end;
 
 let past(b: Bytes, k: Nat) -> Bytes =
-    match Bool/holds(k <= Bytes/len(b))
+    match Bool/holds(k <= Bytes/length(b))
     | some(within) => Bytes/drop(b, k, @within)
     | none() => 0x[]
     end;
@@ -59,7 +59,7 @@ let alike_at_every_cut(
     expected: Fed,
 ) -> Bool =
     List/all(
-        List/range(0, Bytes/len(wire) + 1),
+        List/range(0, Bytes/length(wire) + 1),
         (k) => fed(piece, start, 0x[], [front(wire, k), past(wire, k)]) == expected);
 
 -- Whether `piece` still wants more at every place short of `whole` that `wire` may stop.

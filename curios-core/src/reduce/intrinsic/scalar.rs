@@ -250,7 +250,7 @@ fn int_euclid_split(dividend: &Term, divisor: &Integer) -> Option<(Term, Term)> 
 ///
 /// The rule the opacity established survives verbatim: an intrinsic needs a fold here only if a type or a proof can depend on its value. `Flt` has moved to the other side of it, because the domains [`Intrinsic::signature`] states for `Flt/to_int` and `Flt/to_nat` are bounds decided by a comparison.
 ///
-/// One fact predates all of it, and `free_monoid::bytes_measure` is where: `Bytes/len(Flt/to_le_bytes(x))` is `8` for every `x`, symbolic `x` included. That is the arity of the operation's result rather than anything about the float, and it is what makes `Flt/of_le_bytes`'s length precondition dischargeable over the operation it inverts.
+/// One fact predates all of it, and `free_monoid::bytes_measure` is where: `Bytes/length(Flt/to_le_bytes(x))` is `8` for every `x`, symbolic `x` included. That is the arity of the operation's result rather than anything about the float, and it is what makes `Flt/of_le_bytes`'s length precondition dischargeable over the operation it inverts.
 pub fn reduce_flt_binary(
     reducer: &mut impl Reducer,
     left: &Term,

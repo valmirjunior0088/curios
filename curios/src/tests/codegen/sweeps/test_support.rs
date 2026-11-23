@@ -13,7 +13,7 @@ let walk(n: Nat, acc: Nat) -> Nat =
         walk(k, (x + y) % 65537)
     end;
 let entry() -> /std/Io({}) =
-    let n = List/len(Proc/args()!);
+    let n = List/length(Proc/args()!);
     /std/print(Nat/to_str(walk(n, 0)));
 entry()
 "#;
@@ -25,7 +25,7 @@ let left(n: Nat, pair: {Nat, Nat}) -> Nat =
 let right(n: Nat, pair: {Nat, Nat}) -> Nat =
     match n | 0 => pair.0 + pair.1 | k + 1 => right(k, ((pair.0 + pair.1) % 65537, pair.0)) + 2 end;
 let entry() -> /std/Io({}) =
-    let n = List/len(Proc/args()!);
+    let n = List/length(Proc/args()!);
     /std/print(Nat/to_str(left(n, (n, 1)) + right(n, (n, 2))));
 entry()
 "#;
@@ -51,7 +51,7 @@ let right(n: Nat) -> (Nat) -> Nat =
         right(k)(c)
     end;
 let entry() -> /std/Io({}) =
-    let n = List/len(Proc/args()!);
+    let n = List/length(Proc/args()!);
     /std/print(Nat/to_str(left(n)(1) + right(n)(2)));
 entry()
 "#;
@@ -76,7 +76,7 @@ let right(side: Side) -> Nat =
     let f = e * 17 % 65539;
     f * 19 % 65539;
 let entry() -> /std/Io({}) =
-    let n = List/len(Proc/args()!);
+    let n = List/length(Proc/args()!);
     let a = left(Side/left(n));
     let b = left(Side/right(n));
     let c = right(Side/left(n));
@@ -94,7 +94,7 @@ let walk(op: (Nat) -> Nat, n: Nat, acc: Nat) -> Nat =
 let up(n: Nat) -> Nat = (n + 1) % 65537;
 let down(n: Nat) -> Nat = (n * 3 + 2) % 65537;
 let entry() -> /std/Io({}) =
-    let n = List/len(Proc/args()!);
+    let n = List/length(Proc/args()!);
     /std/print(Nat/to_str(walk(up, n, 0) + walk(down, n, 1)));
 entry()
 "#;

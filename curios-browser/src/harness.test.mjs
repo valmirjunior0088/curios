@@ -494,7 +494,7 @@ test("a program that reads its arguments is refused by the row, which has none t
 use /std/{List, Nat, print};
 let main() -> /std/Io({}) =
     let args = /std/Proc/args()!;
-    print(Nat/to_str(List/len(args)));
+    print(Nat/to_str(List/length(args)));
 main()
 `,
     {},
@@ -507,7 +507,7 @@ test("random bytes are exactly as many as were asked for, past one Web Crypto ca
 use /std/{Bytes, Nat, print};
 let main() -> /std/Io({}) =
     let b = /std/rand/bytes(70000)!;
-    print(Nat/to_str(Bytes/len(b)));
+    print(Nat/to_str(Bytes/length(b)));
 main()
 `);
 
@@ -525,9 +525,9 @@ let ping(n: Nat) -> Nat =
 and pong(n: Nat) -> Nat =
     match n | 0 => 1 | m + 1 => (ping(m) * 5 + 2) % 1000003 end;
 let main() -> /std/Io({}) =
-    let n = Bytes/len(/std/rand/bytes(1)!) * 1000000;
+    let n = Bytes/length(/std/rand/bytes(1)!) * 1000000;
     let nested = Str/concat(Str/repeat("[", n / 10), Str/repeat("]", n / 10));
-    let encoded = match Json/decode(nested) | success(json) => Str/len(Json/encode(json)) | failure(_) => 0 end;
+    let encoded = match Json/decode(nested) | success(json) => Str/length(Json/encode(json)) | failure(_) => 0 end;
     let _ = print(Nat/to_str(step(n)))!;
     let _ = print(" ")!;
     let _ = print(Nat/to_str(ping(n)))!;

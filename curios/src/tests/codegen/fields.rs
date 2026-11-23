@@ -30,7 +30,7 @@ fn a_runtime_dependent_tuple_width_is_split_into_fields() {
                 loop(next, make(next, n + 1), n + 1, rest)
             end;
         let entry() -> /std/Io({}) =
-            let n = List/len(Proc/args()!);
+            let n = List/length(Proc/args()!);
             let b = Nat/eql(n, 1);
             /std/print(Nat/to_str(loop(b, make(b, n), n, n)));
         entry()

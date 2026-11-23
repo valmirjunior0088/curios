@@ -9,7 +9,7 @@ let run(k: Nat, s: Nat, built: List(Nat), acc: Nat) -> Nat =
         let n = 75 * s % 65537;
         let grown = [..built, n];
         let past = List/drop(grown, 1);
-        run(m, n, grown, (acc + List/len(past)) % 1000003)
+        run(m, n, grown, (acc + List/length(past)) % 1000003)
     end;
 
 let total(n: Nat) -> Nat =

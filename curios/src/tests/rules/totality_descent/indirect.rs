@@ -307,7 +307,7 @@ fn a_recursion_through_a_std_callback_is_graded_alike_by_both_checkers() {
 
         let via_take_while(t : Rose) -> Nat =
             match t
-            | node(label, children) => label + List/len(List/take_while(children, (c) => via_take_while(c) == 0))
+            | node(label, children) => label + List/length(List/take_while(children, (c) => via_take_while(c) == 0))
             end;
         let Taken(t : Rose) -> /std/Bool/True =
             match via_take_while(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
@@ -316,7 +316,7 @@ fn a_recursion_through_a_std_callback_is_graded_alike_by_both_checkers() {
             match t
             | node(label, children) =>
                 match List/traverse(children, (c) => via_traverse(c))
-                | some(ns) => Option/some(label + List/len(ns))
+                | some(ns) => Option/some(label + List/length(ns))
                 | none() => Option/none()
                 end
             end;

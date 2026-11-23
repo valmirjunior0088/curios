@@ -15,7 +15,7 @@ use {
 fn accumulation_loops_are_linear_by_construction() {
     // The rope representation's whole promise: a naive packed-concatenation accumulation loop is O(n) with no optimizer recognition anywhere — each step is one node allocation, and the single read at the end forces once. A representation copying the accumulator per step would be Θ(n²), minutes at this count where the loop takes milliseconds, so a regression fails on the suite's patience. The final slice + print also pins the force → memo → host-write path end to end.
     //
-    // **This is the direct spelling.** `Bytes/slice` states `10 <= Bytes/len(b)`, a *decided* proposition, so `built` stands in a type and the compiler runs the whole accumulation at elaboration — a closed evaluation the machine affords inside the default budget. The test therefore proves both halves at once: the type level evaluates a twenty-five-thousand-step closed fold without a frame row, and the emitted program runs the same loop over the rope in linear time. `tests::numeric`'s `a_bound_behind_a_parameter_evaluates_nothing` holds the opaque spelling, as the proof that opacity computes nothing.
+    // **This is the direct spelling.** `Bytes/slice` states `10 <= Bytes/length(b)`, a *decided* proposition, so `built` stands in a type and the compiler runs the whole accumulation at elaboration — a closed evaluation the machine affords inside the default budget. The test therefore proves both halves at once: the type level evaluates a twenty-five-thousand-step closed fold without a frame row, and the emitted program runs the same loop over the rope in linear time. `tests::numeric`'s `a_bound_behind_a_parameter_evaluates_nothing` holds the opaque spelling, as the proof that opacity computes nothing.
     //
     // **The count is 25 000 because the spelling makes elaboration run the loop too**, at a measured ~160 units an iteration across the two checkers — four million units at this count, which keeps the test seconds while leaving a quadratic regression minutes.
     //
@@ -32,7 +32,7 @@ fn accumulation_loops_are_linear_by_construction() {
             let built = go(25000, 0x[]);
             let head = Bytes/slice(built, 0, 10);
             let _ = Try/run(Io/write(Proc/stdout, head))!;
-            let _ = /std/print(Nat/to_str(Bytes/len(built)))!;
+            let _ = /std/print(Nat/to_str(Bytes/length(built)))!;
             /std/Io/pure(());
         entry()
         "#),
@@ -67,7 +67,7 @@ fn peel_loops_are_linear_by_construction() {
                         drain(next, f, acc + (Byte/to_nat(h) - 48))
                     end
                 end;
-            let total = drain(c, Bytes/len(built) + 1, 0)!;
+            let total = drain(c, Bytes/length(built) + 1, 0)!;
             let _ = /std/print(Nat/to_str(total))!;
             /std/Io/pure(());
         entry()
@@ -185,7 +185,7 @@ fn a_nan_default_on_a_runtime_option_converges() {
         run(r#"
         use /std/{Nat, Flt, Str, Bytes, Option};
         let entry() -> /std/Io({}) =
-            let taint = Bytes/len(/std/rand/bytes(3)!);
+            let taint = Bytes/length(/std/rand/bytes(3)!);
             let f(s : Str) -> Option(Flt) =
                 let n = Nat/of_str(s)!;
                 Option/some(Nat/to_flt(n));
@@ -407,7 +407,7 @@ fn a_recursion_as_deep_as_its_data_runs() {
             let walked = List/traverse(List/range(0, 100000), (n: Nat) => Io/pure(n + 1))!;
             let _ = /std/print(Nat/to_str(length(build(100000))))!;
             let _ = /std/print(" ")!;
-            let _ = /std/print(Nat/to_str(List/len(walked)))!;
+            let _ = /std/print(Nat/to_str(List/length(walked)))!;
             /std/Io/pure(());
         entry()
         "#),
@@ -427,12 +427,12 @@ fn a_sequence_built_under_its_recursion_is_a_loop() {
             let pairs = List/zip(numbers, List/take(numbers, 100000));
             let below = List/take_while(numbers, (n: Nat) => n < 100000);
             let same = List/eql(numbers, below);
-            let bytes = Bytes/of_nat(List/len(pairs));
-            let _ = /std/print(Nat/to_str(List/len(pairs)))!;
+            let bytes = Bytes/of_nat(List/length(pairs));
+            let _ = /std/print(Nat/to_str(List/length(pairs)))!;
             let _ = /std/print(match same | true => " same " | false => " differ " end)!;
-            let _ = /std/print(Nat/to_str(Bytes/len(bytes)))!;
+            let _ = /std/print(Nat/to_str(Bytes/length(bytes)))!;
             let _ = /std/print(" ")!;
-            let _ = /std/print(Nat/to_str(Bytes/len(Str/to_bytes(twice(100000)))))!;
+            let _ = /std/print(Nat/to_str(Bytes/length(Str/to_bytes(twice(100000)))))!;
             /std/Io/pure(());
         entry()
         "#;
@@ -491,7 +491,7 @@ fn a_numbers_text_holds_no_level_of_the_number_across_the_rest() {
         use /std/{Nat, Str, List, Proc, Io};
         let entry() -> /std/Io({}) =
             let arguments = Proc/args()!;
-            let digits = Str/len(Nat/to_str(Nat/pow(10, List/len(arguments) * 20000)));
+            let digits = Str/length(Nat/to_str(Nat/pow(10, List/length(arguments) * 20000)));
             let _ = /std/print(Nat/to_str(digits))!;
             /std/Io/pure(());
         entry()

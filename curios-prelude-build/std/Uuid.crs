@@ -9,11 +9,11 @@ use /std/time/{Timestamp};
 pub struct Uuid: pub Type {
     bytes: Bytes,
     --- That there are sixteen.
-    @sixteen: Bool/Holds(Bytes/len(bytes) == 16),
+    @sixteen: Bool/Holds(Bytes/length(bytes) == 16),
 }
 
 --- The UUID the sixteen bytes `b` spell, in the order RFC 9562 lays them out: any sixteen bytes, of any version and variant, as a UUID read off a wire or out of a store is. Their count is decided where `b` is written, so a literal needs nothing more.
-pub let of_bytes(b: Bytes, @sixteen: Bool/Holds(Bytes/len(b) == 16)) -> Uuid =
+pub let of_bytes(b: Bytes, @sixteen: Bool/Holds(Bytes/length(b) == 16)) -> Uuid =
     Uuid { bytes = b };
 
 --- The sixteen bytes, in the order RFC 9562 lays them out.
@@ -136,7 +136,7 @@ pub let of_str(s: Str) -> Option(Uuid) =
     | false => Option/none()
     | true =>
         let b = of_digits(List/filter(chars, (c) => c != '-'))!;
-        match Bool/holds(Bytes/len(b) == 16)
+        match Bool/holds(Bytes/length(b) == 16)
         | some(sixteen) => Option/some(Uuid { bytes = b, @sixteen = sixteen })
         | none() => Option/none()
         end
@@ -146,11 +146,11 @@ pub let of_str(s: Str) -> Option(Uuid) =
 pub let eq_of_bytes(a: Uuid, b: Uuid, p: Eq()(a.bytes, b.bytes)) -> Eq()(a, b) =
     Eq/subst(
         (bytes: Bytes) =>
-            (sixteen: Bool/Holds(Bytes/len(bytes) == 16)) -> Eq()(
+            (sixteen: Bool/Holds(Bytes/length(bytes) == 16)) -> Eq()(
                 a,
                 Uuid { bytes = bytes, @sixteen = sixteen }),
         p,
-        (_: Bool/Holds(Bytes/len(a.bytes) == 16)) => Eq/refl())(
+        (_: Bool/Holds(Bytes/length(a.bytes) == 16)) => Eq/refl())(
         b.sixteen);
 
 satisfy Eql(Uuid) {

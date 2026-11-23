@@ -5,13 +5,17 @@ use /std/Tui/{Style, View, Pane, Key};
 pub struct Listing(A: Type): pub Type {
     items: List(A),
     --- The selected item, none where there are no items.
-    cursor: Option({i: Nat, ok: Bool/Holds(i < List/len(items))}),
+    cursor: Option({i: Nat, ok: Bool/Holds(i < List/length(items))}),
     --- The first item shown.
     first: Nat,
 }
 
-let at(@A: Type, items: List(A), i: Nat) -> Option({i: Nat, ok: Bool/Holds(i < List/len(items))}) =
-    match Bool/holds(i < List/len(items))
+let at(
+    @A: Type,
+    items: List(A),
+    i: Nat,
+) -> Option({i: Nat, ok: Bool/Holds(i < List/length(items))}) =
+    match Bool/holds(i < List/length(items))
     | none() => Option/none()
     | some(ok) => Option/some((i = i, ok = ok))
     end;
@@ -41,7 +45,7 @@ pub let handle(@A: Type, l: Listing(A), k: Key, rows: Nat) -> Listing(A) =
     match l.cursor
     | none() => l
     | some(c) =>
-        let last = List/len(l.items) - 1;
+        let last = List/length(l.items) - 1;
         let to(i: Nat) -> Listing(A) =
             match at(l.items, i)
             | none() => l
@@ -74,7 +78,7 @@ pub let view(@A: Type, l: Listing(A), show: (A) -> Str, style: Style, highlight:
         let shown =
             List/take(
                 List/drop_while(
-                    List/zip(List/range(0, List/len(l.items)), l.items),
+                    List/zip(List/range(0, List/length(l.items)), l.items),
                     (e) => e.0 < first),
                 h);
         let row(entry: {Nat, A}) -> View(w, 1) =

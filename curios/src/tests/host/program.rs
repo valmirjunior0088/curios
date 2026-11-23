@@ -38,7 +38,7 @@ const READS_A_FILE: &str = r#"
     let main() -> Try(Io, Io/Error, {}) =
         let _ = print("before|")!;
         let held = File/read_all(Path/of_str("notes.txt"))!;
-        print(Nat/to_str(Bytes/len(held)));
+        print(Nat/to_str(Bytes/length(held)));
     main()
     "#;
 

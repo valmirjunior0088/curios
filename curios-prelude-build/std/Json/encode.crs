@@ -10,7 +10,7 @@ let exponent_text(e: Int) -> Str =
 let encode_num(n: Json/Number) -> Str =
     let magnitude = Int/abs(n.mantissa);
     let digits = Nat/to_str(magnitude);
-    let k = Str/len(digits);
+    let k = Str/length(digits);
     let point = n.exponent + Nat/to_int(k);
     -- The first `at` digits and the rest, the rest keeping its leading zeros.
     let split(at: Nat) -> {Str, Str} =

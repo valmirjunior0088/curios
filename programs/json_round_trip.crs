@@ -18,7 +18,7 @@ let execute() -> Try(Io, Str, {}) =
     let entries = Str/join(", ", List/map(List/range(0, n), entry));
     let document = Str/concat(Str/concat("{\"entries\": [", entries), "]}");
     let decoded = Result/map_failure(Json/decode(document), (_) => "bad json")!;
-    let () = Fmt/print("%\n")(Str/len(Json/encode(decoded)))!;
+    let () = Fmt/print("%\n")(Str/length(Json/encode(decoded)))!;
     Try/pure(());
 
 execute()

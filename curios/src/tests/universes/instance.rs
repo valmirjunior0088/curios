@@ -15,8 +15,8 @@ const TWO_INSTANCES_OF_ZIP: &str = r#"
         Eq/subst((m: Nat) => Holds(Nat/eql(0, m)), e, True/qed());
     let succ_cancel(@a: Nat, @b: Nat, e: Eq()(a + 1, b + 1)) -> Eq()(a, b) =
         Eq/cong((w: Nat) => w - 1, e);
-    pub let zip_len(@A: Type, @B: Type, a: List(A), b: List(B), p: Eq()(List/len(b), List/len(a)))
-        -> Eq()(List/len(List/zip(a, b)), List/len(a)) =
+    pub let zip_len(@A: Type, @B: Type, a: List(A), b: List(B), p: Eq()(List/length(b), List/length(a)))
+        -> Eq()(List/length(List/zip(a, b)), List/length(a)) =
         match a
         | [] => Eq/refl()
         | [x, ..xs] =>
@@ -26,8 +26,8 @@ const TWO_INSTANCES_OF_ZIP: &str = r#"
             end
         end;
     pub let use_call(@A: Type, @B: Type, n: Nat, a: List(A), b: List(B),
-                     ca: Eq()(List/len(same(a)), n), cb: Eq()(List/len(b), n))
-        -> Eq()(List/len(List/zip(same(a), b)), n) =
+                     ca: Eq()(List/length(same(a)), n), cb: Eq()(List/length(b), n))
+        -> Eq()(List/length(List/zip(same(a), b)), n) =
         Eq/trans(zip_len(same(a), b, Eq/trans(cb, Eq/sym(ca))), ca);
     Io/pure(())
     "#;
@@ -77,7 +77,7 @@ fn a_solution_naming_its_own_group_is_stamped_with_the_groups_instance() {
     }
 }
 
-// `use_call`'s two spellings of `zip` are two instances of one recursive group, and both checkers accept the program. A member of a group known to terminate is compared, as its group's projection is, at the levels its unfolding holds, and `zip`'s holds none of its own: what it answers is pairs of what it is handed. So the instance of `zip` the result names leaves its callers no level to choose, and the signature keeps the two levels its writer chose, `A`'s and `B`'s, which is what the count pins. Every other level is an occurrence's at a position its family or member is irrelevant in, and finalization settles each at the level its argument or its floor gives it (`UniverseSolver::finalize`): `List(A)` at `A`'s, `Eq()(List/len(b), n)` at zero, and `zip`'s at its floors.
+// `use_call`'s two spellings of `zip` are two instances of one recursive group, and both checkers accept the program. A member of a group known to terminate is compared, as its group's projection is, at the levels its unfolding holds, and `zip`'s holds none of its own: what it answers is pairs of what it is handed. So the instance of `zip` the result names leaves its callers no level to choose, and the signature keeps the two levels its writer chose, `A`'s and `B`'s, which is what the count pins. Every other level is an occurrence's at a position its family or member is irrelevant in, and finalization settles each at the level its argument or its floor gives it (`UniverseSolver::finalize`): `List(A)` at `A`'s, `Eq()(List/length(b), n)` at zero, and `zip`'s at its floors.
 #[test]
 fn a_signature_instantiating_one_recursive_definition_twice_keeps_only_its_writers_levels() {
     typecheck_within(DEFAULT_BUDGET, TWO_INSTANCES_OF_ZIP)

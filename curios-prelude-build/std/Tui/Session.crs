@@ -214,7 +214,7 @@ let arrived(s: Session) -> Try(Io, Io/Error, Option(List(Input))) =
         end
     | success(inputs) =>
         let rest = Reader/held(s.input)!;
-        match Bytes/len(rest) == 0 || s.support.keyboard
+        match Bytes/length(rest) == 0 || s.support.keyboard
         | true => Try/pure(Option/some(inputs))
         | false =>
             -- What the burst decoded is kept for the next read before the wait for the rest of a key, so a read dropped in that wait has lost none of it.

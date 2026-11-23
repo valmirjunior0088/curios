@@ -21,7 +21,7 @@ fn a_try_region_over_io_sequences_io_actions_and_results() {
             let b = step(a)!;
             Try/pure(b);
         let entry() -> /std/Io({}) =
-            let outcome = Try/run(Try/rescue(twice(), (e) => Try/pure(Str/len(e))))!;
+            let outcome = Try/run(Try/rescue(twice(), (e) => Try/pure(Str/length(e))))!;
             match outcome
             | success(n) => print(Nat/to_str(n))
             | failure(e) => print(e)

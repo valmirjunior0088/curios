@@ -86,7 +86,7 @@ fn twig_updates(module: &Module, name: &str) -> (usize, usize) {
 fn map_insert_rebuilds_its_node_at_every_level_in_a_loop_using_its_map_once() {
     let (_, module) = modules(&program(
         SPINES,
-        "Map/len(walk(n, (n + 1) % 65537, Map/empty()))",
+        "Map/length(walk(n, (n + 1) % 65537, Map/empty()))",
     ));
     assert_eq!(
         copies_keeping_a_slot(&module, "/std/Map/internal/Node/insert"),
@@ -117,7 +117,7 @@ fn a_map_a_loop_reads_before_an_insert_rebuilds_its_node_at_every_level() {
         );
         let (_, module) = modules(&program(
             &walk,
-            "Map/len(walk(n, (n + 1) % 65537, Map/empty()))",
+            "Map/length(walk(n, (n + 1) % 65537, Map/empty()))",
         ));
         assert_eq!(
             copies_keeping_a_slot(&module, "/std/Map/internal/Node/insert"),
@@ -138,14 +138,14 @@ fn a_map_a_reader_holds_beside_its_insert_answers_as_if_copied() {
             match k
             | 0 =>
                 let b2 = Map/insert(b, 1, 99);
-                Option/unwrap_or(Map/try_get(a, 1), 0) * 1000 + Map/len(b2)
+                Option/unwrap_or(Map/try_get(a, 1), 0) * 1000 + Map/length(b2)
             | j + 1 => looped(a, b, j)
             end;
         let called(a: Map(Nat, Nat), b: Map(Nat, Nat), k: Nat) -> Nat =
             match k
             | 0 =>
                 let b2 = Map/insert(b, 1, 99);
-                Option/unwrap_or(Map/try_get(a, 1), 0) * 1000 + Map/len(b2)
+                Option/unwrap_or(Map/try_get(a, 1), 0) * 1000 + Map/length(b2)
             | j + 1 => match called(a, b, j) | 0 => 1 | i + 1 => i + 1 end
             end;
         let outer(x: Map(Nat, Nat), n: Nat) -> Nat =
@@ -153,7 +153,7 @@ fn a_map_a_reader_holds_beside_its_insert_answers_as_if_copied() {
                 match k
                 | 0 =>
                     let x2 = Map/insert(x, 1, 99);
-                    Map/len(x2) * 1000 + Option/unwrap_or(Map/try_get(t, 1), 0)
+                    Map/length(x2) * 1000 + Option/unwrap_or(Map/try_get(t, 1), 0)
                 | j + 1 => probe(t, j)
                 end;
             probe(x, n);
@@ -195,7 +195,7 @@ fn an_insert_into_a_map_read_again_leaves_the_maps_held_once_their_rebuilds() {
             r#"
             let held(n: Nat) -> Nat =
                 let m = walk(3, 0, n % 65537, Map/empty());
-                Map/len(Map/insert(m, 70000, 1)) + Map/len(m);
+                Map/length(Map/insert(m, 70000, 1)) + Map/length(m);
             "#,
         ]
         .concat(),
@@ -213,7 +213,7 @@ fn an_insert_into_a_map_read_again_leaves_the_maps_held_once_their_rebuilds() {
 fn map_remove_rebuilds_its_node_at_every_level_in_a_loop_using_its_map_once() {
     let (_, module) = modules(&program(
         REMOVALS,
-        "Map/len(drain(n, fill(n, Map/empty())))",
+        "Map/length(drain(n, fill(n, Map/empty())))",
     ));
     assert_eq!(
         copies_keeping_a_slot(&module, "/std/Map/internal/Node/remove"),
@@ -229,12 +229,12 @@ fn a_maps_descent_writes_each_levels_twigs_in_place() {
     for (definitions, result, function) in [
         (
             SPINES,
-            "Map/len(walk(n, (n + 1) % 65537, Map/empty()))",
+            "Map/length(walk(n, (n + 1) % 65537, Map/empty()))",
             "/std/Map/internal/Node/insert",
         ),
         (
             REMOVALS,
-            "Map/len(drain(n, fill(n, Map/empty())))",
+            "Map/length(drain(n, fill(n, Map/empty())))",
             "/std/Map/internal/Node/remove",
         ),
     ] {
@@ -253,19 +253,19 @@ fn a_map_something_else_still_holds_answers_as_if_copied() {
         r#"
         let walk(n: Nat, m: Map(Nat, Nat), acc: Nat) -> Nat =
             match n
-            | 0 => acc + Map/len(m)
-            | k + 1 => let m2 = Map/insert(m, k % 97, k); walk(k, m2, acc + Map/len(m))
+            | 0 => acc + Map/length(m)
+            | k + 1 => let m2 = Map/insert(m, k % 97, k); walk(k, m2, acc + Map/length(m))
             end;
         "#,
         // Two maps sharing a subtree, the older read again.
         r#"
         let walk(n: Nat, m: Map(Nat, Nat), acc: Nat) -> Nat =
             match n
-            | 0 => acc + Map/len(m)
+            | 0 => acc + Map/length(m)
             | k + 1 =>
                 let m1 = Map/insert(m, k % 89, k);
                 let m2 = Map/insert(m1, k % 97, k);
-                walk(k, m2, acc + Map/len(m1))
+                walk(k, m2, acc + Map/length(m1))
             end;
         "#,
         // Held by a list.
@@ -275,8 +275,8 @@ fn a_map_something_else_still_holds_answers_as_if_copied() {
             | none() => acc
             | some(m) =>
                 match n
-                | 0 => acc + Map/len(m)
-                | k + 1 => walk(k, [Map/insert(m, k % 97, k), m], acc + Map/len(m))
+                | 0 => acc + Map/length(m)
+                | k + 1 => walk(k, [Map/insert(m, k % 97, k), m], acc + Map/length(m))
                 end
             end;
         "#,
@@ -284,9 +284,9 @@ fn a_map_something_else_still_holds_answers_as_if_copied() {
         r#"
         let walk(n: Nat, m: Map(Nat, Nat), acc: Nat) -> Nat =
             match n
-            | 0 => acc + Map/len(m)
+            | 0 => acc + Map/length(m)
             | k + 1 =>
-                let size = () => Map/len(m);
+                let size = () => Map/length(m);
                 let m2 = Map/insert(m, k % 97, k);
                 walk(k, m2, acc + size())
             end;
@@ -296,8 +296,8 @@ fn a_map_something_else_still_holds_answers_as_if_copied() {
         let base = Map/insert(Map/insert(Map/empty(), 1, 1), 2, 2);
         let walk(n: Nat, m: Map(Nat, Nat), acc: Nat) -> Nat =
             match n
-            | 0 => acc + Map/len(m)
-            | k + 1 => walk(k, m, acc + Map/len(Map/insert(base, k % 97, k)))
+            | 0 => acc + Map/length(m)
+            | k + 1 => walk(k, m, acc + Map/length(Map/insert(base, k % 97, k)))
             end;
         "#,
     ];
@@ -328,9 +328,9 @@ fn a_map_a_cell_holds_answers_as_if_copied() {
             let cell = Cell/new()!;
             let _ = Cell/fill(cell, Map/insert(Map/insert(Map/empty(), n, 1), n + 1, 2))!;
             let first = Cell/poll(cell)!;
-            let grown = match first | some(m) => Map/len(Map/insert(m, n + 2, 3)) | none() => 0 end;
+            let grown = match first | some(m) => Map/length(Map/insert(m, n + 2, 3)) | none() => 0 end;
             let again = Cell/poll(cell)!;
-            let kept = match again | some(m) => Map/len(m) | none() => 0 end;
+            let kept = match again | some(m) => Map/length(m) | none() => 0 end;
             let _ = Fmt/print("%\n")(grown * 10 + kept)!;
             Try/pure(());
         execute()
@@ -354,10 +354,10 @@ fn a_map_two_keys_of_a_map_hold_is_inserted_into_by_a_copy() {
                     Map/insert(Map/insert(Map/empty(), 1, inner), 2, inner);
                 let grown =
                     match Map/try_get(outer, 1)
-                    | some(m) => Map/len(Map/insert(m, 70000, 1))
+                    | some(m) => Map/length(Map/insert(m, 70000, 1))
                     | none() => 0
                     end;
-                let kept = match Map/try_get(outer, 2) | some(m) => Map/len(m) | none() => 0 end;
+                let kept = match Map/try_get(outer, 2) | some(m) => Map/length(m) | none() => 0 end;
                 grown * 100000 + kept;
             "#,
         ]

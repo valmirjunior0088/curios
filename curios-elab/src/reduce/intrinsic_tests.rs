@@ -251,7 +251,7 @@ fn list_slice_peels_symbolic_cons() {
     );
 }
 
-// `List/len` distributes over the monoid like `Bytes/len`: a symbolic cons or append reduces its length to a `succ` spine instead of stalling.
+// `List/length` distributes over the monoid like `Bytes/length`: a symbolic cons or append reduces its length to a `succ` spine instead of stalling.
 #[test]
 fn list_len_distributes_over_cons_and_append() {
     let mut context = context();

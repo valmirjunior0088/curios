@@ -1075,7 +1075,7 @@ fn surveys_the_fold_accumulator_region() {
     let source = r#"
         use /std/{Nat, Str, Char, List, Proc};
         let entry() -> /std/Io({}) =
-            let taint = List/len(Proc/args()!);
+            let taint = List/length(Proc/args()!);
             let n : Nat = taint;
             let text : Str = Nat/to_str(n);
             /std/print(Nat/to_str(Str/fold(text, 0, (codepoint, acc) => acc + Char/to_nat(codepoint))));
@@ -1296,7 +1296,7 @@ let entry() -> /std/Io({}) =
         match Str/of_bytes(bytes)
         | success(s) =>
             match Toml/decode(s)
-            | success(m) => /std/print(Nat/to_str(Map/len(m)))
+            | success(m) => /std/print(Nat/to_str(Map/length(m)))
             | failure(e) => /std/print(Toml/Error/to_str(e))
             end
         | failure(_) => /std/print("invalid utf-8")

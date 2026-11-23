@@ -11,7 +11,7 @@ pub let to_nat(b: Bytes) -> Nat =
 --- The number a run denotes is below `256` to the run's length.
 ---
 --- What makes [`to_nat`] a bounded reading, so a fixed-width pattern has a fixed range: a float's eight bytes denote a number below `2^64`.
-pub let below(b: Bytes) -> Bool/Holds(to_nat(b) < Nat/pow(256, Bytes/len(b))) =
+pub let below(b: Bytes) -> Bool/Holds(to_nat(b) < Nat/pow(256, Bytes/length(b))) =
     match b
     | 0x[] => Bool/True/qed()
     | 0x[h, ..t] =>

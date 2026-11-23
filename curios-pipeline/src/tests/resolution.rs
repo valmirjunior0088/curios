@@ -131,7 +131,7 @@ fn a_module_out_of_scope_is_told_how_to_reach_it() {
         r#"
         use /std/{Nat};
 
-        let f(xs: Nat) -> Nat = List/len(xs);
+        let f(xs: Nat) -> Nat = List/length(xs);
 
         /std/print("x")
     "#,

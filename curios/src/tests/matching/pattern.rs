@@ -127,7 +127,7 @@ fn nested_nat_literal_dispatch_selects_matching_case() {
     let source = r#"
         use /std/{Option, Nat, Bytes, rand};
         let entry() -> /std/Io({}) =
-            let z = Bytes/len(rand/bytes(0)!);
+            let z = Bytes/length(rand/bytes(0)!);
             let n = Nat/add(z, 5);
             let hit =
                 match Option/some(n)
@@ -146,7 +146,7 @@ fn nested_nat_literal_dispatch_falls_through_to_default() {
     let source = r#"
         use /std/{Option, Nat, Bytes, rand};
         let entry() -> /std/Io({}) =
-            let z = Bytes/len(rand/bytes(0)!);
+            let z = Bytes/length(rand/bytes(0)!);
             let n = Nat/add(z, 6);
             let miss =
                 match Option/some(n)

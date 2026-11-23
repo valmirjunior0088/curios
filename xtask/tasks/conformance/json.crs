@@ -32,9 +32,9 @@ let execute() -> Try(Io, Str, {}) =
                     (_) => Str/concat("cannot read ", case))!;
             Try/pure((case, reads(bytes))))!;
     let wrong = List/filter_map(answers, (answer: {Str, Bool}) => judged(answer.0, answer.1));
-    let read = List/len(List/filter(answers, (answer: {Str, Bool}) => answer.1));
-    let () = Monad/lift(Fmt/print("% cases, % read\n")(List/len(answers))(read))!;
-    match List/len(wrong)
+    let read = List/length(List/filter(answers, (answer: {Str, Bool}) => answer.1));
+    let () = Monad/lift(Fmt/print("% cases, % read\n")(List/length(answers))(read))!;
+    match List/length(wrong)
     | 0 => Try/pure(())
     | count => Try/raise(Str/join("\n", [Fmt/render("% answered otherwise:")(count), ..wrong]))
     end;

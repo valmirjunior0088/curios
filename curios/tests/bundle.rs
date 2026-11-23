@@ -551,7 +551,7 @@ let reading() -> Io({}) =
     let input = Io/Reader/new(Proc/stdin)!;
     let read = Try/run(Io/Reader/rest(input))!;
     match read
-    | success(bytes) => /std/print(Str/concat("read ", Nat/to_str(Bytes/len(bytes))))
+    | success(bytes) => /std/print(Str/concat("read ", Nat/to_str(Bytes/length(bytes))))
     | failure(_) => /std/print("failed")
     end;
 Io/select([reading(), ticks(3000)])

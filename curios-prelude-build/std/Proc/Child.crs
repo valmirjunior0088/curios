@@ -21,7 +21,7 @@ let env_entry(entry: {Bytes, Bytes}) -> Bytes =
 
 --- Whether `key` can name an environment variable: something, and no `=`, which would end the name early in the `NAME=VALUE` entry it crosses as.
 let names_a_variable(key: Bytes) -> Bool =
-    match Bytes/len(key) == 0
+    match Bytes/length(key) == 0
     | true => false
     | false => Bool/not(Bytes/contains(key, '='))
     end;

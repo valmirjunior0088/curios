@@ -25,13 +25,13 @@ pub let to_str(p: Path) -> Result(Nat, Str) =
 
 --- Whether the path has no bytes.
 pub let is_empty(p: Path) -> Bool =
-    Bytes/len(p.0) == 0;
+    Bytes/length(p.0) == 0;
 
 let separator: Byte =
     '/';
 
 let ends_with_separator(b: Bytes) -> Bool =
-    match Bytes/try_get(b, Bytes/len(b) - 1)
+    match Bytes/try_get(b, Bytes/length(b) - 1)
     | some(last) => last == separator
     | none() => false
     end;
@@ -71,7 +71,7 @@ pub let parent(p: Path) -> Option(Path) =
         let above = Bytes/join(0x[separator], before);
         Option/some(
             Path {
-                match Bytes/len(above) == 0
+                match Bytes/length(above) == 0
                 | true => 0x[separator]
                 | false => above
                 end })

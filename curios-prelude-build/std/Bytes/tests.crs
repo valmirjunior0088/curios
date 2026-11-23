@@ -8,11 +8,11 @@ test atom_splice_builds_the_written_sequence =
     let bang: Byte = 0x21;
     Test/equal(0x[0x48, i, bang], Str/to_bytes("Hi!"));
 
--- An atom leading a spread lowers to the cons spelling the packed-match refinement builds — the singleton `append(0x[], h)` concatenated with the tail — so a literal written that way *is* the cons spine rather than merely equal to one. Stated over symbolic operands through `len` and `try_get`, the two observations that reduce across that spine, so nothing here is reached by folding literals. These are proofs rather than tests: each is a claim about every `h` and `t`, so it is stated in a type and discharged by the certifier on every build, and there is nothing left for a run to decide.
+-- An atom leading a spread lowers to the cons spelling the packed-match refinement builds — the singleton `append(0x[], h)` concatenated with the tail — so a literal written that way *is* the cons spine rather than merely equal to one. Stated over symbolic operands through `length` and `try_get`, the two observations that reduce across that spine, so nothing here is reached by folding literals. These are proofs rather than tests: each is a claim about every `h` and `t`, so it is stated in a type and discharged by the certifier on every build, and there is nothing left for a run to decide.
 let _bytes_cons_has_the_length_of_its_tail_plus_one(
     h: Byte,
     t: Bytes,
-) -> Eq()(Bytes/len(0x[h, ..t]), 1 + Bytes/len(t)) =
+) -> Eq()(Bytes/length(0x[h, ..t]), 1 + Bytes/length(t)) =
     Eq/refl();
 
 let _bytes_cons_decodes_its_head_first(
@@ -92,13 +92,13 @@ let _the_order_of_bytes_reads_past_a_shared_prefix(
 -- A run of bytes read as a number: bounded by its width, and injective at one width.
 let _a_run_denotes_a_number_below_its_width(
     b: Bytes,
-) -> Holds(Bytes/to_nat(b) < Nat/pow(256, Bytes/len(b))) =
+) -> Holds(Bytes/to_nat(b) < Nat/pow(256, Bytes/length(b))) =
     Bytes/to_nat/below(b);
 
 let _two_runs_of_one_length_and_one_number_are_one(
     a: Bytes,
     b: Bytes,
-    same: Eq()(Bytes/len(a), Bytes/len(b)),
+    same: Eq()(Bytes/length(a), Bytes/length(b)),
     e: Eq()(Bytes/to_nat(a), Bytes/to_nat(b)),
 ) -> Eq()(a, b) =
     Bytes/to_nat_injective(a, b, same, e);

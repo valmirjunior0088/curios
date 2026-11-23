@@ -22,8 +22,8 @@ pub let empty(@K: Type, use Map/Key(K)) -> Set(K) =
     Set { map = Map/empty() };
 
 --- How many elements.
-pub let len(@K: Type, use Map/Key(K), s: Set(K)) -> Nat =
-    Map/len(s.map);
+pub let length(@K: Type, use Map/Key(K), s: Set(K)) -> Nat =
+    Map/length(s.map);
 
 --- `s` with `k`.
 pub let insert(@K: Type, use Map/Key(K), s: Set(K), k: K) -> Set(K) =

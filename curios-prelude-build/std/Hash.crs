@@ -13,13 +13,13 @@ pub use Hash/*;
 -- Trailing rather than leading, and that is not a preference. `Bytes/of_nat` writes its least significant byte first, so a zero byte *after* the run is a higher place worth nothing, while one before it would multiply the value by 256: padding `5` and `1280` on the wrong side gives both `0x[0,0,0,5]`, and two distinct numbers sharing an encoding is exactly what every user of this function exists to prevent. `Key`'s law would refuse its own case at the witness; `framed`, `tagged` and `digest` carry no law and would collide in silence.
 --- `b` ahead of enough zero bytes to reach `width`, or `b` itself when it is already that long.
 let padded(b: Bytes, width: Nat) -> Bytes =
-    Bytes/flatten([b, Bytes/replicate(width - Bytes/len(b), 0x0)]);
+    Bytes/flatten([b, Bytes/replicate(width - Bytes/length(b), 0x0)]);
 
 --- `b` behind its four-byte length.
 ---
 --- Four bytes because the minimal encoding of any length a `Bytes` value can have fits in four, so the frame is self-delimiting: a concatenation of framed parts splits back into exactly those parts. The fixed width is what makes that true, not the length's byte order.
 pub let framed(b: Bytes) -> Bytes =
-    Bytes/flatten([padded(Bytes/of_nat(Bytes/len(b)), 4), b]);
+    Bytes/flatten([padded(Bytes/of_nat(Bytes/length(b)), 4), b]);
 
 --- A constructor's tag and its payloads' encodings, each framed.
 ---

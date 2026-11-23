@@ -783,11 +783,11 @@ const UNDERS: &[Under] = &[
 
 const SUBSTITUTIONS: &[Substitution] = &[
     Substitution {
-        guard: "a < List/len(xs)",
+        guard: "a < List/length(xs)",
         variable: "a",
         case: "0",
         other: "_",
-        at_case: "0 < List/len(xs)",
+        at_case: "0 < List/length(xs)",
         refused: &[],
         certifier: &[],
     },

@@ -91,7 +91,7 @@ fn higher_kinded_implicit_infers_by_imitation() {
         pub let apply_m(@M : (Type) -> Type, @A : Type, x : M(A)) -> M(A) = x;
         let l : List(Nat) = [1, 2];
         let k : List(Nat) = apply_m(l);
-        /std/print(Nat/to_str(List/len(k)))
+        /std/print(Nat/to_str(List/length(k)))
         "#;
 
     assert_eq!(run(source), b"2");
@@ -174,23 +174,23 @@ fn an_undetermined_hidden_field_is_reported_as_an_uninferred_field() {
     );
 }
 
-/// A solution is committed as written where its reduct does not re-check. `reach` reduces to `k` plus `hop` inlined, and `hop`'s absurd arm types only because its own arm refines the variable `b`: inlined, its scrutinee's type is `Holds(0 < Bytes/len(b) - k)`, which the arm's equation on `Bytes/slice(…)` never reaches, so the reduct is refused at re-validation and `Eq/refl`'s `@x` is solved to `reach(b, k, @within, @here)` as written. Mutation-checked: committing the reduct alone refuses the program at `Eq/refl()`.
+/// A solution is committed as written where its reduct does not re-check. `reach` reduces to `k` plus `hop` inlined, and `hop`'s absurd arm types only because its own arm refines the variable `b`: inlined, its scrutinee's type is `Holds(0 < Bytes/length(b) - k)`, which the arm's equation on `Bytes/slice(…)` never reaches, so the reduct is refused at re-validation and `Eq/refl`'s `@x` is solved to `reach(b, k, @within, @here)` as written. Mutation-checked: committing the reduct alone refuses the program at `Eq/refl()`.
 #[test]
 fn a_solution_whose_reduct_does_not_recheck_is_committed_as_written() {
     let output = run(r#"
         use /std/{Bytes, Nat, Eq, print, proved};
         use /std/Bool/{True, Holds};
 
-        let hop(@b: Bytes, some: Holds(0 < Bytes/len(b))) -> Nat =
+        let hop(@b: Bytes, some: Holds(0 < Bytes/length(b))) -> Nat =
             match b
             | 0x[] => match some end
             | 0x[_, .._] => 1
             end;
 
-        let reach(b: Bytes, k: Nat, @within: Holds(k <= Bytes/len(b)), @here: Holds(k < Bytes/len(b))) -> Nat =
+        let reach(b: Bytes, k: Nat, @within: Holds(k <= Bytes/length(b)), @here: Holds(k < Bytes/length(b))) -> Nat =
             k + hop(@Bytes/drop(b, k, @within), proved());
 
-        pub let same(b: Bytes, k: Nat, @within: Holds(k <= Bytes/len(b)), @here: Holds(k < Bytes/len(b)))
+        pub let same(b: Bytes, k: Nat, @within: Holds(k <= Bytes/length(b)), @here: Holds(k < Bytes/length(b)))
             -> Eq()(reach(b, k, @within, @here), reach(b, k, @within, @here)) =
             Eq/refl();
 
@@ -415,7 +415,7 @@ fn a_lists_unknown_tail_is_solved_to_what_the_other_side_has_left() {
             let lengths =
                 List/map(
                     [longer_prefix(1, 2, [3]), two_tails(1, [2], [3]), literal(1, 2)],
-                    (l : List(Nat)) => Nat/to_str(List/len(l)));
+                    (l : List(Nat)) => Nat/to_str(List/length(l)));
             let _ = /std/print(Str/join(" ", lengths))!;
             /std/Io/pure(());
         entry()

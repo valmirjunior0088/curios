@@ -1170,7 +1170,7 @@ pub fn reduce_intrinsic(
         Intrinsic::Bytes(run) => Ok(Subterm::Intrinsic(Intrinsic::Bytes(run.clone()))),
         Intrinsic::BytesLen(bytes) => {
             let bytes = reducer.reduce_forced(bytes.clone())?;
-            // The measure answers a wholly-literal spine by folding it, without rebuilding a `Bytes/len` per operand and handing each back to the reducer, which would make a length over a deep concatenation re-walk every sub-spine. It agrees with the homomorphism below by construction on the shapes it accepts (a literal run's length, summed over a concatenation's operands) and declines everything else, which the homomorphism reduces.
+            // The measure answers a wholly-literal spine by folding it, without rebuilding a `Bytes/length` per operand and handing each back to the reducer, which would make a length over a deep concatenation re-walk every sub-spine. It agrees with the homomorphism below by construction on the shapes it accepts (a literal run's length, summed over a concatenation's operands) and declines everything else, which the homomorphism reduces.
             if let Some(total) = FreeMonoid::Bytes.measure(&bytes) {
                 return Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(total))));
             }

@@ -94,7 +94,7 @@ let cells_of(@w: Nat, @h: Nat, f: Frame(w, h)) -> List(List(Str)) =
 
 let set(row: List(Str), at: Nat, value: Str) -> List(Str) =
     List/map(
-        List/zip(List/range(0, List/len(row)), row),
+        List/zip(List/range(0, List/length(row)), row),
         (cell) => match cell.0 == at | true => value | false => cell.1 end);
 
 -- `cluster` written where the screen's cursor stands, the cursor past the columns it takes.
@@ -102,7 +102,7 @@ let put(s: Screen, cluster: Str) -> Screen =
     let columns = Line/width(Line/of_str(cluster));
     let written =
         List/map(
-            List/zip(List/range(0, List/len(s.cells)), s.cells),
+            List/zip(List/range(0, List/length(s.cells)), s.cells),
             (r) =>
                 match
                 | r.0 != s.y => r.1

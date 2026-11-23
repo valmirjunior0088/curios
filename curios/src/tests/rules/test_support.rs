@@ -498,7 +498,7 @@ pub const A_LIST_OF_EVIDENCE_IS_STILL_A_LIST: &str = r#"
 
     let one : List(Option(True)) = [Option/some(True/qed())];
 
-    /std/print(Nat/to_str(List/len(one)))
+    /std/print(Nat/to_str(List/length(one)))
     "#;
 
 pub const A_CATCH_ALL_IS_CHECKED_AT_ITS_SCRUTINEE: &str = r#"

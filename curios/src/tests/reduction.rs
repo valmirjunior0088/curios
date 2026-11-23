@@ -1,6 +1,6 @@
 //! What a sequence costs to build at the *type* level, measured against what the same loop costs at runtime.
 //!
-//! `Bytes/slice` states `10 <= Bytes/len(b)`, a decided proposition, so its subject stands in a type and the obligation is discharged by reducing that subject. Writing `Bytes/slice(built, 0, 10)` over a computed accumulator therefore runs the whole accumulation at elaboration time. `curios-core`'s `FUSION_CAP` keeps `normalize_concat` from fusing an all-literal concatenation into one packed value — which would recopy everything accumulated so far on every step, a quadratic — and its measure keeps a length over the resulting spine a single fold.
+//! `Bytes/slice` states `10 <= Bytes/length(b)`, a decided proposition, so its subject stands in a type and the obligation is discharged by reducing that subject. Writing `Bytes/slice(built, 0, 10)` over a computed accumulator therefore runs the whole accumulation at elaboration time. `curios-core`'s `FUSION_CAP` keeps `normalize_concat` from fusing an all-literal concatenation into one packed value — which would recopy everything accumulated so far on every step, a quadratic — and its measure keeps a length over the resulting spine a single fold.
 //!
 //! Three arms divide that cost, and the division is the point: the middle arm performs the same number of transitions as the last one and constructs nothing, so whatever separates them is construction rather than machinery.
 //!
@@ -28,7 +28,7 @@ fn bytes_opaque(n: usize) -> String {
         let go(i : Nat, acc : Bytes) -> Bytes =
             match i | 0 => acc | k + 1 => go(k, 0x[..acc, ..Str/to_bytes("0123456789")]) end;
         let head_of(b : Bytes) -> Bytes =
-            match 10 <= Bytes/len(b) | true => Bytes/slice(b, 0, 10) | false => 0x[] end;
+            match 10 <= Bytes/length(b) | true => Bytes/slice(b, 0, 10) | false => 0x[] end;
         let built = go(${n}, 0x[]);
         let head = head_of(built);
         /std/print("ok")
@@ -75,7 +75,7 @@ fn list_opaque(n: usize) -> String {
         let go(i : Nat, acc : List(Nat)) -> List(Nat) =
             match i | 0 => acc | k + 1 => go(k, [..acc, ..[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]) end;
         let head_of(a : List(Nat)) -> List(Nat) =
-            match 10 <= List/len(a) | true => List/slice(a, 0, 10) | false => [] end;
+            match 10 <= List/length(a) | true => List/slice(a, 0, 10) | false => [] end;
         let built = go(${n}, []);
         let head = head_of(built);
         /std/print("ok")
@@ -375,7 +375,7 @@ fn bytes_literal(n: usize) -> String {
         r#"
         use /std/{Bytes, Nat};
         let b : Bytes = 0x[${entries}];
-        /std/print(Nat/to_str(Bytes/len(b)))
+        /std/print(Nat/to_str(Bytes/length(b)))
         "#,
         entries
     )
@@ -427,7 +427,7 @@ fn cost_row(label: &str, source: &str) {
 fn a_literal_mentioned_in_several_types_is_folded_once() {
     let literal = "0123456789".repeat(30);
     let program = |uses: usize| {
-        let types = vec![format!("Eq()(Str/len(\"{literal}\"), 300)"); uses].join(", ");
+        let types = vec![format!("Eq()(Str/length(\"{literal}\"), 300)"); uses].join(", ");
         let proofs = vec!["Eq/refl()"; uses].join(", ");
         fill!(
             "use /std/{Str, Eq, Nat};\n\nlet q: {${types}} = (${proofs},);\n\n/std/print(\"ok\")\n",
@@ -452,7 +452,7 @@ fn a_literal_mentioned_in_several_types_is_folded_once() {
 /// **A guard on this tree rather than a regression test.** Every item's finalization rewrites its universe levels and clears the reducts with them, so `_b` meets a cold table after `_a` whether or not the table outlives a declaration. What keeps it from outliving one is held where it is kept: `curios-elab`'s `a_closed_reduct_does_not_outlive_its_declaration`, and in each checker `what_a_declaration_spends_does_not_depend_on_what_was_reduced_before_it`.
 #[test]
 fn an_items_verdict_is_the_same_compiled_alone_and_after_its_neighbours() {
-    let claim = |literal: String| format!("Eq()(Str/len(\"{literal}\"), 300)");
+    let claim = |literal: String| format!("Eq()(Str/length(\"{literal}\"), 300)");
     let (first, second) = (
         claim("0123456789".repeat(30)),
         claim("abcdefghij".repeat(30)),
@@ -788,7 +788,7 @@ fn paired_fold(width: usize, paired: bool) -> String {
                     (0x[Byte/xor(h, c), ..rest], out)
                 end;
             let (bytes, _) = go(Bytes/slice(0x[${ones}], 0, ${width}), 0);
-            let _counted: Eq()(Bytes/len(bytes), ${width}) = Eq/refl();
+            let _counted: Eq()(Bytes/length(bytes), ${width}) = Eq/refl();
             /std/print("")
             "#,
             ones,
@@ -802,7 +802,7 @@ fn paired_fold(width: usize, paired: bool) -> String {
                 | 0x[] => 0x[]
                 | 0x[h, ..t] => 0x[Byte/xor(h, c), ..go(t, Byte/xor(h, c))]
                 end;
-            let _counted: Eq()(Bytes/len(go(Bytes/slice(0x[${ones}], 0, ${width}), 0)), ${width}) = Eq/refl();
+            let _counted: Eq()(Bytes/length(go(Bytes/slice(0x[${ones}], 0, ${width}), 0)), ${width}) = Eq/refl();
             /std/print("")
             "#,
             ones,
@@ -881,7 +881,7 @@ fn a_bytes_walk_is_run_once_however_many_follow_it() {
         let literal = "ab,".repeat(tokens);
         let total = 2 * tokens;
         fill!(
-            "use /std/{Parse, Result, Eq, Byte, Bytes, Str, Nat};\n\nlet token() -> Parse(Bytes, Nat) =\n    let run = Parse/bytes/take_while((b) => Byte/to_nat(b) != ',')!;\n    let _ = Parse/bytes/expect(',')!;\n    Parse/pure(Bytes/len(run));\n\nlet tokens(count: Nat, acc: Nat) -> Parse(Bytes, Nat) =\n    match count\n    | 0 => Parse/pure(acc)\n    | k + 1 =>\n        let n = token()!;\n        tokens(k, acc + n)\n    end;\n\nlet walked: Eq()(Parse/run(tokens(${tokens}, 0), Str/to_bytes(\"${literal}\")), Result/success(${total})) = Eq/refl();\n\n/std/print(\"ok\")\n",
+            "use /std/{Parse, Result, Eq, Byte, Bytes, Str, Nat};\n\nlet token() -> Parse(Bytes, Nat) =\n    let run = Parse/bytes/take_while((b) => Byte/to_nat(b) != ',')!;\n    let _ = Parse/bytes/expect(',')!;\n    Parse/pure(Bytes/length(run));\n\nlet tokens(count: Nat, acc: Nat) -> Parse(Bytes, Nat) =\n    match count\n    | 0 => Parse/pure(acc)\n    | k + 1 =>\n        let n = token()!;\n        tokens(k, acc + n)\n    end;\n\nlet walked: Eq()(Parse/run(tokens(${tokens}, 0), Str/to_bytes(\"${literal}\")), Result/success(${total})) = Eq/refl();\n\n/std/print(\"ok\")\n",
             tokens,
             literal,
             total
@@ -1097,8 +1097,8 @@ fn a_url_literal_read_as_text_costs_a_type_what_its_length_does() {
 /// A program whose claim is how many bytes of `input` are `left` once `parser` has read it, read back by the carrier's `rest` and stated over a declaration bound to the read, so no member is left to inference. A claim over the success alone counts no walk where a primitive answers its success before its walk is run, as one that builds its position where its walk stops does.
 fn primitive_claim(carrier: &str, parser: &str, input: &str, left: usize) -> String {
     let (rest, length) = match carrier {
-        "Str" => ("Parse/str/rest", "Bytes/len(Str/to_bytes(tail))"),
-        _ => ("Parse/bytes/rest", "Bytes/len(tail)"),
+        "Str" => ("Parse/str/rest", "Bytes/length(Str/to_bytes(tail))"),
+        _ => ("Parse/bytes/rest", "Bytes/length(tail)"),
     };
     fill!(
         "use /std/{Str, Bytes, Byte, Char, Nat, Parse, Result, Option, Eq};\n\nlet left(r: Result(Parse/Error, Nat)) -> Option(Nat) =\n    match r\n    | success(n) => Option/some(n)\n    | failure(_) => Option/none()\n    end;\n\nlet times(@I: Type, use Parse/Input(I), @A: Type, n: Nat, p: Parse(I, A)) -> Parse(I, {}) =\n    match n\n    | 0 => Parse/pure(())\n    | k + 1 =>\n        let _ = p!;\n        times(k, p)\n    end;\n\nlet reader() -> Parse(${carrier}, Nat) =\n    let _ = ${parser}!;\n    let tail = ${rest}!;\n    Parse/pure(${length});\n\nlet read: Result(Parse/Error, Nat) = Parse/run(reader(), ${input});\n\nlet _claim: Eq()(left(read), Option/some(${left})) = Eq/refl();\n\n/std/print(\"ok\")\n",

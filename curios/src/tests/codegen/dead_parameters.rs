@@ -80,7 +80,7 @@ fn recursive_arguments_keep_their_positions_and_effects() {
             end;
         let after(_: {}, x: Nat) -> Nat = x;
         let entry() -> Io({}) =
-            let n = List/len(Proc/args()!);
+            let n = List/length(Proc/args()!);
             let _ = /std/print("before:")!;
             let first = walk(n, n + 3, after(/std/print("argument:")!, n + 100), n + 5);
             let _ = Io/yield()!;
@@ -108,7 +108,7 @@ fn a_nested_capture_survives_cleanup_and_suspension() {
             | k + 1 => (x) => capture(k, unused, b + 2, a + 1)(x) + 1
             end;
         let entry() -> Io({}) =
-            let n = List/len(Proc/args()!);
+            let n = List/length(Proc/args()!);
             let f = capture(n, n + 100, n + 3, n + 5);
             let _ = /std/print("before:")!;
             let _ = Io/yield()!;

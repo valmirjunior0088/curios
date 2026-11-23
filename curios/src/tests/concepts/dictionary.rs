@@ -143,7 +143,7 @@ fn omitted_superclass_resolves_from_a_premise() {
             eq6(a, b) = a == b
         }
         satisfy (@A : Type, use Eq6(A)) => Eq6(List(A)) {
-            eq6(a, b) = List/len(a) == List/len(b)
+            eq6(a, b) = List/length(a) == List/length(b)
         }
         satisfy (@A : Type, use Ord6(A)) => Ord6(List(A)) {
             cmp6(a, b) = Ordering/lt()

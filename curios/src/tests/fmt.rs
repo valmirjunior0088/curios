@@ -239,7 +239,7 @@ fn runtime_args_leave_no_formatter_in_cps() {
     let source = r#"
         use /std/{Fmt, Nat, List, Proc};
         let entry() -> /std/Io({}) =
-            Fmt/print("count: %")(Nat/to_str(List/len(Proc/args()!)));
+            Fmt/print("count: %")(Nat/to_str(List/length(Proc/args()!)));
         entry()
         "#;
     assert_eq!(run(source), b"count: 0".to_vec());

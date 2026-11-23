@@ -163,7 +163,7 @@ let seam_before(
     h: Bool/Holds(scan_continues(s)),
     @b: Bytes,
     k: Nat,
-    within: Bool/Holds(k <= Bytes/len(b)),
+    within: Bool/Holds(k <= Bytes/length(b)),
     at: Bool/Holds(Str/At/starts(Bytes/drop(b, k, @within))),
     d: from(s, b),
 ) -> from(s, Bytes/slice(b, 0, k, @within)) =
@@ -195,7 +195,7 @@ let seam_after(
     h: Bool/Holds(scan_continues(s)),
     @b: Bytes,
     k: Nat,
-    within: Bool/Holds(k <= Bytes/len(b)),
+    within: Bool/Holds(k <= Bytes/length(b)),
     at: Bool/Holds(Str/At/starts(Bytes/drop(b, k, @within))),
     d: from(s, b),
 ) -> Valid(Bytes/drop(b, k, @within)) =
@@ -226,7 +226,7 @@ pub let before(
     @b: Bytes,
     v: Valid(b),
     k: Nat,
-    within: Bool/Holds(k <= Bytes/len(b)),
+    within: Bool/Holds(k <= Bytes/length(b)),
     at: Bool/Holds(Str/At/starts(Bytes/drop(b, k, @within))),
 ) -> Valid(Bytes/slice(b, 0, k, @within)) =
     seam_before(Scan/lead(), Bool/True/qed(), k, within, at, v);
@@ -236,7 +236,7 @@ pub let after(
     @b: Bytes,
     v: Valid(b),
     k: Nat,
-    within: Bool/Holds(k <= Bytes/len(b)),
+    within: Bool/Holds(k <= Bytes/length(b)),
     at: Bool/Holds(Str/At/starts(Bytes/drop(b, k, @within))),
 ) -> Valid(Bytes/drop(b, k, @within)) =
     seam_after(Scan/lead(), Bool/True/qed(), k, within, at, v);

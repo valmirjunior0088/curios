@@ -443,7 +443,7 @@ fn an_answer_past_a_modules_memory_names_the_module_and_the_export() {
         r#"
         foreign far() -> Bytes;
         let entry() -> /std/Io({}) =
-            let _ = /std/Proc/exit(@{}, /std/Nat/to_byte(/std/Bytes/len(far()!) % 256))!;
+            let _ = /std/Proc/exit(@{}, /std/Nat/to_byte(/std/Bytes/length(far()!) % 256))!;
             /std/Io/pure(());
         entry()
         "#,
@@ -467,7 +467,7 @@ fn a_modules_recursion_from_a_deep_frame_stops_on_the_engines_trap() {
         let entry() -> /std/Io({}) =
             let numbers = List/range(0, 2000000);
             let walked = List/traverse(numbers, (n: Nat) => match n == 1999999 | true => spin() | false => Io/pure(n) end)!;
-            let _ = /std/Proc/exit(@{}, /std/Nat/to_byte(List/len(walked) % 256))!;
+            let _ = /std/Proc/exit(@{}, /std/Nat/to_byte(List/length(walked) % 256))!;
             /std/Io/pure(());
         entry()
         "#,

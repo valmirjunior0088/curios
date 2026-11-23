@@ -103,7 +103,7 @@ pub let picked(
     @V: Type,
     l: List(Node(K, V)),
     i: Nat,
-    @within: Bool/Holds(i < List/len(l)),
+    @within: Bool/Holds(i < List/length(l)),
 ) -> Eq()(List/get(l, i), pick(l, i)) =
     match l
     | [] => match within end
@@ -410,7 +410,7 @@ pub let pick_set(
     @V: Type,
     l: List(Node(K, V)),
     i: Nat,
-    @ok: Bool/Holds(i < List/len(l)),
+    @ok: Bool/Holds(i < List/length(l)),
     n: Node(K, V),
     j: Nat,
 ) -> Eq()(pick(List/set(l, i, n), j), match i == j | true => n | false => pick(l, j) end) =
@@ -437,7 +437,7 @@ pub let count_set(
     @V: Type,
     l: List(Node(K, V)),
     i: Nat,
-    @ok: Bool/Holds(i < List/len(l)),
+    @ok: Bool/Holds(i < List/length(l)),
     n: Node(K, V),
 ) -> Eq()(count(List/set(l, i, n)) + present(pick(l, i)), count(l) + present(n)) =
     match l
@@ -492,7 +492,7 @@ pub let twigs_set(
     a: Bytes,
     twigs: Twigs(l, at, d, a),
     i: Nat,
-    @ok: Bool/Holds(i < List/len(l)),
+    @ok: Bool/Holds(i < List/length(l)),
     n: Node(K, V),
     twig: Twig(n, at, d + i, a),
 ) -> Twigs(List/set(l, i, n), at, d, a) =
@@ -3494,7 +3494,7 @@ pub and canonical_in(
     a2: Bytes,
     twigs1: Twigs(l1, at, d, a1),
     twigs2: Twigs(l2, at, d, a2),
-    long: Eq()(List/len(l1), List/len(l2)),
+    long: Eq()(List/length(l1), List/length(l2)),
     alike: (x: K, from: Bool/Holds(d <= digit(Hash/hash(x), at))) -> Eq()(
         find(pick(l1, digit(Hash/hash(x), at) - d), Hash/hash(x)),
         find(pick(l2, digit(Hash/hash(x), at) - d), Hash/hash(x))),

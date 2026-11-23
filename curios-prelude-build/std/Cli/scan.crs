@@ -54,7 +54,7 @@ let claims_of(f: Field, i: Nat) -> List({Str, Claim}) =
         as([..List/map(names, (n) => Str/concat("--", n)), ..short], Claim/valued(i))
     | choice(_, alternatives, _) =>
         List/map(
-            List/zip(List/range(0, List/len(alternatives)), alternatives),
+            List/zip(List/range(0, List/length(alternatives)), alternatives),
             (entry) => (Str/concat("--", entry.1.long), Claim/alternative(i, entry.0)))
     end;
 
@@ -67,7 +67,7 @@ let claims(fields: List(Field), version: Option(Str)) -> Map(Str, Claim) =
         | some(_) => [("--version", Claim/version())]
         end,
         ..List/concat_map(
-            List/zip(List/range(0, List/len(fields)), fields),
+            List/zip(List/range(0, List/length(fields)), fields),
             (entry) => claims_of(entry.1, entry.0))]);
 
 -- `s` recorded against the option at `i`.
@@ -136,7 +136,7 @@ let leads(p: Bytes, b: Bytes) -> Bool =
 
 -- The bytes of `b` after its first `k`, or none where it holds no more.
 let after(b: Bytes, k: Nat) -> Bytes =
-    match Bool/holds(k <= Bytes/len(b))
+    match Bool/holds(k <= Bytes/length(b))
     | some(ok) => Bytes/drop(b, k, @ok)
     | none() => 0x[]
     end;
@@ -159,7 +159,7 @@ let cluster(
     whole: Bytes,
     more: List(Bytes),
 ) -> {Raw, List(Bytes)} =
-    match Bytes/len(body) == 0
+    match Bytes/length(body) == 0
     | true => (raw, more)
     | false =>
         match List/find(names, (name: {Bytes, Str, Claim}) => leads(name.0, body))
@@ -171,11 +171,11 @@ let cluster(
                 whole,
                 more)
         | some((character, spelled, claim)) =>
-            let rest = after(body, Bytes/len(character));
+            let rest = after(body, Bytes/length(character));
             match claim
             | valued(_) =>
                 let attached =
-                    match Bytes/len(rest) == 0
+                    match Bytes/length(rest) == 0
                     | true => Option/none()
                     | false => Option/some(rest)
                     end;
@@ -288,7 +288,7 @@ let distance(a: Str, b: Str) -> Nat =
     let last =
         List/fold(
             Str/to_list(a),
-            (List/range(0, List/len(bs) + 1), 1),
+            (List/range(0, List/length(bs) + 1), 1),
             (c, state: {List(Nat), Nat}) =>
                 ([state.1, ..advance(state.0, bs, c, state.1)], state.1 + 1));
     Option/unwrap_or(List/last(last.0), 0);
@@ -306,6 +306,6 @@ pub let closest(word: Str, known: List(Str)) -> Option(Str) =
                 | _ => Option/some((candidate, d))
                 end);
     match near
-    | some(found), found.1 <= 2 && found.1 < Str/len(word) => Option/some(found.0)
+    | some(found), found.1 <= 2 && found.1 < Str/length(word) => Option/some(found.0)
     | _ => Option/none()
     end;

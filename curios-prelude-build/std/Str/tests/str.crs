@@ -9,7 +9,7 @@ test next_steps_over_codepoints_of_every_width =
     let third = Str/At/next(s, second.past);
     Test/equal(
         Str/join(",", [
-            Nat/to_str(Str/len(s)),
+            Nat/to_str(Str/length(s)),
             Nat/to_str(Char/to_nat(first.char)),
             Nat/to_str(Char/to_nat(second.char)),
             Nat/to_str(Char/to_nat(third.char)),
@@ -40,7 +40,7 @@ test a_braced_escape_names_a_scalar =
     let accent = Str/At/next(s, Str/At/next(s, Str/At/start(s)).past);
     Test/equal(
         Str/join(",", [
-            Nat/to_str(Str/len(s)),
+            Nat/to_str(Str/length(s)),
             Nat/to_str(Char/to_nat(accent.char)),
             "e\\u",
             Str/of_char('😀')]),
@@ -95,7 +95,7 @@ test logical_operations_use_certified_chars =
             Show/show('😀'),
             Bool/to_str(Str/eql_ignoring_ascii_case("AbÉ", "aBÉ")),
             Bool/to_str(Str/eql_ignoring_ascii_case("É", "é")),
-            Nat/to_str(Str/len(s)),
+            Nat/to_str(Str/length(s)),
             Str/between(s, Str/At/of_offset(s, 1), Str/At/of_offset(s, 4))]),
         "a€😀|€|1|4|😀|true|false|3|€");
 
@@ -132,5 +132,5 @@ test repeat_writes_its_text_n_times =
             Str/repeat("ab", 0),
             Str/repeat("ab", 1),
             Str/repeat("ab", 5),
-            Nat/to_str(Str/len(Str/repeat("a", 1000000)))],
+            Nat/to_str(Str/length(Str/repeat("a", 1000000)))],
         ["", "ab", "ababababab", "1000000"]);

@@ -32,7 +32,7 @@ let variable(f: Field, env: Map(Str, Bytes)) -> Option({Str, Bytes}) =
     match f.env
     | some(name) =>
         match Map/try_get(env, name)
-        | some(value), Bytes/len(value) > 0 => Option/some((Str/concat("$", name), value))
+        | some(value), Bytes/length(value) > 0 => Option/some((Str/concat("$", name), value))
         | _ => Option/none()
         end
     | none() => Option/none()
@@ -59,7 +59,7 @@ let switch_word(name: Str, text: Str) -> Result(Failure, Bool) =
     end;
 
 let given(seen: List(Seen)) -> Nat =
-    List/len(List/filter(seen, (s) => match s | given() => true | _ => false end));
+    List/length(List/filter(seen, (s) => match s | given() => true | _ => false end));
 
 let given_values(seen: List(Seen)) -> List(Bytes) =
     List/concat_map(seen, (s) => match s | value(b) => [b] | _ => [] end);

@@ -53,7 +53,7 @@ let bump(k: Nat, l: List(Nat)) -> List(Nat) =
     | 0 => l
     | j + 1 =>
         let i = j % 4;
-        bump(j, match i < List/len(l) | true => List/set(l, i, List/get(l, i) + j) | false => l end)
+        bump(j, match i < List/length(l) | true => List/set(l, i, List/get(l, i) + j) | false => l end)
     end;
 "#;
 
@@ -90,7 +90,7 @@ let put(t: N, k: Nat, v: Nat) -> N =
     | leaf(k0, _) => N/leaf(k0, v)
     | branch(tw) =>
         let d = k % 4;
-        match d < List/len(tw)
+        match d < List/length(tw)
         | true => N/branch(List/set(tw, d, put(List/get(tw, d), k / 4, v)))
         | false => N/branch(tw)
         end

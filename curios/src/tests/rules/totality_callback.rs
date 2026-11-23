@@ -524,7 +524,7 @@ fn a_member_handed_to_a_list_map_is_called_below_the_list() {
         end
 
         let total(t: Rose) -> Nat =
-            match t | rose(n, cs) => n + List/len(List/map(cs, total)) end;
+            match t | rose(n, cs) => n + List/length(List/map(cs, total)) end;
 
         let Small(t: Rose) -> /std/Bool/True =
             match total(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;

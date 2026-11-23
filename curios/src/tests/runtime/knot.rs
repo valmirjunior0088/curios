@@ -32,8 +32,14 @@ fn a_closure_built_by_a_call_inside_a_knot_reaches_a_later_member() {
 #[test]
 fn an_initializer_calling_a_function_that_reads_a_later_member_forces_it_first() {
     for (first, second) in [
-        ("table: Nat = build(Bytes/len(bs))", "size: Nat = base + 1"),
-        ("size: Nat = base + 1", "table: Nat = build(Bytes/len(bs))"),
+        (
+            "table: Nat = build(Bytes/length(bs))",
+            "size: Nat = base + 1",
+        ),
+        (
+            "size: Nat = base + 1",
+            "table: Nat = build(Bytes/length(bs))",
+        ),
     ] {
         assert_eq!(
             run(&fill!(
@@ -41,7 +47,7 @@ fn an_initializer_calling_a_function_that_reads_a_later_member_forces_it_first()
                 use /std/{Nat, Str, Bytes, Byte, Io, rand, print};
                 let main() -> Io({}) =
                     let bs = rand/bytes(1)!;
-                    let base: Nat = Bytes/len(bs) + 40
+                    let base: Nat = Bytes/length(bs) + 40
                     and ${first}
                     and build(n: Nat) -> Nat = n + size
                     and ${second};
@@ -66,8 +72,8 @@ fn a_member_an_arm_not_taken_reads_is_not_computed() {
             let main() -> Io({}) =
                 let bs = rand/bytes(1)!;
                 let h: (Bool) -> Nat = (b) => match b | true => d | false => 7 end
-                and d: Nat = Nat/shl(1, Bytes/len(bs) * 200000000000);
-                print(Nat/to_str(h(Bytes/len(bs) == ${flag})));
+                and d: Nat = Nat/shl(1, Bytes/length(bs) * 200000000000);
+                print(Nat/to_str(h(Bytes/length(bs) == ${flag})));
             main()
             "#,
             flag
@@ -87,12 +93,12 @@ fn a_member_an_arm_not_taken_reads_is_not_computed() {
 fn a_stepper_a_fold_applies_inside_an_initializer_forces_what_it_reads() {
     for (first, second) in [
         (
-            "table: Nat = List/fold([Bytes/len(bs)], 0, (x, acc) => x + acc + size)",
-            "size: Nat = Bytes/len(bs) + 40",
+            "table: Nat = List/fold([Bytes/length(bs)], 0, (x, acc) => x + acc + size)",
+            "size: Nat = Bytes/length(bs) + 40",
         ),
         (
-            "size: Nat = Bytes/len(bs) + 40",
-            "table: Nat = List/fold([Bytes/len(bs)], 0, (x, acc) => x + acc + size)",
+            "size: Nat = Bytes/length(bs) + 40",
+            "table: Nat = List/fold([Bytes/length(bs)], 0, (x, acc) => x + acc + size)",
         ),
     ] {
         assert_eq!(
@@ -128,7 +134,7 @@ fn a_member_read_through_a_closure_the_verifier_cannot_see_is_forced() {
                 | success(v) => v
                 | failure(_) => 0
                 end
-            and size: Nat = Bytes/len(bs) + 40;
+            and size: Nat = Bytes/length(bs) + 40;
             print(Nat/to_str(n));
         main()
         "#),

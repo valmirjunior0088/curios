@@ -185,7 +185,7 @@ fn a_position_keeps_its_place_across_a_concatenation() {
         use /std/{Str, Nat, List, Option, Bytes};
 
         let texts: List(Str) = [${texts}];
-        let offsets(s: Str) -> List(Nat) = List/range(0, Bytes/len(s.bytes) + 1);
+        let offsets(s: Str) -> List(Nat) = List/range(0, Bytes/length(s.bytes) + 1);
         let pair(left: Str, right: Str) -> Str =
             let whole = Str/concat(left, right);
             let rest(at: Str/At(whole)) -> Str =

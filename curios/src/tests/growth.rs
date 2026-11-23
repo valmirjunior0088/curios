@@ -171,13 +171,13 @@ pub fn grown(growth: Growth, size: usize) -> String {
             let definitions = (0..size)
                 .map(|index| format!("let s{index}: Str = \"s{index}\";\n"))
                 .collect::<String>();
-            program(&definitions, &format!("Str/len(s{last}) + a"))
+            program(&definitions, &format!("Str/length(s{last}) + a"))
         }
         Growth::List => {
             let elements = joined((0..size).map(|index| index.to_string()), ", ");
             program(
                 &format!("let xs: /std/List(Nat) = [{elements}];\n"),
-                "/std/List/len(xs) + a",
+                "/std/List/length(xs) + a",
             )
         }
         Growth::ListOpen => {
@@ -190,7 +190,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
             );
             program(
                 &format!("let f(a: Nat) -> /std/List(Nat) = [{elements}];\n"),
-                "/std/List/len(f(a))",
+                "/std/List/length(f(a))",
             )
         }
         Growth::Arms => {
@@ -447,7 +447,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
                     "[".repeat(size),
                     "]".repeat(size)
                 ),
-                "/std/List/len(f(a))",
+                "/std/List/length(f(a))",
             )
         }
         Growth::Lets => {
@@ -466,7 +466,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
         ),
         Growth::StringLiteral => program(
             &format!("let s: Str = \"{}\";\n", "ab".repeat(size / 2)),
-            "Str/len(s) + a",
+            "Str/length(s) + a",
         ),
     }
 }
@@ -474,7 +474,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
 /// A whole program: `definitions`, then an entry printing `result` over `a`, the argument count.
 fn program(definitions: &str, result: &str) -> String {
     fill!(
-        "use /std/{Nat, Str};\n\n${definitions}\nlet entry() -> /std/Io({}) =\n    let a = /std/List/len(/std/Proc/args()!);\n    /std/print(Str/concat(Nat/to_str(${result}), \"\\n\"));\n\nentry()\n",
+        "use /std/{Nat, Str};\n\n${definitions}\nlet entry() -> /std/Io({}) =\n    let a = /std/List/length(/std/Proc/args()!);\n    /std/print(Str/concat(Nat/to_str(${result}), \"\\n\"));\n\nentry()\n",
         definitions,
         result,
     )

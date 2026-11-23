@@ -78,7 +78,7 @@ pub let all(
     @E: Type,
     @A: Type,
     actions: List(Try(Io, E, A)),
-) -> Try(Io, E, Vec(A, List/len(actions))) =
+) -> Try(Io, E, Vec(A, List/length(actions))) =
     let failed: Future(E) = Future/new()!;
     first_failure(failed, Io/all(List/map(actions, (x: Try(Io, E, A)) => guarded(failed, x))));
 

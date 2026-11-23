@@ -183,7 +183,7 @@ pub let lookahead(@I: Type, use Input(I), @A: Type, p: Parse(I, A)) -> Parse(I, 
 pub let eof(@I: Type, use Input(I)) -> Parse(I, {}) =
     Of {
         run(input, at) =
-            match at.offset < Bytes/len(input)
+            match at.offset < Bytes/length(input)
             | true => Result/failure(Error/declined("expected end of input", at.offset))
             | false => Result/success((at, ()))
             end };

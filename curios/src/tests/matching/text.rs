@@ -58,7 +58,7 @@ fn a_string_pattern_nests_where_a_pattern_does() {
             end;
         let verb(args: List(Str)) -> Nat =
             match args
-            | ["run", ..rest] => 10 + List/len(rest)
+            | ["run", ..rest] => 10 + List/length(rest)
             | ["test"] => 20
             | _ => 0
             end;

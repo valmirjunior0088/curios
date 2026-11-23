@@ -14,7 +14,7 @@ const SHARED: &str = r#"
         | (none(), some(y)) => y
         end;
     let entry() -> /std/Io({}) =
-        let n = List/len(Proc/args()!) + 7;
+        let n = List/length(Proc/args()!) + 7;
         /std/print(Nat/to_str(pick(half(n), third(n), n)));
     entry()
     "#;
@@ -31,7 +31,7 @@ const ALTERNATIVES: &str = r#"
         | (none(), none()) => n
         end;
     let entry() -> /std/Io({}) =
-        let n = List/len(Proc/args()!) + 7;
+        let n = List/length(Proc/args()!) + 7;
         /std/print(Nat/to_str(pick(half(n), third(n), n)));
     entry()
     "#;

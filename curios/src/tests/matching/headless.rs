@@ -25,7 +25,7 @@ fn the_first_arm_whose_guards_pass_is_taken() {
     let source = r#"
         use /std/{Nat, Bytes, rand};
         let entry() -> /std/Io({}) =
-            let z = Bytes/len(rand/bytes(0)!);
+            let z = Bytes/length(rand/bytes(0)!);
             let n = Nat/add(z, 2);
             let result =
                 match
@@ -47,7 +47,7 @@ fn a_match_with_no_head_of_only_a_default_takes_it() {
     let source = r#"
         use /std/{Nat, Bytes, rand};
         let entry() -> /std/Io({}) =
-            let z = Bytes/len(rand/bytes(0)!);
+            let z = Bytes/length(rand/bytes(0)!);
             let result =
                 match
                 | _ => Nat/add(z, 42)
@@ -71,7 +71,7 @@ fn a_match_with_no_head_reads_its_arms_from_the_top() {
             | _ => 10 / x
             end;
         let entry() -> /std/Io({}) =
-            let z = Bytes/len(rand/bytes(0)!);
+            let z = Bytes/length(rand/bytes(0)!);
             let a = pick(z, Option/some(1));
             let b = pick(2 + z, Option/some(1));
             let c = pick(5 + z, Option/none());
@@ -94,7 +94,7 @@ fn a_bind_guard_binds_where_its_pattern_matches_and_falls_through_where_it_misse
             | _ => 99
             end;
         let entry() -> /std/Io({}) =
-            let z = Bytes/len(rand/bytes(0)!);
+            let z = Bytes/length(rand/bytes(0)!);
             /std/print(Nat/to_str((f(Option/some(5)) + f(Option/none())) + z));
         entry()
         "#;
@@ -113,7 +113,7 @@ fn a_bind_guard_refutable_at_two_places_shares_one_fallthrough() {
             | _ => 99
             end;
         let entry() -> /std/Io({}) =
-            let z = Bytes/len(rand/bytes(0)!);
+            let z = Bytes/length(rand/bytes(0)!);
             let a = f(Option/some([5, 6, 7]));
             let b = f(Option/some([]));
             let c = f(Option/none());

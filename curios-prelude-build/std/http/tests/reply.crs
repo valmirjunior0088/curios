@@ -54,7 +54,7 @@ test a_reply_has_the_body_its_status_and_its_request_allow =
         Test/equal(
             Result/map(
                 read(Method/head(), "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\n"),
-                (r) => (r.status.code, Bytes/len(r.body))),
+                (r) => (r.status.code, Bytes/length(r.body))),
             Result/success((200, 0))),
         is(
             "HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi",
@@ -131,5 +131,5 @@ test a_reply_head_is_read_as_its_grammar_spells_it =
                         ..Str/to_bytes("\r\nX-A: caf"),
                         0xE9,
                         ..Str/to_bytes("\r\nContent-Length: 2\r\n\r\nhi")]),
-                (r) => (Bytes/len(r.status.reason.bytes), Response/header(r, "X-A"))),
+                (r) => (Bytes/length(r.status.reason.bytes), Response/header(r, "X-A"))),
             Result/success((11, Field/Value/of_bytes(0x['c', 'a', 'f', 0xE9]))))]);

@@ -29,7 +29,8 @@ let stroke(from: Option(Nat), to: Option(Nat), row: Nat) -> Str =
 --- A `lo` above `hi` draws the line upside down. Where the two are equal no reading has a place between them: one above goes to the top row, one below to the bottom, and one equal to them is blank.
 pub let wave(style: Style, points: List(Flt), lo: Flt, hi: Flt) -> Pane =
     (w, h) =>
-        let levels = List/map(List/drop(points, List/len(points) - w), (p) => level(p, lo, hi, h));
+        let levels =
+            List/map(List/drop(points, List/length(points) - w), (p) => level(p, lo, hi, h));
         let previous: List(Option(Nat)) = [Option/none(), ..levels];
         let strokes = List/zip(previous, levels);
         Pane/stack(

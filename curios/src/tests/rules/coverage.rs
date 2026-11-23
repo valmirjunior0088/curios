@@ -123,7 +123,7 @@ fn an_arm_absent_where_a_carriers_index_may_meet_its_target_is_refused() {
             xs: Bytes,
             s: Nat,
             l: Nat,
-            @p: Holds(s + l <= Bytes/len(xs)),
+            @p: Holds(s + l <= Bytes/length(xs)),
             v: By(0x[..Bytes/slice(xs, s, l), 1]),
         ) -> False =
             match v end;
@@ -286,7 +286,7 @@ fn two_lists_that_meet_their_case_at_some_value_are_no_clash() {
         pub let open(x: Nat, v: Ln([x])) -> False = match v end;
         pub let spread(x: Nat, xs: List(Nat), v: Ln([x, ..xs])) -> False = match v end;
         pub let appended(x: Nat, xs: List(Nat), v: Ln([..xs, x])) -> False = match v end;
-        pub let window(xs: List(Nat), s: Nat, @p: Holds(s + 1 <= List/len(xs)), v: Ln([..List/slice(xs, s, 1), 0])) -> False =
+        pub let window(xs: List(Nat), s: Nat, @p: Holds(s + 1 <= List/length(xs)), v: Ln([..List/slice(xs, s, 1), 0])) -> False =
             match v end;
         pub let twice(v: D([Pr/a()], [Pr/b()])) -> False = match v end;
         pub let bytes(c: Byte, v: E(0x[c, c], 0x[1])) -> False = match v end;

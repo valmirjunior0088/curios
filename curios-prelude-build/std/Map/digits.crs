@@ -10,7 +10,7 @@ let low(x: Nat) -> Nat =
 
 --- The digit of `k` at byte `g`, place `o` of four: place zero says whether the byte exists, the next two are its high and low nibble, and no fork reads the fourth. A missing byte has every digit zero, so a run that ends sorts before every run that continues.
 let at_place(k: Bytes, g: Nat, o: Nat) -> Nat =
-    match g < Bytes/len(k)
+    match g < Bytes/length(k)
     | false => 0
     | true =>
         match o
@@ -56,7 +56,7 @@ pub let crit(a: Bytes, b: Bytes) -> Parted =
 
 --- A digit is below sixteen, so it indexes a fork's twigs.
 pub let small(k: Bytes, p: Nat) -> Bool/Holds(digit(k, p) < 16) =
-    match p / 4 < Bytes/len(k)
+    match p / 4 < Bytes/length(k)
     | false => Bool/True/qed()
     | true =>
         match p % 4

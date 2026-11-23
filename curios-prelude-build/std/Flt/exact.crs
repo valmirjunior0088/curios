@@ -5,7 +5,7 @@ let pow2(k: Nat) -> Nat =
     Nat/shl(1, k);
 
 --- How many bits spell `n`: none for zero, one past the highest set bit otherwise.
-pub let bit_len(n: Nat) -> Nat =
+pub let bit_length(n: Nat) -> Nat =
     match n | 0 => 0 | _ => Nat/log2(n) + 1 end;
 
 --- `f`'s bit pattern as a natural.
@@ -80,7 +80,7 @@ let encode(mode: Mode, negative: Bool, m: Nat, e: Int) -> Flt =
 -- It is `curios_num::Floating`'s `round`, line for line, so the rounding a type reasons about is the one every primitive folds by.
 --- The float `(-1)^negative · (m + ε) · 2^e` rounds to in `mode`, `ε` in `(0, 1)` when `sticky` and zero when not.
 pub let round_in(mode: Mode, negative: Bool, m: Nat, e: Int, sticky: Bool) -> Flt =
-    let width = Nat/to_int(bit_len(m));
+    let width = Nat/to_int(bit_length(m));
     let grid = -1074 - e;
     match
     | m == 0 && Bool/not(sticky) => of_bits(sign_bit(negative))
@@ -125,7 +125,7 @@ pub let ties_toward_zero(mantissa: Int, exponent: Int) -> Flt =
 
 --- `magnitude · 2^exponent` rounded to 53 bits in `mode` with no ceiling on the exponent, compared with the largest finite value: IEEE's test for overflow (§7.4), which the ceiling a real rounding applies would hide.
 pub let overflows_in(mode: Mode, negative: Bool, m: Nat, e: Int, sticky: Bool) -> Bool =
-    let width = bit_len(m);
+    let width = bit_length(m);
     match
     | width == 0 => false
     | width <= 53 => e + Nat/to_int(width) > +1024
@@ -139,7 +139,7 @@ pub let overflows_in(mode: Mode, negative: Bool, m: Nat, e: Int, sticky: Bool) -
         let inexact = sticky || dropped != 0;
         let up = rounds_up_in(mode, negative, above, tie, Bool/not(Nat/is_even(kept)), inexact);
         let stepped = match up | true => kept + 1 | false => kept end;
-        e + Nat/to_int(s + bit_len(stepped)) > +1024
+        e + Nat/to_int(s + bit_length(stepped)) > +1024
     end;
 
 --- `overflows_in` in one of the five directions.
@@ -148,4 +148,4 @@ pub let overflows(r: Rounding, negative: Bool, m: Nat, e: Int, sticky: Bool) -> 
 
 --- Whether `m · 2^e` is nonzero and below the least normal `2^-1022` — and so is any value above it by less than `2^e`, which a quotient's sticky residue is: tininess detected before rounding, the one reading this library takes (§7.5).
 pub let tiny(m: Nat, e: Int) -> Bool =
-    m != 0 && e + Nat/to_int(bit_len(m)) <= -1022;
+    m != 0 && e + Nat/to_int(bit_length(m)) <= -1022;

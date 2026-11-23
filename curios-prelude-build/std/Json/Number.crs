@@ -50,13 +50,13 @@ pub let of_flt(f: Flt) -> Option(Number) =
         let (whole, fraction) = Option/unwrap_or(Str/split_once(unsigned, "."), (unsigned, ""));
         let magnitude = Nat/to_int(Option/unwrap_or(Nat/of_str(Str/concat(whole, fraction)), 0));
         let mantissa = match negative | true => +0 - magnitude | false => magnitude end;
-        Option/some(of(mantissa, +0 - Nat/to_int(Str/len(fraction))))
+        Option/some(of(mantissa, +0 - Nat/to_int(Str/length(fraction))))
     end;
 
 --- The float nearest `n`, correctly rounded as `Flt/of_decimal` rounds: an infinity past binary64's range and a zero of its sign below it.
 pub let to_flt(n: Number) -> Flt =
     let magnitude = Int/abs(n.mantissa);
-    Flt/of_decimal(n.mantissa < +0, magnitude, n.exponent, Str/len(Nat/to_str(magnitude)));
+    Flt/of_decimal(n.mantissa < +0, magnitude, n.exponent, Str/length(Nat/to_str(magnitude)));
 
 --- `n` as an integer: `none` where it has a fraction, and where it would have more than 4,300 digits, the bound Python 3.11 puts on converting a decimal to an integer (CVE-2020-10735), since `1e1000000000` is small to hold and enormous to multiply out.
 pub let to_int(n: Number) -> Option(Int) =
@@ -64,7 +64,7 @@ pub let to_int(n: Number) -> Option(Int) =
     | false => Option/none()
     | true =>
         let shift = Int/to_nat(n.exponent);
-        match Str/len(Nat/to_str(Int/abs(n.mantissa))) + shift > 4300
+        match Str/length(Nat/to_str(Int/abs(n.mantissa))) + shift > 4300
         | true => Option/none()
         | false => Option/some(n.mantissa * Nat/to_int(Nat/pow(10, shift)))
         end

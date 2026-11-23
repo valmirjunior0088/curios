@@ -16,14 +16,14 @@ let full(outcome: Channel/Push) -> Bool =
 -- The length follows each push and take, and the capacity is the one the channel was made with: a push past it finds the channel full.
 test a_channel_counts_what_it_holds_against_what_it_was_made_with =
     let c = Channel/new(@Nat, 2)!;
-    let empty = Channel/len(c)!;
+    let empty = Channel/length(c)!;
     let _ = Channel/try_push(c, 1)!;
-    let one = Channel/len(c)!;
+    let one = Channel/length(c)!;
     let _ = Channel/try_push(c, 2)!;
-    let at_capacity = Channel/len(c)!;
+    let at_capacity = Channel/length(c)!;
     let refused = Channel/try_push(c, 3)!;
     let _ = Channel/try_take(c)!;
-    let after = Channel/len(c)!;
+    let after = Channel/length(c)!;
     let made = Channel/capacity(c)!;
     Test/all([
         Test/equal([empty, one, at_capacity, after, made], [0, 1, 2, 1, 2]),
@@ -51,7 +51,7 @@ test a_finished_channel_says_so_while_it_still_holds_values =
     let _ = Channel/try_push(c, 7)!;
     let () = Channel/finish(c)!;
     let finished = Channel/finished(c)!;
-    let held = Channel/len(c)!;
+    let held = Channel/length(c)!;
     let first = Channel/try_take(c)!;
     let then = Channel/try_take(c)!;
     Test/all([

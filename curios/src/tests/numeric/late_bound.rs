@@ -26,7 +26,7 @@ fn a_bound_whose_subject_the_expected_type_pins_discharges() {
         use /std/Bool/{Holds};
         let mk(@n: Nat, @_ok: Holds(n < 10)) -> Vec(Nat, n) = Vec/replicate(n, 0);
         let v: Vec(Nat, 3) = mk();
-        /std/print(Nat/to_str(Vec/len(v)))
+        /std/print(Nat/to_str(Vec/length(v)))
         "#),
         b"3"
     );

@@ -322,7 +322,7 @@ impl Intrinsic {
             // `Bytes`: a sequence of bytes.
             Self::BytesLen(_) => un(bytes_type(), nat_type()),
             Self::BytesEql(..) => bytes_op(bytes_type(), bool_type()),
-            // The two bounded `Bytes` accessors. `Bytes/len` is the *intrinsic* here rather than `/sys`'s wrapper, because a signature states what the operand must be and this table is below `/sys`.
+            // The two bounded `Bytes` accessors. `Bytes/length` is the *intrinsic* here rather than `/sys`'s wrapper, because a signature states what the operand must be and this table is below `/sys`.
             Self::BytesGet { bytes, index, .. } => sig(
                 vec![
                     Operand::At(bytes_type()),
