@@ -29,7 +29,7 @@ fn commands_of<'a>(tree: &'a Tree, group: &str) -> Vec<(&'a Step, Vec<String>)> 
                 .iter()
                 .filter_map(move |instruction| match instruction {
                     Instruction::Command(command) => Some(command),
-                    Instruction::Write { .. } => None,
+                    Instruction::Write { .. } | Instruction::Check(_) => None,
                 })
                 .map(move |command| {
                     (

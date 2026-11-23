@@ -1,6 +1,6 @@
 //! The repository's steps, as `cargo xtask <task>`: a runner of the task files `xtask/tasks.toml` and `xtask/tasks/*.toml`.
 //!
-//! **The files are the plan, and this crate holds only rules.** Every fact about what the repository runs — each step's commands, what it requires and consumes, the files it produces, the values its commands share, the tools they run and where each is fetched from — is written in the task files, and [`tree`] reads them, refusing before anything runs whatever is out of place or names nothing. What is left here holds for any such tree: [`schedule()`] takes what was asked and everything it runs after, in the order the files write them, [`runner`] performs the steps and reports each, [`values`] fills a command's braces, [`launch`](mod@launch) says what a command's words launch, [`tools`] keeps the tools the steps name, and [`cli`] reads the command line off the tree. Why the steps are data and the runner is rules is `README.md`'s.
+//! **The files are the plan, and this crate holds rules, and the judgments of the tree no command states.** Every fact about what the repository runs — each step's commands, what it requires and consumes, the files it produces, the values its commands share, the tools they run and where each is fetched from — is written in the task files, and [`tree`] reads them, refusing before anything runs whatever is out of place or names nothing. What is left here holds for any such tree: [`schedule()`] takes what was asked and everything it runs after, in the order the files write them, [`runner`] performs the steps and reports each, [`checks`] holds the judgments of the tree a step names where no command states one, [`values`] fills a command's braces, [`launch`](mod@launch) says what a command's words launch, [`tools`] keeps the tools the steps name, and [`cli`] reads the command line off the tree. Why the steps are data and the runner is rules is `README.md`'s.
 //!
 //! **Two commands are not tasks.** `release` cuts a release and `installer` renders the release's install script: each makes judgments of its own rather than running a plan, so each is Rust, and the reader refuses a task of either name.
 //!
@@ -26,6 +26,9 @@ use tools::*;
 
 mod schedule;
 use schedule::*;
+
+mod checks;
+use checks::*;
 
 mod runner;
 use runner::*;

@@ -198,7 +198,7 @@ jobs:
       - name: Build
         run: cargo xtask zed build
       - name: Check the extension against the tree
-        run: cargo xtask zed test
+        run: cargo xtask zed check
 
   jig:
     name: Jig

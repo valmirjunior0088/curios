@@ -9,9 +9,6 @@ use zed_extension_api::{
     settings::LspSettings,
 };
 
-#[cfg(test)]
-mod tests;
-
 struct Curios;
 
 /// Where the installer puts the binary, relative to `$HOME`.

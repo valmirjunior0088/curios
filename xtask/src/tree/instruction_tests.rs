@@ -1,4 +1,4 @@
-//! What a step runs: commands, and writes of a file whole, each held to the shape it takes.
+//! What a step runs: commands, writes of a file whole, and the checks the runner holds, each held to the shape it takes.
 
 use super::{test_support::*, *};
 
@@ -81,6 +81,30 @@ fn a_flag_that_is_no_short_or_long_spelling_is_refused() {
 }
 
 #[test]
-fn an_instruction_neither_a_command_nor_a_write_is_refused() {
+fn an_instruction_neither_a_command_nor_a_write_nor_a_check_is_refused() {
     assert!(run_refused("", "[\"true\"]").contains("an instruction is a command"));
+}
+
+#[test]
+fn a_check_names_a_judgment_the_runner_holds() {
+    let tree = tree(&[(
+        "a",
+        "description = \"A\"\n[s]\ndescription = \"S\"\nrun = [{ check = \"zed\" }]\n",
+    )])
+    .unwrap();
+
+    let [Instruction::Check(check)] = tree.steps[0].run.as_slice() else {
+        panic!("the one instruction is a check");
+    };
+    assert_eq!(check.name, "zed");
+}
+
+/// A name the runner holds no check under is refused naming those it holds, and a check holds its name and nothing else.
+#[test]
+fn a_check_the_runner_does_not_hold_is_refused_naming_those_it_does() {
+    assert_eq!(
+        run_refused("", "[{ check = \"nothing\" }]"),
+        "`nothing` is no check the runner holds, which are `zed`"
+    );
+    assert!(run_refused("", "[{ check = \"zed\", dir = \"x\" }]").contains("`dir` is not it"));
 }

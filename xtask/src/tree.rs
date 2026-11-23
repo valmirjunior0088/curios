@@ -5,7 +5,7 @@
 //! **A name is the path to where it is declared, written from the top with a leading `.`, and it names one thing.** Each segment is a key, read from the top one projection at a time: a step or a group is its tables, `.workspace.lint.clippy`; a variable sits under its file's `variables`, `.workspace.variables.edition`; a tool under the root's `tools`, `.tools.node`, and its version beneath it, `.tools.node.version`; and a produced file under its step's `produces`, `.launcher.build.produces.binary`. So a name reads the same wherever it is written, and says where to find what it names. `requires` names steps and groups, `consumes` produced files, and the braces in a command a variable, a tool or a produced file, or, with a `!` where the `.` stands, a value the runner fills ([`BUILT_INS`]). Each resolves as the tree is read, so a name that names nothing, one written without its `.`, or one naming the wrong kind of thing, is refused before anything runs, and so is a command that reads a file its step does not consume, which would run without the edge that orders it.
 
 use {
-    crate::root,
+    crate::{CHECKS, Check, root},
     curios_common::{About, Report, Said, Source, Span},
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -119,6 +119,8 @@ pub enum Instruction {
     Command(Vec<Word>),
     /// A file written whole: where, from where the step runs, and what it holds.
     Write { path: Word, contents: Word },
+    /// A judgment of the tree the runner holds, which no command states.
+    Check(Check),
 }
 
 impl Instruction {
@@ -127,6 +129,7 @@ impl Instruction {
         match self {
             Instruction::Command(words) => words.iter().collect::<Vec<_>>(),
             Instruction::Write { path, contents } => vec![path, contents],
+            Instruction::Check(_) => Vec::new(),
         }
         .into_iter()
     }
@@ -629,13 +632,12 @@ impl Tree {
                 })?;
                 for instruction in instructions.iter() {
                     if let Some(table) = instruction.as_inline_table() {
-                        run.push(write_of(
-                            file,
-                            table,
-                            instruction.span(),
-                            &tree.variables,
-                            &word,
-                        )?);
+                        run.push(match table.contains_key("check") {
+                            true => check_of(file, table, instruction.span())?,
+                            false => {
+                                write_of(file, table, instruction.span(), &tree.variables, &word)?
+                            }
+                        });
                         continue;
                     }
                     let words = instruction
@@ -644,7 +646,7 @@ impl Tree {
                         .ok_or_else(|| {
                             file.refuse(
                                 instruction.span(),
-                                "an instruction is a command, a list of words, or a write, `{ write = path, contents = text }`".to_string(),
+                                "an instruction is a command, a list of words; a write, `{ write = path, contents = text }`; or a check, `{ check = name }`".to_string(),
                             )
                         })?;
                     let words = words.iter().map(&word).collect::<Result<Vec<_>, _>>()?;
@@ -1285,6 +1287,47 @@ fn write_of(
         path: one("write")?,
         contents: one("contents")?,
     })
+}
+
+/// The check `table` names, one the runner holds, which holds nothing beside its name.
+fn check_of(
+    file: &File<'_>,
+    table: &toml_edit::InlineTable,
+    span: Option<Range<usize>>,
+) -> Result<Instruction, Box<Report>> {
+    if let Some((key, _)) = table.iter().find(|(key, _)| *key != "check") {
+        return Err(file.refuse(
+            span,
+            format!("a check holds the name of the one it runs, `check`, and `{key}` is not it"),
+        ));
+    }
+    let named = table
+        .get("check")
+        .and_then(toml_edit::Value::as_str)
+        .ok_or_else(|| {
+            file.refuse(
+                span.clone(),
+                "a check's `check` is a name, a string".to_string(),
+            )
+        })?;
+
+    CHECKS
+        .iter()
+        .find(|check| check.name == named)
+        .map(|check| Instruction::Check(*check))
+        .ok_or_else(|| {
+            file.refuse(
+                span,
+                format!(
+                    "`{named}` is no check the runner holds, which are {}",
+                    CHECKS
+                        .iter()
+                        .map(|check| format!("`{}`", check.name))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            )
+        })
 }
 
 /// The word `text` writes, its braces resolved in `file`'s scope.

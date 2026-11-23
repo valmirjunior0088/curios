@@ -71,7 +71,7 @@ pub fn perform(tree: &Tree, asked: &Name, given: &Given) -> Result<(), String> {
     }
 }
 
-/// Run one step's instructions in order — each command launched, each write's file written whole, its directory made where it is not — then hold the step to what it produces.
+/// Run one step's instructions in order — each command launched, each write's file written whole, its directory made where it is not, each check judged — then hold the step to what it produces.
 fn run(tree: &Tree, values: &Values<'_>, step: usize) -> Result<(), String> {
     // Each tool the step names that ships beside others, found first by every launch the step makes, its own nested ones included.
     let found = directories(tree, step);
@@ -99,6 +99,12 @@ fn run(tree: &Tree, values: &Values<'_>, step: usize) -> Result<(), String> {
                     fs::create_dir_all(parent).map_err(failed)?;
                 }
                 fs::write(&path, values.text(contents)?).map_err(failed)?;
+                continue;
+            }
+            Instruction::Check(check) => {
+                // Said as a command's line is, so the terminal reads as a transcript of the work.
+                eprintln!("check {}", check.name);
+                (check.judge)()?;
                 continue;
             }
         };
