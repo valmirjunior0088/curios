@@ -138,15 +138,16 @@ pub fn named_members(context: &Context, term: &Term) -> Term {
     named_with(&Rc::new(groups), term)
 }
 
-/// The terms naming `group`'s members, in member order: each member's global where this elaboration's declarations define the group itself, and none otherwise.
+/// The terms naming `group`'s members, in member order: each member's global at the instance `group` stands at, where reduction opened the group, or the one it is an instance of, from a name in the declaration in progress ([`Context::member_names_at`]), and none otherwise.
+///
+/// A member named inside the declaration that defines its group stands at no instance, as any self-reference does until the declaration's parameters are stamped on it. A definition generalized over a level is opened at an instance wherever another declaration names it, and its members are named at that instance: named at none, the name would denote no instance of its scheme, and left as the group, the term would hold the copy this spelling exists to spare it.
 fn members_named(context: &Context, group: &RecGroup) -> Option<Vec<Term>> {
-    let names = context.member_names(group)?;
+    let (names, universes) = context.member_names_at(group)?;
 
-    // A member named inside the declaration that defines its group stands at no instance, as any self-reference does until the declaration's parameters are stamped on it.
     Some(
         names
             .iter()
-            .map(|name| Term::instance(*name, Universes::default()))
+            .map(|name| Term::instance(*name, universes.clone()))
             .collect(),
     )
 }

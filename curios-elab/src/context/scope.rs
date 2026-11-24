@@ -210,6 +210,19 @@ impl<'s> Context<'s> {
         names
     }
 
+    /// [`Context::member_names`] beside the instance `group` stands at: none where `group` is the group a definition states, and where it is an instance of one reduction opened in the declaration in progress, the instance read off it ([`Caches::opened_instance`](super::Caches::opened_instance)), each of the definition's parameters at the level `group` holds in its place.
+    pub(crate) fn member_names_at(&self, group: &RecGroup) -> Option<(Vec<Global>, Universes)> {
+        if let Some(names) = self.member_names(group) {
+            return Some((names, Universes::default()));
+        }
+        let (declared, universes) = self
+            .typing
+            .caches
+            .opened_instance(group, |name| self.typing.frames.universe_context(name))?;
+
+        Some((self.member_names(&declared)?, universes))
+    }
+
     /// [`Frames::is_declaration_defined`](super::Frames::is_declaration_defined).
     pub(super) fn is_declaration_defined(&self, name: &Global) -> bool {
         self.typing.frames.is_declaration_defined(name)

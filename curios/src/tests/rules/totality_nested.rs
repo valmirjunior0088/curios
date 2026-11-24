@@ -195,3 +195,79 @@ fn a_record_handed_on_states_what_it_applied_where_it_was_answered() {
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
+
+// A law that leaves its answers to inference holds the comparison it is over by its name, at the instance it stands at: `seq` is generalized over its element's level, and `seq_law` hands `step` the comparisons of the tails with nothing written, so the proof names `seq` where a copy of its group would be a recursion no summary is filed of. The list's witness then publishes how its law applies its premise's, and a document nested through it has a lawful witness.
+#[test]
+fn a_family_nested_through_a_law_that_infers_its_answers_descends() {
+    control(
+        r#"
+        use /std/{Nat, Eq, List, Ord, Ordering};
+
+        concept Order(A: Type): pub Type {
+            cmp(A, A) -> Ordering,
+            law(a: A, b: A) -> Eq()(cmp(b, a), Ordering/flip(cmp(a, b))),
+        }
+
+        let step(
+            @x: Ordering,
+            @y: Ordering,
+            @fx: Ordering,
+            @fy: Ordering,
+            head: Eq()(fx, Ordering/flip(x)),
+            rest: (Eq()(x, Ordering/eq())) -> Eq()(fy, Ordering/flip(y)),
+        ) -> Eq()(Ordering/then(fx, fy), Ordering/flip(Ordering/then(x, y))) =
+            Ordering/then/flips(x, y, fx, fy, head, rest);
+
+        let seq(@T: Type, use Order(T), a: List(T), b: List(T)) -> Ordering =
+            match a
+            | [] => match b | [] => Ordering/eq() | [_, .._] => Ordering/lt() end
+            | [x, ..xs] =>
+                match b
+                | [] => Ordering/gt()
+                | [y, ..ys] => Ordering/then(Order/cmp(x, y), seq(xs, ys))
+                end
+            end;
+
+        let seq_law(
+            @T: Type,
+            use Order(T),
+            a: List(T),
+            b: List(T),
+        ) -> Eq()(seq(b, a), Ordering/flip(seq(a, b))) =
+            match a
+            | [] => match b | [] => Eq/refl() | [_, .._] => Eq/refl() end
+            | [x, ..xs] =>
+                match b
+                | [] => Eq/refl()
+                | [y, ..ys] => step(Order/law(x, y), (_) => seq_law(xs, ys))
+                end
+            end;
+
+        satisfy (@T: Type, use Order(T)) => Order(List(T)) {
+            cmp = seq,
+            law = seq_law,
+        }
+
+        induct Doc: Type
+        | num(Nat)
+        | arr(List(Doc))
+        end
+
+        satisfy Order(Doc) {
+            cmp(a, b) =
+                match a
+                | num(n) => match b | num(m) => Ord/ord(n, m) | arr(_) => Ordering/lt() end
+                | arr(xs) => match b | num(_) => Ordering/gt() | arr(ys) => Order/cmp(xs, ys) end
+                end,
+            law(a, b) =
+                match a
+                | num(n) => match b | num(m) => Ord/flips(n, m) | arr(_) => Eq/refl() end
+                | arr(xs) => match b | num(_) => Eq/refl() | arr(ys) => Order/law(xs, ys) end
+                end,
+        }
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    );
+}

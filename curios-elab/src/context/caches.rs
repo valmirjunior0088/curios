@@ -24,7 +24,8 @@ use {
     curios_common::{Entropy, Keyed},
     curios_core::{
         AsideAnswers, Bound, ClosedMemo, Free, Global, Level, LevelHead, Mention, Quality,
-        QualityMetaId, RecGroup, Sharing, Sort, Term, UniverseMetaId, lasting,
+        QualityMetaId, QualityParam, RecGroup, Sharing, Sort, Term, UniverseContext,
+        UniverseMetaId, UniverseParam, Universes, instantiate_universes, lasting,
         rewrite_universe_qualities, substitute_universe_metas,
     },
     std::{
@@ -600,6 +601,31 @@ impl Caches {
             .copied()
     }
 
+    /// The group reduction opened in the declaration in progress that `group` is an instance of, beside the instance `group` stands at ([`instance_between`]): `scheme` answers what the definition a group was opened from is generalized over. A definition generalized over a level is opened as its stored value, and what a reduct holds of it is that value at the levels its occurrence states, which the reduction table may have carried from another occurrence's, so an instance is known by what it is and by no record of its opening.
+    ///
+    /// The groups are tried in the order of the names they were opened from, so the answer follows no table's order.
+    pub fn opened_instance(
+        &self,
+        group: &RecGroup,
+        scheme: impl Fn(&Global) -> Option<UniverseContext>,
+    ) -> Option<(RecGroup, Universes)> {
+        let projected = group.projected();
+        let mut opened = self
+            .opened
+            .borrow()
+            .iter()
+            .filter(|(declared, _)| declared.key().projected() == projected)
+            .map(|(declared, name)| (*name, declared.key().clone()))
+            .collect::<Vec<_>>();
+        opened.sort_by_key(|(name, _)| *name);
+
+        opened.into_iter().find_map(|(name, declared)| {
+            let universes = instance_between(&declared, group, &scheme(&name)?)?;
+
+            Some((declared, universes))
+        })
+    }
+
     pub fn elaboration_get(
         &self,
         term: &Term,
@@ -911,6 +937,37 @@ impl Caches {
         );
         self.clear_scoped_reductions();
     }
+}
+
+/// The instance of `scheme` at which `declared`, a group as its definition states it, is `held`: each parameter the scheme generalizes over at the level `held` states in its place, and each sort at the sort, read off the pairs the two differ in by the walk conversion reads levels by ([`Term::level_differences`]) under [`EveryPosition`]. A parameter the two do not differ at stands for itself, the declaration in progress stating one of its own there.
+///
+/// **Proposed by the walk, accepted by the instantiation.** The answer is served only where `declared` at the instance read *is* `held`: a parameter stated only inside a larger level, which the walk hands back whole, a parameter sent to two levels, and two groups apart in more than their universes each answer none.
+fn instance_between(
+    declared: &RecGroup,
+    held: &RecGroup,
+    scheme: &UniverseContext,
+) -> Option<Universes> {
+    let declared = Term::rec_proj(declared.clone(), 0);
+    let held = Term::rec_proj(held.clone(), 0);
+    let differences = declared.level_differences(&held, |_| false, &EveryPosition)?;
+
+    let mut universes = scheme.identity_instance();
+    for (stated, standing) in differences.compared {
+        let parameter =
+            (0..universes.levels.len()).find(|index| stated == Level::param(UniverseParam(*index)));
+        if let Some(parameter) = parameter {
+            universes.levels[parameter] = standing;
+        }
+    }
+    for (stated, standing) in differences.sorts {
+        if let Quality::Param(QualityParam(parameter)) = stated
+            && let Some(sort) = universes.qualities.get_mut(parameter)
+        {
+            *sort = standing;
+        }
+    }
+
+    (instantiate_universes(&declared, &universes).ok()? == held).then_some(universes)
 }
 
 /// How a spelling stored in the reduction table is carried to another that shares its universe-erased projection: each universe metavariable of the stored spelling to the level the asking one states in its place, and each sort metavariable to the sort it states, so that the stored spelling carried is the asking one. A reduct stored under the one is the answer for the other once carried ([`Self::carried`]).
