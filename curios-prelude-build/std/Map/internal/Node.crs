@@ -2737,7 +2737,7 @@ let le_self(
     use Key(K),
     k: K,
 ) -> Bool/Holds(Ord/le_by((a: K, b: K) => Ord/ord(a, b))(k, k)) =
-    Eq/subst((r: Ordering) => Bool/Holds(Ordering/is_le(r)), Eq/sym(Key/refl(k)), Bool/True/qed());
+    Eq/subst((r: Ordering) => Bool/Holds(Ordering/is_le(r)), Eq/sym(Ord/refl(k)), Bool/True/qed());
 
 -- A key before another by their encodings is at or below it.
 let le_of_before(

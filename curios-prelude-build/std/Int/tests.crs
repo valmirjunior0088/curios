@@ -1,9 +1,9 @@
 -- `Int` through its sign view, at zero, at both signs and at equal magnitudes of opposite sign: the order's laws, cancellation, the extrema, `abs` and `sign` of a product, the signed scale and floored division.
-use /std/{Nat, Int, Bool, List, Option, Ordering, Eq, Test};
+use /std/{Nat, Int, Bool, List, Option, Ord, Ordering, Eq, Test};
 use /std/Bool/{True, Holds};
 
 let _a_number_orders_as_equal_to_itself(a: Int) -> Eq()(Int/ord(a, a), Ordering/eq()) =
-    Int/ord/refl(a);
+    Ord/refl(a);
 
 let _opposite_signs_of_one_magnitude_are_ordered: Holds(-7 < +7) =
     Int/ord/lt(-7, +7, Eq/refl());

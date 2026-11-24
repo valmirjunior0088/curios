@@ -1,4 +1,4 @@
-use /std/{Nat, Bytes, Eq, Ordering, proved, Bool};
+use /std/{Nat, Bytes, Eq, Ord, Ordering, proved, Bool};
 use /std/ops/{Eql};
 
 -- How many bytes follow a number's first.
@@ -238,7 +238,7 @@ let first_same(
                                     | gt() => false
                                     end),
                             Eq/sym(
-                                Nat/ord/of_eq(
+                                Ord/of_eq(
                                     0x80 + 16 * l + ta,
                                     0x80 + 16 * lb + tb,
                                     Nat/le/antisym(
@@ -396,7 +396,7 @@ pub let monotone(a: Nat, b: Nat) -> Eq()(Nat/ord(a, b), Bytes/ord(hash(a), hash(
     | a < b => Eq/sym(Bytes/ord/below/lt(hash(a), hash(b), of_lt(a, b, Bool/True/qed())))
     | b < a =>
         Eq/trans(
-            Nat/ord/of_gt(a, b, Bool/True/qed()),
+            Ord/of_gt(a, b, Bool/True/qed()),
             Eq/sym(
                 Eq/trans(
                     Bytes/ord/flips(hash(b), hash(a)),

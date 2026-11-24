@@ -81,31 +81,7 @@ pub let view(i: Int) -> Sign(i) =
 let absurd_succ(@P: Sort, x: Nat, h: Bool/Holds(eql(+0, Nat/to_int(x) + 1))) -> P =
     match h end;
 
---- Where `a` stands against `b`, with the evidence.
-pub induct Trichotomy(a: Int, b: Int): pub Type
---- `a` is below `b`.
-| lt(p: Bool/Holds(a < b))
---- They are one number.
-| eq(e: Eq()(a, b))
---- `a` is above `b`.
-| gt(p: Bool/Holds(b < a))
-end
-
---- `a` against `b`: below, equal, or above, one of them with its proof.
-pub let trichotomy(a: Int, b: Int) -> Trichotomy(a, b) =
-    match a < b
-    | true => Trichotomy/lt(Bool/True/qed())
-    | false =>
-        let ge: Bool/Holds(b <= a) = Bool/True/qed();
-        match b < a
-        | true => Trichotomy/gt(Bool/True/qed())
-        | false =>
-            let le: Bool/Holds(a <= b) = Bool/True/qed();
-            Trichotomy/eq(le/antisym(a, b, le, ge))
-        end
-    end;
-
--- Stated over `eql`, and decided through `lt` and `le`, each by name: an operator here would read the witness that names this, as [`trichotomy`]'s do. Public for the elaborator's own proofs alone, which name it where a bound follows from an `==` guard, before any witness is elaborated: a program crosses by `Eql/eq_of_eql`.
+-- Stated over `eql`, and decided through `lt` and `le`, each by name: an operator here would read the witness that names this. Public for the elaborator's own proofs alone, which name it where a bound follows from an `==` guard, before any witness is elaborated: a program crosses by `Eql/eq_of_eql`.
 --- `Eql`'s law at `Int`: a decided equality is an equation.
 pub let eq_of_eql(a: Int, b: Int, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
     match lt(a, b)

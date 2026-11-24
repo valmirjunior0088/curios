@@ -1,6 +1,6 @@
 pub use /sys/Int/{mul};
 
-use /std/{Int, Eq, proved, Bool};
+use /std/{Int, Eq, Ord, proved, Bool};
 
 -- A factor above zero cancels: the order of two products by it is the order of what it multiplies, which the elaborator proves from the facts in scope, once in each direction.
 let cancel_positive(
@@ -16,10 +16,13 @@ let cancel_positive(
 ---
 --- The integral-domain fact, standing in for the inverse `Int` lacks. Conversion never applies it, since without the premise the equation says nothing of `a` and `b`.
 pub let cancel_r(a: Int, b: Int, k: Int, e: Eq()(a * k, b * k), @nz: Int/NonZero(k)) -> Eq()(a, b) =
-    match Int/trichotomy(k, +0)
-    | lt(p) => cancel_positive(a, b, +0 - k, Eq/cong((x: Int) => +0 - x, e), p)
-    | eq(z) => match Eq/subst((x: Int) => Int/NonZero(x), z, nz) end
-    | gt(p) => cancel_positive(a, b, k, e, p)
+    match Ord/ord(k, +0)
+    | lt() =>
+        cancel_positive(a, b, +0 - k, Eq/cong((x: Int) => +0 - x, e), Ord/below(k, +0, Eq/refl()))
+    | eq() =>
+        match Eq/subst((x: Int) => Int/NonZero(x), Ord/eq_of_ord(k, +0, Eq/refl()), nz)
+        end
+    | gt() => cancel_positive(a, b, k, e, Ord/above(k, +0, Eq/refl()))
     end;
 
 --- A nonzero factor on the left cancels: `k * a = k * b` gives `a = b`.

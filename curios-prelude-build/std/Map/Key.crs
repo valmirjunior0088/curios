@@ -1,4 +1,4 @@
-use /std/{Bytes, Bool, Eq, Hash, Ord, Ordering};
+use /std/{Bytes, Bool, Eq, Hash, Ord};
 use /std/ops/{Eql};
 
 -- **`Flt` is deliberately not a key, and the reason is not the proof.** Injectivity holds and is cheap — `Flt/of_le_bytes` inverts `Flt/to_le_bytes`, so the witness is one congruence through a guarded decoder. What stops it is that this concept promises injectivity on *propositional* equality while `/std/ops/Eql`'s `Flt` witness is IEEE `==`, and the two disagree at both ends: `+0.0` and `-0.0` are distinct values with distinct encodings that `==` calls equal, so a map would hold them as two entries; a `NaN` is found by lookup though `==` calls it equal to nothing. Nothing here forbids that, because a key's law says nothing about `Eql` — which is exactly why the witness is withheld until what a map means for such a carrier is decided rather than discovered.
@@ -17,10 +17,6 @@ pub concept Key(K: Type): pub Type {
 }
 
 pub use Key/*;
-
---- A key is `eq` to itself in its order, as its encoding is in the order of bytes.
-pub let refl(@K: Type, use Key(K), a: K) -> Eq()(Ord/ord(a, a), Ordering/eq()) =
-    Eq/trans(Key/monotone(a, a), Bytes/ord/refl(Hash/hash(a)));
 
 --- Two keys whose encodings compare equal are one key: the encodings are one run, and [`injective`] takes that to the keys.
 pub let same(
@@ -41,30 +37,3 @@ pub let apart(
     h: Bool/Holds(Bool/not(Hash/hash(a) == Hash/hash(b))),
 ) -> (Eq()(b, a)) -> Bool/False =
     (same) => Eq/subst((y: K) => Bool/Holds(Bool/not(Hash/hash(a) == Hash/hash(y))), same, h);
-
---- A key's order answers the flipped answer with its operands swapped, as the order of bytes does.
----
---- Proved once for every key from [`monotone`], so no witness states it and a sort under `use Key(K)` has its law from the dictionary.
-pub let flips(@K: Type, use Key(K)) -> Ord/Flips((a: K, b: K) => Ord/ord(a, b)) =
-    (a, b) =>
-        Eq/trans(
-            Key/monotone(b, a),
-            Eq/trans(
-                Bytes/ord/flips(Hash/hash(a), Hash/hash(b)),
-                Eq/cong(Ordering/flip, Eq/sym(Key/monotone(a, b)))));
-
---- A key's order as a relation carries across a middle key, as the order of bytes does.
-pub let transitive(
-    @K: Type,
-    use Key(K),
-) -> Ord/Transitive(Ord/le_by((a: K, b: K) => Ord/ord(a, b))) =
-    (a, b, c, p, q) =>
-        Eq/subst(
-            (o: Ordering) => Bool/Holds(Ordering/is_le(o)),
-            Eq/sym(Key/monotone(a, c)),
-            Bytes/ord/transitive(
-                Hash/hash(a),
-                Hash/hash(b),
-                Hash/hash(c),
-                Eq/subst((o: Ordering) => Bool/Holds(Ordering/is_le(o)), Key/monotone(a, b), p),
-                Eq/subst((o: Ordering) => Bool/Holds(Ordering/is_le(o)), Key/monotone(b, c), q)));

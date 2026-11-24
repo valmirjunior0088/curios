@@ -140,14 +140,14 @@ pub let transitive: Ord/Transitive(Ord/le_by(ord)) =
                             let second: Bool/Holds(kn < jn) = Nat/ord/lt(kn, jn, Eq/refl());
                             Eq/subst(
                                 (o: Ordering) => Bool/Holds(after(o, t, s)),
-                                Eq/sym(Nat/ord/of_lt(hn, jn, proved())),
+                                Eq/sym(Ord/of_lt(hn, jn, proved())),
                                 Bool/True/qed())
                         | eq() =>
                             let second: Eq()(kn, jn) = Nat/ord/eq(kn, jn, Eq/refl());
                             Eq/subst(
                                 (o: Ordering) => Bool/Holds(after(o, t, s)),
                                 Eq/sym(
-                                    Nat/ord/of_lt(
+                                    Ord/of_lt(
                                         hn,
                                         jn,
                                         Eq/subst((x: Nat) => Bool/Holds(hn < x), second, first))),
@@ -162,7 +162,7 @@ pub let transitive: Ord/Transitive(Ord/le_by(ord)) =
                             Eq/subst(
                                 (o: Ordering) => Bool/Holds(after(o, t, s)),
                                 Eq/sym(
-                                    Nat/ord/of_lt(
+                                    Ord/of_lt(
                                         hn,
                                         jn,
                                         Eq/subst(
@@ -174,7 +174,7 @@ pub let transitive: Ord/Transitive(Ord/le_by(ord)) =
                             let second: Eq()(kn, jn) = Nat/ord/eq(kn, jn, Eq/refl());
                             Eq/subst(
                                 (o: Ordering) => Bool/Holds(after(o, t, s)),
-                                Eq/sym(Nat/ord/of_eq(hn, jn, Eq/trans(first, second))),
+                                Eq/sym(Ord/of_eq(hn, jn, Eq/trans(first, second))),
                                 transitive(t, r, s, p, q))
                         end
                     end

@@ -1,4 +1,4 @@
-use /std/{Nat, Byte, Bytes, Bool, Eq, Ordering, proved};
+use /std/{Nat, Byte, Bytes, Bool, Eq, Ord, Ordering, proved};
 use /std/ops/{Eql};
 
 -- A byte's high nibble.
@@ -324,7 +324,7 @@ let headed(
                 | gt() => Ordering/gt()
                 end,
                 Ordering/lt()),
-        Eq/sym(Nat/ord/of_lt(Byte/to_nat(h), Byte/to_nat(k), ordered)),
+        Eq/sym(Ord/of_lt(Byte/to_nat(h), Byte/to_nat(k), ordered)),
         Eq/refl());
 
 --- A run whose digit is the smaller at the first position where it differs from another is before it in byte order: the digits are each byte's nibbles from the top, after a digit marking that the byte exists, so that position is where `Bytes/ord` decides.

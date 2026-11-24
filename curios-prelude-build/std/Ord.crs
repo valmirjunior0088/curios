@@ -101,3 +101,63 @@ pub let chains(
         Ordering/chains/tied(ord(p, r))
     | gt() => Bool/True/qed()
     end;
+
+-- Of the three answers `eq` alone is its own flip.
+--- A value is `eq` to itself in its order.
+pub let refl(@T: Type, use Ord(T), a: T) -> Eq()(ord(a, a), Ordering/eq()) =
+    match ord(a, a)
+    | lt() => match flips(a, a) end
+    | eq() => Eq/refl()
+    | gt() => match flips(a, a) end
+    end;
+
+--- `ord` answers `eq` at two values that are one.
+pub let of_eq(@T: Type, use Ord(T), a: T, b: T, e: Eq()(a, b)) -> Eq()(ord(a, b), Ordering/eq()) =
+    Eq/subst((x: T) => Eq()(ord(a, x), Ordering/eq()), e, refl(a));
+
+--- `ord` answers `lt` where the first is below the second.
+pub let of_lt(
+    @T: Type,
+    use Ord(T),
+    a: T,
+    b: T,
+    p: Bool/Holds(a < b),
+) -> Eq()(ord(a, b), Ordering/lt()) =
+    match ord(a, b)
+    | lt() => Eq/refl()
+    | eq() => match Eq/subst((x: Bool) => Bool/Holds(x), lt_of_ord(a, b), p) end
+    | gt() => match Eq/subst((x: Bool) => Bool/Holds(x), lt_of_ord(a, b), p) end
+    end;
+
+--- `ord` answers `gt` where the second is below the first.
+pub let of_gt(
+    @T: Type,
+    use Ord(T),
+    a: T,
+    b: T,
+    p: Bool/Holds(b < a),
+) -> Eq()(ord(a, b), Ordering/gt()) =
+    Eq/trans(flips(b, a), Eq/cong(Ordering/flip, of_lt(b, a, p)));
+
+--- The first is below the second where `ord` answers `lt`.
+pub let below(
+    @T: Type,
+    use Ord(T),
+    a: T,
+    b: T,
+    h: Eq()(ord(a, b), Ordering/lt()),
+) -> Bool/Holds(a < b) =
+    Eq/subst(
+        (x: Bool) => Bool/Holds(x),
+        Eq/sym(Eq/trans(lt_of_ord(a, b), Eq/cong(Ordering/is_lt, h))),
+        Bool/True/qed());
+
+--- The second is below the first where `ord` answers `gt`.
+pub let above(
+    @T: Type,
+    use Ord(T),
+    a: T,
+    b: T,
+    h: Eq()(ord(a, b), Ordering/gt()),
+) -> Bool/Holds(b < a) =
+    below(b, a, Eq/trans(flips(a, b), Eq/cong(Ordering/flip, h)));

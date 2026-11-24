@@ -24,22 +24,6 @@ let below(
         end
     end;
 
-pub let refl(a: Nat) -> Eq()(ord(a, a), Ordering/eq()) =
-    Eq/refl();
-
-pub let of_lt(a: Nat, b: Nat, p: Bool/Holds(a < b)) -> Eq()(ord(a, b), Ordering/lt()) =
-    match a < b | true => Eq/refl() end;
-
-pub let of_eq(a: Nat, b: Nat, e: Eq()(a, b)) -> Eq()(ord(a, b), Ordering/eq()) =
-    Eq/subst((x: Nat) => Eq()(ord(a, x), Ordering/eq()), e, refl(a));
-
-pub let of_gt(a: Nat, b: Nat, p: Bool/Holds(b < a)) -> Eq()(ord(a, b), Ordering/gt()) =
-    match
-    | a < b => match proved(@Bool/False) end
-    | a == b => match proved(@Bool/False) end
-    | _ => Eq/refl()
-    end;
-
 pub let lt(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/lt())) -> Bool/Holds(a < b) =
     match
     | a < b => Bool/True/qed()

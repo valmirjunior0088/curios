@@ -78,7 +78,7 @@ fn a_key_witness_out_of_its_order_is_rejected() {
     );
 }
 
-// A function under `use Key(K)` alone reads its keys' order through the dictionary: the sort takes `Ord(K)` from the key's superclass edge, and the law that the sort's answer is in order takes the order's flip from the key, so no caller states an order or proves a law beside the key it names.
+// A function under `use Key(K)` alone reads its keys' order through the dictionary: the sort takes `Ord(K)` from the key's superclass edge, and the law that the sort's answer is in order reads the order's own laws through that edge, so no caller states an order or proves a law beside the key it names.
 #[test]
 fn a_function_under_a_key_alone_sorts_its_keys_and_states_their_order() {
     let source = r#"
@@ -92,7 +92,7 @@ fn a_function_under_a_key_alone_sorts_its_keys_and_states_their_order() {
             use Key(K),
             keys: List(K),
         ) -> Holds(List/ordered(sorted(keys), Ord/le_by((a: K, b: K) => Ord/ord(a, b)))) =
-            List/sort/sorted(Key/flips(), keys);
+            List/sort/sorted(keys);
         /std/print(
             Str/join(
                 " ",

@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Byte, Bytes, Eq, Ordering, proved, Bool};
+use /std/{Nat, Int, Byte, Bytes, Eq, Ord, Ordering, proved, Bool};
 
 -- A run with every byte complemented, a byte at a time so that conversion carries it across a cons.
 let flipped(b: Bytes) -> Bytes =
@@ -36,10 +36,7 @@ let reversed(
                             | gt() => false
                             end),
                     Eq/sym(
-                        Nat/ord/of_eq(
-                            255 - kn,
-                            255 - hn,
-                            Eq/cong((v: Nat) => 255 - v, Eq/sym(same)))),
+                        Ord/of_eq(255 - kn, 255 - hn, Eq/cong((v: Nat) => 255 - v, Eq/sym(same)))),
                     reversed(t, r, parted))
             end
         end
@@ -115,7 +112,7 @@ pub let monotone(a: Int, b: Int) -> Eq()(Int/ord(a, b), Bytes/ord(hash(a), hash(
     | a < b => Eq/sym(Bytes/ord/below/lt(hash(a), hash(b), of_lt(a, b, Bool/True/qed())))
     | b < a =>
         Eq/trans(
-            Int/ord/of_gt(a, b, Bool/True/qed()),
+            Ord/of_gt(a, b, Bool/True/qed()),
             Eq/sym(
                 Eq/trans(
                     Bytes/ord/flips(hash(b), hash(a)),
