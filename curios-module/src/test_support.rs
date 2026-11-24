@@ -3,7 +3,7 @@
 use curios_common::{
     CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax, EqlDerivation,
     EqualitySyntax, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
-    OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax,
+    OperatorSyntax, OptionSyntax, OrdDerivation, OrdLaws, OrderSyntax, ProgramSyntax, ProofSyntax,
     ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry,
     TestSyntax,
 };
@@ -106,6 +106,19 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             eq: registry_name(&["std", "Ord", "Ordering", "Ordering", "eq"]),
             is_lt: registry_name(&["std", "Ord", "Ordering", "is_lt"]),
             is_le: registry_name(&["std", "Ord", "Ordering", "is_le"]),
+            laws: OrdLaws {
+                flips: registry_field(&["std", "Ord", "Ord"], "flips"),
+                eq_of_ord: registry_field(&["std", "Ord", "Ord"], "eq_of_ord"),
+                chains: registry_name(&["std", "Ord", "chains"]),
+                then_flips: registry_name(&["std", "Ord", "Ordering", "then", "flips"]),
+                then_first: registry_name(&["std", "Ord", "Ordering", "then", "first"]),
+                then_second: registry_name(&["std", "Ord", "Ordering", "then", "second"]),
+                chains_then: registry_name(&["std", "Ord", "Ordering", "chains", "then"]),
+                chains_le: registry_name(&["std", "Ord", "Ordering", "chains", "le"]),
+                by_tag_flips: registry_name(&["std", "Ord", "by_tag", "flips"]),
+                by_tag_chains: registry_name(&["std", "Ord", "by_tag", "chains"]),
+                by_tag_tied: registry_name(&["std", "Ord", "by_tag", "tied"]),
+            },
         },
         hash: HashDerivation {
             hash: registry_field(&["std", "Digest", "Digest"], "digest"),

@@ -510,6 +510,8 @@ An operator is a call of its concept's method, resolved as any witness is, intri
 
 `==` is `Eql`'s method `eql`, and `a != b` is `Bool/not(a == b)`: a witness states equality once, so the two never disagree. Beside `eql` a witness proves the concept's two laws, `eq_of_eql`, that two values it holds equal are one, and `refl`, that a value is equal to itself, so `==` decides equality wherever a type has it; a [derived witness](#derived-witnesses) has both written for it.
 
+`<` and `<=` are `Ord`'s methods `lt` and `le`, and `a > b` and `a >= b` are `b < a` and `b <= a`. Beside `ord`, `lt` and `le` a witness proves the order's five laws: `flips`, that `ord` answers the flipped answer with its operands swapped; `transitive`, that it carries across a middle value; `eq_of_ord`, that two values it answers `eq` at are one; and `lt_of_ord` and `le_of_ord`, that `lt` and `le` are what `ord` answers. So `<` is a total order wherever a type has it; a [derived witness](#derived-witnesses) has the five written for it.
+
 `Flt` answers none of `==`, `!=`, `<`, `<=`, `>` and `>=`: IEEE's comparisons are no equality and no total order, false between a NaN and itself and true both ways between `+0.0` and `-0.0`, so a float is compared by name, `Flt/eql`, `Flt/lt`, `Flt/le`, `Flt/gt` and `Flt/ge`, or by its bit pattern, `Flt/identical`.
 
 `&&` and `||` are calls of `And/and` and `Or/or`, as `+` is of `Add/add`, and not conditionals: neither operand is a fact in the other. So `x != 0 && 10 / x > 1` is refused, and `match | x != 0, 10 / x > 1 => true | _ => false end` is how a guard reaches the division.
@@ -1318,13 +1320,22 @@ and Show(Forest) {
 
 A concept with no parameter has no registered witness: a value of it is supplied to a `use` parameter.
 
-A second dictionary for an unsealed concept at the same key is an ordinary concept value, supplied explicitly; a sealed concept refuses the literal outside its module.
+A second dictionary for an unsealed concept at the same key is an ordinary concept value, supplied explicitly; a sealed concept refuses the literal outside its module. It proves the concept's laws as a witness does: the reversed order below takes each of its own from `Nat`'s, with the operands swapped.
 
 ```crs
-use /std/{List, Nat, Ord};
+use /std/{Eq, List, Nat, Ord};
 
 pub let descending(values: List(Nat)) -> List(Nat) =
-    let reverse: Ord(Nat) = Ord { ord(a, b) = Ord/ord(b, a), lt(a, b) = b < a, le(a, b) = b <= a };
+    let reverse: Ord(Nat) =
+        Ord {
+            ord(a, b) = Ord/ord(b, a),
+            lt(a, b) = b < a,
+            le(a, b) = b <= a,
+            flips(a, b) = Ord/flips(b, a),
+            transitive(a, b, c, p, q) = Ord/transitive(c, b, a, q, p),
+            eq_of_ord(a, b, h) = Eq/sym(Ord/eq_of_ord(b, a, h)),
+            lt_of_ord(a, b) = Ord/lt_of_ord(b, a),
+            le_of_ord(a, b) = Ord/le_of_ord(b, a) };
     List/sort(@_, use reverse, values);
 ```
 
@@ -1372,7 +1383,7 @@ The key is a declared `induct` or `struct` whose representation is open where th
 A concept's superclasses are hidden members of a concept value. They take no position when it is read — a projection `.N` and a pattern's positional fields count the methods alone — and a literal's entries follow the declaration as a call's arguments follow a function's parameters: the fields in order, and before each, `use value` entries filling the superclass slots before it, from the first. A slot left out is resolved, and `use _` holds a slot's place to the same effect, so `Both { use _, use second, both = … }` supplies the second of two superclasses alone.
 
 ```text
-Ord { use custom_eql, ord(a, b) = reversed(a, b), lt(a, b) = Ordering/is_lt(reversed(a, b)), le(a, b) = Ordering/is_le(reversed(a, b)) }
+Ord { use custom_eql, ord = reversed, lt = below, le = at_most, flips = flips, transitive = transitive, eq_of_ord = tied, lt_of_ord = is_below, le_of_ord = is_at_most }
 ```
 
 A witness's body writes none: a `use` entry in a `satisfy` is refused by name, and resolution fills every superclass of a registered witness.

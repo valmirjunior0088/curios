@@ -1,6 +1,6 @@
-//! Derived `Ord`: constructors ranked then payloads, fieldwise, a proof taking no part, and the equality its concept requires.
+//! Derived `Ord`: constructors ranked then payloads, fieldwise, a proof taking no part, the equality its concept requires, and the order's laws.
 
-use crate::tests::test_support::*;
+use {crate::tests::test_support::*, curios_common::fill};
 
 // --- The `Ord` derivation: constructors in declaration order, then payloads lexicographically through each one's own witness. ---
 
@@ -128,4 +128,221 @@ fn the_standard_library_derives_order_for_ordering() {
         "#;
 
     assert_eq!(run(source), b"lt gt eq ");
+}
+
+// --- The laws: that `ord` flips with its operands, carries across a middle value and answers `eq` only at one value, and that `lt` and `le` are what it answers, proved where a witness is declared. ---
+
+// The derivation writes the five proofs, which a program reads through the concept as it reads the methods: over a recursive family, a family nested through `List`'s witness and through a pair's inside it, a parameterized family under a premise, a constructor whose payload is a proof, a family of constructors that hold nothing, a struct with a hidden proof field, and a struct of several fields.
+#[test]
+fn a_derived_witness_proves_the_orders_laws() {
+    let source = r#"
+        use /std/{Nat, Bool, Str, List, Eq, Ord, print};
+        use /std/Ord/{Ordering};
+        use /std/Bool/{True, Holds};
+        use /std/ops/{Eql};
+
+        induct Tree: Type | leaf(Nat) | node(Tree, Tree) end
+        induct Doc: Type | num(Nat) | arr(List(Doc)) | obj(List({Str, Doc})) end
+        induct Rose(A: Type): Type | rose(A, List(Rose(A))) end
+        induct Certified: Type | cert(n: Nat, proof: Eq()(n, n)) end
+        induct Day: Type | mon() | tue() | wed() | thu() end
+        struct Small: Type { n: Nat, @below: Holds(n < 10) }
+        struct Span: Type { from: Nat, to: Nat, tag: Str }
+
+        satisfy Eql(Tree) { .. }
+        satisfy Eql(Doc) { .. }
+        satisfy (@A: Type, use Eql(A)) => Eql(Rose(A)) { .. }
+        satisfy Eql(Certified) { .. }
+        satisfy Eql(Day) { .. }
+        satisfy Eql(Small) { .. }
+        satisfy Eql(Span) { .. }
+
+        satisfy Ord(Tree) { .. }
+        satisfy Ord(Doc) { .. }
+        satisfy (@A: Type, use Eql(A), use Ord(A)) => Ord(Rose(A)) { .. }
+        satisfy Ord(Certified) { .. }
+        satisfy Ord(Day) { .. }
+        satisfy Ord(Small) { .. }
+        satisfy Ord(Span) { .. }
+
+        let flips(@A: Type, use Ord(A), a: A, b: A) -> Eq()(Ord/ord(b, a), Ordering/flip(Ord/ord(a, b))) =
+            Ord/flips(a, b);
+        let carries(
+            @A: Type,
+            use Ord(A),
+            a: A,
+            b: A,
+            c: A,
+            p: Holds(Ordering/is_le(Ord/ord(a, b))),
+            q: Holds(Ordering/is_le(Ord/ord(b, c))),
+        ) -> Holds(Ordering/is_le(Ord/ord(a, c))) =
+            Ord/transitive(a, b, c, p, q);
+        let tied(@A: Type, use Ord(A), a: A, b: A, h: Eq()(Ord/ord(a, b), Ordering/eq())) -> Eq()(a, b) =
+            Ord/eq_of_ord(a, b, h);
+        let below(@A: Type, use Ord(A), a: A, b: A) -> Eq()(a < b, Ordering/is_lt(Ord/ord(a, b))) =
+            Ord/lt_of_ord(a, b);
+        let at_most(@A: Type, use Ord(A), a: A, b: A) -> Eq()(a <= b, Ordering/is_le(Ord/ord(a, b))) =
+            Ord/le_of_ord(a, b);
+
+        let _trees(a: Tree, b: Tree) -> Eq()(Ord/ord(b, a), Ordering/flip(Ord/ord(a, b))) = flips(a, b);
+        let _docs(a: Doc, b: Doc) -> Eq()(Ord/ord(b, a), Ordering/flip(Ord/ord(a, b))) = flips(a, b);
+        let _roses(a: Rose(Doc), b: Rose(Doc)) -> Eq()(Ord/ord(b, a), Ordering/flip(Ord/ord(a, b))) = flips(a, b);
+        let _days(a: Day, b: Day) -> Eq()(Ord/ord(b, a), Ordering/flip(Ord/ord(a, b))) = flips(a, b);
+        let _spans(a: Span, b: Span) -> Eq()(Ord/ord(b, a), Ordering/flip(Ord/ord(a, b))) = flips(a, b);
+
+        let _across_docs(
+            a: Doc,
+            b: Doc,
+            c: Doc,
+            p: Holds(Ordering/is_le(Ord/ord(a, b))),
+            q: Holds(Ordering/is_le(Ord/ord(b, c))),
+        ) -> Holds(Ordering/is_le(Ord/ord(a, c))) =
+            carries(a, b, c, p, q);
+        let _across_days(
+            a: Day,
+            b: Day,
+            c: Day,
+            p: Holds(Ordering/is_le(Ord/ord(a, b))),
+            q: Holds(Ordering/is_le(Ord/ord(b, c))),
+        ) -> Holds(Ordering/is_le(Ord/ord(a, c))) =
+            carries(a, b, c, p, q);
+        let _across_small(
+            a: Small,
+            b: Small,
+            c: Small,
+            p: Holds(Ordering/is_le(Ord/ord(a, b))),
+            q: Holds(Ordering/is_le(Ord/ord(b, c))),
+        ) -> Holds(Ordering/is_le(Ord/ord(a, c))) =
+            carries(a, b, c, p, q);
+
+        let _one_tree(a: Tree, b: Tree, h: Eq()(Ord/ord(a, b), Ordering/eq())) -> Eq()(a, b) = tied(a, b, h);
+        let _one_rose(a: Rose(Doc), b: Rose(Doc), h: Eq()(Ord/ord(a, b), Ordering/eq())) -> Eq()(a, b) =
+            tied(a, b, h);
+        let _one_certified(a: Certified, b: Certified, h: Eq()(Ord/ord(a, b), Ordering/eq())) -> Eq()(a, b) =
+            tied(a, b, h);
+        let _one_small(a: Small, b: Small, h: Eq()(Ord/ord(a, b), Ordering/eq())) -> Eq()(a, b) = tied(a, b, h);
+        let _one_span(a: Span, b: Span, h: Eq()(Ord/ord(a, b), Ordering/eq())) -> Eq()(a, b) = tied(a, b, h);
+
+        let _below_trees(a: Tree, b: Tree) -> Eq()(a < b, Ordering/is_lt(Ord/ord(a, b))) = below(a, b);
+        let _at_most_spans(a: Span, b: Span) -> Eq()(a <= b, Ordering/is_le(Ord/ord(a, b))) = at_most(a, b);
+
+        let _closed: Holds(Tree/leaf(9) < Tree/node(Tree/leaf(0), Tree/leaf(0))) = True/qed();
+
+        print("ok")
+        "#;
+
+    assert_eq!(run(source), b"ok");
+}
+
+// A witness is held to the laws where it is declared: an `ord` that answers `lt` both ways round has no proof that it flips, one that ties two constructors has no proof that they are one, and a witness that writes the methods alone is refused for the laws it leaves out. Each refused program breaks the one law and proves the others.
+#[test]
+fn a_witness_whose_order_breaks_a_law_is_refused_where_it_is_declared() {
+    let program = |ord: &str, flips: &str, carries: &str, tied: &str| {
+        fill!(
+            r#"
+            use /std/{Bool, Eq, Ord, print};
+            use /std/Ord/{Ordering};
+            use /std/Bool/{True};
+            use /std/ops/{Eql};
+            induct Side: Type | left() | right() end
+            satisfy Eql(Side) { .. }
+            let ord(a: Side, b: Side) -> Ordering =
+                ${ord};
+            satisfy Ord(Side) {
+                ord = ord,
+                lt(a, b) = Ordering/is_lt(ord(a, b)),
+                le(a, b) = Ordering/is_le(ord(a, b)),
+                flips(a, b) =
+                    ${flips},
+                transitive(a, b, c, p, q) =
+                    ${carries},
+                eq_of_ord(a, b, h) =
+                    ${tied},
+                lt_of_ord(_, _) = Eq/refl(),
+                le_of_ord(_, _) = Eq/refl(),
+            }
+            print("ok")
+            "#,
+            ord,
+            flips,
+            carries,
+            tied
+        )
+    };
+    let by_cases = |left_right: &str, right_left: &str| {
+        fill!(
+            r#"match a
+                | left() => match b | left() => Ordering/eq() | right() => Ordering/${left_right}() end
+                | right() => match b | left() => Ordering/${right_left}() | right() => Ordering/eq() end
+                end"#,
+            left_right,
+            right_left
+        )
+    };
+    let every_case = r#"match a
+                    | left() => match b | left() => Eq/refl() | right() => Eq/refl() end
+                    | right() => match b | left() => Eq/refl() | right() => Eq/refl() end
+                    end"#;
+    let across = r#"match a
+                    | left() => match c | left() => True/qed() | right() => True/qed() end
+                    | right() =>
+                        match b
+                        | left() => match p end
+                        | right() => match c | left() => match q end | right() => True/qed() end
+                        end
+                    end"#;
+    let apart = r#"match a
+                    | left() => match b | left() => Eq/refl() | right() => match h end end
+                    | right() => match b | left() => match h end | right() => Eq/refl() end
+                    end"#;
+
+    let lawful = program(&by_cases("lt", "gt"), every_case, across, apart);
+    assert_eq!(run(&lawful), b"ok");
+
+    // `lt` both ways round: it carries across any middle side and ties no two, and the case of `flips` at two different sides asks that `lt` be `gt`.
+    let unflipped = program(
+        &by_cases("lt", "lt"),
+        every_case,
+        r#"match a
+                    | left() => match c | left() => True/qed() | right() => True/qed() end
+                    | right() => match c | left() => True/qed() | right() => True/qed() end
+                    end"#,
+        apart,
+    );
+    let report = error(&unflipped);
+    assert!(
+        report.contains("type mismatch")
+            && report.contains("expected: `Eq(@Ordering)(Ordering/lt(), Ordering/gt())`"),
+        "{report}"
+    );
+
+    // `eq` at every pair: it flips and carries across, and two different sides are tied and are not one.
+    let conflating = program("Ordering/eq()", "Eq/refl()", "True/qed()", every_case);
+    let report = error(&conflating);
+    assert!(
+        report.contains("type mismatch")
+            && report.contains("expected: `Eq(@Side)(Side/left(), Side/right())`"),
+        "{report}"
+    );
+
+    let lawless = r#"
+        use /std/{Bool, Ord, print};
+        use /std/Ord/{Ordering};
+        use /std/ops/{Eql};
+        induct Side: Type | left() | right() end
+        satisfy Eql(Side) { .. }
+        satisfy Ord(Side) {
+            ord(a, b) = Ordering/eq(),
+            lt(a, b) = false,
+            le(a, b) = true,
+        }
+        print("unreachable")
+        "#;
+    let report = error(lawless);
+    assert!(
+        report.contains("method count mismatch")
+            && report
+                .contains("missing: `flips`, `transitive`, `eq_of_ord`, `lt_of_ord`, `le_of_ord`"),
+        "{report}"
+    );
 }

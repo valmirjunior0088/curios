@@ -13,11 +13,7 @@ fn a_colliding_key_witness_is_rejected() {
         | right()
         end
         satisfy Eql(Side) { .. }
-        satisfy Ord(Side) {
-            ord(a, b) = Ordering/eq(),
-            lt(a, b) = false,
-            le(a, b) = true,
-        }
+        satisfy Ord(Side) { .. }
         satisfy Hash(Side) {
             hash(s) = 0x[],
         }

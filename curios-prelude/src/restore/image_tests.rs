@@ -38,7 +38,7 @@ fn a_place_in_the_image_is_spelled_by_its_sources_name() {
         let label = Anchors::label(&[anchors], &reverse).expect("`reverse` is written");
 
         assert_eq!(label.source.file(), None);
-        assert_eq!(label.place(&Style::plain()), "/std/List.crs:124:9");
+        assert_eq!(label.place(&Style::plain()), "/std/List.crs:128:9");
     });
 }
 

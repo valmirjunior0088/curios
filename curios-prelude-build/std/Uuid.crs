@@ -164,6 +164,11 @@ satisfy Ord(Uuid) {
     ord(a, b) = Bytes/ord(a.bytes, b.bytes),
     lt(a, b) = Ordering/is_lt(Bytes/ord(a.bytes, b.bytes)),
     le(a, b) = Ordering/is_le(Bytes/ord(a.bytes, b.bytes)),
+    flips(a, b) = Ord/flips(a.bytes, b.bytes),
+    transitive(a, b, c, p, q) = Ord/transitive(a.bytes, b.bytes, c.bytes, p, q),
+    eq_of_ord(a, b, h) = eq_of_bytes(a, b, Ord/eq_of_ord(a.bytes, b.bytes, h)),
+    lt_of_ord(_, _) = Eq/refl(),
+    le_of_ord(_, _) = Eq/refl(),
 }
 
 --- The sixteen bytes.

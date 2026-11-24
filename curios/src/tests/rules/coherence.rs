@@ -98,11 +98,7 @@ fn orphan_witness_is_rejected() {
         use /std/ops/{Eql};
         induct Mine : pub Type | m() end
         satisfy Eql(Mine) { .. }
-        satisfy Ord(Mine) {
-            ord(a, b) = Ordering/eq(),
-            lt(a, b) = false,
-            le(a, b) = true,
-        }
+        satisfy Ord(Mine) { .. }
         let n : Bool = true;
         /std/print("ok")
         "#,

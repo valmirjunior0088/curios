@@ -305,6 +305,11 @@ satisfy Ord(Bytes) {
     ord = ord,
     lt(a, b) = Ordering/is_lt(ord(a, b)),
     le(a, b) = Ordering/is_le(ord(a, b)),
+    flips = ord/flips,
+    transitive = ord/transitive,
+    eq_of_ord = ord/eq,
+    lt_of_ord(_, _) = Eq/refl(),
+    le_of_ord(_, _) = Eq/refl(),
 }
 
 --- Hexadecimal, two digits per byte.

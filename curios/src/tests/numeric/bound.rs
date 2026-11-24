@@ -373,7 +373,7 @@ fn a_bound_over_one_length_reached_by_two_routes_discharges() {
 fn a_member_bound_discharges_through_a_row_the_module_declares() {
     assert_eq!(
         run(r#"
-        use /std/{Str, Nat, Bool, Ord, Ordering};
+        use /std/{Str, Nat, Bool, Eq, Ord, Ordering};
         use /std/Bool/{Holds};
         use /std/ops/{Eql, Rem};
         struct Num: Type { n : Nat }
@@ -381,7 +381,19 @@ fn a_member_bound_discharges_through_a_row_the_module_declares() {
         let lt(a : Num, b : Num) -> Bool = a.n < b.n;
         let le(a : Num, b : Num) -> Bool = a.n <= b.n;
         satisfy Eql(Num) { .. }
-        satisfy Ord(Num) { ord = ord, lt = lt, le = le }
+        let one(n : Nat, m : Nat, e : Eq()(n, m)) -> Eq()(Num { n = n }, Num { n = m }) =
+            let refl() = e;
+            Eq/refl();
+        satisfy Ord(Num) {
+            ord = ord,
+            lt = lt,
+            le = le,
+            flips(a, b) = Ord/flips(a.n, b.n),
+            transitive(a, b, c, p, q) = Ord/transitive(a.n, b.n, c.n, p, q),
+            eq_of_ord(a, b, h) = one(a.n, b.n, Ord/eq_of_ord(a.n, b.n, h)),
+            lt_of_ord(a, b) = Ord/lt_of_ord(a.n, b.n),
+            le_of_ord(a, b) = Ord/le_of_ord(a.n, b.n),
+        }
         satisfy Rem(Num) { Ok(b) = Holds(0 < b.n), rem(a, b, @ok) = a }
         let probe() -> Num = Rem/rem(Num { n = 10 }, Num { n = 3 });
         /std/print("ok")

@@ -35,6 +35,10 @@ pub use sort_by/{let sort_by};
 pub mod sort;
 pub use sort/{let sort};
 
+--- The order of two lists, lexicographic with a proper prefix first, and its laws.
+pub mod ord;
+pub use ord/{let ord};
+
 use /std/{Nat, Bool, Option, Str, Eq, Show, Spell, Fmt, Monad, Ordering, Ord, Hash, proved};
 use /std/ops/{Eql};
 
@@ -273,24 +277,16 @@ satisfy Monad(List) {
     bind(m, f) = fold(m, [], (x, acc) => [..acc, ..f(x)]),
 }
 
---- Lexicographic, a proper prefix first.
-pub let ord(@T: Type, use Ord(T), a: List(T), b: List(T)) -> Ordering =
-    match (a, b)
-    | ([], []) => Ordering/eq()
-    | ([], [_, .._]) => Ordering/lt()
-    | ([_, .._], []) => Ordering/gt()
-    | ([x, ..xs], [y, ..ys]) =>
-        match Ord/ord(x, y)
-        | eq() => ord(xs, ys)
-        | lt() => Ordering/lt()
-        | gt() => Ordering/gt()
-        end
-    end;
-
-satisfy (@T: Type, use Ord(T)) => Ord(List(T)) {
+-- `Eql` of an element type is a premise beside `Ord` of it, which holds one: the witness's own superclass is then built from a premise handed whole, where one built from the superclass inside `Ord` is a use of that premise the totality check does not follow, and a family nested through this witness would have no lawful `Ord`.
+satisfy (@T: Type, use Eql(T), use Ord(T)) => Ord(List(T)) {
     ord = ord,
     lt(a, b) = Ordering/is_lt(ord(a, b)),
     le(a, b) = Ordering/is_le(ord(a, b)),
+    flips = ord/flips,
+    transitive = ord/transitive,
+    eq_of_ord = ord/eq,
+    lt_of_ord(_, _) = Eq/refl(),
+    le_of_ord(_, _) = Eq/refl(),
 }
 
 satisfy (@A: Type, use Hash(A)) => Hash(List(A)) {

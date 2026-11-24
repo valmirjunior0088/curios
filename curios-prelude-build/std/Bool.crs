@@ -97,6 +97,39 @@ satisfy Ord(Bool) {
     ord = ord,
     lt(a, b) = Ordering/is_lt(ord(a, b)),
     le(a, b) = Ordering/is_le(ord(a, b)),
+    flips(a, b) =
+        match a
+        | false => match b | false => Eq/refl() | true => Eq/refl() end
+        | true => match b | false => Eq/refl() | true => Eq/refl() end
+        end,
+    transitive(a, b, c, p, q) =
+        match a
+        | false => match c | false => True/qed() | true => True/qed() end
+        | true =>
+            match b
+            | false => match p end
+            | true =>
+                match c
+                | false => match q end
+                | true => True/qed()
+                end
+            end
+        end,
+    eq_of_ord(a, b, h) =
+        match a
+        | false =>
+            match b
+            | false => Eq/refl()
+            | true => match h end
+            end
+        | true =>
+            match b
+            | false => match h end
+            | true => Eq/refl()
+            end
+        end,
+    lt_of_ord(_, _) = Eq/refl(),
+    le_of_ord(_, _) = Eq/refl(),
 }
 
 satisfy Hash(Bool) {

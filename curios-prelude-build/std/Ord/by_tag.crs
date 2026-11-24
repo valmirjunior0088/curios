@@ -1,4 +1,4 @@
-use /std/{Nat, Eq, Ordering};
+use /std/{Nat, Bool, Eq, Ord, Ordering};
 
 --- Two constructors ordered by declaration position, answering `same` where they agree.
 ---
@@ -30,3 +30,24 @@ pub let tied(
     h: Eq()(by_tag(left, right, same), Ordering/eq()),
 ) -> Eq()(left, right) =
     Nat/ord/eq(left, right, Ordering/then/first(Nat/ord(left, right), same, h));
+
+--- Three answers of `by_tag` chain, where the answers it is handed chain at one position.
+pub let chains(
+    left: Nat,
+    middle: Nat,
+    right: Nat,
+    x: Ordering,
+    y: Ordering,
+    z: Ordering,
+    tied: (Eq()(left, middle), Eq()(middle, right)) -> Bool/Holds(Ordering/chains(x, y, z)),
+) -> Bool/Holds(
+    Ordering/chains(by_tag(left, middle, x), by_tag(middle, right, y), by_tag(left, right, z))) =
+    Ordering/chains/then(
+        Nat/ord(left, middle),
+        Nat/ord(middle, right),
+        Nat/ord(left, right),
+        x,
+        y,
+        z,
+        Ord/chains(left, middle, right),
+        (e, f) => tied(Nat/ord/eq(left, middle, e), Nat/ord/eq(middle, right, f)));

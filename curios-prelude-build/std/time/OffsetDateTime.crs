@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Ord, Ordering, Hash, Spell, Str, Option, Show};
+use /std/{Nat, Int, Eq, Ord, Ordering, Hash, Spell, Str, Option, Show};
 use /std/ops/{Eql};
 use /std/time/{Date, Time, DateTime, Offset, Timestamp, iso8601};
 
@@ -20,15 +20,111 @@ satisfy Spell(OffsetDateTime) {
     ..
 }
 
+-- A function of its own, so the witness states `lt` and `le` over it and the laws read all three by reduction.
+let ord(a: OffsetDateTime, b: OffsetDateTime) -> Ordering =
+    Ord/lexicographic([
+        Ord/ord(to_timestamp(a), to_timestamp(b)),
+        Ord/ord(a.date_time, b.date_time),
+        Ord/ord(a.offset, b.offset)]);
+
+-- The laws are the step's ([`Ordering/then`]), a piece at a time, each piece's part by its own type's law. Two that compare `eq` are one by their last two pieces, which are the two fields: a congruence written over them, where an equation between two projections solves nothing.
 --- By the moment first, as java.time compares, then the local date-time, then the offset, `unknown()` first: two compare equal exactly where they are one value.
 satisfy Ord(OffsetDateTime) {
-    ord(a, b) =
-        Ord/lexicographic([
-            Ord/ord(to_timestamp(a), to_timestamp(b)),
-            Ord/ord(a.date_time, b.date_time),
-            Ord/ord(a.offset, b.offset)]),
-    lt(a, b) = Ordering/is_lt(Ord/ord(a, b)),
-    le(a, b) = Ordering/is_le(Ord/ord(a, b)),
+    ord = ord,
+    lt(a, b) = Ordering/is_lt(ord(a, b)),
+    le(a, b) = Ordering/is_le(ord(a, b)),
+    flips(a, b) =
+        Ordering/then/flips(
+            Ordering/then(
+                Ord/ord(to_timestamp(a), to_timestamp(b)),
+                Ord/ord(a.date_time, b.date_time)),
+            Ord/ord(a.offset, b.offset),
+            Ordering/then(
+                Ord/ord(to_timestamp(b), to_timestamp(a)),
+                Ord/ord(b.date_time, a.date_time)),
+            Ord/ord(b.offset, a.offset),
+            Ordering/then/flips(
+                Ord/ord(to_timestamp(a), to_timestamp(b)),
+                Ord/ord(a.date_time, b.date_time),
+                Ord/ord(to_timestamp(b), to_timestamp(a)),
+                Ord/ord(b.date_time, a.date_time),
+                Ord/flips(to_timestamp(a), to_timestamp(b)),
+                (_) => Ord/flips(a.date_time, b.date_time)),
+            (_) => Ord/flips(a.offset, b.offset)),
+    transitive(a, b, c, p, q) =
+        Ordering/chains/le(
+            ord(a, b),
+            ord(b, c),
+            ord(a, c),
+            Ordering/chains/then(
+                Ordering/then(
+                    Ord/ord(to_timestamp(a), to_timestamp(b)),
+                    Ord/ord(a.date_time, b.date_time)),
+                Ordering/then(
+                    Ord/ord(to_timestamp(b), to_timestamp(c)),
+                    Ord/ord(b.date_time, c.date_time)),
+                Ordering/then(
+                    Ord/ord(to_timestamp(a), to_timestamp(c)),
+                    Ord/ord(a.date_time, c.date_time)),
+                Ord/ord(a.offset, b.offset),
+                Ord/ord(b.offset, c.offset),
+                Ord/ord(a.offset, c.offset),
+                Ordering/chains/then(
+                    Ord/ord(to_timestamp(a), to_timestamp(b)),
+                    Ord/ord(to_timestamp(b), to_timestamp(c)),
+                    Ord/ord(to_timestamp(a), to_timestamp(c)),
+                    Ord/ord(a.date_time, b.date_time),
+                    Ord/ord(b.date_time, c.date_time),
+                    Ord/ord(a.date_time, c.date_time),
+                    Ord/chains(to_timestamp(a), to_timestamp(b), to_timestamp(c)),
+                    (_, _) => Ord/chains(a.date_time, b.date_time, c.date_time)),
+                (_, _) => Ord/chains(a.offset, b.offset, c.offset)),
+            p,
+            q),
+    eq_of_ord(a, b, h) =
+        let fields(
+            date_time1: DateTime,
+            offset1: Offset,
+            date_time2: DateTime,
+            offset2: Offset,
+            date_time: Eq()(date_time1, date_time2),
+            offset: Eq()(offset1, offset2),
+        ) -> Eq()(
+            OffsetDateTime { date_time = date_time1, offset = offset1 },
+            OffsetDateTime { date_time = date_time2, offset = offset2 }) =
+            let refl() = date_time;
+            let refl() = offset;
+            Eq/refl();
+        let leading =
+            Ordering/then/first(
+                Ordering/then(
+                    Ord/ord(to_timestamp(a), to_timestamp(b)),
+                    Ord/ord(a.date_time, b.date_time)),
+                Ord/ord(a.offset, b.offset),
+                h);
+        fields(
+            a.date_time,
+            a.offset,
+            b.date_time,
+            b.offset,
+            Ord/eq_of_ord(
+                a.date_time,
+                b.date_time,
+                Ordering/then/second(
+                    Ord/ord(to_timestamp(a), to_timestamp(b)),
+                    Ord/ord(a.date_time, b.date_time),
+                    leading)),
+            Ord/eq_of_ord(
+                a.offset,
+                b.offset,
+                Ordering/then/second(
+                    Ordering/then(
+                        Ord/ord(to_timestamp(a), to_timestamp(b)),
+                        Ord/ord(a.date_time, b.date_time)),
+                    Ord/ord(a.offset, b.offset),
+                    h))),
+    lt_of_ord(_, _) = Eq/refl(),
+    le_of_ord(_, _) = Eq/refl(),
 }
 
 --- The moment the date-time names at its offset: its seconds counted as POSIX counts a date and a time, less how far ahead of UTC the offset is, so a second of `60` counts as the next minute's first.

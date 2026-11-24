@@ -199,6 +199,11 @@ satisfy Ord(Int) {
     ord = ord,
     lt = lt,
     le = le,
+    flips = ord/flips,
+    transitive = ord/transitive,
+    eq_of_ord = ord/eq,
+    lt_of_ord = ord/is_lt,
+    le_of_ord = ord/is_le,
 }
 
 --- The encoding [`hash`] writes: its natural's at or above zero and a complement below, so a smaller integer's is before a larger one's.

@@ -10,6 +10,8 @@ use /std/{List, Bool, Eq};
 use /std/ops/{Eql};
 
 --- A total order: `ord` decides `lt`, `eq` or `gt`, and `Eql` is its superclass. `<` and `<=` dispatch through `lt` and `le`, and `>` and `>=` through them with their operands swapped.
+---
+--- A witness proves the order's laws beside its methods, so `<` is a total order wherever a type has one: `ord` flips with its operands, carries across a middle element, and answers `eq` only at one value, and `lt` and `le` are what `ord` answers. A type whose comparison is no total order, as `Flt`'s is none, has no witness and names its comparisons.
 pub concept Ord(A: Type): pub Type {
     use Eql(A),
     ord(A, A) -> Ordering,
@@ -17,6 +19,21 @@ pub concept Ord(A: Type): pub Type {
     lt(A, A) -> Bool,
     --- Whether the first is below the second or equal to it.
     le(A, A) -> Bool,
+    --- `ord` answers the flipped answer with its operands swapped: [`Flips`] of `ord`.
+    flips(a: A, b: A) -> Eq()(ord(b, a), Ordering/flip(ord(a, b))),
+    --- `ord` carries across a middle element: [`Transitive`] of `ord` as a relation.
+    transitive(
+        a: A,
+        b: A,
+        c: A,
+        Bool/Holds(Ordering/is_le(ord(a, b))),
+        Bool/Holds(Ordering/is_le(ord(b, c)))) -> Bool/Holds(Ordering/is_le(ord(a, c))),
+    --- Two values `ord` answers `eq` at are one.
+    eq_of_ord(a: A, b: A, h: Eq()(ord(a, b), Ordering/eq())) -> Eq()(a, b),
+    --- `lt` is `ord` answering `lt`.
+    lt_of_ord(a: A, b: A) -> Eq()(lt(a, b), Ordering/is_lt(ord(a, b))),
+    --- `le` is `ord` answering `lt` or `eq`.
+    le_of_ord(a: A, b: A) -> Eq()(le(a, b), Ordering/is_le(ord(a, b))),
 }
 
 pub use Ord/*;
@@ -27,7 +44,7 @@ pub let lexicographic(pieces: List(Ordering)) -> Ordering =
 
 --- The law that `ord` answers the flipped answer with its operands swapped: `gt` one way exactly where `lt` the other, and `eq` both ways or neither.
 ---
---- A comparator's proof of it lives beside the comparator (`Nat/ord/flips`), and a theorem that needs it takes it as a hypothesis: `Ord` itself carries no law.
+--- `Ord` carries it of its own `ord` ([`flips`]); a theorem over a comparator it is handed takes it as a hypothesis.
 pub let Flips(@T: Type, ord: (T, T) -> Ordering) -> Prop =
     (a: T, b: T) -> Eq()(ord(b, a), Ordering/flip(ord(a, b)));
 
@@ -53,3 +70,34 @@ pub let then(@T: Type, ord: (T, T) -> Ordering, second: (T, T) -> Bool) -> (T, T
         | eq() => second(a, b)
         | gt() => false
         end;
+
+-- By cases on the three answers. Two that tie are one value, so the third answer is the other's; two that are `lt` leave the third `lt`, since `eq` there would make the second the first's flip, and `gt` is what [`transitive`] rules out. It takes the three values and nothing else: a law that recurses through its witness hands this the witness, and the witness's laws are applied here at parameters alone.
+--- The answers of one order at `p` and `q`, at `q` and `r`, and at `p` and `r` chain ([`Ordering/chains`]).
+pub let chains(
+    @T: Type,
+    use Ord(T),
+    p: T,
+    q: T,
+    r: T,
+) -> Bool/Holds(Ordering/chains(ord(p, q), ord(q, r), ord(p, r))) =
+    match ord(p, q)
+    | lt() =>
+        match ord(q, r)
+        | lt() =>
+            match ord(p, r)
+            | lt() => Bool/True/qed()
+            | eq() =>
+                let refl() = eq_of_ord(p, r, Eq/refl());
+                match flips(p, q) end
+            | gt() => match transitive(p, q, r, Bool/True/qed(), Bool/True/qed()) end
+            end
+        | eq() =>
+            let refl() = eq_of_ord(q, r, Eq/refl());
+            Bool/True/qed()
+        | gt() => Bool/True/qed()
+        end
+    | eq() =>
+        let refl() = eq_of_ord(p, q, Eq/refl());
+        Ordering/chains/tied(ord(p, r))
+    | gt() => Bool/True/qed()
+    end;

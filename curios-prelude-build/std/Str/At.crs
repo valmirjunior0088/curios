@@ -334,32 +334,27 @@ pub let of_left(s: Str, t: Str, at: At(s)) -> At(Str/concat(s, t)) =
 pub let of_right(s: Str, t: Str, at: At(t)) -> At(Str/concat(s, t)) =
     At { offset = Bytes/length(s.bytes) + at.offset };
 
+-- A congruence written over the fields and applied at the projections, where an equation between two projections solves nothing: two positions of one offset are one, their bounds being proofs. `Eql`'s law and `Ord`'s both read it, each from its own equation of the offsets.
+let eq_of_offset(@s: Str, a: At(s), b: At(s), offset: Eq()(a.offset, b.offset)) -> Eq()(a, b) =
+    let fields(
+        offset1: Nat,
+        within1: Bool/Holds(offset1 <= Bytes/length(s.bytes)),
+        boundary1: Bool/Holds(starts(Bytes/drop(s.bytes, offset1, @within1))),
+        offset2: Nat,
+        within2: Bool/Holds(offset2 <= Bytes/length(s.bytes)),
+        boundary2: Bool/Holds(starts(Bytes/drop(s.bytes, offset2, @within2))),
+        offset: Eq()(offset1, offset2),
+    ) -> Eq(@At(s))(
+        At { offset = offset1, @within = within1, @boundary = boundary1 },
+        At { offset = offset2, @within = within2, @boundary = boundary2 }) =
+        let refl() = offset;
+        Eq/refl();
+    fields(a.offset, a.within, a.boundary, b.offset, b.within, b.boundary, offset);
+
 --- Two positions are equal when their offsets are.
 satisfy (@s: Str) => Eql(At(s)) {
     eql(a, b) = a.offset == b.offset,
-    -- A congruence written over the fields and applied at the projections, where an equation between two projections solves nothing. The law is applied outside it, at the projections: a field is below its record, so a family nested through this one descends through the law as it does through `eql`. Once the offsets are one, the two proofs of each bound are.
-    eq_of_eql(a, b, h) =
-        let fields(
-            offset1: Nat,
-            within1: Bool/Holds(offset1 <= Bytes/length(s.bytes)),
-            boundary1: Bool/Holds(starts(Bytes/drop(s.bytes, offset1, @within1))),
-            offset2: Nat,
-            within2: Bool/Holds(offset2 <= Bytes/length(s.bytes)),
-            boundary2: Bool/Holds(starts(Bytes/drop(s.bytes, offset2, @within2))),
-            offset: Eq()(offset1, offset2),
-        ) -> Eq(@At(s))(
-            At { offset = offset1, @within = within1, @boundary = boundary1 },
-            At { offset = offset2, @within = within2, @boundary = boundary2 }) =
-            let refl() = offset;
-            Eq/refl();
-        fields(
-            a.offset,
-            a.within,
-            a.boundary,
-            b.offset,
-            b.within,
-            b.boundary,
-            Eql/eq_of_eql(a.offset, b.offset, h)),
+    eq_of_eql(a, b, h) = eq_of_offset(a, b, Eql/eq_of_eql(a.offset, b.offset, h)),
     refl(a) = Eql/refl(a.offset),
 }
 
@@ -368,4 +363,9 @@ satisfy (@s: Str) => Ord(At(s)) {
     ord(a, b) = Nat/ord(a.offset, b.offset),
     lt(a, b) = a.offset < b.offset,
     le(a, b) = a.offset <= b.offset,
+    flips(a, b) = Ord/flips(a.offset, b.offset),
+    transitive(a, b, c, p, q) = Ord/transitive(a.offset, b.offset, c.offset, p, q),
+    eq_of_ord(a, b, h) = eq_of_offset(a, b, Ord/eq_of_ord(a.offset, b.offset, h)),
+    lt_of_ord(a, b) = Ord/lt_of_ord(a.offset, b.offset),
+    le_of_ord(a, b) = Ord/le_of_ord(a.offset, b.offset),
 }

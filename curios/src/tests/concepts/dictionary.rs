@@ -63,11 +63,7 @@ fn a_superclass_reads_alike_through_the_table_and_through_a_witness() {
         use /std/ops/{Eql};
         induct Mine: pub Type | a() | b() end
         satisfy Eql(Mine) { .. }
-        satisfy Ord(Mine) {
-            ord(x, y) = Ordering/eq(),
-            lt(x, y) = false,
-            le(x, y) = true,
-        }
+        satisfy Ord(Mine) { .. }
         let via_table(x: Mine, y: Mine) -> Bool = x == y;
         let via_super(@A: Type, use Ord(A), x: A, y: A) -> Bool = x == y;
         print(Str/concat(

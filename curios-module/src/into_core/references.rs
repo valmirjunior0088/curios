@@ -152,7 +152,7 @@ fn derived_vocabulary(item: &FlatItem, syntax: &SyntaxRegistry) -> Vec<curios_co
         };
         vocabulary.extend(
             derivation
-                .vocabulary(&syntax.string, syntax.equality)
+                .vocabulary(syntax)
                 .into_iter()
                 .map(curios_core::Global::Authored),
         );

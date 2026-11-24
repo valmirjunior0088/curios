@@ -701,7 +701,7 @@ pub struct EqlDerivation {
     pub qed: SyntaxName,
 }
 
-/// The names a derived `Ord` witness body is written with: its own method, applied to each payload pair, and the two `/std/Ord` combinators the body folds their answers through — `lexicographic` within one constructor, `by_tag` across two, with `Ordering/eq` filling the arm that cannot be reached because the tags already agreed — and `Ordering/is_lt` and `is_le`, which read `lt` and `le` off the same comparison.
+/// The names a derived `Ord` witness body is written with: its own method, applied to each payload pair; the names its laws' proofs apply ([`OrdLaws`]); and the two `/std/Ord` combinators the body folds their answers through — `lexicographic` within one constructor, `by_tag` across two, with `Ordering/eq` filling the arm that cannot be reached because the tags already agreed — and `Ordering/is_lt` and `is_le`, which read `lt` and `le` off the same comparison.
 ///
 /// No string machinery, and deliberately: `lexicographic` takes the payload answers alone, where `Spell`'s renderers take a constructor path. An `Ordering` has no text to re-parse and no report to read, so the path would be a literal nothing consumes — and carrying one would put every `/std/Str` name back into this row's vocabulary for a value that is never rendered.
 #[derive(Debug, Clone, Copy)]
@@ -712,6 +712,67 @@ pub struct OrdDerivation {
     pub eq: SyntaxName,
     pub is_lt: SyntaxName,
     pub is_le: SyntaxName,
+    pub laws: OrdLaws,
+}
+
+/// The names the proofs of a derived `Ord`'s laws apply, beside what the comparison itself is written with.
+///
+/// Two laws of the concept, each applied to a payload as the method is; the law every order's answers obey at three values, which is each payload's part of `transitive`; the laws of the step `lexicographic` folds by, which carry a proof from one payload to the next; and `by_tag`'s, which ask for the payloads' part where two constructors are one. The proofs also conclude equations and close on the inhabitant of `True`, which [`SyntaxRegistry::equality`] and [`SyntaxRegistry::proof`] name.
+#[derive(Debug, Clone, Copy)]
+pub struct OrdLaws {
+    /// The law that `ord` answers the flipped answer with its operands swapped.
+    pub flips: ConceptField,
+    /// The law that two values `ord` answers `eq` at are one value.
+    pub eq_of_ord: ConceptField,
+    /// That an order's answers at three values chain, from its laws.
+    pub chains: SyntaxName,
+    /// A step flips to the step of the flipped answers.
+    pub then_flips: SyntaxName,
+    /// The first of two answers that step to `eq` is `eq`.
+    pub then_first: SyntaxName,
+    /// And so is the second.
+    pub then_second: SyntaxName,
+    /// Three steps chain where their answers do.
+    pub chains_then: SyntaxName,
+    /// The third of three answers that chain is `lt` or `eq` where the first two are, which closes `transitive`.
+    pub chains_le: SyntaxName,
+    /// `by_tag` flips where the answers it is handed do at one constructor.
+    pub by_tag_flips: SyntaxName,
+    /// `by_tag`'s answers chain where the ones it is handed do at one constructor.
+    pub by_tag_chains: SyntaxName,
+    /// Two positions `by_tag` answers `eq` at are one: the fact that closes two different constructors.
+    pub by_tag_tied: SyntaxName,
+}
+
+impl OrdLaws {
+    /// The lemmas among these names: every one but the concept's two fields.
+    fn lemmas(self) -> [SyntaxName; 9] {
+        let Self {
+            flips: _,
+            eq_of_ord: _,
+            chains,
+            then_flips,
+            then_first,
+            then_second,
+            chains_then,
+            chains_le,
+            by_tag_flips,
+            by_tag_chains,
+            by_tag_tied,
+        } = self;
+
+        [
+            chains,
+            then_flips,
+            then_first,
+            then_second,
+            chains_then,
+            chains_le,
+            by_tag_flips,
+            by_tag_chains,
+            by_tag_tied,
+        ]
+    }
 }
 
 /// The names a derived `Hash` witness body is written with: its own method, applied to each payload, and the one `/std/Hash` combinator the body folds their encodings through — `tagged`, which writes the constructor's ordinal and frames every part.
@@ -755,9 +816,8 @@ impl Derivation {
                 both: _,
                 qed: _,
             }) => vec![eql, eq_of_eql, refl],
-            Derivation::Spell(_) | Derivation::Ord(_) | Derivation::Hash(_) => {
-                vec![self.concept_field()]
-            }
+            Derivation::Ord(row) => vec![row.ord, row.laws.flips, row.laws.eq_of_ord],
+            Derivation::Spell(_) | Derivation::Hash(_) => vec![self.concept_field()],
         }
     }
 
@@ -765,8 +825,9 @@ impl Derivation {
     ///
     /// A [`Qualifier`] rather than a [`SyntaxName`], as the bodies' references are read.
     ///
-    /// `string` is [`SyntaxRegistry::string`], shared with the body writer; only `Spell` emits string literals and adds these dependencies. `equality` is [`SyntaxRegistry::equality`], shared the same way: `Eql`'s laws conclude an equation and close on its constructor.
-    pub fn vocabulary(self, string: &StringSyntax, equality: EqualitySyntax) -> Vec<Qualifier> {
+    /// `registry` is the registry this row is of, for the groups a body shares with other features and the body writer reads there too: [`SyntaxRegistry::string`], for the string literals only `Spell` emits; [`SyntaxRegistry::equality`], for the equations `Eql`'s laws and `Ord`'s conclude; and [`SyntaxRegistry::proof`], for the inhabitant of `True` an `Ord` law closes on where a constructor holds nothing.
+    pub fn vocabulary(self, registry: &SyntaxRegistry) -> Vec<Qualifier> {
+        let (string, equality) = (registry.string, registry.equality);
         // A method named by its path reads its concept: a method is its concept's field, and no declaration.
         let concept = self.concept_field().concept.qualifier();
 
@@ -807,9 +868,24 @@ impl Derivation {
                 eq,
                 is_lt,
                 is_le,
+                laws,
             }) => [concept]
                 .into_iter()
-                .chain([lexicographic, by_tag, eq, is_lt, is_le].map(SyntaxName::qualifier))
+                .chain(
+                    [
+                        lexicographic,
+                        by_tag,
+                        eq,
+                        is_lt,
+                        is_le,
+                        equality.family,
+                        equality.refl,
+                        registry.proof.true_qed,
+                    ]
+                    .into_iter()
+                    .chain(laws.lemmas())
+                    .map(SyntaxName::qualifier),
+                )
                 .collect(),
             Derivation::Hash(HashDerivation { hash: _, tagged }) => {
                 vec![concept, tagged.qualifier()]
@@ -842,7 +918,11 @@ impl Derivation {
                 eq,
                 is_lt,
                 is_le,
-            }) => vec![ord.concept, lexicographic, by_tag, eq, is_lt, is_le],
+                laws,
+            }) => [ord.concept, lexicographic, by_tag, eq, is_lt, is_le]
+                .into_iter()
+                .chain(laws.lemmas())
+                .collect(),
             Derivation::Hash(HashDerivation { hash, tagged }) => vec![hash.concept, tagged],
         }
         .into_iter()

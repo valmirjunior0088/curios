@@ -1,0 +1,110 @@
+use /std/{List, Bool, Eq, Ord, Ordering};
+
+--- Lexicographic, a proper prefix first.
+pub let ord(@T: Type, use Ord(T), a: List(T), b: List(T)) -> Ordering =
+    match (a, b)
+    | ([], []) => Ordering/eq()
+    | ([], [_, .._]) => Ordering/lt()
+    | ([_, .._], []) => Ordering/gt()
+    | ([x, ..xs], [y, ..ys]) =>
+        match Ord/ord(x, y)
+        | eq() => ord(xs, ys)
+        | lt() => Ordering/lt()
+        | gt() => Ordering/gt()
+        end
+    end;
+
+-- A recursion over both lists. At two conses `ord` is a step ([`Ordering/then`]): the heads' answer, and the tails' where they tie, so each law below is the step's, the heads' part by the elements' own law and the tails' by the recursion.
+--- `ord` answers the flipped answer with its operands swapped.
+pub let flips(
+    @T: Type,
+    use Ord(T),
+    a: List(T),
+    b: List(T),
+) -> Eq()(ord(b, a), Ordering/flip(ord(a, b))) =
+    match a
+    | [] => match b | [] => Eq/refl() | [_, .._] => Eq/refl() end
+    | [x, ..xs] =>
+        match b
+        | [] => Eq/refl()
+        | [y, ..ys] =>
+            Ordering/then/flips(
+                Ord/ord(x, y),
+                ord(xs, ys),
+                Ord/ord(y, x),
+                ord(ys, xs),
+                Ord/flips(x, y),
+                (_) => flips(xs, ys))
+        end
+    end;
+
+-- An empty list and a list that is not settle what is asked wherever they meet, a `gt` or an `lt` that [`Ordering/chains`] reads alone, and two empty lists leave the third's answer chaining with itself. A case of the third list is taken where the first is empty and the second is not: the third empty, the second answer is `gt`, and otherwise the third answer is `lt`.
+--- The answers of `ord` at `a` and `b`, at `b` and `c`, and at `a` and `c` chain ([`Ordering/chains`]).
+pub let chains(
+    @T: Type,
+    use Ord(T),
+    a: List(T),
+    b: List(T),
+    c: List(T),
+) -> Bool/Holds(Ordering/chains(ord(a, b), ord(b, c), ord(a, c))) =
+    match a
+    | [] =>
+        match b
+        | [] => Ordering/chains/tied(ord(b, c))
+        | [_, .._] => match c | [] => Bool/True/qed() | [_, .._] => Bool/True/qed() end
+        end
+    | [x, ..xs] =>
+        match b
+        | [] => Bool/True/qed()
+        | [y, ..ys] =>
+            match c
+            | [] => Bool/True/qed()
+            | [z, ..zs] =>
+                Ordering/chains/then(
+                    Ord/ord(x, y),
+                    Ord/ord(y, z),
+                    Ord/ord(x, z),
+                    ord(xs, ys),
+                    ord(ys, zs),
+                    ord(xs, zs),
+                    Ord/chains(x, y, z),
+                    (_, _) => chains(xs, ys, zs))
+            end
+        end
+    end;
+
+--- `ord` as a relation carries across a middle list.
+pub let transitive(
+    @T: Type,
+    use Ord(T),
+    a: List(T),
+    b: List(T),
+    c: List(T),
+    below: Bool/Holds(Ordering/is_le(ord(a, b))),
+    above: Bool/Holds(Ordering/is_le(ord(b, c))),
+) -> Bool/Holds(Ordering/is_le(ord(a, c))) =
+    Ordering/chains/le(ord(a, b), ord(b, c), ord(a, c), chains(a, b, c), below, above);
+
+--- `ord(a, b)` is `eq` only where `a` is `b`: the order agrees with equality.
+pub let eq(
+    @T: Type,
+    use Ord(T),
+    a: List(T),
+    b: List(T),
+    h: Eq()(ord(a, b), Ordering/eq()),
+) -> Eq()(a, b) =
+    match a
+    | [] =>
+        match b
+        | [] => Eq/refl()
+        | [_, .._] => match h end
+        end
+    | [x, ..xs] =>
+        match b
+        | [] => match h end
+        | [y, ..ys] =>
+            let refl() = Ord/eq_of_ord(x, y, Ordering/then/first(Ord/ord(x, y), ord(xs, ys), h));
+            let refl() = eq(xs, ys, Ordering/then/second(Ord/ord(x, y), ord(xs, ys), h));
+            Eq/refl()
+        end
+    end;

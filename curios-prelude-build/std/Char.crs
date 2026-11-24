@@ -332,8 +332,14 @@ satisfy Spell(Char) {
         Fmt/render("'%'")(body),
 }
 
+-- Each law is `Nat`'s at the two codes, which `ord`, `lt` and `le` read a character through.
 satisfy Ord(Char) {
     ord = ord,
     lt = lt,
     le = le,
+    flips(a, b) = Ord/flips(a.code, b.code),
+    transitive(a, b, c, p, q) = Ord/transitive(a.code, b.code, c.code, p, q),
+    eq_of_ord(a, b, h) = eq_of_code(a, b, Ord/eq_of_ord(a.code, b.code, h)),
+    lt_of_ord(a, b) = Ord/lt_of_ord(a.code, b.code),
+    le_of_ord(a, b) = Ord/le_of_ord(a.code, b.code),
 }
