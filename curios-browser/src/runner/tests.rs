@@ -11,7 +11,8 @@ fn a_write_and_an_outcome_are_each_read_as_the_runner_sends_them() {
     assert_eq!(wrote.decoded().unwrap(), b"hi");
 
     let Sent::Outcome(posted) =
-        Sent::parse(br#"{"outcome":{"exitCode":0,"trap":null,"answer":"W10="}}"#).unwrap()
+        Sent::parse(br#"{"outcome":{"exitCode":0,"trap":null,"records":["aGk=","eW8="]}}"#)
+            .unwrap()
     else {
         panic!("an outcome");
     };
@@ -20,10 +21,24 @@ fn a_write_and_an_outcome_are_each_read_as_the_runner_sends_them() {
         Posted {
             exit_code: Some(0),
             trap: None,
-            answer: Some("W10=".to_string()),
+            records: Some(vec!["aGk=".to_string(), "eW8=".to_string()]),
         }
     );
-    assert_eq!(posted.answered(), Some(Ok(b"[]".to_vec())));
+    assert_eq!(
+        posted.reported(),
+        Some(Ok(vec![b"hi".to_vec(), b"yo".to_vec()]))
+    );
+}
+
+#[test]
+fn an_outcome_that_returned_nothing_reports_no_records() {
+    let Sent::Outcome(posted) =
+        Sent::parse(br#"{"outcome":{"exitCode":3,"trap":null,"records":null}}"#).unwrap()
+    else {
+        panic!("an outcome");
+    };
+
+    assert_eq!(posted.reported(), None);
 }
 
 #[test]

@@ -34,7 +34,7 @@ pub fn compile(out: &Path) -> Vec<PathBuf> {
     // Both roots lowered before either is elaborated, because the registry spans them: a target check over `/sys` alone would miss every `/std` slot and one over `/std` alone every `/sys` slot, so the check runs once over the union and there is no half to pass by being asked the wrong question.
     let sys_text = lower("sys", &sys_modules, &[]);
     let std_text = lower("std", &std_modules, &[&sys_text]);
-    validate_syntax_targets(&[sys_text.core(), std_text.core()]);
+    validate_syntax_targets(&[("sys", sys_text.core()), ("std", std_text.core())]);
 
     // The fold: `/sys` against nothing, `/std` against what `/sys` established. Each root is certified as it is made and its image framed as every unit the cabinet keeps is, holding the certified unit, so the prelude the crate restores is a fold of two units and not a shape of its own.
     let sys = unit("sys", sys_text, &Established::nothing(), &[]);
@@ -379,16 +379,24 @@ fn write_documentation(directory: &Path, records: &Vec<Documentation>) {
         .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
 }
 
-/// Check every registered syntax target against the lowered prelude, over the **union** of its roots.
+/// Check every registered syntax target under one of the prelude's roots, each `(prefix, definitions)`, against the lowered prelude, over the **union** of its roots.
 ///
-/// The union rather than each root in turn, because the registry spans them: `/sys` holds the intrinsic preconditions and `/std` everything the compiler emits by name, so either half alone would report the other's slots as absent.
-fn validate_syntax_targets(modules: &[&curios_core::Definitions]) {
-    let names = modules
+/// The union rather than each root in turn, because the registry spans them: `/sys` holds the intrinsic preconditions and `/std` everything the compiler emits by name, so either half alone would report the other's slots as absent. A target under `/test`, which a test compilation alone links, is no root's: `curios-pipeline` holds it where `/test` is compiled.
+fn validate_syntax_targets(roots: &[(&str, &curios_core::Definitions)]) {
+    let names = roots
         .iter()
-        .flat_map(|definitions| definitions.items.iter())
+        .flat_map(|(_, definitions)| definitions.items.iter())
         .flat_map(Item::declared_names)
         .collect::<BTreeSet<_>>();
-    for target in SYNTAX.targets() {
+    let prefixes = roots
+        .iter()
+        .map(|(prefix, _)| Qualifier::from([*prefix]))
+        .collect::<Vec<_>>();
+    for target in SYNTAX.targets().filter(|target| {
+        prefixes
+            .iter()
+            .any(|prefix| target.qualifier().is_within(prefix))
+    }) {
         let symbol = target.symbol();
         assert!(
             names.contains(&Global::Authored(target.qualifier())),
@@ -407,9 +415,9 @@ fn validate_syntax_targets(modules: &[&curios_core::Definitions]) {
         let field = target.field;
         let name = Global::Authored(target.concept.qualifier());
         // A concept's methods are named by its record's fields.
-        let record = modules
+        let record = roots
             .iter()
-            .find_map(|definitions| {
+            .find_map(|(_, definitions)| {
                 definitions.concepts().get(&name)?;
                 definitions.struct_decls().get(&name).copied()
             })

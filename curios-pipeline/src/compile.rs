@@ -5,7 +5,7 @@ pub mod test_support;
 
 use {
     super::{DumpScope, Over, Stage, compile_lowered_over, compile_unit_over},
-    curios_abi::{ForeignStore, TEST_ANSWER, WireType},
+    curios_abi::ForeignStore,
     curios_anf::lower_to_cps,
     curios_cert::{Accepted, Globals, Rechecked, Refusal, certify_definitions, certify_program},
     curios_common::{
@@ -680,19 +680,29 @@ fn closing(function: &Term, syntax: &SyntaxRegistry) -> Term {
 const WITHHELD_ONLY_WHEN_BROKEN: &str = "an entry is withheld only for reaching an item that did not parse, which fails the compile first";
 
 /// Which final term a compilation checks, and what it is judged at: the one the author wrote, as a program or at `False`, or the test tail synthesized from a unit's registered tests. A policy rather than a boolean at each call site, so the program shapes a unit can compile to are named where they diverge — and the whole of what an entry can be judged at, since nothing else states its type.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub enum EntryTail {
     /// The authored entrypoint as a program: judged at `Io({})`, each of its tails run through `/std/Program`.
     Program,
     /// The authored entrypoint as an alleged proof of the empty proposition, judged at `/sys/Bool/False`: how the soundness board puts a witness through [`examine_entrypoint`].
     False,
-    /// The synthesized `Test/main([...])` over the tests in scope at or under any of `under`, a whole segment at a time, replacing an executable's authored tail, or a library's absence of one, where the entry is an empty program. Only the unit compiled tested holds tests ([`curios_module::RootSource::tested`]), so they are that unit's, wherever it stands in the fold. A tail selecting none is `Test/main([])`, which runs nothing and answers that every test held.
+    /// The synthesized `/test/main([...])` over the tests in scope at or under any of `under`, a whole segment at a time, replacing an executable's authored tail, or a library's absence of one, where the entry is an empty program, closed over `runner`, the compiled `/test`, after every unit and the entry's own declarations. Only the unit compiled tested holds tests ([`curios_module::RootSource::tested`]), so they are that unit's, wherever it stands in the fold. A tail selecting none is `/test/main([])`, which runs nothing and reports nothing.
     ///
     /// **Which tests is the program's, never the unit's.** The unit holds every test it declares whatever is selected, so one tested unit serves every selection, `wonder` and `lint`; what the tail does not reach is linked into nothing, so a selection narrows the program's back end, where most of a test program's cost is.
-    Test { under: Vec<Qualifier> },
+    ///
+    /// **`/test` is in scope for the tail alone.** No unit is compiled over `runner`, the entry's declarations included, so no name written in a test compilation reaches it and every name that resolves there resolves in a build.
+    Test { under: Vec<Qualifier>, runner: Unit },
 }
 
 impl EntryTail {
+    /// The compiled `/test` a test tail is closed over beside the entry's declarations, where the tail is one.
+    fn runner(&self) -> Option<&Unit> {
+        match self {
+            EntryTail::Program | EntryTail::False => None,
+            EntryTail::Test { runner, .. } => Some(runner),
+        }
+    }
+
     /// The tests in scope, module by module, those the tail selects scheduled and the rest skipped: the tests `own`, the entry's unit, and `scope` hold, each a lowered module, in the fold's order and each unit's [module order](in_module_order); a program and an entry at `False` schedule none and skip none.
     ///
     /// A test program's tail is synthesized by the elaborator, in Core, once the unit's items are defined — it schedules those definitions and chooses each test's discharge from their elaborated form, so it cannot exist before them. What is decided here is *which* tests it schedules, and in what order. The records for the runner are read off the same lowered definitions the tail schedules, so the two cannot disagree about what the tests are.
@@ -701,7 +711,7 @@ impl EntryTail {
         own: &curios_core::Definitions,
         scope: &[&curios_core::Definitions],
     ) -> Vec<ScheduledModule> {
-        let EntryTail::Test { under } = self else {
+        let EntryTail::Test { under, .. } = self else {
             return Vec::new();
         };
         let selected = |test: &Global| under.iter().any(|prefix| selects(prefix, test));
@@ -732,7 +742,7 @@ impl EntryTail {
 
     /// Each prefix the tail selects tests at or under that selects none of `schedule`'s: what a run names where no subject's tail selects anything at it. None for a program or an entry at `False`.
     fn unmatched(&self, schedule: &[ScheduledModule]) -> Vec<Qualifier> {
-        let EntryTail::Test { under } = self else {
+        let EntryTail::Test { under, .. } = self else {
             return Vec::new();
         };
 
@@ -746,14 +756,6 @@ impl EntryTail {
             })
             .copied()
             .collect()
-    }
-
-    /// The wire type the entry's answer crosses to its host at, where a host reads one: a test program's, what its test found ([`TEST_ANSWER`]). A program's unit is read by no host, and an entry put at `False` is never run.
-    fn answer(&self) -> Option<WireType> {
-        match self {
-            EntryTail::Program | EntryTail::False => None,
-            EntryTail::Test { .. } => Some(TEST_ANSWER),
-        }
     }
 
     /// What the elaborator closes the program with: the authored `entry`, or the test tail over `scheduled`, which the elaborator synthesizes and states the type of.
@@ -1176,6 +1178,8 @@ where
         dumped,
     ));
     let closing = tail.closing(&written, &scheduled);
+    // A test tail is closed over `/test` beside the declarations' unit, which no unit is compiled over, so it is closed apart from their walk, over the unit the walk made, as it is over a unit the cache handed back: the tail raises nothing of its own, so the batch of what the walk refused loses nothing by it.
+    let runner = tail.runner();
 
     let mut findings = None;
     let closed = match (hit, baseline) {
@@ -1189,9 +1193,16 @@ where
                     Some(unit.certification()),
                 );
             }
-            // Decided where the unit was made, of a compile that elaborated this term beside its declarations: the proofs it writes now read what they read then.
+            // Decided where the unit was made, of a compile that elaborated this term beside its declarations, or a test tail after them: the proofs it writes now read what they read then.
             findings = Some(Findings::of_unit(&unit));
-            let closed = close_over(budget, predecessors, syntax, &unit, &lowered, closing);
+            let closed = close_over(
+                budget,
+                predecessors,
+                syntax,
+                (&unit, runner),
+                &lowered,
+                closing,
+            );
 
             closed.map(|entry| (unit, Some(lowered), entry))
         }
@@ -1214,10 +1225,13 @@ where
                     tell(predecessors.units(), lowered, elaborated, traces, None);
                 }
             };
-            let closing = Some(Closing {
-                tail: closing,
-                elaborated: &mut elaborated,
-            });
+            let walked_closing = match runner {
+                Some(_) => None,
+                None => Some(Closing {
+                    tail: closing,
+                    elaborated: &mut elaborated,
+                }),
+            };
             // The program's own declarations are told of by the empty prefix the entry owns.
             let mut walked = |walked: Walked<'_>| {
                 progress(Progress::Walked {
@@ -1246,7 +1260,7 @@ where
                             .collect::<Vec<_>>(),
                         candidates: candidates.as_deref(),
                     },
-                    closing,
+                    walked_closing,
                     Telling {
                         walked: Some(&mut walked),
                         refused: Some(&mut refused),
@@ -1257,7 +1271,7 @@ where
                     predecessors,
                     syntax,
                     lowered,
-                    closing,
+                    walked_closing,
                     Telling {
                         walked: Some(&mut walked),
                         refused: Some(&mut refused),
@@ -1265,7 +1279,7 @@ where
                 ),
             };
 
-            compiled.map(|(unit, entry)| {
+            compiled.and_then(|(unit, entry)| {
                 if let (Some(tell), Some(text)) = (told_elaborated, unit.text()) {
                     tell(
                         predecessors.units(),
@@ -1280,7 +1294,20 @@ where
                     curios_common::profile!("cache::put" => cache.put(source, &unit));
                 }
 
-                (unit, None, entry.expect(WITHHELD_ONLY_WHEN_BROKEN))
+                let entry = match runner {
+                    None => entry.expect(WITHHELD_ONLY_WHEN_BROKEN),
+                    Some(_) => close_over(
+                        budget,
+                        predecessors,
+                        syntax,
+                        (&unit, runner),
+                        unit.text()
+                            .expect("a program's declarations are a unit written as a program"),
+                        closing,
+                    )?,
+                };
+
+                Ok((unit, None, entry))
             })
         }
     };
@@ -1290,7 +1317,8 @@ where
         Ok((unit, lowered, entry)) => {
             // Read off the unit before the term that closes the program is judged: a lint is no part of that verdict either.
             let findings = findings.unwrap_or_else(|| Findings::of_unit(&unit));
-            if lowered.is_some() {
+            // The term was elaborated apart from the declarations' walk where the unit was restored or the term is a test tail, and is told of here; elaborated in the walk, it was told of there.
+            if lowered.is_some() || runner.is_some() {
                 observe(Stage::CoreElab(
                     &Program {
                         definitions: unit.core().clone(),
@@ -1307,6 +1335,7 @@ where
                     .iter()
                     .copied()
                     .chain([&unit])
+                    .chain(runner)
                     .collect::<Vec<_>>();
                 let text = lowered
                     .as_ref()
@@ -1336,12 +1365,12 @@ where
     })
 }
 
-/// The term a program closes with, elaborated alone over `unit`, the unit of the program's declarations as a cache handed it back: nothing of the unit is elaborated, and the term reads it as it reads any unit in scope. `lowered` is this compile's lowering of the program, which a report is placed and spelled by.
+/// The term a program closes with, elaborated alone over `unit`, the unit of the program's declarations as the walk made it or a cache handed it back, and `runner`, the compiled `/test` a test tail is closed over after it: nothing of either is elaborated, and the term reads them as it reads any unit in scope. `lowered` is the program's lowering, which a report is placed and spelled by.
 fn close_over(
     budget: u64,
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
-    unit: &Unit,
+    (unit, runner): (&Unit, Option<&Unit>),
     lowered: &PreparedText,
     closing: Tail<'_>,
 ) -> Result<curios_core::Entrypoint, CompileError> {
@@ -1351,6 +1380,7 @@ fn close_over(
         .iter()
         .copied()
         .chain([unit])
+        .chain(runner)
         .collect::<Vec<_>>();
     let scope = Predecessors::over(&units);
     let fixed = scope.fixed();
@@ -1546,10 +1576,9 @@ pub fn examine_entrypoint(
     })
 }
 
-/// The back half of [`compile_entrypoint`]: from a verified erased module through optimization, the lowering into CPS, CPS optimization and the rebuild in place it settles, and wasm emission, the entry's answer crossing at `answer` where it is declared at one, observing every stage in order.
+/// The back half of [`compile_entrypoint`]: from a verified erased module through optimization, the lowering into CPS, CPS optimization and the rebuild in place it settles, and wasm emission, observing every stage in order.
 pub fn lower_from_anf<O>(
     mut anf_module: curios_anf::Module,
-    answer: Option<&WireType>,
     observe: &mut O,
 ) -> (curios_wasm::Module, ForeignStore)
 where
@@ -1579,7 +1608,7 @@ where
 
     observe(Stage::CpsOptm(&cps_optm_module));
 
-    let (wasm_module, imported) = into_wasm(&cps_optm_module, turns, answer);
+    let (wasm_module, imported) = into_wasm(&cps_optm_module, turns);
 
     observe(Stage::Wasm(&wasm_module));
 
@@ -2185,7 +2214,6 @@ where
         elaborated,
         progress,
     } = told;
-    let answer = tail.answer();
     // Compiling reports no lint, so the findings go unread.
     let (_, entered) = enter(
         budget,
@@ -2208,7 +2236,7 @@ where
             let anf_module = anf_module?;
 
             // What an embedder is handed is the rows the module imports, which the emitter knows as it writes them: a program asks for an implementation of what it reaches, so a row a dependency declares and nothing calls costs its consumers nothing — no module read, linked or carried in an executable.
-            Some(lower_from_anf(anf_module, answer.as_ref(), observe))
+            Some(lower_from_anf(anf_module, observe))
         }
     };
 

@@ -24,7 +24,6 @@ use {
         validate_entry_universes, validate_universes, zonk, zonk_arity, zonk_entry, zonk_published,
         zonk_solved_term_metas,
     },
-    curios_abi::TEST_ANSWER,
     curios_analysis::{definition_applications, group_applications, group_totality},
     curios_common::{Candidates, Mount, Plicity, Qualifier, grown},
     curios_core::{
@@ -32,7 +31,7 @@ use {
         FuncType, Global, InductParam, Intrinsic, Item, Items, Label, Level, Made, Minted, Names,
         Nominal, Nominals, Order, Places, Quality, RecItem, Revised, Sort, StructDecl, Subterm,
         Telescope, Term, Totality, Transient, UniverseConstraintOrigin, UniverseContext, Universes,
-        Visit, stamp_declaration_instance, wire_term,
+        Visit, stamp_declaration_instance,
     },
     std::{collections::BTreeSet, rc::Rc},
 };
@@ -1642,11 +1641,10 @@ fn elaborate_definitions_suffix<'s>(
                 .filter(|test| !poison.holds(test))
                 .cloned()
                 .collect::<Vec<_>>();
-            // A test program's tail is judged at what `Test/main` answers, the text of what the test found, read off the wire type its entry crosses at: the verdict is the value the entry hands back, where a program's unit says nothing a runner could read.
-            let answer = wire_term(&TEST_ANSWER, &context.syntax());
+            // A test program's tail is judged at what every program's is, `Io({})`: what its test found reaches its runner through `/test/report`, and nothing reads what the entry yields.
             synthesized = Entrypoint {
                 body: test_program_tail(context, &scheduled),
-                type_: Some(Term::intrinsic(Intrinsic::io_type(answer))),
+                type_: Some(Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit()))),
             };
             // Choosing each test's discharge reduces bodies under their telescopes; that is spent on the declarations' behalf, so the tail itself still checks on a full budget.
             context.restore_budget();
@@ -1923,7 +1921,7 @@ fn refused(refusals: Vec<Error>, finalized: Result<Finalized, Error>) -> Error {
 pub enum Tail<'a> {
     /// The program's own [`Entrypoint`], exactly as lowered.
     Entry(&'a Entrypoint),
-    /// `Test/main([...])` over these tests, replacing the program's written entry; a unit with no tests gets `Test/main([])`.
+    /// `/test/main([...])` over these tests, replacing the program's written entry; a unit with no tests gets `/test/main([])`.
     Tests(&'a [Global]),
 }
 

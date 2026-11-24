@@ -72,7 +72,7 @@ pub(super) fn lower_declaration(
                 false => FlatItem::Let(items.pop().expect("a `let` item has a member")),
             });
         }
-        // A test takes no parameters, so it is not function sugar — but it lowers to a `() -> Test({})` thunk, because `Test/main` holds the whole schedule and must force only the one it selected. The output is emitted as core directly off the registry slot, since a synthesized `Var` carries the resolved identity and nothing here depends on the declaration being importable.
+        // A test takes no parameters, so it is not function sugar — but it lowers to a `() -> Test({})` thunk, because `/test/main` holds the whole schedule and must force only the one it selected. The output is emitted as core directly off the registry slot, since a synthesized `Var` carries the resolved identity and nothing here depends on the declaration being importable.
         TopItem::Test(test) => {
             let name = curios_core::Global::Authored(context.prefixed(&test.label));
             context.record_import_scope(Some(&name));
@@ -83,7 +83,7 @@ pub(super) fn lower_declaration(
                 )),
                 [curios_core::Term::tuple_type_unit()],
             );
-            // The empty telescope is not vestigial: it is the thunk. A test lowers to `() -> Test({})` so `Test/main` can hold it unforced and run only the one it selected.
+            // The empty telescope is not vestigial: it is the thunk. A test lowers to `() -> Test({})` so `/test/main` can hold it unforced and run only the one it selected.
             let type_ = lower.func_type_under(&func_sugar_type_params(&[]), || Ok(output))?;
             let body = curios_core::Term::func_marked(
                 Vec::<(Plicity, curios_core::Free, curios_core::Term)>::new(),

@@ -30,6 +30,7 @@ use test_runner::*;
 
 use {
     curios::{CABINET, bindings_of, fault, unlinked},
+    curios_abi::RunAs,
     curios_common::{Code, Kind, OsError, Report, Source, SourceName, Style},
     curios_cranelift::module_exports,
     curios_document::write_documentation,
@@ -319,7 +320,7 @@ fn dispatch() -> Result<(), Failure> {
                 tree,
             } = compiled?;
             // Linked as the run links, entering nothing, so what could not be linked is the compiler's to refuse, at the row that declares it, before the program has taken a step.
-            let bindings = bindings_of(manifest.as_deref(), &foreigns, cabinet)?;
+            let bindings = bindings_of(manifest.as_deref(), &foreigns, cabinet, RunAs::Program)?;
 
             // Nothing announces the run: what follows is the program's own output, written past the transcript.
             tree.close();
@@ -521,7 +522,8 @@ fn dispatch() -> Result<(), Failure> {
                     } = compiled?;
 
                     // Linked here as a run links, entering nothing: the executable's launcher has these modules and its host and no other answer, so what it would refuse at every start is refused before the executable is written.
-                    let bindings = bindings_of(manifest.as_deref(), &foreigns, cabinet)?;
+                    let bindings =
+                        bindings_of(manifest.as_deref(), &foreigns, cabinet, RunAs::Program)?;
 
                     // Written out here, where Cranelift is, so the launcher only ever deserializes: that is what lets a program declaring `foreign` reach a machine with no compiler, no manifest and no sources, carrying the modules answering it inside its own image.
                     let plugins = bindings

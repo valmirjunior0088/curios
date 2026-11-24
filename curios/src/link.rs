@@ -1,6 +1,6 @@
 //! What answers the `foreign` rows a program reaches, for each target: the foreign providers of its package graph that answer one of them, compiled natively into the modules a run links and an executable carries, or read for a browser into the gateways and files its page holds — and the refusal of a reached row nothing answers, by what would answer it.
 //!
-//! **Nothing is read where the host answers every row the program reaches**, which is very nearly every program, since each reaches the standard library's rows and few any other: no manifest is walked and no file opened, so the common case pays one pass over its rows. A row answers a declaration of its own package alone, so none could answer for such a program.
+//! **Nothing is read where the run answers itself every row the program reaches** — the host's, and a test run's own ([`RunAs`]) — which is very nearly every program, since each reaches the standard library's rows and few any other: no manifest is walked and no file opened, so the common case pays one pass over its rows. A row answers a declaration of its own package alone, so none could answer for such a program.
 //!
 //! **The graph walked is the one of the package whose manifest declares the program**, an umbrella's member as a package standing alone: an umbrella's directory, where `.curios/` sits, declares no package to walk from. A loose program has no manifest and so no row: what it reaches of the standard library's rows the host answers, and a row of its own is refused, saying it has nowhere to name what would answer it.
 
@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    curios_abi::{ForeignStore, host_answers},
+    curios_abi::{ForeignStore, RunAs, host_answers},
     curios_browser::{Linked, Placed},
     curios_common::{OsError, Report, Said},
     curios_native::{DeclaredModule, ForeignBindings, Unlinked, plugin_bindings},
@@ -29,16 +29,16 @@ struct Reached {
     cabinet: Option<Cabinet>,
 }
 
-/// The rows of the graph of the package `manifest` declares that answer a declaration among `foreigns`, split by whether they state `target`'s table, the graph read out of the cabinet `cabinet` names or the governing root's own.
+/// The rows of the graph of the package `manifest` declares that answer a declaration among `foreigns`, split by whether they state `target`'s table, the graph read out of the cabinet `cabinet` names or the governing root's own — none walked where a run of `run`'s kind answers every one itself.
 fn reached(
     manifest: Option<&Path>,
     foreigns: &ForeignStore,
-    target: Target,
+    (target, run): (Target, RunAs),
     cabinet: Option<&Path>,
 ) -> Result<Reached, Box<Report>> {
     if foreigns
         .iter()
-        .all(|function| host_answers(function.name()))
+        .all(|function| host_answers(function.name()) || run.answers(function.name()))
     {
         return Ok(Reached::default());
     }
@@ -196,13 +196,14 @@ fn refused(
     }
 }
 
-/// What answers a program's rows natively ahead of the host: each module its packages declare for the rows it reaches, accepted against the hash its row pins and compiled here, where Cranelift is, to the machine code `run`, `test` and `compile` alike resolve it from. Shared by the three, so what a bundled executable carries and what a run links are one resolution, and a reached row nothing answers is refused before anything runs or is written.
+/// What answers a program's rows natively ahead of the host, for a run of `run`'s kind: each module its packages declare for the rows it reaches, accepted against the hash its row pins and compiled here, where Cranelift is, to the machine code `run`, `test` and `compile` alike resolve it from. Shared by the three, so what a bundled executable carries and what a run links are one resolution, and a reached row nothing answers — neither a module nor what the run answers itself — is refused before anything runs or is written.
 pub fn bindings_of(
     manifest: Option<&Path>,
     foreigns: &ForeignStore,
     cabinet: Option<&Path>,
+    run: RunAs,
 ) -> Result<ForeignBindings, Box<Report>> {
-    let reached = reached(manifest, foreigns, Target::Native, cabinet)?;
+    let reached = reached(manifest, foreigns, (Target::Native, run), cabinet)?;
 
     let mut modules = Vec::new();
     for Provider {
@@ -254,19 +255,20 @@ pub fn bindings_of(
         .map_err(|unlinked| refused(unlinked, &providers, manifest, Target::Native))?;
     // Linked as the run links, entering nothing: whether each reached row is answered, and at its declaration's types, is the engine's one judgment, and what it refuses is worded here from what the package graph says of the row.
     bindings
-        .check(foreigns)
+        .check(foreigns, run)
         .map_err(|unlinked| refused(unlinked, &providers, manifest, Target::Native))?;
 
     Ok(bindings)
 }
 
-/// What a browser links for a program's rows ahead of the host: each gateway its packages declare for the rows it reaches, accepted against the hash its row pins, with the declarations of the program it answers and every file its `static` table serves, read here once. A reached row nothing answers is refused before anything is written.
+/// What a browser links for a program's rows ahead of the host, for a page of `run`'s kind: each gateway its packages declare for the rows it reaches, accepted against the hash its row pins, with the declarations of the program it answers and every file its `static` table serves, read here once. A reached row nothing answers — neither a gateway, the harness, nor the page's loader, which answers a test page's own row — is refused before anything is written.
 pub fn linked_of(
     manifest: Option<&Path>,
     foreigns: &ForeignStore,
     cabinet: Option<&Path>,
+    run: RunAs,
 ) -> Result<Vec<Linked>, Box<Report>> {
-    let reached = reached(manifest, foreigns, Target::Browser, cabinet)?;
+    let reached = reached(manifest, foreigns, (Target::Browser, run), cabinet)?;
 
     let mut linked = Vec::new();
     for Provider {
@@ -328,11 +330,12 @@ pub fn linked_of(
     }
 
     let answered = |name: &str| {
-        linked.iter().any(|row| {
-            row.answers
-                .iter()
-                .any(|(declaration, _)| declaration == name)
-        })
+        run.answers(name)
+            || linked.iter().any(|row| {
+                row.answers
+                    .iter()
+                    .any(|(declaration, _)| declaration == name)
+            })
     };
     if let Some(name) = first_unanswered(foreigns, answered) {
         return Err(unanswered(

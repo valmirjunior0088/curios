@@ -242,10 +242,10 @@ fn tested(root: &Path) {
     fs::write(root.join("quiet.crs"), "/std/print(\"quiet\\n\")\n").unwrap();
 }
 
-/// An outcome as a runner sends one over the run's socket: the answer in base64, given encoded, and the rest as the harness resolves it.
-fn posted(exit_code: &str, trap: &str, answer: &str) -> Message {
+/// An outcome as a runner sends one over the run's socket: the records its test reported, each in base64, given encoded as the JSON list or `null` they are sent as, and the rest as the harness resolves it.
+fn posted(exit_code: &str, trap: &str, records: &str) -> Message {
     Message::text(format!(
-        "{{\"outcome\":{{\"exitCode\":{exit_code},\"trap\":{trap},\"answer\":{answer}}}}}"
+        "{{\"outcome\":{{\"exitCode\":{exit_code},\"trap\":{trap},\"records\":{records}}}}}"
     ))
 }
 
@@ -337,15 +337,15 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
     let (status, _, library) = serving.get("/index.wasm");
     assert_eq!(status, "HTTP/1.1 200 OK");
 
-    // What each page's runner sends of its test: what its entry answered, in base64 — the text of an empty list for a test that held, and for the failing one the outcome `/std/Test` spells of `Test/equal(1, 2)` — and, for the executable's, the base64 of a `drawn\n` it wrote on its standard output, ahead of the outcome.
-    let held = vec![posted("0", "null", "\"W10=\"")];
+    // What each page's runner sends of its test: the records it reported, each in base64 — none for a test that held, and for the failing one the one record `/std/Test` spells of `Test/equal(1, 2)`, none for an exit, which reports nothing — and, for the executable's, the base64 of a `drawn\n` it wrote on its standard output, ahead of the outcome.
+    let held = vec![posted("0", "null", "[]")];
     let failed = vec![posted(
         "0",
         "null",
-        "\"W0ZhaWx1cmUgeyBzdGVwcyA9IFtdLCBzdGF0ZW1lbnQgPSAibm90IGVxdWFsIiwgZmFjdHMgPSBbKCJvYnRhaW5lZCIsICIxIiksICgiZXhwZWN0ZWQiLCAiMiIpXSB9XQ==\"",
+        "[\"RmFpbHVyZSB7IHN0ZXBzID0gW10sIHN0YXRlbWVudCA9ICJub3QgZXF1YWwiLCBmYWN0cyA9IFsoIm9idGFpbmVkIiwgIjEiKSwgKCJleHBlY3RlZCIsICIyIildIH0=\"]",
     )];
     let exited = vec![posted("7", "null", "null")];
-    let own = vec![wrote("stdout", "ZHJhd24K"), posted("0", "null", "\"W10=\"")];
+    let own = vec![wrote("stdout", "ZHJhd24K"), posted("0", "null", "[]")];
 
     let mut socket = serving.socket();
     let (mut shown, first) = reply(&mut socket);
@@ -457,7 +457,7 @@ fn test_exits_zero_once_every_selected_test_has_passed() {
         )),
         "{opening}"
     );
-    socket.send(posted("0", "null", "\"W10=\"")).unwrap();
+    socket.send(posted("0", "null", "[]")).unwrap();
     let (closing, after) = reply(&mut socket);
     assert_eq!(after, None);
     assert_eq!(

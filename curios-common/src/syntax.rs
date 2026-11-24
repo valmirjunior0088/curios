@@ -571,7 +571,7 @@ impl ReportSyntax {
     }
 }
 
-/// The names the `test` declaration form emits: `/std/Test`, the declared output type of every lowered test, and `/std/Test/main`, the scheduler the synthesized tail applies to the collected tests. Two slots, because the tail decides nothing — a test takes no parameters, so there is no discharge to choose and no description to compare a body against.
+/// The names the `test` declaration form emits: `/std/Test`, the declared output type of every lowered test, and `/test/main`, the scheduler the synthesized tail applies to the collected tests, which a test compilation alone links. Two slots, because the tail decides nothing — a test takes no parameters, so there is no discharge to choose and no description to compare a body against.
 #[derive(Debug, Clone, Copy)]
 pub struct TestSyntax {
     pub test_type: SyntaxName,

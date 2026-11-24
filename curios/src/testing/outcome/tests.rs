@@ -1,41 +1,49 @@
 use super::*;
 
 #[test]
-fn an_outcome_reads_back_the_failures_a_derived_spell_writes() {
-    let answer = br#"[Failure { steps = ["case 2"], statement = "not equal", facts = [("expected", "\"a\""), ("obtained", "\"a\\n\"")] }]"#;
+fn records_read_back_the_failures_a_derived_spell_writes_in_the_order_reported() {
+    let first = br#"Failure { steps = ["case 2"], statement = "not equal", facts = [("expected", "\"a\""), ("obtained", "\"a\\n\"")] }"#;
+    let second = br#"Failure { steps = [], statement = "no", facts = [] }"#;
 
     assert_eq!(
-        Outcome::read(answer),
+        Outcome::of(&[first.to_vec(), second.to_vec()]),
         Ok(Outcome {
-            failures: vec![FailedCheck {
-                steps: vec!["case 2".to_string()],
-                statement: "not equal".to_string(),
-                facts: vec![
-                    ("expected".to_string(), "\"a\"".to_string()),
-                    ("obtained".to_string(), "\"a\\n\"".to_string()),
-                ],
-            }],
+            failures: vec![
+                FailedCheck {
+                    steps: vec!["case 2".to_string()],
+                    statement: "not equal".to_string(),
+                    facts: vec![
+                        ("expected".to_string(), "\"a\"".to_string()),
+                        ("obtained".to_string(), "\"a\\n\"".to_string()),
+                    ],
+                },
+                FailedCheck {
+                    steps: vec![],
+                    statement: "no".to_string(),
+                    facts: vec![],
+                },
+            ],
         })
     );
 }
 
 #[test]
-fn an_empty_list_is_a_test_that_held() {
-    assert!(Outcome::read(b"[]").is_ok_and(|outcome| outcome.held()));
+fn no_record_is_a_test_that_held() {
+    assert!(Outcome::of(&[]).is_ok_and(|outcome| outcome.held()));
 }
 
 #[test]
-fn an_answer_that_spells_no_outcome_says_what_it_spells() {
-    for (answer, why) in [
-        (&b""[..], "the answer is no term"),
-        (b"true", "`true` is no list"),
-        (b"[1]", "`1` is no failed check"),
+fn a_record_that_spells_no_failed_check_says_what_it_spells() {
+    for (record, why) in [
+        (&b""[..], "a record is no term"),
+        (b"true", "`true` is no failed check"),
+        (b"[]", "is no failed check"),
         (
-            br#"[Failure { steps = [], statement = "x" }]"#,
+            br#"Failure { steps = [], statement = "x" }"#,
             "has no `facts`",
         ),
     ] {
-        let refusal = Outcome::read(answer).expect_err("no outcome");
+        let refusal = Outcome::of(&[record.to_vec()]).expect_err("no outcome");
 
         assert!(refusal.contains(why), "{refusal}");
     }

@@ -1,4 +1,4 @@
-//! What a test found, as its program answers it: the checks that failed, each the steps that reached it, what it states and the values it compared, read back from the text `/std/Test` writes of them. The one reading of an answer, which a native run and a page's post are each read through, so the two runners present a test alike.
+//! What a test found, as its program reports it through `/test/report`: the checks that failed, each the steps that reached it, what it states and the values it compared, read back from the text `/std/Test` writes of each, one record a check. The one reading of a test's records, which a native run's and a page's post are each read through, so the two runners present a test alike.
 
 #[cfg(test)]
 mod tests;
@@ -20,15 +20,11 @@ pub struct FailedCheck {
 }
 
 impl Outcome {
-    /// The outcome `answer` spells: the text a derived `Spell` writes of `/std/Test`'s failures, a list of structure literals read back as Curios. `Err` says what of it is no outcome, which a test program never answers, so its runner reports it as its own fault.
-    pub fn read(answer: &[u8]) -> Result<Self, String> {
-        let text = str::from_utf8(answer).map_err(|_| "the answer is no text".to_string())?;
-        let term = text
-            .parse::<Term>()
-            .map_err(|error| format!("the answer is no term: {}", error.format()))?;
-        let failures = listed(&term)?
-            .into_iter()
-            .map(failed_check)
+    /// The outcome `records` spell, in the order the test reported them: each the text a derived `Spell` writes of one of `/std/Test`'s failures, a structure literal read back as Curios, and none where the test held. `Err` says what of a record is no failed check, which a test program never reports, so its runner reports it as its own fault.
+    pub fn of(records: &[Vec<u8>]) -> Result<Self, String> {
+        let failures = records
+            .iter()
+            .map(|record| FailedCheck::read(record))
             .collect::<Result<_, _>>()?;
 
         Ok(Self { failures })
@@ -37,6 +33,18 @@ impl Outcome {
     /// Whether the test held: no check of it failed.
     pub fn held(&self) -> bool {
         self.failures.is_empty()
+    }
+}
+
+impl FailedCheck {
+    /// The failed check `record` spells: the text a derived `Spell` writes of one of `/std/Test`'s failures, read back as Curios.
+    fn read(record: &[u8]) -> Result<Self, String> {
+        let text = str::from_utf8(record).map_err(|_| "a record is no text".to_string())?;
+        let term = text
+            .parse::<Term>()
+            .map_err(|error| format!("a record is no term: {}", error.format()))?;
+
+        failed_check(&term)
     }
 }
 

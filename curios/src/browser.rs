@@ -3,6 +3,7 @@
 use {
     crate::{Built, Failure, Then, Tree, payload_of},
     curios::{linked_of, page_name},
+    curios_abi::RunAs,
     curios_browser::page,
     curios_common::{OsError, Report, write_whole},
     curios_package::{Program, Refused, Target},
@@ -29,14 +30,13 @@ pub fn built(
         foreigns,
         tree,
     } = payload_of(budget, program, verdicts, Target::Browser, Then::More)?;
-    let linked = linked_of(manifest.as_deref(), &foreigns, cabinet)?;
+    let linked = linked_of(manifest.as_deref(), &foreigns, cabinet, RunAs::Program)?;
     let files = page(
         curios_browser::Program {
             name: &name,
             package: package.as_deref(),
             module,
             foreigns: &foreigns,
-            answer: None,
         },
         linked,
     )?;

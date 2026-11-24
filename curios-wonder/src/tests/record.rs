@@ -235,7 +235,7 @@ fn a_refused_library_reports_its_lints_beside_the_refusal() {
 
 /// A library's ill-typed test is its own record, though no tail is compiled over the library's tests.
 ///
-/// **The premise a question about a library rests on.** `curios test` compiles a library under a synthesized `Test/main([...])`, and a question compiles no entry at all — which is sound only because that tail raises nothing of its own: a test's body is an item checked at `/std/Test` like any other, so a fault in one is the unit's refusal.
+/// **The premise a question about a library rests on.** `curios test` compiles a library under a synthesized `/test/main([...])`, and a question compiles no entry at all — which is sound only because that tail raises nothing of its own: a test's body is an item checked at `/std/Test` like any other, so a fault in one is the unit's refusal.
 #[test]
 fn a_library_reports_an_ill_typed_test_without_compiling_a_tail() {
     let root = mounted_project("library-test");

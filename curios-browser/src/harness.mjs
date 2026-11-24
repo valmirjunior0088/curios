@@ -53,14 +53,14 @@ const describe = (value) => {
 
 /**
  * Run a compiled program. `config` carries:
- * - `compiled`: what `compile` returned — `program`, the module bytes, `foreigns`, the program's own `foreign` rows as `{ name, params, results }`, `never: true` in place of `results` for a row that does not return, and `answer`, optional, the wire type the program's entry answers at where its kind declares one, spelled as a row's types are — a test program's `Bytes`;
+ * - `compiled`: what `compile` returned — `program`, the module bytes, and `foreigns`, the program's own `foreign` rows as `{ name, params, results }`, `never: true` in place of `results` for a row that does not return;
  * - `bridge`: the bridge module's bytes, from `bridge_bytes`;
  * - `status`, `event`, `stdio`, `seed`, `deadlock`: the wire code tables, the standard streams' tokens, the first token this host may mint and the report of a program suspended on nothing, from the configuration curios-browser renders;
  * - `rows`: from that configuration too — the name the standard library declares each of the host's rows under, beside the host method that answers it;
  * - `args`: optional, the program's arguments, each a `Uint8Array`, its name first, which a page passes and the playground does not;
  * - `hooks`: optional `{ onStdout?, onStderr?, foreign? }` — `onStdout`/`onStderr` are streaming callbacks, each handed every write to its stream as a `Uint8Array` it owns, which the run then keeps no copy of; `foreign` implements `foreign` declarations, keyed by fully qualified name (e.g. `{ "/frobnicate": fn }`), each held to its row as `checked` states, and answers a row before the host does — at once, or later by a promise, the call suspending while it is pending and the signal the hook was handed aborted where the call is cancelled.
  *
- * Resolves to `{ stdout, stderr, exitCode, trap, answer }`: the output of each stream no hook took, accumulated, the code the program exited with (0 when `main` returns), the trap message if execution failed instead, and what the entry answered where its kind declares an answer and it returned one, lifted at `compiled.answer` as a row's operand of that type is — a test program's outcome, the bytes of what its test found — or `null`: a program's unit, an exit, a trap.
+ * Resolves to `{ stdout, stderr, exitCode, trap, returned }`: the output of each stream no hook took, accumulated, the code the program exited with (0 when `main` returns), the trap message if execution failed instead, and whether `main` returned, which an exit, `0` included, a deadlock and a trap do not — what a test program's runner reads a test's records by. What the entry yields is the unit every program yields, which is not read.
  */
 export async function run(config) {
   const bridge = (await WebAssembly.instantiate(config.bridge, {})).instance
@@ -790,7 +790,7 @@ export async function run(config) {
     stderr: concat(output.stderr),
     exitCode: 0,
     trap: null,
-    answer: null,
+    returned: false,
   });
 
   try {
@@ -803,7 +803,7 @@ export async function run(config) {
     const advance = instance.exports["func/advance"];
     let turn = instance.exports["func/main"]();
 
-    // A program that cannot suspend answers what it yields, which nothing here reads. One that can is advanced until it yields; where it suspends on no handle, its cancel runs to its end and the deadlock is reported, ending the run as an exit with code 1 would.
+    // A program that cannot suspend answers what it yields, the unit, which nothing here reads. One that can is advanced until it yields; where it suspends on no handle, its cancel runs to its end and the deadlock is reported, ending the run as an exit with code 1 would.
     while (advance !== undefined && turn[0] === 1) {
       const on = waits(turn[2]);
 
@@ -819,16 +819,7 @@ export async function run(config) {
       turn = advance(turn[4]);
     }
 
-    // What the entry answered, where the program's kind declares a wire type for it: lowered by the program as a row's operand of that type is, and lifted here as one is. A program's unit is not read.
-    const yielded = advance === undefined ? turn : turn[1];
-    const answer =
-      config.compiled.answer === undefined || config.compiled.answer === null
-        ? null
-        : lifts[config.compiled.answer](yielded, (what) => {
-            throw new Error(`the entry's answer: ${what}`);
-          });
-
-    return { ...result(), answer };
+    return { ...result(), returned: true };
   } catch (error) {
     if (error instanceof ExitSignal) {
       return { ...result(), exitCode: error.code };

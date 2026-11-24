@@ -184,7 +184,7 @@ fn a_units_tests_run_from_the_tail_of_the_program_compiled_after_it() {
     let (system, _) = MockHost::builder().args(["test", "0"]).build();
     let outcome = compiled.run_test(system, ForeignBindings::empty());
 
-    assert_eq!(outcome, Ok(TestEnd::Answered(b"[]".to_vec())));
+    assert_eq!(outcome, Ok(TestEnd::Returned(Vec::new())));
 }
 
 /// The two obligations are decided independently and reported together, so a reader fixing one is told about the other in the same run.

@@ -1,19 +1,19 @@
 use {
     super::{
         BundledPlugin, Lift, Lower, Plugin, Raised, Replied, Reply, Stop, Unlinked,
-        anyref_array_type, bool_of, bytes_of, filled, i8_array_type, longs_array_type, raised,
+        anyref_array_type, bool_of, filled, i8_array_type, longs_array_type, raised,
         words_array_type,
     },
     curios_abi::{
         Answer, Answered, Carrier, ENTRY, ForeignFunction, ForeignStore, Handle, HostOp, HostOps,
-        LANE_IN, Mode, Namespace, PANIC, Refusal, RowReply, SerialFlow, SerialOp, SerialParity,
-        Settled, StdioMode, WireReturn, WireType, for_each_host_op,
+        LANE_IN, Mode, Namespace, PANIC, Refusal, RowReply, RunAs, SerialFlow, SerialOp,
+        SerialParity, Settled, StdioMode, TEST_REPORT, WireReturn, WireType, for_each_host_op,
     },
     std::{
         collections::{HashMap, hash_map::Entry},
         error::Error,
-        fmt, panic,
-        sync::{Arc, LazyLock, OnceLock},
+        fmt, mem, panic,
+        sync::{Arc, LazyLock, Mutex, OnceLock},
         thread,
     },
     wasmtime::{
@@ -504,8 +504,8 @@ impl ForeignBindings {
                 .any(|module| module.answers().any(|row| row.name() == name))
     }
 
-    /// Link the program whose rows are `foreigns` as a run under this runtime's host would, entering nothing: every row is held to what stands to answer it, by the comparison a run makes, and what a run would refuse where it begins is refused here. What writes an executable asks this first, since a launcher has these bindings and this host and no other.
-    pub fn check(&self, foreigns: &ForeignStore) -> Result<(), Unlinked> {
+    /// Link the program whose rows are `foreigns` as a run of `run`'s kind under this runtime's host would, entering nothing: every row is held to what stands to answer it — these bindings, then the rows the run answers itself, the host's and a test run's — by the comparison a run makes, and what a run would refuse where it begins is refused here. What writes an executable asks this first, since a launcher has these bindings and this host and no other.
+    pub fn check(&self, foreigns: &ForeignStore, run: RunAs) -> Result<(), Unlinked> {
         let mut bindings = Answers::<()> {
             rows: self
                 .answers
@@ -522,13 +522,42 @@ impl ForeignBindings {
         }
         bindings.admit(foreigns)?;
 
-        let host = host_stated();
+        let own = run_stated(run);
         for row in foreigns.iter() {
-            answering(foreigns, &bindings, &host, row.name())?;
+            answering(foreigns, &bindings, &own, row.name())?;
         }
 
         Ok(())
     }
+}
+
+/// What a run of `run`'s kind states of every row it answers itself, with nothing to enter: the host's ([`host_stated`]), and for a test run [`TEST_REPORT`] as it answers that row ([`reporting`]).
+fn run_stated(run: RunAs) -> Answers<()> {
+    let mut stated = host_stated();
+    match run {
+        RunAs::Program => {}
+        RunAs::Test => {
+            let mut reported = Answers::default();
+            reporting(&mut reported, Arc::default());
+            let (row, _) = reported
+                .rows
+                .remove(TEST_REPORT)
+                .expect("a test run answers the row it reports through");
+            stated.record(TEST_REPORT.to_string(), row, ());
+        }
+    }
+
+    stated
+}
+
+/// Answer [`TEST_REPORT`], the row a test run answers itself beside the host's, into `records`: each record the test reports, in the order it reports them. The closure's own types state the row, which the link holds to the declaration `/test` makes of it.
+fn reporting(answers: &mut Answers, records: Arc<Mutex<Vec<Vec<u8>>>>) {
+    answers.answer(TEST_REPORT.to_string(), move |record: Vec<u8>| {
+        records
+            .lock()
+            .expect("a test's records are kept by its one run")
+            .push(record);
+    });
 }
 
 /// What this runtime's host states of every row it answers, with nothing to enter: the table's own signatures, which [`host_rows`] answers by.
@@ -772,34 +801,28 @@ impl Ended for u8 {
     }
 }
 
-/// How a test program's run ended: with the verdict its entry answered, or by an exit that left it unanswered. An exit is the second whatever its code, so no code is ever read as a verdict.
+/// How a test program's run ended: returned, beside what its test reported through [`TEST_REPORT`] — each check that failed, one record a report, none where the test held — or by an exit, which reports nothing whatever its code, so no code is ever read as an outcome.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TestEnd {
-    /// The entry returned, answering what the test it ran found: the text `/std/Test` writes of the checks that failed, which the runner reads back.
-    Answered(Vec<u8>),
-    /// `proc_exit` ended the run with this code before the entry answered.
+    /// The entry returned, the test having reported these records, in order: the text `/std/Test` writes of one failure each, which the runner reads back.
+    Returned(Vec<Vec<u8>>),
+    /// `proc_exit` ended the run with this code.
     Exited(u8),
 }
 
-/// A test program's entry answers at [`TEST_ANSWER`](curios_abi::TEST_ANSWER), `Bytes` ([`ENTRY`]), lifted as a row's operand of that type is, and a reference that is no byte string is refused rather than read as a verdict. The unit a program's entry hands back is a struct, so a module that is no test program is never read as one that answered.
-impl Ended for TestEnd {
-    fn returned(store: &mut Store<Guest>, result: Option<Rooted<AnyRef>>) -> Result<Self, Stop> {
-        let answer = result.ok_or_else(|| {
-            Stop::of("compiler fault", format_args!("`{ENTRY}` answered nothing"))
-        })?;
+/// How a run ended where what its entry yields is read by nothing and a return is told from an exit: what a test run reads of its end before it hands back what its test reported.
+enum Finished {
+    Returned,
+    Exited(u8),
+}
 
-        bytes_of(&mut *store, &answer)
-            .map(TestEnd::Answered)
-            .map_err(|error| {
-                Stop::of(
-                    "compiler fault",
-                    format_args!("what `{ENTRY}` answered could not be read: {error}"),
-                )
-            })
+impl Ended for Finished {
+    fn returned(_: &mut Store<Guest>, _: Option<Rooted<AnyRef>>) -> Result<Self, Stop> {
+        Ok(Finished::Returned)
     }
 
     fn exited(code: u8) -> Self {
-        TestEnd::Exited(code)
+        Finished::Exited(code)
     }
 }
 
@@ -894,15 +917,25 @@ impl Compiled {
         self.run_in(GUEST_HEAP, bindings, host_rows(Arc::clone(&host)), host)
     }
 
-    /// [`Compiled::run`] for a program compiled as a test program, returning how its run ended: the verdict its entry answered, or the exit that left it unanswered.
+    /// [`Compiled::run`] for a program compiled as a test program, which answers [`TEST_REPORT`] itself beside the host's rows, into what this one run keeps, and returns how the run ended: returned with what its test reported, or exited.
     pub fn run_test<H: HostOps + Send + Sync + 'static>(
         &self,
         host: H,
         bindings: ForeignBindings,
     ) -> Result<TestEnd, Stop> {
         let host = Arc::new(host);
+        let records = Arc::new(Mutex::new(Vec::new()));
+        let mut answers = host_rows(Arc::clone(&host));
+        reporting(&mut answers, Arc::clone(&records));
 
-        self.run_in(GUEST_HEAP, bindings, host_rows(Arc::clone(&host)), host)
+        Ok(match self.run_in(GUEST_HEAP, bindings, answers, host)? {
+            Finished::Returned => TestEnd::Returned(mem::take(
+                &mut *records
+                    .lock()
+                    .expect("a test's records are kept by its one run"),
+            )),
+            Finished::Exited(code) => TestEnd::Exited(code),
+        })
     }
 }
 

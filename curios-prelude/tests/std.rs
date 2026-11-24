@@ -193,14 +193,14 @@ fn run_module(module: &Qualifier) {
         });
 
         let failed = match end {
-            Ok(TestEnd::Answered(answer)) => match Outcome::read(&answer) {
-                // The test answered that nothing it checked failed.
+            Ok(TestEnd::Returned(records)) => match Outcome::of(&records) {
+                // The test returned and reported nothing it checked failed.
                 Ok(outcome) if outcome.held() => None,
                 // What the test found, drawn as this suite draws it, beneath what it wrote; its path is what only the schedule knows.
                 Ok(outcome) => Some(format!("failed\n{reported}{:#?}", outcome.failures)),
-                Err(why) => Some(format!("answered no outcome: {why}\n{reported}")),
+                Err(why) => Some(format!("reported no failed check: {why}\n{reported}")),
             },
-            // An exit is a failure whatever its code: an outcome is answered, never exited with.
+            // An exit is a failure whatever its code: an outcome is reported by a run that returns, never exited with.
             Ok(TestEnd::Exited(code)) => Some(format!("exited {code}\n{reported}")),
             Err(error) => Some(format!("{error}\n{reported}")),
         };

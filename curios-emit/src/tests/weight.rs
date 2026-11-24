@@ -296,7 +296,7 @@ fn instructions(instrs: &[curios_wasm::Instr]) -> usize {
 
 /// The instructions the body of the function `f` of `module` emits, which the emitter names after its hint, apart from the closure it is also made into.
 fn emitted(module: &curios_cps::Module) -> usize {
-    let (mut wasm, _) = crate::into_wasm(module, None, None);
+    let (mut wasm, _) = crate::into_wasm(module, None);
     let counts = wasm
         .funcs_mut()
         .filter(|(name, _)| {

@@ -45,14 +45,17 @@ test("a write is sent as it was made, in base64, and an outcome as the page post
       posted({
         exitCode: 0,
         trap: null,
-        answer: new TextEncoder().encode("[]"),
+        records: [
+          new TextEncoder().encode("hi"),
+          new TextEncoder().encode("yo"),
+        ],
       }),
     ),
-    { outcome: { exitCode: 0, trap: null, answer: "W10=" } },
+    { outcome: { exitCode: 0, trap: null, records: ["aGk=", "eW8="] } },
   );
   assert.deepEqual(
-    JSON.parse(posted({ exitCode: 7, trap: null, answer: null })),
-    { outcome: { exitCode: 7, trap: null, answer: null } },
+    JSON.parse(posted({ exitCode: 7, trap: null, records: null })),
+    { outcome: { exitCode: 7, trap: null, records: null } },
   );
   assert.deepEqual(
     decoded(encoded(new Uint8Array([0, 255, 128]))),
@@ -68,7 +71,7 @@ test("the page follows what is appended while its reader stands at its end, and 
 });
 
 test("a page whose loader never started is reported trapped, naming the loader", () => {
-  assert.equal(NEVER_STARTED.answer, null);
+  assert.equal(NEVER_STARTED.records, null);
   assert.equal(NEVER_STARTED.exitCode, null);
   assert.match(NEVER_STARTED.trap, /^the loader of index\.html did not start/);
 });

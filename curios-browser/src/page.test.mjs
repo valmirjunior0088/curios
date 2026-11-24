@@ -141,8 +141,8 @@ test("a gateway's export answers its row through the loader", async (t) => {
 
   assert.equal(outcome.trap, null);
   assert.equal(outcome.exitCode, 0);
-  // A program's kind declares no answer, so its entry's unit is not read.
-  assert.equal(outcome.answer, null);
+  // The program returned, which an exit does not, and what its entry yields is not read.
+  assert.equal(outcome.returned, true);
   assert.deepEqual(outcome.out, ["42"]);
   assert.deepEqual(outcome.posted, []);
 });
@@ -167,7 +167,7 @@ test("a framed page posts started, each write as it is made, then its outcome, a
     "42",
   );
   assert.deepEqual(posted.at(-1), [
-    { type: "outcome", outcome: { exitCode: 0, trap: null, answer: null } },
+    { type: "outcome", outcome: { exitCode: 0, trap: null, records: [] } },
     "/",
   ]);
 });
@@ -341,7 +341,7 @@ const serving = (t, directory) => {
   return { port, ended };
 };
 
-test("a test page served by the command answers its word through its gateway, and the run ends on its outcome", async (t) => {
+test("a test page served by the command answers its word through its gateway, posts what its test reported with its outcome, and the run ends on the last", async (t) => {
   const gateway = "export const twice = (n) => n * 2n;\n";
   const root = tree(t, {
     "app/curios.toml": manifest({
@@ -351,7 +351,7 @@ test("a test page served by the command answers its word through its gateway, an
       gateway,
       answers: { double: "twice" },
     }),
-    "app/lib.crs": `use /std/{Nat, Test};\n\n${DOUBLE}\ntest doubling = Test/equal(double(21)!, 42);\n`,
+    "app/lib.crs": `use /std/{Nat, Test};\n\n${DOUBLE}\ntest doubling = Test/equal(double(21)!, 42);\n\ntest halving = Test/equal(double(1)!, 3);\n`,
     "app/exe.crs": DOUBLED,
     "app/web/dom.js": gateway,
   });
@@ -415,31 +415,43 @@ test("a test page served by the command answers its word through its gateway, an
     query: `?${run.argument}=0`,
   });
 
-  // A test that held answers no failure: the text of an empty list.
+  // A test that held returned and reported nothing.
   assert.equal(outcome.trap, null);
-  assert.equal(new TextDecoder().decode(outcome.answer), "[]");
+  assert.equal(outcome.returned, true);
   assert.equal(posted[0][0].type, "started");
-  assert.equal(new TextDecoder().decode(posted.at(-1)[0].outcome.answer), "[]");
+  assert.deepEqual(posted.at(-1)[0].outcome.records, []);
 
-  // Sent as the runner sends it, the answer in base64.
-  const { answer, ...outcomeRest } = posted.at(-1)[0].outcome;
-  socket.send(
+  // Sent as the runner sends it, each record in base64.
+  const sent = ({ records, ...rest }) =>
     JSON.stringify({
       outcome: {
-        ...outcomeRest,
-        answer: Buffer.from(answer).toString("base64"),
+        ...rest,
+        records: records.map((record) =>
+          Buffer.from(record).toString("base64"),
+        ),
       },
-    }),
-  );
+    });
+  socket.send(sent(posted.at(-1)[0].outcome));
+  const next = await replied();
+  assert.deepEqual(next.next, { subject: 0, test: 1 });
+
+  // A test that failed reports its one failure, which the page posts with its outcome and the command draws beneath the test's ending.
+  posted.length = 0;
+  await loader.start({ program, query: `?${run.argument}=1` });
+  const { records } = posted.at(-1)[0].outcome;
+  assert.equal(records.length, 1);
+  assert.match(new TextDecoder().decode(records[0]), /statement = "not equal"/);
+  socket.send(sent(posted.at(-1)[0].outcome));
   const reply = await replied();
   assert.equal(reply.next, null);
   assert.match(
-    Buffer.from(reply.written, "base64").toString(),
-    /^Tested `\/app\/doubling`: passed in \d+\.\ds\nTested `\/app`: 1 passed, 0 failed in \d+\.\ds\n1 passed, 0 failed; \d+\.\ds\n$/,
+    Buffer.from(next.written, "base64").toString() +
+      Buffer.from(reply.written, "base64").toString(),
+    /^Tested `\/app\/doubling`: passed in \d+\.\ds\nTesting `\/app\/halving`\nTested `\/app\/halving`: failed in \d+\.\ds; lib\.crs:\d+:\d+\n {2}not equal\n {4}obtained: `2`\n {4}expected: `3`\nTested `\/app`: 1 passed, 1 failed in \d+\.\ds\n1 passed, 1 failed; \d+\.\ds\n$/,
   );
 
-  // A test that held wrote nothing, and the report is standard error's.
+  // The tests wrote nothing, the report is standard error's, and a failure fails the run.
   const { code, stdout } = await ended;
-  assert.equal(code, 0);
+  assert.equal(code, 1);
   assert.equal(stdout, "");
 });

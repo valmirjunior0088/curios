@@ -1,6 +1,8 @@
 //! The fold with the fixed prelude in front of it.
 //!
 //! **The half that knows no particular predecessors is [`compile_entrypoint`], and it stays that way.** It takes a [`Predecessors`] and cannot tell which unit is `/std`; nothing here changes that, and nothing there calls anything here. What this module adds is the *standard* predecessors — the ones every product puts in scope — so that the answer to "what does a Curios program get for free" is written once rather than by the native product, the browser product and this crate's own tests each. A product may still hand the fold any predecessors it likes.
+//!
+//! The runner's half of a test program, `/test`, is the standard fold's too: its source is the compiler's ([`TEST_SOURCE`]), and a test compilation compiles it over the prelude's roots and closes its tail over it ([`Fold::tests`]).
 
 #[cfg(test)]
 mod tests;
@@ -8,17 +10,39 @@ mod tests;
 use {
     crate::{
         Cache, Checked, CompileError, EntryTail, Listeners, Progress, ReadElaborated, ReadLowering,
-        ReadRefusal, Stage, TestProgram, Told, check_entrypoint, compile_entrypoint, compile_units,
-        declared_test_paths, enter_core_text, lower_from_anf, lower_subject,
+        ReadRefusal, Stage, Telling, TestProgram, Told, check_entrypoint, compile_entrypoint,
+        compile_unit, compile_units, declared_test_paths, enter_core_text, lower_from_anf,
+        lower_subject,
     },
     curios_abi::ForeignStore,
-    curios_common::{Qualifier, Source},
+    curios_common::{Qualifier, Source, SourceName},
     curios_document::Documentation,
     curios_module::{PreparedText, RootSource, SYNTAX, UnitSource, document_unit},
     curios_prelude::{root_prefixes, with_prelude},
     curios_unit::{Predecessors, Unit},
-    std::sync::Arc,
+    std::{path::Path, sync::Arc},
 };
+
+/// `/test`'s source: the runner's half of a test program — what selects the test the runner named and hands it each check that failed — which a test compilation alone links, for its tail alone.
+const TEST_SOURCE: &str = include_str!("standard/test.crs");
+
+/// `/test`, compiled over `roots`, the prelude's: the unit a test program's tail is closed over, and nothing else is compiled over ([`EntryTail::Test`]). Filed nowhere: its source is the compiler's, which a filed payload's header names, and what it is compiled over is among the units the payload's record names, so a payload is believed without it.
+fn runner(budget: u64, roots: Predecessors<'_>) -> Result<Unit, CompileError> {
+    let name = SourceName::of("test", Path::new("test.crs"))
+        .expect("`test` and `test.crs` are plain names");
+    let source = Source::named(name, TEST_SOURCE);
+    let root = RootSource::supplied_module("test", &source)
+        .map_err(|error| CompileError::Failure(vec![error.report()]))?;
+
+    compile_unit(
+        budget,
+        roots,
+        &SYNTAX,
+        &UnitSource::mounted(&root),
+        &|_| {},
+        Telling::default(),
+    )
+}
 
 /// Compile `entrypoint` against the fixed prelude — the two units every product path puts in scope, `/sys` then `/std`.
 ///
@@ -127,7 +151,7 @@ impl<'a> Fold<'a> {
         })
     }
 
-    /// [`Fold::compile`] with the entry compiled as a test program: the authored tail, or a library's absence of one, replaced by the synthesized `Test/main([...])` over the tests in scope at or under any of `under` ([`EntryTail::Test`]) — which are tests of the one unit marked tested, the entry's own where `loader` is ([`RootSource::tested`]). Everything else is the ordinary pipeline, certifier judgment included, and a selection meeting no test builds no program ([`TestProgram`]).
+    /// [`Fold::compile`] with the entry compiled as a test program: the authored tail, or a library's absence of one, replaced by the synthesized `/test/main([...])` over the tests in scope at or under any of `under` ([`EntryTail::Test`]) — which are tests of the one unit marked tested, the entry's own where `loader` is ([`RootSource::tested`]) — and closed over `/test`, compiled here over the prelude's roots. Everything else is the ordinary pipeline, certifier judgment included, and a selection meeting no test builds no program ([`TestProgram`]).
     pub fn tests<O, P>(
         self,
         entrypoint: &curios_surface::Entrypoint,
@@ -143,13 +167,17 @@ impl<'a> Fold<'a> {
         let mut observe = observe;
 
         self.under_entry(progress, |predecessors, stand_in, progress| {
+            // The prelude's roots lead the fold, a `std` package standing in the second's place where it takes it, since only the last root is ever withheld ([`stood_in_for`]).
+            let roots = &predecessors.units()[..root_prefixes().len()];
+            let runner = runner(self.budget, Predecessors::over(roots))?;
+
             compile_entrypoint(
                 self.budget,
                 predecessors,
                 &SYNTAX,
                 &entry_source(entrypoint, loader, stand_in),
                 self.cache,
-                EntryTail::Test { under },
+                EntryTail::Test { under, runner },
                 Told {
                     observe: &mut observe,
                     read: self.read,
@@ -241,7 +269,7 @@ impl<'a> Fold<'a> {
 
             Ok(entered
                 .linked
-                .map(|linked| lower_from_anf(linked, None, &mut observe)))
+                .map(|linked| lower_from_anf(linked, &mut observe)))
         })
     }
 

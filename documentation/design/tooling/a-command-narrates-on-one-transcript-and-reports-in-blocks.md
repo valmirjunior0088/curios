@@ -29,7 +29,7 @@
 - **Capturing what a test writes and showing it on failure**, which hides the output of a test that hangs, and reorders it against the test's own timing; and **holding any subject's lines until it ends**, which gives silences and then bursts.
 - **One stream for both drawings**, closing a node left open with `…` and writing it again with its outcome: a stream of fragments on a terminal and in a log alike.
 - **A drawing thread fed through a channel**: every write asynchronous, what is queued lost on an abort or an early exit, and a test's line overtaken by a child given its stream unless every such path waits on the queue.
-- **A stream of results beside the answer a test's entry gives**, each check as it happens: a test runs in an instantiation of its own, so its runner knows a trap, an exit and the time without one, and what the test found is its entry's answer, the one thing its body cannot forge.
+- **A stream of results beside what a test reports**, each check as it happens: a test runs in an instantiation of its own, so its runner knows a trap, an exit and the time without one, and what the test found is what `/test` reports of it once it has run, through a row only its runner answers and its body cannot name.
 - **A severity before the headline**, `error: type mismatch`: the kind is known to whoever prints and is the same for every report of a run, so it closes the block and the tag leads.
 - **A sentence as the headline**, which no reader can match and which pushes the facts into clauses.
 - **`kind; subject` as the closing line**, which reads as a step of the tree and collides with the step `format`.

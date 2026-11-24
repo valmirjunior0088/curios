@@ -768,7 +768,6 @@ dependencies = [
 name = "curios-elab"
 version = "0.16.25"
 dependencies = [
- "curios-abi",
  "curios-algebra",
  "curios-analysis",
  "curios-archive",

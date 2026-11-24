@@ -79,7 +79,7 @@ pub fn rebuilds_of(module: &Module, row: &str) -> usize {
 
 /// The exit code and output of `module` run with `n` as its argument.
 pub fn run(module: &Module, n: &str) -> (u8, Vec<u8>) {
-    let (wasm, foreigns) = curios_emit::into_wasm(module, module.entry_suspension(), None);
+    let (wasm, foreigns) = curios_emit::into_wasm(module, module.entry_suspension());
     start_test_engine();
     let code = curios_cranelift::compile(&to_bytes(&wasm, &Names::default()))
         .expect("the module validates");

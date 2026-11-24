@@ -4,7 +4,7 @@
 export const NEVER_STARTED = {
   exitCode: null,
   trap: "the loader of index.html did not start; the console names what stopped it",
-  answer: null,
+  records: null,
 };
 
 /** Whether `event` is a post from `iframe`'s window at `origin`, the runner's own: a message on the window can come from any site, and only the page the runner opened is listened to. */
@@ -30,13 +30,13 @@ export const decoded = (text) =>
 export const wrote = (stream, bytes) =>
   JSON.stringify({ wrote: { stream, bytes: encoded(bytes) } });
 
-/** `outcome` as the socket carries it to the command: how the test ended, as its page posted it, what its entry answered in base64. */
+/** `outcome` as the socket carries it to the command: how the test ended, as its page posted it, and each record its test reported where its program returned, in base64. */
 export const posted = (outcome) =>
   JSON.stringify({
     outcome: {
       exitCode: outcome.exitCode,
       trap: outcome.trap,
-      answer: outcome.answer === null ? null : encoded(outcome.answer),
+      records: outcome.records === null ? null : outcome.records.map(encoded),
     },
   });
 

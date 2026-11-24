@@ -310,13 +310,18 @@ fn every_registry_entry_is_keyed_by_a_name_an_item_of_its_root_declares() {
     });
 }
 
+/// A name under `/test`, which a test compilation alone links, is held where `/test` is compiled (`curios-pipeline`'s `standard::tests`).
 #[test]
-fn every_syntax_target_is_present_after_restore() {
+fn every_syntax_target_under_a_root_is_present_after_restore() {
     with_prelude(|prelude| {
         let names = items(prelude)
             .flat_map(Item::declared_names)
             .collect::<BTreeSet<_>>();
-        for target in SYNTAX.targets() {
+        let roots = root_prefixes();
+        for target in SYNTAX
+            .targets()
+            .filter(|target| roots.iter().any(|root| target.qualifier().is_within(root)))
+        {
             assert!(
                 names.contains(&Global::Authored(target.qualifier())),
                 "missing syntax target {}",

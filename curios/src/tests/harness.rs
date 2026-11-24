@@ -1,4 +1,4 @@
-//! The test harness across the stages: the `Test` description, its combinators, `Test/main`'s dispatch, the `Spell` witnesses the reports rely on, the `test` declaration, and the synthesized tail a unit's test program runs.
+//! The test harness across the stages: the `Test` description, its combinators, `/test/main`'s dispatch, the `Spell` witnesses the reports rely on, the `test` declaration, and the synthesized tail a unit's test program runs.
 
 mod resource;
 mod sequence;
@@ -6,6 +6,7 @@ mod sequence;
 use {
     super::test_support::*,
     crate::{FailedCheck, Outcome, test_support::*},
+    curios_abi::DEADLOCK,
     curios_common::{Qualifier, RootKind},
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
@@ -62,7 +63,7 @@ fn try_runs_a_fallible_action_and_fails_with_the_error_shown() {
 
 #[test]
 fn an_index_argument_selects_one_test() {
-    // The runner's protocol: argv[1] names the test to run, which answers what it found and writes nothing of it, since whoever selected it names it, says how it ended and presents what it found. An index the program does not hold answers no outcome, which the runner reports as its own fault.
+    // The runner's protocol: argv[1] names the test to run, which reports what it found and writes nothing of it, since whoever selected it names it, says how it ended and presents what it found. An index the program does not hold is reported as a failure naming it, so a run that reports nothing is one that held.
     let (module, foreigns) = test_program(
         r#"
         use /std/{Nat, Test};
@@ -76,13 +77,13 @@ fn an_index_argument_selects_one_test() {
     let compiled = to_compiled(&module, foreigns).expect("the test program compiles");
     let selected = |index: &str| {
         let (system, io) = MockHost::builder().args(["prog", index]).build();
-        let Ok(TestEnd::Answered(answer)) = compiled.run_test(system, ForeignBindings::empty())
+        let Ok(TestEnd::Returned(records)) = compiled.run_test(system, ForeignBindings::empty())
         else {
-            panic!("the test at {index} answers");
+            panic!("the test at {index} returns");
         };
         assert_eq!(io.output(), b"", "the test at {index} writes nothing");
 
-        Outcome::read(&answer)
+        Outcome::of(&records)
     };
 
     assert!(selected("0").is_ok_and(|outcome| outcome.held()));
@@ -97,7 +98,14 @@ fn an_index_argument_selects_one_test() {
             ],
         }])
     );
-    assert!(selected("2").is_err());
+    assert_eq!(
+        selected("2").map(|outcome| outcome.failures),
+        Ok(vec![FailedCheck {
+            steps: vec![],
+            statement: "the runner named no test at index 2".to_string(),
+            facts: vec![],
+        }])
+    );
 }
 
 #[test]
@@ -392,7 +400,7 @@ fn survives(module: &curios_anf::Module, needle: &str) -> bool {
 
 #[test]
 fn declared_tests_schedule_through_the_synthesized_tail() {
-    // The unit compiled as its own test program runs every declared test module by module in declaration order — a private `mod`'s included — under the synthesized `Test/main` tail, and the authored entry does not run.
+    // The unit compiled as its own test program runs every declared test module by module in declaration order — a private `mod`'s included — under the synthesized `/test/main` tail, and the authored entry does not run.
     assert_eq!(
         run_tests_program(
             r#"
@@ -411,7 +419,7 @@ fn declared_tests_schedule_through_the_synthesized_tail() {
 
 #[test]
 fn a_unit_with_no_tests_builds_no_program() {
-    // `Test/main([])` replaces the authored tail and is judged, and a program that would run nothing is built no further.
+    // `/test/main([])` replaces the authored tail and is judged, and a program that would run nothing is built no further.
     let program = test_program(r#"/std/print("ran\n")"#);
     assert!(program.modules.is_empty());
     assert!(program.compiled.is_none());
@@ -553,4 +561,43 @@ fn a_test_program_schedules_only_the_tested_units_tests() {
         scheduled(&built, &program, &RootSource::none().tested()),
         ["/the_program_holds"]
     );
+}
+
+/// A test that waits on nothing that can wake it ends as a program that does: its run exits 1 once its cancel has run, beside the `deadlock:` line, and reports nothing — no turn reads what the cancel yields.
+#[test]
+fn a_test_that_waits_on_nothing_exits_one_beside_the_deadlock_line() {
+    let (module, foreigns) = test_program(
+        r#"
+        use /std/{Io, Test};
+        test waits_forever =
+            let _ = Io/select(@{}, [])!;
+            Test/pure(());
+        ()
+        "#,
+    )
+    .compiled
+    .expect("a test program scheduling a test is built");
+    let compiled = to_compiled(&module, foreigns).expect("the test program compiles");
+    let (system, io) = MockHost::builder().args(["prog", "0"]).build();
+
+    assert_eq!(
+        compiled.run_test(system, ForeignBindings::empty()),
+        Ok(TestEnd::Exited(1))
+    );
+    assert_eq!(io.errors(), DEADLOCK.as_bytes());
+}
+
+/// `/test` is in scope for a test program's tail alone, so a test compilation's own code names `/test/main` no more than a build's does: a name that resolves in a test compilation resolves in a build.
+#[test]
+fn a_test_compilation_names_the_runner_no_more_than_a_build_does() {
+    let source = r#"
+        use /std/{Io, Test};
+        let schedule() -> Io({}) = /test/main([]);
+        test holds = Test/pure(());
+        ()
+        "#;
+
+    for refusal in [tests_error(source), error(source)] {
+        assert!(refusal.contains("/test/main"), "{refusal}");
+    }
 }

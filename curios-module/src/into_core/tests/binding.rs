@@ -296,7 +296,7 @@ fn a_built_unit_holds_no_test_and_a_tested_one_holds_each() {
 
 #[test]
 fn a_test_lowers_to_the_thunk_its_surface_no_longer_spells() {
-    // A test takes no parameters, but it is still a `() -> Test({})` in Core: `Test/main` holds the whole schedule and forces only the one it selected, so the body cannot be a bare value, and the empty telescope is the thunk.
+    // A test takes no parameters, but it is still a `() -> Test({})` in Core: `/test/main` holds the whole schedule and forces only the one it selected, so the body cannot be a bare value, and the empty telescope is the thunk.
     let definitions = lowered_definitions("test t = Type;\n()");
     let definition = definitions
         .items

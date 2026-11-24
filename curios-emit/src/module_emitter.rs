@@ -2,8 +2,8 @@ use {
     super::{
         BigEmitter, BigHelper, ClsrData, Context, EmissionClosure, EmissionData, EmissionFunction,
         EmissionFunctionName, EmissionModule, EmissionValueName, ExprEmitter, FltEmitter,
-        FltHelper, ImmediateLayout, RopeData, RopeEmitter, Table, TurnEmitter, answer_instrs,
-        big_sub_type, bytes_sub_type, concrete_val, elems_sub_type, flt_sub_type, holder_sub_type,
+        FltHelper, ImmediateLayout, RopeData, RopeEmitter, Table, TurnEmitter, big_sub_type,
+        bytes_sub_type, concrete_val, elems_sub_type, flt_sub_type, holder_sub_type,
         longs_sub_type, null, refusal_data_name, refusal_message, rope_base_sub_type,
         rope_enter_sub_type, rope_leaf_sub_type, rope_node_sub_type, rope_room_sub_type,
         rope_view_sub_type, words_sub_type,
@@ -1044,47 +1044,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    /// Export `entry`, the program's own entry function, under [`ENTRY`]: as it stands where the program's kind declares no answer, and otherwise behind `$io/answer`, which hands back what it yields lowered at `answer`, as a row's operand of that type is ([`answer_instrs`]).
-    fn export_entry(&mut self, entry: curios_wasm::FuncName, answer: Option<&WireType>) {
-        let exported = match answer {
-            None => entry,
-            Some(answer) => {
-                let func_name = curios_wasm::FuncName::from("io/answer");
-                let type_name = curios_wasm::TypeName::from("io/answer");
-
-                self.module.add_type(
-                    type_name.clone(),
-                    curios_wasm::SubType {
-                        is_final: true,
-                        super_types: vec![],
-                        comp_type: curios_wasm::CompType::Func(curios_wasm::FuncType {
-                            inputs: curios_wasm::ResultType::from([]),
-                            outputs: curios_wasm::ResultType::from([Table::top_type(true)]),
-                        }),
-                    },
-                );
-                self.module.add_func(
-                    func_name.clone(),
-                    curios_wasm::Func {
-                        type_name,
-                        params: vec![],
-                        locals: vec![],
-                        expr: iter::once(curios_wasm::Instr::Call { func_name: entry })
-                            .chain(answer_instrs(self.table, answer))
-                            .collect::<Vec<_>>()
-                            .into(),
-                    },
-                );
-
-                func_name
-            }
-        };
-
-        self.module
-            .add_export(ENTRY, curios_wasm::Export::Func(exported));
-    }
-
-    pub fn emit_module(&mut self, module: &'a EmissionModule, answer: Option<&WireType>) {
+    pub fn emit_module(&mut self, module: &'a EmissionModule) {
         self.emit_flt_type();
         self.emit_big_types();
         self.emit_longs_type();
@@ -1136,9 +1096,11 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         if let Some(name) = module.entry() {
             let func_name = self.table.find_func(name).func_name();
             match module.entry_suspension() {
-                None => self.export_entry(func_name, answer),
+                None => self
+                    .module
+                    .add_export(ENTRY, curios_wasm::Export::Func(func_name)),
                 Some(row) => {
-                    TurnEmitter::new(self.table, self.module).emit_turns(func_name, row, answer);
+                    TurnEmitter::new(self.table, self.module).emit_turns(func_name, row);
                 }
             }
         }

@@ -39,9 +39,7 @@ pub fn halt_zero() -> curios_cps::Node {
 
 /// The emitted module rendered as WAT text — the public inspection surface (`Module`'s items are private; `Display` is how consumers read it back).
 pub fn wat(module: &curios_cps::Module) -> String {
-    into_wasm(module, module.entry_suspension(), None)
-        .0
-        .to_string()
+    into_wasm(module, module.entry_suspension()).0.to_string()
 }
 
 #[track_caller]

@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, Str, Bytes, List, Option, Result, Try, Io, Monad, Spell, Show, Proc};
+use /std/{Nat, Bool, Str, List, Result, Try, Io, Monad, Spell, Show};
 use /std/ops/{Eql};
 use /std/time/{Duration};
 
@@ -14,7 +14,7 @@ satisfy Spell(Failure) {
     ..
 }
 
--- Its private representation keeps interpretation inside the test runner and resource combinators.
+-- Its private representation keeps interpretation inside this module: a runner is handed what a test found by `run`, and the resource combinators release before a failure goes on.
 --- A computation that succeeds with an `A` or ends the current test with what it found: the checks that failed, one at least.
 pub induct Test(A: Type): Type
 | success(A)
@@ -162,35 +162,4 @@ pub let run(@A: Type, test: Test(A)) -> Io(List(Failure)) =
     match result
     | success(_) => Io/pure([])
     | failure(failures) => Io/pure(failures)
-    end;
-
--- What a test found, spelled for its runner to read back and present: the checks that failed, none where it held.
-let verdict(failures: List(Failure)) -> Bytes =
-    Str/to_bytes(Spell/spell(failures));
-
--- The one test a runner selected is named by the runner, which says how it ended and presents what it found: the test writes nothing of its own.
-let answer(test: Test({})) -> Io(Bytes) =
-    let failures = run(test)!;
-    Io/pure(verdict(failures));
-
-let parse_index(raw: Bytes) -> Option(Nat) =
-    match Str/of_bytes(raw)
-    | success(s) => Nat/of_str(s)
-    | failure(_) => Option/none()
-    end;
-
---- Run the test the runner selected, its index in `tests` the program's first argument, and answer what it found, for the runner to present: the checks that failed, spelled, and none where it held. An index the program does not hold answers no verdict, which the runner reports as its own fault.
-pub let main(tests: List(() -> Test({}))) -> Io(Bytes) =
-    let arguments = Proc/args()!;
-    match List/try_get(arguments, 1)
-    | some(raw) =>
-        match parse_index(raw)
-        | some(index) =>
-            match List/try_get(tests, index)
-            | some(body) => answer(body())
-            | none() => Io/pure(0x[])
-            end
-        | none() => Io/pure(0x[])
-        end
-    | none() => Io/pure(0x[])
     end;

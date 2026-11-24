@@ -9,7 +9,7 @@ pub use outcome::{FailedCheck, Outcome};
 
 use {
     crate::{bindings_of, engine, fault, linked_of, optimize, to_cwasm},
-    curios_abi::{ForeignStore, HostOps, TEST_ANSWER},
+    curios_abi::{ForeignStore, HostOps, RunAs},
     curios_browser::page,
     curios_common::{Location, Qualifier, Report, Source, SourceName},
     curios_module::{PackageRoot, RootSource, open_entrypoint, supply_entrypoint},
@@ -410,7 +410,7 @@ impl Tested {
         let compiled = unsafe { Compiled::deserialize(cwasm, foreigns.clone()) }
             .map_err(|error| fault("the program's machine code could not be read back", error))?;
         // Resolved once for the subject: its manifests are walked and its modules compiled here, and each test is handed the resolution. A run instantiates a module in its own store, so every test still meets an instance of its own, which keeps one test's marks in a module's memory out of the next one's. A loose subject has no package, so nothing declares what would answer a `foreign` of its own, and `bindings_of` refuses one it reaches, saying so.
-        let bindings = bindings_of(subject.manifest(), foreigns, subject.cabinet())?;
+        let bindings = bindings_of(subject.manifest(), foreigns, subject.cabinet(), RunAs::Test)?;
 
         Ok(Some(TestRun {
             compiled,
@@ -431,7 +431,7 @@ impl Tested {
         let Payload::Module(module) = payload else {
             unreachable!("a test program is laid out for the target it was compiled for");
         };
-        let linked = linked_of(subject.manifest(), foreigns, subject.cabinet())?;
+        let linked = linked_of(subject.manifest(), foreigns, subject.cabinet(), RunAs::Test)?;
 
         page(
             curios_browser::Program {
@@ -442,7 +442,6 @@ impl Tested {
                     .map(|filing| filing.package.as_str()),
                 module: module.clone(),
                 foreigns,
-                answer: Some(&TEST_ANSWER),
             },
             linked,
         )
@@ -458,7 +457,7 @@ pub struct TestRun {
 }
 
 impl TestRun {
-    /// Run the test at `index` in the schedule under the host `host` makes of the program's arguments, `[argv0, index]`, which is how `Test/main` is told which to run. A test answers what it found, which [`Outcome::read`] reads; a trap is the error.
+    /// Run the test at `index` in the schedule under the host `host` makes of the program's arguments, `[argv0, index]`, which is how `/test/main` is told which to run. A test that returns hands back what it reported, each record one check that failed, which [`Outcome::of`] reads; a trap is the error.
     pub fn run<H: HostOps + Send + Sync + 'static>(
         &self,
         index: usize,

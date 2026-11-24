@@ -3,10 +3,8 @@
 //! A turn is the five values [`ADVANCE`] states. The suspension that reaches a turn is one the entry surfaced, with no frames, a rest that resumes everything beneath it and a cancel that surfaces whatever it suspends on, so the host needs nothing of the row beyond its handles, its cancel and that rest — never its cells, which the entry has already read — and advances either description through the same export.
 
 use {
-    super::{
-        Table, answer_instrs, cast, concrete_ref, concrete_val, field_get, get, i32_type, set,
-    },
-    curios_abi::{ADVANCE, ENTRY, WireType},
+    super::{Table, cast, concrete_ref, concrete_val, field_get, get, i32_type, set},
+    curios_abi::{ADVANCE, ENTRY},
 };
 
 #[derive(Debug)]
@@ -20,14 +18,9 @@ impl<'a, 'b> TurnEmitter<'a, 'b> {
         Self { table, module }
     }
 
-    /// Export the entry's turn and the advance. `entry` is the program's own entry function, answering what its forced description answered; `row` is the suspension's; `answer` the wire type the value a turn yields crosses at, where the program's kind declares one.
-    pub fn emit_turns(
-        &mut self,
-        entry: curios_wasm::FuncName,
-        row: curios_cps::RowId,
-        answer: Option<&WireType>,
-    ) {
-        let turn = self.emit_turn(row, answer);
+    /// Export the entry's turn and the advance. `entry` is the program's own entry function, answering what its forced description answered; `row` is the suspension's.
+    pub fn emit_turns(&mut self, entry: curios_wasm::FuncName, row: curios_cps::RowId) {
+        let turn = self.emit_turn(row);
 
         let main = self.add_func(
             "io/main",
@@ -67,12 +60,8 @@ impl<'a, 'b> TurnEmitter<'a, 'b> {
             .add_export(ADVANCE, curios_wasm::Export::Func(advance));
     }
 
-    /// `$io/turn (anyref) -> turn`: what a forced description answered, as a turn. The handles cross as a `List(Handle)` operand of a host row does, and so does a value the program yields where its kind declares the wire type it answers at ([`answer_instrs`]).
-    fn emit_turn(
-        &mut self,
-        row: curios_cps::RowId,
-        answer: Option<&WireType>,
-    ) -> curios_wasm::FuncName {
+    /// `$io/turn (anyref) -> turn`: what a forced description answered, as a turn. The handles cross as a `List(Handle)` operand of a host row does; a value the program yields is handed back as it stands, since a rest yields the unit every program yields and a cancel the unit it is typed at, and no host reads either.
+    fn emit_turn(&mut self, row: curios_cps::RowId) -> curios_wasm::FuncName {
         let row_type = self.table.find_row_type(row);
         let answered = curios_wasm::LocalName::from("answer");
         let suspension = curios_wasm::LocalName::from("suspension");
@@ -95,11 +84,14 @@ impl<'a, 'b> TurnEmitter<'a, 'b> {
             curios_wasm::Instr::If {
                 label_name: curios_wasm::LabelName::from("value"),
                 block_type: curios_wasm::BlockType::Empty,
-                then_instructions: [curios_wasm::Instr::I32Const { value: 0 }, get(&answered)]
-                    .into_iter()
-                    .chain(answer.map_or_else(Vec::new, |answer| answer_instrs(self.table, answer)))
-                    .chain([null(), null(), null(), curios_wasm::Instr::Return])
-                    .collect(),
+                then_instructions: vec![
+                    curios_wasm::Instr::I32Const { value: 0 },
+                    get(&answered),
+                    null(),
+                    null(),
+                    null(),
+                    curios_wasm::Instr::Return,
+                ],
                 else_instructions: Vec::new(),
             },
             get(&answered),

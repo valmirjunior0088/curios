@@ -415,11 +415,28 @@ pub const PANIC: &str = "panic";
 
 /// The one export both ends link on: the entrypoint the emitter exports and the runtime looks up to run a program. It spells the entry function's own name under the compiler's naming scheme, so a module dump reads as it links — but the name is a contract stated here, not a consequence of that scheme or of the hint the entry happens to carry, so no debug name decides a wire string.
 ///
-/// The entry takes nothing and hands back what the program's description yields, as one reference, at the wire type its kind of program declares, crossing as a row's operand of that type crosses: lowered to the flat payload the host lifts. A program declares none, and yields the unit, which no host reads; a test program answers at [`TEST_ANSWER`]. A program that can suspend answers its first turn here instead, as [`ADVANCE`] states, the value a turn yields crossing the same way.
+/// The entry takes nothing and hands back what the program's description yields, as one reference: the unit, which every program yields and no host reads. A program that can suspend answers its first turn here instead, as [`ADVANCE`] states.
 pub const ENTRY: &str = "func/main";
 
-/// The wire type a test program's entry answers at: what its test found, which its runner reads — the text `/std/Test` writes of the checks that failed. The one statement of it, as a row's are its declaration's, so the type the compiler judges a test program's tail at, the lowering of its answer and each host's reading of it cannot disagree.
-pub const TEST_ANSWER: WireType = WireType::Bytes;
+/// The row a test program's runner answers, and nothing else: `/test`'s `report`, handed each check the test found failed, one record a call, as the text `/std/Test`'s `Spell` writes of a failure, which the runner reads back as Curios. The one spelling of its name, so the unit that declares it and each runner that answers it cannot disagree.
+pub const TEST_REPORT: &str = "/test/report";
+
+/// What a program is run as, which decides the rows its run answers itself beside the host's: a program's run answers none, and a test program's answers [`TEST_REPORT`] — natively the engine's test run, in a browser the test page's loader. What a link holds a program's rows to beside [`host_answers`](crate::host_answers).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunAs {
+    Program,
+    Test,
+}
+
+impl RunAs {
+    /// Whether a run of this kind answers the row declared as `name` itself.
+    pub fn answers(self, name: &str) -> bool {
+        match self {
+            RunAs::Program => false,
+            RunAs::Test => name == TEST_REPORT,
+        }
+    }
+}
 
 /// The export a program that can suspend is advanced through, beside [`ENTRY`]: it takes a description the host was handed — a suspension's rest or its cancel — forces it, and answers the next turn.
 ///

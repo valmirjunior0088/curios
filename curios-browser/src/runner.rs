@@ -47,22 +47,27 @@ impl Wrote {
     }
 }
 
-/// What a page posted to the runner when its program ended, as the runner sends it over the run's socket, the outcome of the step in hand: the harness's `exitCode`, `trap` and `answer` as the page posted them, the answer's bytes in base64.
+/// What a page posted to the runner when its program ended, as the runner sends it over the run's socket, the outcome of the step in hand: the harness's `exitCode` and `trap` as the page posted them, and where the program returned, the records its test reported through `/test/report`, each in base64 — none where it held.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Posted {
     pub exit_code: Option<u8>,
     pub trap: Option<String>,
-    pub answer: Option<String>,
+    pub records: Option<Vec<String>>,
 }
 
 impl Posted {
-    /// The bytes the test's entry answered, decoded, where it answered: what a test found, which the command reads.
-    pub fn answered(&self) -> Option<Result<Vec<u8>, String>> {
-        self.answer.as_ref().map(|answer| {
-            STANDARD
-                .decode(answer)
-                .map_err(|error| format!("what the page answered is not base64: {error}"))
+    /// The records the test reported, decoded, where its program returned: what a test found, one failed check each, which the command reads.
+    pub fn reported(&self) -> Option<Result<Vec<Vec<u8>>, String>> {
+        self.records.as_ref().map(|records| {
+            records
+                .iter()
+                .map(|record| {
+                    STANDARD
+                        .decode(record)
+                        .map_err(|error| format!("a record the page posted is not base64: {error}"))
+                })
+                .collect()
         })
     }
 }

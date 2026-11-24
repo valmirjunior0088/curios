@@ -127,7 +127,7 @@ pub fn tests_error(source: &str) -> String {
         .to_string()
 }
 
-/// Compile `source` as its own test program over every test it declares — the synthesized `Test/main` tail over them in place of the authored one.
+/// Compile `source` as its own test program over every test it declares — the synthesized `/test/main` tail over them in place of the authored one.
 pub fn test_program(source: &str) -> TestProgram {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
     Fold::new(DEFAULT_BUDGET, &[], None)
@@ -146,7 +146,7 @@ pub fn run_tests_program(source: &str) -> Vec<u8> {
     run_tests_under(source, MockHost::builder)
 }
 
-/// [`test_program`], each test it schedules run by its index, as the runner runs one, under a host `host` builds, and what each came to, in order: what the test wrote, then its path and `passed`, or `failed` and beneath it what it found, as the runner draws it — each failed check's steps and statement, and each value it compared behind its label. That every test ran to a verdict is asserted: a fixture about an exit or a trap reaches for the pieces itself.
+/// [`test_program`], each test it schedules run by its index, as the runner runs one, under a host `host` builds, and what each came to, in order: what the test wrote, then its path and `passed`, or `failed` and beneath it what it found, as the runner draws it — each failed check's steps and statement, and each value it compared behind its label. That every test's run returned is asserted: a fixture about an exit or a trap reaches for the pieces itself.
 pub fn run_tests_under(source: &str, host: impl Fn() -> MockHostBuilder) -> Vec<u8> {
     let program = test_program(source);
     let (module, foreigns) = program
@@ -162,11 +162,11 @@ pub fn run_tests_under(source: &str, host: impl Fn() -> MockHostBuilder) -> Vec<
     for (index, test) in scheduled.enumerate() {
         let (system, io) = host().args(["prog".to_string(), index.to_string()]).build();
         let end = compiled.run_test(system, ForeignBindings::empty());
-        let Ok(TestEnd::Answered(answer)) = end else {
+        let Ok(TestEnd::Returned(records)) = end else {
             panic!("`{}` ran to {end:?}", test.join());
         };
-        let outcome = Outcome::read(&answer)
-            .unwrap_or_else(|why| panic!("`{}` answered no outcome: {why}", test.join()));
+        let outcome = Outcome::of(&records)
+            .unwrap_or_else(|why| panic!("`{}` reported no failed check: {why}", test.join()));
 
         drawn.extend_from_slice(&io.output());
         let ended = match outcome.held() {

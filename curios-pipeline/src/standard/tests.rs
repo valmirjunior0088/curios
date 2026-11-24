@@ -1,8 +1,9 @@
-//! Which unit takes an archived root's place, what it is granted, and what it is offered; and the library compiled from its own terms as a report prints them.
+//! Which unit takes an archived root's place, what it is granted, and what it is offered; the library compiled from its own terms as a report prints them; and `/test`, the unit a test program's tail is closed over.
 
 use {
     super::*,
     crate::{tests::test_support::*, *},
+    curios_abi::{TEST_REPORT, WireReturn, WireType},
     curios_anf::FieldShape,
     curios_common::{Qualifier, RootKind, digest, test_support::*},
     curios_core::{
@@ -1899,5 +1900,30 @@ fn family_slot_probe() {
         for line in report {
             println!("{line}");
         }
+    });
+}
+
+/// `/test`, compiled over the prelude as a test compilation compiles it, declares the scheduler the synthesized tail calls, [`SYNTAX`]'s `test.main`, and the row its runner answers, [`TEST_REPORT`], at the types each runner answers it at: one byte string a record, and nothing back.
+#[test]
+fn the_runner_declares_the_scheduler_a_test_tail_calls_and_the_row_its_runner_answers() {
+    with_prelude(|prelude| {
+        let unit = runner(DEFAULT_BUDGET, Predecessors::over(prelude)).expect("`/test` compiles");
+        let declared = unit
+            .core()
+            .items
+            .iter()
+            .flat_map(Item::declared_names)
+            .collect::<BTreeSet<_>>();
+        assert!(declared.contains(&Global::Authored(SYNTAX.test.main.qualifier())));
+
+        let row = unit
+            .foreigns()
+            .get(TEST_REPORT)
+            .expect("`/test` declares the row its runner answers");
+        let signature = row.signature();
+        assert_eq!(signature.params, [WireType::Bytes]);
+        assert!(
+            matches!(&signature.returns, WireReturn::Answers(results) if results.types().is_empty())
+        );
     });
 }

@@ -6,13 +6,13 @@ import * as gateway{{ loop.index0 }} from {{ gateway.specifier }};
 
 {{ harness }}
 
-/** What this page was built with: the name the program is run by, the key the query spells its arguments under, the harness's configuration, the program's rows, the wire type its entry answers at or null, the bridge in base64, the program's integrity, where it stands and the element its output is written into. */
+/** What this page was built with: the name the program is run by, the key the query spells its arguments under, the harness's configuration, the program's rows, the name of the row a test program reports what its test found through, which this loader answers where the program declares it, the bridge in base64, the program's integrity, where it stands and the element its output is written into. */
 const page = {
   name: {{ name }},
   argument: {{ argument }},
   configuration: {{ configuration }},
   rows: {{ rows }},
-  answer: {{ answer }},
+  report: {{ report }},
   bridge: {{ bridge }},
   integrity: {{ integrity }},
   program: {{ program }},
@@ -102,9 +102,15 @@ const fetched = async () => {
   return new Uint8Array(await response.arrayBuffer());
 };
 
-/** What answers each declaration the page's gateways answer, or a refusal naming the first export that is no function. */
-const answers = () => {
+/** What answers each declaration the page's gateways answer, and the row a test program reports what its test found through, where the program declares it, each record it reports kept in `records`; or a refusal naming the first export that is no function. */
+const answers = (records) => {
   const foreign = {};
+
+  if (page.rows.some((row) => row.name === page.report)) {
+    foreign[page.report] = (record) => {
+      records.push(record);
+    };
+  }
 
   for (const { row, package: owner, path, module, answers } of gateways) {
     for (const [declaration, name] of answers) {
@@ -124,7 +130,7 @@ const answers = () => {
 /**
  * Run the page's program: `program`, its bytes, or what `index.wasm` holds, fetched beside this loader against its integrity; its arguments from `query`, the location's own where there is one. Its output is written into the page's element while that stands in the document and to the console, and a trap is reported in both.
  *
- * Framed — `globalThis.parent` a window other than this one — the page posts `{ type: "started" }` to its parent before the program runs, `{ type: "wrote", stream, bytes }` for each write the program makes on a standard stream, as it makes it, and `{ type: "outcome", outcome }` after, `outcome` how the program ended, each to the page's own origin, `"/"`, so no other origin reads a program's output.
+ * Framed — `globalThis.parent` a window other than this one — the page posts `{ type: "started" }` to its parent before the program runs, `{ type: "wrote", stream, bytes }` for each write the program makes on a standard stream, as it makes it, and `{ type: "outcome", outcome }` after, `outcome` how the program ended — `{ exitCode, trap, records }`, `records` what a test program reported where it returned, and `null` otherwise — each to the page's own origin, `"/"`, so no other origin reads a program's output.
  *
  * Resolves to what the harness's `run` resolves to.
  */
@@ -144,11 +150,12 @@ export async function start({ program, query = globalThis.location?.search ?? ""
     parent.postMessage({ type: "started" }, "/");
   }
 
+  const records = [];
   const outcome = await (async () => {
-    const { refusal, foreign } = answers();
+    const { refusal, foreign } = answers(records);
 
     if (refusal !== undefined) {
-      return { stdout: new Uint8Array(0), stderr: new Uint8Array(0), exitCode: null, trap: refusal, answer: null };
+      return { stdout: new Uint8Array(0), stderr: new Uint8Array(0), exitCode: null, trap: refusal, returned: false };
     }
 
     try {
@@ -156,13 +163,13 @@ export async function start({ program, query = globalThis.location?.search ?? ""
 
       return await run({
         ...page.configuration,
-        compiled: { program: bytes, foreigns: page.rows, answer: page.answer },
+        compiled: { program: bytes, foreigns: page.rows },
         bridge: decoded(page.bridge),
         args: [encoder.encode(page.name), ...argumentsOf(query)],
         hooks: { onStdout: stdout.write, onStderr: stderr.write, foreign },
       });
     } catch (error) {
-      return { stdout: new Uint8Array(0), stderr: new Uint8Array(0), exitCode: null, trap: String(error), answer: null };
+      return { stdout: new Uint8Array(0), stderr: new Uint8Array(0), exitCode: null, trap: String(error), returned: false };
     }
   })();
 
@@ -181,7 +188,11 @@ export async function start({ program, query = globalThis.location?.search ?? ""
     parent.postMessage(
       {
         type: "outcome",
-        outcome: { exitCode: outcome.exitCode, trap: outcome.trap, answer: outcome.answer },
+        outcome: {
+          exitCode: outcome.exitCode,
+          trap: outcome.trap,
+          records: outcome.returned ? records : null,
+        },
       },
       "/",
     );

@@ -1291,7 +1291,7 @@ fn rope_read(table: &Table, load_as: &LoadAs) -> curios_wasm::Instr {
     }
 }
 
-/// The rope→wire step for a value crossing to the host, a host argument or what an entry answers: a reference param crosses as a flat payload exactly its run, since a host lifts the whole array, so the loaded rope is taken exact first — deeply for `List(Bytes)`/`List(Handle)`, whose *elements* the host lifts as raw `$bytes`, and into `$longs` or `$words` for a list of scalars, each element narrowed as a lone argument is.
+/// The rope→wire step for a host argument crossing to the host: a reference param crosses as a flat payload exactly its run, since a host lifts the whole array, so the loaded rope is taken exact first — deeply for `List(Bytes)`/`List(Handle)`, whose *elements* the host lifts as raw `$bytes`, and into `$longs` or `$words` for a list of scalars, each element narrowed as a lone argument is.
 fn wire_forced(table: &Table, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
     let force = match wire_type {
         // No rope to force: a scalar reaches the wire from a register carrier, and `Flt`'s is the `f64` its box already holds.
@@ -1308,20 +1308,6 @@ fn wire_forced(table: &Table, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
     };
 
     vec![curios_wasm::Instr::Call { func_name: force }]
-}
-
-/// What an entry's answer crosses as where it is declared at `wire_type`, read off the reference the entry yields: entered into its rope as a host operand of that type is loaded, and forced to the flat payload a host lifts ([`wire_forced`]), so a value leaves the program one way, whether a row or the entry hands it over. An entry yields one reference, so the type is a reference's.
-pub fn answer_instrs(table: &Table, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
-    let read = match LoadAs::from(wire_type) {
-        load_as @ (LoadAs::Bytes | LoadAs::List) => rope_read(table, &load_as),
-        _ => {
-            unreachable!("an entry yields one reference, so it answers at a reference's wire type")
-        }
-    };
-
-    iter::once(read)
-        .chain(wire_forced(table, wire_type))
-        .collect()
 }
 
 /// How a host-import operand of the given wire type is loaded at the call site: a `Bool` or a `Byte` as its word, a `Nat` or `Int` narrowed to the wire's `i64` — refusing a value the wire cannot carry, the one narrowing that refuses — `Flt` read out of its box, and the reference shapes cast to their rope base type (a handle is its `Bytes` token) — the force step to the flat wire payload follows in `wire_force_instrs`.

@@ -68,7 +68,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     },
     test: TestSyntax {
         test_type: registry_name(&["std", "Test", "Test"]),
-        main: registry_name(&["std", "Test", "main"]),
+        main: registry_name(&["test", "main"]),
     },
     program: ProgramSyntax {
         execute: registry_field(&["std", "Program"], "execute"),
