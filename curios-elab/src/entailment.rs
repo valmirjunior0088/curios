@@ -181,8 +181,8 @@ pub fn facts_in_scope(context: &mut Context) -> Result<Vec<(Origin, Term)>, Erro
 fn stated_by_a_fact(context: &mut Context, bound: &Term) -> Result<Option<Term>, Error> {
     curios_common::profile!("entailment::stated_by_a_fact");
     for (name, type_) in binders(context) {
-        for (statement, proof, _) in statements(context, &name, &type_)? {
-            let states = same_uncommitted(context, &statement, bound).map_err(|error| {
+        for Statement { stated, proof, .. } in statements(context, &name, &type_)? {
+            let states = same_uncommitted(context, &stated, bound).map_err(|error| {
                 Error::from_reduce(error, |refusal| {
                     Error::reduce_exhausted(bound.clone(), refusal)
                 })

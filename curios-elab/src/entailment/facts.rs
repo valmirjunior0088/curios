@@ -4,6 +4,7 @@
 //!
 //! - A hypothesis in scope whose type reduces to a decided comparison, a conjunction of comparisons — `&&`, and any `Bool` function unfolding to one as `in_range` and `Char/is_ascii_upper` do — or an equation at `Nat` or `Int`.
 //! - A proof field of a tuple- or struct-typed hypothesis, one level down, where the item may open the representation: `v.counted`, `hi.ok`.
+//! - A proof field of a tuple- or struct-typed application or field read the bound's own sides name, read as a hypothesis's is: `List/get(frame.list, y).counted`, so a bound holds of a call written in place as it does of one a `let` names.
 //! - A hypothesis or a field whose statement the arm's refinements reduce to an empty proposition — `in_range(n, 128, 191)` where a guard holds `n <= 127` — which refutes the scope by itself: read as `1 <= 0`, proved by its own zero-arm match.
 //! - A guard of an arm the hole sits in — the arm's at insertion, and at a retry the ones the hole was born under: a comparison scrutinee with the case it took, an `==` scrutinee's true arm, a range check's true arm, through `le/of_in_range`, and a conjunction's true arm, each conjunct through `and/first` or `and/second`, since a split in the guard's own arm meets the guard's key, which answers `true` for the whole check and never unfolds it. Its proof is stated over the operands the guard spells ([`Reader::guards`]), and a guard recorded under two spellings is one fact.
 //! - What an operation a fact or the goal is read over defines: a quotient's bounds, a truncated subtraction's cases, a `min`'s and a `max`'s, an `abs`'s and a `sign`'s, and that a power of a base conversion holds at least one is at least one ([`Reader::definitions`]). A subtraction, a `min` and a `max` are read too through what both of their cases state — `a - b <= a`, which conversion decides, and `a <= b + (a - b)`, which `le/add_sub` proves, a `min` at most each operand, a `max` at least each — and an `abs` and a `sign` through what every case states and a lemma of their module proves — a magnitude at least its operand and its negation, a sign within one of zero — asked where the facts alone leave an assignment and before any case is opened, so a bound the facts prove is proved as it was and one that turns on no case opens none.
@@ -24,18 +25,19 @@
 use {
     super::{decision_of, global, in_scope, is_empty},
     crate::{
-        Context, Error, answered_guard, classing_among, distributed, open_layer, reduce_with,
-        same_uncommitted, zonk_solved_term_metas,
+        Binders, Context, Error, answered_guard, classing_among, distributed, open_layer,
+        reduce_with, same_uncommitted, synth_neutral, zonk_solved_term_metas,
     },
     curios_algebra::{Carrier, Half, Lattice, LinearForm, Monomial, Operation},
     curios_analysis::{Classes, RESOLVED_SPELLING_LAYERS, atoms_in, classed_in, is_node},
     curios_common::{OrderSyntax, Plicity, SyntaxName, recurse},
     curios_core::{
         Aligned, Apply, Cases, Extremum, Free, Global, InductType, Instance, Intrinsic,
-        LinearViews, Match, Nat, Probe, StructType, Subterm, Term, TupleType,
+        LinearViews, Match, Nat, Probe, Proj, StructType, Subterm, Term, TupleType,
         instantiate_universes,
     },
     curios_num::{Integer, Natural},
+    std::collections::HashSet,
 };
 
 /// Where a fact came from, for the report.
@@ -382,8 +384,32 @@ impl<'a> Reader<'a> {
     ) -> Result<Facts, Error> {
         curios_common::profile!("entailment::collect");
         for (name, type_) in binders(context) {
-            for (statement, proof, origin) in statements(context, &name, &type_)? {
-                self.proposition(context, &statement, proof, origin)?;
+            for Statement {
+                stated,
+                proof,
+                origin,
+            } in statements(context, &name, &type_)?
+            {
+                self.proposition(context, &stated, proof, origin)?;
+            }
+        }
+        // What the bound's own sides name states its fields too: a value a `let` would name is one the bound reads in place.
+        for term in target.map_or_else(Vec::new, |target| named([&target.left, &target.right])) {
+            let Ok(Some(type_)) = synth_neutral(
+                context,
+                &Binders::default(),
+                &crate::Opened::default(),
+                &term,
+            ) else {
+                continue;
+            };
+            for Statement {
+                stated,
+                proof,
+                origin,
+            } in fields(context, &term, &term, &type_)?.unwrap_or_default()
+            {
+                self.proposition(context, &stated, proof, origin)?;
             }
         }
         self.guards(context)?;
@@ -1784,7 +1810,34 @@ pub fn statements(
     context: &mut Context,
     name: &Free,
     type_: &Term,
-) -> Result<Vec<(Term, Term, Origin)>, Error> {
+) -> Result<Vec<Statement>, Error> {
+    let subject = subject_of(context, name);
+    Ok(
+        match fields(context, &Term::free_var(name), &subject, type_)? {
+            Some(fields) => fields,
+            None => vec![Statement {
+                stated: type_.clone(),
+                proof: Term::free_var(name),
+                origin: Origin::Hypothesis(subject),
+            }],
+        },
+    )
+}
+
+/// One thing a hypothesis or a field states: the proposition, the proof that inhabits it, and where it came from.
+pub struct Statement {
+    pub stated: Term,
+    pub proof: Term,
+    pub origin: Origin,
+}
+
+/// The fields of `value`, a tuple or a structure of type `type_`, one level down and in their order, each statement beside the read of `value` that inhabits it and where it came from, `subject` the term a report names `value` by: a hypothesis's, or those of a term a bound names. `None` where `type_` is neither, and no field where the item may not open the structure's representation.
+fn fields(
+    context: &mut Context,
+    value: &Term,
+    subject: &Term,
+    type_: &Term,
+) -> Result<Option<Vec<Statement>>, Error> {
     let reduced = reduce_with(context, type_)?;
     let (telescope, structure) = match &*reduced {
         Subterm::TupleType(TupleType { telescope }) => (telescope.clone(), None),
@@ -1794,7 +1847,7 @@ pub fn statements(
             params,
         }) => {
             let Some(decl) = context.struct_decl(family).cloned() else {
-                return Ok(Vec::new());
+                return Ok(Some(Vec::new()));
             };
             // `elaborate_proj`'s own rule: a proof the procedure writes reaches no field its author could not.
             if !decl.rep_public
@@ -1802,7 +1855,7 @@ pub fn statements(
                     .island()
                     .is_some_and(|island| !island.is_within(&decl.module))
             {
-                return Ok(Vec::new());
+                return Ok(Some(Vec::new()));
             }
             let arity = decl.universe_context.read_at(&decl.arity, universes)?;
             (
@@ -1810,34 +1863,53 @@ pub fn statements(
                 Some(*family),
             )
         }
-        _ => {
-            return Ok(vec![(
-                type_.clone(),
-                Term::free_var(name),
-                Origin::Hypothesis(subject_of(context, name)),
-            )]);
-        }
+        _ => return Ok(None),
     };
     // A field is read as a projection written there is elaborated: a tuple's slot, or the structure's.
     let read = |value: Term, index: usize| match structure {
         Some(structure) => Term::proj_struct(value, structure, index),
         None => Term::proj(value, index),
     };
-    let subject = subject_of(context, name);
     let mut stated = Vec::with_capacity(telescope.len());
     let mut cursor = telescope.cursor();
     let mut index = 0;
     while let Some((label, domain)) = cursor.entry() {
         let label = label.map_or_else(|| index.to_string(), str::to_string);
-        stated.push((
-            domain,
-            read(Term::free_var(name), index),
-            Origin::Field(subject.clone(), label),
-        ));
+        stated.push(Statement {
+            stated: domain,
+            proof: read(value.clone(), index),
+            origin: Origin::Field(subject.clone(), label),
+        });
         cursor.advance(read(subject.clone(), index));
         index += 1;
     }
-    Ok(stated)
+    Ok(Some(stated))
+}
+
+/// The applications and the field reads `sides` name, each once: the terms a bound reads beside the hypotheses, whose fields state facts as a hypothesis's do ([`Reader::collect`]). What an operation is over is looked into, and an argument or a read's head is.
+fn named(sides: [&Term; 2]) -> Vec<Term> {
+    let mut found = Vec::new();
+    let mut seen = HashSet::new();
+    let mut work = sides.to_vec();
+    while let Some(term) = work.pop() {
+        match &**term {
+            Subterm::Apply(apply) => {
+                if seen.insert(term.clone()) {
+                    found.push(term.clone());
+                    work.extend(apply.params());
+                }
+            }
+            Subterm::Proj(Proj { head, .. }) => {
+                if seen.insert(term.clone()) {
+                    found.push(term.clone());
+                    work.push(head);
+                }
+            }
+            Subterm::Intrinsic(intrinsic) => work.extend(intrinsic.operands()),
+            _ => {}
+        }
+    }
+    found
 }
 
 /// The term a report names the hypothesis `name` by: the term it stands for where the compiler bound it and wrote no name, and the hypothesis itself otherwise.

@@ -1378,6 +1378,38 @@ fn a_hidden_argument_a_list_literal_restores_is_left_out() {
     }
 }
 
+const FRAMES: &str = "use /std/{Bool, List, Nat, Vec, Io};";
+
+/// A proof field of a term a bound names is a fact where the term stands: a row read out of a frame states its count in place as one a `let` names does, so the read of its cell holds either way. A refused bound lists the field of the row it names, and of no row it does not name.
+#[test]
+fn a_proof_field_of_a_term_a_bound_names_is_a_fact_where_the_term_stands() {
+    let cell = |held: &str, body: &str| {
+        format!(
+            "{FRAMES}\nlet cell(@w: Nat, @h: Nat, frame: Vec(Vec(Nat, w), h), other: Vec(Vec(Nat, w), h), x: Nat, y: Nat, @ok_y: Bool/Holds(y < h){held}) -> Nat =\n    {body};\nIo/pure(())"
+        )
+    };
+    let within = ", @ok_x: Bool/Holds(x < w)";
+
+    for body in [
+        "List/get(List/get(frame.list, y).list, x)",
+        "let row = List/get(frame.list, y);\n    List/get(row.list, x)",
+    ] {
+        let verdict = typecheck(&cell(within, body));
+        assert!(verdict.is_ok(), "{body}: {verdict:?}");
+    }
+
+    let refused = typecheck(&cell(
+        "",
+        "List/length(List/get(other.list, y).list) + List/get(List/get(frame.list, y).list, x)",
+    ))
+    .expect_err("nothing bounds `x`");
+    assert!(
+        refused.contains("List/get(frame.list, y).counted")
+            && !refused.contains("List/get(other.list, y).counted"),
+        "{refused}"
+    );
+}
+
 #[test]
 fn a_refused_bound_names_each_guard_once_and_a_guard_as_the_way_out() {
     let refusal = |declared: &str, binders: &str, body: &str| {
