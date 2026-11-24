@@ -3,7 +3,7 @@ pub use /sys/Int/{le};
 use /std/{Nat, Int, Bool, Eq};
 
 -- The floors the order laws stand on, stated over abstract naturals, where the comparison decides them by comparing preimages; a law instantiates one at the naturals its hypotheses name, and the instance reduces to the comparison the law concludes.
-let floor(x: Nat, y: Nat) -> Bool/Holds(+0 <= Nat/to_int(x) + Nat/to_int(y)) =
+let floor(x: Nat, y: Nat) -> Bool/Holds(le(+0, Nat/to_int(x) + Nat/to_int(y))) =
     Bool/True/qed();
 
 let floor_mul(x: Nat, y: Nat) -> Bool/Holds(+0 <= Nat/to_int(x) * Nat/to_int(y)) =
@@ -21,14 +21,15 @@ pub let refl(n: Int) -> Bool/Holds(n <= n) =
 pub let of_lt(a: Int, b: Int, p: Bool/Holds(a < b)) -> Bool/Holds(a <= b) =
     trans(@a, @a + 1, @b, Bool/True/qed(), p);
 
+-- Stated through `le` by name, with the floor it stands on: `Ord(Int)`'s laws read it, and an operator here would read that witness.
 --- Transitivity.
 pub let trans(
     @a: Int,
     @b: Int,
     @c: Int,
-    p: Bool/Holds(a <= b),
-    q: Bool/Holds(b <= c),
-) -> Bool/Holds(a <= c) =
+    p: Bool/Holds(le(a, b)),
+    q: Bool/Holds(le(b, c)),
+) -> Bool/Holds(le(a, c)) =
     floor(Int/to_nat(b - a, @p), Int/to_nat(c - b, @q));
 
 -- The step a proof the elaborator writes from the facts in scope is summed with, one fact at a time. It is [`trans`] alone, because `a + c <= b + c` cancels to `a <= b` and `b + c <= b + d` to `c <= d`.

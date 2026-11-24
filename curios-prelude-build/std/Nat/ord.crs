@@ -47,12 +47,20 @@ pub let lt(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/lt())) -> Bool/Holds(a < 
     | _ => match Ordering/gt_neq_lt(h) end
     end;
 
+-- By recursion on both sides, as [`flips`] is.
 --- `ord(a, b)` is `eq` only where `a` is `b`: the order agrees with equality.
 pub let eq(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/eq())) -> Eq()(a, b) =
-    match
-    | a < b => match Ordering/eq_neq_lt(Eq/sym(h)) end
-    | a == b => Eql/eq_of_eql(a, b, Bool/True/qed())
-    | _ => match Ordering/gt_neq_eq(h) end
+    match a
+    | 0 =>
+        match b
+        | 0 => Eq/refl()
+        | _ + 1 => match h end
+        end
+    | ap + 1 =>
+        match b
+        | 0 => match h end
+        | bp + 1 => Eq/cong((x) => x + 1, eq(ap, bp, h))
+        end
     end;
 
 pub let gt(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/gt())) -> Bool/Holds(b < a) =
@@ -78,38 +86,43 @@ pub let of_le(a: Nat, b: Nat, p: Bool/Holds(a <= b)) -> Bool/Holds(Ordering/is_l
         match proved(@Bool/False) end
     end;
 
--- By the two guards `ord` reads, taken on each side. The arms no two numbers reach are refuted from the guards, and the two a failed `==` leaves are closed by the equation the other guards give, carried into the comparison that failed.
+-- By recursion on both sides: a successor on each cancels in the two comparisons `ord` reads, so `ord` of two successors is `ord` of their predecessors. It reads no lemma, and none typed through `<` or `<=`: `Ord`'s witness at `Nat` names this law and the four below, and an operator would read that witness back.
 --- `ord` answers the flipped answer with its operands swapped.
 pub let flips: Ord/Flips(ord) =
     (a, b) =>
-        match
-        | a < b =>
-            match
-            | b < a => match proved(@Bool/False) end
-            | b == a => match proved(@Bool/False) end
-            | _ => Eq/refl()
-            end
-        | a == b =>
-            match
-            | b < a => match proved(@Bool/False) end
-            | b == a => Eq/refl()
-            | _ =>
-                let same = Eql/eq_of_eql(a, b, proved());
-                let held: Bool/Holds(b == a) =
-                    Eq/subst((x: Nat) => Bool/Holds(b == x), Eq/sym(same), Bool/True/qed());
-                match held end
-            end
-        | _ =>
-            match b < a
-            | true => Eq/refl()
-            | false =>
-                let same = Nat/le/antisym(a, b, proved(), proved());
-                let held: Bool/Holds(a == b) =
-                    Eq/subst((x: Nat) => Bool/Holds(a == x), same, Bool/True/qed());
-                match held end
+        match a
+        | 0 => match b | 0 => Eq/refl() | _ + 1 => Eq/refl() end
+        | ap + 1 => match b | 0 => Eq/refl() | bp + 1 => flips(ap, bp) end
+        end;
+
+-- By recursion on the three, as [`flips`] is on its two.
+--- `ord` as a relation carries across a middle element.
+pub let transitive: Ord/Transitive(Ord/le_by(ord)) =
+    (a, b, c, p, q) =>
+        match a
+        | 0 => match c | 0 => Bool/True/qed() | _ + 1 => Bool/True/qed() end
+        | ap + 1 =>
+            match b
+            | 0 => match p end
+            | bp + 1 =>
+                match c
+                | 0 => match q end
+                | cp + 1 => transitive(ap, bp, cp, p, q)
+                end
             end
         end;
 
---- `ord` as a relation carries across a middle element.
-pub let transitive: Ord/Transitive(Ord/le_by(ord)) =
-    (a, b, c, p, q) => of_le(a, c, Nat/le/trans(le(a, b, p), le(b, c, q)));
+-- Stated over `Nat/lt` by name, as [`is_le`] is over `Nat/le`: `a < b` would read the witness that names this.
+--- `a < b` is `ord` answering `lt`.
+pub let is_lt(a: Nat, b: Nat) -> Eq()(Nat/lt(a, b), Ordering/is_lt(ord(a, b))) =
+    match a
+    | 0 => match b | 0 => Eq/refl() | _ + 1 => Eq/refl() end
+    | ap + 1 => match b | 0 => Eq/refl() | bp + 1 => is_lt(ap, bp) end
+    end;
+
+--- `a <= b` is `ord` answering `lt` or `eq`.
+pub let is_le(a: Nat, b: Nat) -> Eq()(Nat/le(a, b), Ordering/is_le(ord(a, b))) =
+    match a
+    | 0 => match b | 0 => Eq/refl() | _ + 1 => Eq/refl() end
+    | ap + 1 => match b | 0 => Eq/refl() | bp + 1 => is_le(ap, bp) end
+    end;

@@ -47,12 +47,16 @@ pub let lt(a: Int, b: Int, h: Eq()(ord(a, b), Ordering/lt())) -> Bool/Holds(a < 
     | _ => match Ordering/gt_neq_lt(h) end
     end;
 
+-- By the two decisions `ord` reads, each by name, as every law `Ord`'s witness at `Int` names is: `a < b` would read that witness back.
 --- `ord(a, b)` is `eq` only where `a` is `b`: the order agrees with equality.
 pub let eq(a: Int, b: Int, h: Eq()(ord(a, b), Ordering/eq())) -> Eq()(a, b) =
-    match
-    | a < b => match Ordering/eq_neq_lt(Eq/sym(h)) end
-    | a == b => Eql/eq_of_eql(a, b, Bool/True/qed())
-    | _ => match Ordering/gt_neq_eq(h) end
+    match Int/lt(a, b)
+    | true => match h end
+    | false =>
+        match Int/eql(a, b)
+        | true => Int/eq_of_eql(a, b, Bool/True/qed())
+        | false => match h end
+        end
     end;
 
 pub let gt(a: Int, b: Int, h: Eq()(ord(a, b), Ordering/gt())) -> Bool/Holds(b < a) =
@@ -78,15 +82,98 @@ pub let of_le(a: Int, b: Int, p: Bool/Holds(a <= b)) -> Bool/Holds(Ordering/is_l
         match proved(@Bool/False) end
     end;
 
+-- No two integers are each below the other: `a < b` is `a + 1 <= b`, and the two bounds in a row put `a + 1` at most `a - 1`.
+let apart(a: Int, b: Int, p: Bool/Holds(Int/lt(a, b)), q: Bool/Holds(Int/lt(b, a))) -> Bool/False =
+    Int/le/trans(@a + 1, @b, @a - 1, p, q);
+
+-- Two integers neither of which is below the other are one: a comparison that failed is the dual one holding.
+let level(
+    a: Int,
+    b: Int,
+    p: Bool/Holds(Bool/not(Int/lt(a, b))),
+    q: Bool/Holds(Bool/not(Int/lt(b, a))),
+) -> Eq()(a, b) =
+    Int/le/antisym(a, b, q, p);
+
+-- By the decisions `ord` reads on each side. Where both sides are decided alike the answers are read off; the arms no two integers reach are closed by [`apart`], by [`level`], and by an equation carried into the decision that failed.
 --- `ord` answers the flipped answer with its operands swapped.
 pub let flips: Ord/Flips(ord) =
     (a, b) =>
-        match
-        | a < b => of_gt(b, a, Bool/True/qed())
-        | a == b => of_eq(b, a, Eq/sym(Eql/eq_of_eql(a, b, Bool/True/qed())))
-        | _ => of_lt(b, a, below(a, b, proved(), Bool/True/qed()))
+        match Int/lt(a, b)
+        | true =>
+            match Int/lt(b, a)
+            | true => match apart(a, b, Bool/True/qed(), Bool/True/qed()) end
+            | false =>
+                match Int/eql(b, a)
+                | true =>
+                    let same = Int/eq_of_eql(b, a, Bool/True/qed());
+                    match Eq/subst(
+                        (x: Int) => Bool/Holds(Int/lt(x, b)),
+                        Eq/sym(same),
+                        Bool/True/qed())
+                    end
+                | false => Eq/refl()
+                end
+            end
+        | false =>
+            match Int/eql(a, b)
+            | true =>
+                let refl() = Int/eq_of_eql(a, b, Bool/True/qed());
+                Eq/refl()
+            | false =>
+                match Int/lt(b, a)
+                | true => Eq/refl()
+                | false =>
+                    let same = level(a, b, Bool/True/qed(), Bool/True/qed());
+                    match Eq/subst(
+                        (x: Int) => Bool/Holds(Bool/not(Int/eql(a, x))),
+                        Eq/sym(same),
+                        Bool/True/qed())
+                    end
+                end
+            end
         end;
 
+--- `a < b` is `ord` answering `lt`.
+pub let is_lt(a: Int, b: Int) -> Eq()(Int/lt(a, b), Ordering/is_lt(ord(a, b))) =
+    match Int/lt(a, b)
+    | true => Eq/refl()
+    | false => match Int/eql(a, b) | true => Eq/refl() | false => Eq/refl() end
+    end;
+
+--- `a <= b` is `ord` answering `lt` or `eq`.
+pub let is_le(a: Int, b: Int) -> Eq()(Int/le(a, b), Ordering/is_le(ord(a, b))) =
+    match Int/lt(a, b)
+    | true =>
+        match Int/le(a, b)
+        | true => Eq/refl()
+        | false => match apart(a, b, Bool/True/qed(), Bool/True/qed()) end
+        end
+    | false =>
+        match Int/eql(a, b)
+        | true =>
+            let refl() = Int/eq_of_eql(a, b, Bool/True/qed());
+            Eq/refl()
+        | false =>
+            match Int/le(a, b)
+            | true =>
+                let same = level(a, b, Bool/True/qed(), Bool/True/qed());
+                match Eq/subst(
+                    (x: Int) => Bool/Holds(Bool/not(Int/eql(a, x))),
+                    Eq/sym(same),
+                    Bool/True/qed())
+                end
+            | false => Eq/refl()
+            end
+        end
+    end;
+
+-- `Int/le/trans`, each bound read through [`is_le`].
 --- `ord` as a relation carries across a middle element.
 pub let transitive: Ord/Transitive(Ord/le_by(ord)) =
-    (a, b, c, p, q) => of_le(a, c, Int/le/trans(le(a, b, p), le(b, c, q)));
+    (a, b, c, p, q) =>
+        let below: Bool/Holds(Int/le(a, b)) =
+            Eq/subst((x: Bool) => Bool/Holds(x), Eq/sym(is_le(a, b)), p);
+        let above: Bool/Holds(Int/le(b, c)) =
+            Eq/subst((x: Bool) => Bool/Holds(x), Eq/sym(is_le(b, c)), q);
+        Eq/subst((x: Bool) => Bool/Holds(x), is_le(a, c), Int/le/trans(below, above));

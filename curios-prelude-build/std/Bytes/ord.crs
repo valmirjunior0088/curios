@@ -29,6 +29,32 @@ pub let refl(a: Bytes) -> Eq()(ord(a, a), Ordering/eq()) =
 pub let past(p: Bytes, a: Bytes, b: Bytes) -> Eq()(ord(0x[..p, ..a], 0x[..p, ..b]), ord(a, b)) =
     match p | 0x[] => Eq/refl() | 0x[_, ..t] => past(t, a, b) end;
 
+-- A recursion over both runs: `ord` at two conses is a step, its heads' answer and then its tails', so both are `eq`, the heads one byte by `Nat/ord/eq` on their values.
+--- `ord(a, b)` is `eq` only where `a` is `b`: the order agrees with equality.
+pub let eq(a: Bytes, b: Bytes, h: Eq()(ord(a, b), Ordering/eq())) -> Eq()(a, b) =
+    match a
+    | 0x[] =>
+        match b
+        | 0x[] => Eq/refl()
+        | 0x[_, .._] => match h end
+        end
+    | 0x[x, ..t] =>
+        match b
+        | 0x[] => match h end
+        | 0x[y, ..r] =>
+            let heads = Nat/ord(Byte/to_nat(x), Byte/to_nat(y));
+            let values =
+                Nat/ord/eq(
+                    Byte/to_nat(x),
+                    Byte/to_nat(y),
+                    Ordering/then/first(heads, ord(t, r), h));
+            let head: Eq()(x, y) = Eq/cong((n) => Nat/to_byte(n % 256), values);
+            let refl() = head;
+            let refl() = eq(t, r, Ordering/then/second(heads, ord(t, r), h));
+            Eq/refl()
+        end
+    end;
+
 -- A recursion over both runs: where the two heads differ the answer is theirs, which `Nat/ord/flips` flips, and where they tie it is the tails'.
 --- `ord` answers the flipped answer with its operands swapped.
 pub let flips: Ord/Flips(ord) =
