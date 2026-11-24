@@ -98,7 +98,7 @@ pub let cons_injective_tail(
 
 -- By recursion on both runs, since the comparison of two conses is their heads' and their tails', and of a cons and no bytes is `false`.
 --- A decided equality is an equation: `a == b` gives `Eq()(a, b)`.
-pub let eq_of_eql(a: Bytes, b: Bytes, h: Bool/Holds(a == b)) -> Eq()(a, b) =
+pub let eq_of_eql(a: Bytes, b: Bytes, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
     match a
     | 0x[] =>
         match b
@@ -298,6 +298,8 @@ pub let split(b: Bytes, sep: Byte) -> List(Bytes) =
 
 satisfy Eql(Bytes) {
     eql = eql,
+    eq_of_eql = eq_of_eql,
+    refl(_) = Bool/True/qed(),
 }
 
 satisfy Ord(Bytes) {

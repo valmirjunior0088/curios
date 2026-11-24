@@ -380,7 +380,7 @@ fn a_member_bound_discharges_through_a_row_the_module_declares() {
         let ord(a : Num, b : Num) -> Ordering = Nat/ord(a.n, b.n);
         let lt(a : Num, b : Num) -> Bool = a.n < b.n;
         let le(a : Num, b : Num) -> Bool = a.n <= b.n;
-        satisfy Eql(Num) { eql(a, b) = a.n == b.n }
+        satisfy Eql(Num) { .. }
         satisfy Ord(Num) { ord = ord, lt = lt, le = le }
         satisfy Rem(Num) { Ok(b) = Holds(0 < b.n), rem(a, b, @ok) = a }
         let probe() -> Num = Rem/rem(Num { n = 10 }, Num { n = 3 });

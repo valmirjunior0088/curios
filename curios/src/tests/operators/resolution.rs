@@ -187,19 +187,22 @@ fn a_refused_swapped_comparison_names_its_own_operator() {
     assert!(message.contains("`>` operator"), "{message}");
 }
 
-// `!=` is the negation of the `eql` a witness states, with no method of its own to disagree with it: a witness answering `true` at every pair answers `false` for `!=` at every pair. A `!=` reading `eql` as it stands breaks every bound `/std` states over `!=` before any test runs, so the claim is held here by the fixture alone, which the shape with a `neq` of its own refused for the method it did not write.
+// `!=` is the negation of the `eql` a witness states, with no method of its own to disagree with it: a witness answering `true` at every pair, as the law has it on a type of one value, answers `false` for `!=` at every pair. A `!=` reading `eql` as it stands breaks every bound `/std` states over `!=` before any test runs, so the claim is held here by the fixture alone, which the shape with a `neq` of its own refused for the method it did not write.
 #[test]
 fn a_disequality_is_the_negation_of_its_witness_s_equality() {
     assert_eq!(
         run(r#"
-            use /std/{Nat, Bool, print};
+            use /std/{Bool, Eq, print};
+            use /std/Bool/{True};
             use /std/ops/{Eql};
-            struct Any : pub Type { x : Nat }
+            induct Any : pub Type | any() end
             satisfy Eql(Any) {
                 eql(_, _) = true,
+                eq_of_eql(a, b, _) = match a | any() => match b | any() => Eq/refl() end end,
+                refl(_) = True/qed(),
             }
-            let a : Any = Any { x = 1 };
-            let b : Any = Any { x = 2 };
+            let a : Any = Any/any();
+            let b : Any = Any/any();
             print(Bool/to_str(a != b))
         "#),
         b"false"

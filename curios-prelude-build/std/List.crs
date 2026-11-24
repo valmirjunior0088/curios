@@ -35,7 +35,7 @@ pub use sort_by/{let sort_by};
 pub mod sort;
 pub use sort/{let sort};
 
-use /std/{Nat, Bool, Option, Str, Show, Spell, Fmt, Monad, Ordering, Ord, Hash, proved};
+use /std/{Nat, Bool, Option, Str, Eq, Show, Spell, Fmt, Monad, Ordering, Ord, Hash, proved};
 use /std/ops/{Eql};
 
 --- The element at `i`, or `none` past the end.
@@ -223,8 +223,41 @@ pub let eql(@A: Type, use Eql(A), a: List(A), b: List(A)) -> Bool =
     | _ => false
     end;
 
+-- By recursion on both lists: two conses `eql` holds equal have one head, by the elements' own law, and one tail.
+let eq_of_eql(
+    @A: Type,
+    use Eql(A),
+    a: List(A),
+    b: List(A),
+    h: Bool/Holds(eql(a, b)),
+) -> Eq()(a, b) =
+    match a
+    | [] =>
+        match b
+        | [] => Eq/refl()
+        | [_, .._] => match h end
+        end
+    | [x, ..xs] =>
+        match b
+        | [] => match h end
+        | [y, ..ys] =>
+            let refl() = Eql/eq_of_eql(x, y, Bool/and/first(x == y, eql(xs, ys), h));
+            let refl() = eq_of_eql(xs, ys, Bool/and/second(x == y, eql(xs, ys), h));
+            Eq/refl()
+        end
+    end;
+
+-- By recursion: each element is equal to itself by its own law.
+let eql_refl(@A: Type, use Eql(A), a: List(A)) -> Bool/Holds(eql(a, a)) =
+    match a
+    | [] => Bool/True/qed()
+    | [x, ..xs] => Bool/and/both(x == x, eql(xs, xs), Eql/refl(x), eql_refl(xs))
+    end;
+
 satisfy (@A: Type, use Eql(A)) => Eql(List(A)) {
     eql = eql,
+    eq_of_eql = eq_of_eql,
+    refl = eql_refl,
 }
 
 satisfy (@A: Type, use Show(A)) => Show(List(A)) {

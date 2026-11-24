@@ -48,8 +48,25 @@ pub let holds_of_eq(b: Bool, p: Eq()(b, true)) -> Holds(b) =
 pub let holds(b: Bool) -> Option(Holds(b)) =
     match b | true => Option/some(True/qed()) | false => Option/none() end;
 
+-- By cases on both, `eql` reducing at each.
+let eq_of_eql(a: Bool, b: Bool, h: Holds(eql(a, b))) -> Eq()(a, b) =
+    match a
+    | true =>
+        match b
+        | true => Eq/refl()
+        | false => match h end
+        end
+    | false =>
+        match b
+        | true => match h end
+        | false => Eq/refl()
+        end
+    end;
+
 satisfy Eql(Bool) {
     eql = eql,
+    eq_of_eql = eq_of_eql,
+    refl(a) = match a | true => True/qed() | false => True/qed() end,
 }
 
 satisfy Or(Bool) {

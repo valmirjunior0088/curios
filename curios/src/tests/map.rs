@@ -12,9 +12,7 @@ fn a_colliding_key_witness_is_rejected() {
         | left()
         | right()
         end
-        satisfy Eql(Side) {
-            eql(a, b) = true,
-        }
+        satisfy Eql(Side) { .. }
         satisfy Ord(Side) {
             ord(a, b) = Ordering/eq(),
             lt(a, b) = false,

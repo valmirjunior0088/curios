@@ -9,7 +9,8 @@ let floor(x: Nat, y: Nat) -> Bool/Holds(+0 <= Nat/to_int(x) + Nat/to_int(y)) =
 let floor_mul(x: Nat, y: Nat) -> Bool/Holds(+0 <= Nat/to_int(x) * Nat/to_int(y)) =
     Bool/True/qed();
 
-let positive(m: Nat, y: Nat) -> Bool/Holds(+0 < Nat/to_int(m + 1) + Nat/to_int(y)) =
+-- Stated through `Int/lt` by name, as [`antisym`] is through `le`: `Eql(Int)`'s law reads both, and an operator here would read the order's witness, which reads that one.
+let positive(m: Nat, y: Nat) -> Bool/Holds(Int/lt(+0, Nat/to_int(m + 1) + Nat/to_int(y))) =
     Bool/True/qed();
 
 pub let refl(n: Int) -> Bool/Holds(n <= n) =
@@ -78,13 +79,16 @@ pub let mul(
 
 -- The two differences are naturals summing to zero; a successor for the first is a positive sum, which the second hypothesis already refutes.
 --- Two bounds facing each other pin one value.
-pub let antisym(a: Int, b: Int, p: Bool/Holds(a <= b), q: Bool/Holds(b <= a)) -> Eq()(a, b) =
+pub let antisym(a: Int, b: Int, p: Bool/Holds(le(a, b)), q: Bool/Holds(le(b, a))) -> Eq()(a, b) =
     let other = Int/to_nat(a - b, @q);
     let e: Eq()(Nat/to_int(Int/to_nat(b - a, @p)), b - a) = Eq/refl();
     match Int/to_nat(b - a, @p)
     | 0 => Eq/cong((x: Int) => a + x, e)
     | m + 1 =>
-        let sum: Bool/Holds(+0 < b - a + Nat/to_int(other)) =
-            Eq/subst((x: Int) => Bool/Holds(+0 < x + Nat/to_int(other)), e, positive(m, other));
+        let sum: Bool/Holds(Int/lt(+0, b - a + Nat/to_int(other))) =
+            Eq/subst(
+                (x: Int) => Bool/Holds(Int/lt(+0, x + Nat/to_int(other))),
+                e,
+                positive(m, other));
         match sum end
     end;

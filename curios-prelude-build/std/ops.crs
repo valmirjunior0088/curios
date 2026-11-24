@@ -1,11 +1,15 @@
-use /std/{Bool};
+use /std/{Bool, Eq};
 
 --- Equality as a decision, which `==` dispatches through, and `!=` as its negation.
 ---
---- Distinct from `Eq`, which is the proposition that two values are the same: a witness here answers, and owes no proof that its answer agrees.
+--- `Eq` is the proposition that two values are one, and a witness here decides it: its two laws hold `eql` to `Eq`, so `a == b` holds exactly where `a` and `b` are one value. A type whose comparison is no equality, as `Flt`'s is none, has no witness and names its comparison.
 pub concept Eql(A: Type): pub Type {
     --- Whether the two are equal.
     eql(A, A) -> Bool,
+    --- Two values `eql` holds equal are one: the bridge from a decided equality to an equation.
+    eq_of_eql(a: A, b: A, h: Bool/Holds(eql(a, b))) -> Eq()(a, b),
+    --- A value is equal to itself.
+    refl(a: A) -> Bool/Holds(eql(a, a)),
 }
 
 --- Addition, which `+` dispatches through.

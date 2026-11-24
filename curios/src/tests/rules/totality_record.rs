@@ -198,66 +198,94 @@ fn a_member_handed_where_its_callee_applies_it_is_a_call_of_each_of_its_parts() 
     });
 }
 
-// A witness handed to a definition that applies its method is graded where the definition applies it: `/std/List/eql` applies `e.0` to elements below its lists, so the method's call of `List/eql` on the children is a call of the method below its arguments, and a type reaching `==` on the type is formed. The refusal hands `List/eql` lists built around the arguments themselves, whose elements are no smaller.
+// A witness handed to a definition that applies its method is graded where the definition applies it: `same_list` applies `e.0` to elements below its lists, as `/std/List/eql` does, so the method's call of it on the children is a call of the method below its arguments, and a proof reaching the method is formed. The refusal hands `same_list` lists built around the arguments themselves, whose elements are no smaller. The concept is the program's own and carries no law, so a refusal is derived by editing its one method.
 #[test]
 fn a_witness_handed_to_a_container_operation_descends_where_the_operation_applies_its_method() {
     control(
         r#"
         use /std/{Nat, Bool, List};
-        use /std/ops/{Eql};
+
+        concept Same(A: Type): Type {
+            same(A, A) -> Bool,
+        }
+
+        satisfy Same(Nat) {
+            same(a, b) = a == b,
+        }
+
+        let same_list(@A: Type, use Same(A), a: List(A), b: List(A)) -> Bool =
+            match (a, b)
+            | ([], []) => true
+            | ([x, ..xs], [y, ..ys]) => Same/same(x, y) && same_list(xs, ys)
+            | _ => false
+            end;
 
         induct Rose: Type
         | rose(Nat, List(Rose))
         end
 
-        satisfy Eql(Rose) {
-            eql(a, b) = match a | rose(n, cs) => match b | rose(m, ds) => n == m && List/eql(cs, ds) end end,
+        satisfy Same(Rose) {
+            same(a, b) = match a | rose(n, cs) => match b | rose(m, ds) => n == m && same_list(cs, ds) end end,
         }
 
-        let Same(a: Rose, b: Rose) -> /std/Bool/True =
-            match a == b | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
+        let Alike(a: Rose, b: Rose) -> /std/Bool/True =
+            match Same/same(a, b) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
         b"ok",
     )
-    .refused(&[("List/eql(cs, ds)", "List/eql([a], [b])")])
-    .by_elaborator_in("/Same", |error| {
+    .refused(&[("same_list(cs, ds)", "same_list([a], [b])")])
+    .by_elaborator_in("/Alike", |error| {
         matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
     })
-    .by_certifier_in("/Same", |error| {
+    .by_certifier_in("/Alike", |error| {
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
 
-// A witness under a telescope is handed to a container operation as the member applied to its own parameters: its own arguments are graded as a call's are, and the method's after them as the operation applies it, so the call on the children descends as the witness of no telescope does. The refusal hands `List/eql` lists built around the arguments themselves.
+// A witness under a telescope is handed to a container operation as the member applied to its own parameters: its own arguments are graded as a call's are, and the method's after them as the operation applies it, so the call on the children descends as the witness of no telescope does. The refusal hands `same_list` lists built around the arguments themselves.
 #[test]
 fn a_witness_applied_to_its_own_parameters_and_handed_to_a_container_operation_descends() {
     control(
         r#"
         use /std/{Nat, Bool, List};
-        use /std/ops/{Eql};
+
+        concept Same(A: Type): Type {
+            same(A, A) -> Bool,
+        }
+
+        satisfy Same(Nat) {
+            same(a, b) = a == b,
+        }
+
+        let same_list(@A: Type, use Same(A), a: List(A), b: List(A)) -> Bool =
+            match (a, b)
+            | ([], []) => true
+            | ([x, ..xs], [y, ..ys]) => Same/same(x, y) && same_list(xs, ys)
+            | _ => false
+            end;
 
         induct Rose(A: Type): Type
         | rose(A, List(Rose(A)))
         end
 
-        satisfy (@A: Type, use Eql(A)) => Eql(Rose(A)) {
-            eql(a, b) = match a | rose(n, cs) => match b | rose(m, ds) => n == m && List/eql(cs, ds) end end,
+        satisfy (@A: Type, use Same(A)) => Same(Rose(A)) {
+            same(a, b) = match a | rose(n, cs) => match b | rose(m, ds) => Same/same(n, m) && same_list(cs, ds) end end,
         }
 
-        let Same(a: Rose(Nat), b: Rose(Nat)) -> /std/Bool/True =
-            match a == b | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
+        let Alike(a: Rose(Nat), b: Rose(Nat)) -> /std/Bool/True =
+            match Same/same(a, b) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
         b"ok",
     )
-    .refused(&[("List/eql(cs, ds)", "List/eql([a], [b])")])
-    .by_elaborator_in("/Same", |error| {
+    .refused(&[("same_list(cs, ds)", "same_list([a], [b])")])
+    .by_elaborator_in("/Alike", |error| {
         matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
     })
-    .by_certifier_in("/Same", |error| {
+    .by_certifier_in("/Alike", |error| {
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
@@ -414,14 +442,17 @@ fn a_containers_witness_is_graded_by_the_summary_of_its_method() {
     control(
         r#"
         use /std/{Nat, Bool};
-        use /std/ops/{Eql};
+
+        concept Same(A: Type): Type {
+            same(A, A) -> Bool,
+        }
 
         struct Wrap(A: Type): Type {
             item: A,
         }
 
-        satisfy (@A: Type, use Eql(A)) => Eql(Wrap(A)) {
-            eql(a, b) = Eql/eql(a.item, b.item),
+        satisfy (@A: Type, use Same(A)) => Same(Wrap(A)) {
+            same(a, b) = Same/same(a.item, b.item),
         }
 
         induct Tree: Type
@@ -429,28 +460,28 @@ fn a_containers_witness_is_graded_by_the_summary_of_its_method() {
         | node(Wrap(Tree))
         end
 
-        satisfy Eql(Tree) {
-            eql(a, b) = match a
+        satisfy Same(Tree) {
+            same(a, b) = match a
                 | leaf(n) => match b | leaf(m) => n == m | _ => false end
-                | node(x) => match b | node(y) => x == y | _ => false end
+                | node(x) => match b | node(y) => Same/same(x, y) | _ => false end
                 end,
         }
 
-        let Same(a: Tree, b: Tree) -> /std/Bool/True =
-            match a == b | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
+        let Alike(a: Tree, b: Tree) -> /std/Bool/True =
+            match Same/same(a, b) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
         "#,
         b"ok",
     )
     .refused(&[(
-        "| node(y) => x == y",
-        "| node(y) => Wrap { item = a } == Wrap { item = b }",
+        "| node(y) => Same/same(x, y)",
+        "| node(y) => Same/same(Wrap { item = a }, Wrap { item = b })",
     )])
-    .by_elaborator_in("/Same", |error| {
+    .by_elaborator_in("/Alike", |error| {
         matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
     })
-    .by_certifier_in("/Same", |error| {
+    .by_certifier_in("/Alike", |error| {
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }

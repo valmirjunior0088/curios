@@ -508,7 +508,7 @@ Every infix operator needs whitespace on both sides, and associates to the left.
 
 An operator is a call of its concept's method, resolved as any witness is, intrinsic operands included. `/std` declares the witnesses for the intrinsic types and for some of its own, and a `satisfy` declares one for any other type. Both operands have one type. `+`, `-`, `*`, `/`, `%`, `&&` and `||` answer that type, and `==`, `!=`, `<`, `>`, `<=` and `>=` answer `Bool`.
 
-`==` is `Eql`'s method `eql`, and `a != b` is `Bool/not(a == b)`: a witness states equality once, so the two never disagree.
+`==` is `Eql`'s method `eql`, and `a != b` is `Bool/not(a == b)`: a witness states equality once, so the two never disagree. Beside `eql` a witness proves the concept's two laws, `eq_of_eql`, that two values it holds equal are one, and `refl`, that a value is equal to itself, so `==` decides equality wherever a type has it; a [derived witness](#derived-witnesses) has both written for it.
 
 `Flt` answers none of `==`, `!=`, `<`, `<=`, `>` and `>=`: IEEE's comparisons are no equality and no total order, false between a NaN and itself and true both ways between `+0.0` and `-0.0`, so a float is compared by name, `Flt/eql`, `Flt/lt`, `Flt/le`, `Flt/gt` and `Flt/ge`, or by its bit pattern, `Flt/identical`.
 

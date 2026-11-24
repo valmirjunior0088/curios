@@ -23,30 +23,28 @@ fn the_stages_show_the_transient_and_its_expansion() {
 
 // --- Refusals, each at the declaration and naming what to write instead. ---
 
-// A derived body is a term judged as an authored one is, its termination included: over a recursive family it reaches its own entry through its method, as the body written out does, each call on a child below its argument, so a proof that reads either is admitted alike; and the written body that hands its method back its own arguments is `Unfounded`, so its witness unfolds to nothing and `Tree/leaf(1) == Tree/leaf(2)` stays as written, no `False` for `h` to be, a refusal that names the witness as kept folded. No derivation is a recursion graded total that a written one is not.
+// A derived body is a term judged as an authored one is, its termination included: over a recursive family it reaches its own entry through its method, as the body written out does, each call on a child below its argument, so a proof that reads either is admitted alike; and the written body that hands its method back its own argument is `Unfounded`, so its witness unfolds to nothing and the comparison of two leaves' encodings stays as written, no `False` for `h` to be, a refusal that names the witness as kept folded. No derivation is a recursion graded total that a written one is not. The concept is `Hash`, which carries no law, so the body that loops is one a witness may write.
 #[test]
 fn a_derived_body_reaching_a_proof_is_held_to_termination_as_its_written_body_is() {
     let derived = r#"
-        use /std/{Nat};
-        use /std/ops/{Eql};
+        use /std/{Nat, Hash};
         use /std/Bool/{False, Holds};
         induct Tree: Type | leaf(Nat) | node(Tree, Tree) end
-        satisfy Eql(Tree) { .. }
-        let _apart(h: Holds(Tree/leaf(1) == Tree/leaf(2))) -> False = h;
+        satisfy Hash(Tree) { .. }
+        let _apart(h: Holds(Hash/hash(Tree/leaf(1)) == Hash/hash(Tree/leaf(2)))) -> False = h;
         /std/print("")
         "#;
     let written = r#"
-        use /std/{Nat, Bool};
-        use /std/ops/{Eql};
+        use /std/{Nat, Hash};
         use /std/Bool/{False, Holds};
         induct Tree: Type | leaf(Nat) | node(Tree, Tree) end
-        satisfy Eql(Tree) {
-            eql(a, b) = match a
-                | leaf(x) => match b | leaf(y) => x == y | _ => false end
-                | node(l, r) => match b | node(m, s) => Eql/eql(l, m) && Eql/eql(r, s) | _ => false end
+        satisfy Hash(Tree) {
+            hash(t) = match t
+                | leaf(x) => Hash/tagged(0, [Hash/hash(x)])
+                | node(l, r) => Hash/tagged(1, [Hash/hash(l), Hash/hash(r)])
                 end,
         }
-        let _apart(h: Holds(Tree/leaf(1) == Tree/leaf(2))) -> False = h;
+        let _apart(h: Holds(Hash/hash(Tree/leaf(1)) == Hash/hash(Tree/leaf(2)))) -> False = h;
         /std/print("")
         "#;
 
@@ -55,14 +53,13 @@ fn a_derived_body_reaching_a_proof_is_held_to_termination_as_its_written_body_is
     }
 
     let looping = written.replace(
-        "Eql/eql(l, m) && Eql/eql(r, s)",
-        "Eql/eql(a, b) && Eql/eql(r, s)",
+        "[Hash/hash(l), Hash/hash(r)]",
+        "[Hash/hash(t), Hash/hash(r)]",
     );
     let report = error(&looping);
     assert!(
-        report.contains("inferred: `Holds(Tree/leaf(1) == Tree/leaf(2))`")
-            && report.contains("expected: `False`")
-            && report.contains("the witness of `Eql` for head `Tree` is kept folded"),
+        report.contains("expected: `False`")
+            && report.contains("the witness of `Hash` for head `Tree` is kept folded"),
         "{report}"
     );
 }

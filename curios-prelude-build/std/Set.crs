@@ -8,7 +8,7 @@ pub use has/{let has};
 pub mod to_list;
 pub use to_list/{let to_list};
 
-use /std/{Nat, List, Map, Show, Spell, Fmt};
+use /std/{Nat, List, Map, Eq, Show, Spell, Fmt};
 use /std/ops/{Eql};
 
 --- A set of keys: a map from them to nothing.
@@ -56,6 +56,17 @@ pub let difference(@K: Type, use Map/Key(K), a: Set(K), b: Set(K)) -> Set(K) =
 --- Two sets are equal where they hold the same elements, which is where their maps are equal.
 satisfy (@K: Type, use Map/Key(K)) => Eql(Set(K)) {
     eql(a, b) = a.map == b.map,
+    -- A congruence written over the fields and applied at the projections, where an equation between two projections solves nothing. The law is applied outside it, at the projections: a field is below its record, so a family nested through this one descends through the law as it does through `eql`.
+    eq_of_eql(a, b, h) =
+        let fields(
+            m1: Map(K, {}),
+            m2: Map(K, {}),
+            map: Eq()(m1, m2),
+        ) -> Eq(@Set(K))(Set { map = m1 }, Set { map = m2 }) =
+            let refl() = map;
+            Eq/refl();
+        fields(a.map, b.map, Eql/eq_of_eql(a.map, b.map, h)),
+    refl(a) = Eql/refl(a.map),
 }
 
 satisfy (@K: Type, use Map/Key(K), use Show(K)) => Show(Set(K)) {

@@ -638,7 +638,7 @@ impl DerivationSyntax {
     }
 
     fn concept_fields(self) -> impl Iterator<Item = ConceptField> {
-        self.rows().map(Derivation::concept_field)
+        self.rows().flat_map(Derivation::concept_fields)
     }
 }
 
@@ -654,10 +654,28 @@ pub struct SpellDerivation {
     pub hidden: SyntaxName,
 }
 
-/// The names a derived `Eql` witness body is written with: its own method, applied to each payload pair, and nothing else. What the body builds beside that is an intrinsic or an infix operator, and the elaborator resolves an operator to a projection off a witness — neither names a global for anything to order against.
+/// The names a derived `Eql` witness body is written with: its own method, applied to each payload pair, and the names its two laws' proofs apply. `eql`'s own body builds nothing beside its method but an intrinsic or an infix operator, and the elaborator resolves an operator to a projection off a witness, neither a global for anything to order against.
+///
+/// The proofs name the concept's two laws, each applied to a payload as the method is; the three lemmas of `/std/Bool/and`, by which a conjunction of comparisons is split and joined; propositional equality with its one constructor, which each proof closes on; and the inhabitant of `Holds(true)`, which proves a comparison of nothing. `equality` and `qed` are the declarations [`EntailmentSyntax::equality`] and [`ProofSyntax::true_qed`] name, carried here as well so the row holds every name its writer applies.
 #[derive(Debug, Clone, Copy)]
 pub struct EqlDerivation {
     pub eql: ConceptField,
+    /// The law that two values `eql` holds equal are one value.
+    pub eq_of_eql: ConceptField,
+    /// The law that a value is `eql` to itself.
+    pub refl: ConceptField,
+    /// A conjunction's first conjunct, from a proof of the whole.
+    pub first: SyntaxName,
+    /// Its second conjunct.
+    pub second: SyntaxName,
+    /// Two decisions that hold, as their conjunction.
+    pub both: SyntaxName,
+    /// Propositional equality, which `eq_of_eql` concludes.
+    pub equality: SyntaxName,
+    /// Its constructor: what a payload's equation is matched to, and what a proof closes on once every payload's is.
+    pub same: SyntaxName,
+    /// The inhabitant of `Holds(true)`, which `refl` answers where a constructor holds no payload to compare.
+    pub qed: SyntaxName,
 }
 
 /// The names a derived `Ord` witness body is written with: its own method, applied to each payload pair, and the two `/std/Ord` combinators the body folds their answers through — `lexicographic` within one constructor, `by_tag` across two, with `Ordering/eq` filling the arm that cannot be reached because the tags already agreed — and `Ordering/is_lt` and `is_le`, which read `lt` and `le` off the same comparison.
@@ -702,6 +720,26 @@ impl Derivation {
         }
     }
 
+    /// Every concept method a body written by this derivation projects, for the prelude build's field check: the method the lookup keys on, and for `Eql` the two laws its body proves through each payload's own.
+    fn concept_fields(self) -> Vec<ConceptField> {
+        match self {
+            Derivation::Eql(EqlDerivation {
+                eql,
+                eq_of_eql,
+                refl,
+                first: _,
+                second: _,
+                both: _,
+                equality: _,
+                same: _,
+                qed: _,
+            }) => vec![eql, eq_of_eql, refl],
+            Derivation::Spell(_) | Derivation::Ord(_) | Derivation::Hash(_) => {
+                vec![self.concept_field()]
+            }
+        }
+    }
+
     /// Every name a body written by this derivation references, as the identity a lowered `Var` carries — the references `curios-module`'s unused-declaration lint cannot read off the `Derive` transient, since the body naming them does not exist yet.
     ///
     /// A [`Qualifier`] rather than a [`SyntaxName`], as the bodies' references are read.
@@ -726,7 +764,20 @@ impl Derivation {
                         .map(SyntaxName::qualifier),
                 )
                 .collect(),
-            Derivation::Eql(EqlDerivation { eql: _ }) => vec![concept],
+            Derivation::Eql(EqlDerivation {
+                eql: _,
+                eq_of_eql: _,
+                refl: _,
+                first,
+                second,
+                both,
+                equality,
+                same,
+                qed,
+            }) => [concept]
+                .into_iter()
+                .chain([first, second, both, equality, same, qed].map(SyntaxName::qualifier))
+                .collect(),
             Derivation::Ord(OrdDerivation {
                 ord: _,
                 lexicographic,
@@ -753,7 +804,17 @@ impl Derivation {
                 record,
                 hidden,
             }) => vec![spell.concept, call, record, hidden],
-            Derivation::Eql(EqlDerivation { eql }) => vec![eql.concept],
+            Derivation::Eql(EqlDerivation {
+                eql,
+                eq_of_eql: _,
+                refl: _,
+                first,
+                second,
+                both,
+                equality,
+                same,
+                qed,
+            }) => vec![eql.concept, first, second, both, equality, same, qed],
             Derivation::Ord(OrdDerivation {
                 ord,
                 lexicographic,

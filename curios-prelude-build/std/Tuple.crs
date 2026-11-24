@@ -1,4 +1,4 @@
-use /std/{Show, Spell, Fmt, Ord, Ordering, Str, List};
+use /std/{Bool, Eq, Show, Spell, Fmt, Ord, Ordering, Str, List};
 use /std/ops/{Eql};
 
 let parens(parts: List(Str)) -> Str =
@@ -273,18 +273,85 @@ satisfy (
 
 satisfy Eql({}) {
     eql((), ()) = true,
+    -- The unit has one value, so any two are one.
+    eq_of_eql((), (), _) = Eq/refl(),
+    refl(()) = Bool/True/qed(),
 }
 
 satisfy (@A: Type, use Eql(A)) => Eql({A}) {
     eql(a, b) = a.0 == b.0,
+    -- A congruence written over the fields and applied at the projections, where an equation between two projections solves nothing. The law is applied outside it, at the projections: a field is below its record, so a family nested through this one descends through the law as it does through `eql`. Each field's equation is matched in turn, and the two tuples are then one.
+    eq_of_eql(a, b, h) =
+        let fields(x0: A, y0: A, e0: Eq()(x0, y0)) -> Eq()((x0,), (y0,)) =
+            let refl() = e0;
+            Eq/refl();
+        fields(a.0, b.0, Eql/eq_of_eql(a.0, b.0, h)),
+    refl(a) = Eql/refl(a.0),
 }
 
 satisfy (@A: Type, @B: Type, use Eql(A), use Eql(B)) => Eql({A, B}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1,
+    -- A congruence written over the fields and applied at the projections, where an equation between two projections solves nothing. The law is applied outside it, at the projections: a field is below its record, so a family nested through this one descends through the law as it does through `eql`. Each field's equation is matched in turn, and the two tuples are then one.
+    eq_of_eql(a, b, h) =
+        let fields(
+            x0: A,
+            x1: B,
+            y0: A,
+            y1: B,
+            e0: Eq()(x0, y0),
+            e1: Eq()(x1, y1),
+        ) -> Eq()((x0, x1), (y0, y1)) =
+            let refl() = e0;
+            let refl() = e1;
+            Eq/refl();
+        let p1 = Bool/and/first(a.0 == b.0, a.1 == b.1, h);
+        fields(
+            a.0,
+            a.1,
+            b.0,
+            b.1,
+            Eql/eq_of_eql(a.0, b.0, p1),
+            Eql/eq_of_eql(a.1, b.1, Bool/and/second(a.0 == b.0, a.1 == b.1, h))),
+    refl(a) = Bool/and/both(a.0 == a.0, a.1 == a.1, Eql/refl(a.0), Eql/refl(a.1)),
 }
 
 satisfy (@A: Type, @B: Type, @C: Type, use Eql(A), use Eql(B), use Eql(C)) => Eql({A, B, C}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2,
+    -- A congruence written over the fields and applied at the projections, where an equation between two projections solves nothing. The law is applied outside it, at the projections: a field is below its record, so a family nested through this one descends through the law as it does through `eql`. Each field's equation is matched in turn, and the two tuples are then one.
+    eq_of_eql(a, b, h) =
+        let fields(
+            x0: A,
+            x1: B,
+            x2: C,
+            y0: A,
+            y1: B,
+            y2: C,
+            e0: Eq()(x0, y0),
+            e1: Eq()(x1, y1),
+            e2: Eq()(x2, y2),
+        ) -> Eq()((x0, x1, x2), (y0, y1, y2)) =
+            let refl() = e0;
+            let refl() = e1;
+            let refl() = e2;
+            Eq/refl();
+        let p2 = Bool/and/first(a.0 == b.0 && a.1 == b.1, a.2 == b.2, h);
+        let p1 = Bool/and/first(a.0 == b.0, a.1 == b.1, p2);
+        fields(
+            a.0,
+            a.1,
+            a.2,
+            b.0,
+            b.1,
+            b.2,
+            Eql/eq_of_eql(a.0, b.0, p1),
+            Eql/eq_of_eql(a.1, b.1, Bool/and/second(a.0 == b.0, a.1 == b.1, p2)),
+            Eql/eq_of_eql(a.2, b.2, Bool/and/second(a.0 == b.0 && a.1 == b.1, a.2 == b.2, h))),
+    refl(a) =
+        Bool/and/both(
+            a.0 == a.0 && a.1 == a.1,
+            a.2 == a.2,
+            Bool/and/both(a.0 == a.0, a.1 == a.1, Eql/refl(a.0), Eql/refl(a.1)),
+            Eql/refl(a.2)),
 }
 
 satisfy (
@@ -298,6 +365,56 @@ satisfy (
     use Eql(D),
 ) => Eql({A, B, C, D}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3,
+    -- A congruence written over the fields and applied at the projections, where an equation between two projections solves nothing. The law is applied outside it, at the projections: a field is below its record, so a family nested through this one descends through the law as it does through `eql`. Each field's equation is matched in turn, and the two tuples are then one.
+    eq_of_eql(a, b, h) =
+        let fields(
+            x0: A,
+            x1: B,
+            x2: C,
+            x3: D,
+            y0: A,
+            y1: B,
+            y2: C,
+            y3: D,
+            e0: Eq()(x0, y0),
+            e1: Eq()(x1, y1),
+            e2: Eq()(x2, y2),
+            e3: Eq()(x3, y3),
+        ) -> Eq()((x0, x1, x2, x3), (y0, y1, y2, y3)) =
+            let refl() = e0;
+            let refl() = e1;
+            let refl() = e2;
+            let refl() = e3;
+            Eq/refl();
+        let p3 = Bool/and/first(a.0 == b.0 && a.1 == b.1 && a.2 == b.2, a.3 == b.3, h);
+        let p2 = Bool/and/first(a.0 == b.0 && a.1 == b.1, a.2 == b.2, p3);
+        let p1 = Bool/and/first(a.0 == b.0, a.1 == b.1, p2);
+        fields(
+            a.0,
+            a.1,
+            a.2,
+            a.3,
+            b.0,
+            b.1,
+            b.2,
+            b.3,
+            Eql/eq_of_eql(a.0, b.0, p1),
+            Eql/eq_of_eql(a.1, b.1, Bool/and/second(a.0 == b.0, a.1 == b.1, p2)),
+            Eql/eq_of_eql(a.2, b.2, Bool/and/second(a.0 == b.0 && a.1 == b.1, a.2 == b.2, p3)),
+            Eql/eq_of_eql(
+                a.3,
+                b.3,
+                Bool/and/second(a.0 == b.0 && a.1 == b.1 && a.2 == b.2, a.3 == b.3, h))),
+    refl(a) =
+        Bool/and/both(
+            a.0 == a.0 && a.1 == a.1 && a.2 == a.2,
+            a.3 == a.3,
+            Bool/and/both(
+                a.0 == a.0 && a.1 == a.1,
+                a.2 == a.2,
+                Bool/and/both(a.0 == a.0, a.1 == a.1, Eql/refl(a.0), Eql/refl(a.1)),
+                Eql/refl(a.2)),
+            Eql/refl(a.3)),
 }
 
 satisfy (
@@ -313,6 +430,75 @@ satisfy (
     use Eql(E),
 ) => Eql({A, B, C, D, E}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4,
+    -- A congruence written over the fields and applied at the projections, where an equation between two projections solves nothing. The law is applied outside it, at the projections: a field is below its record, so a family nested through this one descends through the law as it does through `eql`. Each field's equation is matched in turn, and the two tuples are then one.
+    eq_of_eql(a, b, h) =
+        let fields(
+            x0: A,
+            x1: B,
+            x2: C,
+            x3: D,
+            x4: E,
+            y0: A,
+            y1: B,
+            y2: C,
+            y3: D,
+            y4: E,
+            e0: Eq()(x0, y0),
+            e1: Eq()(x1, y1),
+            e2: Eq()(x2, y2),
+            e3: Eq()(x3, y3),
+            e4: Eq()(x4, y4),
+        ) -> Eq()((x0, x1, x2, x3, x4), (y0, y1, y2, y3, y4)) =
+            let refl() = e0;
+            let refl() = e1;
+            let refl() = e2;
+            let refl() = e3;
+            let refl() = e4;
+            Eq/refl();
+        let p4 =
+            Bool/and/first(a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3, a.4 == b.4, h);
+        let p3 = Bool/and/first(a.0 == b.0 && a.1 == b.1 && a.2 == b.2, a.3 == b.3, p4);
+        let p2 = Bool/and/first(a.0 == b.0 && a.1 == b.1, a.2 == b.2, p3);
+        let p1 = Bool/and/first(a.0 == b.0, a.1 == b.1, p2);
+        fields(
+            a.0,
+            a.1,
+            a.2,
+            a.3,
+            a.4,
+            b.0,
+            b.1,
+            b.2,
+            b.3,
+            b.4,
+            Eql/eq_of_eql(a.0, b.0, p1),
+            Eql/eq_of_eql(a.1, b.1, Bool/and/second(a.0 == b.0, a.1 == b.1, p2)),
+            Eql/eq_of_eql(a.2, b.2, Bool/and/second(a.0 == b.0 && a.1 == b.1, a.2 == b.2, p3)),
+            Eql/eq_of_eql(
+                a.3,
+                b.3,
+                Bool/and/second(a.0 == b.0 && a.1 == b.1 && a.2 == b.2, a.3 == b.3, p4)),
+            Eql/eq_of_eql(
+                a.4,
+                b.4,
+                Bool/and/second(
+                    a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3,
+                    a.4 == b.4,
+                    h))),
+    refl(a) =
+        Bool/and/both(
+            a.0 == a.0 && a.1 == a.1 && a.2 == a.2 && a.3 == a.3,
+            a.4 == a.4,
+            Bool/and/both(
+                a.0 == a.0 && a.1 == a.1 && a.2 == a.2,
+                a.3 == a.3,
+                Bool/and/both(
+                    a.0 == a.0 && a.1 == a.1,
+                    a.2 == a.2,
+                    Bool/and/both(a.0 == a.0, a.1 == a.1, Eql/refl(a.0), Eql/refl(a.1)),
+                    Eql/refl(a.2)),
+                Eql/refl(a.3)),
+            Eql/refl(a.4)),
 }
 
 satisfy (
@@ -330,6 +516,97 @@ satisfy (
     use Eql(F),
 ) => Eql({A, B, C, D, E, F}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5,
+    -- A congruence written over the fields and applied at the projections, where an equation between two projections solves nothing. The law is applied outside it, at the projections: a field is below its record, so a family nested through this one descends through the law as it does through `eql`. Each field's equation is matched in turn, and the two tuples are then one.
+    eq_of_eql(a, b, h) =
+        let fields(
+            x0: A,
+            x1: B,
+            x2: C,
+            x3: D,
+            x4: E,
+            x5: F,
+            y0: A,
+            y1: B,
+            y2: C,
+            y3: D,
+            y4: E,
+            y5: F,
+            e0: Eq()(x0, y0),
+            e1: Eq()(x1, y1),
+            e2: Eq()(x2, y2),
+            e3: Eq()(x3, y3),
+            e4: Eq()(x4, y4),
+            e5: Eq()(x5, y5),
+        ) -> Eq()((x0, x1, x2, x3, x4, x5), (y0, y1, y2, y3, y4, y5)) =
+            let refl() = e0;
+            let refl() = e1;
+            let refl() = e2;
+            let refl() = e3;
+            let refl() = e4;
+            let refl() = e5;
+            Eq/refl();
+        let p5 =
+            Bool/and/first(
+                a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4,
+                a.5 == b.5,
+                h);
+        let p4 =
+            Bool/and/first(a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3, a.4 == b.4, p5);
+        let p3 = Bool/and/first(a.0 == b.0 && a.1 == b.1 && a.2 == b.2, a.3 == b.3, p4);
+        let p2 = Bool/and/first(a.0 == b.0 && a.1 == b.1, a.2 == b.2, p3);
+        let p1 = Bool/and/first(a.0 == b.0, a.1 == b.1, p2);
+        fields(
+            a.0,
+            a.1,
+            a.2,
+            a.3,
+            a.4,
+            a.5,
+            b.0,
+            b.1,
+            b.2,
+            b.3,
+            b.4,
+            b.5,
+            Eql/eq_of_eql(a.0, b.0, p1),
+            Eql/eq_of_eql(a.1, b.1, Bool/and/second(a.0 == b.0, a.1 == b.1, p2)),
+            Eql/eq_of_eql(a.2, b.2, Bool/and/second(a.0 == b.0 && a.1 == b.1, a.2 == b.2, p3)),
+            Eql/eq_of_eql(
+                a.3,
+                b.3,
+                Bool/and/second(a.0 == b.0 && a.1 == b.1 && a.2 == b.2, a.3 == b.3, p4)),
+            Eql/eq_of_eql(
+                a.4,
+                b.4,
+                Bool/and/second(
+                    a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3,
+                    a.4 == b.4,
+                    p5)),
+            Eql/eq_of_eql(
+                a.5,
+                b.5,
+                Bool/and/second(
+                    a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4,
+                    a.5 == b.5,
+                    h))),
+    refl(a) =
+        Bool/and/both(
+            a.0 == a.0 && a.1 == a.1 && a.2 == a.2 && a.3 == a.3 && a.4 == a.4,
+            a.5 == a.5,
+            Bool/and/both(
+                a.0 == a.0 && a.1 == a.1 && a.2 == a.2 && a.3 == a.3,
+                a.4 == a.4,
+                Bool/and/both(
+                    a.0 == a.0 && a.1 == a.1 && a.2 == a.2,
+                    a.3 == a.3,
+                    Bool/and/both(
+                        a.0 == a.0 && a.1 == a.1,
+                        a.2 == a.2,
+                        Bool/and/both(a.0 == a.0, a.1 == a.1, Eql/refl(a.0), Eql/refl(a.1)),
+                        Eql/refl(a.2)),
+                    Eql/refl(a.3)),
+                Eql/refl(a.4)),
+            Eql/refl(a.5)),
 }
 
 satisfy (
@@ -351,6 +628,120 @@ satisfy (
     eql(a, b) =
         a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5
             && a.6 == b.6,
+    -- A congruence written over the fields and applied at the projections, where an equation between two projections solves nothing. The law is applied outside it, at the projections: a field is below its record, so a family nested through this one descends through the law as it does through `eql`. Each field's equation is matched in turn, and the two tuples are then one.
+    eq_of_eql(a, b, h) =
+        let fields(
+            x0: A,
+            x1: B,
+            x2: C,
+            x3: D,
+            x4: E,
+            x5: F,
+            x6: G,
+            y0: A,
+            y1: B,
+            y2: C,
+            y3: D,
+            y4: E,
+            y5: F,
+            y6: G,
+            e0: Eq()(x0, y0),
+            e1: Eq()(x1, y1),
+            e2: Eq()(x2, y2),
+            e3: Eq()(x3, y3),
+            e4: Eq()(x4, y4),
+            e5: Eq()(x5, y5),
+            e6: Eq()(x6, y6),
+        ) -> Eq()((x0, x1, x2, x3, x4, x5, x6), (y0, y1, y2, y3, y4, y5, y6)) =
+            let refl() = e0;
+            let refl() = e1;
+            let refl() = e2;
+            let refl() = e3;
+            let refl() = e4;
+            let refl() = e5;
+            let refl() = e6;
+            Eq/refl();
+        let p6 =
+            Bool/and/first(
+                a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5,
+                a.6 == b.6,
+                h);
+        let p5 =
+            Bool/and/first(
+                a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4,
+                a.5 == b.5,
+                p6);
+        let p4 =
+            Bool/and/first(a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3, a.4 == b.4, p5);
+        let p3 = Bool/and/first(a.0 == b.0 && a.1 == b.1 && a.2 == b.2, a.3 == b.3, p4);
+        let p2 = Bool/and/first(a.0 == b.0 && a.1 == b.1, a.2 == b.2, p3);
+        let p1 = Bool/and/first(a.0 == b.0, a.1 == b.1, p2);
+        fields(
+            a.0,
+            a.1,
+            a.2,
+            a.3,
+            a.4,
+            a.5,
+            a.6,
+            b.0,
+            b.1,
+            b.2,
+            b.3,
+            b.4,
+            b.5,
+            b.6,
+            Eql/eq_of_eql(a.0, b.0, p1),
+            Eql/eq_of_eql(a.1, b.1, Bool/and/second(a.0 == b.0, a.1 == b.1, p2)),
+            Eql/eq_of_eql(a.2, b.2, Bool/and/second(a.0 == b.0 && a.1 == b.1, a.2 == b.2, p3)),
+            Eql/eq_of_eql(
+                a.3,
+                b.3,
+                Bool/and/second(a.0 == b.0 && a.1 == b.1 && a.2 == b.2, a.3 == b.3, p4)),
+            Eql/eq_of_eql(
+                a.4,
+                b.4,
+                Bool/and/second(
+                    a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3,
+                    a.4 == b.4,
+                    p5)),
+            Eql/eq_of_eql(
+                a.5,
+                b.5,
+                Bool/and/second(
+                    a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4,
+                    a.5 == b.5,
+                    p6)),
+            Eql/eq_of_eql(
+                a.6,
+                b.6,
+                Bool/and/second(
+                    a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4
+                        && a.5 == b.5,
+                    a.6 == b.6,
+                    h))),
+    refl(a) =
+        Bool/and/both(
+            a.0 == a.0 && a.1 == a.1 && a.2 == a.2 && a.3 == a.3 && a.4 == a.4 && a.5 == a.5,
+            a.6 == a.6,
+            Bool/and/both(
+                a.0 == a.0 && a.1 == a.1 && a.2 == a.2 && a.3 == a.3 && a.4 == a.4,
+                a.5 == a.5,
+                Bool/and/both(
+                    a.0 == a.0 && a.1 == a.1 && a.2 == a.2 && a.3 == a.3,
+                    a.4 == a.4,
+                    Bool/and/both(
+                        a.0 == a.0 && a.1 == a.1 && a.2 == a.2,
+                        a.3 == a.3,
+                        Bool/and/both(
+                            a.0 == a.0 && a.1 == a.1,
+                            a.2 == a.2,
+                            Bool/and/both(a.0 == a.0, a.1 == a.1, Eql/refl(a.0), Eql/refl(a.1)),
+                            Eql/refl(a.2)),
+                        Eql/refl(a.3)),
+                    Eql/refl(a.4)),
+                Eql/refl(a.5)),
+            Eql/refl(a.6)),
 }
 
 satisfy (
@@ -375,6 +766,145 @@ satisfy (
         a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5
             && a.6 == b.6
             && a.7 == b.7,
+    -- A congruence written over the fields and applied at the projections, where an equation between two projections solves nothing. The law is applied outside it, at the projections: a field is below its record, so a family nested through this one descends through the law as it does through `eql`. Each field's equation is matched in turn, and the two tuples are then one.
+    eq_of_eql(a, b, h) =
+        let fields(
+            x0: A,
+            x1: B,
+            x2: C,
+            x3: D,
+            x4: E,
+            x5: F,
+            x6: G,
+            x7: H,
+            y0: A,
+            y1: B,
+            y2: C,
+            y3: D,
+            y4: E,
+            y5: F,
+            y6: G,
+            y7: H,
+            e0: Eq()(x0, y0),
+            e1: Eq()(x1, y1),
+            e2: Eq()(x2, y2),
+            e3: Eq()(x3, y3),
+            e4: Eq()(x4, y4),
+            e5: Eq()(x5, y5),
+            e6: Eq()(x6, y6),
+            e7: Eq()(x7, y7),
+        ) -> Eq()((x0, x1, x2, x3, x4, x5, x6, x7), (y0, y1, y2, y3, y4, y5, y6, y7)) =
+            let refl() = e0;
+            let refl() = e1;
+            let refl() = e2;
+            let refl() = e3;
+            let refl() = e4;
+            let refl() = e5;
+            let refl() = e6;
+            let refl() = e7;
+            Eq/refl();
+        let p7 =
+            Bool/and/first(
+                a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5
+                    && a.6 == b.6,
+                a.7 == b.7,
+                h);
+        let p6 =
+            Bool/and/first(
+                a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5,
+                a.6 == b.6,
+                p7);
+        let p5 =
+            Bool/and/first(
+                a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4,
+                a.5 == b.5,
+                p6);
+        let p4 =
+            Bool/and/first(a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3, a.4 == b.4, p5);
+        let p3 = Bool/and/first(a.0 == b.0 && a.1 == b.1 && a.2 == b.2, a.3 == b.3, p4);
+        let p2 = Bool/and/first(a.0 == b.0 && a.1 == b.1, a.2 == b.2, p3);
+        let p1 = Bool/and/first(a.0 == b.0, a.1 == b.1, p2);
+        fields(
+            a.0,
+            a.1,
+            a.2,
+            a.3,
+            a.4,
+            a.5,
+            a.6,
+            a.7,
+            b.0,
+            b.1,
+            b.2,
+            b.3,
+            b.4,
+            b.5,
+            b.6,
+            b.7,
+            Eql/eq_of_eql(a.0, b.0, p1),
+            Eql/eq_of_eql(a.1, b.1, Bool/and/second(a.0 == b.0, a.1 == b.1, p2)),
+            Eql/eq_of_eql(a.2, b.2, Bool/and/second(a.0 == b.0 && a.1 == b.1, a.2 == b.2, p3)),
+            Eql/eq_of_eql(
+                a.3,
+                b.3,
+                Bool/and/second(a.0 == b.0 && a.1 == b.1 && a.2 == b.2, a.3 == b.3, p4)),
+            Eql/eq_of_eql(
+                a.4,
+                b.4,
+                Bool/and/second(
+                    a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3,
+                    a.4 == b.4,
+                    p5)),
+            Eql/eq_of_eql(
+                a.5,
+                b.5,
+                Bool/and/second(
+                    a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4,
+                    a.5 == b.5,
+                    p6)),
+            Eql/eq_of_eql(
+                a.6,
+                b.6,
+                Bool/and/second(
+                    a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4
+                        && a.5 == b.5,
+                    a.6 == b.6,
+                    p7)),
+            Eql/eq_of_eql(
+                a.7,
+                b.7,
+                Bool/and/second(
+                    a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5
+                        && a.6 == b.6,
+                    a.7 == b.7,
+                    h))),
+    refl(a) =
+        Bool/and/both(
+            a.0 == a.0 && a.1 == a.1 && a.2 == a.2 && a.3 == a.3 && a.4 == a.4 && a.5 == a.5
+                && a.6 == a.6,
+            a.7 == a.7,
+            Bool/and/both(
+                a.0 == a.0 && a.1 == a.1 && a.2 == a.2 && a.3 == a.3 && a.4 == a.4 && a.5 == a.5,
+                a.6 == a.6,
+                Bool/and/both(
+                    a.0 == a.0 && a.1 == a.1 && a.2 == a.2 && a.3 == a.3 && a.4 == a.4,
+                    a.5 == a.5,
+                    Bool/and/both(
+                        a.0 == a.0 && a.1 == a.1 && a.2 == a.2 && a.3 == a.3,
+                        a.4 == a.4,
+                        Bool/and/both(
+                            a.0 == a.0 && a.1 == a.1 && a.2 == a.2,
+                            a.3 == a.3,
+                            Bool/and/both(
+                                a.0 == a.0 && a.1 == a.1,
+                                a.2 == a.2,
+                                Bool/and/both(a.0 == a.0, a.1 == a.1, Eql/refl(a.0), Eql/refl(a.1)),
+                                Eql/refl(a.2)),
+                            Eql/refl(a.3)),
+                        Eql/refl(a.4)),
+                    Eql/refl(a.5)),
+                Eql/refl(a.6)),
+            Eql/refl(a.7)),
 }
 
 satisfy Ord({}) {

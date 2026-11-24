@@ -86,6 +86,8 @@ pub let NonZero(n: Nat) -> Prop =
 
 satisfy Eql(Nat) {
     eql = eql,
+    eq_of_eql = eq_of_eql,
+    refl(_) = Bool/True/qed(),
 }
 
 satisfy Add(Nat) {
@@ -183,8 +185,9 @@ pub let odd_part(n: Nat, @ok: Bool/Holds(0 < n)) -> Nat =
 pub let in_range(c: Nat, lo: Nat, hi: Nat) -> Bool =
     match c >= lo | true => c <= hi | false => false end;
 
+-- Stated over `eql` by name, where `a == b` would read the witness that names this.
 --- A decided equality is an equation: `a == b` gives `Eq()(a, b)`, by recursion on both sides, since `a + 1 == b + 1` is `a == b` after cancellation.
-pub let eq_of_eql(a: Nat, b: Nat, h: Bool/Holds(a == b)) -> Eq()(a, b) =
+pub let eq_of_eql(a: Nat, b: Nat, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
     match a
     | 0 =>
         match b

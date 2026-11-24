@@ -36,7 +36,7 @@ fn a_bound_given_up_in_a_dead_arm_says_the_arm_is_never_taken() {
     );
 }
 
-/// A dispatch whose method ignores its locals resolves to a spelling that mentions none, `Nat/lt(3, 2)`. The written guard `x == y` is recorded; the resolved one is not, in either checker, so a proof about it is refused in the arm. Mutation-checked with the other three: removing the rule from `refine_head` accepts all four in the elaborator and leaves the certifier to refuse them.
+/// A dispatch whose method ignores its locals resolves to a spelling that mentions none, `Nat/lt(3, 2)`, the equality of a type with no value, where answering `false` at every pair is the law. The written guard `x == y` is recorded; the resolved one is not, in either checker, so a proof about it is refused in the arm. Mutation-checked with the other three: removing the rule from `refine_head` accepts all four in the elaborator and leaves the certifier to refuse them.
 #[test]
 fn a_dispatch_that_resolves_to_a_closed_comparison_records_nothing() {
     assert_refused_in_a_dead_arm(
@@ -45,10 +45,13 @@ fn a_dispatch_that_resolves_to_a_closed_comparison_records_nothing() {
         use /std/Bool/{True, Holds};
         use /std/ops/{Eql};
 
-        struct U: pub Type { Nat }
+        induct U: pub Type
+        end
 
         satisfy Eql(U) {
             eql(a, b) = Nat/lt(3, 2),
+            eq_of_eql(a, _, _) = match a end,
+            refl(a) = match a end,
         }
 
         let dead(x: U, y: U) -> Nat =
@@ -59,7 +62,7 @@ fn a_dispatch_that_resolves_to_a_closed_comparison_records_nothing() {
             | false => 1
             end;
 
-        print(Nat/to_str(dead(U { 0 }, U { 1 })))
+        print("unreachable")
         "#,
     );
 }

@@ -1,6 +1,6 @@
-//! Derived `Eql`: structural and fieldwise, a proof taking no part and a hidden member taking part, and the standard library's own.
+//! Derived `Eql`: structural and fieldwise, a proof taking no part and a hidden member taking part, the standard library's own, and the concept's two laws, which a derivation proves and a written witness is held to.
 
-use crate::tests::test_support::*;
+use {crate::tests::test_support::*, curios_common::fill};
 
 // --- The `Eql` derivation: structural equality, constructor by constructor and payload by payload, through each payload's own witness. ---
 
@@ -146,5 +146,123 @@ fn the_standard_library_derives_option_result_and_order() {
     assert_eq!(
         run(source),
         b"Option/some(1)\nOption/none()\nResult/success(1)\nResult/failure(\"no\")\nOrdering/lt()Ordering/eq()Ordering/gt()\ntrue false true true true true "
+    );
+}
+
+// --- The laws: `eq_of_eql`, that two values `eql` holds equal are one, and `refl`, that a value is equal to itself, proved where a witness is declared. ---
+
+// The derivation writes both proofs, which a program reads through the concept as it reads the method: over a recursive family, a family nested through `List`'s witness and through a pair's inside it, a parameterized family under a premise, a constructor holding a proof, and a struct holding a proof of its own field. Each law is used at a variable, where only the proof answers, and the bridge at two closed values, where the comparison reduces.
+#[test]
+fn a_derived_witness_proves_both_laws() {
+    let source = r#"
+        use /std/{Nat, Bool, Str, List, Eq, print};
+        use /std/Bool/{True, Holds};
+        use /std/ops/{Eql};
+
+        induct Tree: Type | leaf(Nat) | node(Tree, Tree) end
+        induct Doc: Type | num(Nat) | arr(List(Doc)) | obj(List({Str, Doc})) end
+        induct Rose(A: Type): Type | rose(A, List(Rose(A))) end
+        induct Certified: Type | cert(n: Nat, proof: Eq()(n, n)) end
+        struct Small: Type { n: Nat, @below: Holds(n < 10) }
+
+        satisfy Eql(Tree) { .. }
+        satisfy Eql(Doc) { .. }
+        satisfy (@A: Type, use Eql(A)) => Eql(Rose(A)) { .. }
+        satisfy Eql(Certified) { .. }
+        satisfy Eql(Small) { .. }
+
+        let one(@A: Type, use Eql(A), a: A, b: A, h: Holds(a == b)) -> Eq()(a, b) =
+            Eql/eq_of_eql(a, b, h);
+        let itself(@A: Type, use Eql(A), a: A) -> Holds(a == a) = Eql/refl(a);
+
+        let _trees(a: Tree, b: Tree, h: Holds(a == b)) -> Eq()(a, b) = one(a, b, h);
+        let _docs(a: Doc, b: Doc, h: Holds(a == b)) -> Eq()(a, b) = one(a, b, h);
+        let _roses(a: Rose(Doc), b: Rose(Doc), h: Holds(a == b)) -> Eq()(a, b) = one(a, b, h);
+        let _certified(a: Certified, b: Certified, h: Holds(a == b)) -> Eq()(a, b) = one(a, b, h);
+        let _small(a: Small, b: Small, h: Holds(a == b)) -> Eq()(a, b) = one(a, b, h);
+
+        let _a_tree(a: Tree) -> Holds(a == a) = itself(a);
+        let _a_doc(a: Doc) -> Holds(a == a) = itself(a);
+        let _a_rose(a: Rose(Doc)) -> Holds(a == a) = itself(a);
+        let _a_small(a: Small) -> Holds(a == a) = itself(a);
+
+        let _closed: Eq()(Doc/obj([("a", Doc/arr([Doc/num(1)]))]), Doc/obj([("a", Doc/arr([Doc/num(1)]))])) =
+            Eql/eq_of_eql(
+                Doc/obj([("a", Doc/arr([Doc/num(1)]))]),
+                Doc/obj([("a", Doc/arr([Doc/num(1)]))]),
+                True/qed());
+
+        print("ok")
+        "#;
+
+    assert_eq!(run(source), b"ok");
+}
+
+// A witness is held to the laws where it is declared: an `eql` that holds two constructors equal has no proof that they are one, one that holds a value apart from itself has no proof that it is not, and a witness that writes the method alone is missing two fields.
+#[test]
+fn a_witness_whose_equality_breaks_a_law_is_refused_where_it_is_declared() {
+    let program = |witness: &str| {
+        fill!(
+            r#"
+            use /std/{Bool, Eq, print};
+            use /std/Bool/{True};
+            use /std/ops/{Eql};
+            induct Side: Type | left() | right() end
+            ${witness}
+            print("unreachable")
+            "#,
+            witness
+        )
+    };
+    let lawful = program(
+        r#"satisfy Eql(Side) {
+                eql(a, b) =
+                    match a
+                    | left() => match b | left() => true | right() => false end
+                    | right() => match b | left() => false | right() => true end
+                    end,
+                eq_of_eql(a, b, h) =
+                    match a
+                    | left() => match b | left() => Eq/refl() | right() => match h end end
+                    | right() => match b | left() => match h end | right() => Eq/refl() end
+                    end,
+                refl(a) = match a | left() => True/qed() | right() => True/qed() end,
+            }"#,
+    );
+    let conflating = program(
+        r#"satisfy Eql(Side) {
+                eql(a, b) = true,
+                eq_of_eql(a, b, h) = Eq/refl(),
+                refl(a) = True/qed(),
+            }"#,
+    );
+    let parting = program(
+        r#"satisfy Eql(Side) {
+                eql(a, b) = false,
+                eq_of_eql(a, b, h) = match h end,
+                refl(a) = True/qed(),
+            }"#,
+    );
+    let lawless = program("satisfy Eql(Side) { eql(a, b) = true, }");
+
+    assert_eq!(
+        run(&lawful.replace("print(\"unreachable\")", "print(\"ok\")")),
+        b"ok"
+    );
+
+    let report = error(&conflating);
+    assert!(
+        report.contains("type mismatch") && report.contains("expected: `Eq(@Side)(a, b)`"),
+        "{report}"
+    );
+    let report = error(&parting);
+    assert!(
+        report.contains("type mismatch") && report.contains("inferred: `True`"),
+        "{report}"
+    );
+    let report = error(&lawless);
+    assert!(
+        report.contains("method count mismatch") && report.contains("missing: `eq_of_eql`, `refl`"),
+        "{report}"
     );
 }

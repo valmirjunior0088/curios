@@ -26,7 +26,7 @@ fn use_entry_fills_a_concept_field_explicitly() {
     assert_eq!(run(source), b"false");
 }
 
-// A witness body is not a concept literal in this one respect: it never writes a superclass slot. Written, the registered `Ord(Mine)` would carry an `Eql(Mine)` other than the registered one, and `==` on one type would answer `false` through the table and `true` through the witness's own projection — two implicit resolutions disagreeing, which is what global coherence exists to rule out. The refusal names the rule, so a fixture broken some other way cannot pass for it.
+// A witness body is not a concept literal in this one respect: it never writes a superclass slot. Written, the registered `Ord(Mine)` would carry an `Eql(Mine)` other than the registered one, and `==` on one type would be one dictionary through the table and another through the witness's own projection — two implicit resolutions of one goal, which is what global coherence exists to rule out, and a law read through one would say nothing of the other. The refusal names the rule, so a fixture broken some other way cannot pass for it.
 #[test]
 fn a_witness_never_writes_its_superclass_slot() {
     let source = r#"
@@ -34,9 +34,13 @@ fn a_witness_never_writes_its_superclass_slot() {
         use /std/ops/{Eql};
         induct Mine: pub Type | a() | b() end
         satisfy Eql(Mine) { .. }
-        let always: Eql(Mine) = Eql { eql(x, y) = true };
+        let other: Eql(Mine) =
+            Eql {
+                eql(x, y) = x == y,
+                eq_of_eql(x, y, h) = Eql/eq_of_eql(x, y, h),
+                refl(x) = Eql/refl(x) };
         satisfy Ord(Mine) {
-            use always,
+            use other,
             ord(x, y) = Ordering/eq(),
             lt(x, y) = false,
             le(x, y) = true,

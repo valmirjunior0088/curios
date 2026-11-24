@@ -2145,6 +2145,105 @@ pub and same_in(
     | [x, ..xs] => match b | [] => false | [y, ..ys] => same(x, y) && same_in(xs, ys) end
     end;
 
+-- By recursion on both nodes: two nodes [`same`] holds alike are at one case, a leaf's keys one by [`Key/same`] and its values by the values' own law, and a branch's twigs one by one.
+--- Two nodes that are alike are one node.
+pub let eq_of_same(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    use Eql(V),
+    a: Node(K, V),
+    b: Node(K, V),
+    h: Bool/Holds(same(a, b)),
+) -> Eq()(a, b) =
+    match a
+    | empty() =>
+        match b
+        | empty() => Eq/refl()
+        | leaf(_, _) => match h end
+        | branch(_, _) => match h end
+        end
+    | leaf(k1, v1) =>
+        match b
+        | empty() => match h end
+        | leaf(k2, v2) =>
+            let refl() =
+                Key/same(k1, k2, Bool/and/first(Hash/hash(k1) == Hash/hash(k2), v1 == v2, h));
+            let refl() =
+                Eql/eq_of_eql(v1, v2, Bool/and/second(Hash/hash(k1) == Hash/hash(k2), v1 == v2, h));
+            Eq/refl()
+        | branch(_, _) => match h end
+        end
+    | branch(at1, t1) =>
+        match b
+        | empty() => match h end
+        | leaf(_, _) => match h end
+        | branch(at2, t2) =>
+            let refl() =
+                Eql/eq_of_eql(at1, at2, Bool/and/first(at1 == at2, same_in(t1.list, t2.list), h));
+            let refl() =
+                Vec/eq_of_list(
+                    t1,
+                    t2,
+                    eq_of_same_in(
+                        t1.list,
+                        t2.list,
+                        Bool/and/second(at1 == at2, same_in(t1.list, t2.list), h)));
+            Eq/refl()
+        end
+    end
+pub and eq_of_same_in(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    use Eql(V),
+    a: List(Node(K, V)),
+    b: List(Node(K, V)),
+    h: Bool/Holds(same_in(a, b)),
+) -> Eq()(a, b) =
+    match a
+    | [] =>
+        match b
+        | [] => Eq/refl()
+        | [_, .._] => match h end
+        end
+    | [x, ..xs] =>
+        match b
+        | [] => match h end
+        | [y, ..ys] =>
+            let refl() = eq_of_same(x, y, Bool/and/first(same(x, y), same_in(xs, ys), h));
+            let refl() = eq_of_same_in(xs, ys, Bool/and/second(same(x, y), same_in(xs, ys), h));
+            Eq/refl()
+        end
+    end;
+
+--- A node is alike to itself.
+pub let same_refl(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    use Eql(V),
+    a: Node(K, V),
+) -> Bool/Holds(same(a, a)) =
+    match a
+    | empty() => Bool/True/qed()
+    | leaf(k, v) =>
+        Bool/and/both(Hash/hash(k) == Hash/hash(k), v == v, Eql/refl(Hash/hash(k)), Eql/refl(v))
+    | branch(at, t) =>
+        Bool/and/both(at == at, same_in(t.list, t.list), Eql/refl(at), same_refl_in(t.list))
+    end
+pub and same_refl_in(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    use Eql(V),
+    a: List(Node(K, V)),
+) -> Bool/Holds(same_in(a, a)) =
+    match a
+    | [] => Bool/True/qed()
+    | [x, ..xs] => Bool/and/both(same(x, x), same_in(xs, xs), same_refl(x), same_refl_in(xs))
+    end;
+
 --- `f` on every value, the keys and the branches as they were.
 pub let map(@K: Type, @V: Type, @W: Type, t: Node(K, V), f: (V) -> W) -> Node(K, W) =
     match t

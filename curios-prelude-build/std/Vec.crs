@@ -86,6 +86,8 @@ pub let zip(@A: Type, @B: Type, @n: Nat, v: Vec(A, n), w: Vec(B, n)) -> Vec({A, 
 
 satisfy (@T: Type, @n: Nat, use Eql(T)) => Eql(Vec(T, n)) {
     eql(v, w) = v.list == w.list,
+    eq_of_eql(v, w, h) = eq_of_list(v, w, Eql/eq_of_eql(v.list, w.list, h)),
+    refl(v) = Eql/refl(v.list),
 }
 
 satisfy (@T: Type, @n: Nat, use Show(T)) => Show(Vec(T, n)) {

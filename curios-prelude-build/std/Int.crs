@@ -78,7 +78,7 @@ pub let view(i: Int) -> Sign(i) =
     | false => Sign/neg(to_nat(-1 - i))
     end;
 
-let absurd_succ(@P: Sort, x: Nat, h: Bool/Holds(+0 == Nat/to_int(x) + 1)) -> P =
+let absurd_succ(@P: Sort, x: Nat, h: Bool/Holds(eql(+0, Nat/to_int(x) + 1))) -> P =
     match h end;
 
 --- Where `a` stands against `b`, with the evidence.
@@ -105,12 +105,23 @@ pub let trichotomy(a: Int, b: Int) -> Trichotomy(a, b) =
         end
     end;
 
+-- Stated over `eql`, and decided through `lt` and `le`, each by name: an operator here would read the witness that names this, as [`trichotomy`]'s do.
 --- A decided equality is an equation: `a == b` gives `Eq()(a, b)`.
-pub let eq_of_eql(a: Int, b: Int, h: Bool/Holds(a == b)) -> Eq()(a, b) =
-    match trichotomy(a, b)
-    | lt(p) => absurd_succ(to_nat(b - a - 1, @p), h)
-    | eq(e) => e
-    | gt(p) => absurd_succ(to_nat(a - b - 1, @p), h)
+pub let eq_of_eql(a: Int, b: Int, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
+    match lt(a, b)
+    | true =>
+        let below: Bool/Holds(lt(a, b)) = Bool/True/qed();
+        absurd_succ(to_nat(b - a - 1, @below), h)
+    | false =>
+        let at_least: Bool/Holds(le(b, a)) = Bool/True/qed();
+        match lt(b, a)
+        | true =>
+            let above: Bool/Holds(lt(b, a)) = Bool/True/qed();
+            absurd_succ(to_nat(a - b - 1, @above), h)
+        | false =>
+            let at_most: Bool/Holds(le(a, b)) = Bool/True/qed();
+            le/antisym(a, b, at_most, at_least)
+        end
     end;
 
 --- The value with its sign written, `+3` or `-3`, so the text re-parses as an `Int` without context.
@@ -148,6 +159,8 @@ pub let non_neg(n: Int) -> Option(NonNeg(n)) =
 
 satisfy Eql(Int) {
     eql = eql,
+    eq_of_eql = eq_of_eql,
+    refl(_) = Bool/True/qed(),
 }
 
 satisfy Add(Int) {

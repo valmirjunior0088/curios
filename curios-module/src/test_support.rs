@@ -86,6 +86,14 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         },
         eql: EqlDerivation {
             eql: registry_field(&["std", "Equal", "Equal"], "eql"),
+            eq_of_eql: registry_field(&["std", "Equal", "Equal"], "eq_of_eql"),
+            refl: registry_field(&["std", "Equal", "Equal"], "refl"),
+            first: registry_name(&["std", "Bool", "and", "first"]),
+            second: registry_name(&["std", "Bool", "and", "second"]),
+            both: registry_name(&["std", "Bool", "and", "both"]),
+            equality: registry_name(&["std", "Eq", "Eq"]),
+            same: registry_name(&["std", "Eq", "Eq", "refl"]),
+            qed: registry_name(&["sys", "Bool", "True", "qed"]),
         },
         ord: OrdDerivation {
             ord: registry_field(&["std", "Ord", "Ord"], "ord"),

@@ -1,6 +1,6 @@
 mod tests;
 
-use /std/{Bytes, Byte, Str, Nat, Bool, Option, Result, List, Show, Spell, Fmt};
+use /std/{Bytes, Byte, Str, Nat, Bool, Option, Result, List, Eq, Show, Spell, Fmt};
 use /std/ops/{Eql};
 
 --- A path as the host holds it.
@@ -96,6 +96,13 @@ pub let extension(p: Path) -> Option(Path) =
 
 satisfy Eql(Path) {
     eql(a, b) = a.0 == b.0,
+    -- A congruence written over the fields and applied at the projections, where an equation between two projections solves nothing. The law is applied outside it, at the projections: a field is below its record, so a family nested through this one descends through the law as it does through `eql`.
+    eq_of_eql(a, b, h) =
+        let fields(x: Bytes, y: Bytes, bytes: Eq()(x, y)) -> Eq()(Path { x }, Path { y }) =
+            let refl() = bytes;
+            Eq/refl();
+        fields(a.0, b.0, Eql/eq_of_eql(a.0, b.0, h)),
+    refl(a) = Eql/refl(a.0),
 }
 
 --- The text when the bytes are UTF-8, the bytes otherwise.

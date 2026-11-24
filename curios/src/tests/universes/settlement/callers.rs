@@ -219,7 +219,7 @@ fn an_occurrence_level_settles_at_its_argument_rather_than_generalizing() {
     );
 }
 
-// **A declaration's levels do not follow where its witnesses are written.** `rewrap`'s `!` asks for `Monad(Box)`, and `same` reaches `Eql(Box(A))` and `Spell(Box(A))` through the `use` premises of a function another unit declares. A goal whose witness the unit declares and has not elaborated voids its item's attempt, which is made again once the witness has: so each goal resolves while its declaration's levels are open, `A` stays the caller's, and a use at `Type` is accepted with the witness written before the declaration or after it. Settled at its least levels instead, a declaration written before its witness would offer `A` at one level, and `big` would be refused.
+// **A declaration's levels do not follow where its witnesses are written.** `rewrap`'s `!` asks for `Monad(Box)`, and `same` reaches `Hash(Box(A))` through the `use` premise of a function another unit declares. A goal whose witness the unit declares and has not elaborated voids its item's attempt, which is made again once the witness has: so each goal resolves while its declaration's levels are open, `A` stays the caller's, and a use at `Type` is accepted with the witness written before the declaration or after it. Settled at its least levels instead, a declaration written before its witness would offer `A` at one level, and `big` would be refused.
 #[test]
 fn a_declarations_levels_do_not_follow_where_its_witnesses_are_written() {
     let through_bang = (
@@ -229,17 +229,15 @@ fn a_declarations_levels_do_not_follow_where_its_witnesses_are_written() {
         "/rewrap",
     );
     let through_a_premise = (
-        "let same(@A: Type, b: Box(A)) -> Test({}) = Test/equal(b, b);",
-        r#"satisfy (@A: Type) => Eql(Box(A)) { eql(_, _) = true, }
-           satisfy (@A: Type) => Spell(Box(A)) { spell(_) = "box", }"#,
-        "let big: Test({}) = same(Box { value = Nat });",
+        "let same(@A: Type, b: Box(A)) -> Bytes = Hash/of(b);",
+        "satisfy (@A: Type) => Hash(Box(A)) { hash(_) = 0x[], }",
+        "let big: Bytes = same(Box { value = Nat });",
         "/same",
     );
     let program = |first: &str, second: &str, use_: &str| {
         fill!(
             r#"
-            use /std/{Monad, Nat, Spell, Test};
-            use /std/ops/{Eql};
+            use /std/{Bytes, Hash, Monad, Nat};
             pub struct Box(A: Type): pub Type { value: A }
             ${first}
             ${second}

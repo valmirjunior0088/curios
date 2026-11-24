@@ -294,8 +294,23 @@ pub let to_utf8(c: Char) -> Bytes =
             Nat/to_byte(0x80 + code % 0x40)]
     end;
 
+-- A congruence written over the fields and applied at the projections, where an equation between two projections solves nothing. The law is applied outside it, at the projections: a field is below its record, so a family nested through this one descends through the law as it does through `eql`.
+let eq_of_eql(a: Char, b: Char, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
+    let fields(
+        code1: Nat,
+        valid1: Valid(code1),
+        code2: Nat,
+        valid2: Valid(code2),
+        code: Eq()(code1, code2),
+    ) -> Eq()(Char { code = code1, @valid = valid1 }, Char { code = code2, @valid = valid2 }) =
+        let refl() = code;
+        Eq/refl();
+    fields(a.code, a.valid, b.code, b.valid, Eql/eq_of_eql(a.code, b.code, h));
+
 satisfy Eql(Char) {
     eql = eql,
+    eq_of_eql = eq_of_eql,
+    refl(c) = Eql/refl(c.code),
 }
 
 satisfy Show(Char) {

@@ -91,6 +91,14 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         },
         eql: EqlDerivation {
             eql: field(&["std", "Equal", "Equal"], "eql"),
+            eq_of_eql: field(&["std", "Equal", "Equal"], "eq_of_eql"),
+            refl: field(&["std", "Equal", "Equal"], "refl"),
+            first: name(&["std", "Bool", "and", "first"]),
+            second: name(&["std", "Bool", "and", "second"]),
+            both: name(&["std", "Bool", "and", "both"]),
+            equality: name(&["std", "Eq", "Eq"]),
+            same: name(&["std", "Eq", "Eq", "refl"]),
+            qed: name(&["sys", "Bool", "True", "qed"]),
         },
         ord: OrdDerivation {
             ord: field(&["std", "Ord", "Ord"], "ord"),

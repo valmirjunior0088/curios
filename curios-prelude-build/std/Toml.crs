@@ -24,7 +24,7 @@ pub use decode/{let decode};
 mod encode;
 pub use encode/{let encode};
 
-use /std/{Int, Flt, Bool, Str, List, Map, Spell};
+use /std/{Int, Flt, Bool, Str, List, Map, Eq, Spell};
 use /std/ops/{Eql};
 use /std/time/{Date, Time, DateTime, OffsetDateTime, rfc3339};
 
@@ -72,6 +72,173 @@ satisfy Eql(Toml) {
         | local_time(x) => match b | local_time(y) => x == y | _ => false end
         | arr(x) => match b | arr(y) => x == y | _ => false end
         | table(x) => match b | table(y) => x == y | _ => false end
+        end,
+    -- An arm for every pair of cases: at two different ones `eql` answered `false`, and at the same one the values are one by their own law.
+    eq_of_eql(a, b, h) =
+        match a
+        | str(x) =>
+            match b
+            | str(y) =>
+                let refl() = Eql/eq_of_eql(x, y, h);
+                Eq/refl()
+            | int(_) => match h end
+            | flt(_) => match h end
+            | bool(_) => match h end
+            | offset_date_time(_) => match h end
+            | local_date_time(_) => match h end
+            | local_date(_) => match h end
+            | local_time(_) => match h end
+            | arr(_) => match h end
+            | table(_) => match h end
+            end
+        | int(x) =>
+            match b
+            | str(_) => match h end
+            | int(y) =>
+                let refl() = Eql/eq_of_eql(x, y, h);
+                Eq/refl()
+            | flt(_) => match h end
+            | bool(_) => match h end
+            | offset_date_time(_) => match h end
+            | local_date_time(_) => match h end
+            | local_date(_) => match h end
+            | local_time(_) => match h end
+            | arr(_) => match h end
+            | table(_) => match h end
+            end
+        | flt(x) =>
+            match b
+            | str(_) => match h end
+            | int(_) => match h end
+            | flt(y) =>
+                let refl() = Flt/eq_of_identical(x, y, h);
+                Eq/refl()
+            | bool(_) => match h end
+            | offset_date_time(_) => match h end
+            | local_date_time(_) => match h end
+            | local_date(_) => match h end
+            | local_time(_) => match h end
+            | arr(_) => match h end
+            | table(_) => match h end
+            end
+        | bool(x) =>
+            match b
+            | str(_) => match h end
+            | int(_) => match h end
+            | flt(_) => match h end
+            | bool(y) =>
+                let refl() = Eql/eq_of_eql(x, y, h);
+                Eq/refl()
+            | offset_date_time(_) => match h end
+            | local_date_time(_) => match h end
+            | local_date(_) => match h end
+            | local_time(_) => match h end
+            | arr(_) => match h end
+            | table(_) => match h end
+            end
+        | offset_date_time(x) =>
+            match b
+            | str(_) => match h end
+            | int(_) => match h end
+            | flt(_) => match h end
+            | bool(_) => match h end
+            | offset_date_time(y) =>
+                let refl() = Eql/eq_of_eql(x, y, h);
+                Eq/refl()
+            | local_date_time(_) => match h end
+            | local_date(_) => match h end
+            | local_time(_) => match h end
+            | arr(_) => match h end
+            | table(_) => match h end
+            end
+        | local_date_time(x) =>
+            match b
+            | str(_) => match h end
+            | int(_) => match h end
+            | flt(_) => match h end
+            | bool(_) => match h end
+            | offset_date_time(_) => match h end
+            | local_date_time(y) =>
+                let refl() = Eql/eq_of_eql(x, y, h);
+                Eq/refl()
+            | local_date(_) => match h end
+            | local_time(_) => match h end
+            | arr(_) => match h end
+            | table(_) => match h end
+            end
+        | local_date(x) =>
+            match b
+            | str(_) => match h end
+            | int(_) => match h end
+            | flt(_) => match h end
+            | bool(_) => match h end
+            | offset_date_time(_) => match h end
+            | local_date_time(_) => match h end
+            | local_date(y) =>
+                let refl() = Eql/eq_of_eql(x, y, h);
+                Eq/refl()
+            | local_time(_) => match h end
+            | arr(_) => match h end
+            | table(_) => match h end
+            end
+        | local_time(x) =>
+            match b
+            | str(_) => match h end
+            | int(_) => match h end
+            | flt(_) => match h end
+            | bool(_) => match h end
+            | offset_date_time(_) => match h end
+            | local_date_time(_) => match h end
+            | local_date(_) => match h end
+            | local_time(y) =>
+                let refl() = Eql/eq_of_eql(x, y, h);
+                Eq/refl()
+            | arr(_) => match h end
+            | table(_) => match h end
+            end
+        | arr(x) =>
+            match b
+            | str(_) => match h end
+            | int(_) => match h end
+            | flt(_) => match h end
+            | bool(_) => match h end
+            | offset_date_time(_) => match h end
+            | local_date_time(_) => match h end
+            | local_date(_) => match h end
+            | local_time(_) => match h end
+            | arr(y) =>
+                let refl() = Eql/eq_of_eql(x, y, h);
+                Eq/refl()
+            | table(_) => match h end
+            end
+        | table(x) =>
+            match b
+            | str(_) => match h end
+            | int(_) => match h end
+            | flt(_) => match h end
+            | bool(_) => match h end
+            | offset_date_time(_) => match h end
+            | local_date_time(_) => match h end
+            | local_date(_) => match h end
+            | local_time(_) => match h end
+            | arr(_) => match h end
+            | table(y) =>
+                let refl() = Eql/eq_of_eql(x, y, h);
+                Eq/refl()
+            end
+        end,
+    refl(a) =
+        match a
+        | str(x) => Eql/refl(x)
+        | int(x) => Eql/refl(x)
+        | flt(x) => Eql/refl(Flt/to_le_bytes(x))
+        | bool(x) => Eql/refl(x)
+        | offset_date_time(x) => Eql/refl(x)
+        | local_date_time(x) => Eql/refl(x)
+        | local_date(x) => Eql/refl(x)
+        | local_time(x) => Eql/refl(x)
+        | arr(x) => Eql/refl(x)
+        | table(x) => Eql/refl(x)
         end,
 }
 

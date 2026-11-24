@@ -10,7 +10,7 @@
 //!
 //! **The `Spell` body.** One match arm per constructor in declaration order, its goal a hole as a written match's is, and per arm a single renderer application over structured pieces: `Spell/call("Tree/node", [spell(l), …])` for a constructor, `Spell/record("Point", [("x", spell(x)), …])` for a struct, whose fields are projected. A value therefore spells as its type's name and constructor tag applied to its payloads, a hidden one under its mark (`Spell/hidden`), so the text re-parses wherever the type's name is visible unqualified; a struct spells labeled, or positionally where its field has no label; a proof payload spells as the written goal `"?"`.
 //!
-//! **The `Eql` body.** `eql` matches its two arguments in turn: an arm per constructor on the first, and inside it a one-arm match on the second at the same constructor — its payloads compared pairwise through `Eql/eql` under `&&`, `true` when there is nothing to compare — with a `| _ => false` default for every other constructor. A struct compares its projections the same way, with no match. Proofs do not take part.
+//! **The `Eql` body.** `eql` matches its two arguments in turn: an arm per constructor on the first, and inside it a one-arm match on the second at the same constructor — its payloads compared pairwise through `Eql/eql` under `&&`, `true` when there is nothing to compare — with a `| _ => false` default for every other constructor. A struct compares its projections the same way, with no match. Proofs do not take part. The two laws are proved of that comparison, each over the comparison built again, so each proof reads the method's own spelling by reduction: `eq_of_eql` by an arm for every pair of constructors ([`equal_where_eql`]), and `refl` by an arm a constructor ([`eql_to_itself`]), each payload's part through the concept's own law at that payload, a witness goal of its own as the method's is.
 //!
 //! **The `Ord` body.** The constructors decide before the payloads do, which that shape cannot express: its inner default is one *constant* for every mismatched tag, and a mismatched pair orders by which constructor is which. So `ord` matches each argument once for its constructor's declaration position and hands both ordinals, with the lockstep comparison, to `/std/Ord`'s `by_tag` — which answers the tag order unless they agree and the comparison otherwise. The lockstep half is then `compare`'s shape exactly, `Ordering/eq` filling a default the tag decision has already made unreachable, and the payload answers fold through `lexicographic` first-difference-wins. A proof contributes no piece, which under that fold is answering `eq`. Linear in the constructor count; an arm per pair would be quadratic. The concept's superclass slot is left unfilled, so the key's `Eql` witness is resolved as it would be for a written literal that omitted it.
 
@@ -22,9 +22,9 @@ use {
         Qualifier, SpellDerivation, StringSyntax, Symbol, SyntaxName, SyntaxRegistry,
     },
     curios_core::{
-        CalleeId, Extent, Free, Global, InductDecl, InductParam, InductType, Intrinsic, Mention,
-        MetavarOrigin, Method, Numeral, StructDecl, StructEntry, StructType, Subterm, Term,
-        WantedPremise, WitnessOrigin, WitnessRole, str_literal, syn_call,
+        Atom, CalleeId, Extent, Free, Global, InductDecl, InductParam, InductType, Intrinsic,
+        Mention, MetavarOrigin, Method, Numeral, StructDecl, StructEntry, StructType, Subterm,
+        Term, WantedPremise, WitnessOrigin, WitnessRole, str_literal, syn_call,
     },
     curios_num::Natural,
     std::rc::Rc,
@@ -441,22 +441,70 @@ fn struct_parts(
     params: &[Term],
     value: &Free,
 ) -> Result<Vec<Classified>, Error> {
-    let fields = decl.arity.clone().open(&params.iter().collect::<Vec<_>>());
-    let labels = fields
+    let width = decl
+        .arity
+        .clone()
+        .open(&params.iter().collect::<Vec<_>>())
+        .len();
+    let projections = (0..width)
+        .map(|index| Term::proj_struct(Term::free_var(value), *name, index))
+        .collect::<Vec<_>>();
+    let mut opened = Opened::default();
+    opened.push(*value, site.key.clone());
+
+    struct_parts_read(
+        context,
+        site,
+        (name, decl, params),
+        &projections,
+        opened,
+        None,
+    )
+}
+
+/// [`struct_parts`] with a binder standing for each field, hidden ones included, where a body is written over the fields and no value of the struct is in scope: each field's type read under the binders before it, as a constructor's payloads are ([`Constructor::parts`]). Answers each field's type beside the parts, the type its binder is bound at.
+fn struct_parts_over(
+    context: &mut Context,
+    site: &Site<'_>,
+    name: &Global,
+    decl: &StructDecl,
+    params: &[Term],
+    binders: &[Free],
+) -> Result<(Vec<Classified>, Vec<Term>), Error> {
+    let fields = binders.iter().map(Term::free_var).collect::<Vec<_>>();
+    let mut types = Vec::new();
+    let parts = struct_parts_read(
+        context,
+        site,
+        (name, decl, params),
+        &fields,
+        Opened::default(),
+        Some((binders, &mut types)),
+    )?;
+
+    Ok((parts, types))
+}
+
+/// The walk [`struct_parts`] and [`struct_parts_over`] share: the struct's field telescope opened at `fields`, the terms its fields are read as, each classified under `opened`. `bound` is the binders those terms are, where they are binders, each entered in scope at its field's type once it is classified, with the types kept.
+fn struct_parts_read(
+    context: &mut Context,
+    site: &Site<'_>,
+    (name, decl, params): (&Global, &StructDecl, &[Term]),
+    fields: &[Term],
+    mut opened: Opened,
+    mut bound: Option<(&[Free], &mut Vec<Term>)>,
+) -> Result<Vec<Classified>, Error> {
+    let telescope = decl.arity.clone().open(&params.iter().collect::<Vec<_>>());
+    let labels = telescope
         .labels()
         .into_iter()
         .map(str::to_string)
         .collect::<Vec<_>>();
-    let projections = (0..labels.len())
-        .map(|index| Term::proj_struct(Term::free_var(value), *name, index))
-        .collect::<Vec<_>>();
 
-    let marks = fields.marks();
-    let mut opened = Opened::default();
-    opened.push(*value, site.key.clone());
+    let marks = telescope.marks();
     let mut parts = Vec::new();
     let mut ordinal = 0;
-    fields.walk(&projections, |index, _, type_| {
+    telescope.walk(fields, |index, _, type_| {
         // A field is described by its place among the plain fields, which is what a literal counts.
         if marks[index] == Plicity::Explicit {
             ordinal += 1;
@@ -471,6 +519,10 @@ fn struct_parts(
             type_,
             marks[index],
         )?);
+        if let Some((binders, types)) = &mut bound {
+            opened.push(binders[index], type_.clone());
+            types.push(type_.clone());
+        }
         Ok::<(), Error>(())
     })?;
     Ok(parts)
@@ -708,7 +760,7 @@ fn hash_body(
     Ok(site.at(dictionary(site, [method])))
 }
 
-/// The `Eql` witness record: `eql` over the derived comparison.
+/// The `Eql` witness record: `eql` over the derived comparison, and its two laws, each proved through its payloads' own.
 fn eql_body(
     context: &mut Context,
     site: &Site<'_>,
@@ -717,7 +769,7 @@ fn eql_body(
 ) -> Result<Term, Error> {
     let left = context.fresh(None);
     let right = context.fresh(None);
-    let compared = compare(context, site, subject, row.eql, &left, &right)?;
+    let compared = compare(context, site, subject, row, &left, &right)?;
     let eql = Term::func(
         [
             (left, Term::hole(context.mint_metavar())),
@@ -725,7 +777,78 @@ fn eql_body(
         ],
         compared,
     );
-    Ok(site.at(dictionary(site, [eql])))
+    let eq_of_eql = equal_where_eql(context, site, subject, row)?;
+    let refl = eql_to_itself(context, site, subject, row)?;
+
+    Ok(site.at(dictionary(site, [eql, eq_of_eql, refl])))
+}
+
+/// The comparisons `eql` joins for one constructor or one struct: the parts that are values, in order, and the two terms each is compared at. A proof takes no part.
+struct Compared<'c> {
+    row: EqlDerivation,
+    values: Vec<(&'c Classified, Option<&'c Term>)>,
+    reads: &'c dyn Fn(usize) -> (Term, Term),
+}
+
+impl<'c> Compared<'c> {
+    fn new(
+        row: EqlDerivation,
+        parts: &'c [Classified],
+        reads: &'c dyn Fn(usize) -> (Term, Term),
+    ) -> Self {
+        let values = parts
+            .iter()
+            .filter_map(|classified| match &classified.part {
+                Part::Proof => None,
+                Part::Value { premise } => Some((classified, premise.as_ref())),
+            })
+            .collect();
+
+        Self { row, values, reads }
+    }
+
+    /// The two terms the value at `index` is compared at.
+    fn pair(&self, index: usize) -> (Term, Term) {
+        (self.reads)(self.values[index].0.position)
+    }
+
+    /// The concept's `field` applied at the value at `index` over `args`, its witness goal born at this call: a comparison written twice is two goals, so none stands under two scopes.
+    fn applied(
+        &self,
+        context: &mut Context,
+        site: &Site<'_>,
+        field: ConceptField,
+        index: usize,
+        args: Vec<Term>,
+    ) -> Term {
+        let (classified, premise) = self.values[index];
+        witness_call(context, site, field, classified, premise, args)
+    }
+
+    /// The comparison of the value at `index`, as `eql` writes it.
+    fn comparison(&self, context: &mut Context, site: &Site<'_>, index: usize) -> Term {
+        let (this, that) = self.pair(index);
+        self.applied(context, site, self.row.eql, index, vec![this, that])
+    }
+
+    /// The first `count` comparisons joined under `&&`, the leftmost innermost, `count` at least one: the spelling [`Compared::joined`] gives the whole, which the laws' proofs take apart and put together a conjunct at a time.
+    fn conjunction(&self, context: &mut Context, site: &Site<'_>, count: usize) -> Term {
+        let mut joined = self.comparison(context, site, 0);
+        for index in 1..count {
+            let next = self.comparison(context, site, index);
+            joined = site.at(Term::infix(InfixOp::And, joined, next));
+        }
+
+        joined
+    }
+
+    /// Every comparison joined, `true` where there is nothing to compare.
+    fn joined(&self, context: &mut Context, site: &Site<'_>) -> Term {
+        match self.values.len() {
+            0 => Term::intrinsic(Intrinsic::Bool(true)),
+            count => self.conjunction(context, site, count),
+        }
+    }
 }
 
 /// Whether `left` and `right` are equal, as a `Bool`-valued term over the two binders.
@@ -733,44 +856,21 @@ fn compare(
     context: &mut Context,
     site: &Site<'_>,
     subject: &Subject,
-    field: ConceptField,
+    row: EqlDerivation,
     left: &Free,
     right: &Free,
 ) -> Result<Term, Error> {
-    // The comparisons of the classified payloads read through `reads`, joined under `&&`; a proof takes no part.
-    let conjunction =
-        |context: &mut Context, parts: &[Classified], reads: &dyn Fn(usize) -> (Term, Term)| {
-            parts
-                .iter()
-                .filter_map(|classified| match &classified.part {
-                    Part::Proof => None,
-                    Part::Value { premise } => {
-                        let (this, that) = reads(classified.position);
-                        Some(witness_call(
-                            context,
-                            site,
-                            field,
-                            classified,
-                            premise.as_ref(),
-                            vec![this, that],
-                        ))
-                    }
-                })
-                .collect::<Vec<_>>()
-                .into_iter()
-                .reduce(|this, that| site.at(Term::infix(InfixOp::And, this, that)))
-                .unwrap_or_else(|| Term::intrinsic(Intrinsic::Bool(true)))
-        };
-
     match subject {
         Subject::Struct { name, decl, params } => {
             let parts = struct_parts(context, site, name, decl, params, left)?;
-            Ok(conjunction(context, &parts, &|index| {
+            let reads = |index: usize| {
                 (
                     Term::proj_struct(Term::free_var(left), *name, index),
                     Term::proj_struct(Term::free_var(right), *name, index),
                 )
-            }))
+            };
+
+            Ok(Compared::new(row, &parts, &reads).joined(context, site))
         }
         Subject::Induct { name, decl, params } => {
             let mut arms = Vec::new();
@@ -784,12 +884,13 @@ fn compare(
                 let lefts = constructor.binders(context);
                 let rights = constructor.binders(context);
                 let parts = constructor.parts(context, site, &lefts, left)?;
-                let compared = conjunction(context, &parts, &|position| {
+                let reads = |position: usize| {
                     (
                         Term::free_var(&lefts[position]),
                         Term::free_var(&rights[position]),
                     )
-                });
+                };
+                let compared = Compared::new(row, &parts, &reads).joined(context, site);
                 let plicities = constructor.plicities();
 
                 // The inner match names the one constructor the outer arm already committed to; every other tag is the default.
@@ -819,6 +920,394 @@ fn compare(
             )))
         }
     }
+}
+
+/// `eq_of_eql`: that two values `eql` holds equal are one, as a function of the two and of the proof that it does.
+///
+/// **An inductive is matched on both sides, an arm for every pair of constructors.** At two different constructors `eql` answered `false`, so the hypothesis reduces to a proposition nothing proves and the arm is its zero-arm match; at the same constructor the comparisons hold part by part ([`equated`]). A default cannot stand for the mismatched arms as it does in `eql`: the hypothesis reduces only where the second constructor is known.
+///
+/// **A struct's proof is a congruence written over its fields and applied at the projections.** A struct has no arm to bind its fields, and an equation between two projections solves nothing, so the proof is a helper over a binder for each field of each side and an equation for each field that is a value, which states that the two literals are one, applied at the two values' projections, where eta holds a value one with the literal of its projections. The concept's law is applied outside it, at the projections: a field is below its record, so a family nested through the struct descends through the law as it does through `eql`, which a call at the helper's own binders would not show.
+fn equal_where_eql(
+    context: &mut Context,
+    site: &Site<'_>,
+    subject: &Subject,
+    row: EqlDerivation,
+) -> Result<Term, Error> {
+    let left = context.fresh(None);
+    let right = context.fresh(None);
+    let held = context.fresh(None);
+
+    let proof = match subject {
+        Subject::Induct { name, decl, params } => {
+            let mut arms = Vec::new();
+            for (tag, signature) in decl.constructors() {
+                let constructor = Constructor {
+                    owner: name,
+                    tag: tag.as_str(),
+                    signature,
+                    params,
+                };
+                let lefts = constructor.binders(context);
+                let parts = constructor.parts(context, site, &lefts, &left)?;
+
+                let mut facing = Vec::new();
+                for (other, other_signature) in decl.constructors() {
+                    let faced = Constructor {
+                        owner: name,
+                        tag: other.as_str(),
+                        signature: other_signature,
+                        params,
+                    };
+                    let rights = faced.binders(context);
+                    let body = match other == tag {
+                        true => {
+                            let reads = |position: usize| {
+                                (
+                                    Term::free_var(&lefts[position]),
+                                    Term::free_var(&rights[position]),
+                                )
+                            };
+                            equated(context, site, &Compared::new(row, &parts, &reads), &held)
+                        }
+                        false => refuted(context, site, &held),
+                    };
+                    facing.push((
+                        other.clone(),
+                        faced
+                            .plicities()
+                            .into_iter()
+                            .zip(rights)
+                            .collect::<Vec<_>>(),
+                        body,
+                    ));
+                }
+
+                let inner = site.at(Term::induct_match_marked(
+                    Term::free_var(&right),
+                    goal(context),
+                    facing,
+                    None,
+                ));
+                arms.push((
+                    tag.clone(),
+                    constructor
+                        .plicities()
+                        .into_iter()
+                        .zip(lefts)
+                        .collect::<Vec<_>>(),
+                    inner,
+                ));
+            }
+
+            let goal = goal(context);
+            site.at(Term::induct_match_marked(
+                Term::free_var(&left),
+                goal,
+                arms,
+                None,
+            ))
+        }
+        Subject::Struct { name, decl, params } => {
+            let Subterm::StructType(StructType { universes, .. }) = &**site.key else {
+                unreachable!("a struct is derived for at a struct type");
+            };
+            let width = decl
+                .arity
+                .clone()
+                .open(&params.iter().collect::<Vec<_>>())
+                .len();
+            let lefts = (0..width).map(|_| context.fresh(None)).collect::<Vec<_>>();
+            let rights = (0..width).map(|_| context.fresh(None)).collect::<Vec<_>>();
+            let literal = |fields: &[Free]| {
+                Term::struct_at(
+                    *name,
+                    universes.clone(),
+                    params.to_vec(),
+                    fields.iter().map(Term::free_var).collect::<Vec<_>>(),
+                )
+            };
+
+            // Each field's type under the fields before it, and the other side's the same types at its own binders.
+            let (fields, left_types) =
+                struct_parts_over(context, site, name, decl, params, &lefts)?;
+            let renamed = lefts
+                .iter()
+                .zip(&rights)
+                .map(|(left, right)| (*left, Term::free_var(right)))
+                .collect::<Vec<_>>();
+            let right_types = left_types.iter().map(|type_| type_.substitute(&renamed));
+            let equality = |this: Term, that: Term| {
+                site.at(Term::apply(syn_call(row.equality, []), vec![this, that]))
+            };
+
+            // The helper's type takes an equation for each field that is a value and states the two literals one, and its body, a lambda checked against that type, matches each equation in turn.
+            let premises = fields
+                .iter()
+                .filter(|classified| matches!(classified.part, Part::Value { .. }))
+                .map(|classified| {
+                    let equation = equality(
+                        Term::free_var(&lefts[classified.position]),
+                        Term::free_var(&rights[classified.position]),
+                    );
+                    (context.fresh(None), equation)
+                })
+                .collect::<Vec<_>>();
+            let signature = Term::func_type(
+                lefts
+                    .iter()
+                    .copied()
+                    .zip(left_types.iter().cloned())
+                    .chain(rights.iter().copied().zip(right_types))
+                    .chain(premises.iter().cloned())
+                    .collect::<Vec<_>>(),
+                equality(literal(&lefts), literal(&rights)),
+            );
+            let proved = matched(
+                context,
+                site,
+                row,
+                premises
+                    .iter()
+                    .map(|(premise, _)| Term::free_var(premise))
+                    .collect(),
+            );
+            let binders = lefts
+                .iter()
+                .chain(&rights)
+                .chain(premises.iter().map(|(premise, _)| premise))
+                .map(|binder| (*binder, Term::hole(context.mint_metavar())))
+                .collect::<Vec<_>>();
+
+            // The laws, each applied at the two values' own projections.
+            let parts = struct_parts(context, site, name, decl, params, &left)?;
+            let projections = |value: &Free| {
+                (0..width)
+                    .map(|index| Term::proj_struct(Term::free_var(value), *name, index))
+                    .collect::<Vec<_>>()
+            };
+            let reads = |index: usize| {
+                (
+                    Term::proj_struct(Term::free_var(&left), *name, index),
+                    Term::proj_struct(Term::free_var(&right), *name, index),
+                )
+            };
+            let (bound, equations) =
+                equations(context, site, &Compared::new(row, &parts, &reads), &held);
+            let helper = context.fresh(None);
+            let applied = site.at(Term::apply(
+                Term::free_var(&helper),
+                projections(&left)
+                    .into_iter()
+                    .chain(projections(&right))
+                    .chain(equations)
+                    .collect::<Vec<_>>(),
+            ));
+
+            Term::let_(
+                &helper,
+                signature,
+                Term::func(binders, proved),
+                bound_around(context, bound, applied),
+            )
+        }
+    };
+
+    Ok(Term::func(
+        [
+            (left, Term::hole(context.mint_metavar())),
+            (right, Term::hole(context.mint_metavar())),
+            (held, Term::hole(context.mint_metavar())),
+        ],
+        proof,
+    ))
+}
+
+/// The zero-arm match on `held`: the arm of two constructors `eql` holds apart, where the hypothesis reduces to a proposition with no proof.
+fn refuted(context: &mut Context, site: &Site<'_>, held: &Free) -> Term {
+    site.at(Term::induct_match_marked(
+        Term::free_var(held),
+        goal(context),
+        Vec::<(Atom, Vec<(Plicity, Free)>, Term)>::new(),
+        None,
+    ))
+}
+
+/// A proof that the two sides `compared` reads are one value, from `held`, a proof that every comparison holds: each part's equation ([`equations`]) matched in turn ([`matched`]).
+fn equated(context: &mut Context, site: &Site<'_>, compared: &Compared<'_>, held: &Free) -> Term {
+    let (bound, equations) = equations(context, site, compared, held);
+    let proof = matched(context, site, compared.row, equations);
+
+    bound_around(context, bound, proof)
+}
+
+/// Each part's equation from `held`, a proof that every comparison of `compared` holds, in the parts' order, beside the proofs it binds on the way, outermost first: the concept's own law at a part gives that part's equation from its comparison.
+///
+/// **The hypothesis is taken apart a conjunct at a time.** `eql` joins the comparisons leftmost innermost, so each shorter prefix is the first conjunct of the next, bound once, and a part's own comparison is the second conjunct of its prefix.
+fn equations(
+    context: &mut Context,
+    site: &Site<'_>,
+    compared: &Compared<'_>,
+    held: &Free,
+) -> (Vec<(Free, Term)>, Vec<Term>) {
+    let row = compared.row;
+    let count = compared.values.len();
+
+    // `prefixes[n]` proves the first `count - n` comparisons joined.
+    let mut prefixes = vec![*held];
+    let mut bound = Vec::new();
+    for length in (1..count).rev() {
+        let longer = Term::free_var(&prefixes[prefixes.len() - 1]);
+        let shorter = compared.conjunction(context, site, length);
+        let last = compared.comparison(context, site, length);
+        let binder = context.fresh(None);
+        bound.push((
+            binder,
+            site.at(syn_call(row.first, [shorter, last, longer])),
+        ));
+        prefixes.push(binder);
+    }
+
+    let equations = (0..count)
+        .map(|index| {
+            let prefix = Term::free_var(&prefixes[count - index - 1]);
+            let evidence = match index {
+                0 => prefix,
+                _ => {
+                    let before = compared.conjunction(context, site, index);
+                    let own = compared.comparison(context, site, index);
+                    site.at(syn_call(row.second, [before, own, prefix]))
+                }
+            };
+            let (this, that) = compared.pair(index);
+            compared.applied(
+                context,
+                site,
+                row.eq_of_eql,
+                index,
+                vec![this, that, evidence],
+            )
+        })
+        .collect();
+
+    (bound, equations)
+}
+
+/// `body` under the proofs `bound` binds, outermost first, each at a type its value gives.
+fn bound_around(context: &mut Context, bound: Vec<(Free, Term)>, body: Term) -> Term {
+    bound.into_iter().rev().fold(body, |body, (binder, value)| {
+        Term::let_(&binder, Term::hole(context.mint_metavar()), value, body)
+    })
+}
+
+/// **Each equation is matched to `refl()` in turn, and `Eq/refl()` closes.** Matching a part's equation solves the second side's part to the first's, so the parts after it, whose types may name it, stand at one type, and once every part is solved the two sides are one term. A proof part needs no equation: two proofs of one proposition are one.
+fn matched(
+    context: &mut Context,
+    site: &Site<'_>,
+    row: EqlDerivation,
+    equations: Vec<Term>,
+) -> Term {
+    let mut proof = site.at(syn_call(row.same, []));
+    for equation in equations.into_iter().rev() {
+        // The constructor's one payload is hidden, the value both sides are.
+        let payload = context.fresh(None);
+        proof = site.at(Term::induct_match_marked(
+            equation,
+            goal(context),
+            [(
+                Atom::from(row.same.qualifier().last()),
+                vec![(Plicity::Implicit, payload)],
+                proof,
+            )],
+            None,
+        ));
+    }
+
+    proof
+}
+
+/// `refl`: that a value is `eql` to itself, as a function of the value. An inductive is matched once, an arm a constructor; a struct reads its projections.
+fn eql_to_itself(
+    context: &mut Context,
+    site: &Site<'_>,
+    subject: &Subject,
+    row: EqlDerivation,
+) -> Result<Term, Error> {
+    let value = context.fresh(None);
+
+    let proof = match subject {
+        Subject::Struct { name, decl, params } => {
+            let parts = struct_parts(context, site, name, decl, params, &value)?;
+            let reads = |index: usize| {
+                let field = Term::proj_struct(Term::free_var(&value), *name, index);
+                (field.clone(), field)
+            };
+
+            held_of_itself(context, site, &Compared::new(row, &parts, &reads))
+        }
+        Subject::Induct { name, decl, params } => {
+            let mut arms = Vec::new();
+            for (tag, signature) in decl.constructors() {
+                let constructor = Constructor {
+                    owner: name,
+                    tag: tag.as_str(),
+                    signature,
+                    params,
+                };
+                let binders = constructor.binders(context);
+                let parts = constructor.parts(context, site, &binders, &value)?;
+                let reads = |position: usize| {
+                    let payload = Term::free_var(&binders[position]);
+                    (payload.clone(), payload)
+                };
+                let proved = held_of_itself(context, site, &Compared::new(row, &parts, &reads));
+                arms.push((
+                    tag.clone(),
+                    constructor
+                        .plicities()
+                        .into_iter()
+                        .zip(binders)
+                        .collect::<Vec<_>>(),
+                    proved,
+                ));
+            }
+
+            let goal = goal(context);
+            site.at(Term::induct_match_marked(
+                Term::free_var(&value),
+                goal,
+                arms,
+                None,
+            ))
+        }
+    };
+
+    Ok(Term::func(
+        [(value, Term::hole(context.mint_metavar()))],
+        proof,
+    ))
+}
+
+/// A proof that every comparison of `compared` holds where both sides are one term: each part's by the concept's own law at that part, joined a conjunct at a time as `eql` joins the comparisons, and `True/qed()` where there is nothing to compare.
+fn held_of_itself(context: &mut Context, site: &Site<'_>, compared: &Compared<'_>) -> Term {
+    let row = compared.row;
+    let count = compared.values.len();
+    if count == 0 {
+        return site.at(syn_call(row.qed, []));
+    }
+
+    let own = |context: &mut Context, index: usize| {
+        let (this, _) = compared.pair(index);
+        compared.applied(context, site, row.refl, index, vec![this])
+    };
+    let mut proof = own(context, 0);
+    for index in 1..count {
+        let before = compared.conjunction(context, site, index);
+        let last = compared.comparison(context, site, index);
+        let next = own(context, index);
+        proof = site.at(syn_call(row.both, [before, last, proof, next]));
+    }
+
+    proof
 }
 
 /// The `Ord` witness record: `ord` over the derived comparison, and `lt` and `le` its `Ordering/is_lt` and `is_le`, each the comparison built again over binders of its own, so each agrees with `ord` by reduction.

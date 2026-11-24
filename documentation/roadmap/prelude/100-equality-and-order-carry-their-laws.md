@@ -4,13 +4,14 @@
 
 ## What is wrong today
 
-- **`Eql` and `Ord` carry no law.** `ops.crs` says a witness of `Eql` "owes no proof that its answer agrees" and `Ord.crs` that "`Ord` itself carries no law"; a theorem over a witness that needs one takes it as a hypothesis, `Ord/Flips` in `List/sort`'s `ordered` and `sorted`, and `Map/Key` proves `refl`, `flips` and `transitive` of its own beside it. `/std` holds 24 written and 58 derived witnesses of `Eql` and 22 written and 11 derived of `Ord` (counted at `3c4346ab6`).
+- **`Ord` carries no law.** `Ord.crs` says "`Ord` itself carries no law"; a theorem over a witness that needs one takes it as a hypothesis, `Ord/Flips` in `List/sort`'s `ordered` and `sorted`, and `Map/Key` proves `refl`, `flips` and `transitive` of its own beside it. `/std` holds 22 written and 11 derived witnesses of `Ord` (counted at `3c4346ab6`).
+- **Four carriers each state the bridge `Eql`'s law states once.** `Byte`, `Bytes`, `Int` and `Nat` each declare a public `eq_of_eql`, the lemma its witness names, which their callers read where the concept's `Eql/eq_of_eql` is the one bridge ([the bridge finding](000-findings.md)).
 
 ## Goal
 
-- `Eql(A)` holds `eql` and two laws: `eq_of_eql`, that `a == b` gives `Eq()(a, b)`, and `refl`, that `a == a`.
+- The bridge from `==` to `Eq` is `Eql/eq_of_eql` alone: no carrier's own lemma is public.
 - `Ord(A)` holds five laws beside `ord`, `lt` and `le`: `flips`, `Ord/Flips(ord)`; `transitive`, `Ord/Transitive(Ord/le_by(ord))`; `eq_of_ord`, that `ord(a, b)` answering `eq` gives `Eq()(a, b)`; and `lt_of_ord` and `le_of_ord`, that `lt(a, b)` is `Ordering/is_lt(ord(a, b))` and `le(a, b)` is `Ordering/is_le(ord(a, b))`.
-- `{ .. }` writes the proofs of a derived `Eql`'s and `Ord`'s laws, and each written witness proves its own.
+- `{ .. }` writes the proofs of a derived `Ord`'s laws, as it writes a derived `Eql`'s, and each written witness proves its own.
 - A theorem over a witness takes the laws from it: `List/sort`'s `ordered` and `sorted` lose their `flips`, and `Map/Key`'s `refl`, `flips` and `transitive` are removed for `Ord`'s, read through its superclass. `List/sort_by` and `List/Pairwise` keep theirs: each is handed a function, and `Ord/Flips` and `Ord/Transitive` are that function's laws.
 
 ## Settled
@@ -30,7 +31,7 @@
 
 ## Stages
 
-**1. `Eql`'s laws.** The two fields; their proofs written by the derivation and by the 24 written witnesses; each carrier's `eq_of_eql` made private, its callers reading `Eql/eq_of_eql` ([the bridge finding](000-findings.md)). Check: a witness whose `eql` breaks either law is refused where it is declared; a derived witness of a recursive family, of a nested one and of one with a proof field is accepted.
+**1. The bridge is the concept's.** Each carrier's `eq_of_eql` made private, its callers reading `Eql/eq_of_eql` ([the bridge finding](000-findings.md)). Check: no carrier's `eq_of_eql` is public, and `/std` builds.
 
 **2. An `Eq` goal decided at a lawful carrier.** The bound procedure asks an `Eq()(a, b)` goal at a carrier with a lawful `Eql` as `Bool/Holds(a == b)` and answers through `Eql/eq_of_eql` ([arithmetic's finding](../arithmetic/000-findings.md)). Check: an implicit `Eq()(List/length([1, 2, 3]), 3)` is filled, and one at `Flt`, whose `==` is no equality, is not.
 

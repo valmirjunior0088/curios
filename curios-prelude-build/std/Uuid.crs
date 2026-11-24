@@ -155,6 +155,8 @@ pub let eq_of_bytes(a: Uuid, b: Uuid, p: Eq()(a.bytes, b.bytes)) -> Eq()(a, b) =
 
 satisfy Eql(Uuid) {
     eql(a, b) = a.bytes == b.bytes,
+    eq_of_eql(a, b, h) = eq_of_bytes(a, b, Eql/eq_of_eql(a.bytes, b.bytes, h)),
+    refl(a) = Eql/refl(a.bytes),
 }
 
 --- The order of their bytes, which is the order a version 7's were made in.

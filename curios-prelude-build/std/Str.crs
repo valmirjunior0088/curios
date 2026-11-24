@@ -884,8 +884,14 @@ pub let pad_start(s: Str, n: Nat, c: Char) -> Str =
 pub let pad_end(s: Str, n: Nat, c: Char) -> Str =
     concat(s, repeat(of_char(c), n - length(s)));
 
+-- Their bytes are one run by `Bytes`'s own law, and a string is its bytes.
+let eq_of_eql(a: Str, b: Str, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
+    eq_of_bytes(a, b, Eql/eq_of_eql(to_bytes(a), to_bytes(b), h));
+
 satisfy Eql(Str) {
     eql = eql,
+    eq_of_eql = eq_of_eql,
+    refl(_) = Bool/True/qed(),
 }
 
 satisfy Show(Str) {
