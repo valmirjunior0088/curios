@@ -3109,57 +3109,14 @@ pub fn document_unit(
         })
         .collect::<Result<HashMap<_, _>, Error>>()?;
 
-    // The unit's own tables as the nearest base, where the lowering held them as the layer it wrote: every read answers alike, since mount sets are disjoint.
-    let tables = predecessor_tables
-        .iter()
-        .copied()
-        .chain([&unit.table])
-        .collect::<Vec<_>>();
-    let exports = predecessors
-        .iter()
-        .map(|earlier| &earlier.public)
-        .chain([&unit.public])
-        .collect::<Vec<_>>();
-    // What each written name resolved to, read off the lowered items as an editor's go-to-definition reads it: the one resolution a page links by.
-    let mentions = unit
-        .texts(None, |_| true)
-        .iter()
-        .flat_map(|text| text.mentions())
-        .filter_map(|mention| {
-            let curios_core::Global::Authored(referent) = mention.name else {
-                return None;
-            };
-            let span = mention.span;
-
-            Some((
-                (
-                    span.source.name().cloned(),
-                    span.source.file().map(ToOwned::to_owned),
-                    span.start,
-                    span.end,
-                ),
-                referent,
-            ))
-        })
-        .collect();
-
-    let units = predecessors
-        .iter()
-        .copied()
-        .chain([unit])
-        .collect::<Vec<_>>();
-
     Ok(Some(document(
         &modules,
-        &Scoped::over(&tables),
-        &Scoped::over(&exports),
-        &mentions,
         &prefix,
-        &unit.visible,
-        records,
-        &units,
-        &Checked::of(definitions, certification),
         description,
+        unit,
+        predecessors,
+        records,
+        &Checked::of(definitions, certification),
     )))
 }
 

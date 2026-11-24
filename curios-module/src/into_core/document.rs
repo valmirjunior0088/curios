@@ -106,30 +106,63 @@ impl<'a> Checked<'a> {
     }
 }
 
-/// The interface of the unit mounted at `prefix`, read off the tables its lowering built: `modules` are the file-backed modules discovery parsed, `table` and `public` the direct interface and the export view over the whole scope, and `mentions` what each name written in the unit resolved to, where it was written.
+/// The interface of `unit`, mounted at `prefix`, read off the tables its lowering stored and those of `predecessors`, the units it was lowered over: `modules` are the file-backed modules discovery parsed, `records` the records of the units it adopts a root of, and `checked` what the checkers established of its declarations.
 ///
 /// Infallible, because every module it visits is one discovery loaded a moment ago: a prefix without a module in the map is a broken invariant of this stage, not a condition a caller can meet.
 ///
 /// # Panics
 ///
-/// Where `mounts` adopts a root no record of `records` documents.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "three over the line: each argument is a table the lowering built, a fact about its scope or what its checks established, and the one caller holds each under these names, so a struct would be a second spelling of the same ten"
-)]
+/// Where `unit` adopts a root no record of `records` documents.
 pub fn document(
     modules: &HashMap<Qualifier, Rc<Module>>,
-    table: &Scoped<'_, ModuleInfo>,
-    public: &Scoped<'_, PublicInterface>,
-    mentions: &HashMap<Written, Qualifier>,
     prefix: &Qualifier,
-    mounts: &[Mount],
-    records: &[&Documentation],
-    units: &[&PreparedText],
-    checked: &Checked<'_>,
     description: Option<String>,
+    unit: &PreparedText,
+    predecessors: &[&PreparedText],
+    records: &[&Documentation],
+    checked: &Checked<'_>,
 ) -> Documentation {
     curios_common::profile!("document");
+    // The unit's own tables as the nearest base, where the lowering held them as the layer it wrote: every read answers alike, since mount sets are disjoint.
+    let tables = predecessors
+        .iter()
+        .map(|earlier| &earlier.table)
+        .chain([&unit.table])
+        .collect::<Vec<_>>();
+    let exports = predecessors
+        .iter()
+        .map(|earlier| &earlier.public)
+        .chain([&unit.public])
+        .collect::<Vec<_>>();
+    let (table, public) = (&Scoped::over(&tables), &Scoped::over(&exports));
+    // What each written name resolved to, read off the lowered items as an editor's go-to-definition reads it: the one resolution a page links by.
+    let mentions = &unit
+        .texts(None, |_| true)
+        .iter()
+        .flat_map(|text| text.mentions())
+        .filter_map(|mention| {
+            let curios_core::Global::Authored(referent) = mention.name else {
+                return None;
+            };
+            let span = mention.span;
+
+            Some((
+                (
+                    span.source.name().cloned(),
+                    span.source.file().map(ToOwned::to_owned),
+                    span.start,
+                    span.end,
+                ),
+                referent,
+            ))
+        })
+        .collect();
+    let units = &predecessors
+        .iter()
+        .copied()
+        .chain([unit])
+        .collect::<Vec<_>>();
+    let mounts = &unit.visible;
     let adopted = adopted_mounts(mounts, prefix);
     for (root, _) in &adopted {
         assert!(
