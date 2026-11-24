@@ -116,6 +116,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     entailment: EntailmentSyntax {
         equality: name(&["std", "Eq", "Eq"]),
         sym: name(&["std", "Eq", "sym"]),
+        decided: field(&["std", "Equal", "Equal"], "eq_of_eql"),
         range: name(&["std", "Nat", "le", "of_in_range"]),
         in_range: name(&["std", "Nat", "in_range"]),
         and_first: name(&["std", "Bool", "and", "first"]),

@@ -29,12 +29,10 @@
 
 ## Stages
 
-**1. An `Eq` goal decided at a lawful carrier.** The bound procedure asks an `Eq()(a, b)` goal at a carrier with a lawful `Eql` as `Bool/Holds(a == b)` and answers through `Eql/eq_of_eql` ([arithmetic's finding](../arithmetic/000-findings.md)). Check: an implicit `Eq()(List/length([1, 2, 3]), 3)` is filled, and one at `Flt`, whose `==` is no equality, is not.
+**1. `Ord`'s laws.** The five fields; `Ord/lexicographic`'s and `Ord/by_tag`'s laws proved once, for the derivation and the written lexicographic witnesses; the carriers' lemmas their witnesses read spelled through their named functions; the 22 written witnesses' proofs. Check: a witness that breaks `flips` is refused where it is declared; a derived `Ord` of a recursive family is accepted.
 
-**2. `Ord`'s laws.** The five fields; `Ord/lexicographic`'s and `Ord/by_tag`'s laws proved once, for the derivation and the written lexicographic witnesses; the carriers' lemmas their witnesses read spelled through their named functions; the 22 written witnesses' proofs. Check: a witness that breaks `flips` is refused where it is declared; a derived `Ord` of a recursive family is accepted.
-
-**3. The theorems take the laws.** `List/sort`'s `ordered` and `sorted` lose their `flips`, and `Map/Key`'s `refl`, `flips` and `transitive` are removed for `Ord`'s. Check: `/std` builds, and its tests pass as restated.
+**2. The theorems take the laws.** `List/sort`'s `ordered` and `sorted` lose their `flips`, and `Map/Key`'s `refl`, `flips` and `transitive` are removed for `Ord`'s. Check: `/std` builds, and its tests pass as restated.
 
 ## Verification and retirement
 
-Each stage's check, then `cargo xtask compiler lint`, `cargo xtask jig lint`, the suite and `cargo xtask docs build`. As the work lands, `documentation/language.md`'s two `Ord` literals and [A witness body may be written by the compiler](../../design/surface/a-witness-body-may-be-written-by-the-compiler.md)'s `Eql` and `Ord` bodies and its *Entries beside the dots* are restated. Once stage 3 lands, this file is deleted.
+Each stage's check, then `cargo xtask compiler lint`, `cargo xtask jig lint`, the suite and `cargo xtask docs build`. As the work lands, `documentation/language.md`'s two `Ord` literals and [A witness body may be written by the compiler](../../design/surface/a-witness-body-may-be-written-by-the-compiler.md)'s `Eql` and `Ord` bodies and its *Entries beside the dots* are restated. Once stage 2 lands, this file is deleted.

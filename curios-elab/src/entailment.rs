@@ -13,6 +13,7 @@
 //! - Where the products leave one too, through the disequalities the scope states, each as the order comparison conversion holds it to be ([`disequalities`]): `total / (n + m)` under `Holds(n != 0)`. Asked last, so a bound the facts prove is proved as it was before a disequality was read at all.
 //! - An empty proposition the facts refute: a bound at `False`, which is what `proved(@False)` asks for and what closes a leaf of a match no arm reaches.
 //! - A conjunction of any of these, conjunct by conjunct, the proofs joined by `and/both` ([`conjoined`]).
+//! - An equation at a type that decides its equality, through the decision: `Eq()(a, b)` where `a == b` has a witness is asked as `Holds(a == b)`, a bound of its own proved as any of these is, and answered by `Eql`'s law over that proof ([`equated`]). A type with no witness, as `Flt`, states no decision, and its equation is read as any proposition the procedure reads nothing in.
 //! - A disjunction of comparisons, refuted whole: every side but the last read as failing and the last the goal, the proof split on each side in turn ([`disjoined`]).
 //!
 //! **What failure is.** The bound's refusal, as the fill leaves it, naming the facts the procedure considered, those it could not read, and — where the search produced one — an assignment of the atoms that satisfies the facts and falsifies the goal ([`Refusal`]).
@@ -43,7 +44,7 @@ use {
     },
     curios_algebra::{LinearForm, Monomial},
     curios_analysis::Classes,
-    curios_common::SyntaxName,
+    curios_common::{InfixOp, Plicity, SyntaxName},
     curios_core::{Cases, Global, LinearViews, Match, Probe, Subterm, Term},
 };
 
@@ -114,6 +115,12 @@ pub fn entail(context: &mut Context, bound: &Term, reduced: &Term) -> Result<Ent
         && let Some((first, second)) = conjunction(context, stated.as_ref().unwrap_or(decision))?
     {
         return conjoined(context, bound, reduced, &first, &second);
+    }
+    // An equation at a type that decides its equality is proved as the decision is, and crossed by the concept's law.
+    if goal.is_none()
+        && let Some(entailed) = equated(context, bound, reduced)?
+    {
+        return Ok(entailed);
     }
     // A disjunction is refuted whole, as `omega` refutes a goal's negation: the sides' failures are read together and the proof splits on each side in turn.
     let goal = match goal {
@@ -232,6 +239,74 @@ fn conjoined(
     };
     context.credit(&proof);
     Ok(Entailed::Proved(proof))
+}
+
+/// A bound that is an equation at a type that decides its equality, proved by a fact that states it or through the decision — the proof a reader writes, `Eql/eq_of_eql(a, b, proved())`: `Holds(a == b)` is a bound of its own, asked of the fill and then of this procedure, and `Eql`'s law takes its proof to the equation. `None` where `reduced` is no equation, where the law is not in scope, and where `==` has no witness at the type, as at `Flt`: the equation is then read as any proposition the procedure reads nothing in.
+fn equated(context: &mut Context, bound: &Term, reduced: &Term) -> Result<Option<Entailed>, Error> {
+    let Subterm::InductType(equation) = &**reduced else {
+        return Ok(None);
+    };
+    let equality = Global::Authored(context.syntax().entailment.equality.qualifier());
+    let ([carrier], [left, right], true) = (
+        equation.params.as_slice(),
+        equation.indices.as_slice(),
+        equation.name == equality,
+    ) else {
+        return Ok(None);
+    };
+    let law = context.syntax().entailment.decided;
+    if !in_scope(context, &[law.concept]) {
+        return Ok(None);
+    }
+    if let Some(proof) = context.with_entailing(|context| stated_by_a_fact(context, bound))? {
+        context.credit(&proof);
+        return Ok(Some(Entailed::Proved(proof)));
+    }
+    // The decision, written as a program writes it and elaborated as one, its witness the one the sides' type resolves.
+    let holds = context.syntax().proof.holds;
+    let decision = Term::infix(InfixOp::Eql, left.clone(), right.clone());
+    let Some(decided) = stated(context, &Term::apply(global(holds), [decision]))? else {
+        return Ok(None);
+    };
+    let (reduct, inhabitant) = trivially_inhabited(context, &decided)?;
+    let proof = match inhabitant {
+        Some(inhabitant) => inhabitant,
+        None => match entail(context, &decided, &reduct)? {
+            Entailed::Proved(proof) => proof,
+            Entailed::Refused(refusal) => return Ok(Some(Entailed::Refused(refusal))),
+        },
+    };
+    // The law's call names the type, so its witness slot is resolved where it is born: a candidate is checked where nothing waits, and a slot left to the first argument would.
+    let crossed = Term::apply_marked(
+        Term::registered_method(law),
+        [
+            (Plicity::Implicit, carrier.clone()),
+            (Plicity::Explicit, left.clone()),
+            (Plicity::Explicit, right.clone()),
+            (Plicity::Explicit, proof),
+        ],
+    );
+    Ok(Some(match check(context, &crossed, bound)? {
+        Some(proof) => {
+            context.credit(&proof);
+            Entailed::Proved(proof)
+        }
+        None => Entailed::Refused(Refusal::rejected()),
+    }))
+}
+
+/// `written`, a proposition as a program writes it, elaborated as one under the refinements live now: `None` where it does not elaborate, an `==` at a type with no witness among them. What it solved is kept where it elaborates and undone where it does not, as [`check`] keeps a candidate's.
+fn stated(context: &mut Context, written: &Term) -> Result<Option<Term>, Error> {
+    let mark = context.solution_mark();
+    let result = context.with_oracle(|context| elaborate(context, written, Mode::Infer));
+    let verdict = result
+        .probed()
+        .map(|elaborated| elaborated.map(|(statement, _)| statement));
+    if !matches!(verdict, Ok(Some(_))) {
+        context.rollback_solutions(mark);
+    }
+    context.end_solutions(mark);
+    verdict
 }
 
 /// `reduced`, the match `Holds` reduces to, over `decision` in place of the one it decided.

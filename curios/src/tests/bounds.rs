@@ -51,6 +51,21 @@ const ROWS: &[Row] = &[
     // The same for a proposition the search reads nothing in: an equation, which is no decision, and `Str/Valid`, a decision over a scan of bytes.
     claim("a: Nat, b: Nat, p: Eq()(a, b)", "Eq()(a, b)"),
     claim("b: Bytes, v: Str/Valid(b)", "Str/Valid(b)"),
+    // An equation at a type that decides its equality, proved as the decision is and crossed by `Eql`'s law: one reduction decides, one the facts' arithmetic proves at each carrier it reads, one an equation read the other way round gives as its two bounds, and one a fact states decided at a carrier whose equality is derived.
+    claim("", "Eq()(List/length([1, 2, 3]), 3)"),
+    claim(
+        "a: Nat, b: Nat, p: Holds(a <= b), q: Holds(b <= a)",
+        "Eq()(a, b)",
+    ),
+    claim(
+        "a: Int, b: Int, p: Holds(a <= b), q: Holds(b <= a)",
+        "Eq()(a, b)",
+    ),
+    claim("a: Nat, b: Nat, p: Eq()(b, a)", "Eq()(a, b)"),
+    claim(
+        "o: Option(Nat), p: Holds(o == Option/none())",
+        "Eq()(o, Option/none())",
+    ),
     // The same through a call: a bound the callee demands is the one the caller was handed.
     body(
         "f: (Nat) -> Bool, n: Nat, p: Holds(f(n)), needs: (m: Nat, @Holds(f(m))) -> Nat",
@@ -751,9 +766,13 @@ const CONTROLS: &[Row] = &[
         "{}",
         "match x < w && y < h | true => () | false => let _: Holds(w <= x) = proved(); () end",
     ),
-    // An equation no fact states, and one only symmetry would reach.
+    // An equation no fact states; one only symmetry would reach, at a type that decides nothing; and one at `Flt`, whose comparison is no equality and has no witness, so the fact that it holds states no decision the law crosses.
     claim("a: Nat, b: Nat", "Eq()(a, b)"),
-    claim("a: Nat, b: Nat, p: Eq()(b, a)", "Eq()(a, b)"),
+    claim("T: Type, a: T, b: T, p: Eq()(b, a)", "Eq()(a, b)"),
+    claim(
+        "x: /std/Flt, y: /std/Flt, p: Holds(/std/Flt/eql(x, y))",
+        "Eq()(x, y)",
+    ),
     claim(
         "v: {inner: {flag: Bool, ok: Holds(flag)}}",
         "Holds(v.inner.flag)",

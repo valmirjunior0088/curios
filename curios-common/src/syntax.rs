@@ -103,7 +103,7 @@ impl SyntaxRegistry {
 
     /// Every registered concept method, for the prelude build's field check. A concept can exist under the registered name and still not declare the field the compiler projects, which is the drift a presence check alone cannot see.
     ///
-    /// Only five groups hold concept methods; the other eight are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
+    /// Only six groups hold concept methods; the other seven are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
     pub fn concept_fields(self) -> impl Iterator<Item = ConceptField> {
         let Self {
             option: _,
@@ -118,7 +118,7 @@ impl SyntaxRegistry {
             program,
             report: _,
             derivations,
-            entailment: _,
+            entailment,
         } = self;
 
         operator
@@ -127,6 +127,7 @@ impl SyntaxRegistry {
             .chain([lift.lift])
             .chain([program.execute])
             .chain(derivations.concept_fields())
+            .chain([entailment.decided])
     }
 }
 
@@ -344,6 +345,8 @@ pub struct EntailmentSyntax {
     pub equality: SyntaxName,
     /// An equation read the other way round, for its second bound.
     pub sym: SyntaxName,
+    /// `Eql`'s law that a decided equality is an equation, by which an equation at a type that decides its equality is proved from the decision. A concept's method and no lemma of the vocabulary: [`EntailmentSyntax::targets`], which the elaborator elaborates ahead of a unit's other declarations, does not list it, and a proof names it where its witness resolves.
+    pub decided: ConceptField,
     /// A range check's two bounds, as a pair: how a range check's guard is read, where a split on it would meet the guard's own key.
     pub range: SyntaxName,
     /// The range check `range` reads, which a guard's written spelling is opened to: its bounds are proved over the arguments the guard's key spells, the one spelling both checkers record.
@@ -371,11 +374,12 @@ pub struct EntailmentSyntax {
 }
 
 impl EntailmentSyntax {
-    /// Every name the procedure writes or reads.
+    /// Every lemma the procedure writes or reads: its vocabulary, which the law it crosses to an equation by is no part of.
     pub fn targets(self) -> impl Iterator<Item = SyntaxName> {
         let Self {
             equality,
             sym,
+            decided: _,
             range,
             in_range,
             and_first,

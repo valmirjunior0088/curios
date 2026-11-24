@@ -111,6 +111,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     entailment: EntailmentSyntax {
         equality: registry_name(&["std", "Eq", "Eq"]),
         sym: registry_name(&["std", "Eq", "sym"]),
+        decided: registry_field(&["std", "Equal", "Equal"], "eq_of_eql"),
         range: registry_name(&["std", "Nat", "le", "of_in_range"]),
         in_range: registry_name(&["std", "Nat", "in_range"]),
         and_first: registry_name(&["std", "Bool", "and", "first"]),

@@ -181,10 +181,10 @@ fn a_goal_in_a_witness_is_offered_a_module_function() {
 
 #[test]
 fn an_imported_lemma_is_suggested_with_its_proof_slot_filled_from_the_scope() {
-    // Pool 5 and the scope fill together. `Eq/sym` is never mentioned by the program — it arrives through `use /std/{Eq}` — and its explicit slot is a proof the goal cannot pin; the output pins `x := k, y := 7`, and `h : Eq()(k, 7)` is the one binder whose type then fits the slot. The complete fit leads; `Eq/cong(?, h)` follows as the refinement whose function is open. Spelled `Eq/sym`, the path the import resolves under, not the `/std/Eq/sym` Core holds.
+    // Pool 5 and the scope fill together. `Eq/sym` is never mentioned by the program — it arrives through `use /std/{Eq}` — and its explicit slot is a proof the goal cannot pin; the output pins `x := k, y := c`, and `h : Eq()(k, c)` is the one binder whose type then fits the slot. The complete fit leads; `Eq/cong(?, h)` follows as the refinement whose function is open. Spelled `Eq/sym`, the path the import resolves under, not the `/std/Eq/sym` Core holds. The type is a parameter, which decides no equality: at `Nat` the equation follows from `h` by arithmetic, and the report leads with `proved()` in the place of a fit.
     let source = r#"
-        use /std/{Nat, Eq};
-        let flip(k : Nat, h : Eq()(k, 7)) -> Eq()(7, k) = ?;
+        use /std/{Eq};
+        let flip(@T : Type, k : T, c : T, h : Eq()(k, c)) -> Eq()(c, k) = ?;
         /std/Io/pure(())
     "#;
 
@@ -205,14 +205,16 @@ fn an_imported_lemma_is_suggested_with_its_proof_slot_filled_from_the_scope() {
 
 #[test]
 fn a_hypothesis_fills_an_imported_lemmas_proof_slot_under_an_open_function() {
-    // The step case of a proof about a function the normalizer cannot unfold on a variable: `double(p + 1)` against `(p + 1) * 2` is not refl, and `Eq/cong`'s output `Eq()(f(x), f(y))` is undecided on `f` alone once `ih`, the call at the predecessor, pins `x` and `y` — undecided on exactly the open slot, which is the advisory the report keeps. The vacuous `Eq/sym(?)` and `Eq/trans(?, ?)`, true of every equation, are not offered.
+    // The step case of a proof about two functions the normalizer cannot unfold on a variable: `double(s(p))` against `twice(z(), s(p))` is two successors over each call at `p`, two functions of two shapes conversion holds apart, which is not refl, and `Eq/cong`'s output `Eq()(f(x), f(y))` is undecided on `f` alone once `ih`, the call at the predecessor, pins `x` and `y` — undecided on exactly the open slot, which is the advisory the report keeps. The vacuous `Eq/sym(?)` and `Eq/trans(?, ?)`, true of every equation, are not offered. The naturals are the program's own, which decide no equality: at `Nat` the step follows from `ih` by arithmetic, and the report leads with `proved()`.
     let source = r#"
-        use /std/{Nat, Eq};
-        let double(n : Nat) -> Nat = match n | 0 => 0 | p + 1 => double(p) + 2 end;
-        let double_correct(n : Nat) -> Eq()(double(n), n * 2) =
+        use /std/{Eq};
+        induct N : Type | z() | s(N) end
+        let double(n : N) -> N = match n | z() => N/z() | s(p) => N/s(N/s(double(p))) end;
+        let twice(from : N, n : N) -> N = match n | z() => from | s(p) => N/s(N/s(twice(from, p))) end;
+        let double_correct(n : N) -> Eq()(double(n), twice(N/z(), n)) =
             match n
-            | 0 => Eq/refl()
-            | p + 1 =>
+            | z() => Eq/refl()
+            | s(p) =>
                 let ih = double_correct(p);
                 ?
             end;
@@ -256,8 +258,8 @@ fn an_application_fit_nothing_pinned_is_not_suggested() {
 fn a_suggested_imported_candidate_compiles_when_pasted() {
     // The paste-and-recheck contract for a pool-5 candidate: `Eq/sym(h)` as suggested in `an_imported_lemma_is_suggested_with_its_proof_slot_filled_from_the_scope`.
     let source = r#"
-        use /std/{Nat, Eq};
-        let flip(k : Nat, h : Eq()(k, 7)) -> Eq()(7, k) = Eq/sym(h);
+        use /std/{Eq};
+        let flip(@T : Type, k : T, c : T, h : Eq()(k, c)) -> Eq()(c, k) = Eq/sym(h);
         /std/Io/pure(())
     "#;
 
