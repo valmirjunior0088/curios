@@ -5,7 +5,7 @@ use super::{test_support::*, *};
 const DIGEST: &str = "abc15ec8c3df7ff6fa771b051a8950012403b241af2688e82374e0bcafcdd21c";
 
 /// The tree whose root declares `data` and whose file `a` holds one step, `step` its keys past its description.
-fn under(data: &str, step: &str) -> Result<Tree, Box<Report>> {
+fn under(data: &str, step: &str) -> Result<Tree, Refusal> {
     Tree::parse(&[
         (ROOT_FILE, &format!("{TOP}{data}")),
         (

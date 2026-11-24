@@ -5,7 +5,7 @@ use super::*;
 pub const TOP: &str = "description = \"The top\"\n";
 
 /// The tree the files `(name, text)` of [`DIRECTORY`] make, under a top holding nothing of its own.
-pub fn tree(files: &[(&str, &str)]) -> Result<Tree, Box<Report>> {
+pub fn tree(files: &[(&str, &str)]) -> Result<Tree, Refusal> {
     let paths = files
         .iter()
         .map(|(name, _)| format!("{DIRECTORY}/{name}.toml"))

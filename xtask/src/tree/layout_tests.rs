@@ -89,11 +89,11 @@ fn a_task_named_like_a_command_outside_the_tree_is_refused() {
     assert!(
         refusal.headline.contains("outside the tree"),
         "{}",
-        refusal.render()
+        refusal.rendered(false)
     );
 }
 
-/// A refusal is drawn as every report of the toolchain is: what it says, the line it is about with the place marked, and the file, line and column it closes on.
+/// A refusal is drawn as what it says, the line it is about with the place marked, and the file, line and column it closes on.
 #[test]
 fn a_refusal_marks_its_place_and_closes_on_its_file_line_and_column() {
     let refusal = tree(&[(
@@ -101,7 +101,7 @@ fn a_refusal_marks_its_place_and_closes_on_its_file_line_and_column() {
         "description = \"A\"\n[s]\ndescription = \"S\"\nrequires = [\".nothing\"]\n",
     )])
     .unwrap_err()
-    .render();
+    .rendered(false);
 
     assert_eq!(
         refusal,

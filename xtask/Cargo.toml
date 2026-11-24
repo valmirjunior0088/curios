@@ -10,8 +10,6 @@ publish = false
 workspace = true
 
 [dependencies]
-# A refusal of the task files is a report, drawn as every other the toolchain makes is.
-curios-common = { workspace = true }
 # Every tool a step runs, fetched at its digest and kept unpacked or as an executable, by the protocol the build scripts fetch by.
 curios-download = { workspace = true }
 # `string` for a command line whose subcommands and flags are the task files' names, read when the program runs.

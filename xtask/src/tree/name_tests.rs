@@ -70,7 +70,7 @@ fn a_name_declared_twice_is_refused() {
             .headline
             .contains("`.variables.x` is declared twice"),
         "{}",
-        refusal.render()
+        refusal.rendered(false)
     );
 }
 

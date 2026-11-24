@@ -15,6 +15,9 @@ use commands::*;
 mod launch;
 use launch::*;
 
+mod refusal;
+use refusal::*;
+
 mod tree;
 use tree::*;
 
@@ -42,13 +45,10 @@ use installer::*;
 mod release;
 use release::*;
 
-use {
-    curios_common::{Kind, Style},
-    std::{
-        env,
-        io::{self, IsTerminal},
-        process::ExitCode,
-    },
+use std::{
+    env,
+    io::{self, IsTerminal},
+    process::ExitCode,
 };
 
 #[cfg(test)]
@@ -58,13 +58,10 @@ fn main() -> ExitCode {
     let tree = match Tree::read() {
         Ok(tree) => tree,
         Err(refusal) => {
-            // Painted as the compiler paints what it reports: where standard error is a terminal and `NO_COLOR` says nothing.
-            let style = Style {
-                here: None,
-                painted: io::stderr().is_terminal()
-                    && env::var_os("NO_COLOR").is_none_or(|unpainted| unpainted.is_empty()),
-            };
-            eprintln!("{}", refusal.rendered(Kind::Error, &style));
+            // Painted where standard error is a terminal and `NO_COLOR` says nothing.
+            let painted = io::stderr().is_terminal()
+                && env::var_os("NO_COLOR").is_none_or(|unpainted| unpainted.is_empty());
+            eprintln!("{}", refusal.rendered(painted));
 
             return ExitCode::FAILURE;
         }

@@ -5,7 +5,7 @@ use {super::test_support::*, super::*, curios_common::fill};
 const DIGEST: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 /// The tree whose root declares the tool `t`, its table holding `table`, and whose file `a` runs it.
-fn with_tool(table: &str) -> Result<Tree, Box<Report>> {
+fn with_tool(table: &str) -> Result<Tree, Refusal> {
     Tree::parse(&[
         (
             ROOT_FILE,
