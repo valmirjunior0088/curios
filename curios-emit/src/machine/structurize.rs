@@ -2,9 +2,8 @@
 
 use {
     super::{
-        MachineBlock, MachineBlockId, MachineConstruct, MachineEdge, MachineFunction,
-        MachineInstruction, MachineModule, MachineOperand, MachineTerminator, MachineValueId,
-        MachineWrapper,
+        MachineBlockId, MachineConstruct, MachineEdge, MachineFunction, MachineInstruction,
+        MachineModule, MachineOperand, MachineTerminator, MachineValueId, MachineWrapper,
     },
     crate::{
         EmissionArg, EmissionBinder, EmissionBlock, EmissionBlockName, EmissionBody,
@@ -170,7 +169,6 @@ struct MachineFunctionBridge<'a> {
     function: &'a MachineFunction,
     resume: EmissionBlockName,
     literal_entropy: Entropy,
-    block_captures: BTreeMap<MachineBlockId, Vec<MachineValueId>>,
     /// The values this bridge minted that a register holds, at their carriers. See [`EmissionModule::minted_registers`].
     minted: Vec<(EmissionValueName, curios_cps::Repr)>,
 }
@@ -182,14 +180,12 @@ impl<'a> MachineFunctionBridge<'a> {
         function: &'a MachineFunction,
         resume: EmissionBlockName,
     ) -> Self {
-        let block_captures = block_captures(function);
         Self {
             machine,
             function_id,
             function,
             resume,
             literal_entropy: Entropy::new(),
-            block_captures,
             minted: Vec::new(),
         }
     }
@@ -290,13 +286,7 @@ impl<'a> MachineFunctionBridge<'a> {
         (
             self.block_name(block),
             EmissionBlock {
-                params: source
-                    .params
-                    .iter()
-                    .chain(&self.block_captures[&block])
-                    .copied()
-                    .map(value_name)
-                    .collect(),
+                params: source.params.iter().copied().map(value_name).collect(),
                 region: self.convert_block(block),
             },
         )
@@ -453,17 +443,13 @@ impl<'a> MachineFunctionBridge<'a> {
         }
     }
 
-    /// The block a call or an operation resumes into, handing over results held at `carriers`. Where `target` captures values, a block minted in front of it takes the results as parameters of its own, each held as it arrives, and jumps on with the captures.
+    /// The block a call or an operation resumes into, handing over results held at `carriers`: a block minted in front of `target` takes the results as parameters of its own, each held as it arrives, and jumps on to `target`, the edge loading each as the parameter it feeds is held.
     fn resume_target(
         &mut self,
         target: MachineBlockId,
         carriers: &[Option<curios_cps::Repr>],
         blocks: &mut Vec<(EmissionBlockName, EmissionBlock)>,
     ) -> EmissionBlockName {
-        if self.block_captures[&target].is_empty() {
-            return self.block_name(target);
-        }
-
         let synthetic = self.literal_entropy.fresh();
         let resume =
             EmissionBlockName::from(format!("resume/{}/{}", self.function_id.index(), synthetic));
@@ -482,19 +468,7 @@ impl<'a> MachineFunctionBridge<'a> {
                 name
             })
             .collect::<Vec<_>>();
-        let captures = &self.block_captures[&target];
-        let mut params = results
-            .iter()
-            .cloned()
-            .map(EmissionArg::Value)
-            .collect::<Vec<_>>();
-        params.extend(
-            captures
-                .iter()
-                .copied()
-                .map(value_name)
-                .map(EmissionArg::Value),
-        );
+        let params = results.iter().cloned().map(EmissionArg::Value).collect();
         blocks.push((
             resume.clone(),
             EmissionBlock {
@@ -593,17 +567,9 @@ impl<'a> MachineFunctionBridge<'a> {
         edge: &MachineEdge,
         values: &mut Vec<(EmissionValueName, EmissionValue)>,
     ) -> EmissionJumpTarget {
-        let mut params = self.jump_args(&edge.args, values);
-        params.extend(
-            self.block_captures[&edge.target]
-                .iter()
-                .copied()
-                .map(value_name)
-                .map(EmissionArg::Value),
-        );
         EmissionJumpTarget {
             target: self.block_name(edge.target),
-            params,
+            params: self.jump_args(&edge.args, values),
         }
     }
 
@@ -671,133 +637,6 @@ impl<'a> MachineFunctionBridge<'a> {
 
     fn block_name(&self, block: MachineBlockId) -> EmissionBlockName {
         EmissionBlockName::from(format!("block/{}/{}", self.function_id.index(), block.0))
-    }
-}
-
-fn block_captures(function: &MachineFunction) -> BTreeMap<MachineBlockId, Vec<MachineValueId>> {
-    let function_scope = function
-        .free_values
-        .iter()
-        .chain(&function.params)
-        .copied()
-        .collect::<BTreeSet<_>>();
-    let mut captures = function
-        .blocks
-        .keys()
-        .copied()
-        .map(|block| (block, BTreeSet::new()))
-        .collect::<BTreeMap<_, _>>();
-
-    loop {
-        let previous = captures.clone();
-        for (block_id, block) in &function.blocks {
-            let mut bound = function_scope.clone();
-            bound.extend(&block.params);
-            for instruction in &block.instructions {
-                match instruction {
-                    MachineInstruction::Construct { result, .. }
-                    | MachineInstruction::Intrinsic { result, .. }
-                    | MachineInstruction::Rebuild { result, .. }
-                    | MachineInstruction::MakeClosure { result, .. } => {
-                        bound.insert(*result);
-                    }
-                }
-            }
-
-            let mut required = block_operand_values(block);
-            for successor in block_successors(&block.terminator) {
-                required.extend(previous[&successor].iter().copied());
-            }
-            required.retain(|value| !bound.contains(value));
-            captures.insert(*block_id, required);
-        }
-        if captures == previous {
-            break;
-        }
-    }
-
-    captures
-        .into_iter()
-        .map(|(block, values)| (block, values.into_iter().collect()))
-        .collect()
-}
-
-fn block_operand_values(block: &MachineBlock) -> BTreeSet<MachineValueId> {
-    let mut values = BTreeSet::new();
-    let mut insert = |operand: &MachineOperand| {
-        if let MachineOperand::Value(value) = operand {
-            values.insert(*value);
-        }
-    };
-    for instruction in &block.instructions {
-        match instruction {
-            MachineInstruction::Construct { value, .. } => match value {
-                MachineConstruct::Literal(_) => {}
-                MachineConstruct::List(operands)
-                | MachineConstruct::Tuple(operands)
-                | MachineConstruct::Row(_, operands) => {
-                    operands.iter().for_each(&mut insert);
-                }
-            },
-            MachineInstruction::Intrinsic { args, .. }
-            | MachineInstruction::MakeClosure { captures: args, .. } => {
-                args.iter().for_each(&mut insert);
-            }
-            MachineInstruction::Rebuild { of, values, .. } => {
-                insert(of);
-                values.iter().for_each(&mut insert);
-            }
-        }
-    }
-    match &block.terminator {
-        MachineTerminator::Return(operands) => operands.iter().for_each(&mut insert),
-        MachineTerminator::Jump(edge) => edge.args.iter().for_each(&mut insert),
-        MachineTerminator::Switch {
-            scrutinee,
-            cases,
-            default,
-        } => {
-            insert(scrutinee);
-            for edge in cases.values().chain(default.iter()) {
-                edge.args.iter().for_each(&mut insert);
-            }
-        }
-        MachineTerminator::DirectCall { args, .. }
-        | MachineTerminator::TailDirectCall { args, .. }
-        | MachineTerminator::Foreign { args, .. }
-        | MachineTerminator::ForeignReturn { args, .. }
-        | MachineTerminator::Halt { args, .. }
-        | MachineTerminator::Cell { args, .. }
-        | MachineTerminator::Box { args, .. }
-        | MachineTerminator::CellReturn { args, .. }
-        | MachineTerminator::BoxReturn { args, .. }
-        | MachineTerminator::Intrinsic { args, .. }
-        | MachineTerminator::IntrinsicReturn { args, .. } => args.iter().for_each(&mut insert),
-        MachineTerminator::IndirectCall { closure, args, .. }
-        | MachineTerminator::TailIndirectCall { closure, args } => {
-            insert(&MachineOperand::Value(*closure));
-            args.iter().for_each(&mut insert);
-        }
-        MachineTerminator::Panic(_) | MachineTerminator::Unreachable => {}
-    }
-    values
-}
-
-fn block_successors(terminator: &MachineTerminator) -> Vec<MachineBlockId> {
-    match terminator {
-        MachineTerminator::Jump(edge) => vec![edge.target],
-        MachineTerminator::Switch { cases, default, .. } => cases
-            .values()
-            .chain(default.iter())
-            .map(|edge| edge.target)
-            .collect(),
-        MachineTerminator::DirectCall { resume, .. }
-        | MachineTerminator::IndirectCall { resume, .. }
-        | MachineTerminator::Foreign { resume, .. }
-        | MachineTerminator::Cell { resume, .. }
-        | MachineTerminator::Box { resume, .. }
-        | MachineTerminator::Intrinsic { resume, .. } => vec![*resume],
-        _ => vec![],
     }
 }
 

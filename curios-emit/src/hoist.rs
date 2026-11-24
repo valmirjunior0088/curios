@@ -58,7 +58,7 @@ pub fn hoist_consts(module: &mut EmissionModule) {
     module.set_consts(interner.consts);
 }
 
-/// Hoist one function's region tree: collect and intern its constants, then drop the hoisted bindings, with the block parameters that captured them, and rename every surviving occurrence. Two phases because a scalar may be demanded by an aggregate bound after uses of the scalar were already walked.
+/// Hoist one function's region tree: collect and intern its constants, then drop the hoisted bindings and rename every surviving occurrence. Two phases because a scalar may be demanded by an aggregate bound after uses of the scalar were already walked.
 fn hoist_region(region: &mut EmissionBody, interner: &mut ConstInterner) {
     let mut consts = FunctionConsts::default();
     collect_consts(region, interner, &mut consts);

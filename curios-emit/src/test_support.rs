@@ -990,7 +990,7 @@ pub fn constant_tuple_pair() -> curios_cps::Module {
     module
 }
 
-/// A constant tuple bound in `main`'s body and read in a continuation a jump enters, so the block that continuation becomes captures the binding.
+/// A constant tuple bound in `main`'s body and read in a continuation a jump enters: a value bound before a block and read within it.
 pub fn constant_tuple_across_a_jump() -> curios_cps::Module {
     let mut module = curios_cps::Module::new();
     let main = module.reserve_function();

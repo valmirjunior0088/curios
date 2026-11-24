@@ -526,6 +526,30 @@ fn elaborates(source: &str) -> Result<(), String> {
     }
 }
 
+/// `f(n)`, `size` calls of `step` in its body, each at the answer of the one before it, ending in the sum of every answer: each stays live to the end.
+fn kept_calls(size: usize) -> String {
+    let mut body = "let step(n: Nat) -> Nat =\n    match n | 0 => 1 | m + 1 => (step(m) * 3 + 1) % 1000003 end;\n\nlet f(n: Nat) -> Nat =\n    let x0 = n;\n".to_string();
+    for index in 1..=size {
+        writeln!(body, "    let x{index} = step(x{});", index - 1).expect("a string takes a line");
+    }
+    let sum = joined((0..=size).map(|index| format!("x{index}")), " + ");
+    writeln!(body, "    {sum};").expect("a string takes a line");
+    program(&body, "f(a)")
+}
+
+/// The most locals any function of the module `source` is emitted as holds.
+fn most_locals(source: &str) -> usize {
+    let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");
+    let (mut module, _) =
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
+            .expect("the fixture compiles");
+    module
+        .funcs_mut()
+        .map(|(_, function)| function.locals.len())
+        .max()
+        .unwrap_or(0)
+}
+
 /// Whether `source` is emitted as a module the engine validates, with what it is refused for where it is not: what a fixture holding the emitter to the engine's limits asks.
 fn emits(source: &str) -> Result<(), String> {
     let entrypoint = source
@@ -598,6 +622,17 @@ fn ten_thousand_operators_in_one_function_fit_the_engine_s_locals() {
     for growth in [Growth::LeftPlus, Growth::LetPlus] {
         assert_eq!(emits(&grown(growth, 10_100)), Ok(()), "{growth:?}");
     }
+}
+
+/// A function's locals grow with what it binds: a chain of calls whose answers are all kept to the end is emitted with locals in its length, each value in the one local the function holds it in, where a block binding again every value live into it bound the chain's whole live set at each call.
+#[test]
+fn a_chain_of_calls_whose_answers_are_all_kept_is_emitted_with_locals_in_its_length() {
+    let (hundred, two_hundred) = (most_locals(&kept_calls(100)), most_locals(&kept_calls(200)));
+
+    assert!(
+        two_hundred < 3 * hundred,
+        "two hundred calls hold {two_hundred} locals, a hundred {hundred}"
+    );
 }
 
 /// A structure of 10 001 fields and a family whose constructor carries 10 001 run, and a tuple of 10 001 elements handed to a function is emitted as a module the engine validates: a struct type past the engine's 10 000 fields keeps 9 999 and nests the rest in a trailing struct.

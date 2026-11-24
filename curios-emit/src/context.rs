@@ -797,68 +797,22 @@ impl<'a, 'b> Context<'a, 'b> {
         output
     }
 
-    /// Enter the block a direct call resumes into with the callee's results on the stack, each at the position its signature holds it at.
-    ///
-    /// A result slot the representation raised into a register reaches every call into its class raw, and a resume parameter whose own uses read it only as a reference is held boxed: that result is boxed once, here, as it enters, rather than at each use. A result arriving as a reference never enters a parameter held in a register, since such a parameter is offered the register only where the slot feeding it is one.
+    /// Enter the block a direct call resumes into with the callee's results on the stack, each at the position its signature holds it at. The block is the one minted for the call, whose parameters hold each result as it arrives: what a result feeds is loaded as that is held where the block jumps on, so a result raised into a register is boxed once, there, for a parameter its uses read only as a reference.
     fn call_resume_instrs(
-        &mut self,
+        &self,
         resume: &'a EmissionBlockName,
         results: &[Position],
     ) -> Vec<curios_wasm::Instr> {
-        let held = self
-            .find_block(resume)
-            .params()
-            .iter()
-            .map(|(param, _)| self.table().raw_carrier(param))
-            .collect::<Vec<_>>();
-        assert_eq!(
-            held.len(),
-            results.len(),
-            "resume block `{resume}` takes as many values as its callee hands back",
+        let block = self.find_block(resume);
+        assert!(
+            block
+                .params()
+                .iter()
+                .map(|(param, _)| self.table().raw_carrier(param))
+                .eq(results.iter().map(|result| result.carrier())),
+            "resume block `{resume}` holds each result as its callee hands it back",
         );
-
-        if results
-            .iter()
-            .zip(&held)
-            .all(|(result, held)| result.carrier() == *held)
-        {
-            return self.find_block(resume).enter(results.len());
-        }
-
-        // Some result is held otherwise than its parameter: set every result aside at its own position, then load each as its parameter is held.
-        let locals = results
-            .iter()
-            .map(|position| self.push_local("result", position.val_type(self.table())))
-            .collect::<Vec<_>>();
-        let mut output = locals
-            .iter()
-            .rev()
-            .map(|local| curios_wasm::Instr::LocalSet {
-                local_name: local.clone(),
-            })
-            .collect::<Vec<_>>();
-        for ((local, position), held) in locals.iter().zip(results).zip(&held) {
-            let producer = vec![curios_wasm::Instr::LocalGet {
-                local_name: local.clone(),
-            }];
-            output.extend(match position.carrier() {
-                Some(carrier) => self.raw_as_instrs(
-                    producer,
-                    carrier,
-                    held.map_or(LoadAs::Null, |held| LoadAs::of(&held)),
-                ),
-                None => {
-                    assert!(
-                        held.is_none(),
-                        "resume block `{resume}` holds a parameter in a register its callee hands back as a reference",
-                    );
-                    producer
-                }
-            });
-        }
-        output.extend(self.find_block(resume).enter(results.len()));
-
-        output
+        block.enter(results.len())
     }
 
     pub fn call_indirect_instrs(
