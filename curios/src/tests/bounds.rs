@@ -1356,6 +1356,28 @@ fn a_bound_from_a_signature_leaves_out_the_type_its_operands_restore() {
     }
 }
 
+/// A hidden argument a paste would restore is left out where the member after it is a list literal naming a value: the literal is read by its elements and its spreads, as a paste of it is, so `[x]` and `[x, ..xs]` restore the type they are lists of. One a paste leaves to the type expected of it, `[]` or `[1]`, restores nothing, and the argument is shown.
+#[test]
+fn a_hidden_argument_a_list_literal_restores_is_left_out() {
+    for (hypothesis, shown) in [
+        ("List/length([x]) <= 3", "List/length([x]) <= 3"),
+        ("List/length([x, ..xs]) <= 3", "List/length([x, ..xs]) <= 3"),
+        ("List/length(xs) <= 3", "List/length(xs) <= 3"),
+        ("List/length(@Nat, []) <= 3", "List/length(@Nat, []) <= 3"),
+        ("List/length([1]) <= 3", "List/length(@Nat, [1]) <= 3"),
+    ] {
+        let program = format!(
+            "{HEADER}\nlet f(x: Nat, xs: List(Nat), h: Holds({hypothesis})) -> Nat = ?;\nIo/pure(())"
+        );
+        let goal = typecheck(&program).expect_err("a written goal never compiles");
+
+        assert!(
+            goal.contains(&format!("h : Holds({shown})")),
+            "{hypothesis}: {goal}"
+        );
+    }
+}
+
 #[test]
 fn a_refused_bound_names_each_guard_once_and_a_guard_as_the_way_out() {
     let refusal = |declared: &str, binders: &str, body: &str| {

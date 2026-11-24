@@ -1107,15 +1107,8 @@ fn typed_again(
         if holed == *type_ {
             continue;
         }
-        let converts = match synth_neutral(context, &Binders::default(), &Opened::default(), later)
-        {
-            Ok(Some(found)) => matches!(
-                subsume_outcome(context, &found, &holed, None, None),
-                Ok(Outcome::Converts)
-            ),
-            _ => false,
-        };
-        if !converts {
+        // An operand that decides nothing confirms nothing, so the operand it follows is kept.
+        if meets(context, later, &holed) != Some(true) {
             agreed = false;
             break;
         }
@@ -1133,6 +1126,51 @@ fn typed_again(
     context.end_solutions(trial);
 
     restored
+}
+
+/// Whether `member`, read as a paste of it is read, meets the type `domain` its slot asks, solving what of `domain` it decides: a member whose type is synthesized, by that type; and a list literal by its pieces, each element held to the element type `domain` asks and each spread to `domain`, as elaboration checks one, met where a piece is and none is refused. `None` where the member decides nothing: one whose type no synthesis gives, a literal among them, and a list literal of such pieces or of none, each of which a paste leaves to the type expected of it.
+fn meets(context: &mut Context, member: &Term, domain: &Term) -> Option<bool> {
+    if let Ok(Some(type_)) = synth_neutral(context, &Binders::default(), &Opened::default(), member)
+    {
+        return Some(matches!(
+            subsume_outcome(context, &type_, domain, None, None),
+            Ok(Outcome::Converts)
+        ));
+    }
+    let (elements, spreads): (Vec<&Term>, Vec<&Term>) = match &**member {
+        Subterm::Intrinsic(Intrinsic::List { items, .. }) => (items.iter().collect(), Vec::new()),
+        Subterm::Intrinsic(Intrinsic::ListConcat { operands, .. }) => {
+            let mut elements = Vec::new();
+            let mut spreads = Vec::new();
+            for operand in operands {
+                match &**operand {
+                    Subterm::Intrinsic(Intrinsic::List { items, .. }) => elements.extend(items),
+                    _ => spreads.push(operand),
+                }
+            }
+            (elements, spreads)
+        }
+        _ => return None,
+    };
+    let reduced = reduce_with(context, domain).ok()?;
+    let Subterm::Intrinsic(Intrinsic::ListType(element)) = &*reduced else {
+        return None;
+    };
+
+    let mut met = None;
+    let pieces = elements
+        .into_iter()
+        .map(|piece| (piece, element))
+        .chain(spreads.into_iter().map(|piece| (piece, domain)));
+    for (piece, asked) in pieces {
+        match meets(context, piece, asked) {
+            Some(false) => return Some(false),
+            Some(true) => met = Some(true),
+            None => {}
+        }
+    }
+
+    met
 }
 
 /// `term` with every occurrence of `operand` in it standing as `hole`.
@@ -1169,12 +1207,7 @@ fn determined<B: Bound>(
         }
         if index > slot
             && *plicity == Plicity::Explicit
-            && let Ok(Some(type_)) =
-                synth_neutral(context, &Binders::default(), &Opened::default(), opened)
-            && !matches!(
-                subsume_outcome(context, &type_, &domain, None, None),
-                Ok(Outcome::Converts)
-            )
+            && meets(context, opened, &domain) == Some(false)
         {
             hole = None;
             break;
