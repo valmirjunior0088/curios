@@ -85,7 +85,7 @@ impl Module {
         self.read(|filed| &mut filed.flow, ValueFlow::of)
     }
 
-    /// The fact `slot` holds where it was read at the module's generation, and otherwise the one `build` reads now, filed there. A build may ask for another fact, so the store is not held across one; debug builds hold a fact handed again to the one built fresh, as they verify every round.
+    /// The fact `slot` holds where it was read at the module's generation, and otherwise the one `build` reads now, filed there. A build may ask for another fact, so the store is not held across one; this crate's tests, which drive every pass, hold a fact handed again to the one built fresh.
     fn read<T: PartialEq>(
         &self,
         slot: fn(&mut Filed) -> &mut Option<Rc<T>>,
@@ -103,7 +103,8 @@ impl Module {
             slot(&mut filed).clone()
         };
         if let Some(fact) = filed {
-            debug_assert!(
+            #[cfg(test)]
+            assert!(
                 *fact == build(self),
                 "a fact handed again at a generation is the one built at it"
             );
