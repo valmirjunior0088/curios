@@ -460,3 +460,40 @@ fn a_witness_that_hands_its_premise_on_at_another_place_publishes_nothing_of_it(
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
+
+// A field of a parameter handed on is applied where its callee applies what it is handed: `all` applies its handler's `step` to each element below its list, so `through`, which hands it `o`'s field `inner`, applies `o`'s field `[0, 0]` there, and `w`, whose `step` recurses through `through` on a document's children, descends. The refusal hands `through` a list built around the argument itself.
+#[test]
+fn a_field_of_a_parameter_handed_on_is_applied_where_its_callee_applies_it() {
+    control(
+        r#"
+        use /std/{Nat, List};
+        use /std/Bool/{True};
+
+        struct Inner(A: Type): Type { step: (A) -> True }
+        struct Outer(A: Type): Type { inner: Inner(A) }
+
+        induct Doc: Type | leaf() | arr(List(Doc)) end
+
+        let all(@T: Type, e: Inner(T), s: List(T)) -> True =
+            match s
+            | [] => True/qed()
+            | [x, ..xs] => match e.step(x) | qed() => all(e, xs) end
+            end;
+
+        let through(@T: Type, o: Outer(T), s: List(T)) -> True = all(o.inner, s);
+
+        let w: Outer(Doc) =
+            Outer { inner = Inner { step(d) = match d | leaf() => True/qed() | arr(s) => through(w, s) end } };
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("through(w, s)", "through(w, [d])")])
+    .by_elaborator_in("/w", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/w", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}

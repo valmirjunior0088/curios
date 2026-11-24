@@ -97,7 +97,7 @@ pub fn group_totality<D: Driver>(driver: &mut D, group: &RecGroup) -> Result<Tot
 /// How many matrices a parameter's applications may close to before the parameter is summarized as used otherwise: the conservative direction, as a closure past its bound is `Unfounded`.
 const APPLICATIONS_LIMIT: usize = 64;
 
-/// How each part of each member of `group` applies its parameters ([`Applications`]): for a parameter at a position no part uses otherwise than as the head of an application, a field of it applied, or handed on unchanged — at that position to a member taking a parameter there, called or itself handed where its callee applies it, or to a definition whose summary applies what it is handed — every application of it the part makes, graded against the part's parameters, and every one reached through a path of the group's calls, graded through the path. A member's leading lambdas are one part, and each field lambda of the record under them another ([`PartShape`]), over the member's parameters and then its own; a member's parameter a field lambda applies is applied wherever the field is called, so the leading lambdas' summary states nothing of it and the field's does, beside what the leading lambdas apply of it themselves: a field is called on a record they answered.
+/// How each part of each member of `group` applies its parameters ([`Applications`]): for a parameter at a position no part uses otherwise than as the head of an application, a field of it applied, or handed on unchanged, itself or a field of it — at that position to a member taking a parameter there, called or itself handed where its callee applies it, or to a definition whose summary applies what it is handed — every application of it the part makes, graded against the part's parameters, and every one reached through a path of the group's calls, graded through the path. A member's leading lambdas are one part, and each field lambda of the record under them another ([`PartShape`]), over the member's parameters and then its own; a member's parameter a field lambda applies is applied wherever the field is called, so the leading lambdas' summary states nothing of it and the field's does, beside what the leading lambdas apply of it themselves: a field is called on a record they answered.
 ///
 /// **Only where every use is seen.** A use the walk cannot follow — the parameter stored, returned, handed to a definition that states nothing of it, handed to a member at another position or past its parameters, or named in a type — leaves the position unsummarized in every part, and a call through it is graded as it is without a summary. A member call handing a position something other than the caller's own parameter there hands the callee another function, whose applications the summary then counts as well: more matrices claim less, never more.
 pub fn group_applications<D: Driver>(
@@ -381,6 +381,23 @@ impl<D: Driver> Walk<'_, D> {
             .filter(|position| *position < tracked.escaped.len())
     }
 
+    /// Where `term` is a parameter a summarizing walk keeps a record of, or a field of one, `e.1.0`: the parameter's position, and the slots the term projects out of it, in order.
+    fn tracked_path(&self, term: &Term) -> Option<(usize, Vec<usize>)> {
+        let (root, steps) = call_path(term);
+        let Subterm::Var(var) = &*root else {
+            return None;
+        };
+        let position = self.tracked_position(var.as_free())?;
+        let slots = steps
+            .iter()
+            .map(|step| match step {
+                Segment::Field(slot) => Some(*slot),
+                Segment::Arguments(_) => None,
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some((position, slots))
+    }
+
     /// Whether `term` names a parameter a summarizing walk keeps a record of.
     fn names_tracked(&self, term: &Term) -> bool {
         self.tracked.is_some() && self.params.iter().any(|param| term.mentions_free(param))
@@ -484,19 +501,23 @@ impl<D: Driver> Walk<'_, D> {
         let Some(applied) = applied.filter(|applied| !applied.is_empty()) else {
             return self.walk_term(argument);
         };
-        match &**argument {
-            // A parameter handed whole is applied where the callee applies what it is handed, as its summary states, through this call: those applications are this member's own, already graded against its parameters ([`handed`]).
-            Subterm::Var(var) if let Some(position) = self.tracked_position(var.as_free()) => {
-                for matrix in &applied.itself {
-                    self.recorded(position, None, matrix.clone());
-                }
-                for (path, matrices) in &applied.fields {
-                    for matrix in matrices {
-                        self.recorded(position, Some(path.clone()), matrix.clone());
-                    }
-                }
-                return Ok(());
+        // A parameter handed whole, or a field of one, is applied where the callee applies what it is handed, as its summary states, through this call: those applications are this member's own, already graded against its parameters ([`handed`]), of the parameter at the path the argument projects, and of its fields at that path continued.
+        if let Some((position, projected)) = self.tracked_path(argument) {
+            let at = |path: &[usize]| {
+                let at = [projected.as_slice(), path].concat();
+                (!at.is_empty()).then_some(at)
+            };
+            for matrix in &applied.itself {
+                self.recorded(position, at(&[]), matrix.clone());
             }
+            for (path, matrices) in &applied.fields {
+                for matrix in matrices {
+                    self.recorded(position, at(path), matrix.clone());
+                }
+            }
+            return Ok(());
+        }
+        match &**argument {
             Subterm::Func(Func { telescope, .. }) => {
                 return self.walk_handed(telescope.clone(), &applied.itself);
             }
