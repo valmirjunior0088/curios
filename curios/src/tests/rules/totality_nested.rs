@@ -271,3 +271,64 @@ fn a_family_nested_through_a_law_that_infers_its_answers_descends() {
         b"ok",
     );
 }
+
+// A law that takes its container's law apart descends as one that answers it: `Doc`'s law matches on `List`'s at its children, and the arm's solution, `List`'s comparison handed `Doc`'s witness, is what inversion concluded and no call the arm makes, so the call through `List`'s law is graded where `List`'s witness applies its premise, below the children, by both checkers. The refusal hands `List`'s law lists built around the arguments themselves.
+#[test]
+fn a_law_taking_its_containers_law_apart_descends() {
+    control(
+        r#"
+        use /std/{Nat, Bool, Eq, List};
+
+        concept Order(A: Type): pub Type {
+            ord(A, A) -> Bool,
+            law(a: A, b: A) -> Eq()(ord(a, b), ord(a, b)),
+        }
+
+        let seq_ord(@T: Type, use Order(T), a: List(T), b: List(T)) -> Bool =
+            match a
+            | [] => match b | [] => true | [_, .._] => false end
+            | [x, ..xs] => match b | [] => false | [y, ..ys] => Bool/and(Order/ord(x, y), seq_ord(xs, ys)) end
+            end;
+
+        let seq_law(@T: Type, use Order(T), a: List(T), b: List(T)) -> Eq()(seq_ord(a, b), seq_ord(a, b)) =
+            match a
+            | [] => Eq/refl()
+            | [x, ..xs] =>
+                match b
+                | [] => Eq/refl()
+                | [y, ..ys] => match Order/law(x, y) | refl() => match seq_law(xs, ys) | refl() => Eq/refl() end end
+                end
+            end;
+
+        satisfy (@T: Type, use Order(T)) => Order(List(T)) {
+            ord = seq_ord,
+            law = seq_law,
+        }
+
+        induct Doc: Type | num(Nat) | arr(List(Doc)) end
+
+        satisfy Order(Doc) {
+            ord(a, b) =
+                match a
+                | num(n) => match b | num(m) => n == m | arr(_) => false end
+                | arr(xs) => match b | num(_) => false | arr(ys) => Order/ord(xs, ys) end
+                end,
+            law(a, b) =
+                match a
+                | num(_) => Eq/refl()
+                | arr(xs) => match b | num(_) => Eq/refl() | arr(ys) => match Order/law(xs, ys) | refl() => Eq/refl() end end
+                end,
+        }
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("Order/law(xs, ys) | refl()", "Order/law([a], [b]) | refl()")])
+    .by_elaborator_in("/witness~/Order(/Doc)", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/witness~/Order(/Doc)", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}

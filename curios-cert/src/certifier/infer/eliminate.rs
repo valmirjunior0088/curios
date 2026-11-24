@@ -356,9 +356,11 @@ fn specialize(
 /// Bind each variable the case solves to its solution, at the solution's own type, as a `let` binds a local: the arm is checked as written, typing reads a solved variable at that type, and every other reader reads the arm by value, the solution substituted. What the scope held of other locals that names the variable is read again where it is bound ([`Certifier::bind`]), and the enclosing `mark`/`retract` bracket retracts all of it with the arm.
 ///
 /// **At the solution's type, not the variable's.** A case value is typed at its case's targets, and an index equation the unifier leaves standing — one between forms it does not take apart, as a list spelled `[h, ..l]` — keeps the scrutinee's own type apart from them: in `/std/List/Member/uncons`'s `here` arm, `i : Member(x, [h, ..l])` stands for `here(x, l) : Member(x, [x, ..l])`. Bound at its variable's type, a solution would be a `let` holding a value of another type; bound at its own, each occurrence is typed as the solution substituted in its place was, and the solution is typed once.
+///
+/// **Typed recording no call.** A solution is what inversion concluded, read off the scrutinee's type, and no position of the arm: the arm names it by its solved variable, which a call passes as itself, so a call the solution holds is none the body makes, as the shared walk reads the arm as written ([`Certifier::unrecorded`]). Recorded, a member the solution names would be a call the group never makes, and one it names bare a call of each of its parts claiming nothing.
 pub fn bind_solutions(certifier: &mut Certifier, solutions: &[(Free, Term)]) -> Result<(), Error> {
     for (name, solution) in solutions {
-        let type_ = super::infer(certifier, solution)?;
+        let type_ = certifier.unrecorded(|certifier| super::infer(certifier, solution))?;
         certifier.bind_solved(name, &type_, solution);
     }
 

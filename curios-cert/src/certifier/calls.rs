@@ -2,7 +2,7 @@
 //!
 //! Like the erased positions, this is the certifier's *output*, collected during the typing walk because that is the only place the answer is available. A group's members are assumed under fresh locals while its bodies are checked (`check_group`), so a recursive call, as the certifier types it, is an application whose spine head is one of those locals, and every such application the walk types is a call it records. What the walk types is every position it accepts, which is what makes the set fail closed where a separate traversal fails open: a position that traversal never visits contributes no edge, and a group with no edges is accepted.
 //!
-//! **Graded when recorded.** A call is graded by the shared [`grade`] once its arguments are typed, against every parameter of the caller's part as the member's leading lambdas bind them — one typed in a binder's type, before the binders after it, hands those nothing it is graded against, so the shared walk's grading of the call is its own — under a [`SizeContext`] the arms enclosing the call built: each arm's own case, where it scrutinizes a binder, its binders below the value it scrutinizes, where it scrutinizes an expression, and nothing its index inversion solved ([`Certifier::assume_arm`]) — its payload binders, the nonzero facts a boolean or switch arm establishes, and, where a lambda is applied on the spot, each of its binders standing for its argument. The context lives in the certifier's scope brackets: `Certifier::scoped` marks it and retracts it with the binders, so an arm's knowledge leaves with the arm on every path.
+//! **Graded when recorded.** A call is graded by the shared [`grade`] once its arguments are typed, against every parameter of the caller's part as the member's leading lambdas bind them — one typed in a binder's type, before the binders after it, hands those nothing it is graded against, so the shared walk's grading of the call is its own — under a [`SizeContext`] the arms enclosing the call built: each arm's own case, where it scrutinizes a binder, its binders below the value it scrutinizes, where it scrutinizes an expression, and nothing its index inversion solved ([`Certifier::assume_arm`]), whose solutions are typed recording no call ([`Certifier::unrecorded`]) — its payload binders, the nonzero facts a boolean or switch arm establishes, and, where a lambda is applied on the spot, each of its binders standing for its argument. The context lives in the certifier's scope brackets: `Certifier::scoped` marks it and retracts it with the binders, so an arm's knowledge leaves with the arm on every path.
 //!
 //! **Closed per group.** When `check_group` has checked every body, the group's calls close to a verdict through the shared [`decide`] — the local gate's, and the one type totality and proof totality read for the group, an inline one included. A group the walk never typed has no verdict, and a reader takes that as `Partial`.
 
@@ -56,6 +56,8 @@ pub struct Calls {
     rest_handed: Vec<Option<Handed>>,
     /// Whether the record literal the next judgment types is what a member's leading lambdas answer, or a record held at a field of one, so its fields are checked as the parts they are ([`Certifier::enter_field`]). Taken by that judgment alone, as `parameters` is.
     record: bool,
+    /// How many judgments under way type a term no body states, whose calls are none a group makes ([`Certifier::unrecorded`]).
+    unrecorded: usize,
 }
 
 /// What a call hands one argument where its callee applies it ([`handed`]), once for each frame whose body is being checked: the frame, and the callee's applications of the argument and of its fields graded against that frame's caller. A lambda handed inside an inner group's body runs within the enclosing member's invocation too, so its binders stand to every caller whose body holds it, as a call of an enclosing member is graded against that member's parameters ([`Certifier::record_call`]).
@@ -414,9 +416,10 @@ impl Certifier<'_> {
 
     /// Record the call a path rooted at `head` makes, its `steps` read as [`part_calls`] reads them, when `head` is a member of a group whose body is being checked: each part the path reaches, with the arguments it hands that part.
     ///
-    /// Not while a reader reads: its judgments are no item's check, deciding a position's erased half among them, which may read a member — `T(n)`, a sibling computing the type — without that being a call any body makes.
+    /// Not while a reader reads: its judgments are no item's check, deciding a position's erased half among them, which may read a member — `T(n)`, a sibling computing the type — without that being a call any body makes. Nor while a term no body states is typed ([`Certifier::unrecorded`]).
     pub(super) fn record_call(&mut self, head: &Free, steps: &[Segment]) -> Result<(), Error> {
-        if self.calls.frames.is_empty() || self.positions.suppressed() {
+        if self.calls.frames.is_empty() || self.positions.suppressed() || self.calls.unrecorded > 0
+        {
             return Ok(());
         }
         let Some((frame, callee)) =
@@ -626,7 +629,9 @@ impl Certifier<'_> {
                     .position(|candidate| candidate == member)?;
                 Some((frame, callee))
             });
-        let Some((frame, callee)) = callee.filter(|_| !self.positions.suppressed()) else {
+        let Some((frame, callee)) =
+            callee.filter(|_| !self.positions.suppressed() && self.calls.unrecorded == 0)
+        else {
             return self.record_call(member, &steps);
         };
         let Some((caller, params)) = self.calls.frames[frame].caller.clone() else {
@@ -669,6 +674,14 @@ impl Certifier<'_> {
     /// Outside every body there is no call to grade, and reading an arm's value or a comparison as a size forces it, and typing a lambda applied on the spot through its binders passes the memo by — which an ordinary match elsewhere in a program should not pay for. That includes the tail a group scopes over, typed while its frame is still open: a recursive `let` opens one over the whole rest of a program, whose own dispatch would otherwise have every arm read as a size.
     pub(super) fn recording(&self) -> bool {
         self.calls.frames.iter().any(|frame| frame.caller.is_some())
+    }
+
+    /// Run `judge` recording no call: what it types is a term no body of a group states, an arm's index solution, which the size order reads nothing of, as the shared walk reads the arm as written and its solved variable as a binder. The members it names still keep its typing out of the memo ([`Calls::names_member`]), so a body's own typing of the same term records its calls.
+    pub(super) fn unrecorded<T>(&mut self, judge: impl FnOnce(&mut Self) -> T) -> T {
+        self.calls.unrecorded += 1;
+        let judged = judge(self);
+        self.calls.unrecorded -= 1;
+        judged
     }
 
     /// Enter what one arm establishes into the size context, within the current bracket — which `Certifier::scoped` retracts it with.
