@@ -369,3 +369,79 @@ fn an_archive_s_directory_whose_files_differ_is_refused_and_not_kept() {
     assert_eq!(fs::read_dir(&directory).unwrap().count(), 1);
     let _ = fs::remove_dir_all(&directory);
 }
+
+// Files published one by one are gathered into one directory, a file a hand placed read where it stands and another downloaded, and kept once they check together.
+#[test]
+fn files_published_one_by_one_are_gathered_placed_or_downloaded_and_kept_once_they_check() {
+    let directory = directory("gathered");
+    let placed = directory.join("placed");
+    files(&placed, &[("deeper/two.txt", "two")]);
+    let written = directory.join("written");
+    files(&written, &[("one.txt", "one"), ("deeper/two.txt", "two")]);
+    let digest = tree_sha256_hex(&written).unwrap();
+    fs::remove_dir_all(&written).unwrap();
+    let place = directory.join("kept");
+    // The listener answers whatever path it is asked for, once: the file no hand placed.
+    let url = served(b"one");
+
+    Gathered {
+        what: "a test's files",
+        url: &url,
+        files: &["one.txt".to_string(), "deeper/two.txt".to_string()],
+        digest: &digest,
+        placed: &placed,
+        place: &place,
+    }
+    .kept()
+    .unwrap();
+
+    assert_eq!(fs::read(place.join("one.txt")).unwrap(), b"one");
+    assert_eq!(fs::read(place.join("deeper/two.txt")).unwrap(), b"two");
+    let leftovers = fs::read_dir(&directory)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        leftovers,
+        BTreeSet::from(["kept".to_string(), "placed".to_string()])
+    );
+    let _ = fs::remove_dir_all(&directory);
+}
+
+// Files that are not the digest's together are refused, naming the mismatch, each file's address and where a hand places them, and nothing is kept.
+#[test]
+fn gathered_files_that_differ_are_refused_and_not_kept() {
+    let directory = directory("gathered-differs");
+    let placed = directory.join("placed");
+    files(
+        &placed,
+        &[("one.txt", "one"), ("deeper/two.txt", "another")],
+    );
+    let place = directory.join("kept");
+    let url = unanswered();
+
+    let refused = Gathered {
+        what: "a test's files",
+        url: &url,
+        files: &["one.txt".to_string(), "deeper/two.txt".to_string()],
+        digest: &sha256_hex(b"another tree"),
+        placed: &placed,
+        place: &place,
+    }
+    .kept()
+    .expect_err("files that do not check are refused")
+    .to_string();
+
+    assert!(
+        refused.contains("digest mismatch over the files"),
+        "{refused}"
+    );
+    assert!(
+        refused.contains(&format!("{url}/deeper/two.txt")),
+        "{refused}"
+    );
+    assert!(refused.contains(&placed.display().to_string()), "{refused}");
+    assert!(!place.exists());
+    assert_eq!(fs::read_dir(&directory).unwrap().count(), 1);
+    let _ = fs::remove_dir_all(&directory);
+}

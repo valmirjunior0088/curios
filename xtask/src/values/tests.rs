@@ -222,16 +222,17 @@ fn a_key_a_file_does_not_hold_as_a_string_is_refused_naming_both() {
     }
 }
 
+// Data stands for the directory it is kept as, under its name and version: with the runner's own where a step's command reads it, and beside the crate its table names where that crate's build does.
 #[test]
-fn a_corpus_stands_for_its_kept_directory() {
+fn data_stands_for_its_kept_directory() {
     let tree = Tree::parse(&[
         (
             "xtask/tasks.toml",
-            "description = \"The top\"\n[corpora.cases]\nversion = \"abc\"\nurl = \"https://example.invalid/abc.tar.gz\"\npath = \"cases\"\nsha256 = \"0000000000000000000000000000000000000000000000000000000000000000\"\n",
+            "description = \"The top\"\n[data.cases]\nversion = \"abc\"\nurl = \"https://example.invalid/abc.tar.gz\"\npath = \"cases\"\nsha256 = \"0000000000000000000000000000000000000000000000000000000000000000\"\n[data.tables]\nversion = \"7.0\"\nurl = \"https://example.invalid/ucd\"\nfiles = [\"one.txt\"]\nsha256 = \"0000000000000000000000000000000000000000000000000000000000000000\"\nbeside = \"some-crate\"\n",
         ),
         (
             "xtask/tasks/a.toml",
-            "description = \"A\"\n[s]\ndescription = \"S\"\nrun = [[\"ls\", \"{.corpora.cases}\"]]\n",
+            "description = \"A\"\n[s]\ndescription = \"S\"\nrun = [[\"ls\", \"{.data.cases}\", \"{.data.tables}\"]]\n",
         ),
     ])
     .unwrap();
@@ -240,7 +241,14 @@ fn a_corpus_stands_for_its_kept_directory() {
         words(&tree, &[]).unwrap(),
         [
             "ls".to_string(),
-            artifacts().join("cases-abc").to_string_lossy().into_owned()
+            artifacts()
+                .join("data/cases-abc")
+                .to_string_lossy()
+                .into_owned(),
+            root()
+                .join("some-crate/.artifacts/tables-7.0")
+                .to_string_lossy()
+                .into_owned()
         ]
     );
 }

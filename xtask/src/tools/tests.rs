@@ -1,4 +1,4 @@
-//! Where a tool or a corpus is kept and how a run gets it, from task files of the test's own whose tools are fetched for the host the test runs on, each under a name of this process's own in `xtask/.artifacts`.
+//! Where a tool or data is kept and how a run gets it, from task files of the test's own whose tools are fetched for the host the test runs on, each under a name of this process's own in `xtask/.artifacts`.
 
 use {
     super::*,
@@ -65,15 +65,15 @@ fn a_tool_is_kept_by_its_name_and_version() {
 
     assert_eq!(
         executable(&tree, &tool("bare")),
-        artifacts().join("bare-1.0")
+        artifacts().join("tools/bare-1.0")
     );
     assert_eq!(
         executable(&tree, &tool("packed")),
-        artifacts().join("packed-1.0/bin/packed")
+        artifacts().join("tools/packed-1.0/bin/packed")
     );
     assert_eq!(
         executable(&tree, &tool("shipped")),
-        artifacts().join("packed-1.0/bin/shipped")
+        artifacts().join("tools/packed-1.0/bin/shipped")
     );
     let bumped = tree_of(
         &fetched("bare", "https://example.org/bare-linux", &digest).replace("1.0", "1.1"),
@@ -81,7 +81,7 @@ fn a_tool_is_kept_by_its_name_and_version() {
     );
     assert_eq!(
         executable(&bumped, &tool("bare")),
-        artifacts().join("bare-1.1")
+        artifacts().join("tools/bare-1.1")
     );
 
     let Instruction::Command(words) = &tree.steps[0].run[0] else {
@@ -90,9 +90,12 @@ fn a_tool_is_kept_by_its_name_and_version() {
     assert_eq!(
         Values::new(&tree, &Given::new()).command(words),
         Ok(Some(vec![
-            artifacts().join("bare-1.0").to_string_lossy().into_owned(),
             artifacts()
-                .join("packed-1.0/bin/shipped")
+                .join("tools/bare-1.0")
+                .to_string_lossy()
+                .into_owned(),
+            artifacts()
+                .join("tools/packed-1.0/bin/shipped")
                 .to_string_lossy()
                 .into_owned(),
         ]))
@@ -116,7 +119,7 @@ fn a_step_finds_the_directory_of_each_tool_kept_as_one_first() {
 
     assert_eq!(
         directories(&tree, 0),
-        vec![artifacts().join("engine-1.0/bin")]
+        vec![tools_place().join("engine-1.0/bin")]
     );
 }
 
@@ -144,8 +147,8 @@ fn a_tool_without_a_download_for_the_host_refuses_the_run() {
 #[test]
 fn a_tool_kept_already_is_not_fetched_again() {
     let name = unique("kept");
-    let kept = artifacts().join(format!("{name}-1.0"));
-    fs::create_dir_all(artifacts()).unwrap();
+    let kept = tools_place().join(format!("{name}-1.0"));
+    fs::create_dir_all(tools_place()).unwrap();
     fs::write(&kept, b"kept\n").unwrap();
     let tree = tree_of(
         &fetched(&name, &unanswered(&name), &"0".repeat(64)),
@@ -163,8 +166,8 @@ fn a_tool_kept_already_is_not_fetched_again() {
 fn a_placed_download_is_checked_and_kept_as_an_executable() {
     let name = unique("placed");
     let file = format!("{name}-download");
-    let placed = artifacts().join(&file);
-    fs::create_dir_all(artifacts()).unwrap();
+    let placed = tools_place().join(&file);
+    fs::create_dir_all(tools_place()).unwrap();
     fs::write(&placed, b"#!/bin/sh\n").unwrap();
     let tree = tree_of(
         &fetched(&name, &unanswered(&file), &sha256_hex(b"#!/bin/sh\n")),
@@ -191,8 +194,8 @@ fn a_placed_download_is_checked_and_kept_as_an_executable() {
 fn a_placed_tarball_is_unpacked_into_the_tool_s_directory() {
     let name = unique("packed");
     let file = format!("{name}.tar.gz");
-    let placed = artifacts().join(&file);
-    let staging = artifacts().join(format!("{name}-staging"));
+    let placed = tools_place().join(&file);
+    let staging = tools_place().join(format!("{name}-staging"));
     fs::create_dir_all(staging.join("packed-v1.0-linux/bin")).unwrap();
     fs::write(staging.join("packed-v1.0-linux/bin/packed"), b"binary\n").unwrap();
     let archived = Command::new("tar")
@@ -215,7 +218,7 @@ fn a_placed_tarball_is_unpacked_into_the_tool_s_directory() {
 
     let outcome = fetch(&tree, &Values::new(&tree, &Given::new()), &[0]);
 
-    let kept = artifacts().join(format!("{name}-1.0"));
+    let kept = tools_place().join(format!("{name}-1.0"));
     let held = fs::read(executable(&tree, &tool(&name))).ok();
     let _ = fs::remove_file(&placed);
     let _ = fs::remove_dir_all(&staging);
@@ -229,8 +232,8 @@ fn a_placed_tarball_is_unpacked_into_the_tool_s_directory() {
 fn a_placed_download_whose_digest_differs_is_refused() {
     let name = unique("differs");
     let file = format!("{name}-download");
-    let placed = artifacts().join(&file);
-    fs::create_dir_all(artifacts()).unwrap();
+    let placed = tools_place().join(&file);
+    fs::create_dir_all(tools_place()).unwrap();
     fs::write(&placed, b"another\n").unwrap();
     let tree = tree_of(
         &fetched(&name, &unanswered(&file), &sha256_hex(b"pinned\n")),
@@ -248,8 +251,9 @@ fn a_placed_download_whose_digest_differs_is_refused() {
 
 /// A placed archive whose top holds `cases/one.json` and `other/two.json` under one directory, as a forge generates one at a commit, and the digest of its `cases`.
 fn archived(name: &str) -> (PathBuf, String) {
-    let placed = artifacts().join(format!("{name}.tar.gz"));
-    let staging = artifacts().join(format!("{name}-staging"));
+    fs::create_dir_all(data_place()).unwrap();
+    let placed = data_place().join(format!("{name}.tar.gz"));
+    let staging = data_place().join(format!("{name}-staging"));
     fs::create_dir_all(staging.join("repo-abc/cases")).unwrap();
     fs::create_dir_all(staging.join("repo-abc/other")).unwrap();
     fs::write(staging.join("repo-abc/cases/one.json"), b"[1]").unwrap();
@@ -269,54 +273,114 @@ fn archived(name: &str) -> (PathBuf, String) {
     (placed, digest)
 }
 
-/// The root declaring the corpus `name` at commit `abc`, its archive at `url`, its directory `cases` at `digest`.
-fn corpus_of(name: &str, url: &str, digest: &str) -> String {
+/// The root declaring the data `name` at commit `abc`, its archive at `url`, its directory `cases` at `digest`.
+fn data_of(name: &str, url: &str, digest: &str) -> String {
     format!(
-        "[corpora.{name}]\nversion = \"abc\"\nurl = \"{url}\"\npath = \"cases\"\nsha256 = \"{digest}\"\n"
+        "[data.{name}]\nversion = \"abc\"\nurl = \"{url}\"\npath = \"cases\"\nsha256 = \"{digest}\"\n"
     )
 }
 
-/// A corpus a scheduled step names is kept as its one directory, read here from a placed archive with nothing to answer the network.
+fn data(name: &str) -> Name {
+    vec!["data".to_string(), name.to_string()]
+}
+
+/// Data a scheduled step names is kept as its one directory, with the runner's own and apart from the tools, read here from a placed archive with nothing to answer the network.
 #[test]
-fn a_corpus_is_kept_as_its_one_directory_of_a_placed_archive() {
+fn data_is_kept_as_its_one_directory_of_a_placed_archive() {
     let name = unique("cases");
     let (placed, digest) = archived(&name);
     let tree = tree_of(
-        &corpus_of(&name, &unanswered(&format!("{name}.tar.gz")), &digest),
-        &fill!("[\"true\", \"{.corpora.${name}}\"]", name),
+        &data_of(&name, &unanswered(&format!("{name}.tar.gz")), &digest),
+        &fill!("[\"true\", \"{.data.${name}}\"]", name),
     );
 
     let outcome = fetch(&tree, &Values::new(&tree, &Given::new()), &[0]);
 
-    let kept = corpus(&tree, &vec!["corpora".to_string(), name.clone()]);
+    let kept = data_kept(&tree, &data(&name));
     let one = fs::read(kept.join("one.json")).ok();
     let other = kept.join("other").exists();
     let _ = fs::remove_file(&placed);
     let _ = fs::remove_dir_all(&kept);
     assert_eq!(outcome, Ok(()));
     assert_eq!(one.as_deref(), Some(&b"[1]"[..]));
-    assert!(!other, "what the corpus does not read was kept");
+    assert_eq!(kept, artifacts().join(format!("data/{name}-abc")));
+    assert!(!other, "what no step reads of the archive was kept");
 }
 
 /// An archive whose directory's files are not the digest's is refused, and nothing is kept for a step to read.
 #[test]
-fn a_corpus_whose_files_differ_from_its_digest_is_refused() {
+fn data_whose_files_differ_from_its_digest_is_refused() {
     let name = unique("differing");
     let (placed, _) = archived(&name);
     let tree = tree_of(
-        &corpus_of(
+        &data_of(
             &name,
             &unanswered(&format!("{name}.tar.gz")),
             &sha256_hex(b"another tree"),
         ),
-        &fill!("[\"true\", \"{.corpora.${name}}\"]", name),
+        &fill!("[\"true\", \"{.data.${name}}\"]", name),
     );
 
     let outcome = fetch(&tree, &Values::new(&tree, &Given::new()), &[0]);
 
-    let kept = corpus(&tree, &vec!["corpora".to_string(), name.clone()]).exists();
+    let kept = data_kept(&tree, &data(&name)).exists();
     let _ = fs::remove_file(&placed);
     let refused = outcome.unwrap_err();
     assert!(refused.contains("digest mismatch over cases"), "{refused}");
-    assert!(!kept, "a refused corpus was kept");
+    assert!(!kept, "refused data was kept");
+}
+
+/// Data a crate's build reads is kept beside that crate, under its name and version, for a run none of whose steps names it: its files, published one by one, are each read here where a hand placed it.
+#[test]
+fn data_a_crate_s_build_reads_is_gathered_beside_the_crate_whatever_the_run_s_steps_name() {
+    let name = unique("tables");
+    let kept = artifacts().join(format!("{name}-7.0"));
+    let placed = artifacts().join(format!("{name}-7.0.placed"));
+    fs::create_dir_all(placed.join("deeper")).unwrap();
+    fs::write(placed.join("one.txt"), b"one").unwrap();
+    fs::write(placed.join("deeper/two.txt"), b"two").unwrap();
+    let digest = tree_sha256_hex(&placed).unwrap();
+    // This crate is the one beside which the test keeps the data: a crate at the repository's root, with a directory of kept things.
+    let tree = tree_of(
+        &fill!(
+            "[data.${name}]\nversion = \"7.0\"\nurl = \"${url}\"\nfiles = [\"one.txt\", \"deeper/two.txt\"]\nsha256 = \"${digest}\"\nbeside = \"xtask\"\n",
+            name,
+            url = unanswered("published"),
+            digest
+        ),
+        "[\"true\"]",
+    );
+
+    let outcome = fetch(&tree, &Values::new(&tree, &Given::new()), &[0]);
+
+    let stated = data_kept(&tree, &data(&name));
+    let two = fs::read(kept.join("deeper/two.txt")).ok();
+    let _ = fs::remove_dir_all(&placed);
+    let _ = fs::remove_dir_all(&kept);
+    assert_eq!(outcome, Ok(()));
+    assert_eq!(stated, kept);
+    assert_eq!(two.as_deref(), Some(&b"two"[..]));
+}
+
+/// Data kept beside a directory that is no crate is refused before anything is fetched.
+#[test]
+fn data_beside_what_is_no_crate_is_refused() {
+    let name = unique("stray");
+    let tree = tree_of(
+        &fill!(
+            "[data.${name}]\nversion = \"7.0\"\nurl = \"${url}\"\nfiles = [\"one.txt\"]\nsha256 = \"${digest}\"\nbeside = \"no-such-crate\"\n",
+            name,
+            url = unanswered("published"),
+            digest = "0".repeat(64)
+        ),
+        "[\"true\"]",
+    );
+
+    let refused = fetch(&tree, &Values::new(&tree, &Given::new()), &[0]).unwrap_err();
+
+    assert!(
+        refused.contains("is no crate at the repository's root"),
+        "{refused}"
+    );
+    assert!(!root().join("no-such-crate").exists());
 }

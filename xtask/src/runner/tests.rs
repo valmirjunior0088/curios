@@ -73,7 +73,7 @@ fn a_write_leaves_its_file_holding_its_contents() {
 #[test]
 fn a_step_runs_with_its_tools_directories_first_on_its_path() {
     let name = format!("shelf-{}", std::process::id());
-    let kept = artifacts().join(format!("{name}-1.0"));
+    let kept = artifacts().join(format!("tools/{name}-1.0"));
     fs::create_dir_all(kept.join("bin")).unwrap();
     let digest = "0".repeat(64);
     let tree = Tree::parse(&[

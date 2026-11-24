@@ -1,6 +1,6 @@
 description = "The repository's tasks: a group of steps for each file under `tasks/`, and the steps here"
 
-# The tools the steps run beside the Rust toolchain, which `rust-toolchain.toml` pins: each fetched at its digest for the host a run is on before the run's first step, and kept as `xtask/.artifacts/<name>-<version>`.
+# The tools the steps run beside the Rust toolchain, which `rust-toolchain.toml` pins: each fetched at its digest for the host a run is on before the run's first step, and kept as `xtask/.artifacts/tools/<name>-<version>`.
 
 # A process to a test, as every test step runs the suite.
 [tools.cargo-nextest]
@@ -68,19 +68,19 @@ sha256.x86_64-unknown-linux-gnu = "d01042f94ba3d6827ddc9788e235f75d8366431be42bd
 sha256.aarch64-unknown-linux-gnu = "404be5d54a4955571c4067c21d4699660eab3a534cefb0659341b207f7139ec5"
 sha256.aarch64-apple-darwin = "46cb97d9a2c52c94e22d9a76c2f1116156b8b61f98360e2a9cce05fcb197cd4d"
 
-# The corpora the conformance steps read, each one directory of the archive its forge generates at a pinned commit, checked by the digest of its files, which `find . -type f -printf '%P\0' | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum` retakes in the directory, and kept as `xtask/.artifacts/<name>-<commit>`.
+# The data the steps and the builds read, each one directory checked by the digest of its files, which `find . -type f -printf '%P\0' | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum` retakes in the directory, and kept as `xtask/.artifacts/data/<name>-<version>`: one directory of the archive a forge generates at a pinned commit, its `path`, or the `files` a site publishes one by one under the `url`.
 
 # JSONTestSuite's documents, each named for what a parser does with it: `y_` read, `n_` refused, `i_` its own to decide. Its archive carries the parsers the suite was run over beside them, which are not kept.
-[corpora.json]
+[data.json]
 version = "1ef36fa01286573e846ac449e8683f8833c5b26a"
-url = "https://github.com/nst/JSONTestSuite/archive/{.corpora.json.version}.tar.gz"
+url = "https://github.com/nst/JSONTestSuite/archive/{.data.json.version}.tar.gz"
 path = "test_parsing"
 sha256 = "abc15ec8c3df7ff6fa771b051a8950012403b241af2688e82374e0bcafcdd21c"
 
 # toml-test's valid and invalid documents, each valid one beside the tagged JSON of its value, with the list of those each version of TOML holds.
-[corpora.toml]
+[data.toml]
 version = "96fd088448ec0f4d9f061c730ed7854399c46faf"
-url = "https://github.com/toml-lang/toml-test/archive/{.corpora.toml.version}.tar.gz"
+url = "https://github.com/toml-lang/toml-test/archive/{.data.toml.version}.tar.gz"
 path = "tests"
 sha256 = "2af617ef8e263f3c6f4932ea28aa5bc659cc1b6994ff498e7b7ac3771b06dbb0"
 

@@ -1,4 +1,4 @@
-//! A file a build pins by its SHA-256: read where a hand placed it or an earlier run kept it, else downloaded, and checked against its digest either way, a failure saying how to place it by hand where it cannot be had; a directory of an archive a forge generates, pinned by the digest of its files; and the pieces that keep what it holds, unpacked or as an executable.
+//! A file a build pins by its SHA-256: read where a hand placed it or an earlier run kept it, else downloaded, and checked against its digest either way, a failure saying how to place it by hand where it cannot be had; a directory pinned by the digest of its files, one of an archive a forge generates or one of files a site publishes one by one; and the pieces that keep what it holds, unpacked or as an executable.
 //!
 //! What takes something from the network takes it through [`Download`] — the build scripts, `curios-unicode`'s database, `curios-binaryen`'s source archive and `curios-profile`'s trace schema, and `xtask`, each tool a step runs — so how a pinned file is obtained, checked and kept, and what an offline build is told, is written once. Why this is a crate of its own is `README.md`'s decision.
 //!
@@ -34,23 +34,17 @@ pub struct Download<'a> {
 #[derive(Debug)]
 pub struct Unobtained {
     what: String,
-    url: String,
-    /// What is checked of the file placed by hand, said as the instructions say it.
-    verify: String,
-    place: PathBuf,
     cause: String,
+    /// What to download by hand, what is checked of it and where it goes, said as the instructions say it.
+    by_hand: String,
 }
 
 impl fmt::Display for Unobtained {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
-            "could not obtain {}:\n  {}\n\nTo build offline, download this file by hand:\n  {}\n{}\nand place it at:\n  {}\nthen run again.",
-            self.what,
-            self.cause,
-            self.url,
-            self.verify,
-            self.place.display(),
+            "could not obtain {}:\n  {}\n\nTo build offline, {}\nthen run again.",
+            self.what, self.cause, self.by_hand,
         )
     }
 }
@@ -101,10 +95,13 @@ impl Download<'_> {
     fn unobtained(&self, cause: String) -> Unobtained {
         Unobtained {
             what: self.what.to_string(),
-            url: self.url.to_string(),
-            verify: format!("verify it has sha256:\n  {}", self.sha256),
-            place: self.place.to_path_buf(),
             cause,
+            by_hand: format!(
+                "download this file by hand:\n  {}\nverify it has sha256:\n  {}\nand place it at:\n  {}",
+                self.url,
+                self.sha256,
+                self.place.display()
+            ),
         }
     }
 }
@@ -180,13 +177,113 @@ impl Unpacked<'_> {
     fn unobtained(&self, cause: String) -> Unobtained {
         Unobtained {
             what: self.what.to_string(),
-            url: self.url.to_string(),
-            verify: format!(
-                "the files of its directory `{}` are checked to have the digest:\n  {}",
-                self.directory, self.digest
-            ),
-            place: self.placed.to_path_buf(),
             cause,
+            by_hand: format!(
+                "download this file by hand:\n  {}\nthe files of its directory `{}` are checked to have the digest:\n  {}\nand place it at:\n  {}",
+                self.url,
+                self.directory,
+                self.digest,
+                self.placed.display()
+            ),
+        }
+    }
+}
+
+/// A directory a run pins by the digest of the files it holds, each published by itself under one URL, as a standard's own site publishes its data: every file read where a hand placed it or else downloaded, the files checked together against the digest, and the directory kept.
+pub struct Gathered<'a> {
+    /// What the directory is, as the instructions a failure prints name it: "the Unicode Character Database".
+    pub what: &'a str,
+    /// The directory the files are published under.
+    pub url: &'a str,
+    /// Each file's path under the URL, which is its path in the directory kept.
+    pub files: &'a [String],
+    /// The digest of the files, as [`tree_sha256_hex`] writes it.
+    pub digest: &'a str,
+    /// Where files placed by hand stand, each at its path, read before the network.
+    pub placed: &'a Path,
+    /// Where the directory is kept.
+    pub place: &'a Path,
+}
+
+impl Gathered<'_> {
+    /// Keep the directory at [`place`](Self::place), where it is not kept already: each file a hand placed, or else a download, gathered beside the place, the files checked against the digest, and the directory renamed onto the place, whole or not at all.
+    pub fn kept(&self) -> Result<(), Unobtained> {
+        if self.place.is_dir() {
+            return Ok(());
+        }
+
+        let gathered = partial(self.place);
+        let kept = self.checked(&gathered);
+        let removed = match gathered.exists() {
+            true => fs::remove_dir_all(&gathered),
+            false => Ok(()),
+        };
+
+        kept?;
+        removed.map_err(|error| self.unobtained(format!("remove {}: {error}", gathered.display())))
+    }
+
+    /// Gather the files at `gathered`, check them, and rename the directory onto the place.
+    fn checked(&self, gathered: &Path) -> Result<(), Unobtained> {
+        let failed = |error: io::Error| self.unobtained(error.to_string());
+        if gathered.exists() {
+            fs::remove_dir_all(gathered).map_err(failed)?;
+        }
+        for file in self.files {
+            let placed = self.placed.join(file);
+            let bytes = match fs::read(&placed) {
+                Ok(bytes) => bytes,
+                Err(error) if error.kind() == ErrorKind::NotFound => {
+                    download(&format!("{}/{file}", self.url))
+                        .map_err(|cause| self.unobtained(cause))?
+                }
+                Err(error) => {
+                    return Err(self.unobtained(format!("read {}: {error}", placed.display())));
+                }
+            };
+            let at = gathered.join(file);
+            if let Some(parent) = at.parent() {
+                fs::create_dir_all(parent).map_err(failed)?;
+            }
+            fs::write(&at, bytes).map_err(failed)?;
+        }
+
+        let actual = tree_sha256_hex(gathered)
+            .map_err(|error| self.unobtained(format!("read {}: {error}", gathered.display())))?;
+        if actual != self.digest {
+            return Err(self.unobtained(format!(
+                "digest mismatch over the files: expected {}, got {actual}",
+                self.digest
+            )));
+        }
+        if let Some(parent) = self.place.parent() {
+            fs::create_dir_all(parent).map_err(failed)?;
+        }
+
+        match fs::rename(gathered, self.place) {
+            Ok(()) => Ok(()),
+            Err(_) if self.place.is_dir() => Ok(()),
+            Err(error) => Err(failed(error)),
+        }
+    }
+
+    /// `cause`, with how to fetch the files by hand and what is checked of them.
+    fn unobtained(&self, cause: String) -> Unobtained {
+        let urls = self
+            .files
+            .iter()
+            .map(|file| format!("  {}/{file}", self.url))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        Unobtained {
+            what: self.what.to_string(),
+            cause,
+            by_hand: format!(
+                "download these files by hand:\n{urls}\nthey are checked together to have the digest:\n  {}\nand place each, at its path under that address, in:\n  {}",
+                self.digest,
+                self.placed.display()
+            ),
         }
     }
 }

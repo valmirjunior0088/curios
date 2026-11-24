@@ -1,15 +1,21 @@
-//! Where a tool or a corpus a step names is kept, and how a run gets it before its first step.
+//! Where a tool or data a step names is kept, and how a run gets it before its first step.
 //!
-//! **A tool is kept by its name and version**, `xtask/.artifacts/biome-2.6.2`: a gzipped tarball unpacked into a directory, and any other download kept as the executable itself, a gzipped one decoded first, as [`Shape`] reads it off the URL. A kept copy is trusted by its presence, since [`curios_download`] renames one into place only once its digest has checked, so a run never reads part of one as the whole; and a bumped version is kept beside the old copy and never reads it. A download placed by hand under the name its URL ends in, beside the kept copies, is read before the network, as a build script reads its own.
+//! **A tool is kept by its name and version**, `xtask/.artifacts/tools/biome-2.6.2`: a gzipped tarball unpacked into a directory, and any other download kept as the executable itself, a gzipped one decoded first, as [`Shape`] reads it off the URL. A kept copy is trusted by its presence, since [`curios_download`] renames one into place only once its digest has checked, so a run never reads part of one as the whole; and a bumped version is kept beside the old copy and never reads it. A download placed by hand under the name its URL ends in, beside the kept copies, is read before the network, as a build script reads its own.
 //!
-//! **A corpus is kept as its one directory**, `xtask/.artifacts/json-<commit>`: the archive a forge generates at its commit, placed by hand or downloaded, unpacked, the directory's files checked against the digest the corpus states, and the directory kept, as [`curios_download::Unpacked`] keeps one, the rest of the archive and the archive itself not. A kept corpus is trusted by its presence, as a kept tool is.
+//! **Data is kept as one directory, beside what reads it.** What a step's command reads is kept with the runner's own, `xtask/.artifacts/data/json-<commit>`, beside the tools and apart from them, so a tool and data of one name are two places; what a crate's build reads is kept beside the crate its table names, `curios-unicode/.artifacts/unicode-<version>`, where the build finds it through its own manifest as it finds everything it keeps, and no crate learns where the runner keeps its own. Either is one directory of the archive a forge generates at a commit, placed by hand or downloaded and unpacked, or the files a site publishes one by one, each placed by hand or downloaded; the directory's files checked against the digest the data states, and the directory kept, as [`curios_download::Unpacked`] and [`curios_download::Gathered`] keep one, an archive and the rest of it not. Kept data is trusted by its presence, as a kept tool is.
 //!
-//! **Naming a tool is the edge.** Every tool and corpus the scheduled steps name, `{.tools.npm}` or `{.corpora.json}`, is fetched before the first step, once for each download, and a run any of them cannot be had for runs nothing. A step runs with the directory holding each named tool's executable first on its `PATH`, where the tool is kept as a directory, so a launch nested inside it finds what ships beside it: npm's `#!/usr/bin/env node` finds the Node it came with.
+//! **Naming a tool is the edge.** Every tool and all the data the scheduled steps name, `{.tools.npm}` or `{.data.json}`, is fetched before the first step; data a crate's build reads is fetched before any run's, since no step names it and which steps build the crate is Cargo's to know, once for each download, and a run any of them cannot be had for runs nothing. A step runs with the directory holding each named tool's executable first on its `PATH`, where the tool is kept as a directory, so a launch nested inside it finds what ships beside it: npm's `#!/usr/bin/env node` finds the Node it came with.
 
 use {
-    crate::{Fetched, Fill, HOST_TRIPLE, Name, Shape, Tool, Tree, Values, artifacts, from_top},
-    curios_download::{Download, Unpacked, gunzipped, keep_executable, unpack},
-    std::{fs, path::PathBuf},
+    crate::{
+        Fetched, Fill, Form, HOST_TRIPLE, Name, Shape, Tool, Tree, Values, artifacts, from_top,
+        root,
+    },
+    curios_download::{Download, Gathered, Unpacked, gunzipped, keep_executable, unpack},
+    std::{
+        fs,
+        path::{Path, PathBuf},
+    },
 };
 
 #[cfg(test)]
@@ -28,11 +34,21 @@ fn owner<'a>(tree: &'a Tree, name: &'a Name) -> (&'a Name, &'a Fetched, &'a str)
     }
 }
 
+/// Where the tools are kept, and a download of one a hand placed is read.
+fn tools_place() -> PathBuf {
+    artifacts().join("tools")
+}
+
+/// Where data a step's command reads is kept, and an archive of any data a hand placed is read: beside the tools and apart from them, so a tool and data of one name are two places.
+fn data_place() -> PathBuf {
+    artifacts().join("data")
+}
+
 /// Where the fetched tool `name` is kept: under its name and version.
 fn kept(name: &Name, fetched: &Fetched) -> PathBuf {
     let name = name.last().expect("a tool is named");
 
-    artifacts().join(format!("{name}-{}", fetched.version))
+    tools_place().join(format!("{name}-{}", fetched.version))
 }
 
 /// How this host keeps the fetched tool, which a run has refused before its first step where it has no download.
@@ -54,23 +70,27 @@ pub fn executable(tree: &Tree, name: &Name) -> PathBuf {
     }
 }
 
-/// Where the corpus `name` is kept: its one directory, under its name and commit.
-pub fn corpus(tree: &Tree, name: &Name) -> PathBuf {
-    let version = &tree.corpora[name].version;
-    let name = name.last().expect("a corpus is named");
+/// Where the data `name` is kept: its one directory, under its name and version, beside the crate whose build reads it where its table names one, and with the runner's own otherwise.
+pub fn data_kept(tree: &Tree, name: &Name) -> PathBuf {
+    let data = &tree.data[name];
+    let name = name.last().expect("data is named");
+    let kept = format!("{name}-{}", data.version);
 
-    artifacts().join(format!("{name}-{version}"))
+    match &data.beside {
+        Some(reader) => root().join(reader).join(".artifacts").join(kept),
+        None => data_place().join(kept),
+    }
 }
 
 /// What some steps name of what a run fetches, each once, in the order their words name it.
 struct Named {
     tools: Vec<Name>,
-    corpora: Vec<Name>,
+    data: Vec<Name>,
 }
 
-/// The tools and the corpora the `steps` name.
+/// The tools and the data the `steps` name.
 fn named(tree: &Tree, steps: &[usize]) -> Named {
-    let (mut tools, mut corpora) = (Vec::new(), Vec::new());
+    let (mut tools, mut data) = (Vec::new(), Vec::new());
     for &step in steps {
         for fill in tree.steps[step]
             .run
@@ -80,7 +100,7 @@ fn named(tree: &Tree, steps: &[usize]) -> Named {
         {
             let (named, name) = match fill {
                 Fill::Tool(name) => (&mut tools, name),
-                Fill::Corpus(name) => (&mut corpora, name),
+                Fill::Data(name) => (&mut data, name),
                 _ => continue,
             };
             if !named.contains(name) {
@@ -89,7 +109,7 @@ fn named(tree: &Tree, steps: &[usize]) -> Named {
         }
     }
 
-    Named { tools, corpora }
+    Named { tools, data }
 }
 
 /// The directories `step`'s commands find first on their `PATH`: each holding a named tool's executable where the tool is kept as a directory.
@@ -113,9 +133,15 @@ pub fn directories(tree: &Tree, step: usize) -> Vec<PathBuf> {
     directories
 }
 
-/// Keep every tool and corpus the `scheduled` steps name that is not kept yet, once for each download, refusing the run with every one this host cannot have.
+/// Keep every tool and all the data the `scheduled` steps name, and all the data a crate's build reads, whatever the steps: each that is not kept yet, once for each download, refusing the run with every one this host cannot have.
 pub fn fetch(tree: &Tree, values: &Values<'_>, scheduled: &[usize]) -> Result<(), String> {
-    let Named { tools, corpora } = named(tree, scheduled);
+    let Named { tools, mut data } = named(tree, scheduled);
+    // What a crate's build reads no step names: which steps build the crate is Cargo's to know, so the data is kept before any of them runs.
+    for (name, read) in &tree.data {
+        if read.beside.is_some() && !data.contains(name) {
+            data.push(name.clone());
+        }
+    }
     let mut owners = Vec::<Name>::new();
     for name in tools {
         let (owner, _, _) = owner(tree, &name);
@@ -128,9 +154,8 @@ pub fn fetch(tree: &Tree, values: &Values<'_>, scheduled: &[usize]) -> Result<()
         .iter()
         .filter_map(|owner| obtained(tree, values, owner).err())
         .chain(
-            corpora
-                .iter()
-                .filter_map(|name| unpacked(tree, values, name).err()),
+            data.iter()
+                .filter_map(|name| gathered(tree, values, name).err()),
         )
         .collect::<Vec<_>>();
     match refused.is_empty() {
@@ -139,28 +164,68 @@ pub fn fetch(tree: &Tree, values: &Values<'_>, scheduled: &[usize]) -> Result<()
     }
 }
 
-/// Keep the corpus `name`, where it is not kept already.
-fn unpacked(tree: &Tree, values: &Values<'_>, name: &Name) -> Result<(), String> {
-    let kept = corpus(tree, name);
+/// Where a download from `url` a hand placed stands, under `kept`: the name the address ends in.
+fn placed(kept: &Path, url: &str) -> PathBuf {
+    kept.join(url.rsplit('/').next().unwrap_or(url))
+}
+
+/// Keep the data `name`, where it is not kept already: one directory of its archive, or its files gathered.
+fn gathered(tree: &Tree, values: &Values<'_>, name: &Name) -> Result<(), String> {
+    let kept = data_kept(tree, name);
     if kept.exists() {
         return Ok(());
     }
-    let read = &tree.corpora[name];
+    let read = &tree.data[name];
+    if let Some(reader) = &read.beside
+        && !root().join(reader).join("Cargo.toml").is_file()
+    {
+        return Err(format!(
+            "`{}` is kept beside `{reader}`, which is no crate at the repository's root",
+            from_top(name)
+        ));
+    }
     let url = values.text(&read.url)?;
-    let placed = artifacts().join(url.rsplit('/').next().unwrap_or(&url));
-    if !placed.exists() {
-        eprintln!("fetch {url}");
-    }
+    let what = format!("`{}` at {}", from_top(name), read.version);
 
-    Unpacked {
-        what: &format!("`{}` at {}", from_top(name), read.version),
-        url: &url,
-        directory: &read.path,
-        digest: &read.sha256,
-        placed: &placed,
-        place: &kept,
+    match &read.form {
+        Form::Directory(directory) => {
+            let placed = placed(&data_place(), &url);
+            if !placed.exists() {
+                eprintln!("fetch {url}");
+            }
+
+            Unpacked {
+                what: &what,
+                url: &url,
+                directory,
+                digest: &read.sha256,
+                placed: &placed,
+                place: &kept,
+            }
+            .kept()
+        }
+        Form::Files(files) => {
+            // Files placed by hand stand beside where the directory is kept, each at its path, under the directory's name with `.placed` after it.
+            let mut placed = kept.clone().into_os_string();
+            placed.push(".placed");
+            let placed = PathBuf::from(placed);
+            for file in files {
+                if !placed.join(file).exists() {
+                    eprintln!("fetch {url}/{file}");
+                }
+            }
+
+            Gathered {
+                what: &what,
+                url: &url,
+                files,
+                digest: &read.sha256,
+                placed: &placed,
+                place: &kept,
+            }
+            .kept()
+        }
     }
-    .kept()
     .map_err(|unobtained| unobtained.to_string())
 }
 
@@ -181,7 +246,7 @@ fn obtained(tree: &Tree, values: &Values<'_>, name: &Name) -> Result<(), String>
     })?;
 
     let url = values.text(&published.url)?;
-    let placed = artifacts().join(url.rsplit('/').next().unwrap_or(&url));
+    let placed = placed(&tools_place(), &url);
     if !placed.exists() {
         eprintln!("fetch {url}");
     }
@@ -195,7 +260,7 @@ fn obtained(tree: &Tree, values: &Values<'_>, name: &Name) -> Result<(), String>
     .map_err(|unobtained| unobtained.to_string())?;
 
     let failed = |error: std::io::Error| format!("keep {}: {error}", kept.display());
-    fs::create_dir_all(artifacts()).map_err(failed)?;
+    fs::create_dir_all(tools_place()).map_err(failed)?;
     match published.shape {
         Shape::Tarball => unpack(&bytes, &kept),
         Shape::Gzipped => gunzipped(&bytes).and_then(|decoded| keep_executable(&decoded, &kept)),
