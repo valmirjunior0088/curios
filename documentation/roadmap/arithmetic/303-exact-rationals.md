@@ -8,7 +8,7 @@ Four stages, each landing alone: the executable core, the executable binary64 bo
 
 ## What this builds on
 
-- **`Dyadic`**, at `/std/Flt/internal/Dyadic` and private to `Flt` today: `{mantissa: Int, exponent: Int}`, unnormalized, whose `+`, `-` and `·` never round and whose `Eql`, `Ord` and `Hash` read the value, with `normalized` answering the odd-mantissa representation. Every dyadic is a rational, so `Rat` takes one in whole.
+- **`Dyadic`**, at `/std/Flt/internal/Dyadic` and private to `Flt` today: `{mantissa: Int, exponent: Int}`, unnormalized, whose `+`, `-` and `·` never round and whose `eql` and `Hash` read the value, with `normalized` answering the odd-mantissa representation. It has no `Eql` and no `Ord`: two representations of one number are two values, so its `eql` decides no `Eq`. Every dyadic is a rational, so `Rat` takes one in whole.
 - **`Dyadic/of(f, @ok: Flt/Finite(f))`**: a finite float's exact value, through `/sys/Flt/mantissa` and `/sys/Flt/exponent`, which take the same bound. `Dyadic/try_of` is the `Option` form.
 - **`Dyadic/to_flt(r, d)`**: the one rounding in the library, `curios_num::Floating`'s own, line for line, in every direction — with the subnormal grid, the carry into the exponent, and the overflow each direction sends where it sends it.
 - **`Nat` and `Int`**: unbounded at run time ([Nat and Int are an i31 until they outgrow it](../../design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md)), so no exact computation here reintroduces a width.

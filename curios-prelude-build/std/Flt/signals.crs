@@ -1,4 +1,4 @@
-use /std/{Flt, Nat, Int, Bool, List, Vec, Option};
+use /std/{Flt, Nat, Int, Bool, List, Vec};
 use /std/Flt/{Rounding, Exceptions, rounded, exact, reduction};
 use /std/Flt/internal/{Dyadic};
 
@@ -15,7 +15,11 @@ let from_exact(r: Rounding, e: Dyadic, sticky: Bool, result: Flt) -> Exceptions 
     let magnitude = Int/abs(e.mantissa);
     let overflow = exact/overflows(r, e.mantissa < +0, magnitude, e.exponent, sticky);
     let inexact =
-        sticky || overflow || match Dyadic/try_of(result) | some(d) => d != e | none() => true end;
+        sticky || overflow
+            || match Dyadic/try_of(result)
+            | some(d) => Bool/not(Dyadic/eql(d, e))
+            | none() => true
+            end;
     Exceptions {
         ..Exceptions/none,
         overflow = overflow,
@@ -107,7 +111,7 @@ pub let sqrt(r: Rounding, a: Flt) -> Exceptions =
     | Flt/lt(a, +0.0) => invalid
     | Flt/is_zero(a) => Exceptions/none
     | (some(root), some(x)) = (Dyadic/try_of(rounded/sqrt(r, a)), Dyadic/try_of(a)) =>
-        Exceptions { ..Exceptions/none, inexact = root * root != x }
+        Exceptions { ..Exceptions/none, inexact = Bool/not(Dyadic/eql(root * root, x)) }
     -- `+inf`, its own root.
     | _ => Exceptions/none
     end;
@@ -245,8 +249,10 @@ let augmented(v: Dyadic) -> Exceptions =
     | some(h) =>
         let lost = v - h;
         let inexact =
-            Dyadic/try_of(exact/ties_toward_zero(lost.mantissa, lost.exponent))
-                != Option/some(lost);
+            match Dyadic/try_of(exact/ties_toward_zero(lost.mantissa, lost.exponent))
+            | some(kept) => Bool/not(Dyadic/eql(kept, lost))
+            | none() => true
+            end;
         Exceptions { ..Exceptions/none, underflow = inexact, inexact = inexact }
     end;
 
