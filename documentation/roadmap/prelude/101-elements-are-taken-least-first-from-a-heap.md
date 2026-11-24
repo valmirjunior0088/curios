@@ -14,16 +14,16 @@
 - **The order is in the type**, as a container shaped by a dictionary names it ([Concepts resolve with global coherence](../../design/surface/concepts-resolve-with-global-coherence.md)), so a heap built under one order is read under it, as `Map(K, use Key(K), V)` is under its `Key`.
 - **Leftist, persistent and worst-case**: each operation is O(log n) in the worst case, so persistence breaks no amortized bound, as it does a pairing heap's.
 - **Equal priorities come out in no promised order**; a program wanting stability pairs each priority with a counter.
-- **The element is its own priority** (decided by the user on 2026-11-23): `Heap(A, use Ord(A))` orders what it holds by its `Ord`, whose laws the order carries ([Equality and order carry their laws](100-equality-and-order-carry-their-laws.md)), and the heap's obligations are discharged by bounds and guards over that one order. A value no order holds, a closure or a handle, is queued by what orders it, a priority and a counter naming it, the value kept beside the heap.
+- **The element is its own priority** (decided by the user on 2026-11-23): `Heap(A, use Ord(A))` orders what it holds by its `Ord`, which carries its laws ([Operators](../../language.md#operators)), and the heap's obligations are discharged by bounds and guards over that one order. A value no order holds, a closure or a handle, is queued by what orders it, a priority and a counter naming it, the value kept beside the heap.
 - **The leftist invariant is held by construction**: a node carries a hidden proof that its ranks are in order, discharged where `make` builds it from the comparison it made, as `Json/Number` carries its `canonical`.
 
-**Rejected.** A multiset over `Map`, `Map(P, List(V))`: a priority needs a `Key`, and ties keep insertion order where nothing asks for it. A priority held apart from its value, as .NET's `PriorityQueue<TElement, TPriority>`, Haskell's `MinPQueue k a` and Julia's `PriorityQueue{K,V}` hold one: a second order beside the one `Ord` carries its laws in. A pairing heap: amortized bounds persistence breaks. A concept of the heap's own carrying its order's laws: [Equality and order carry their laws](100-equality-and-order-carry-their-laws.md) puts them in `Ord`.
+**Rejected.** A multiset over `Map`, `Map(P, List(V))`: a priority needs a `Key`, and ties keep insertion order where nothing asks for it. A priority held apart from its value, as .NET's `PriorityQueue<TElement, TPriority>`, Haskell's `MinPQueue k a` and Julia's `PriorityQueue{K,V}` hold one: a second order beside the one `Ord` carries its laws in. A pairing heap: amortized bounds persistence breaks. A concept of the heap's own carrying its order's laws: `Ord` carries them.
 
 ## Stages
 
 **1. The heap.** `/std/Heap`, its operations and its invariant held by construction, with its tests, a shortest-path search among them. Check: the tests pass, a node whose ranks are out of order is refused where it is built, and the drain sorts the corpus's inputs.
 
-**2. Its theorems**, once [Equality and order carry their laws](100-equality-and-order-carry-their-laws.md)'s stage 3 gives `Ord` its laws: size, permutation, least and sorted drain. Check: each stated over every witness of `Ord`, with no hypothesis.
+**2. Its theorems**, over the laws `Ord` carries: size, permutation, least and sorted drain. Check: each stated over every witness of `Ord`, with no hypothesis.
 
 ## Verification and retirement
 

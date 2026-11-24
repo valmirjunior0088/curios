@@ -4,7 +4,7 @@
 
 ## What is missing
 
-**A declaration is published whole, so two that read each other's signatures are a cycle.** `let ord(a: Num, b: Num) -> Ordering` guarding with `a < b`, beside `satisfy Ord(Num) { ord = ord, lt = lt, le = le }`, is refused as a declaration cycle (`curios-elab/src/elaborate/module/demand.rs`), the refusal naming the two ways around it. `/std/Nat`'s, `/std/Int`'s and `/std/Byte`'s `ord` take the first: each guards with its `lt` called by name, where `<` would read as the witness's own.
+**A declaration is published whole, so two that read each other's signatures are a cycle.** `let ord(a: Num, b: Num) -> Ordering` guarding with `a < b`, beside `satisfy Ord(Num) { ord = ord, lt = lt, le = le }`, is refused as a declaration cycle (`curios-elab/src/elaborate/module/demand.rs`), the refusal naming the two ways around it. `/std/Nat`'s, `/std/Int`'s and `/std/Byte`'s `ord` take the first: each guards with its `lt` called by name, where `<` would read as the witness's own. The lemmas a carrier's witness names for the laws `Ord` and `Eql` carry take it too: `Nat/ord`'s and `Int/ord`'s, and `Int/le`'s `trans` and `antisym` that `Int/ord`'s read, state their types through `Nat/lt`, `Int/le` and `Int/eql` where a caller writes the operator, one type by conversion.
 
 ## What is known
 
