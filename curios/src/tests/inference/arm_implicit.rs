@@ -214,13 +214,14 @@ fn an_implicit_born_in_an_arm_is_solved_under_the_arms_guard() {
     let output = run(r#"
         use /std/{Bytes, Byte, Nat, Eq, print};
         use /std/Bool/{True};
+        use /std/ops/{Eql};
 
         let probe(b: Bytes, k: Nat, f: Byte, P: (Byte) -> Type, lead: P(f), fallback: Nat, consume: (x: Byte, P(x)) -> Nat) -> Nat =
             match k < Bytes/length(b)
             | true =>
                 match Bytes/get(b, k) == f
                 | true =>
-                    let found = Byte/eq_of_eql(Bytes/get(b, k), f, True/qed());
+                    let found = Eql/eq_of_eql(Bytes/get(b, k), f, True/qed());
                     consume(Bytes/get(b, k), Eq/subst((c: Byte) => P(c), Eq/sym(found), lead))
                 | false => fallback
                 end

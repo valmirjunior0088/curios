@@ -1,4 +1,5 @@
 use /std/{Nat, Bool, Option, List, Vec, Eq, Hash, Bytes, proved};
+use /std/ops/{Eql};
 use /std/List/{Member};
 use /std/Map/{Map, Key, empty, has, insert, remove, map, union, filter, intersection, difference,
     update, to_list};
@@ -25,7 +26,7 @@ let apart_codes(
                 Key/injective(
                     key,
                     other,
-                    Bytes/eq_of_eql(Hash/hash(key), Hash/hash(other), Bool/True/qed()))))
+                    Eql/eq_of_eql(Hash/hash(key), Hash/hash(other), Bool/True/qed()))))
         end
     end;
 

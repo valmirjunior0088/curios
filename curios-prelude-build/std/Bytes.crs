@@ -96,9 +96,8 @@ pub let cons_injective_tail(
 ) -> Eq()(p1, p2) =
     Eq/cong((halves: {Byte, Bytes}) => halves.1, Option/some_injective(Eq/cong(uncons, e)));
 
--- By recursion on both runs, since the comparison of two conses is their heads' and their tails', and of a cons and no bytes is `false`.
---- A decided equality is an equation: `a == b` gives `Eq()(a, b)`.
-pub let eq_of_eql(a: Bytes, b: Bytes, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
+-- `Eql`'s law at `Bytes`, by recursion on both runs, since the comparison of two conses is their heads' and their tails', and of a cons and no bytes is `false`.
+let eq_of_eql(a: Bytes, b: Bytes, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
     match a
     | 0x[] =>
         match b
@@ -112,7 +111,7 @@ pub let eq_of_eql(a: Bytes, b: Bytes, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
             match Byte/to_nat(y) == Byte/to_nat(k)
             | true =>
                 Eq/trans(
-                    Eq/cong((c: Byte) => 0x[c, ..t], Byte/eq_of_eql(y, k, Bool/True/qed())),
+                    Eq/cong((c: Byte) => 0x[c, ..t], Eql/eq_of_eql(y, k, Bool/True/qed())),
                     Eq/cong((q: Bytes) => 0x[k, ..q], eq_of_eql(t, p, h)))
             | false => match h end
             end

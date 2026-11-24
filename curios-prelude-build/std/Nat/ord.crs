@@ -1,4 +1,5 @@
 use /std/{Nat, Bool, Eq, Ordering, Ord, proved};
+use /std/ops/{Eql};
 
 --- The order of the two.
 pub let ord(x: Nat, y: Nat) -> Ordering =
@@ -50,7 +51,7 @@ pub let lt(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/lt())) -> Bool/Holds(a < 
 pub let eq(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/eq())) -> Eq()(a, b) =
     match
     | a < b => match Ordering/eq_neq_lt(Eq/sym(h)) end
-    | a == b => Nat/eq_of_eql(a, b, Bool/True/qed())
+    | a == b => Eql/eq_of_eql(a, b, Bool/True/qed())
     | _ => match Ordering/gt_neq_eq(h) end
     end;
 
@@ -64,7 +65,7 @@ pub let gt(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/gt())) -> Bool/Holds(b < 
 pub let le(a: Nat, b: Nat, h: Bool/Holds(Ordering/is_le(ord(a, b)))) -> Bool/Holds(a <= b) =
     match
     | a < b => proved()
-    | a == b => Nat/le/of_eq(Nat/eq_of_eql(a, b, Bool/True/qed()))
+    | a == b => Nat/le/of_eq(Eql/eq_of_eql(a, b, Bool/True/qed()))
     | _ => match h end
     end;
 
@@ -93,7 +94,7 @@ pub let flips: Ord/Flips(ord) =
             | b < a => match proved(@Bool/False) end
             | b == a => Eq/refl()
             | _ =>
-                let same = Nat/eq_of_eql(a, b, proved());
+                let same = Eql/eq_of_eql(a, b, proved());
                 let held: Bool/Holds(b == a) =
                     Eq/subst((x: Nat) => Bool/Holds(b == x), Eq/sym(same), Bool/True/qed());
                 match held end

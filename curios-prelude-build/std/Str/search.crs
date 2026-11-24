@@ -1,4 +1,5 @@
 use /std/{Str, Char, Bool, Bytes, Nat, Option, Eq, proved};
+use /std/ops/{Eql};
 use /std/Str/{At};
 
 --- The first character at or after `from` that `pred` accepts, and where it is, or `none`: one walk over the bytes from `from`, which stops before it.
@@ -83,7 +84,7 @@ pub let occurrence(
                                         needle.bytes),
                                 e,
                                 (_) =>
-                                    Bytes/eq_of_eql(
+                                    Eql/eq_of_eql(
                                         Bytes/slice(rest.bytes, k, n, @inside),
                                         needle.bytes,
                                         proved()))(

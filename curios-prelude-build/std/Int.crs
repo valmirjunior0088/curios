@@ -105,8 +105,8 @@ pub let trichotomy(a: Int, b: Int) -> Trichotomy(a, b) =
         end
     end;
 
--- Stated over `eql`, and decided through `lt` and `le`, each by name: an operator here would read the witness that names this, as [`trichotomy`]'s do.
---- A decided equality is an equation: `a == b` gives `Eq()(a, b)`.
+-- Stated over `eql`, and decided through `lt` and `le`, each by name: an operator here would read the witness that names this, as [`trichotomy`]'s do. Public for the elaborator's own proofs alone, which name it where a bound follows from an `==` guard, before any witness is elaborated: a program crosses by `Eql/eq_of_eql`.
+--- `Eql`'s law at `Int`: a decided equality is an equation.
 pub let eq_of_eql(a: Int, b: Int, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
     match lt(a, b)
     | true =>

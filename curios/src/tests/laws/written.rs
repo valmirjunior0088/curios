@@ -1104,7 +1104,7 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(0x[..bs, 1] == 0x[], false)",
             "Eq()(0x[..bs, k] == bs, false)",
             "Eq()(0x[..bs, ..cs, 1] == bs, false)",
-            // Equality is read past what two runs share, as `Nat`'s comparisons are read past their common floor; and two runs that each open with a byte are equal exactly when the bytes and the rest are, which is what lets `/std/Bytes/eq_of_eql` take an equality apart a byte at a time.
+            // Equality is read past what two runs share, as `Nat`'s comparisons are read past their common floor; and two runs that each open with a byte are equal exactly when the bytes and the rest are, which is what lets `Bytes`'s proof of `Eql`'s law take an equality apart a byte at a time.
             "Eq()(0x[1, ..bs] == 0x[1, ..cs], bs == cs)",
             "Eq()(0x[k, ..bs] == 0x[k, ..cs], bs == cs)",
             "Eq()(0x[h, ..bs] == 0x[k, ..cs], h == k && bs == cs)",

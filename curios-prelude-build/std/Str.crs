@@ -699,7 +699,7 @@ pub let follows(
     let n = Bytes/length(piece.bytes);
     match Bool/holds(n <= Bytes/length(rest.bytes))
     | some(fits), Bytes/slice(rest.bytes, 0, n, @fits) == piece.bytes =>
-        let held = Bytes/eq_of_eql(Bytes/slice(rest.bytes, 0, n, @fits), piece.bytes, proved());
+        let held = Eql/eq_of_eql(Bytes/slice(rest.bytes, 0, n, @fits), piece.bytes, proved());
         let onward: Valid(Bytes/drop(rest.bytes, n, @fits)) =
             Valid/after_prefix(
                 piece.valid,
@@ -754,7 +754,7 @@ pub let strip_suffix(s: Str, suffix: Str) -> Option(Str) =
     match Bool/holds(n <= Bytes/length(s.bytes))
     | some(_), Bytes/drop(s.bytes, Bytes/length(s.bytes) - n) == suffix.bytes =>
         let held =
-            Bytes/eq_of_eql(Bytes/drop(s.bytes, Bytes/length(s.bytes) - n), suffix.bytes, proved());
+            Eql/eq_of_eql(Bytes/drop(s.bytes, Bytes/length(s.bytes) - n), suffix.bytes, proved());
         Option/some(
             before(
                 s,

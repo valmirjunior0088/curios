@@ -1,4 +1,5 @@
 use /std/{Int, Bool, Eq, Ordering, Ord, proved};
+use /std/ops/{Eql};
 
 --- The order of the two.
 pub let ord(x: Int, y: Int) -> Ordering =
@@ -50,7 +51,7 @@ pub let lt(a: Int, b: Int, h: Eq()(ord(a, b), Ordering/lt())) -> Bool/Holds(a < 
 pub let eq(a: Int, b: Int, h: Eq()(ord(a, b), Ordering/eq())) -> Eq()(a, b) =
     match
     | a < b => match Ordering/eq_neq_lt(Eq/sym(h)) end
-    | a == b => Int/eq_of_eql(a, b, Bool/True/qed())
+    | a == b => Eql/eq_of_eql(a, b, Bool/True/qed())
     | _ => match Ordering/gt_neq_eq(h) end
     end;
 
@@ -64,7 +65,7 @@ pub let gt(a: Int, b: Int, h: Eq()(ord(a, b), Ordering/gt())) -> Bool/Holds(b < 
 pub let le(a: Int, b: Int, h: Bool/Holds(Ordering/is_le(ord(a, b)))) -> Bool/Holds(a <= b) =
     match
     | a < b => proved()
-    | a == b => Int/le/of_eq(Int/eq_of_eql(a, b, Bool/True/qed()))
+    | a == b => Int/le/of_eq(Eql/eq_of_eql(a, b, Bool/True/qed()))
     | _ => match h end
     end;
 
@@ -82,7 +83,7 @@ pub let flips: Ord/Flips(ord) =
     (a, b) =>
         match
         | a < b => of_gt(b, a, Bool/True/qed())
-        | a == b => of_eq(b, a, Eq/sym(Int/eq_of_eql(a, b, Bool/True/qed())))
+        | a == b => of_eq(b, a, Eq/sym(Eql/eq_of_eql(a, b, Bool/True/qed())))
         | _ => of_lt(b, a, below(a, b, proved(), Bool/True/qed()))
         end;
 

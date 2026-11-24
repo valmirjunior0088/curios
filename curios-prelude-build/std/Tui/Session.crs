@@ -1,4 +1,5 @@
 use /std/{Nat, Bytes, Bool, List, Option, Result, Eq, Box, Io, Try, Tty, proved};
+use /std/ops/{Eql};
 use /std/Io/{Reader};
 use /std/time/{Duration};
 use /std/Tui/{Frame, View, Input, Reply, Mode, render, ansi};
@@ -153,8 +154,8 @@ pub let forget(s: Session) -> Try(Io, Io/Error, {}) =
 let drawn_at(w: Nat, h: Nat, shown: Option(Shown)) -> Option(Frame(w, h)) =
     match shown
     | some(p), p.w == w && p.h == h =>
-        let as_wide = Eq/subst((n: Nat) => Frame(n, p.h), Nat/eq_of_eql(p.w, w, proved()), p.frame);
-        Option/some(Eq/subst((n: Nat) => Frame(w, n), Nat/eq_of_eql(p.h, h, proved()), as_wide))
+        let as_wide = Eq/subst((n: Nat) => Frame(n, p.h), Eql/eq_of_eql(p.w, w, proved()), p.frame);
+        Option/some(Eq/subst((n: Nat) => Frame(w, n), Eql/eq_of_eql(p.h, h, proved()), as_wide))
     | _ => Option/none()
     end;
 

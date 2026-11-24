@@ -1,4 +1,5 @@
 use /std/{Nat, Byte, Bytes, Bool, Eq, Ordering, proved};
+use /std/ops/{Eql};
 
 -- A byte's high nibble.
 let high(x: Nat) -> Nat =
@@ -169,7 +170,7 @@ let joined(
     down: Eq()(low(Byte/to_nat(h)), low(Byte/to_nat(k))),
 ) -> Eq()(h, k) =
     let (hn, kn) = (Byte/to_nat(h), Byte/to_nat(k));
-    Eq/cong((n: Nat) => Nat/to_byte(n % 256), Nat/eq_of_eql(hn, kn, proved()));
+    Eq/cong((n: Nat) => Nat/to_byte(n % 256), Eql/eq_of_eql(hn, kn, proved()));
 
 -- Two bytes that differ, alike in their high nibble, differ in their low one.
 let low_differs(
@@ -185,8 +186,8 @@ let low_differs(
             joined(
                 h,
                 k,
-                Nat/eq_of_eql(high(Byte/to_nat(h)), high(Byte/to_nat(k)), up),
-                Nat/eq_of_eql(low(Byte/to_nat(h)), low(Byte/to_nat(k)), Bool/True/qed()));
+                Eql/eq_of_eql(high(Byte/to_nat(h)), high(Byte/to_nat(k)), up),
+                Eql/eq_of_eql(low(Byte/to_nat(h)), low(Byte/to_nat(k)), Bool/True/qed()));
         match Eq/subst((y: Byte) => Bool/Holds(Bool/not(h == y)), Eq/sym(same), differs)
         end
     end;
@@ -203,7 +204,7 @@ let spec(a: Bytes, b: Bytes, g: Nat) -> Found(a, b, g, parts(a, b, g)) =
             let inner = spec(t, r, g + 1);
             Eq/subst(
                 (y: Byte) => Found(0x[h, ..t], 0x[y, ..r], g, parts(t, r, g + 1)),
-                Byte/eq_of_eql(h, k, Bool/True/qed()),
+                Eql/eq_of_eql(h, k, Bool/True/qed()),
                 match parts(t, r, g + 1)
                 | same() => Eq/cong((z: Bytes) => 0x[h, ..z], inner)
                 | at(c) =>
@@ -245,7 +246,7 @@ let spec(a: Bytes, b: Bytes, g: Nat) -> Found(a, b, g, parts(a, b, g)) =
                                         match j
                                         | 0 => Eq/refl()
                                         | 1 =>
-                                            Nat/eq_of_eql(
+                                            Eql/eq_of_eql(
                                                 high(Byte/to_nat(h)),
                                                 high(Byte/to_nat(k)),
                                                 Bool/True/qed())

@@ -185,8 +185,8 @@ pub let odd_part(n: Nat, @ok: Bool/Holds(0 < n)) -> Nat =
 pub let in_range(c: Nat, lo: Nat, hi: Nat) -> Bool =
     match c >= lo | true => c <= hi | false => false end;
 
--- Stated over `eql` by name, where `a == b` would read the witness that names this.
---- A decided equality is an equation: `a == b` gives `Eq()(a, b)`, by recursion on both sides, since `a + 1 == b + 1` is `a == b` after cancellation.
+-- Stated over `eql` by name, where `a == b` would read the witness that names this. Public for the elaborator's own proofs alone, which name it where a bound follows from an `==` guard, before any witness is elaborated: a program crosses by `Eql/eq_of_eql`.
+--- `Eql`'s law at `Nat`: a decided equality is an equation, by recursion on both sides, since `a + 1 == b + 1` is `a == b` after cancellation.
 pub let eq_of_eql(a: Nat, b: Nat, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
     match a
     | 0 =>
