@@ -165,7 +165,7 @@ let dated(reply: Response) -> Io(Response) =
 let stamped(reply: Response, date: Option(Field/Value)) -> Response =
     match date
     | some(value) =>
-        let field = Field { name = Field/Name { text = "Date" }, value = value };
+        let field = Field { name = Field/Name { text = "date" }, value = value };
         Response { ..reply, headers = [field, ..reply.headers], @bodied = reply.bodied }
     | none() => reply
     end;
@@ -191,7 +191,7 @@ let send(s: Server, c: Socket, method: Method, reply: Response) -> Io({}) =
 let allowed: Response =
     Response {
         status = Status/of(200),
-        headers = [Field/of("Allow", "GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS")],
+        headers = [Field/of("allow", "GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS")],
         body = 0x[] };
 
 --- What a server does with one connection of `scheme`: read a request as its framing delimits it, hand it to `handler`, write the reply, and end the connection as HTTP asks — the sending half ended, what the peer still sends read until it closes or falls quiet, and the close left to whoever opened the connection. A request the reader refuses is answered with the status its refusal names, one that has not arrived whole within `s.timeout` 408, and a handler that fails 500; `OPTIONS *`, which asks about the server and no resource, is answered by the server with the methods it reads, and no handler sees it; a peer that sends nothing is told nothing. Every reply carries the `Date` it is sent at, unless its handler dated it. `serve` and `serve_tls` run it over a listener of their own, and a program with a listener of its own hands it each socket it accepts.

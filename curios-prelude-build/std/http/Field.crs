@@ -24,11 +24,11 @@ satisfy Spell(Field) {
     ..
 }
 
---- The field the literals `name` and `value` spell.
+--- The field the literals `name`, lowercase, and `value` spell.
 pub let of(
     name: Str,
     value: Str,
-    @_: Bool/Holds(Name/is_token(name)),
+    @_: Bool/Holds(Name/is_name(name)),
     @_: Bool/Holds(Bytes/all(Str/to_bytes(value), Value/admits)),
 ) -> Field =
     Field { name = Name { text = name }, value = Value/lit(value) };
@@ -79,7 +79,11 @@ pub let members(fields: List(Field), name: Str) -> List(Bytes) =
 
 --- The field as its line on the wire: the name, a colon and a space, the value, and the line's end.
 pub let line(f: Field) -> Bytes =
-    0x[..Str/to_bytes(f.name.text), ':', ' ', ..f.value.bytes, '\r', '\n'];
+    line_of(f.name, f.value.bytes);
+
+--- The line of a field named `name` whose value is the octets `value`: what [`line`] writes of a field, and what a renderer writes of a field it owns, whose value it computes.
+pub let line_of(name: Name, value: Bytes) -> Bytes =
+    0x[..Str/to_bytes(name.text), ':', ' ', ..value, '\r', '\n'];
 
 --- The lines of the `fields` whose name `owned` does not claim, in order: what a renderer writes of a caller's fields beside the ones it writes itself.
 pub let lines(fields: List(Field), owned: (Name) -> Bool) -> Bytes =

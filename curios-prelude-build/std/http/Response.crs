@@ -21,20 +21,21 @@ satisfy Spell(Response) {
     ..
 }
 
---- Whether a reply's renderer writes the field named `name` itself: the framing fields and `Connection`. A caller's own field of one of these names is not sent.
+--- Whether a reply's renderer writes the field named `name` itself: the framing fields and `connection`. A caller's own field of one of these names is not sent.
 pub let owned(name: Field/Name) -> Bool =
-    Field/Name/is(name, "Content-Length") || Field/Name/is(name, "Transfer-Encoding")
-        || Field/Name/is(name, "Connection");
+    name == Field/Name/content_length || name == Field/Name/transfer_encoding
+        || name == Field/Name/connection;
 
 let length_line(n: Nat) -> Bytes =
-    Str/to_bytes(Fmt/render("Content-Length: %\r\n")(n));
+    Field/line_of(Field/Name/content_length, Str/to_bytes(Nat/to_str(n)));
 
---- The reply's head as the bytes sent on the wire, stating the length of `body`: the status line as HTTP/1.1, `Connection: close`, since a server keeps no connection, `Content-Length` unless the status is 1xx, 204 or 304, then the headers the renderer does not own, and the blank line.
+--- The reply's head as the bytes sent on the wire, stating the length of `body`: the status line as HTTP/1.1, `connection: close`, since a server keeps no connection, `content-length` unless the status is 1xx, 204 or 304, then the headers the renderer does not own, and the blank line.
 pub let render_head(r: Response, body: Bytes) -> Bytes =
     0x[
         ..Str/to_bytes(Fmt/render("HTTP/1.1 % ")(r.status.code)),
         ..r.status.reason.bytes,
-        ..Str/to_bytes("\r\nConnection: close\r\n"),
+        '\r', '\n',
+        ..Field/line_of(Field/Name/connection, Str/to_bytes("close")),
         ..match Status/bodiless(r.status.code)
         | true => 0x[]
         | false => length_line(Bytes/length(body))
@@ -50,12 +51,12 @@ pub let render(r: Response) -> Bytes =
 pub let header(r: Response, name: Str) -> Option(Field/Value) =
     Field/find(r.headers, name);
 
---- `r` with the field `name: value` appended to its headers. A field the renderer owns — `Content-Length`, `Transfer-Encoding`, `Connection` — is kept and not sent.
+--- `r` with the field `name: value` appended to its headers. A field the renderer owns — `content-length`, `transfer-encoding`, `connection` — is kept and not sent.
 pub let with_header(
     r: Response,
     name: Str,
     value: Str,
-    @_: Bool/Holds(Field/Name/is_token(name)),
+    @_: Bool/Holds(Field/Name/is_name(name)),
     @_: Bool/Holds(Bytes/all(Str/to_bytes(value), Field/Value/admits)),
 ) -> Response =
     Response { ..r, headers = [..r.headers, Field/of(name, value)], @bodied = r.bodied };
@@ -84,7 +85,7 @@ pub let of(
     @_: Bool/Holds(Bytes/all(Str/to_bytes(kind), Field/Value/admits)),
     @_: Bool/Holds(Status/carries_content(code) || Bytes/length(body) == 0),
 ) -> Response =
-    Response { status = Status/of(code), headers = [Field/of("Content-Type", kind)], body = body };
+    Response { status = Status/of(code), headers = [Field/of("content-type", kind)], body = body };
 
 --- A reply with `code`, its usual reason, and neither headers nor content: what a 204 or a 304 is.
 pub let empty(code: Nat, @_: Bool/Holds(100 <= code && code <= 999)) -> Response =
@@ -143,7 +144,7 @@ pub let of_refusal(why: Refusal) -> Response =
 pub let redirect(url: Url) -> Response =
     Response {
         status = Status/of(303),
-        headers = [Field { name = Field/Name { text = "Location" }, value = Url/to_value(url) }],
+        headers = [Field { name = Field/Name { text = "location" }, value = Url/to_value(url) }],
         body = 0x[] };
 
 --- A `404 Not Found` with an empty body.

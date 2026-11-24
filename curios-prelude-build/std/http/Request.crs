@@ -27,12 +27,12 @@ pub let get(url: Url) -> Request =
 pub let post(url: Url, body: Bytes) -> Request =
     Request { method = Method/post(), url = url, headers = [], body = body };
 
---- `r` with the field `name: value` appended to its headers. A field the renderer owns — `Host`, `Content-Length`, `Transfer-Encoding`, `Connection` — is kept and not sent.
+--- `r` with the field `name: value` appended to its headers. A field the renderer owns — `host`, `content-length`, `transfer-encoding`, `connection` — is kept and not sent.
 pub let with_header(
     r: Request,
     name: Str,
     value: Str,
-    @_: Bool/Holds(Field/Name/is_token(name)),
+    @_: Bool/Holds(Field/Name/is_name(name)),
     @_: Bool/Holds(Bytes/all(Str/to_bytes(value), Field/Value/admits)),
 ) -> Request =
     Request { ..r, headers = [..r.headers, Field/of(name, value)] };
@@ -54,11 +54,11 @@ pub let target(u: Url) -> Str =
     | none() => u.path
     end;
 
---- Whether a request's renderer writes the field named `name` itself: `Host`, the framing fields and `Connection`. A caller's own field of one of these names is not sent.
+--- Whether a request's renderer writes the field named `name` itself: `host`, the framing fields and `connection`. A caller's own field of one of these names is not sent.
 pub let owned(name: Field/Name) -> Bool =
-    Field/Name/is(name, "Host") || Field/Name/is(name, "Content-Length")
-        || Field/Name/is(name, "Transfer-Encoding")
-        || Field/Name/is(name, "Connection");
+    name == Field/Name/host || name == Field/Name/content_length
+        || name == Field/Name/transfer_encoding
+        || name == Field/Name/connection;
 
 --- Whether a request of method `m` states its length even where it has no content: the methods that define a meaning for content sent with them (RFC 9110 §8.6).
 let states_length(m: Method) -> Bool =
@@ -66,19 +66,20 @@ let states_length(m: Method) -> Bool =
 
 let length_line(r: Request) -> Bytes =
     match Bytes/length(r.body) != 0 || states_length(r.method)
-    | true => Str/to_bytes(Fmt/render("Content-Length: %\r\n")(Bytes/length(r.body)))
+    | true =>
+        Field/line_of(Field/Name/content_length, Str/to_bytes(Nat/to_str(Bytes/length(r.body))))
     | false => 0x[]
     end;
 
---- The request as the bytes sent on the wire: the request line as HTTP/1.1, `Host`, `Connection: close` since a client keeps no connection, the length where there is a body or the method always states one, the headers the renderer does not own, then the body. The target and the host are percent-encoded wherever the wire cannot carry an octet of them, so every request can be sent and nothing is refused.
+--- The request as the bytes sent on the wire: the request line as HTTP/1.1, `host`, `connection: close` since a client keeps no connection, the length where there is a body or the method always states one, the headers the renderer does not own, then the body. The target and the host are percent-encoded wherever the wire cannot carry an octet of them, so every request can be sent and nothing is refused.
 pub let render(r: Request) -> Bytes =
     0x[
         ..Str/to_bytes(Method/to_str(r.method)),
         ' ',
         ..Url/escaped(target(r.url)).bytes,
-        ..Str/to_bytes(" HTTP/1.1\r\nHost: "),
-        ..Url/escaped(host_header(r.url)).bytes,
-        ..Str/to_bytes("\r\nConnection: close\r\n"),
+        ..Str/to_bytes(" HTTP/1.1\r\n"),
+        ..Field/line_of(Field/Name/host, Url/escaped(host_header(r.url)).bytes),
+        ..Field/line_of(Field/Name/connection, Str/to_bytes("close")),
         ..length_line(r),
         ..Field/lines(r.headers, owned),
         '\r', '\n',
@@ -146,7 +147,7 @@ let host_of(headers: List(Field)) -> Result(Refusal, Option(Str)) =
         | some(host), is_authority(host) => Result/success(Option/some(host))
         | _ => Result/failure(Refusal/malformed("Host is a host and, after a colon, a port"))
         end;
-    match List/filter(headers, (f: Field) => Field/Name/is(f.name, "Host"))
+    match List/filter(headers, (f: Field) => f.name == Field/Name/host)
     | [] => Result/success(Option/none())
     | [one] => stated(one)
     | _ => Result/failure(Refusal/malformed("a request states one Host"))

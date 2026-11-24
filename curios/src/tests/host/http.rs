@@ -19,13 +19,13 @@ fn refusal(message: &str) -> String {
     typecheck(&making(message)).expect_err("the message is refused")
 }
 
-// A message no wire could carry is refused where it is written, by the proposition its literal fails: a field name that is no token, a value that holds a line's end, a status code that is not three digits, and content under a status that carries none. The same makers accept what a wire carries.
+// A message no wire could carry is refused where it is written, by the proposition its literal fails: a field name that is no token, or one with a capital letter, since a name is stored lowercase, a value that holds a line's end, a status code that is not three digits, and content under a status that carries none. The same makers accept what a wire carries.
 #[test]
 fn a_message_no_wire_carries_is_refused_where_it_is_written() {
     let get = r#"Request/get(Url/lit("http://h/"))"#;
 
     for accepted in [
-        format!(r#"Request/with_header({get}, "X-A", "one")"#),
+        format!(r#"Request/with_header({get}, "x-a", "one")"#),
         r#"Response/of_text(200, "hello")"#.to_string(),
         r#"Response/of(204, "text/plain", 0x[])"#.to_string(),
         "Response/empty(304)".to_string(),
@@ -35,10 +35,12 @@ fn a_message_no_wire_carries_is_refused_where_it_is_written() {
 
     let name = refusal(&format!(r#"Request/with_header({get}, "X (A)", "one")"#));
     assert!(name.contains("nothing discharged"), "{name}");
-    assert!(name.contains(r#"is_token("X (A)")"#), "{name}");
+    assert!(name.contains(r#"is_name("X (A)")"#), "{name}");
+    let capital = refusal(&format!(r#"Request/with_header({get}, "X-A", "one")"#));
+    assert!(capital.contains(r#"is_name("X-A")"#), "{capital}");
 
     for refused in [
-        format!(r#"Request/with_header({get}, "X-A", "one\r\nX-Injected: two")"#),
+        format!(r#"Request/with_header({get}, "x-a", "one\r\nX-Injected: two")"#),
         r#"Response/of(204, "text/plain", Str/to_bytes("oops"))"#.to_string(),
         r#"Response/of_text(204, "oops")"#.to_string(),
         r#"Response/of_text(1000, "oops")"#.to_string(),
@@ -62,7 +64,7 @@ const SERVER: &str = r#"
         match
         | r.url.path == "/fail" => Try/raise(Io/Error/connection_refused())
         | r.url.path == "/dated" =>
-            Try/pure(Response/with_header(said, "Date", "Tue, 15 Nov 1994 08:12:31 GMT"))
+            Try/pure(Response/with_header(said, "date", "Tue, 15 Nov 1994 08:12:31 GMT"))
         | _ => Try/pure(said)
         end;
     let session() -> Try(Io, Io/Error, {}) =
@@ -267,7 +269,7 @@ fn a_reply_to_head_is_its_head_alone(server: &Compiled) {
     let reply = reply(server, "HEAD /x HTTP/1.1\r\nHost: h\r\n\r\n");
 
     assert_eq!(status(&reply), "HTTP/1.1 200 OK");
-    assert!(reply.contains("\r\nContent-Length: 9\r\n"), "{reply}");
+    assert!(reply.contains("\r\ncontent-length: 9\r\n"), "{reply}");
     assert_eq!(body(&reply), "");
 }
 
@@ -282,10 +284,10 @@ fn options_is_asked_of_a_resource_or_of_the_server(server: &Compiled) {
 
     assert_eq!(status(&general), "HTTP/1.1 200 OK");
     assert!(
-        general.contains("\r\nAllow: GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS\r\n"),
+        general.contains("\r\nallow: GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS\r\n"),
         "{general}"
     );
-    assert!(general.contains("\r\nContent-Length: 0\r\n"), "{general}");
+    assert!(general.contains("\r\ncontent-length: 0\r\n"), "{general}");
     assert_eq!(body(&general), "");
 
     assert_eq!(
@@ -302,24 +304,24 @@ fn a_reply_carries_the_date_it_is_sent_at(server: &Compiled) {
     let (stamped, _) = served(server, host);
 
     assert!(
-        stamped.contains("\r\nDate: Sun, 06 Nov 1994 08:49:37 GMT\r\n"),
+        stamped.contains("\r\ndate: Sun, 06 Nov 1994 08:49:37 GMT\r\n"),
         "{stamped}"
     );
 
     let refused = reply(server, "GET /\r\n\r\n");
 
     assert!(
-        refused.contains("\r\nDate: Thu, 01 Jan 1970 00:00:00 GMT\r\n"),
+        refused.contains("\r\ndate: Thu, 01 Jan 1970 00:00:00 GMT\r\n"),
         "{refused}"
     );
 
     let dated = reply(server, "GET /dated HTTP/1.1\r\nHost: h\r\n\r\n");
 
     assert!(
-        dated.contains("\r\nDate: Tue, 15 Nov 1994 08:12:31 GMT\r\n"),
+        dated.contains("\r\ndate: Tue, 15 Nov 1994 08:12:31 GMT\r\n"),
         "{dated}"
     );
-    assert_eq!(dated.matches("\r\nDate: ").count(), 1, "{dated}");
+    assert_eq!(dated.matches("\r\ndate: ").count(), 1, "{dated}");
 }
 
 // A connection is ended as the protocol asks: the reply written, the sending half finished, what the peer still sends read until the peer closes, and only then the close. A refusal sent before the request's content is read reaches a peer that is still sending it; and a peer that neither sends nor closes is closed on once it has been quiet.

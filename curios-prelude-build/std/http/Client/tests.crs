@@ -9,10 +9,10 @@ let sent: Request =
         url = Url/lit("https://a.example/form"),
         headers =
             [
-                Field/of("Authorization", "Basic eDp5"),
-                Field/of("Cookie", "s=1"),
-                Field/of("Content-Type", "text/plain"),
-                Field/of("Accept", "*/*")],
+                Field/of("authorization", "Basic eDp5"),
+                Field/of("cookie", "s=1"),
+                Field/of("content-type", "text/plain"),
+                Field/of("accept", "*/*")],
         body = 0x['h', 'i'] };
 
 -- The method, the URL, the fields' names and the content's length a request carries.
@@ -29,29 +29,29 @@ test a_redirect_keeps_the_method_and_content_its_status_says =
     Test/all([
         Test/equal(
             carried(redirected(sent, 303, next)),
-            "GET https://a.example/next Authorization,Cookie,Accept 0"),
+            "GET https://a.example/next authorization,cookie,accept 0"),
         Test/equal(
             carried(redirected(sent, 302, next)),
-            "GET https://a.example/next Authorization,Cookie,Accept 0"),
+            "GET https://a.example/next authorization,cookie,accept 0"),
         Test/equal(
             carried(redirected(sent, 307, next)),
-            "POST https://a.example/next Authorization,Cookie,Content-Type,Accept 2"),
+            "POST https://a.example/next authorization,cookie,content-type,accept 2"),
         Test/equal(
             carried(redirected(sent, 308, next)),
-            "POST https://a.example/next Authorization,Cookie,Content-Type,Accept 2"),
+            "POST https://a.example/next authorization,cookie,content-type,accept 2"),
         Test/equal(
             carried(redirected(Request { ..sent, method = Method/head(), body = 0x[] }, 303, next)),
-            "HEAD https://a.example/next Authorization,Cookie,Content-Type,Accept 0")]);
+            "HEAD https://a.example/next authorization,cookie,content-type,accept 0")]);
 
 -- Another host, another port and a fall from `https` to `http` are each another origin, and the credentials stay behind.
 test a_redirect_to_another_origin_hands_on_no_credentials =
     Test/all([
         Test/equal(
             carried(redirected(sent, 307, Url/lit("https://b.example/"))),
-            "POST https://b.example/ Content-Type,Accept 2"),
+            "POST https://b.example/ content-type,accept 2"),
         Test/equal(
             carried(redirected(sent, 307, Url/lit("https://a.example:8443/"))),
-            "POST https://a.example:8443/ Content-Type,Accept 2"),
+            "POST https://a.example:8443/ content-type,accept 2"),
         Test/equal(
             carried(redirected(sent, 307, Url/lit("http://a.example/form"))),
-            "POST http://a.example/form Content-Type,Accept 2")]);
+            "POST http://a.example/form content-type,accept 2")]);

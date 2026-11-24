@@ -27,18 +27,18 @@ test a_method_spells_and_reads =
 let wire(b: Bytes) -> Option(Str) =
     Result/to_option(Str/of_bytes(b));
 
--- A request is written with its target, `Host`, `Connection: close`, and a length only where it has a body or its method always states one; what is written reads back as the request, the fields its renderer wrote beside its own.
+-- A request is written with its target, `host`, `connection: close`, and a length only where it has a body or its method always states one; what is written reads back as the request, the fields its renderer wrote beside its own.
 test a_request_is_written_and_reads_back =
     let r =
         Request/with_header(
             Request/get(Url/lit("http://example.com/x?y=1")),
-            "Accept",
+            "accept",
             "text/plain");
     Test/all([
         Test/equal(
             wire(Request/render(r)),
             Option/some(
-                "GET /x?y=1 HTTP/1.1\r\nHost: example.com\r\nConnection: close\r\nAccept: text/plain\r\n\r\n")),
+                "GET /x?y=1 HTTP/1.1\r\nhost: example.com\r\nconnection: close\r\naccept: text/plain\r\n\r\n")),
         Test/equal(
             Result/map(
                 Request/of_bytes(Limits/server, Url/Scheme/http(), Request/render(r)),
@@ -49,29 +49,29 @@ test a_request_is_written_and_reads_back =
             Result/success((
                 (Method/get(), "http://example.com/x?y=1"),
                 [
-                    ("Host", Field/Value/lit("example.com")),
-                    ("Connection", Field/Value/lit("close")),
-                    ("Accept", Field/Value/lit("text/plain"))]))),
+                    ("host", Field/Value/lit("example.com")),
+                    ("connection", Field/Value/lit("close")),
+                    ("accept", Field/Value/lit("text/plain"))]))),
         Test/equal(
             wire(Request/render(Request/post(Url/lit("http://h:81/"), Str/to_bytes("hi")))),
             Option/some(
-                "POST / HTTP/1.1\r\nHost: h:81\r\nConnection: close\r\nContent-Length: 2\r\n\r\nhi")),
+                "POST / HTTP/1.1\r\nhost: h:81\r\nconnection: close\r\ncontent-length: 2\r\n\r\nhi")),
         Test/equal(
             wire(Request/render(Request/post(Url/lit("http://h/"), 0x[]))),
             Option/some(
-                "POST / HTTP/1.1\r\nHost: h\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")),
+                "POST / HTTP/1.1\r\nhost: h\r\nconnection: close\r\ncontent-length: 0\r\n\r\n")),
         Test/equal(
             wire(
                 Request/render(
                     Request/with_header(
                         Request/with_header(
                             Request/post(Url/lit("http://h/"), Str/to_bytes("hi")),
-                            "Content-Length",
+                            "content-length",
                             "99"),
                         "host",
                         "elsewhere"))),
             Option/some(
-                "POST / HTTP/1.1\r\nHost: h\r\nConnection: close\r\nContent-Length: 2\r\n\r\nhi"))]);
+                "POST / HTTP/1.1\r\nhost: h\r\nconnection: close\r\ncontent-length: 2\r\n\r\nhi"))]);
 
 -- A reply is written as HTTP/1.1 and says `close`; it states its length unless its status is 1xx, 204 or 304, a 205's being zero; and a caller's own framing field is not sent.
 test a_reply_is_written_with_its_own_framing =
@@ -79,17 +79,17 @@ test a_reply_is_written_with_its_own_framing =
         Test/equal(
             wire(Response/render(Response/of_text(200, "hello"))),
             Option/some(
-                "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 5\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nhello")),
+                "HTTP/1.1 200 OK\r\nconnection: close\r\ncontent-length: 5\r\ncontent-type: text/plain; charset=utf-8\r\n\r\nhello")),
         Test/equal(
             wire(Response/render(Response/empty(204))),
-            Option/some("HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n")),
+            Option/some("HTTP/1.1 204 No Content\r\nconnection: close\r\n\r\n")),
         Test/equal(
             wire(Response/render(Response/empty(304))),
-            Option/some("HTTP/1.1 304 Not Modified\r\nConnection: close\r\n\r\n")),
+            Option/some("HTTP/1.1 304 Not Modified\r\nconnection: close\r\n\r\n")),
         Test/equal(
             wire(Response/render(Response/empty(205))),
             Option/some(
-                "HTTP/1.1 205 Reset Content\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")),
+                "HTTP/1.1 205 Reset Content\r\nconnection: close\r\ncontent-length: 0\r\n\r\n")),
         Test/equal(
             wire(
                 Response/render(
@@ -97,18 +97,18 @@ test a_reply_is_written_with_its_own_framing =
                         Response/with_header(
                             Response/with_header(
                                 Response/of_text(200, "hi"),
-                                "Content-Length",
+                                "content-length",
                                 "99"),
                             "transfer-encoding",
                             "chunked"),
-                        "X-A",
+                        "x-a",
                         "one"))),
             Option/some(
-                "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\nContent-Type: text/plain; charset=utf-8\r\nX-A: one\r\n\r\nhi")),
+                "HTTP/1.1 200 OK\r\nconnection: close\r\ncontent-length: 2\r\ncontent-type: text/plain; charset=utf-8\r\nx-a: one\r\n\r\nhi")),
         Test/equal(
             wire(Response/render_head(Response/of_text(200, "hello"), Str/to_bytes("hello"))),
             Option/some(
-                "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 5\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n"))]);
+                "HTTP/1.1 200 OK\r\nconnection: close\r\ncontent-length: 5\r\ncontent-type: text/plain; charset=utf-8\r\n\r\n"))]);
 
 -- A made reply reads back as itself, and its readers find a header without regard to case, its body as text, and whether its status is a success.
 test a_made_reply_reads_back =
@@ -154,13 +154,14 @@ test a_json_body_that_is_not_text_is_refused_where_it_stops =
         Str/flatten(["a JSON body is text at byte 4|a JSON body is text at byte 4|",
             "a JSON body is text at byte 2|a JSON body is text at byte 3|read"]));
 
--- A name is a token and a value holds no control octet but the tab: text met at run time is read as one or refused, octets past ASCII are a value's to hold, and names are one name whatever their case.
+-- A name is a token and a value holds no control octet but the tab: text met at run time is read as one or refused, octets past ASCII are a value's to hold, and a name is read lowercased, one name whatever its case, decided a token as written, so the Kelvin sign, which lowers to `k`, is none.
 test a_field_met_at_run_time_is_read_or_refused =
     Test/all([
         Test/equal(
             Field/Name/of_str("X-Run-Time"),
             Option/some(Field/Name { text = "x-run-time" })),
         Test/equal(Field/Name/of_str("X (A)"), Option/none()),
+        Test/equal(Field/Name/of_str("\u{212A}"), Option/none()),
         Test/equal(Field/Name/of_str(""), Option/none()),
         Test/equal(Field/Name/of_str("one\r\nX-Injected"), Option/none()),
         Test/equal(Field/Value/of_str("one\r\nX-Injected: two"), Option/none()),
@@ -171,7 +172,7 @@ test a_field_met_at_run_time_is_read_or_refused =
         Test/assert(
             "a value of 65536 octets is a value",
             Option/is_some(Field/Value/of_str(Str/repeat("x", 65536)))),
-        Test/equal(Field/read("X-A", Str/to_bytes("one")), Option/some(Field/of("X-A", "one"))),
+        Test/equal(Field/read("X-A", Str/to_bytes("one")), Option/some(Field/of("x-a", "one"))),
         Test/equal(Field/read("X A", Str/to_bytes("one")), Option/none()),
         Test/equal(Field/read("X-A", Str/to_bytes("one\ntwo")), Option/none())]);
 
@@ -179,8 +180,8 @@ test a_field_met_at_run_time_is_read_or_refused =
 test a_lists_members_are_read_across_its_lines =
     let fields =
         [
-            Field/of("Accept", "a, b"),
-            Field/of("X-Other", "z"),
+            Field/of("accept", "a, b"),
+            Field/of("x-other", "z"),
             Field/of("accept", " , c;q=\"1,2\" ,")];
     Test/all([
         Test/equal(
@@ -201,7 +202,7 @@ test a_url_reaches_the_wire_percent_encoded =
         Test/equal(
             wire(Request/render(Request/get(built))),
             Option/some(
-                "GET /a%20b%0D%0AX-Injected:%20two?q=caf%C3%A9 HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n")),
+                "GET /a%20b%0D%0AX-Injected:%20two?q=caf%C3%A9 HTTP/1.1\r\nhost: h\r\nconnection: close\r\n\r\n")),
         Test/equal(
             Response/header(Response/redirect(built), "Location"),
             Option/some(Field/Value/lit("http://h/a%20b%0D%0AX-Injected:%20two?q=caf%C3%A9"))),
