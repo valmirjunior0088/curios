@@ -2262,3 +2262,79 @@ fn a_construction_keeping_a_slot_is_rebuilt_before_one_keeping_none() {
         rows[0].slots,
     );
 }
+
+/// `main` builds a `Pair` nothing else holds, reads its slot and builds a `Pair` of what it read, then jumps through a chain of continuations, each jumping to the next; where `read`, the last reads the first `Pair` again.
+fn read_past_a_chain(read: bool) -> Module {
+    module_with(|module| {
+        let pair = module.add_row(Row {
+            debug_name: Some("Pair".into()),
+            slots: vec![Slot::Tag, Slot::Opaque],
+        });
+        let [v, t, x, n, z] =
+            ["v", "t", "x", "n", "z"].map(|name| module.add_value(Some(name.into())));
+        let links = [(); 4].map(|()| module.reserve_continuation());
+
+        let exit = module.add_node(halt(vec![Atom::Value(n)]));
+        let mut body = match read {
+            true => module.add_node(Node::LetIntrinsic {
+                result: z,
+                op: Intrinsic::RowGet(pair, 1),
+                args: vec![Atom::Value(t)],
+                next: exit,
+            }),
+            false => exit,
+        };
+        for link in links.into_iter().rev() {
+            module.define_continuation(
+                link,
+                Continuation {
+                    lineage: None,
+                    debug_name: None,
+                    params: vec![],
+                    body,
+                    terminates: false,
+                },
+            );
+            body = module.add_node(Node::ApplyCont(Edge {
+                target: link,
+                args: vec![],
+            }));
+        }
+        let scope = module.add_node(Node::LetCont {
+            continuations: links.to_vec(),
+            body,
+        });
+        let build = module.add_node(Node::LetValue {
+            result: n,
+            value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(x)]),
+            next: scope,
+        });
+        let read_slot = module.add_node(Node::LetIntrinsic {
+            result: x,
+            op: Intrinsic::RowGet(pair, 1),
+            args: vec![Atom::Value(t)],
+            next: build,
+        });
+        let built = module.add_node(Node::LetValue {
+            result: t,
+            value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(v)]),
+            next: read_slot,
+        });
+        module.add_node(Node::LetIntrinsic {
+            result: v,
+            op: Intrinsic::NatAdd,
+            args: vec![nat(3), nat(4)],
+            next: built,
+        })
+    })
+}
+
+/// A value read where a chain of jumps ends is live at every block of the chain and past the construction before it, which is then no rebuild of it; read by nothing there, it dies at the construction, which is rebuilt into it.
+#[test]
+fn a_value_read_where_a_chain_of_jumps_ends_is_rebuilt_by_nothing_before_the_chain() {
+    let read = read_past_a_chain(true);
+    assert_eq!(in_place(&read).rows.len(), 0, "{read}");
+
+    let dead = read_past_a_chain(false);
+    assert_eq!(in_place(&dead).rows.len(), 1, "{dead}");
+}

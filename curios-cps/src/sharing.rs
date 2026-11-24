@@ -2332,7 +2332,36 @@ fn node_sites(node: &Node, own_return: ContinuationId) -> Vec<(ValueId, Site, Ed
     sites
 }
 
+/// What is live on entry to a block, joined by union: a gain is the values a block had not held.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+struct Live {
+    values: BTreeSet<ValueId>,
+}
+
+impl Lattice for Live {
+    fn bottom() -> Self {
+        Live::default()
+    }
+
+    fn join(&mut self, incoming: Self) {
+        self.values.extend(incoming.values);
+    }
+
+    fn gain(&mut self, incoming: &Self) -> Option<Self> {
+        let values = incoming
+            .values
+            .difference(&self.values)
+            .copied()
+            .collect::<BTreeSet<_>>();
+        self.values.extend(&values);
+
+        (!values.is_empty()).then_some(Live { values })
+    }
+}
+
 /// What is live on entry to each block: what it names before binding, and what a block after it needs, short of what its successor binds as parameters.
+///
+/// A block watches each block after it and takes what that one gained, so a value crosses an edge once and a chain of blocks, each needing what the next needs, costs its links.
 fn live_in(
     module: &Module,
     shape: &Shape,
@@ -2362,24 +2391,30 @@ fn live_in(
         .keys()
         .map(|block| (*block, bound(*block)))
         .collect::<BTreeMap<_, _>>();
-    let mut live = BTreeMap::<Block, BTreeSet<ValueId>>::new();
-    loop {
-        let mut changed = false;
-        for block in blocks.keys().rev() {
-            let mut entry = named.get(block).cloned().unwrap_or_default();
-            for successor in &shape.successors[block] {
-                entry.extend(live.get(successor).into_iter().flatten());
-            }
-            entry.retain(|value| !bound[block].contains(value));
-            if live.get(block) != Some(&entry) {
-                live.insert(*block, entry);
-                changed = true;
+    let (named, bound) = (&named, &bound);
+
+    Solver::solve(blocks.keys().copied(), |rules| {
+        for block in blocks.keys().copied() {
+            let bound = &bound[&block];
+            rules.add(move |solver| {
+                let named = named.get(&block).into_iter().flatten();
+                let values = named
+                    .filter(|value| !bound.contains(value))
+                    .copied()
+                    .collect();
+                solver.join(block, Live { values });
+            });
+            for successor in &shape.successors[&block] {
+                rules.watch(*successor, move |solver, gained: &Live| {
+                    let values = gained.values.difference(bound).copied().collect();
+                    solver.join(block, Live { values });
+                });
             }
         }
-        if !changed {
-            return live;
-        }
-    }
+    })
+    .into_iter()
+    .map(|(block, live)| (block, live.values))
+    .collect()
 }
 
 /// Whether a value is shared: the dual the solver's least fixpoint finds, uniqueness being what it leaves.
