@@ -243,6 +243,178 @@ fn applying(back: bool) -> (Module, FunctionId) {
     (module, apply)
 }
 
+/// A call of `callee` at `argument`, not in tail position: it resumes a continuation that hands its answer on to `to`.
+fn calling(module: &mut Module, callee: FunctionId, argument: Atom, to: ContinuationId) -> NodeId {
+    let answer = module.add_value(None);
+    let after_body = module.add_node(Node::ApplyCont(Edge {
+        target: to,
+        args: vec![Atom::Value(answer)],
+    }));
+    let after = module.add_continuation(Continuation {
+        lineage: None,
+        debug_name: None,
+        params: vec![answer],
+        body: after_body,
+        terminates: false,
+    });
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(callee),
+        args: vec![argument],
+        return_to: after,
+    });
+    module.add_node(Node::LetCont {
+        continuations: vec![after],
+        body: call,
+    })
+}
+
+/// A body answering `at_zero` to `to` where `on` is zero, and running `otherwise` where it is not.
+fn switching(
+    module: &mut Module,
+    on: ValueId,
+    at_zero: Atom,
+    to: ContinuationId,
+    otherwise: NodeId,
+) -> NodeId {
+    let more = module.add_continuation(Continuation {
+        lineage: None,
+        debug_name: None,
+        params: vec![],
+        body: otherwise,
+        terminates: false,
+    });
+    let switch = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(on),
+        cases: BTreeMap::from([(
+            0,
+            Edge {
+                target: to,
+                args: vec![at_zero],
+            },
+        )]),
+        default: Some(Edge {
+            target: more,
+            args: vec![],
+        }),
+    });
+    module.add_node(Node::LetCont {
+        continuations: vec![more],
+        body: switch,
+    })
+}
+
+/// `function` defined as `name`, of `params`, returning through `return_cont` from `body`.
+fn define(
+    module: &mut Module,
+    function: FunctionId,
+    name: &str,
+    params: Vec<ValueId>,
+    return_cont: ContinuationId,
+    body: NodeId,
+) {
+    module.define_function(
+        function,
+        Function {
+            lineage: None,
+            debug_name: Some(name.into()),
+            params,
+            return_cont,
+            body,
+            droppable: Droppable::Never,
+            terminates: false,
+        },
+    );
+}
+
+/// `main` calls `outer(3)`. `outer(n)` defines `inner(m)` and, where `n` is not zero, calls it; `inner` answers `n`, which `outer` binds, where `m` is zero, and calls `outer` back where it is not. Neither call is in tail position: two members of one cycle, one defined within the other.
+fn nesting() -> (Module, FunctionId, FunctionId) {
+    let mut module = Module::new();
+    let main = module.reserve_function();
+    let main_return = module.reserve_continuation();
+    let outer = module.reserve_function();
+    let outer_return = module.reserve_continuation();
+    let inner = module.reserve_function();
+    let inner_return = module.reserve_continuation();
+    let n = module.add_value(Some("n".into()));
+    let m = module.add_value(Some("m".into()));
+
+    let back = calling(&mut module, outer, Atom::Value(m), inner_return);
+    let inner_body = switching(&mut module, m, Atom::Value(n), inner_return, back);
+    define(
+        &mut module,
+        inner,
+        "inner",
+        vec![m],
+        inner_return,
+        inner_body,
+    );
+
+    let down = calling(&mut module, inner, Atom::Value(n), outer_return);
+    let zero = Atom::Literal(Literal::Nat(Natural::from(0u32)));
+    let choose = switching(&mut module, n, zero, outer_return, down);
+    let outer_body = module.add_node(Node::LetFun {
+        functions: vec![inner],
+        body: choose,
+    });
+    define(
+        &mut module,
+        outer,
+        "outer",
+        vec![n],
+        outer_return,
+        outer_body,
+    );
+
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(outer),
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(3u32)))],
+        return_to: main_return,
+    });
+    let main_body = module.add_node(Node::LetFun {
+        functions: vec![outer],
+        body: call,
+    });
+    define(&mut module, main, "main", vec![], main_return, main_body);
+    module.set_entry(main);
+    module.verify().expect("the fixture verifies");
+    (module, outer, inner)
+}
+
+/// `main` calls `first(1)`, and `first(x)` and `second(y)` each answer their parameter; `stray` answers its own under the value `second` binds, as `second`'s twin would.
+fn straying() -> (Module, FunctionId, FunctionId, FunctionId) {
+    let mut module = Module::new();
+    let main = module.reserve_function();
+    let main_return = module.reserve_continuation();
+    let x = module.add_value(Some("x".into()));
+    let y = module.add_value(Some("y".into()));
+    let answering = |module: &mut Module, name: &str, parameter: ValueId| {
+        let function = module.reserve_function();
+        let return_cont = module.reserve_continuation();
+        let body = module.add_node(Node::ApplyCont(Edge {
+            target: return_cont,
+            args: vec![Atom::Value(parameter)],
+        }));
+        define(module, function, name, vec![parameter], return_cont, body);
+        function
+    };
+    let first = answering(&mut module, "first", x);
+    let second = answering(&mut module, "second", y);
+    let stray = answering(&mut module, "stray", y);
+
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(first),
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(1u32)))],
+        return_to: main_return,
+    });
+    let main_body = module.add_node(Node::LetFun {
+        functions: vec![first, second, stray],
+        body: call,
+    });
+    define(&mut module, main, "main", vec![], main_return, main_body);
+    module.set_entry(main);
+    (module, first, second, stray)
+}
+
 /// The budget operations the live nodes of `module` hold, each by whether it enters.
 fn budget_operations(module: &Module) -> Vec<bool> {
     module
@@ -354,4 +526,59 @@ fn a_weight_is_the_overhead_and_one_for_each_value_its_body_binds() {
     let (module, count) = counting(false);
 
     assert_eq!(frame_weight(&module, count), FRAME_OVERHEAD + 2);
+}
+
+/// A function a member defines is one function however its member is entered: the member's twin copies the member's own body and names what that body defines, so a member defined within another gains its one twin and no copy of either.
+#[test]
+fn a_member_defined_within_a_member_of_its_cycle_is_twinned_once_and_its_twins_function_shares_it()
+{
+    let (mut module, outer, inner) = nesting();
+
+    bound_frames(&mut module);
+
+    module.verify().expect("a bounded module verifies");
+    let named = |name: &str| {
+        module
+            .live_functions()
+            .filter(|(_, function)| function.debug_name.as_deref() == Some(name))
+            .count()
+    };
+    assert_eq!(
+        (named("outer"), named("heap/outer")),
+        (1, 1),
+        "a member is one function and its twin"
+    );
+    assert_eq!(
+        (named("inner"), named("heap/inner")),
+        (1, 1),
+        "the member defined within it is one function and its twin"
+    );
+    let outer_twin = module.twin(outer).expect("outer is on the cycle");
+    let inner_twin = module.twin(inner).expect("inner is on the cycle");
+    assert!(
+        function_nodes(&module, outer_twin)
+            .into_iter()
+            .any(|node| matches!(
+                module.node(node),
+                Some(Node::ApplyFun { callee: Callee::Known(callee), .. }) if *callee == inner_twin
+            )),
+        "outer's twin enters the twin of the function outer defines"
+    );
+}
+
+/// A twin binds once more what the function it stands for binds, and nothing another function does.
+#[test]
+fn a_twin_binds_again_what_its_own_function_binds_and_nothing_anothers() {
+    let (mut module, _, second, stray) = straying();
+    module.record_twin(second, stray);
+    module
+        .verify()
+        .expect("a twin binds what its function binds");
+
+    let (mut module, first, _, stray) = straying();
+    module.record_twin(first, stray);
+    let refusal = module
+        .verify()
+        .expect_err("a twin binds nothing another function binds");
+    assert!(refusal.0.contains("and again in the twin of"), "{refusal}");
 }

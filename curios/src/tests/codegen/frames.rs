@@ -330,3 +330,43 @@ fn every_recursion_answers_under_the_budget_and_past_it_what_it_answers_natively
         );
     }
 }
+
+/// A program whose `down` calls itself through `depth` closures, each defined within the one before it and each called out of a list at an index only a run decides, as the closure of `RECURSIONS` is: every closure is a member of `down`'s cycle, and stands as deep within it as it is defined.
+fn nesting(depth: usize) -> String {
+    let mut body = format!("down(x{depth})");
+    for level in (1..=depth).rev() {
+        let outer = match level {
+            1 => "m".to_string(),
+            level => format!("x{}", level - 1),
+        };
+        body = format!(
+            "call([(z: Nat) => z, (x{level}: Nat) => {body} + 1], 1 - {outer} % 2 + {outer} % 2, {outer})"
+        );
+    }
+    fill!(
+        r#"
+        let call(gs: List((Nat) -> Nat), i: Nat, n: Nat) -> Nat =
+            match List/try_get(gs, i) | some(g) => g(n) | none() => n end;
+        let down(n: Nat) -> Nat =
+            match n | 0 => 0 | m + 1 => ${body} % 1000003 end;
+        "#,
+        body,
+    )
+}
+
+/// A twin copies its function's own body and shares what that body defines, so what the frame bound adds grows with what it is handed: closures on a cycle nested twice as deep are at most twice the module, where a twin copying what its function defines would double it a level.
+#[test]
+fn a_recursion_through_closures_nested_twice_as_deep_is_bounded_to_at_most_twice_the_module() {
+    let bounded = |depth: usize| {
+        modules(&program(&nesting(depth), "down(n)"))
+            .0
+            .live_nodes()
+            .count()
+    };
+    let (five, ten) = (bounded(5), bounded(10));
+
+    assert!(
+        ten <= 2 * five,
+        "ten levels are bounded to {ten} nodes, five to {five}"
+    );
+}

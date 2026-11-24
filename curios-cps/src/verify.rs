@@ -114,18 +114,35 @@ type NodeTask = (
     InScope<ContinuationId>,
 );
 
+/// The twins of a module the frame bound rewrote ([`bound_frames`](crate::bound_frames)): a twin stands for its function, binding under the same values what that function's own body binds and naming what it defines.
+#[derive(Default)]
+struct Twinned {
+    /// The function each twin stands for.
+    of: BTreeMap<FunctionId, FunctionId>,
+    /// The function each function of a twin's extent stands for: the twin's, and every function defined within it.
+    within: BTreeMap<FunctionId, FunctionId>,
+}
+
 /// The bookkeeping a lexical *verification* walk carries on top of the scope rules: which names have been bound, and which regions are still to visit.
 #[derive(Default)]
 struct ScopeVerifier {
     bound_functions: BTreeSet<FunctionId>,
-    bound_values: BTreeSet<ValueId>,
+    /// Each value bound, by the function whose own body binds it.
+    bound_values: BTreeMap<ValueId, FunctionId>,
+    /// Each value a twin's extent binds, by the function the twin stands for.
+    bound_again: BTreeMap<ValueId, FunctionId>,
     function_work: Vec<(FunctionId, InScope<ValueId>, InScope<FunctionId>)>,
     node_work: Vec<NodeTask>,
 }
 
 impl ScopeVerifier {
-    /// Record what `step` binds, rejecting a name bound twice, then queue the regions below it.
-    fn admit(&mut self, step: ScopeStep) -> Result<(), VerifyError> {
+    /// Record what `step` binds in `owner`'s own body, rejecting a name bound twice, then queue the regions below it. A value bound within a twin's extent, `stood` the function that twin stands for, is bound there once beside its binding in that function.
+    fn admit(
+        &mut self,
+        step: ScopeStep,
+        owner: FunctionId,
+        stood: Option<FunctionId>,
+    ) -> Result<(), VerifyError> {
         let ScopeStep {
             values,
             functions,
@@ -139,7 +156,11 @@ impl ScopeVerifier {
             }
         }
         for ScopeBinding { value, noun } in values {
-            if !self.bound_values.insert(value) {
+            let bound = match stood {
+                Some(function) => self.bound_again.insert(value, function),
+                None => self.bound_values.insert(value, owner),
+            };
+            if bound.is_some() {
                 return Err(VerifyError(format!(
                     "{noun} {value} is bound more than once"
                 )));
@@ -549,10 +570,20 @@ impl Module {
             ..ScopeVerifier::default()
         };
         let mut visited_nodes = BTreeSet::new();
+        let twinned = self.twinned();
 
         while !walk.function_work.is_empty() || !walk.node_work.is_empty() {
-            while let Some((function, values, functions)) = walk.function_work.pop() {
-                walk.admit(self.function_scope(function, values, functions))?;
+            while let Some((function, values, mut functions)) = walk.function_work.pop() {
+                // A twin names what its function's own body defines, wherever in it.
+                if let Some(stood) = twinned.of.get(&function) {
+                    functions.extend(self.defined_within(*stood));
+                }
+                let stood = twinned.within.get(&function).copied();
+                walk.admit(
+                    self.function_scope(function, values, functions),
+                    function,
+                    stood,
+                )?;
             }
 
             let Some((owner, node_id, values, functions, continuations)) = walk.node_work.pop()
@@ -595,7 +626,12 @@ impl Module {
                 }
             }
 
-            walk.admit(self.scope_step(Some(owner), node, values, functions, continuations))?;
+            let stood = twinned.within.get(&owner).copied();
+            walk.admit(
+                self.scope_step(Some(owner), node, values, functions, continuations),
+                owner,
+                stood,
+            )?;
         }
 
         let live_functions = self.function_ids().collect::<BTreeSet<_>>();
@@ -604,13 +640,60 @@ impl Module {
                 "function arena and lexical function bindings disagree".into(),
             ));
         }
+        for (value, stood) in &walk.bound_again {
+            if let Some(binder) = walk.bound_values.get(value)
+                && binder != stood
+            {
+                return Err(VerifyError(format!(
+                    "{value} is bound in {binder} and again in the twin of {stood}"
+                )));
+            }
+        }
         let live_values = self.value_ids().collect::<BTreeSet<_>>();
-        if live_values != walk.bound_values {
+        let bound_values = walk
+            .bound_values
+            .keys()
+            .chain(walk.bound_again.keys())
+            .copied()
+            .collect::<BTreeSet<_>>();
+        if live_values != bound_values {
             return Err(VerifyError(
                 "value arena and lexical value bindings disagree".into(),
             ));
         }
         Ok(())
+    }
+
+    /// The twins the frame bound recorded, each with the functions defined within it ([`Twinned`]). A module no frame bound rewrote has none.
+    fn twinned(&self) -> Twinned {
+        let mut twinned = Twinned::default();
+        for (function, _) in self.live_functions() {
+            let Some(twin) = self.twin(function) else {
+                continue;
+            };
+            if self.function(twin).is_none() {
+                continue;
+            }
+            twinned.of.insert(twin, function);
+            let mut work = vec![twin];
+            while let Some(within) = work.pop() {
+                twinned.within.insert(within, function);
+                work.extend(self.defined_within(within));
+            }
+        }
+        twinned
+    }
+
+    /// The functions the groups of `function`'s own body bind.
+    fn defined_within(&self, function: FunctionId) -> Vec<FunctionId> {
+        function_nodes(self, function)
+            .into_iter()
+            .filter_map(|node| match self.node(node) {
+                Some(Node::LetFun { functions, .. }) => Some(functions.clone()),
+                _ => None,
+            })
+            .flatten()
+            .collect()
     }
 
     /// The functions each function's body may name, and each continuation's, as the [`Scopes`] it starts, by the rule [`Self::scope_step`] states and [`Self::verify_lexical_scopes`] enforces: a function's own `LetFun` group, every group enclosing it, and every group bound *before* it along the chain from the entry; a continuation's, those in scope where its `LetCont` binds it, which take in the groups its function's body binds before it, and beside them the values in scope there. Recorded rather than checked, so a pass forwarding a function reference or a value into a body can ask whether that body may legally name it.
