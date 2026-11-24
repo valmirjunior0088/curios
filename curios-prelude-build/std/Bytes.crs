@@ -13,7 +13,7 @@ pub use ord/{let ord};
 
 use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Show, Spell, Fmt, Ordering, Ord, Hash, Map,
     proved};
-use /std/ops/{Eql, Cmp};
+use /std/ops/{Eql};
 
 --- The byte at `i`, or `none` past the end.
 pub let try_get(b: Bytes, i: Nat) -> Option(Byte) =
@@ -300,15 +300,10 @@ satisfy Eql(Bytes) {
     eql = eql,
 }
 
-satisfy Cmp(Bytes) {
-    lt(a, b) = Ordering/is_lt(ord(a, b)),
-    le(a, b) = Ordering/is_le(ord(a, b)),
-    gt(a, b) = Ordering/is_gt(ord(a, b)),
-    ge(a, b) = Ordering/is_ge(ord(a, b)),
-}
-
 satisfy Ord(Bytes) {
     ord = ord,
+    lt(a, b) = Ordering/is_lt(ord(a, b)),
+    le(a, b) = Ordering/is_le(ord(a, b)),
 }
 
 --- Hexadecimal, two digits per byte.

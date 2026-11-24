@@ -17,6 +17,8 @@ fn a_colliding_key_witness_is_rejected() {
         }
         satisfy Ord(Side) {
             ord(a, b) = Ordering/eq(),
+            lt(a, b) = false,
+            le(a, b) = true,
         }
         satisfy Hash(Side) {
             hash(s) = 0x[],
@@ -95,7 +97,7 @@ fn a_function_under_a_key_alone_sorts_its_keys_and_states_their_order() {
             @K: Type,
             use Key(K),
             keys: List(K),
-        ) -> Holds(List/ordered(sorted(keys), Ord/le((a: K, b: K) => Ord/ord(a, b)))) =
+        ) -> Holds(List/ordered(sorted(keys), Ord/le_by((a: K, b: K) => Ord/ord(a, b)))) =
             List/sort/sorted(Key/flips(), keys);
         /std/print(
             Str/join(

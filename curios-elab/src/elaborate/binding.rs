@@ -1231,14 +1231,19 @@ pub fn elaborate_infix(
         term,
     )?;
 
-    let (arguments, result_type) = method.arguments(context, infix.op, &left, &right, term)?;
+    // A swapped form reads the operands the other way round, each elaborated where it was written.
+    let (first, second) = match form {
+        MethodForm::Swapped => (&right, &left),
+        MethodForm::Direct | MethodForm::Negated => (&left, &right),
+    };
+    let (arguments, result_type) = method.arguments(context, infix.op, first, second, term)?;
     let read = Subterm::Proj(Proj {
         head: method.witness.clone(),
         field: method.field.clone(),
     });
     let applied = Term::apply_marked(Term::from(read), arguments);
     let rebuilt = match form {
-        MethodForm::Direct => applied,
+        MethodForm::Direct | MethodForm::Swapped => applied,
         MethodForm::Negated => Term::intrinsic(Intrinsic::BoolXor(
             applied,
             Term::intrinsic(Intrinsic::Bool(true)),

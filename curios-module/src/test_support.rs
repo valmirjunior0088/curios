@@ -46,9 +46,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         rem: registry_field(&["std", "Remainder"], "rem"),
         eql: registry_field(&["std", "Equal", "Equal"], "eql"),
         lt: registry_field(&["std", "Compare"], "lt"),
-        gt: registry_field(&["std", "Compare"], "gt"),
         le: registry_field(&["std", "Compare"], "le"),
-        ge: registry_field(&["std", "Compare"], "ge"),
         and: registry_field(&["std", "And"], "and"),
         or: registry_field(&["std", "Or"], "or"),
     },
@@ -94,6 +92,8 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             lexicographic: registry_name(&["std", "Ord", "lexicographic"]),
             by_tag: registry_name(&["std", "Ord", "by_tag"]),
             eq: registry_name(&["std", "Ord", "Ordering", "Ordering", "eq"]),
+            is_lt: registry_name(&["std", "Ord", "Ordering", "is_lt"]),
+            is_le: registry_name(&["std", "Ord", "Ordering", "is_le"]),
         },
         hash: HashDerivation {
             hash: registry_field(&["std", "Digest", "Digest"], "digest"),

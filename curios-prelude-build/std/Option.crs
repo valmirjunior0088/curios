@@ -2,7 +2,7 @@ pub use /sys/{let Option};
 pub use /sys/Option/{some, none};
 
 use /std/{Bool, Eq, Show, Spell, Fmt, Monad, Result, Ordering, Ord, Hash};
-use /std/ops/{Eql, Cmp};
+use /std/ops/{Eql};
 
 --- `f` on the value, or `none`.
 pub let bind(@A: Sort, @B: Sort, m: Option(A), f: (A) -> Option(B)) -> Option(B) =
@@ -97,15 +97,10 @@ pub let ord(@A: Type, use Ord(A), a: Option(A), b: Option(A)) -> Ordering =
     | some(x) => match b | none() => Ordering/gt() | some(y) => Ord/ord(x, y) end
     end;
 
-satisfy (@A: Type, use Ord(A)) => Cmp(Option(A)) {
-    lt(a, b) = Ordering/is_lt(ord(a, b)),
-    le(a, b) = Ordering/is_le(ord(a, b)),
-    gt(a, b) = Ordering/is_gt(ord(a, b)),
-    ge(a, b) = Ordering/is_ge(ord(a, b)),
-}
-
 satisfy (@A: Type, use Ord(A)) => Ord(Option(A)) {
     ord = ord,
+    lt(a, b) = Ordering/is_lt(ord(a, b)),
+    le(a, b) = Ordering/is_le(ord(a, b)),
 }
 
 satisfy (@A: Type, use Hash(A)) => Hash(Option(A)) {

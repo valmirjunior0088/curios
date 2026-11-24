@@ -11,7 +11,7 @@ pub let pairwise(
     @K: Type,
     use Map/Key(K),
     s: Set(K),
-) -> Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(to_list(s)) =
+) -> Pairwise(Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))(to_list(s)) =
     Map/keys/pairwise(s.map);
 
 --- The elements of a set are in strict order at adjacent elements, as a decision.
@@ -19,5 +19,5 @@ pub let ordered(
     @K: Type,
     use Map/Key(K),
     s: Set(K),
-) -> Bool/Holds(List/ordered(to_list(s), Ord/lt((a: K, b: K) => Ord/ord(a, b)))) =
+) -> Bool/Holds(List/ordered(to_list(s), Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))) =
     Map/keys/ordered(s.map);

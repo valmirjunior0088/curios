@@ -111,13 +111,12 @@ fn a_bind_guard_matches_headed_catch_all_codegen() {
     assert_eq!(operations(bind), operations(headed),);
 }
 
-/// The comparison concept folds the same way: `Cmp/lt` at `Nat` is the bare `Nat.lt` instruction. Unlike the single-method operators, `Cmp` is a many-method concept whose witness is a *tuple* of methods, so its resolved instance does not newtype-collapse to a bare field — it is baked in by closure specialization, whose `Tuple.get`s then fold to the same intrinsic. The specialized-clone names therefore differ from the direct wrapper's, so the dumps are no longer byte-identical; what must still match is the emitted instructions — the concept path lowers `Cmp/lt` to the bare `Nat.lt` with no witness dispatch left behind, so it emits exactly the direct intrinsic's operations.
+/// The comparison concept folds the same way: `Ord/lt` at `Nat` is the bare `Nat.lt` instruction. Unlike the single-method operators, `Ord` is a many-method concept whose witness is a *tuple* of methods, so its resolved instance does not newtype-collapse to a bare field — it is baked in by closure specialization, whose `Tuple.get`s then fold to the same intrinsic. The specialized-clone names therefore differ from the direct wrapper's, so the dumps are no longer byte-identical; what must still match is the emitted instructions — the concept path lowers `Ord/lt` to the bare `Nat.lt` with no witness dispatch left behind, so it emits exactly the direct intrinsic's operations.
 #[test]
 fn concept_comparison_matches_direct_intrinsic_codegen() {
     let through_concept = r#"
-        use /std/{Nat, Bool, List, Str, Proc};
-        use /std/ops/{Cmp};
-        pub let small(x : Nat) -> Bool = Cmp/lt(x, 10);
+        use /std/{Nat, Bool, List, Str, Proc, Ord};
+        pub let small(x : Nat) -> Bool = Ord/lt(x, 10);
         let entry() -> /std/Io({}) =
             let taint = List/length(Proc/args()!);
             let n : Nat = taint;

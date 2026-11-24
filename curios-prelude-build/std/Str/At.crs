@@ -4,7 +4,7 @@ mod grapheme;
 use /std/{Nat, Bytes, Bool, Char, Option, Str, Eq, Ord, proved};
 use /std/Char/{GraphemeBreak};
 use /std/Str/{utf8};
-use /std/ops/{Eql, Cmp};
+use /std/ops/{Eql};
 
 --- Whether a character may begin at the front of `rest`: it is empty, or its first byte continues none.
 ---
@@ -340,13 +340,8 @@ satisfy (@s: Str) => Eql(At(s)) {
 }
 
 --- Positions are ordered by their offsets, so a guard between two decides the bound [`Str/between`] takes.
-satisfy (@s: Str) => Cmp(At(s)) {
-    lt(a, b) = a.offset < b.offset,
-    le(a, b) = a.offset <= b.offset,
-    gt(a, b) = a.offset > b.offset,
-    ge(a, b) = a.offset >= b.offset,
-}
-
 satisfy (@s: Str) => Ord(At(s)) {
     ord(a, b) = Nat/ord(a.offset, b.offset),
+    lt(a, b) = a.offset < b.offset,
+    le(a, b) = a.offset <= b.offset,
 }

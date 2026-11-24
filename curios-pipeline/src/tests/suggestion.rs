@@ -460,7 +460,7 @@ fn a_goal_its_guard_decides_names_the_guard_and_offers_proved() {
 
     assert!(
         error.contains("it follows from the facts in scope:")
-            && error.contains("a guard, `guests > 0`")
+            && error.contains("a guard, `0 < guests`")
             && error.contains("? \u{2248} /std/proved()")
             && !error.contains("True/qed()"),
         "unexpected error: {error}"

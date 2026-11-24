@@ -92,7 +92,7 @@ let after(o: Ordering, t: Bytes, r: Bytes) -> Bool =
 
 -- A recursion over the three runs: the heads' answers are `Nat/ord`'s, which carries across the middle head, and where all three heads tie the answer is the tails'.
 --- `ord` as a relation carries across a middle run.
-pub let transitive: Ord/Transitive(Ord/le(ord)) =
+pub let transitive: Ord/Transitive(Ord/le_by(ord)) =
     (a, b, c, p, q) =>
         match a
         | 0x[] => match c | 0x[] | 0x[_, .._] => Bool/True/qed() end

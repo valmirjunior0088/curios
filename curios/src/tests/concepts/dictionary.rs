@@ -38,6 +38,8 @@ fn a_witness_never_writes_its_superclass_slot() {
         satisfy Ord(Mine) {
             use always,
             ord(x, y) = Ordering/eq(),
+            lt(x, y) = false,
+            le(x, y) = true,
         }
         print("no")
         "#;
@@ -59,6 +61,8 @@ fn a_superclass_reads_alike_through_the_table_and_through_a_witness() {
         satisfy Eql(Mine) { .. }
         satisfy Ord(Mine) {
             ord(x, y) = Ordering/eq(),
+            lt(x, y) = false,
+            le(x, y) = true,
         }
         let via_table(x: Mine, y: Mine) -> Bool = x == y;
         let via_super(@A: Type, use Ord(A), x: A, y: A) -> Bool = x == y;

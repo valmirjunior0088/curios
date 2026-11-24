@@ -28,6 +28,30 @@ fn derived_order_ranks_constructors_then_payloads() {
     assert_eq!(run(source), b"lt gt lt gt eq lt lt ");
 }
 
+// The comparison operators dispatch through the `lt` and `le` every `Ord` states, so a type that derives its order compares with them, as `/std`'s derived `Month` and `Ordering` and its written tuples and unit do: a derived `lt` is strict, and `>` and `>=` read `lt` and `le` over the operands swapped. A `>` read unswapped breaks the bounds `/std` states over `>` and `>=` before any test runs, so the swap is held here by the fixture alone.
+#[test]
+fn every_order_answers_the_comparison_operators() {
+    let source = r#"
+        use /std/{Nat, Bool, Str, Ord, Ordering, print};
+        use /std/time/{Month};
+        use /std/ops/{Eql};
+        induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
+        satisfy Eql(Tree) { .. }
+        satisfy Ord(Tree) { .. }
+        let show(b: Bool) -> Str = Str/concat(Bool/to_str(b), " ");
+        let pair: {Nat, Nat} = (1, 2);
+        let entry() -> /std/Io({}) =
+            let _ = print(show(Tree/leaf(2) < Tree/leaf(2)))!;
+            let _ = print(show(Month/march() <= Month/february()))!;
+            let _ = print(show(Ordering/gt() > Ordering/eq()))!;
+            let _ = print(show(pair >= (1, 3)))!;
+            print(show(() <= ()));
+        entry()
+        "#;
+
+    assert_eq!(run(source), b"false false true false true ");
+}
+
 #[test]
 fn a_struct_and_a_parameterized_family_order_fieldwise() {
     let source = r#"

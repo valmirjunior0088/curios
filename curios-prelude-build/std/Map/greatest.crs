@@ -12,7 +12,7 @@ pub let greatest(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Option({K, V})
 pub let Above(@K: Type, use Key(K), @V: Type, found: Option({K, V}), x: K) -> Prop =
     match found
     | none() => Bool/False
-    | some(entry) => Bool/Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(x, entry.0))
+    | some(entry) => Bool/Holds(Ord/le_by((a: K, b: K) => Ord/ord(a, b))(x, entry.0))
     end;
 
 pub let among(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Among(greatest(m), keys(m)) =

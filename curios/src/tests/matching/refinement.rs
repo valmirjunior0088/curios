@@ -155,7 +155,7 @@ fn the_false_arm_of_a_comparison_proves_nothing_one_step_past_its_dual() {
     );
 }
 
-// The dead arm of a dispatched guard proves its dual too. `<=` is dispatched through `Cmp`, so the guard's intrinsic spelling is one each checker reaches only by resolving the witness, and the reducer can decide it besides: the quotient is below 64, so the procedure folds `63 < cp % 4096 / 64` to `false` and the false arm is never reached. It is still checked, and the arm's equation answers the dual `true` before the procedure folds it — in both checkers, which is what this asserts by certifying: a certifier meeting the resolved spelling only as the reduct of the written one, after the fold, would refuse what the elaborator accepts. `/std/Str/Valid`'s three-byte decoding is this shape.
+// The dead arm of a dispatched guard proves its dual too. `<=` is dispatched through `Ord`'s `le`, so the guard's intrinsic spelling is one each checker reaches only by resolving the witness, and the reducer can decide it besides: the quotient is below 64, so the procedure folds `63 < cp % 4096 / 64` to `false` and the false arm is never reached. It is still checked, and the arm's equation answers the dual `true` before the procedure folds it — in both checkers, which is what this asserts by certifying: a certifier meeting the resolved spelling only as the reduct of the written one, after the fold, would refuse what the elaborator accepts. `/std/Str/Valid`'s three-byte decoding is this shape.
 #[test]
 fn the_dead_arm_of_a_dispatched_guard_proves_its_dual() {
     let source = r#"

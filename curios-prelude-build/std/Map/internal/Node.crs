@@ -2421,7 +2421,7 @@ pub let ascending(
     @V: Type,
     t: Node(K, V),
     sound: Sound(t),
-) -> Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(keys(t)) =
+) -> Pairwise(Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))(keys(t)) =
     match t
     | empty() => Pairwise/empty()
     | leaf(_, _) => Pairwise/cons((_, i) => match Member/absent(i) end, Pairwise/empty())
@@ -2437,7 +2437,7 @@ pub and ascending_in(
     d: Nat,
     a: Bytes,
     twigs: Twigs(l, at, d, a),
-) -> Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(keys_in(l)) =
+) -> Pairwise(Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))(keys_in(l)) =
     match l
     | [] => Pairwise/empty()
     | [h, ..r] =>
@@ -2603,7 +2603,11 @@ end =
     end;
 
 -- A key is at or below itself.
-let le_self(@K: Type, use Key(K), k: K) -> Bool/Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(k, k)) =
+let le_self(
+    @K: Type,
+    use Key(K),
+    k: K,
+) -> Bool/Holds(Ord/le_by((a: K, b: K) => Ord/ord(a, b))(k, k)) =
     Eq/subst((r: Ordering) => Bool/Holds(Ordering/is_le(r)), Eq/sym(Key/refl(k)), Bool/True/qed());
 
 -- A key before another by their encodings is at or below it.
@@ -2613,7 +2617,7 @@ let le_of_before(
     x: K,
     y: K,
     lt: Eq()(Bytes/ord(Hash/hash(x), Hash/hash(y)), Ordering/lt()),
-) -> Bool/Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(x, y)) =
+) -> Bool/Holds(Ord/le_by((a: K, b: K) => Ord/ord(a, b))(x, y)) =
     Eq/subst(
         (r: Ordering) => Bool/Holds(Ordering/is_le(r)),
         Eq/sym(Eq/trans(Key/monotone(x, y), lt)),
@@ -2630,7 +2634,7 @@ pub let least_below(
     i: Member()(x, keys(t)),
 ) -> match least(t)
 | none() => Bool/False
-| some(e) => Bool/Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(e.0, x))
+| some(e) => Bool/Holds(Ord/le_by((a: K, b: K) => Ord/ord(a, b))(e.0, x))
 end =
     match t
     | empty() => match Member/absent(i) end
@@ -2639,7 +2643,7 @@ end =
             i,
             (e) =>
                 Eq/subst(
-                    (y: K) => Bool/Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(k, y)),
+                    (y: K) => Bool/Holds(Ord/le_by((a: K, b: K) => Ord/ord(a, b))(k, y)),
                     Eq/sym(e),
                     le_self(k)),
             (rest) => match Member/absent(rest) end)
@@ -2658,7 +2662,7 @@ pub and least_below_in(
     i: Member()(x, keys_in(l)),
 ) -> match least_in(l)
 | none() => Bool/False
-| some(e) => Bool/Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(e.0, x))
+| some(e) => Bool/Holds(Ord/le_by((a: K, b: K) => Ord/ord(a, b))(e.0, x))
 end =
     match l
     | [] => match Member/absent(i) end
@@ -2694,7 +2698,7 @@ pub let greatest_above(
     i: Member()(x, keys(t)),
 ) -> match greatest(t)
 | none() => Bool/False
-| some(e) => Bool/Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(x, e.0))
+| some(e) => Bool/Holds(Ord/le_by((a: K, b: K) => Ord/ord(a, b))(x, e.0))
 end =
     match t
     | empty() => match Member/absent(i) end
@@ -2703,7 +2707,7 @@ end =
             i,
             (e) =>
                 Eq/subst(
-                    (y: K) => Bool/Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(y, k)),
+                    (y: K) => Bool/Holds(Ord/le_by((a: K, b: K) => Ord/ord(a, b))(y, k)),
                     Eq/sym(e),
                     le_self(k)),
             (rest) => match Member/absent(rest) end)
@@ -2722,7 +2726,7 @@ pub and greatest_above_in(
     i: Member()(x, keys_in(l)),
 ) -> match greatest_in(l)
 | none() => Bool/False
-| some(e) => Bool/Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(x, e.0))
+| some(e) => Bool/Holds(Ord/le_by((a: K, b: K) => Ord/ord(a, b))(x, e.0))
 end =
     match l
     | [] => match Member/absent(i) end

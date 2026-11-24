@@ -78,7 +78,7 @@ pub mod Scale;
 pub use Scale/{let Scale};
 
 use /std/{Str, Option, Char, Bool, Show, Spell, Ord, Hash, Map, Eq};
-use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
+use /std/ops/{Eql, Add, Sub, Mul, Div, Rem};
 
 --- That `n` is not zero, decided — what `/` and `%` on `Nat` ask of a divisor. It is `Bool/Holds(0 < n)`: a natural is not zero exactly where zero is below it, which conversion decides.
 pub let NonZero(n: Nat) -> Prop =
@@ -86,13 +86,6 @@ pub let NonZero(n: Nat) -> Prop =
 
 satisfy Eql(Nat) {
     eql = eql,
-}
-
-satisfy Cmp(Nat) {
-    lt = lt,
-    le = le,
-    gt = gt,
-    ge = ge,
 }
 
 satisfy Add(Nat) {
@@ -215,6 +208,8 @@ satisfy Spell(Nat) {
 
 satisfy Ord(Nat) {
     ord = ord,
+    lt = lt,
+    le = le,
 }
 
 --- The encoding [`hash`] writes: in the order of the numbers, so a smaller number's is before a larger one's.

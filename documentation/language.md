@@ -502,7 +502,7 @@ Every infix operator needs whitespace on both sides, and associates to the left.
 | --- | --- | --- |
 | 1, loosest | `\|\|` | `Or` |
 | 2 | `&&` | `And` |
-| 3 | `==`, `!=`, `<`, `>`, `<=`, `>=` | `Eql`, `Cmp` |
+| 3 | `==`, `!=`, `<`, `>`, `<=`, `>=` | `Eql`, `Ord` |
 | 4 | `+`, `-` | `Add`, `Sub` |
 | 5, tightest | `*`, `/`, `%` | `Mul`, `Div`, `Rem` |
 
@@ -1243,12 +1243,15 @@ satisfy Rem(Hours) {
 A field written `use` is a superclass, unnamed. Its type reduces to a concept application, as a `use` parameter's does, so an alias of one is a superclass too. A field takes no `@`: a concept's hidden members are its superclasses.
 
 ```crs
+use /std/{Bool};
 use /std/ops/{Eql};
 use /std/Ord/{Ordering};
 
 pub concept Ord(A: Type): pub Type {
     use Eql(A),
     ord(A, A) -> Ordering,
+    lt(A, A) -> Bool,
+    le(A, A) -> Bool,
 }
 ```
 
@@ -1288,7 +1291,7 @@ satisfy (@A: Type, use Show(A)) => Show(Bag(A)) {
 
 A witness is keyed by its concept and by the head of each of the concept's arguments, which its signature spells: an inductive, a structure, an intrinsic type or a tuple type's shape, applied or not, or a family applied in part, written as a lambda, `(A: Type) => State(S, A)`. A function type has no key. One witness at most stands at a key in a whole program, declared where its concept or a head of its key is, and its `use` premises are smaller than its own application. Why: [Concepts resolve with global coherence](design/surface/concepts-resolve-with-global-coherence.md).
 
-Witnesses that resolve through one another are one group, joined by `and` ([Recursive groups](#recursive-groups)). A lone witness may resolve through its own key with nothing said. A method written by another method of its witness — `gt(a, b) = b < a` — reads that method alone, so only a method that reaches itself makes its witness recursive.
+Witnesses that resolve through one another are one group, joined by `and` ([Recursive groups](#recursive-groups)). A lone witness may resolve through its own key with nothing said. A method written by another method of its witness — `le(a, b) = Bool/not(b < a)` — reads that method alone, so only a method that reaches itself makes its witness recursive.
 
 ```crs
 use /std/{Nat, Show, Str};
@@ -1321,7 +1324,7 @@ A second dictionary for an unsealed concept at the same key is an ordinary conce
 use /std/{List, Nat, Ord};
 
 pub let descending(values: List(Nat)) -> List(Nat) =
-    let reverse: Ord(Nat) = Ord { ord(a, b) = Ord/ord(b, a) };
+    let reverse: Ord(Nat) = Ord { ord(a, b) = Ord/ord(b, a), lt(a, b) = b < a, le(a, b) = b <= a };
     List/sort(@_, use reverse, values);
 ```
 
@@ -1369,7 +1372,7 @@ The key is a declared `induct` or `struct` whose representation is open where th
 A concept's superclasses are hidden members of a concept value. They take no position when it is read — a projection `.N` and a pattern's positional fields count the methods alone — and a literal's entries follow the declaration as a call's arguments follow a function's parameters: the fields in order, and before each, `use value` entries filling the superclass slots before it, from the first. A slot left out is resolved, and `use _` holds a slot's place to the same effect, so `Both { use _, use second, both = … }` supplies the second of two superclasses alone.
 
 ```text
-Ord { use custom_eql, ord(a, b) = reversed(a, b) }
+Ord { use custom_eql, ord(a, b) = reversed(a, b), lt(a, b) = Ordering/is_lt(reversed(a, b)), le(a, b) = Ordering/is_le(reversed(a, b)) }
 ```
 
 A witness's body writes none: a `use` entry in a `satisfy` is refused by name, and resolution fills every superclass of a registered witness.

@@ -14,9 +14,9 @@ pub let pairwise(
     use Key(K),
     @V: Type,
     m: Map(K, V),
-) -> Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(keys(m)) =
+) -> Pairwise(Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))(keys(m)) =
     Eq/subst(
-        (l: List(K)) => Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(l),
+        (l: List(K)) => Pairwise(Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))(l),
         Eq/sym(Node/collected(m.root, [])),
         Node/ascending(m.root, m.sound));
 
@@ -26,5 +26,5 @@ pub let ordered(
     use Key(K),
     @V: Type,
     m: Map(K, V),
-) -> Bool/Holds(List/ordered(keys(m), Ord/lt((a: K, b: K) => Ord/ord(a, b)))) =
-    Pairwise/adjacent(Ord/lt((a: K, b: K) => Ord/ord(a, b)), keys(m), pairwise(m));
+) -> Bool/Holds(List/ordered(keys(m), Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))) =
+    Pairwise/adjacent(Ord/lt_by((a: K, b: K) => Ord/ord(a, b)), keys(m), pairwise(m));

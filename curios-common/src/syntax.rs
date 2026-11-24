@@ -65,7 +65,7 @@ pub struct SyntaxRegistry {
 }
 
 impl SyntaxRegistry {
-    /// Every registered name, for the prelude build's presence check. The operator concepts appear once per method that dispatches through them, so `/std/Cmp` recurs — a duplicate costs a redundant assertion and nothing else.
+    /// Every registered name, for the prelude build's presence check. The operator concepts appear once per method that dispatches through them, so `/std/Ord/Ord` recurs — a duplicate costs a redundant assertion and nothing else.
     ///
     /// Each group answers for its own slots instead of having them reached through from here, so that the exhaustive pattern sits in the same scope as the fields it has to keep up with.
     pub fn targets(self) -> impl Iterator<Item = SyntaxName> {
@@ -194,7 +194,7 @@ impl LiftSyntax {
 
 /// The operator→concept table backing `elaborate_infix`: one slot per method the fixed infix operators dispatch through.
 ///
-/// One slot per *method* rather than per concept, because that is the granularity the elaborator asks at — `Cmp` answers four operators and `Eql` answers two, and a per-concept grouping would have to reintroduce the method as a positional index into a field list. Every operator, `&&`/`||` included, resolves through a witness projection of its concept; there is no carved-out exception, so there is no operator without a slot.
+/// One slot per *method* rather than per concept, because that is the granularity the elaborator asks at — `Ord`'s `lt` and `le` answer four operators, `>` and `>=` reading them swapped, and `Eql` answers two, and a per-concept grouping would have to reintroduce the method as a positional index into a field list. Every operator, `&&`/`||` included, resolves through a witness projection of its concept; there is no carved-out exception, so there is no operator without a slot.
 #[derive(Debug, Clone, Copy)]
 pub struct OperatorSyntax {
     pub add: ConceptField,
@@ -204,15 +204,13 @@ pub struct OperatorSyntax {
     pub rem: ConceptField,
     pub eql: ConceptField,
     pub lt: ConceptField,
-    pub gt: ConceptField,
     pub le: ConceptField,
-    pub ge: ConceptField,
     pub and: ConceptField,
     pub or: ConceptField,
 }
 
 impl OperatorSyntax {
-    /// The method `op` dispatches through, and how it reads it: `!=` is the negation of `Eql`'s `eql`, so a witness states equality once and `a != b` cannot disagree with `a == b`.
+    /// The method `op` dispatches through, and how it reads it: `!=` is the negation of `Eql`'s `eql`, so a witness states equality once and `a != b` cannot disagree with `a == b`; and `a > b` and `a >= b` are `b < a` and `b <= a`, so an order states `lt` and `le` alone.
     pub const fn method(self, op: InfixOp) -> OperatorMethod {
         let (method, form) = match op {
             InfixOp::Add => (self.add, MethodForm::Direct),
@@ -223,9 +221,9 @@ impl OperatorSyntax {
             InfixOp::Eql => (self.eql, MethodForm::Direct),
             InfixOp::Neq => (self.eql, MethodForm::Negated),
             InfixOp::Lt => (self.lt, MethodForm::Direct),
-            InfixOp::Gt => (self.gt, MethodForm::Direct),
+            InfixOp::Gt => (self.lt, MethodForm::Swapped),
             InfixOp::Le => (self.le, MethodForm::Direct),
-            InfixOp::Ge => (self.ge, MethodForm::Direct),
+            InfixOp::Ge => (self.le, MethodForm::Swapped),
             InfixOp::And => (self.and, MethodForm::Direct),
             InfixOp::Or => (self.or, MethodForm::Direct),
         };
@@ -255,14 +253,12 @@ impl OperatorSyntax {
             rem,
             eql,
             lt,
-            gt,
             le,
-            ge,
             and,
             or,
         } = self;
 
-        [add, sub, mul, div, rem, eql, lt, gt, le, ge, and, or].into_iter()
+        [add, sub, mul, div, rem, eql, lt, le, and, or].into_iter()
     }
 }
 
@@ -280,6 +276,8 @@ pub enum MethodForm {
     Direct,
     /// The method's `Bool` answer negated: `a != b` is `eql(a, b)` negated.
     Negated,
+    /// The method's answer over the operands swapped, which are elaborated in the order written: `a > b` is `lt(b, a)`.
+    Swapped,
 }
 
 /// The name a character literal builds: `/std/Char`, whose decided `Valid` field the literal closes with [`ProofSyntax::true_qed`].
@@ -662,7 +660,7 @@ pub struct EqlDerivation {
     pub eql: ConceptField,
 }
 
-/// The names a derived `Ord` witness body is written with: its own method, applied to each payload pair, and the two `/std/Ord` combinators the body folds their answers through — `lexicographic` within one constructor, `by_tag` across two, with `Ordering/eq` filling the arm that cannot be reached because the tags already agreed.
+/// The names a derived `Ord` witness body is written with: its own method, applied to each payload pair, and the two `/std/Ord` combinators the body folds their answers through — `lexicographic` within one constructor, `by_tag` across two, with `Ordering/eq` filling the arm that cannot be reached because the tags already agreed — and `Ordering/is_lt` and `is_le`, which read `lt` and `le` off the same comparison.
 ///
 /// No string machinery, and deliberately: `lexicographic` takes the payload answers alone, where `Spell`'s renderers take a constructor path. An `Ordering` has no text to re-parse and no report to read, so the path would be a literal nothing consumes — and carrying one would put every `/std/Str` name back into this row's vocabulary for a value that is never rendered.
 #[derive(Debug, Clone, Copy)]
@@ -671,6 +669,8 @@ pub struct OrdDerivation {
     pub lexicographic: SyntaxName,
     pub by_tag: SyntaxName,
     pub eq: SyntaxName,
+    pub is_lt: SyntaxName,
+    pub is_le: SyntaxName,
 }
 
 /// The names a derived `Hash` witness body is written with: its own method, applied to each payload, and the one `/std/Hash` combinator the body folds their encodings through — `tagged`, which writes the constructor's ordinal and frames every part.
@@ -732,9 +732,11 @@ impl Derivation {
                 lexicographic,
                 by_tag,
                 eq,
+                is_lt,
+                is_le,
             }) => [concept]
                 .into_iter()
-                .chain([lexicographic, by_tag, eq].map(SyntaxName::qualifier))
+                .chain([lexicographic, by_tag, eq, is_lt, is_le].map(SyntaxName::qualifier))
                 .collect(),
             Derivation::Hash(HashDerivation { hash: _, tagged }) => {
                 vec![concept, tagged.qualifier()]
@@ -757,7 +759,9 @@ impl Derivation {
                 lexicographic,
                 by_tag,
                 eq,
-            }) => vec![ord.concept, lexicographic, by_tag, eq],
+                is_lt,
+                is_le,
+            }) => vec![ord.concept, lexicographic, by_tag, eq, is_lt, is_le],
             Derivation::Hash(HashDerivation { hash, tagged }) => vec![hash.concept, tagged],
         }
         .into_iter()

@@ -3,7 +3,7 @@ use /std/{Int, Bool, Eq, Ordering, Ord, proved};
 --- The order of the two.
 pub let ord(x: Int, y: Int) -> Ordering =
     match
-    | x < y => Ordering/lt()
+    | Int/lt(x, y) => Ordering/lt()
     | x == y => Ordering/eq()
     | _ => Ordering/gt()
     end;
@@ -87,5 +87,5 @@ pub let flips: Ord/Flips(ord) =
         end;
 
 --- `ord` as a relation carries across a middle element.
-pub let transitive: Ord/Transitive(Ord/le(ord)) =
+pub let transitive: Ord/Transitive(Ord/le_by(ord)) =
     (a, b, c, p, q) => of_le(a, c, Int/le/trans(le(a, b, p), le(b, c, q)));

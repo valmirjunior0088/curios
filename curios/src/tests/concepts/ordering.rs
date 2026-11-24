@@ -1,8 +1,8 @@
-//! The ordering witnesses beyond the numerics: `Cmp` and `Ord` on strings, bytes, booleans, lists, options and results, and `Eql`/`Show` on maps.
+//! The ordering witnesses beyond the numerics: `Ord` and its comparisons on strings, bytes, booleans, lists, options and results, and `Eql`/`Show` on maps.
 
 use crate::tests::test_support::*;
 
-// UTF-8 bytewise order is scalar-value order, so `Cmp(Str)` compares code points without decoding: `é` (U+00E9) sorts after `z`, a prefix sorts before its extension, and the empty string before everything.
+// UTF-8 bytewise order is scalar-value order, so `Ord(Str)` compares code points without decoding: `é` (U+00E9) sorts after `z`, a prefix sorts before its extension, and the empty string before everything.
 #[test]
 fn strings_compare_by_code_point_and_bytes_and_booleans_bytewise() {
     let source = r#"

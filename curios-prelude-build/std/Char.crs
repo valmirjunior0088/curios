@@ -23,7 +23,7 @@ pub mod EastAsianWidth;
 pub use EastAsianWidth/{let EastAsianWidth};
 
 use /std/{Nat, Byte, Bool, Bytes, Option, Ordering, Eq, Str, Show, Spell, Fmt, Ord, proved};
-use /std/ops/{Eql, Cmp};
+use /std/ops/{Eql};
 
 --- One Unicode scalar value.
 pub struct Char: pub Type {
@@ -298,13 +298,6 @@ satisfy Eql(Char) {
     eql = eql,
 }
 
-satisfy Cmp(Char) {
-    lt = lt,
-    le = le,
-    gt = gt,
-    ge = ge,
-}
-
 satisfy Show(Char) {
     show(c) = Str/of_char(c),
 }
@@ -326,4 +319,6 @@ satisfy Spell(Char) {
 
 satisfy Ord(Char) {
     ord = ord,
+    lt = lt,
+    le = le,
 }

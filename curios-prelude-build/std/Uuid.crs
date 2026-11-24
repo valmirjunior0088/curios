@@ -2,7 +2,7 @@ mod tests;
 
 use /std/{Nat, Int, Byte, Bytes, Bool, Char, Option, List, Str, Eq, Ordering, Ord, Hash, Map, Show,
     Spell, Fmt, Io, rand};
-use /std/ops/{Eql, Cmp};
+use /std/ops/{Eql};
 use /std/time/{Timestamp};
 
 --- A universally unique identifier (RFC 9562): sixteen bytes, laid out as the RFC lays them out, of any version and variant.
@@ -160,13 +160,8 @@ satisfy Eql(Uuid) {
 --- The order of their bytes, which is the order a version 7's were made in.
 satisfy Ord(Uuid) {
     ord(a, b) = Bytes/ord(a.bytes, b.bytes),
-}
-
-satisfy Cmp(Uuid) {
     lt(a, b) = Ordering/is_lt(Bytes/ord(a.bytes, b.bytes)),
     le(a, b) = Ordering/is_le(Bytes/ord(a.bytes, b.bytes)),
-    gt(a, b) = Ordering/is_gt(Bytes/ord(a.bytes, b.bytes)),
-    ge(a, b) = Ordering/is_ge(Bytes/ord(a.bytes, b.bytes)),
 }
 
 --- The sixteen bytes.

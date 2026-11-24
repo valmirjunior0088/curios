@@ -379,18 +379,26 @@ satisfy (
 
 satisfy Ord({}) {
     ord((), ()) = Ordering/eq(),
+    lt(a, b) = Ordering/is_lt(Ord/ord(a, b)),
+    le(a, b) = Ordering/is_le(Ord/ord(a, b)),
 }
 
 satisfy (@A: Type, use Ord(A)) => Ord({A}) {
     ord(a, b) = Ord/ord(a.0, b.0),
+    lt(a, b) = Ordering/is_lt(Ord/ord(a, b)),
+    le(a, b) = Ordering/is_le(Ord/ord(a, b)),
 }
 
 satisfy (@A: Type, @B: Type, use Ord(A), use Ord(B)) => Ord({A, B}) {
     ord(a, b) = then(Ord/ord(a.0, b.0), (()) => Ord/ord(a.1, b.1)),
+    lt(a, b) = Ordering/is_lt(Ord/ord(a, b)),
+    le(a, b) = Ordering/is_le(Ord/ord(a, b)),
 }
 
 satisfy (@A: Type, @B: Type, @C: Type, use Ord(A), use Ord(B), use Ord(C)) => Ord({A, B, C}) {
     ord(a, b) = then(Ord/ord(a.0, b.0), (()) => then(Ord/ord(a.1, b.1), (()) => Ord/ord(a.2, b.2))),
+    lt(a, b) = Ordering/is_lt(Ord/ord(a, b)),
+    le(a, b) = Ordering/is_le(Ord/ord(a, b)),
 }
 
 satisfy (
@@ -410,6 +418,8 @@ satisfy (
                 then(
                     Ord/ord(a.1, b.1),
                     (()) => then(Ord/ord(a.2, b.2), (()) => Ord/ord(a.3, b.3)))),
+    lt(a, b) = Ordering/is_lt(Ord/ord(a, b)),
+    le(a, b) = Ordering/is_le(Ord/ord(a, b)),
 }
 
 satisfy (
@@ -434,6 +444,8 @@ satisfy (
                         then(
                             Ord/ord(a.2, b.2),
                             (()) => then(Ord/ord(a.3, b.3), (()) => Ord/ord(a.4, b.4))))),
+    lt(a, b) = Ordering/is_lt(Ord/ord(a, b)),
+    le(a, b) = Ordering/is_le(Ord/ord(a, b)),
 }
 
 satisfy (
@@ -463,6 +475,8 @@ satisfy (
                                 then(
                                     Ord/ord(a.3, b.3),
                                     (()) => then(Ord/ord(a.4, b.4), (()) => Ord/ord(a.5, b.5)))))),
+    lt(a, b) = Ordering/is_lt(Ord/ord(a, b)),
+    le(a, b) = Ordering/is_le(Ord/ord(a, b)),
 }
 
 satisfy (
@@ -500,6 +514,8 @@ satisfy (
                                                 then(
                                                     Ord/ord(a.5, b.5),
                                                     (()) => Ord/ord(a.6, b.6))))))),
+    lt(a, b) = Ordering/is_lt(Ord/ord(a, b)),
+    le(a, b) = Ordering/is_le(Ord/ord(a, b)),
 }
 
 satisfy (
@@ -542,4 +558,6 @@ satisfy (
                                                         then(
                                                             Ord/ord(a.6, b.6),
                                                             (()) => Ord/ord(a.7, b.7)))))))),
+    lt(a, b) = Ordering/is_lt(Ord/ord(a, b)),
+    le(a, b) = Ordering/is_le(Ord/ord(a, b)),
 }

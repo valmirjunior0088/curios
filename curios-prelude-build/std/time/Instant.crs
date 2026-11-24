@@ -1,5 +1,5 @@
 use /std/{Nat, Int, Io, Ord, Hash};
-use /std/ops/{Eql, Cmp};
+use /std/ops/{Eql};
 use /std/time/{Duration};
 
 --- A reading of the monotonic clock: nanoseconds since its origin, which two readings share only within one run.
@@ -17,13 +17,6 @@ satisfy Ord(Instant) {
 
 satisfy Hash(Instant) {
     ..
-}
-
-satisfy Cmp(Instant) {
-    lt(a, b) = a.nanos < b.nanos,
-    le(a, b) = a.nanos <= b.nanos,
-    gt(a, b) = a.nanos > b.nanos,
-    ge(a, b) = a.nanos >= b.nanos,
 }
 
 --- The monotonic clock: seconds since a fixed origin, signed, and the nanoseconds past them.

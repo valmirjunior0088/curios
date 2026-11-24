@@ -29,7 +29,7 @@ let _a_sets_elements_are_in_their_order(
     @K: Type,
     use Map/Key(K),
     s: Set(K),
-) -> List/Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(Set/to_list(s)) =
+) -> List/Pairwise(Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))(Set/to_list(s)) =
     Set/to_list/pairwise(s);
 
 -- Inserting an element twice is inserting it once, for every set: the two have the same elements, which `Set/has/extensional` takes to the sets.

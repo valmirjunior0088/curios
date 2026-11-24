@@ -19,7 +19,7 @@ use {
     crate::{is_prop_to, sort_of_in},
     curios_common::{
         ConceptField, Derivation, EqlDerivation, HashDerivation, InfixOp, OrdDerivation, Plicity,
-        Qualifier, SpellDerivation, StringSyntax, Symbol, SyntaxRegistry,
+        Qualifier, SpellDerivation, StringSyntax, Symbol, SyntaxName, SyntaxRegistry,
     },
     curios_core::{
         CalleeId, Extent, Free, Global, InductDecl, InductParam, InductType, Intrinsic, Mention,
@@ -821,7 +821,7 @@ fn compare(
     }
 }
 
-/// The `Ord` witness record: `ord` over the derived comparison.
+/// The `Ord` witness record: `ord` over the derived comparison, and `lt` and `le` its `Ordering/is_lt` and `is_le`, each the comparison built again over binders of its own, so each agrees with `ord` by reduction.
 ///
 /// One plain field, and the superclass `Eql` slot deliberately left unfilled — `elaborate_struct` pairs written fields with the plain positions and mints a resolution goal for every `use` position left over, so the key's own equality witness is found exactly as it would be for a written literal that omitted it.
 fn ord_body(
@@ -830,18 +830,27 @@ fn ord_body(
     subject: &Subject,
     row: OrdDerivation,
 ) -> Result<Term, Error> {
-    let left = context.fresh(None);
-    let right = context.fresh(None);
-    let ordered = order(context, site, subject, row, &left, &right)?;
-    let method = Term::func(
-        [
-            (left, Term::hole(context.mint_metavar())),
-            (right, Term::hole(context.mint_metavar())),
-        ],
-        ordered,
-    );
+    let method = |context: &mut Context, read: Option<SyntaxName>| -> Result<Term, Error> {
+        let left = context.fresh(None);
+        let right = context.fresh(None);
+        let ordered = order(context, site, subject, row, &left, &right)?;
+        let body = match read {
+            None => ordered,
+            Some(read) => site.at(syn_call(read, [ordered])),
+        };
+        Ok(Term::func(
+            [
+                (left, Term::hole(context.mint_metavar())),
+                (right, Term::hole(context.mint_metavar())),
+            ],
+            body,
+        ))
+    };
 
-    Ok(site.at(dictionary(site, [method])))
+    let ord = method(context, None)?;
+    let lt = method(context, Some(row.is_lt))?;
+    let le = method(context, Some(row.is_le))?;
+    Ok(site.at(dictionary(site, [ord, lt, le])))
 }
 
 /// How `left` orders against `right`, as an `Ordering`-valued term over the two binders.

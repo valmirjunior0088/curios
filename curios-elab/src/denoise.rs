@@ -56,7 +56,7 @@ pub fn refold_recs(context: &Context, term: &Term) -> Term {
 
 /// `term` with every lambda that is applied where it stands contracted: `((a, b) => f(a, b))(x, y)` spelled `f(x, y)`. Display-only.
 ///
-/// A reduct holds such a redex wherever reduction stopped above it. A definition unfolded at an argument that is itself a function leaves that function's value applied under the binders reduction did not enter: `Ord/Transitive(Ord/le(ord))` unfolds to a bound over `((a, b) => Ordering/is_le(ord(a, b)))(x, y)`. A reader would not have written the redex, and it does not read back: a lambda's parameters take their types from an annotation or from the position it is checked at, and an applied lambda has neither.
+/// A reduct holds such a redex wherever reduction stopped above it. A definition unfolded at an argument that is itself a function leaves that function's value applied under the binders reduction did not enter: `Ord/Transitive(Ord/le_by(ord))` unfolds to a bound over `((a, b) => Ordering/is_le(ord(a, b)))(x, y)`. A reader would not have written the redex, and it does not read back: a lambda's parameters take their types from an annotation or from the position it is checked at, and an applied lambda has neither.
 pub fn contract_redexes(term: &Term) -> Term {
     // Memoized on node identity, as the refold is and for its reason.
     let mut visit = Visit::rewriting_shared(

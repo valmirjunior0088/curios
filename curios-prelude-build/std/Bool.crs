@@ -10,7 +10,7 @@ pub mod or;
 pub use or/{let or};
 
 use /std/{Str, Option, Bytes, Eq, Show, Spell, Ordering, Ord, Hash, Map};
-use /std/ops/{Eql, Or, And, Cmp};
+use /std/ops/{Eql, Or, And};
 
 --- The other value.
 pub let not(b: Bool) -> Bool =
@@ -76,15 +76,10 @@ pub let ord(a: Bool, b: Bool) -> Ordering =
     | (true, false) => Ordering/gt()
     end;
 
-satisfy Cmp(Bool) {
-    lt(a, b) = Ordering/is_lt(ord(a, b)),
-    le(a, b) = Ordering/is_le(ord(a, b)),
-    gt(a, b) = Ordering/is_gt(ord(a, b)),
-    ge(a, b) = Ordering/is_ge(ord(a, b)),
-}
-
 satisfy Ord(Bool) {
     ord = ord,
+    lt(a, b) = Ordering/is_lt(ord(a, b)),
+    le(a, b) = Ordering/is_le(ord(a, b)),
 }
 
 satisfy Hash(Bool) {

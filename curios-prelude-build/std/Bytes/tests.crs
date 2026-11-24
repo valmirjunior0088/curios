@@ -79,7 +79,7 @@ let _a_run_below_another_is_before_it_wherever_the_two_stand(
             Bytes/ord/below/onto(a, b, s, u, parted)));
 
 -- The order of bytes carries across a middle run, and reads through a shared prefix.
-let _the_order_of_bytes_is_transitive: Ord/Transitive(Ord/le(Bytes/ord)) =
+let _the_order_of_bytes_is_transitive: Ord/Transitive(Ord/le_by(Bytes/ord)) =
     Bytes/ord/transitive;
 
 let _the_order_of_bytes_reads_past_a_shared_prefix(

@@ -8,18 +8,6 @@ pub concept Eql(A: Type): pub Type {
     eql(A, A) -> Bool,
 }
 
---- The four ordered comparisons, which `<`, `<=`, `>` and `>=` dispatch through, each answering a `Bool`.
-pub concept Cmp(A: Type): pub Type {
-    --- Whether the first is below the second.
-    lt(A, A) -> Bool,
-    --- Whether the first is below the second or equal to it.
-    le(A, A) -> Bool,
-    --- Whether the first is above the second.
-    gt(A, A) -> Bool,
-    --- Whether the first is above the second or equal to it.
-    ge(A, A) -> Bool,
-}
-
 --- Addition, which `+` dispatches through.
 pub concept Add(A: Type): pub Type {
     --- The sum of the two.

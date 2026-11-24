@@ -144,7 +144,7 @@ fn the_standard_library_documents_from_the_archive() {
             .iter()
             .map(|member| member.name.as_str())
             .collect::<Vec<_>>(),
-        ["", "ord"],
+        ["", "ord", "lt", "le"],
         "{:?}",
         ordered.members
     );

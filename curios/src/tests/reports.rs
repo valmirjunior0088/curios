@@ -196,6 +196,12 @@ fn each_refusal_kind_reads_as_its_reader_wrote_at_its_place() {
             "undischarged bound\n│  the bound of `needs` was not discharged\n│  nothing discharged `Holds(b != 0)`\n│  it fails at `b = 0`\n│  guard the call with `b != 0`\n│  or supply it explicitly, `needs(@...)`\n",
             "│  4 │ let call(b: Nat) -> Nat = needs(b);\n│    │                           ^^^^^^^^",
         ),
+        // Undischarged bound over `>`, written back as the `<` over the operands swapped that it elaborates to.
+        (
+            "use /std/{Nat};\nuse /std/Bool/{Holds};\nlet needs(b: Nat, @_: Holds(b > 3)) -> Nat = b;\nlet call(b: Nat) -> Nat = needs(b);\n/std/print(\"\")\n",
+            "undischarged bound\n│  the bound of `needs` was not discharged\n│  nothing discharged `Holds(3 < b)`\n│  it fails at `b = 0`\n│  guard the call with `3 < b`\n│  or supply it explicitly, `needs(@...)`\n",
+            "│  4 │ let call(b: Nat) -> Nat = needs(b);\n│    │                           ^^^^^^^^",
+        ),
         // Undischarged bound over a product, which the search reads as an unknown of its own.
         (
             "use /std/{Nat};\nuse /std/Bool/{Holds};\nlet small(x: Nat, y: Nat, @_: Holds(x * y <= 10)) -> Nat = x;\nlet call(x: Nat, y: Nat) -> Nat = small(x, y);\n/std/print(\"\")\n",

@@ -136,7 +136,7 @@ let _a_maps_keys_are_in_their_order(
     use Map/Key(K),
     @V: Type,
     m: Map(K, V),
-) -> Holds(List/ordered(Map/keys(m), Ord/lt((a: K, b: K) => Ord/ord(a, b)))) =
+) -> Holds(List/ordered(Map/keys(m), Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))) =
     Map/keys/ordered(m);
 
 -- A map is a function of its entries: two orders of insertion build one map, decided by reduction.

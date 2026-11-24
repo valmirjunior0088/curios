@@ -44,7 +44,7 @@ fn a_goal_over_a_compound_scrutinee_is_read_at_each_case() {
     assert_eq!(run(source), b"4");
 }
 
-// Scrutinee refinement keys on the applied head's tag, `Term::head_key`, which the reducer's refinement lookup gates on. A concept-dispatched comparison reduces past the `Cmp` wrapper to an intrinsic normal form, which is not an application, so `head_key` tags the intrinsic: an untagged `match a <= hi` would register a refinement key the probe never looks up, and the arm would silently fail to refine where the equivalent `Nat/le(a, hi)` spelling refines. Operators must be usable in a proof-carrying position, not just the intrinsic spelling.
+// Scrutinee refinement keys on the applied head's tag, `Term::head_key`, which the reducer's refinement lookup gates on. A concept-dispatched comparison reduces past the `Ord` witness to an intrinsic normal form, which is not an application, so `head_key` tags the intrinsic: an untagged `match a <= hi` would register a refinement key the probe never looks up, and the arm would silently fail to refine where the equivalent `Nat/le(a, hi)` spelling refines. Operators must be usable in a proof-carrying position, not just the intrinsic spelling.
 #[test]
 fn operator_scrutinee_refines_a_proof_carrying_arm() {
     let source = r#"

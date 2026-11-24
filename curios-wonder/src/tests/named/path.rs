@@ -218,7 +218,6 @@ fn a_re_exported_path_answers_the_declaration_behind_it() {
             "/std/Show",
             "/std/Spell",
             "/std/Monad",
-            "/std/ops/Cmp",
             "/std/Ord",
             "/std/Hash"
         ]
@@ -511,7 +510,7 @@ fn a_path_answers_the_declaration_and_the_module_it_names() {
         })
     };
 
-    assert_eq!(named("/std/ops"), Some((None, Some(9))));
+    assert_eq!(named("/std/ops"), Some((None, Some(8))));
     assert_eq!(named("/std/print"), Some((Some(Declared::Function), None)));
     assert_eq!(
         named("/std/Map").map(|(declared, module)| (declared, module.is_some())),

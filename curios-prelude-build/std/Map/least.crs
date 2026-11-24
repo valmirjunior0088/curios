@@ -18,7 +18,7 @@ pub let Among(@K: Type, @V: Type, found: Option({K, V}), l: List(K)) -> Prop =
 pub let Below(@K: Type, use Key(K), @V: Type, found: Option({K, V}), x: K) -> Prop =
     match found
     | none() => Bool/False
-    | some(entry) => Bool/Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(entry.0, x))
+    | some(entry) => Bool/Holds(Ord/le_by((a: K, b: K) => Ord/ord(a, b))(entry.0, x))
     end;
 
 pub let among(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Among(least(m), keys(m)) =

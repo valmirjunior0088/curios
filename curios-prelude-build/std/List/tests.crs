@@ -96,19 +96,19 @@ test ordered_decides_each_adjacent_pair =
     let by_text(p: {Nat, Str}, q: {Nat, Str}) -> Ordering = Str/ord(p.1, q.1);
     let tied = [(1, "b"), (1, "a"), (2, "a")];
     Test/all([
-        Test/assert("the empty list is in order", List/ordered(empty, Ord/le(Nat/ord))),
+        Test/assert("the empty list is in order", List/ordered(empty, Ord/le_by(Nat/ord))),
         Test/assert(
             "a list rising with a tie is in order",
-            List/ordered([1, 2, 2, 5], Ord/le(Nat/ord))),
+            List/ordered([1, 2, 2, 5], Ord/le_by(Nat/ord))),
         Test/assert(
             "a list that falls is out of order",
-            Bool/not(List/ordered([1, 3, 2], Ord/le(Nat/ord)))),
+            Bool/not(List/ordered([1, 3, 2], Ord/le_by(Nat/ord)))),
         Test/assert(
             "a list tied in its key is in order by that key",
-            List/ordered(tied, Ord/le(by_number))),
+            List/ordered(tied, Ord/le_by(by_number))),
         Test/assert(
             "the tie broken by text is out of order",
-            Bool/not(List/ordered(tied, Ord/then(by_number, Ord/le(by_text)))))]);
+            Bool/not(List/ordered(tied, Ord/then(by_number, Ord/le_by(by_text)))))]);
 
 -- A list in order at adjacent pairs is in order at every pair, where the relation carries across a middle element: stated over any relation and its law.
 let _adjacent_order_reaches_every_pair(
@@ -132,7 +132,7 @@ let whole_and_in_order(l: List(Nat)) -> Test({}) =
     let sorted = List/sort(l);
     Test/all([
         Test/equal(List/length(sorted), List/length(l)),
-        Test/assert("the sorted list is in order", List/ordered(sorted, Ord/le(Nat/ord)))]);
+        Test/assert("the sorted list is in order", List/ordered(sorted, Ord/le_by(Nat/ord)))]);
 
 -- A hundred thousand elements, which a sort as deep as its input or as costly as its square does not answer for: already in order, in reverse, and scattered.
 test sort_answers_at_a_hundred_thousand_elements_in_any_order =
@@ -146,7 +146,7 @@ let _a_closed_sort_computes: Eq()(List/sort_by([3, 1, 2, 1], Nat/ord), [1, 1, 2,
     Eq/refl();
 
 let _a_closed_sort_is_in_order: Holds(
-    List/ordered(List/sort_by([3, 1, 2, 1], Nat/ord), Ord/le(Nat/ord))) =
+    List/ordered(List/sort_by([3, 1, 2, 1], Nat/ord), Ord/le_by(Nat/ord))) =
     True/qed();
 
 -- The theorem's two statements, each over any comparator: the answer is the input rearranged, under no law, and it is in order under the comparator's flip.
@@ -162,7 +162,7 @@ let _a_sort_is_in_order_under_the_flip(
     ord: (T, T) -> Ordering,
     flips: Ord/Flips(ord),
     l: List(T),
-) -> Holds(List/ordered(List/sort_by(l, ord), Ord/le(ord))) =
+) -> Holds(List/ordered(List/sort_by(l, ord), Ord/le_by(ord))) =
     List/sort_by/sorted(ord, flips, l);
 
 -- What stable buys: a list sorted by one comparator and then by another is in order by the second, and by the first among what the second ties.
@@ -172,18 +172,20 @@ let _two_sorts_order_by_both_keys(
     earlier: (T, T) -> Ordering,
     later_flips: Ord/Flips(later),
     earlier_flips: Ord/Flips(earlier),
-    earlier_carries: Ord/Transitive(Ord/le(earlier)),
+    earlier_carries: Ord/Transitive(Ord/le_by(earlier)),
     l: List(T),
 ) -> Holds(
-    List/ordered(List/sort_by(List/sort_by(l, earlier), later), Ord/then(later, Ord/le(earlier)))) =
+    List/ordered(
+        List/sort_by(List/sort_by(l, earlier), later),
+        Ord/then(later, Ord/le_by(earlier)))) =
     let once = List/sort_by(l, earlier);
     List/sort_by/ordered(
         later,
         later_flips,
-        Ord/le(earlier),
+        Ord/le_by(earlier),
         once,
         Pairwise/of_ordered(
-            Ord/le(earlier),
+            Ord/le_by(earlier),
             earlier_carries,
             once,
             List/sort_by/sorted(earlier, earlier_flips, l)));
@@ -191,12 +193,12 @@ let _two_sorts_order_by_both_keys(
 -- The theorem read at the orders the examples above sort by: a list of naturals and a list of texts, each by its type's own order, whose flip stands in a module beside it.
 let _naturals_sort_in_order(
     l: List(Nat),
-) -> Holds(List/ordered(List/sort(l), Ord/le((a: Nat, b: Nat) => Ord/ord(a, b)))) =
+) -> Holds(List/ordered(List/sort(l), Ord/le_by((a: Nat, b: Nat) => Ord/ord(a, b)))) =
     List/sort/sorted(Nat/ord/flips, l);
 
 let _texts_sort_in_order(
     l: List(Str),
-) -> Holds(List/ordered(List/sort(l), Ord/le((a: Str, b: Str) => Ord/ord(a, b)))) =
+) -> Holds(List/ordered(List/sort(l), Ord/le_by((a: Str, b: Str) => Ord/ord(a, b)))) =
     List/sort/sorted(Str/ord/flips, l);
 
 let _a_sort_of_texts_rearranges(l: List(Str)) -> Permutation()(l, List/sort(l)) =

@@ -2,7 +2,7 @@ pub use /sys/{let Result};
 pub use /sys/Result/{success, failure};
 
 use /std/{Bool, Show, Spell, Fmt, Option, Ordering, Ord, Monad};
-use /std/ops/{Eql, Cmp};
+use /std/ops/{Eql};
 
 --- `a` as a success.
 pub let pure(@E: Type, @A: Type, a: A) -> Result(E, A) =
@@ -104,13 +104,8 @@ pub let ord(
         end
     end;
 
-satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Cmp(Result(E, A)) {
-    lt(a, b) = Ordering/is_lt(ord(a, b)),
-    le(a, b) = Ordering/is_le(ord(a, b)),
-    gt(a, b) = Ordering/is_gt(ord(a, b)),
-    ge(a, b) = Ordering/is_ge(ord(a, b)),
-}
-
 satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Ord(Result(E, A)) {
     ord = ord,
+    lt(a, b) = Ordering/is_lt(ord(a, b)),
+    le(a, b) = Ordering/is_le(ord(a, b)),
 }

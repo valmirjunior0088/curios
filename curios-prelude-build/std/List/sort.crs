@@ -28,5 +28,5 @@ pub let sorted(
     use Ord(T),
     flips: Ord/Flips((a: T, b: T) => Ord/ord(a, b)),
     l: List(T),
-) -> Bool/Holds(List/ordered(sort(l), Ord/le((a: T, b: T) => Ord/ord(a, b)))) =
+) -> Bool/Holds(List/ordered(sort(l), Ord/le_by((a: T, b: T) => Ord/ord(a, b)))) =
     sort_by/sorted((a, b) => Ord/ord(a, b), flips, l);

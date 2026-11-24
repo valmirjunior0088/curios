@@ -2,7 +2,7 @@ pub use /sys/{let Byte};
 pub use /sys/Byte/{to_nat};
 
 use /std/{Ordering, Nat, Bool, Bytes, Show, Spell, Ord, Hash, Map, Eq};
-use /std/ops/{Eql, Cmp, And, Or};
+use /std/ops/{Eql, And, Or};
 
 --- Whether the two are equal.
 pub let eql(a: Byte, b: Byte) -> Bool =
@@ -72,7 +72,7 @@ pub let rotr(a: Byte, count: Nat) -> Byte =
 --- The order of the two values.
 pub let ord(a: Byte, b: Byte) -> Ordering =
     match
-    | a < b => Ordering/lt()
+    | lt(a, b) => Ordering/lt()
     | a == b => Ordering/eq()
     | _ => Ordering/gt()
     end;
@@ -89,13 +89,6 @@ satisfy Or(Byte) {
     or = or,
 }
 
-satisfy Cmp(Byte) {
-    lt = lt,
-    le = le,
-    gt = gt,
-    ge = ge,
-}
-
 satisfy Show(Byte) {
     show(b) = Nat/to_str(to_nat(b)),
 }
@@ -106,6 +99,8 @@ satisfy Spell(Byte) {
 
 satisfy Ord(Byte) {
     ord = ord,
+    lt = lt,
+    le = le,
 }
 
 -- Spelled as the byte rather than routed through `Bytes/of_nat` and padded back to one byte, which is the same encoding for all 256 values and says it the long way round: `of_nat` answers the empty run at zero, so the padding existed only to undo that. Written directly, `/std/Map`'s `Key(Byte)` reads the byte back with the index that put it there instead of proving its way through a minimal encoding.

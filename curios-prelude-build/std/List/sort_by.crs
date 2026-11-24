@@ -608,5 +608,5 @@ pub let sorted(
     ord: (T, T) -> Ordering,
     flips: Ord/Flips(ord),
     l: List(T),
-) -> Bool/Holds(List/ordered(sort_by(l, ord), Ord/le(ord))) =
+) -> Bool/Holds(List/ordered(sort_by(l, ord), Ord/le_by(ord))) =
     ordered(ord, flips, (_, _) => true, l, Pairwise/everywhere((_, _) => Bool/True/qed(), l));

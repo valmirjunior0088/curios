@@ -52,9 +52,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         rem: field(&["std", "Remainder"], "rem"),
         eql: field(&["std", "Equal", "Equal"], "eql"),
         lt: field(&["std", "Compare"], "lt"),
-        gt: field(&["std", "Compare"], "gt"),
         le: field(&["std", "Compare"], "le"),
-        ge: field(&["std", "Compare"], "ge"),
         and: field(&["std", "And"], "and"),
         or: field(&["std", "Or"], "or"),
     },
@@ -99,6 +97,8 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             lexicographic: name(&["std", "Ord", "lexicographic"]),
             by_tag: name(&["std", "Ord", "by_tag"]),
             eq: name(&["std", "Ord", "Ordering", "Ordering", "eq"]),
+            is_lt: name(&["std", "Ord", "Ordering", "is_lt"]),
+            is_le: name(&["std", "Ord", "Ordering", "is_le"]),
         },
         hash: HashDerivation {
             hash: field(&["std", "Digest", "Digest"], "digest"),

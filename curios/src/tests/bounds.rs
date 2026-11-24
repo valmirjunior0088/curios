@@ -1168,7 +1168,7 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
         "{power}"
     );
 
-    // A guard written through `Cmp` is recorded as written and as the dispatch resolves, and is one fact.
+    // A guard written through `Ord` is recorded as written and as the dispatch resolves, and is one fact.
     let guarded = {
         let program = format!(
             "{HEADER}\nlet row(n: Nat) -> Nat = match n <= 0x7F | true => match proved(@False) end | false => 0 end;\nIo/pure(())"

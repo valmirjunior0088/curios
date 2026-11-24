@@ -1,5 +1,5 @@
 use /std/{Int, Nat, Ord, Hash, Spell, Fmt, Str, Option, Show};
-use /std/ops/{Eql, Cmp, Add, Sub};
+use /std/ops/{Eql, Add, Sub};
 use /std/time/{iso8601};
 
 --- A length of time, signed: one count of nanoseconds, so a sum and a difference are the count's own and a length below zero is one too.
@@ -17,13 +17,6 @@ satisfy Ord(Duration) {
 
 satisfy Hash(Duration) {
     ..
-}
-
-satisfy Cmp(Duration) {
-    lt(a, b) = a.nanos < b.nanos,
-    le(a, b) = a.nanos <= b.nanos,
-    gt(a, b) = a.nanos > b.nanos,
-    ge(a, b) = a.nanos >= b.nanos,
 }
 
 satisfy Add(Duration) {

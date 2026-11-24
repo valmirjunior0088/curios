@@ -37,7 +37,7 @@ use normalization/{normalized};
 
 use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Result, Eq, Show, Spell, Ordering, Ord, Hash,
     Map, proved};
-use /std/ops/{Eql, Cmp};
+use /std/ops/{Eql};
 
 --- What a byte begins, as UTF-8 reads it.
 pub induct Class: pub Type
@@ -910,15 +910,10 @@ satisfy Spell(Str) {
         concat("\"", concat(body, "\"")),
 }
 
-satisfy Cmp(Str) {
-    lt(a, b) = Ordering/is_lt(ord(a, b)),
-    le(a, b) = Ordering/is_le(ord(a, b)),
-    gt(a, b) = Ordering/is_gt(ord(a, b)),
-    ge(a, b) = Ordering/is_ge(ord(a, b)),
-}
-
 satisfy Ord(Str) {
     ord = ord,
+    lt(a, b) = Ordering/is_lt(ord(a, b)),
+    le(a, b) = Ordering/is_le(ord(a, b)),
 }
 
 --- The UTF-8 bytes.

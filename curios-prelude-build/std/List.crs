@@ -36,7 +36,7 @@ pub mod sort;
 pub use sort/{let sort};
 
 use /std/{Nat, Bool, Option, Str, Show, Spell, Fmt, Monad, Ordering, Ord, Hash, proved};
-use /std/ops/{Eql, Cmp};
+use /std/ops/{Eql};
 
 --- The element at `i`, or `none` past the end.
 pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =
@@ -254,15 +254,10 @@ pub let ord(@T: Type, use Ord(T), a: List(T), b: List(T)) -> Ordering =
         end
     end;
 
-satisfy (@T: Type, use Ord(T)) => Cmp(List(T)) {
-    lt(a, b) = Ordering/is_lt(ord(a, b)),
-    le(a, b) = Ordering/is_le(ord(a, b)),
-    gt(a, b) = Ordering/is_gt(ord(a, b)),
-    ge(a, b) = Ordering/is_ge(ord(a, b)),
-}
-
 satisfy (@T: Type, use Ord(T)) => Ord(List(T)) {
     ord = ord,
+    lt(a, b) = Ordering/is_lt(ord(a, b)),
+    le(a, b) = Ordering/is_le(ord(a, b)),
 }
 
 satisfy (@A: Type, use Hash(A)) => Hash(List(A)) {

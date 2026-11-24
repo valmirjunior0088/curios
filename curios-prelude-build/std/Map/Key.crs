@@ -53,7 +53,10 @@ pub let flips(@K: Type, use Key(K)) -> Ord/Flips((a: K, b: K) => Ord/ord(a, b)) 
                 Eq/cong(Ordering/flip, Eq/sym(Key/monotone(a, b)))));
 
 --- A key's order as a relation carries across a middle key, as the order of bytes does.
-pub let transitive(@K: Type, use Key(K)) -> Ord/Transitive(Ord/le((a: K, b: K) => Ord/ord(a, b))) =
+pub let transitive(
+    @K: Type,
+    use Key(K),
+) -> Ord/Transitive(Ord/le_by((a: K, b: K) => Ord/ord(a, b))) =
     (a, b, c, p, q) =>
         Eq/subst(
             (o: Ordering) => Bool/Holds(Ordering/is_le(o)),

@@ -5,10 +5,14 @@ pub use Ordering/{let Ordering};
 use /std/{Nat, List, Bool, Eq};
 use /std/ops/{Eql};
 
---- A total order: `ord` decides `lt`, `eq` or `gt`, and `Eql` is its superclass.
+--- A total order: `ord` decides `lt`, `eq` or `gt`, and `Eql` is its superclass. `<` and `<=` dispatch through `lt` and `le`, and `>` and `>=` through them with their operands swapped.
 pub concept Ord(A: Type): pub Type {
     use Eql(A),
     ord(A, A) -> Ordering,
+    --- Whether the first is below the second: a method of its own, so a carrier states the comparison its bounds are read in.
+    lt(A, A) -> Bool,
+    --- Whether the first is below the second or equal to it.
+    le(A, A) -> Bool,
 }
 
 pub use Ord/*;
@@ -38,16 +42,16 @@ pub let Transitive(@T: Type, le: (T, T) -> Bool) -> Prop =
     (a: T, b: T, c: T, Bool/Holds(le(a, b)), Bool/Holds(le(b, c))) -> Bool/Holds(le(a, c));
 
 --- `ord` as a relation: what it does not answer `gt` at.
-pub let le(@T: Type, ord: (T, T) -> Ordering) -> (T, T) -> Bool =
+pub let le_by(@T: Type, ord: (T, T) -> Ordering) -> (T, T) -> Bool =
     (a, b) => Ordering/is_le(ord(a, b));
 
 --- `ord` as a strict relation: what it answers `lt` at.
-pub let lt(@T: Type, ord: (T, T) -> Ordering) -> (T, T) -> Bool =
+pub let lt_by(@T: Type, ord: (T, T) -> Ordering) -> (T, T) -> Bool =
     (a, b) => Ordering/is_lt(ord(a, b));
 
 --- `ord`, and `second` among what `ord` ties: the relation that holds where `ord` answers `lt`, and where it answers `eq` and `second` holds.
 ---
---- At a `second` that always holds it is `le(ord)`. It is the order two sorts in a row leave a list in, the later sort's comparator first.
+--- At a `second` that always holds it is `le_by(ord)`. It is the order two sorts in a row leave a list in, the later sort's comparator first.
 pub let then(@T: Type, ord: (T, T) -> Ordering, second: (T, T) -> Bool) -> (T, T) -> Bool =
     (a, b) =>
         match ord(a, b)

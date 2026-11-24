@@ -1,5 +1,5 @@
 use /std/{Flt, Nat, Int, Bool, Option, Ordering, Str, Show, Spell, Fmt, Ord, Hash};
-use /std/ops/{Eql, Cmp, Add, Sub, Mul};
+use /std/ops/{Eql, Add, Sub, Mul};
 use /std/Flt/{Rounding, exact};
 
 --- A dyadic rational, `mantissa · 2^exponent`. Every finite float's exact value is one, and so is every sum, difference and product of them, so the arithmetic here never rounds; `to_flt` is the one way back to a float.
@@ -94,14 +94,6 @@ pub let le(a: Dyadic, b: Dyadic) -> Bool =
     let e = common(a, b);
     lowered(a, e) <= lowered(b, e);
 
---- Whether `a` is above `b`.
-pub let gt(a: Dyadic, b: Dyadic) -> Bool =
-    lt(b, a);
-
---- Whether `a` is at least `b`.
-pub let ge(a: Dyadic, b: Dyadic) -> Bool =
-    le(b, a);
-
 --- The order of the two numbers, which is total: unlike `Flt`, nothing here is unordered.
 pub let ord(a: Dyadic, b: Dyadic) -> Ordering =
     let e = common(a, b);
@@ -115,15 +107,10 @@ satisfy Eql(Dyadic) {
     eql = eql,
 }
 
-satisfy Cmp(Dyadic) {
-    lt = lt,
-    le = le,
-    gt = gt,
-    ge = ge,
-}
-
 satisfy Ord(Dyadic) {
     ord = ord,
+    lt = lt,
+    le = le,
 }
 
 satisfy Add(Dyadic) {

@@ -51,7 +51,7 @@ pub mod hash;
 pub use hash/{let hash};
 
 use /std/{Nat, Bool, Str, Option, Show, Spell, Ord, Hash, Map, Eq};
-use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
+use /std/ops/{Eql, Add, Sub, Mul, Div, Rem};
 
 --- That `a` is not zero, decided — what `/` and `%` on `Int` ask of a divisor.
 pub let NonZero(a: Int) -> Prop =
@@ -150,13 +150,6 @@ satisfy Eql(Int) {
     eql = eql,
 }
 
-satisfy Cmp(Int) {
-    lt = lt,
-    le = le,
-    gt = gt,
-    ge = ge,
-}
-
 satisfy Add(Int) {
     add = add,
 }
@@ -191,6 +184,8 @@ satisfy Spell(Int) {
 
 satisfy Ord(Int) {
     ord = ord,
+    lt = lt,
+    le = le,
 }
 
 --- The encoding [`hash`] writes: its natural's at or above zero and a complement below, so a smaller integer's is before a larger one's.

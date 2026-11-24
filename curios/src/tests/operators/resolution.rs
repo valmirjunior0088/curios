@@ -158,6 +158,35 @@ fn a_comparison_of_two_floats_is_refused_as_their_equality_is() {
     );
 }
 
+// `a > b` is `lt(b, a)`, read once the lowering has hoisted each operand's `!` in the order written, so the effects run as the program writes them, `f` before `g`, whatever order the operator reads its operands in.
+#[test]
+fn a_swapped_comparison_runs_its_operands_in_written_order() {
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Bool, Str, print};
+        let f() -> /std/Io(Nat) = let _ = print("f ")!; /std/Io/pure(1);
+        let g() -> /std/Io(Nat) = let _ = print("g ")!; /std/Io/pure(2);
+        let entry() -> /std/Io({}) = print(Bool/to_str(f()! > g()!));
+        entry()
+        "#),
+        b"f g false"
+    );
+}
+
+// A refused `>` names the operator written, not the method it reads.
+#[test]
+fn a_refused_swapped_comparison_names_its_own_operator() {
+    let message = error(
+        r#"
+        use /std/{Nat, Bool, Str, print};
+        struct Point: pub Type { x: Nat }
+        let p: Point = Point { x = 1 };
+        print(Bool/to_str(p > p))
+        "#,
+    );
+    assert!(message.contains("`>` operator"), "{message}");
+}
+
 // `!=` is the negation of the `eql` a witness states, with no method of its own to disagree with it: a witness answering `true` at every pair answers `false` for `!=` at every pair. A `!=` reading `eql` as it stands breaks every bound `/std` states over `!=` before any test runs, so the claim is held here by the fixture alone, which the shape with a `neq` of its own refused for the method it did not write.
 #[test]
 fn a_disequality_is_the_negation_of_its_witness_s_equality() {

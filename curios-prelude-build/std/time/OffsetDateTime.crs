@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Ord, Hash, Spell, Str, Option, Show};
+use /std/{Nat, Int, Ord, Ordering, Hash, Spell, Str, Option, Show};
 use /std/ops/{Eql};
 use /std/time/{Date, Time, DateTime, Offset, Timestamp, iso8601};
 
@@ -27,6 +27,8 @@ satisfy Ord(OffsetDateTime) {
             Ord/ord(to_timestamp(a), to_timestamp(b)),
             Ord/ord(a.date_time, b.date_time),
             Ord/ord(a.offset, b.offset)]),
+    lt(a, b) = Ordering/is_lt(Ord/ord(a, b)),
+    le(a, b) = Ordering/is_le(Ord/ord(a, b)),
 }
 
 --- The moment the date-time names at its offset: its seconds counted as POSIX counts a date and a time, less how far ahead of UTC the offset is, so a second of `60` counts as the next minute's first.
