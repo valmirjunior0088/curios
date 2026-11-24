@@ -237,6 +237,12 @@ pub fn insert_implicits_on_check(
     Ok((Term::func(binders, body), func_type))
 }
 
+/// Whether `reduct`, what a bound reduced to, is the empty proposition: a bound no proof discharges, whatever the facts in scope.
+pub fn reduces_to_false(context: &Context, reduct: &Term) -> bool {
+    let empty = Global::Authored(context.syntax().proof.false_type.qualifier());
+    matches!(&**reduct, Subterm::InductType(induct) if induct.name == empty)
+}
+
 /// The canonical inhabitant of `type_`, when it has exactly one and no argument is needed to build it.
 ///
 /// **This is not proof search.** The answer is unique, so there is no choice to make, nothing to backtrack over, and no incompleteness to reason about — it is the introduction-side counterpart of the singleton condition `singleton_eliminable` applies to elimination, and of proof irrelevance, which already holds that every inhabitant of a proposition is interchangeable. This rule only says that where exactly one exists and it takes no arguments, the elaborator may write it down.

@@ -17,7 +17,7 @@ pub use binding::{is_monad, monad_shape, numeral_default, region_flex};
 
 mod metavar;
 use metavar::*;
-pub use metavar::{trivially_inhabited, waits_as_reference};
+pub use metavar::{reduces_to_false, trivially_inhabited, waits_as_reference};
 
 mod intrinsic;
 use intrinsic::*;

@@ -1092,6 +1092,8 @@ pub enum Error {
         bound: Box<Term>,
         /// What `bound` reduced to when it was asked at the mint, kept when that is an inductive type: `Has(spec, "prot")` reduces to `False`, and the reduct is the sentence the spelling alone does not say.
         reduct: Option<Box<Term>>,
+        /// Whether `reduct` is the empty proposition: the bound is false as written, so no proof is there to write and no search or guard is the way out.
+        refuted: bool,
         /// Why the procedure that proves a bound from the facts in scope proved nothing: the facts it considered, and what its search concluded.
         refusal: Option<Box<Refusal>>,
     },
@@ -1994,6 +1996,7 @@ impl Error {
         binder: Option<String>,
         bound: Term,
         reduct: Option<Term>,
+        refuted: bool,
         refusal: Option<Refusal>,
     ) -> Self {
         Self::UndischargedBound {
@@ -2001,6 +2004,7 @@ impl Error {
             binder,
             bound: Box::new(bound),
             reduct: reduct.map(Box::new),
+            refuted,
             refusal: refusal.map(Box::new),
         }
     }

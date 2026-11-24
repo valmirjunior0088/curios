@@ -1471,9 +1471,24 @@ fn a_written_goal_over_a_bound_shows_what_the_procedure_found() {
 fn a_vector_literal_of_another_length_is_refused_by_its_count() {
     let report =
         error("use /std/{Vec, Nat};\nlet v: Vec(Nat, 2) = Vec { [1, 2, 3] };\n/std/print(\"ok\")");
+    // False as written, it says so and stops: no search could decide it, and no proof of it is there to write.
     assert!(
         report.contains("the bound `counted` of `Vec` was not discharged")
-            && report.contains("which reduces to `/std/Bool/False`"),
+            && report.contains("which reduces to `/std/Bool/False`")
+            && !report.contains("the search finds no proof")
+            && !report.contains("write it explicitly"),
+        "{report}"
+    );
+}
+
+/// A bound over a product of unknowns is one the search reads the product of as an unknown of its own, so the report says why it found neither a proof nor values that break the bound.
+#[test]
+fn a_bound_over_a_product_of_unknowns_says_the_search_read_it_as_one() {
+    let report =
+        error("use /std/{Nat};\nlet f(a: Nat, b: Nat) -> Nat = 10 / (a * b);\n/std/print(\"ok\")");
+    assert!(
+        report.contains("the search finds no proof, and no values under which it fails")
+            && report.contains("it reads a product of unknowns as an unknown of its own"),
         "{report}"
     );
 }

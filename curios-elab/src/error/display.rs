@@ -1817,6 +1817,7 @@ impl Displayed<'_> {
                 binder,
                 bound,
                 reduct,
+                refuted,
                 refusal,
             } => {
                 let bound = bound.spelled(spelling);
@@ -1833,6 +1834,17 @@ impl Displayed<'_> {
                             reduct.spelled(spelling)
                         )),
                     _ => f.stating(format_args!("nothing discharged `{bound}`")),
+                }
+                // A bound false as written that no fact in scope speaks to is said false by the line above: what the search could not decide, and a proof to write in its place, would mislead. Where facts were read, the search's account of them stays, a contradiction among them being a way the bound holds. A witness is still never called.
+                let false_alone = *refuted
+                    && refusal
+                        .as_ref()
+                        .is_none_or(|refusal| refusal.considered().is_empty());
+                if false_alone {
+                    if let Callee::Witness { .. } = callee {
+                        witness_never_called(f);
+                    }
+                    return;
                 }
                 if let Some(refusal) = refusal {
                     refused(f, refusal, spelling);

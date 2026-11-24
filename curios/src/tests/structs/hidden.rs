@@ -121,7 +121,8 @@ fn a_hidden_field_nothing_fills_is_refused_at_the_literal() {
         use /std/{Nat, Str, print};
         use /std/Bool/{Holds};
         struct Positive: pub Type { n: Nat, @Holds(0 < n) }
-        print(Nat/to_str(Positive { n = 0 }.n))
+        let first(m: Nat) -> Nat = Positive { n = m }.n;
+        print(Nat/to_str(first(1)))
         "#;
 
     let report = error(source);
@@ -130,7 +131,7 @@ fn a_hidden_field_nothing_fills_is_refused_at_the_literal() {
         "{report}"
     );
     assert!(
-        report.contains("nothing discharged `Holds(0 < 0)`"),
+        report.contains("nothing discharged `Holds(0 < m)`"),
         "{report}"
     );
     assert!(report.contains("{ @... }"), "{report}");

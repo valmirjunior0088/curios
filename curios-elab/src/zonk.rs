@@ -4,7 +4,7 @@ mod tests;
 use {
     super::{
         BirthTelescope, Context, Error, GoalReport, ReaderScope, Suggestions, callee,
-        contract_redexes, refold_recs, settle_qualities, suggest_candidates,
+        contract_redexes, reduces_to_false, refold_recs, settle_qualities, suggest_candidates,
         validate_entry_universes, written,
     },
     curios_common::recurse,
@@ -230,6 +230,9 @@ impl<'a> Zonk<'a> {
                                     binder,
                                     bound,
                                     entry.reduct().cloned(),
+                                    entry.reduct().is_some_and(|reduct| {
+                                        reduces_to_false(self.context, reduct)
+                                    }),
                                     entry.refusal().cloned(),
                                 ),
                                 _ => Error::uninferred_implicit(callee, binder, bound),

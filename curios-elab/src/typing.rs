@@ -7,9 +7,9 @@ use {
         Mode, Opened, Outcome, ParkedChoice, ParkedConversion, ParkedProblem, ParkedWork, Problem,
         Spines, Watched, answer_witness, answers_differ, callee, elaborate, elaborate_func_settle,
         hold_spines, mismatch, no_witness_error, numeral_default, obligation_shown, pending,
-        probe_open_sort, problem_outcome, reduce_forced, region_flex, resolved_for_display,
-        retry_discharge, retry_witness, shallow_scrutinee, subsume_outcome, synth_neutral,
-        terms_differ, waits_as_reference, zonk_solved_term_metas,
+        probe_open_sort, problem_outcome, reduce_forced, reduces_to_false, region_flex,
+        resolved_for_display, retry_discharge, retry_witness, shallow_scrutinee, subsume_outcome,
+        synth_neutral, terms_differ, waits_as_reference, zonk_solved_term_metas,
     },
     crate::{declared_quality, is_prop_to, sort_of, sort_of_in},
     curios_analysis::{
@@ -1662,6 +1662,9 @@ fn root_blocker_error(
 
     let callee = callee(context, &origin.callee);
     let binder = origin.parameter.map(|name| name.as_str().to_string());
+    let refuted = reduct
+        .as_ref()
+        .is_some_and(|reduct| reduces_to_false(context, reduct));
     Some(
         pending(context, [&bound], move |reporting, [bound]| {
             Error::undischarged_bound(
@@ -1669,6 +1672,7 @@ fn root_blocker_error(
                 binder,
                 resolved_for_display(reporting, &bound),
                 reduct,
+                refuted,
                 refusal,
             )
         })
