@@ -1,6 +1,6 @@
 # Equality and order carry their laws
 
-**Adopted by the user on 2026-11-22; its next step is stage 1, which waits on the three points its delivery met, named under the stage.** `==` decides equality and `<` a total order wherever a type has them: `Eql` and `Ord` carry their laws as fields, as `Div` carries its precondition, so generic code and its theorems rely on what an operator says rather than taking the law as a hypothesis, and a type that cannot meet the laws has no witness and names its comparisons, as `Flt` names `Flt/eql` and `Flt/identical`. Curios states a partial operation's domain where the operation is, rather than giving it a total face that answers junk or traps ([A partial primitive is totalized by a canonical extension, or it states its domain](../../design/arithmetic/a-partial-primitive-is-totalized-by-a-canonical-extension-or-it-states-its-domain.md)), and a lawless `==` is that face over a concept.
+**Adopted by the user on 2026-11-22; its next step is stage 1, which waits on the two points its delivery met, named under the stage.** `==` decides equality and `<` a total order wherever a type has them: `Eql` and `Ord` carry their laws as fields, as `Div` carries its precondition, so generic code and its theorems rely on what an operator says rather than taking the law as a hypothesis, and a type that cannot meet the laws has no witness and names its comparisons, as `Flt` names `Flt/eql` and `Flt/identical`. Curios states a partial operation's domain where the operation is, rather than giving it a total face that answers junk or traps ([A partial primitive is totalized by a canonical extension, or it states its domain](../../design/arithmetic/a-partial-primitive-is-totalized-by-a-canonical-extension-or-it-states-its-domain.md)), and a lawless `==` is that face over a concept.
 
 ## What is wrong today
 
@@ -33,11 +33,10 @@
 
 **1. `Eql`'s laws.** The two fields; their proofs written by the derivation and by the 24 written witnesses; each carrier's `eq_of_eql` made private, its callers reading `Eql/eq_of_eql` ([the bridge finding](000-findings.md)). Check: a witness whose `eql` breaks either law is refused where it is declared; a derived witness of a recursive family, of a nested one and of one with a proof field is accepted.
 
-The stage waits on three points, each the user's to decide:
+The stage waits on two points:
 
 - **A family nested two witnesses deep has no lawful witness**, `Json` among them, until the totality record reads that nesting ([soundness's finding](../soundness/000-findings.md)), or its `eql` is written so the record reads it.
 - **`Map`'s `Eql` as **Settled** has it cannot carry `Toml`'s.** Comparing listings, it applies the values' method to what a fold built, so a family nested through a map does not descend through it. An `eql` over the trie itself would: the trie is a function of its entries (`Node/canonical`, `Map/try_get.crs`), so two maps hold the same entries exactly where their tries are one, the values' method is applied at a leaf's own payload, below the map, and its law is a structural proof that needs neither `try_get/injective` nor the listing lemmas.
-- **A derived proof at a payload whose witness is a record's over the family's own, or over a premise's, is refused as a type mismatch** ([theory's finding](../theory/000-findings.md)), `Toml`'s at a map compared by its trie among them.
 
 A law applied at the binders of a struct's or a tuple's helper is graded as a call at fresh arguments (probed at `3c4346ab6`), so the helper is a congruence, taking an equation for each field, and the law is applied at the projections, a field being below its record.
 

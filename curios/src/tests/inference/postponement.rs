@@ -1,6 +1,6 @@
 //! A checking problem that cannot proceed yet, and what wakes it.
 
-use crate::tests::test_support::*;
+use {crate::tests::test_support::*, curios_common::fill};
 
 #[test]
 fn parked_constraints_let_nested_constructor_metas_resolve() {
@@ -239,4 +239,50 @@ fn a_written_argument_solves_what_its_calls_type_leaves_open() {
         "#;
 
     assert_eq!(run(source), b"1 2");
+}
+
+// A call checked against its own statement while its witness slot is open: the expected side has unfolded the box's method to the premise's at the two items, and the call's side is the slot's method at the two boxes. Argument by argument the two are apart, `x` against `x.item`, which no solution repairs, and they are one once the slot is resolved as the box's witness, so the pair waits for it and nothing the comparison solved on its way stays.
+//
+// The refusal beside it is what says the wait is no acceptance: the same call against a statement at two boxes is apart once the slot is resolved, and is a mismatch.
+#[test]
+fn two_stuck_calls_wait_for_the_witness_one_is_stuck_on() {
+    let declarations = r#"
+        use /std/{Nat, Bool};
+        use /std/Bool/{True, Holds};
+        concept Refl(A: Type): Type {
+            same(A, A) -> Bool,
+            again(a: A) -> Holds(same(a, a)),
+        }
+        satisfy Refl(Nat) {
+            same(a, b) = a == b,
+            again(_) = True/qed(),
+        }
+        struct Box(V: Type): Type { item: V }
+        satisfy (@V: Type, use Refl(V)) => Refl(Box(V)) {
+            same(a, b) = Refl/same(a.item, b.item),
+            again(a) = Refl/again(a.item),
+        }
+        "#;
+    let held = fill!(
+        r#"
+        ${declarations}
+        let law(@V: Type, use Refl(V), x: Box(V)) -> Holds(Refl/same(x, x)) = Refl/again(x);
+        let _held: Holds(Refl/same(Box { item = 2 }, Box { item = 2 })) = law(Box { item = 2 });
+        /std/print("ok")
+        "#,
+        declarations
+    );
+    let apart = fill!(
+        r#"
+        ${declarations}
+        let law(@V: Type, use Refl(V), x: Box(V), y: Box(V)) -> Holds(Refl/same(x, y)) =
+            Refl/again(x);
+        /std/print("ok")
+        "#,
+        declarations
+    );
+
+    assert_eq!(run(&held), b"ok");
+    let report = error(&apart);
+    assert!(report.contains("type mismatch"), "{report}");
 }

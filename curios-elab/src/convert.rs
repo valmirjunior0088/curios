@@ -850,6 +850,47 @@ impl Convert {
         Ok(true)
     }
 
+    /// [`Self::compare_apply`] of two stuck applications, taken at once where neither waits on a metavariable, and otherwise asked in a run of its own, `waiting` being the pair under its raw spelling.
+    ///
+    /// **A congruence under a head a metavariable holds stuck is sufficient and never necessary.** `?w.eql(x, y)` against `d.eql(x.root, y.root)` are one once `?w` is solved as a record's witness, whose method unfolds to the other side, and posed argument by argument they are apart at `x` against `x.root`, which no solution repairs. So where the run holds, what it solved stays, and what it left waiting waits as it would have; where it finds the two apart the pair waits whole, what the run solved on its way there withdrawn with it, and is refused once the metavariable is solved and the two are apart still.
+    fn compare_stuck_apply(
+        &mut self,
+        context: &mut Context,
+        this: Apply,
+        that: Apply,
+        waiting: Option<Problem>,
+    ) -> Result<bool, ReduceError> {
+        let Some(waiting) = waiting else {
+            return self.compare_apply(context, this, that);
+        };
+
+        let mark = context.solution_mark();
+        let committed = context.solutions_committed();
+        let mut run = Self::under(
+            self.binders.clone(),
+            self.pairs.clone(),
+            self.extent,
+            self.site.clone(),
+        );
+        let outcome = match run.compare_apply(context, this, that) {
+            Ok(true) => run.outcome(context),
+            Ok(false) => Ok(Outcome::Mismatch(None)),
+            Err(error) => Err(error),
+        };
+        if matches!(outcome, Ok(Outcome::Mismatch(_))) {
+            context.rollback_solutions(mark);
+        }
+        context.end_solutions(mark);
+        self.progress |= context.solutions_committed() != committed;
+        match outcome? {
+            Outcome::Converts => {}
+            Outcome::Blocked(left) => self.blocked.extend(left),
+            Outcome::Mismatch(_) => self.blocked.push(waiting),
+        }
+
+        Ok(true)
+    }
+
     /// The arguments of two applications of one length, each pair posed at the type the left head's telescope gives it: what is left of two applications whose heads are posed, or held one.
     fn compare_spines(
         &mut self,
@@ -3092,8 +3133,12 @@ impl Convert {
                 (other, Subterm::Func(func)) => {
                     self.eta_expand_func(context, func, other.into(), type_.clone())?
                 }
-                // Both sides already reached `reduce`'s weak-head normal form before this dispatch (see `drain`), so a surviving `Apply` is genuinely stuck — same head or not, there is nothing further unfolding could reveal; `compare_apply` handles both uniformly (enqueuing the heads themselves when they differ, which recurs to a hard mismatch or resolves through whatever solves the head). Two folded calls are what the arm opens with, and unfolding does reveal more of them: a pair is unfolded against itself once ([`Pairs`]), and a comparison that grows past that spends the budget.
+                // Both sides already reached `reduce`'s weak-head normal form before this dispatch (see `drain`), so a surviving `Apply` is stuck — same head or not, there is nothing further unfolding could reveal while what holds it stuck stands; `compare_apply` handles both uniformly (enqueuing the heads themselves when they differ, which recurs to a hard mismatch or resolves through whatever solves the head), at once where neither side waits on a metavariable and in a run of its own where one does ([`Self::compare_stuck_apply`]). Two folded calls are what the arm opens with, and unfolding does reveal more of them: a pair is unfolded against itself once ([`Pairs`]), and a comparison that grows past that spends the budget.
                 (Subterm::Apply(this_a), Subterm::Apply(that_a)) => {
+                    // The pair as it waits where a metavariable holds a side stuck and its congruence does not hold ([`Self::compare_stuck_apply`]).
+                    let waiting = (blocked_on_unsolved_metavar(context, &problem.this)
+                        || blocked_on_unsolved_metavar(context, &problem.that))
+                    .then(|| raw_problem(&problem.type_));
                     let this_head = this_a.head.as_rec_proj().map(|(g, i)| (g.clone(), i));
                     let that_head = that_a.head.as_rec_proj().map(|(g, i)| (g.clone(), i));
 
@@ -3172,7 +3217,9 @@ impl Convert {
                             let this_unfolded = unfold_rec_apply(context, this_a.clone())?;
                             let that_unfolded = unfold_rec_apply(context, that_a.clone())?;
                             match (this_unfolded, that_unfolded) {
-                                (None, None) => self.compare_apply(context, this_a, that_a)?,
+                                (None, None) => {
+                                    self.compare_stuck_apply(context, this_a, that_a, waiting)?
+                                }
                                 (this_unfolded, that_unfolded) => {
                                     // Both opened is a pair unfolded against itself, and met again inside its own unfolding it is apart where both unfoldings re-stick, since unfolded again it poses what it posed one binder further in; where one takes its match apart, the unfolding is taken again. Where a metavariable keeps its heads undecided it waits for that instead, as the question of its levels does: a pair refused there would be refused by the order its metavariables were solved in.
                                     let nested = match (&this_unfolded, &that_unfolded) {
@@ -3208,7 +3255,7 @@ impl Convert {
                                 }
                             }
                         }
-                        _ => self.compare_apply(context, this_a, that_a)?,
+                        _ => self.compare_stuck_apply(context, this_a, that_a, waiting)?,
                     }
                 }
                 // A folded recursive call against anything that is not one is *forced* before it is compared, exactly as the certifier's conversion forces both sides: a closed scan then runs as one machine run rather than as one unfolding per round. Unfolding it a step at a time would make a `Str` literal's validity check quadratic in retention and superlinear in wall clock — every round re-reducing the next folded spelling, whose argument carries the scan's state unreduced, one `step` deeper per character, and storing it. Forcing that makes no progress — a call restuck on a variable — takes the one-step unfold, so a comparison against an unfolded body still meets it.
