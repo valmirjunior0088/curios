@@ -187,6 +187,10 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
                 }
                 _ => None,
             });
+            // A definition applied to its leading lambdas' arguments, handed where its callee applies it, takes what it is handed before those arguments are typed, as a member does.
+            let within = (!spine_head)
+                .then(|| certifier.calls.take_within(term))
+                .flatten();
             let mut from_head = Vec::new();
             let head_type = match &*apply.head {
                 Subterm::Func(func) if certifier.recording() => {
@@ -243,13 +247,17 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
                 });
             }
 
-            // A definition applying a parameter as its summary states hands a lambda there bounds for its binders, and a member there the calls it makes, over its spine's every list: this list's positions taken here, and the rest left for the applications around this one.
+            // A definition applying a parameter as its summary states hands a lambda there bounds for its binders, a member there the calls it makes, and a definition applied there what its own arguments are handed in turn, over its spine's every list: this list's positions taken here, and the rest left for the applications around this one.
             let (mut handed, rest) = match &*apply.head {
                 Subterm::Instance(instance) => {
                     let mut steps = vec![Segment::Arguments(apply.params().cloned().collect())];
                     steps.extend(later.iter().cloned());
                     let mut handed = certifier.handed_to(&instance.name, &steps)?;
                     let rest = handed.split_off(apply.arguments.len().min(handed.len()));
+                    if let Some(within) = &within {
+                        let given = apply.params().cloned().collect::<Vec<_>>();
+                        certifier.hand_within(&instance.name, &given, within, &mut handed)?;
+                    }
                     (handed, rest)
                 }
                 Subterm::Apply(_) | Subterm::Proj(_) => {

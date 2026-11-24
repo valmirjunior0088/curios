@@ -3,7 +3,7 @@
 //! Shared by every walk that finds calls — the elaborator's discovery [`Walk`](super::Walk), and the certifier's own typing walk — so a call is graded by one function whichever walk met it. What a walk contributes is its [`SizeContext`], built as it enters and leaves arms, and the arguments it saw at the call.
 
 use {
-    super::{Call, Carriers, Guard, Segment, Shape, Tag, spine},
+    super::{APPLICATIONS_LIMIT, Call, Carriers, Guard, Segment, Shape, Tag, spine},
     crate::{Driver, forceable},
     curios_core::{
         CallMatrix, Free, FreeMonoid, Global, Intrinsic, Layer, Nat, Probe, Proj, Size, Struct,
@@ -325,6 +325,18 @@ impl Applied {
     pub fn is_empty(&self) -> bool {
         self.itself.is_empty() && self.fields.iter().all(|(_, applied)| applied.is_empty())
     }
+
+    /// `self` with every application `other` states beside its own: what an argument two routes reach is handed.
+    pub fn beside(mut self, other: Applied) -> Applied {
+        self.itself.extend(other.itself);
+        for (path, applied) in other.fields {
+            match self.fields.iter_mut().find(|(at, _)| *at == path) {
+                Some((_, held)) => held.extend(applied),
+                None => self.fields.push((path, applied)),
+            }
+        }
+        self
+    }
 }
 
 /// What a call of `callee`'s part at `path` with `arguments` — its leading lambdas at the empty path, a field lambda of the record they answer otherwise, its arguments the leading lambdas' and then the field's — from a member whose parameters are `params`, hands each argument at a parameter the part applies as its summary states ([`Applications`](curios_core::Applications)): every matrix grading an application of that parameter, or of a field of it, against `params`, through what the call hands the part under `context`. `None` at a position the part summarizes nothing at or applies nowhere, and at every position where nothing is filed of the part or the call does not hand it every parameter.
@@ -400,6 +412,85 @@ pub fn handed<D: Driver>(
     }
 
     Ok(handed)
+}
+
+/// What an application of `callee` to `given`, every argument its leading lambdas take, hands each of them where the application is itself handed to a definition that applies it as `applied` grades against `params`, under `context`: `List`'s witness applied to a member, handed to `List`'s witness in turn.
+///
+/// Each application of a field of what the application answers is a call of `callee`'s part at that path: the leading lambdas' parameters handed `given`, graded as a call's are, and the field lambda's after them as the application grades them. What that part's summary states it applies of a parameter is what the argument there is handed in turn, through that call ([`Applications`](curios_core::Applications)). A parameter the leading lambdas' own summary states is one no field lambda applies or hands on, so a field's application hands the argument there nothing, whatever the field's summary counts at that place.
+///
+/// `None` where this says nothing of the application, which is then walked as it was: where what it answers is itself applied, a call of no part, where nothing is filed of `callee`, and where `given` does not fill its leading lambdas. `None` at a position where it claims nothing, the argument there walked as any term is: where a field applied is no part with a summary, or a part its application does not fill or whose summary does not see every use of the parameter, and where the applications outgrow their bound.
+pub fn handed_within<D: Driver>(
+    driver: &mut D,
+    context: &SizeContext,
+    params: &[Free],
+    callee: &Global,
+    given: &[Term],
+    applied: &Applied,
+) -> Result<Option<Vec<Option<Applied>>>, D::Error> {
+    if !applied.itself.is_empty() {
+        return Ok(None);
+    }
+    let Some(applications) = driver.applications(callee) else {
+        return Ok(None);
+    };
+    let Some(leading) = applications
+        .part(&[])
+        .filter(|leading| leading.arity() == given.len())
+    else {
+        return Ok(None);
+    };
+    let own = grade(driver, context, 0, params, 0, given.len(), given)?.matrix;
+
+    let mut handed = vec![Some(Applied::default()); given.len()];
+    let applied = applied
+        .fields
+        .iter()
+        .filter(|(_, matrices)| !matrices.is_empty());
+    for (path, matrices) in applied {
+        let part = applications.part(path);
+        // The calls of the part this field's applications make.
+        let calls = part.and_then(|part| {
+            matrices
+                .iter()
+                .map(|matrix| {
+                    own.beside(matrix)
+                        .filter(|call| call.columns() == part.arity())
+                })
+                .collect::<Option<Vec<_>>>()
+        });
+        for (position, slot) in handed.iter_mut().enumerate() {
+            let through = match (leading.of(position), part, &calls) {
+                // No field lambda applies a parameter the leading lambdas' summary states, or hands it on, so an application of a field hands the argument there nothing; what the field's own summary states at that place is of what a member it calls is handed there, another value.
+                (Some(_), _, _) => Some(Applied::default()),
+                (None, None, _) | (None, Some(_), None) => None,
+                (None, Some(part), Some(calls)) => {
+                    let through = |applied: &[CallMatrix]| {
+                        calls
+                            .iter()
+                            .flat_map(|call| {
+                                applied.iter().map(|application| call.compose(application))
+                            })
+                            .collect::<Option<BTreeSet<_>>>()
+                            .filter(|matrices| matrices.len() <= APPLICATIONS_LIMIT)
+                            .map(|matrices| matrices.into_iter().collect::<Vec<_>>())
+                    };
+                    part.of(position).and_then(through).and_then(|itself| {
+                        let fields = part
+                            .fields_of(position)
+                            .map(|(path, applied)| Some((path.to_vec(), through(applied)?)))
+                            .collect::<Option<Vec<_>>>()?;
+                        Some(Applied { itself, fields })
+                    })
+                }
+            };
+            *slot = slot
+                .take()
+                .zip(through)
+                .map(|(held, through)| held.beside(through));
+        }
+    }
+
+    Ok(Some(handed))
 }
 
 /// How each of `binders`, a lambda's handed where its callee applies it as `handed` grades, stands to `params`: at each parameter, what every application establishes of the binder at its place, and nothing where one hands it less than that.

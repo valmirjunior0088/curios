@@ -37,7 +37,8 @@ use shape::*;
 mod grade;
 use grade::*;
 pub use grade::{
-    Applied, SizeContext, Standing, binder_bounds, grade, handed, nonzero_by, refined_by_arm,
+    Applied, SizeContext, Standing, binder_bounds, grade, handed, handed_within, nonzero_by,
+    refined_by_arm,
 };
 
 #[cfg(test)]
@@ -96,7 +97,7 @@ pub fn group_totality<D: Driver>(driver: &mut D, group: &RecGroup) -> Result<Tot
 /// How many matrices a parameter's applications may close to before the parameter is summarized as used otherwise: the conservative direction, as a closure past its bound is `Unfounded`.
 const APPLICATIONS_LIMIT: usize = 64;
 
-/// How each part of each member of `group` applies its parameters ([`Applications`]): for a parameter at a position no part uses otherwise than as the head of an application, a field of it applied, or handed on unchanged — at that position to a member taking a parameter there, or to a definition whose summary applies what it is handed — every application of it the part makes, graded against the part's parameters, and every one reached through a path of the group's calls, graded through the path. A member's leading lambdas are one part, and each field lambda of the record under them another ([`PartShape`]), over the member's parameters and then its own; a member's parameter a field lambda applies is applied wherever the field is called, so the leading lambdas' summary states nothing of it and the field's does, beside what the leading lambdas apply of it themselves: a field is called on a record they answered.
+/// How each part of each member of `group` applies its parameters ([`Applications`]): for a parameter at a position no part uses otherwise than as the head of an application, a field of it applied, or handed on unchanged — at that position to a member taking a parameter there, called or itself handed where its callee applies it, or to a definition whose summary applies what it is handed — every application of it the part makes, graded against the part's parameters, and every one reached through a path of the group's calls, graded through the path. A member's leading lambdas are one part, and each field lambda of the record under them another ([`PartShape`]), over the member's parameters and then its own; a member's parameter a field lambda applies is applied wherever the field is called, so the leading lambdas' summary states nothing of it and the field's does, beside what the leading lambdas apply of it themselves: a field is called on a record they answered.
 ///
 /// **Only where every use is seen.** A use the walk cannot follow — the parameter stored, returned, handed to a definition that states nothing of it, handed to a member at another position or past its parameters, or named in a type — leaves the position unsummarized in every part, and a call through it is graded as it is without a summary. A member call handing a position something other than the caller's own parameter there hands the callee another function, whose applications the summary then counts as well: more matrices claim less, never more.
 pub fn group_applications<D: Driver>(
@@ -474,7 +475,7 @@ impl<D: Driver> Walk<'_, D> {
         walked
     }
 
-    /// Walk an argument a call hands where its callee applies it as `applied` grades, and as any term where nothing applies it: a lambda's binders stand as its applications establish ([`Walk::walk_handed`]), a record literal hands each field what its path is applied with, and a member of this group, named bare or applied to its own arguments, makes the calls of its parts each application reaches ([`handed_member`]).
+    /// Walk an argument a call hands where its callee applies it as `applied` grades, and as any term where nothing applies it: a lambda's binders stand as its applications establish ([`Walk::walk_handed`]), a record literal hands each field what its path is applied with, a member of this group, named bare or applied to its own arguments, makes the calls of its parts each application reaches ([`handed_member`]), and a definition applied to its leading lambdas' arguments hands them what its parts apply of them ([`Walk::walk_within`]).
     fn walk_argument(
         &mut self,
         argument: &Term,
@@ -516,8 +517,11 @@ impl<D: Driver> Walk<'_, D> {
             })
             .collect::<Option<Vec<_>>>()
             .map(|lists| lists.into_iter().flatten().collect::<Vec<_>>());
-        let (Some(member), Some(given)) = (member, given) else {
+        let Some(given) = given else {
             return self.walk_term(argument);
+        };
+        let Some(member) = member else {
+            return self.walk_within(argument, &root, &steps, &given, applied);
         };
         let base = base_part(self.parts, member);
         let graded = match given.len() {
@@ -544,7 +548,63 @@ impl<D: Driver> Walk<'_, D> {
                 matrix,
             });
         }
-        self.walks(&given)
+        // A parameter the member is handed at its own place, where its arguments fill its leading lambdas, is the member's parameter there, whose applications the summary reaches through the calls above, as it reaches one a call hands on: a witness that hands itself, applied to its own parameters, to a container's publishes how it applies them.
+        let (handed, rest): (Vec<_>, Vec<_>) =
+            given.iter().enumerate().partition(|(position, argument)| {
+                graded.is_some()
+                    && self.tracked.is_some()
+                    && matches!(&***argument, Subterm::Var(var) if var.as_free() == self.params.get(*position))
+            });
+        if let Some(tracked) = &mut self.tracked {
+            for (position, _) in &handed {
+                if let Some(slot) = tracked.handed.get_mut(*position) {
+                    *slot = true;
+                }
+            }
+        }
+        let rest = rest
+            .into_iter()
+            .map(|(_, argument)| argument.clone())
+            .collect::<Vec<_>>();
+        self.walks(&rest)
+    }
+
+    /// Walk an application of a definition to every argument its leading lambdas take, `given`, where it is handed to a definition that applies it as `applied` grades: each argument is handed what the part each application reaches applies of it ([`handed_within`]), beside what the application's own call hands it, and is walked as any term is where that claims nothing. An argument any other way is walked as it stands.
+    fn walk_within(
+        &mut self,
+        argument: &Term,
+        root: &Term,
+        steps: &[Segment],
+        given: &[Term],
+        applied: &Applied,
+    ) -> Result<(), D::Error> {
+        let (Subterm::Instance(instance), [Segment::Arguments(_)]) = (&**root, steps) else {
+            return self.walk_term(argument);
+        };
+        let Some(within) = handed_within(
+            self.driver,
+            &self.context,
+            self.params,
+            &instance.name,
+            given,
+            applied,
+        )?
+        else {
+            return self.walk_term(argument);
+        };
+        let own = handed(
+            self.driver,
+            &self.context,
+            self.params,
+            &instance.name,
+            steps,
+        )?;
+        for ((argument, own), within) in given.iter().zip(own).zip(within) {
+            let handed = within.map(|within| within.beside(own.unwrap_or_default()));
+            // An application nests as deep as the type it is the witness of is written.
+            recurse(|| self.walk_argument(argument, handed.as_ref()))?;
+        }
+        Ok(())
     }
 
     /// Walk a record literal's fields where a callee applies the record as `applied` grades, each handed what its own path is applied with.

@@ -13,8 +13,8 @@ use {
     super::{Certifier, Error},
     curios_analysis::{
         Applied, Call, PartShape, Segment, SizeContext, Standing, base_part, binder_bounds,
-        call_path, decide, grade, group_parts, handed, handed_member, nonzero_by, part_calls,
-        refined_by_arm,
+        call_path, decide, grade, group_parts, handed, handed_member, handed_within, nonzero_by,
+        part_calls, refined_by_arm,
     },
     curios_common::Keyed,
     curios_core::{Free, Global, Intrinsic, RecGroup, Subterm, Term, Totality},
@@ -46,6 +46,8 @@ pub struct Calls {
     assumed: Option<Handed>,
     /// The member the next typing of a member local names, bare or applied to its own arguments, with what its callee hands it ([`handed`]): calls graded through each in place of ones claiming nothing. Keyed by the member, so no other local's typing takes it.
     handed: Option<(Free, Handed)>,
+    /// The application of a definition to its leading lambdas' arguments the next typing of that term is handed where its callee applies it ([`handed`]): what its own arguments are handed in turn ([`handed_within`]). Keyed by the term, so no other application's typing takes it.
+    within: Option<(Term, Handed)>,
     /// What the record literal the next judgment types is handed, which its rule hands each field by its slot. Taken by that judgment alone, as `record` is.
     literal: Option<Handed>,
     /// The steps after the application whose head the next judgment types, nearest first — the argument lists of a curried spine, and the fields a path projects between them — which its head reads whole, as the elaborator's walk does. Taken by that judgment alone, as `spine_head` is.
@@ -216,7 +218,17 @@ impl Calls {
         }
     }
 
-    /// Hand the argument whose check is about to run what its callee applies it with, `handed`: a lambda takes it as its binders' bounds, a record literal hands each field its own, and a member local, bare or applied to its own arguments, takes it as the calls it makes.
+    /// The applications the typing of the application `term` about to run is handed where its callee applies it, clearing them: `None` for any other term.
+    pub fn take_within(&mut self, term: &Term) -> Option<Handed> {
+        match &self.within {
+            Some((application, _)) if application == term => {
+                self.within.take().map(|(_, handed)| handed)
+            }
+            _ => None,
+        }
+    }
+
+    /// Hand the argument whose check is about to run what its callee applies it with, `handed`: a lambda takes it as its binders' bounds, a record literal hands each field its own, a member local, bare or applied to its own arguments, takes it as the calls it makes, and a definition applied to one list of arguments hands them what its parts apply of them.
     pub fn hand(&mut self, argument: &Term, handed: Handed) {
         match &**argument {
             Subterm::Func(_) | Subterm::Struct(_) | Subterm::Tuple(_) => {
@@ -224,12 +236,18 @@ impl Calls {
             }
             _ => {
                 let (root, steps) = call_path(argument);
-                if let Subterm::Var(var) = &*root
-                    && steps
-                        .iter()
-                        .all(|step| matches!(step, Segment::Arguments(_)))
-                {
-                    self.handed = var.as_free().map(|member| (*member, handed));
+                match (&*root, steps.as_slice()) {
+                    (Subterm::Var(var), steps)
+                        if steps
+                            .iter()
+                            .all(|step| matches!(step, Segment::Arguments(_))) =>
+                    {
+                        self.handed = var.as_free().map(|member| (*member, handed));
+                    }
+                    (Subterm::Instance(_), [Segment::Arguments(_)]) => {
+                        self.within = Some((argument.clone(), handed));
+                    }
+                    _ => {}
                 }
             }
         }
@@ -239,6 +257,7 @@ impl Calls {
     pub fn clear_handed(&mut self) {
         self.assumed = None;
         self.handed = None;
+        self.within = None;
         self.literal = None;
     }
 
@@ -499,6 +518,59 @@ impl Certifier<'_> {
         }
         self.calls.context = context;
         graded.map(|()| by_position)
+    }
+
+    /// Hand each of `given`, the arguments `callee`'s leading lambdas are applied to, what the application is handed in turn where its own callee applies it as `within` grades ([`handed_within`]), for each member whose body holds it, beside what the call itself hands them, `handed`: where that speaks of the application for a member, an argument is handed both, and nothing where it claims nothing there, as the elaborator's walk hands them.
+    pub(super) fn hand_within(
+        &mut self,
+        callee: &Global,
+        given: &[Term],
+        within: &Handed,
+        handed: &mut [Option<Handed>],
+    ) -> Result<(), Error> {
+        if self.positions.suppressed() {
+            return Ok(());
+        }
+        // Graded on what each argument passes, as a call is ([`Certifier::record_call`]).
+        let given = given
+            .iter()
+            .map(|argument| self.graded(argument))
+            .collect::<Vec<_>>();
+        let context = mem::take(&mut self.calls.context);
+        let mut graded = Ok(());
+        for (frame, applied) in within {
+            let Some((_, params)) = self
+                .calls
+                .frames
+                .get(*frame)
+                .and_then(|open| open.caller.clone())
+            else {
+                continue;
+            };
+            match handed_within(self, &context, &params, callee, &given, applied) {
+                Ok(None) => {}
+                Ok(Some(positions)) => {
+                    for (slot, through) in handed.iter_mut().zip(positions) {
+                        let own = slot.as_mut().and_then(|held| {
+                            let at = held.iter().position(|(graded, _)| graded == frame)?;
+                            Some(held.remove(at).1)
+                        });
+                        let applied = through
+                            .map(|through| through.beside(own.unwrap_or_default()))
+                            .filter(|applied| !applied.is_empty());
+                        if let Some(applied) = applied {
+                            slot.get_or_insert_with(Vec::new).push((*frame, applied));
+                        }
+                    }
+                }
+                Err(error) => {
+                    graded = Err(error);
+                    break;
+                }
+            }
+        }
+        self.calls.context = context;
+        graded
     }
 
     /// Within the current bracket, each of `binders`, a lambda's handed where its callee applies it as `handed` grades, stands to the parameters of each member whose body holds it as [`binder_bounds`] reads them, one standing naming them all.
