@@ -4,7 +4,7 @@
 
 ## What is wrong today
 
-- **`Eql` and `Ord` carry no law.** `ops.crs` says a witness of `Eql` "owes no proof that its answer agrees" and `Ord.crs` that "`Ord` itself carries no law"; a theorem over a witness that needs one takes it as a hypothesis, `Ord/Flips` in `List/sort`'s `ordered` and `sorted`, and `Map/Key` proves `refl`, `flips` and `transitive` of its own beside it. Two witnesses of `Eql` decide no `Eq`: `http/Field/Name`'s ignores ASCII case, and `Flt/internal/Dyadic`'s compares the values of a representation it keeps unnormalized on purpose. `/std` holds 26 written and 57 derived witnesses of `Eql` and 23 written and 11 derived of `Ord` (counted at `5ccbbb447`).
+- **`Eql` and `Ord` carry no law.** `ops.crs` says a witness of `Eql` "owes no proof that its answer agrees" and `Ord.crs` that "`Ord` itself carries no law"; a theorem over a witness that needs one takes it as a hypothesis, `Ord/Flips` in `List/sort`'s `ordered` and `sorted`, and `Map/Key` proves `refl`, `flips` and `transitive` of its own beside it. `/std` holds 24 written and 58 derived witnesses of `Eql` and 22 written and 11 derived of `Ord` (counted at `3c4346ab6`).
 
 ## Goal
 
@@ -24,18 +24,17 @@
 - **A derived `flips` and `transitive` go through `by_tag`'s and `lexicographic`'s laws**, proved once in `/std/Ord`: an arm per constructor, `by_tag`'s laws taking the tags' equality as the hypothesis the facts refute where they differ, where an arm per pair is quadratic, 144 for `Month`.
 - **`Map`'s `Eql` compares its entries**, as today: its `eq_of_eql` follows from `try_get/injective`, two maps alike at every key are one, with `of_listed` and `listed` reading `to_list` as `try_get`.
 - **`Hash` takes no law**: once `==` decides `Eq`, equal values encode alike by congruence.
-- **`http/Field/Name` is stored lowercase**, as HTTP/2 and HTTP/3 send a name and Rust's `http::HeaderName` stores one, so its `Eql` derives; `Dyadic` drops its `Eql` and `Ord` for the `eql` it calls by name.
 - **A lawful order on floats is at hand**: `Flt/total_key` and `Flt/total_key_injective` give IEEE's total order as `Nat/ord` reads a key, and `Flt/eq_of_identical` gives `Toml`'s float case, so a type wrapping `Flt` has an `Ord` and an `Eql` from proofs that exist.
 
 **Rejected.** A lawful companion beside each concept, `Ord/Lawful` as Lean splits them. Every law's proof written in its witness, whatever its method: an induction cannot recurse through a witness whose method is a named function, a proof reading its carrier's lemmas typed through the operators meets the same declaration cycle inside the witness as beside it, and every reader of the witness would be tied to how the law is proved, the read a proof's withheld body exists to prevent ([A declaration is a function of what it reads](../../design/compilation/a-declaration-is-a-function-of-what-it-reads.md)). The laws as hypotheses, as today: every theorem restates them, and no generic code can rely on `==`. Decisions returning evidence, Idris's `DecEq` and Agda's `Dec`: `==` stays the `Bool` that conversion folds and bounds are stated in. A count of what the derived proofs cost `/std`'s build: no choice waits on it, and the figures the stages move are named where they land.
 
 ## Stages
 
-**1. `Eql`'s laws.** The two fields; their proofs written by the derivation and by the 26 written witnesses; each carrier's `eq_of_eql` made private, its callers reading `Eql/eq_of_eql` ([the bridge finding](000-findings.md)); `Name` stored lowercase and `Dyadic`'s witness dropped. Check: a witness whose `eql` breaks either law is refused where it is declared; a derived witness of a recursive family, of a nested one and of one with a proof field is accepted.
+**1. `Eql`'s laws.** The two fields; their proofs written by the derivation and by the 24 written witnesses; each carrier's `eq_of_eql` made private, its callers reading `Eql/eq_of_eql` ([the bridge finding](000-findings.md)). Check: a witness whose `eql` breaks either law is refused where it is declared; a derived witness of a recursive family, of a nested one and of one with a proof field is accepted.
 
 **2. An `Eq` goal decided at a lawful carrier.** The bound procedure asks an `Eq()(a, b)` goal at a carrier with a lawful `Eql` as `Bool/Holds(a == b)` and answers through `Eql/eq_of_eql` ([arithmetic's finding](../arithmetic/000-findings.md)). Check: an implicit `Eq()(List/length([1, 2, 3]), 3)` is filled, and one at `Flt`, whose `==` is no equality, is not.
 
-**3. `Ord`'s laws.** The five fields; `Ord/lexicographic`'s and `Ord/by_tag`'s laws proved once, for the derivation and the written lexicographic witnesses; the carriers' lemmas their witnesses read spelled through their named functions; the 23 written witnesses' proofs. Check: a witness that breaks `flips` is refused where it is declared; a derived `Ord` of a recursive family is accepted.
+**3. `Ord`'s laws.** The five fields; `Ord/lexicographic`'s and `Ord/by_tag`'s laws proved once, for the derivation and the written lexicographic witnesses; the carriers' lemmas their witnesses read spelled through their named functions; the 22 written witnesses' proofs. Check: a witness that breaks `flips` is refused where it is declared; a derived `Ord` of a recursive family is accepted.
 
 **4. The theorems take the laws.** `List/sort`'s `ordered` and `sorted` lose their `flips`, and `Map/Key`'s `refl`, `flips` and `transitive` are removed for `Ord`'s. Check: `/std` builds, and its tests pass as restated.
 
