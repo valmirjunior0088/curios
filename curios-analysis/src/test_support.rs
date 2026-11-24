@@ -8,9 +8,10 @@ use {
     crate::*,
     curios_common::{
         CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax, EqlDerivation,
-        HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax, OperatorSyntax,
-        OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax, ReportSyntax,
-        ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
+        EqualitySyntax, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
+        OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax,
+        ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry,
+        TestSyntax,
     },
     curios_core::{Applications, Free, Global, InductDecl, Polarity, StructDecl, Term},
     std::{collections::BTreeMap, convert::Infallible},
@@ -69,6 +70,11 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         false_type: name(&["std", "Bool", "False"]),
         holds: name(&["std", "Bool", "Holds"]),
     },
+    equality: EqualitySyntax {
+        family: name(&["std", "Eq", "Eq"]),
+        refl: name(&["std", "Eq", "Eq", "refl"]),
+        sym: name(&["std", "Eq", "sym"]),
+    },
     test: TestSyntax {
         test_type: name(&["std", "Test", "Test"]),
         main: name(&["test", "main"]),
@@ -96,8 +102,6 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             first: name(&["std", "Bool", "and", "first"]),
             second: name(&["std", "Bool", "and", "second"]),
             both: name(&["std", "Bool", "and", "both"]),
-            equality: name(&["std", "Eq", "Eq"]),
-            same: name(&["std", "Eq", "Eq", "refl"]),
             qed: name(&["sys", "Bool", "True", "qed"]),
         },
         ord: OrdDerivation {
@@ -114,8 +118,6 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         },
     },
     entailment: EntailmentSyntax {
-        equality: name(&["std", "Eq", "Eq"]),
-        sym: name(&["std", "Eq", "sym"]),
         decided: field(&["std", "Equal", "Equal"], "eq_of_eql"),
         range: name(&["std", "Nat", "le", "of_in_range"]),
         in_range: name(&["std", "Nat", "in_range"]),

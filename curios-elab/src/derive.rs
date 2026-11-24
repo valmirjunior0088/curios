@@ -1036,8 +1036,9 @@ fn equal_where_eql(
                 .map(|(left, right)| (*left, Term::free_var(right)))
                 .collect::<Vec<_>>();
             let right_types = left_types.iter().map(|type_| type_.substitute(&renamed));
+            let family = context.syntax().equality.family;
             let equality = |this: Term, that: Term| {
-                site.at(Term::apply(syn_call(row.equality, []), vec![this, that]))
+                site.at(Term::apply(syn_call(family, []), vec![this, that]))
             };
 
             // The helper's type takes an equation for each field that is a value and states the two literals one, and its body, a lambda checked against that type, matches each equation in turn.
@@ -1065,7 +1066,6 @@ fn equal_where_eql(
             let proved = matched(
                 context,
                 site,
-                row,
                 premises
                     .iter()
                     .map(|(premise, _)| Term::free_var(premise))
@@ -1135,7 +1135,7 @@ fn refuted(context: &mut Context, site: &Site<'_>, held: &Free) -> Term {
 /// A proof that the two sides `compared` reads are one value, from `held`, a proof that every comparison holds: each part's equation ([`equations`]) matched in turn ([`matched`]).
 fn equated(context: &mut Context, site: &Site<'_>, compared: &Compared<'_>, held: &Free) -> Term {
     let (bound, equations) = equations(context, site, compared, held);
-    let proof = matched(context, site, compared.row, equations);
+    let proof = matched(context, site, equations);
 
     bound_around(context, bound, proof)
 }
@@ -1200,13 +1200,9 @@ fn bound_around(context: &mut Context, bound: Vec<(Free, Term)>, body: Term) -> 
 }
 
 /// **Each equation is matched to `refl()` in turn, and `Eq/refl()` closes.** Matching a part's equation solves the second side's part to the first's, so the parts after it, whose types may name it, stand at one type, and once every part is solved the two sides are one term. A proof part needs no equation: two proofs of one proposition are one.
-fn matched(
-    context: &mut Context,
-    site: &Site<'_>,
-    row: EqlDerivation,
-    equations: Vec<Term>,
-) -> Term {
-    let mut proof = site.at(syn_call(row.same, []));
+fn matched(context: &mut Context, site: &Site<'_>, equations: Vec<Term>) -> Term {
+    let same = context.syntax().equality.refl;
+    let mut proof = site.at(syn_call(same, []));
     for equation in equations.into_iter().rev() {
         // The constructor's one payload is hidden, the value both sides are.
         let payload = context.fresh(None);
@@ -1214,7 +1210,7 @@ fn matched(
             equation,
             goal(context),
             [(
-                Atom::from(row.same.qualifier().last()),
+                Atom::from(same.qualifier().last()),
                 vec![(Plicity::Implicit, payload)],
                 proof,
             )],

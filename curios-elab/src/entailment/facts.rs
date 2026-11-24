@@ -411,7 +411,7 @@ impl<'a> Reader<'a> {
         if is_empty(context, &reduced) {
             return self.refutation(context, proof, origin);
         }
-        let equality = Global::Authored(context.syntax().entailment.equality.qualifier());
+        let equality = Global::Authored(context.syntax().equality.family.qualifier());
         if let Subterm::InductType(InductType {
             name,
             params,
@@ -560,7 +560,7 @@ impl<'a> Reader<'a> {
         origin: Origin,
     ) -> Result<(), Error> {
         let of_eq = order(context, carrier).of_eq;
-        let sym = context.syntax().entailment.sym;
+        let sym = context.syntax().equality.sym;
         if !in_scope(context, &[of_eq, sym]) {
             return Ok(());
         }
@@ -893,7 +893,7 @@ impl<'a> Reader<'a> {
                 order.max_of_ge,
                 order.of_lt,
                 order.of_eq,
-                context.syntax().entailment.sym,
+                context.syntax().equality.sym,
             ];
             if !in_scope(context, &names) {
                 continue;
@@ -997,7 +997,7 @@ impl<'a> Reader<'a> {
             integer.sign_at_least,
             integer.sign_at_most,
             order.of_eq,
-            context.syntax().entailment.sym,
+            context.syntax().equality.sym,
         ];
         if !in_scope(context, &names) {
             return Ok(false);
@@ -1357,7 +1357,7 @@ impl<'a> Reader<'a> {
             natural.residual,
             order.of_lt,
             order.of_eq,
-            context.syntax().entailment.sym,
+            context.syntax().equality.sym,
         ];
         if !in_scope(context, &names) {
             return Ok(false);

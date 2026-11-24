@@ -57,6 +57,7 @@ pub struct SyntaxRegistry {
     pub character: CharacterSyntax,
     pub string: StringSyntax,
     pub proof: ProofSyntax,
+    pub equality: EqualitySyntax,
     pub test: TestSyntax,
     pub program: ProgramSyntax,
     pub report: ReportSyntax,
@@ -78,6 +79,7 @@ impl SyntaxRegistry {
             character,
             string,
             proof,
+            equality,
             test,
             program,
             report,
@@ -94,16 +96,17 @@ impl SyntaxRegistry {
             .chain(character.targets())
             .chain(string.targets())
             .chain(proof.targets())
+            .chain(equality.targets())
             .chain(test.targets())
             .chain(program.targets())
             .chain(report.targets())
             .chain(derivations.targets())
-            .chain(entailment.targets())
+            .chain(entailment.targets(equality))
     }
 
     /// Every registered concept method, for the prelude build's field check. A concept can exist under the registered name and still not declare the field the compiler projects, which is the drift a presence check alone cannot see.
     ///
-    /// Only six groups hold concept methods; the other seven are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
+    /// Only six groups hold concept methods; the other eight are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
     pub fn concept_fields(self) -> impl Iterator<Item = ConceptField> {
         let Self {
             option: _,
@@ -114,6 +117,7 @@ impl SyntaxRegistry {
             character: _,
             string: _,
             proof: _,
+            equality: _,
             test: _,
             program,
             report: _,
@@ -338,13 +342,26 @@ impl ProofSyntax {
     }
 }
 
+/// Propositional equality, `/std/Eq`: the family, its one constructor, and an equation read the other way round.
+///
+/// A group of its own because more than one feature writes these names: the procedure that proves a bound reads an equation and turns one round, and a derived witness's laws conclude one and close on its constructor. Each reads this group, so the names are filled once.
+#[derive(Debug, Clone, Copy)]
+pub struct EqualitySyntax {
+    pub family: SyntaxName,
+    pub refl: SyntaxName,
+    pub sym: SyntaxName,
+}
+
+impl EqualitySyntax {
+    fn targets(self) -> impl Iterator<Item = SyntaxName> {
+        let Self { family, refl, sym } = self;
+        [family, refl, sym].into_iter()
+    }
+}
+
 /// The names the procedure that proves a bound from the facts in scope writes into its proofs — `curios-elab`'s `entailment`. A proof form is written only where every name it applies is assumed in the context. Inside `/std`, where the vocabulary is elaborated beside its users, `curios-elab`'s walk elaborates the vocabulary first, with every declaration it reads, and offers it to the rest of the unit from then on ([`EntailmentSyntax::targets`]), since any item may omit a bound and no item says so ahead of elaboration.
 #[derive(Debug, Clone, Copy)]
 pub struct EntailmentSyntax {
-    /// Propositional equality itself, which a hypothesis states an equation in.
-    pub equality: SyntaxName,
-    /// An equation read the other way round, for its second bound.
-    pub sym: SyntaxName,
     /// `Eql`'s law that a decided equality is an equation, by which an equation at a type that decides its equality is proved from the decision. A concept's method and no lemma of the vocabulary: [`EntailmentSyntax::targets`], which the elaborator elaborates ahead of a unit's other declarations, does not list it, and a proof names it where its witness resolves.
     pub decided: ConceptField,
     /// A range check's two bounds, as a pair: how a range check's guard is read, where a split on it would meet the guard's own key.
@@ -374,11 +391,9 @@ pub struct EntailmentSyntax {
 }
 
 impl EntailmentSyntax {
-    /// Every lemma the procedure writes or reads: its vocabulary, which the law it crosses to an equation by is no part of.
-    pub fn targets(self) -> impl Iterator<Item = SyntaxName> {
+    /// Every lemma the procedure writes or reads: its vocabulary, which the law it crosses to an equation by is no part of. `equality` is [`SyntaxRegistry::equality`]: a hypothesis states an equation in the family, and the procedure reads one the other way round for its second bound.
+    pub fn targets(self, equality: EqualitySyntax) -> impl Iterator<Item = SyntaxName> {
         let Self {
-            equality,
-            sym,
             decided: _,
             range,
             in_range,
@@ -395,7 +410,15 @@ impl EntailmentSyntax {
         } = self;
 
         [
-            equality, sym, range, in_range, and_first, and_second, and_both, or_first, or_second,
+            equality.family,
+            equality.sym,
+            range,
+            in_range,
+            and_first,
+            and_second,
+            and_both,
+            or_first,
+            or_second,
             proved,
         ]
         .into_iter()
@@ -660,7 +683,7 @@ pub struct SpellDerivation {
 
 /// The names a derived `Eql` witness body is written with: its own method, applied to each payload pair, and the names its two laws' proofs apply. `eql`'s own body builds nothing beside its method but an intrinsic or an infix operator, and the elaborator resolves an operator to a projection off a witness, neither a global for anything to order against.
 ///
-/// The proofs name the concept's two laws, each applied to a payload as the method is; the three lemmas of `/std/Bool/and`, by which a conjunction of comparisons is split and joined; propositional equality with its one constructor, which each proof closes on; and the inhabitant of `Holds(true)`, which proves a comparison of nothing. `equality` and `qed` are the declarations [`EntailmentSyntax::equality`] and [`ProofSyntax::true_qed`] name, carried here as well so the row holds every name its writer applies.
+/// The proofs name the concept's two laws, each applied to a payload as the method is; the three lemmas of `/std/Bool/and`, by which a conjunction of comparisons is split and joined; propositional equality with its one constructor, which each proof closes on and [`SyntaxRegistry::equality`] names; and the inhabitant of `Holds(true)`, which proves a comparison of nothing. `qed` is the declaration [`ProofSyntax::true_qed`] names, carried here as well.
 #[derive(Debug, Clone, Copy)]
 pub struct EqlDerivation {
     pub eql: ConceptField,
@@ -674,10 +697,6 @@ pub struct EqlDerivation {
     pub second: SyntaxName,
     /// Two decisions that hold, as their conjunction.
     pub both: SyntaxName,
-    /// Propositional equality, which `eq_of_eql` concludes.
-    pub equality: SyntaxName,
-    /// Its constructor: what a payload's equation is matched to, and what a proof closes on once every payload's is.
-    pub same: SyntaxName,
     /// The inhabitant of `Holds(true)`, which `refl` answers where a constructor holds no payload to compare.
     pub qed: SyntaxName,
 }
@@ -734,8 +753,6 @@ impl Derivation {
                 first: _,
                 second: _,
                 both: _,
-                equality: _,
-                same: _,
                 qed: _,
             }) => vec![eql, eq_of_eql, refl],
             Derivation::Spell(_) | Derivation::Ord(_) | Derivation::Hash(_) => {
@@ -748,8 +765,8 @@ impl Derivation {
     ///
     /// A [`Qualifier`] rather than a [`SyntaxName`], as the bodies' references are read.
     ///
-    /// `string` is [`SyntaxRegistry::string`], shared with the body writer; only `Spell` emits string literals and adds these dependencies.
-    pub fn vocabulary(self, string: &StringSyntax) -> Vec<Qualifier> {
+    /// `string` is [`SyntaxRegistry::string`], shared with the body writer; only `Spell` emits string literals and adds these dependencies. `equality` is [`SyntaxRegistry::equality`], shared the same way: `Eql`'s laws conclude an equation and close on its constructor.
+    pub fn vocabulary(self, string: &StringSyntax, equality: EqualitySyntax) -> Vec<Qualifier> {
         // A method named by its path reads its concept: a method is its concept's field, and no declaration.
         let concept = self.concept_field().concept.qualifier();
 
@@ -775,12 +792,13 @@ impl Derivation {
                 first,
                 second,
                 both,
-                equality,
-                same,
                 qed,
             }) => [concept]
                 .into_iter()
-                .chain([first, second, both, equality, same, qed].map(SyntaxName::qualifier))
+                .chain(
+                    [first, second, both, equality.family, equality.refl, qed]
+                        .map(SyntaxName::qualifier),
+                )
                 .collect(),
             Derivation::Ord(OrdDerivation {
                 ord: _,
@@ -815,10 +833,8 @@ impl Derivation {
                 first,
                 second,
                 both,
-                equality,
-                same,
                 qed,
-            }) => vec![eql.concept, first, second, both, equality, same, qed],
+            }) => vec![eql.concept, first, second, both, qed],
             Derivation::Ord(OrdDerivation {
                 ord,
                 lexicographic,

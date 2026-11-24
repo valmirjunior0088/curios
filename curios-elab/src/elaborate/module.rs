@@ -1564,10 +1564,10 @@ fn elaborate_definitions_suffix<'s>(
     context.seed(minted);
 
     // The prover's vocabulary, as far as the unit declares it: asked for first, each member bringing in what it reads.
-    let vocabulary = context
-        .syntax()
+    let syntax = context.syntax();
+    let vocabulary = syntax
         .entailment
-        .targets()
+        .targets(syntax.equality)
         .map(|name| Global::Authored(name.qualifier()))
         .filter(|name| declarations.item(name).is_some())
         .collect::<BTreeSet<_>>();

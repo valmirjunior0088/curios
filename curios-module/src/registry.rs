@@ -2,9 +2,10 @@
 
 use curios_common::{
     CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax, EqlDerivation,
-    HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax, OperatorSyntax,
-    OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax, ReportSyntax,
-    ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
+    EqualitySyntax, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
+    OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax,
+    ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry,
+    TestSyntax,
 };
 
 /// Each target is stated as its module segments, so no stage has to split a path back apart to learn where the name lives.
@@ -65,6 +66,11 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         false_type: name(&["sys", "Bool", "False"]),
         holds: name(&["sys", "Bool", "Holds"]),
     },
+    equality: EqualitySyntax {
+        family: name(&["std", "Eq", "Eq"]),
+        refl: name(&["std", "Eq", "Eq", "refl"]),
+        sym: name(&["std", "Eq", "sym"]),
+    },
     test: TestSyntax {
         test_type: name(&["std", "Test", "Test"]),
         main: name(&[TEST_UNIT, "main"]),
@@ -93,8 +99,6 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             first: name(&["std", "Bool", "and", "first"]),
             second: name(&["std", "Bool", "and", "second"]),
             both: name(&["std", "Bool", "and", "both"]),
-            equality: name(&["std", "Eq", "Eq"]),
-            same: name(&["std", "Eq", "Eq", "refl"]),
             qed: name(&["sys", "Bool", "True", "qed"]),
         },
         ord: OrdDerivation {
@@ -111,8 +115,6 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         },
     },
     entailment: EntailmentSyntax {
-        equality: name(&["std", "Eq", "Eq"]),
-        sym: name(&["std", "Eq", "sym"]),
         decided: field(&["std", "ops", "Eql"], "eq_of_eql"),
         range: name(&["std", "Nat", "le", "of_in_range"]),
         in_range: name(&["std", "Nat", "in_range"]),

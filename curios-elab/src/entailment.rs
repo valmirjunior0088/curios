@@ -246,7 +246,7 @@ fn equated(context: &mut Context, bound: &Term, reduced: &Term) -> Result<Option
     let Subterm::InductType(equation) = &**reduced else {
         return Ok(None);
     };
-    let equality = Global::Authored(context.syntax().entailment.equality.qualifier());
+    let equality = Global::Authored(context.syntax().equality.family.qualifier());
     let ([carrier], [left, right], true) = (
         equation.params.as_slice(),
         equation.indices.as_slice(),

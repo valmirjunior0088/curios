@@ -2,9 +2,10 @@
 
 use curios_common::{
     CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax, EqlDerivation,
-    HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax, OperatorSyntax,
-    OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax, ReportSyntax,
-    ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
+    EqualitySyntax, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
+    OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProgramSyntax, ProofSyntax,
+    ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry,
+    TestSyntax,
 };
 
 pub const fn registry_name(segments: &'static [&'static str]) -> SyntaxName {
@@ -63,6 +64,11 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         false_type: registry_name(&["std", "Bool", "False"]),
         holds: registry_name(&["std", "Bool", "Holds"]),
     },
+    equality: EqualitySyntax {
+        family: registry_name(&["std", "Eq", "Eq"]),
+        refl: registry_name(&["std", "Eq", "Eq", "refl"]),
+        sym: registry_name(&["std", "Eq", "sym"]),
+    },
     test: TestSyntax {
         test_type: registry_name(&["std", "Test", "Test"]),
         main: registry_name(&["test", "main"]),
@@ -91,8 +97,6 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             first: registry_name(&["std", "Bool", "and", "first"]),
             second: registry_name(&["std", "Bool", "and", "second"]),
             both: registry_name(&["std", "Bool", "and", "both"]),
-            equality: registry_name(&["std", "Eq", "Eq"]),
-            same: registry_name(&["std", "Eq", "Eq", "refl"]),
             qed: registry_name(&["sys", "Bool", "True", "qed"]),
         },
         ord: OrdDerivation {
@@ -109,8 +113,6 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         },
     },
     entailment: EntailmentSyntax {
-        equality: registry_name(&["std", "Eq", "Eq"]),
-        sym: registry_name(&["std", "Eq", "sym"]),
         decided: registry_field(&["std", "Equal", "Equal"], "eq_of_eql"),
         range: registry_name(&["std", "Nat", "le", "of_in_range"]),
         in_range: registry_name(&["std", "Nat", "in_range"]),
