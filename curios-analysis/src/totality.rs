@@ -936,11 +936,10 @@ impl<D: Driver> Walk<'_, D> {
                     for (part, given) in part_calls(self.parts, member, &steps) {
                         self.call(part, &given)?;
                     }
-                    // A parameter handed on at its own position, where the callee takes one, is the callee's parameter there, whose applications the summary reaches through this call. One handed past the callee's parameters goes to what the callee answers, which applies it where no summary looks, so it is walked as any other use, and so is one a path hands a field's part, which the closure reaches through no position it is handed on at.
+                    // A parameter handed on at its own position, where the callee takes one, is the callee's parameter there, whose applications the summary reaches through this call, whatever the path projects after the callee's own arguments: a field part's parameters open with its member's, so the parameter stands at its own place in the part the path reaches too. One handed past the callee's parameters goes to what the callee answers, or is a field lambda's own argument, which applies it where no summary looks, so it is walked as any other use.
                     let arity = self.arities[base_part(self.parts, member)];
                     let handed_on = |(position, argument): &(usize, &Term)| {
-                        !projected
-                            && self.tracked.is_some()
+                        self.tracked.is_some()
                             && *position < arity
                             && matches!(&***argument, Subterm::Var(var) if var.as_free() == self.params.get(*position))
                     };

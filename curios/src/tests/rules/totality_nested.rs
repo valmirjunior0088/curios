@@ -332,3 +332,131 @@ fn a_law_taking_its_containers_law_apart_descends() {
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
+
+// A witness that recurses through its own method hands its premise on at its own place: `Chain`'s spells its tail by the method it is defining, a call that fills the witness's leading lambdas with its own parameters and then projects the method, so the premise is the callee's parameter there as it is in a call that projects nothing. The witness publishes how it applies its premise, below its argument, and a document whose children are a chain of documents descends through it. The refusal hands a chain built around the argument itself.
+#[test]
+fn a_witness_that_recurses_through_its_own_method_publishes_how_it_applies_its_premise() {
+    control(
+        r#"
+        use /std/{Nat, Bool, Str, Spell};
+
+        induct Chain(A: Type): Type
+        | end_()
+        | link(A, Chain(A))
+        end
+
+        satisfy (@A: Type, use Spell(A)) => Spell(Chain(A)) {
+            spell(a) =
+                match a
+                | end_() => ""
+                | link(x, xs) => Str/concat(Spell/spell(x), Spell/spell(xs))
+                end,
+        }
+
+        induct Doc: Type
+        | num(Nat)
+        | nest(Chain(Doc))
+        end
+
+        satisfy Spell(Doc) {
+            spell(a) = match a | num(n) => Spell/spell(n) | nest(c) => Spell/spell(c) end,
+        }
+
+        let Spelled(a: Doc) -> /std/Bool/True =
+            match Str/length(Spell/spell(a)) == 0
+            | true => /std/Bool/True/qed()
+            | false => /std/Bool/True/qed()
+            end;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("Spell/spell(c)", "Spell/spell(Chain/link(a, Chain/end_()))")])
+    .by_elaborator_in("/Spelled", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Spelled", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A family nested through a recursive family has a lawful witness: `Chain`'s derived `Eql` recurses through its own method and its own laws, and a forest of chains of forests derives its own through it.
+#[test]
+fn a_family_nested_through_a_recursive_family_derives_a_lawful_witness() {
+    control(
+        r#"
+        use /std/ops/{Eql};
+
+        induct Chain(A: Type): Type
+        | end_()
+        | link(A, Chain(A))
+        end
+
+        satisfy (@A: Type, use Eql(A)) => Eql(Chain(A)) {
+            ..
+        }
+
+        induct Forest: Type
+        | none()
+        | some(Chain(Forest))
+        end
+
+        satisfy Eql(Forest) {
+            ..
+        }
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    );
+}
+
+// A premise handed on at another place is no parameter of the callee's there, and the witness publishes nothing of it: `Alt`'s witness spells both its fields and its tail, the tail at its two parameters as the tail's type orders them, so where that type swaps them each premise is handed where the other stands, and a document nested through it is refused, where the same family with its parameters in order descends.
+#[test]
+fn a_witness_that_hands_its_premise_on_at_another_place_publishes_nothing_of_it() {
+    control(
+        r#"
+        use /std/{Nat, Bool, Str, Spell};
+
+        induct Alt(A: Type, B: Type): Type
+        | stop()
+        | go(A, B, Alt(A, B))
+        end
+
+        satisfy (@A: Type, @B: Type, use Spell(A), use Spell(B)) => Spell(Alt(A, B)) {
+            spell(a) =
+                match a
+                | stop() => ""
+                | go(x, y, rest) =>
+                    Str/concat(Spell/spell(x), Str/concat(Spell/spell(y), Spell/spell(rest)))
+                end,
+        }
+
+        induct Doc: Type
+        | num(Nat)
+        | nest(Alt(Doc, Doc))
+        end
+
+        satisfy Spell(Doc) {
+            spell(a) = match a | num(n) => Spell/spell(n) | nest(c) => Spell/spell(c) end,
+        }
+
+        let Spelled(a: Doc) -> /std/Bool/True =
+            match Str/length(Spell/spell(a)) == 0
+            | true => /std/Bool/True/qed()
+            | false => /std/Bool/True/qed()
+            end;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("| go(A, B, Alt(A, B))", "| go(A, B, Alt(B, A))")])
+    .by_elaborator_in("/Spelled", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Spelled", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
