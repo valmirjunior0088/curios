@@ -121,6 +121,7 @@ tracing = { version = "0.1.44", default-features = false, features = ["std"] }
 
 [profile.dev]
 opt-level = 3
+debug = "line-tables-only"
 
 [profile.dev.build-override]
 opt-level = 3
@@ -130,7 +131,3 @@ opt-level = 3
 
 [profile.release.build-override]
 opt-level = 3
-
-[profile.test]
-opt-level = 3
-debug = "line-tables-only"
