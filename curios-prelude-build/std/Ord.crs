@@ -2,7 +2,11 @@
 pub mod Ordering;
 pub use Ordering/{let Ordering};
 
-use /std/{Nat, List, Bool, Eq};
+--- Two constructors ordered by declaration position, with the laws of that order.
+pub mod by_tag;
+pub use by_tag/{let by_tag};
+
+use /std/{List, Bool, Eq};
 use /std/ops/{Eql};
 
 --- A total order: `ord` decides `lt`, `eq` or `gt`, and `Eql` is its superclass. `<` and `<=` dispatch through `lt` and `le`, and `>` and `>=` through them with their operands swapped.
@@ -19,17 +23,7 @@ pub use Ord/*;
 
 --- The first answer that is not `eq`, or `eq` where they all agree.
 pub let lexicographic(pieces: List(Ordering)) -> Ordering =
-    List/fold(pieces, Ordering/eq(), (piece, acc) => match acc | eq() => piece | _ => acc end);
-
---- Two constructors ordered by declaration position, answering `same` where they agree.
----
---- A derived witness compares the constructors before it looks at payloads and consults `same` only when they match, so a value of a later constructor is above one of an earlier constructor whatever the payloads say.
-pub let by_tag(left: Nat, right: Nat, same: Ordering) -> Ordering =
-    match Nat/ord(left, right)
-    | lt() => Ordering/lt()
-    | eq() => same
-    | gt() => Ordering/gt()
-    end;
+    List/fold(pieces, Ordering/eq(), (piece, acc) => Ordering/then(acc, piece));
 
 --- The law that `ord` answers the flipped answer with its operands swapped: `gt` one way exactly where `lt` the other, and `eq` both ways or neither.
 ---

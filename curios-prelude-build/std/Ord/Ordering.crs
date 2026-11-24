@@ -1,3 +1,11 @@
+--- Two answers taken in turn, the second where the first is `eq`, with the laws of that step.
+pub mod then;
+pub use then/{let then};
+
+--- Whether three answers chain, which makes an order built of steps transitive.
+pub mod chains;
+pub use chains/{let chains};
+
 use /std/{Bool, Eq, Hash, Ord, Show, Spell};
 use /std/ops/{Eql};
 

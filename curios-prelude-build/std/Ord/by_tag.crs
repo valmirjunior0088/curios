@@ -1,0 +1,32 @@
+use /std/{Nat, Eq, Ordering};
+
+--- Two constructors ordered by declaration position, answering `same` where they agree.
+---
+--- A derived witness compares the constructors before it looks at payloads and consults `same` only when they match, so a value of a later constructor is above one of an earlier constructor whatever the payloads say.
+pub let by_tag(left: Nat, right: Nat, same: Ordering) -> Ordering =
+    Ordering/then(Nat/ord(left, right), same);
+
+--- `by_tag` answers the flipped answer with its positions swapped, where the answers it is handed flip at one position.
+pub let flips(
+    left: Nat,
+    right: Nat,
+    same: Ordering,
+    back: Ordering,
+    tied: (Eq()(left, right)) -> Eq()(back, Ordering/flip(same)),
+) -> Eq()(by_tag(right, left, back), Ordering/flip(by_tag(left, right, same))) =
+    Ordering/then/flips(
+        Nat/ord(left, right),
+        same,
+        Nat/ord(right, left),
+        back,
+        Nat/ord/flips(left, right),
+        (e) => tied(Nat/ord/eq(left, right, e)));
+
+--- Two positions `by_tag` answers `eq` at are one.
+pub let tied(
+    left: Nat,
+    right: Nat,
+    same: Ordering,
+    h: Eq()(by_tag(left, right, same), Ordering/eq()),
+) -> Eq()(left, right) =
+    Nat/ord/eq(left, right, Ordering/then/first(Nat/ord(left, right), same, h));

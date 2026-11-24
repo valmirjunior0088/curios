@@ -1,0 +1,55 @@
+use /std/{Eq, Ordering};
+
+-- An arm for each answer, where a default would do: a walk that compares its heads and goes on to its tails only where they tie, as `List/ord` does, is this match written out, so the laws below are that walk's.
+--- The first answer, and the second where the first is `eq`: how two comparisons decide in turn.
+pub let then(first: Ordering, second: Ordering) -> Ordering =
+    match first
+    | lt() => Ordering/lt()
+    | eq() => second
+    | gt() => Ordering/gt()
+    end;
+
+-- By cases on the first answer, once each swapped answer is read as the flip it equals. The second's equation is asked for in the one case that reads it. The four answers are written at a call, where the two proofs would give them: an answer left to inference under `Ordering/flip` is solved as the comparison it names unfolded, a recursion written out where the call was, and the totality check follows no witness into one, so a law that recurses through a container's witness would be refused.
+--- A step with its operands swapped is the step flipped: `then` of two flipped answers is the flip of `then` of the two.
+---
+--- The second answer's flip is owed only where the first is `eq`, which is where `then` consults the second.
+pub let flips(
+    x: Ordering,
+    y: Ordering,
+    fx: Ordering,
+    fy: Ordering,
+    head: Eq()(fx, Ordering/flip(x)),
+    rest: (Eq()(x, Ordering/eq())) -> Eq()(fy, Ordering/flip(y)),
+) -> Eq()(then(fx, fy), Ordering/flip(then(x, y))) =
+    let refl() = head;
+    match x
+    | lt() => Eq/refl()
+    | eq() =>
+        let refl() = rest(Eq/refl());
+        Eq/refl()
+    | gt() => Eq/refl()
+    end;
+
+--- The first of two answers that step to `eq` is `eq`.
+pub let first(
+    x: Ordering,
+    y: Ordering,
+    h: Eq()(then(x, y), Ordering/eq()),
+) -> Eq()(x, Ordering/eq()) =
+    match x
+    | lt() => match h end
+    | eq() => Eq/refl()
+    | gt() => match h end
+    end;
+
+--- The second of them is `eq` too.
+pub let second(
+    x: Ordering,
+    y: Ordering,
+    h: Eq()(then(x, y), Ordering/eq()),
+) -> Eq()(y, Ordering/eq()) =
+    match x
+    | lt() => match h end
+    | eq() => h
+    | gt() => match h end
+    end;

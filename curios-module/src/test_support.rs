@@ -98,7 +98,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         ord: OrdDerivation {
             ord: registry_field(&["std", "Ord", "Ord"], "ord"),
             lexicographic: registry_name(&["std", "Ord", "lexicographic"]),
-            by_tag: registry_name(&["std", "Ord", "by_tag"]),
+            by_tag: registry_name(&["std", "Ord", "by_tag", "by_tag"]),
             eq: registry_name(&["std", "Ord", "Ordering", "Ordering", "eq"]),
             is_lt: registry_name(&["std", "Ord", "Ordering", "is_lt"]),
             is_le: registry_name(&["std", "Ord", "Ordering", "is_le"]),
