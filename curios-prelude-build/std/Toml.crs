@@ -56,33 +56,23 @@ end
 
 pub use Toml/*;
 
--- A table is compared entry by entry rather than with `==`, which would ask `Eql(Toml)` of `Map`'s witness from inside its own, a declaration and a witness that need each other; a map lists its entries in one order for one set of keys.
---- Whether `a` and `b` are one value: the same case holding the same value, an array's elements in order and a table's entries alike, and a float the same bit pattern, so a `nan` a document holds equals itself and `+0.0` stands apart from `-0.0`, as a document's values are told apart, where IEEE's equality is a float's.
-let same(a: Toml, b: Toml) -> Bool =
-    match (a, b)
-    | (str(x), str(y)) => x == y
-    | (int(x), int(y)) => x == y
-    | (flt(x), flt(y)) => Flt/identical(x, y)
-    | (bool(x), bool(y)) => x == y
-    | (offset_date_time(x), offset_date_time(y)) => x == y
-    | (local_date_time(x), local_date_time(y)) => x == y
-    | (local_date(x), local_date(y)) => x == y
-    | (local_time(x), local_time(y)) => x == y
-    | (arr(xs), arr(ys)) =>
-        List/length(xs) == List/length(ys)
-            && List/all(List/zip(xs, ys), (p: {Toml, Toml}) => same(p.0, p.1))
-    | (table(x), table(y)) =>
-        let xs = Map/to_list(x);
-        let ys = Map/to_list(y);
-        List/length(xs) == List/length(ys)
-            && List/all(
-                List/zip(xs, ys),
-                (p: {{Str, Toml}, {Str, Toml}}) => p.0.0 == p.1.0 && same(p.0.1, p.1.1))
-    | _ => false
-    end;
-
+--- Whether two values are one: the same case holding the same value, an array's elements in order and a table's entries alike, and a float the same bit pattern, so a `nan` a document holds equals itself and `+0.0` stands apart from `-0.0`, as a document's values are told apart, where IEEE's equality is a float's.
+---
+--- Written in the witness, which may read its own methods: an array and a table are compared by `==`, which asks this witness of `List`'s and of `Map`'s, each applying it below what it holds.
 satisfy Eql(Toml) {
-    eql = same,
+    eql(a, b) =
+        match a
+        | str(x) => match b | str(y) => x == y | _ => false end
+        | int(x) => match b | int(y) => x == y | _ => false end
+        | flt(x) => match b | flt(y) => Flt/identical(x, y) | _ => false end
+        | bool(x) => match b | bool(y) => x == y | _ => false end
+        | offset_date_time(x) => match b | offset_date_time(y) => x == y | _ => false end
+        | local_date_time(x) => match b | local_date_time(y) => x == y | _ => false end
+        | local_date(x) => match b | local_date(y) => x == y | _ => false end
+        | local_time(x) => match b | local_time(y) => x == y | _ => false end
+        | arr(x) => match b | arr(y) => x == y | _ => false end
+        | table(x) => match b | table(y) => x == y | _ => false end
+        end,
 }
 
 satisfy Spell(Toml) {

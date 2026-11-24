@@ -1,5 +1,6 @@
 -- The TOML codec: documents decoded and re-encoded, the refusals pinned to their reasons and their places, and floats pinned to their bits.
 use /std/{Toml, Str, Map, Flt, Bool, Bytes, Byte, Char, Nat, Result, Spell, Test};
+use /std/Bool/{True, Holds};
 
 -- `ch` repeated `k` times: a digit run too long for a reader to count.
 let run_of(ch: Str, k: Nat) -> Str =
@@ -303,3 +304,9 @@ test a_value_is_equal_to_what_its_document_decodes_to_again =
         Test/equal(
             Spell/spell(Toml/arr([Toml/int(+1), Toml/bool(true)])),
             "Toml/arr([Toml/int(+1), Toml/bool(true)])")]);
+
+-- A document's equality is known to terminate, through `List`'s witness at an array and `Map`'s, over its trie, at a table, so a type states that two documents are equal and reduction decides it.
+let _two_documents_are_equal_in_a_type: Holds(
+    Toml/arr([Toml/table(Map/insert(Map/empty(), "a", Toml/int(+1))), Toml/bool(true)])
+        == Toml/arr([Toml/table(Map/insert(Map/empty(), "a", Toml/int(+1))), Toml/bool(true)])) =
+    True/qed();

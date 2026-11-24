@@ -189,25 +189,9 @@ pub let difference(
 pub let rekey(@K: Type, @from: Key(K), use Key(K), @V: Type, m: Map(K, use from, V)) -> Map(K, V) =
     fold(@K, use from, m, empty(), (k, v, acc) => insert(acc, k, v));
 
--- Keys are compared by their encodings, which `Key`'s law makes equality, so a map's own dictionary is all that equality of maps asks of its keys.
-let same_entries(
-    @K: Type,
-    use Key(K),
-    @V: Type,
-    use Eql(V),
-    xs: List({K, V}),
-    ys: List({K, V}),
-) -> Bool =
-    match (xs, ys)
-    | ([], []) => true
-    | ([x, ..xt], [y, ..yt]) =>
-        Hash/hash(x.0) == Hash/hash(y.0) && x.1 == y.1 && same_entries(xt, yt)
-    | _ => false
-    end;
-
---- Entry by entry.
+--- Entry by entry: a trie is a function of its entries, so two maps hold the same keys at equal values exactly where their tries are alike ([`try_get/injective`]).
 satisfy (@K: Type, use Key(K), @V: Type, use Eql(V)) => Eql(Map(K, V)) {
-    eql(a, b) = same_entries(to_list(a), to_list(b)),
+    eql(a, b) = Node/same(a.root, b.root),
 }
 
 satisfy (@K: Type, use Key(K), @V: Type, use Show(K), use Show(V)) => Show(Map(K, V)) {

@@ -53,8 +53,9 @@ pub let intersection(@K: Type, use Map/Key(K), a: Set(K), b: Set(K)) -> Set(K) =
 pub let difference(@K: Type, use Map/Key(K), a: Set(K), b: Set(K)) -> Set(K) =
     Set { map = Map/difference(a.map, b.map) };
 
-satisfy (@K: Type, use Map/Key(K), use Eql(K)) => Eql(Set(K)) {
-    eql(a, b) = to_list(a) == to_list(b),
+--- Two sets are equal where they hold the same elements, which is where their maps are equal.
+satisfy (@K: Type, use Map/Key(K)) => Eql(Set(K)) {
+    eql(a, b) = a.map == b.map,
 }
 
 satisfy (@K: Type, use Map/Key(K), use Show(K)) => Show(Set(K)) {

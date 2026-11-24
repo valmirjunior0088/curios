@@ -2,6 +2,7 @@ use /std/{Bytes, Nat, Bool, Option, List, Vec, Eq, Hash, Ord, Ordering, proved};
 use /std/List/{Member, Pairwise};
 use /std/Map/{Key};
 use /std/Map/digits/{digit, small, crit, Parting, parting, Apart, turned, reheaded, before};
+use /std/ops/{Eql};
 
 --- A trie's node: nothing, a key with its value, or a branch at the position its keys first differ at, holding sixteen twigs, the one at each digit holding the keys with that digit there.
 pub induct Node(K: Type, V: Type): pub Type
@@ -2114,6 +2115,35 @@ pub let fold(@K: Type, @V: Type, @A: Type, t: Node(K, V), acc: A, f: (K, V, A) -
     end
 pub and fold_in(@K: Type, @V: Type, @A: Type, l: List(Node(K, V)), acc: A, f: (K, V, A) -> A) -> A =
     match l | [] => acc | [h, ..r] => fold_in(r, fold(h, acc, f), f) end;
+
+-- Keys are compared by their encodings, which `Key`'s law makes equality, so a map's own dictionary is all that equality of maps asks of its keys. A value is compared where the trie holds it, a leaf's own payload, so a family whose values are maps of itself descends through this as it does through a list's equality.
+--- Whether two nodes are alike: one shape, each leaf's key encoded alike and its value equal. A trie is a function of its entries, so two sound nodes are alike exactly where they hold the same keys at equal values.
+pub let same(@K: Type, use Key(K), @V: Type, use Eql(V), a: Node(K, V), b: Node(K, V)) -> Bool =
+    match a
+    | empty() => match b | empty() => true | _ => false end
+    | leaf(k1, v1) =>
+        match b
+        | leaf(k2, v2) => Hash/hash(k1) == Hash/hash(k2) && v1 == v2
+        | _ => false
+        end
+    | branch(at1, t1) =>
+        match b
+        | branch(at2, t2) => at1 == at2 && same_in(t1.list, t2.list)
+        | _ => false
+        end
+    end
+pub and same_in(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    use Eql(V),
+    a: List(Node(K, V)),
+    b: List(Node(K, V)),
+) -> Bool =
+    match a
+    | [] => match b | [] => true | [_, .._] => false end
+    | [x, ..xs] => match b | [] => false | [y, ..ys] => same(x, y) && same_in(xs, ys) end
+    end;
 
 --- `f` on every value, the keys and the branches as they were.
 pub let map(@K: Type, @V: Type, @W: Type, t: Node(K, V), f: (V) -> W) -> Node(K, W) =

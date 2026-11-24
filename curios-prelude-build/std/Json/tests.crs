@@ -1,5 +1,6 @@
 -- The JSON codec: escapes, the refusals the grammar names, the numbers RFC 8259 spells and the ones it does not, and that a number is finite.
 use /std/{Json, Str, Flt, Bool, List, Int, Option, Test};
+use /std/Bool/{True, Holds};
 
 -- The document decoded and re-encoded, or the refusal that stopped it.
 let decoded(input: Str) -> Str =
@@ -285,3 +286,9 @@ test every_number_a_parser_may_decide_is_read_exactly =
             "[4e669999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999969999999005]|",
             "[-1e9999]|[1.5e9999]|[-1.23123e100005]|[1.23123e100005]|1e400|-1e400|",
             "[100000000000000000000]|true|true"]));
+
+-- A document's equality is known to terminate, through `List`'s witness applied to the pair's at an object, so a type states that two documents are equal and reduction decides it.
+let _two_documents_are_equal_in_a_type: Holds(
+    Json/obj([("a", Json/arr([Json/null(), Json/bool(true)]))])
+        == Json/obj([("a", Json/arr([Json/null(), Json/bool(true)]))])) =
+    True/qed();
