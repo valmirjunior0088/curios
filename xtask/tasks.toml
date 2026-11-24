@@ -84,6 +84,26 @@ url = "https://github.com/toml-lang/toml-test/archive/{.data.toml.version}.tar.g
 path = "tests"
 sha256 = "2af617ef8e263f3c6f4932ea28aa5bc659cc1b6994ff498e7b7ac3771b06dbb0"
 
+# The Unicode Character Database: the files `curios-unicode`'s build writes its tables from, and the conformance files its tests hold them to.
+[data.unicode]
+version = "18.0.0"
+url = "https://www.unicode.org/Public/{.data.unicode.version}/ucd"
+files = [
+    "EastAsianWidth.txt",
+    "emoji/emoji-data.txt",
+    "auxiliary/GraphemeBreakProperty.txt",
+    "DerivedCoreProperties.txt",
+    "UnicodeData.txt",
+    "PropList.txt",
+    "SpecialCasing.txt",
+    "CaseFolding.txt",
+    "DerivedNormalizationProps.txt",
+    "auxiliary/GraphemeBreakTest.txt",
+    "NormalizationTest.txt",
+]
+sha256 = "7527bb5f3bc83f49dd14fb3d899584c93a5737dc07ecb2c9875b6aa4e15e19ff"
+beside = "curios-unicode"
+
 
 [handoff]
 description = "Run every check the handoff holds work to: each subject's steps, each after what it requires and consumes"

@@ -990,9 +990,6 @@ dependencies = [
 [[package]]
 name = "curios-unicode"
 version = "0.16.25"
-dependencies = [
- "curios-download",
-]
 
 [[package]]
 name = "curios-unit"

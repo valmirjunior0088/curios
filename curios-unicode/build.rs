@@ -1,6 +1,6 @@
-//! Downloads, verifies and reads the pinned files of the Unicode Character Database, and writes the tables `src/lib.rs` includes.
+//! Reads the files of the Unicode Character Database the task files pin, and writes the tables `src/lib.rs` includes.
 //!
-//! The files are fetched once and kept in `.artifacts/<version>/` beside this crate — outside Cargo's target tree, so `cargo clean` leaves them — and each is checked against its pinned SHA-256 in memory, whether it was downloaded or placed there by hand for an offline build, as `curios-download` obtains every pinned file.
+//! The files are kept in `.artifacts/unicode-<version>/` beside this crate, outside Cargo's target tree, so `cargo clean` leaves them: `cargo xtask` fetches them there at the digest `xtask/tasks.toml` pins, `[data.unicode]`, before the first step of any run, and this script reads what is kept and fetches nothing, so no build links a network client under the crates that read a character's properties. A build that finds none says what keeps them.
 //!
 //! **The library's enums are the classes.** A run of one class is written as the variant it is, named from the database's own spelling (`Regional_Indicator` is `RegionalIndicator`, `CR` is `Cr`), so a class the database names and an enum lacks is refused where the library compiles, and this script holds no list of classes. The class a scalar no line names is the one the file's `@missing` line gives the whole range, and its runs are left out.
 //!
@@ -8,89 +8,50 @@
 //!
 //! **A decomposition is written whole.** Each scalar a decomposition changes is written with every scalar it ends at, decomposed until nothing it becomes decomposes again, and the primary composites are the pairs a canonical decomposition of two scalars names but the excluded ones, as `README.md` decides.
 
-use {
-    curios_download::Download,
-    std::{
-        collections::BTreeMap,
-        env,
-        fmt::Write,
-        fs,
-        path::{Path, PathBuf},
-    },
+use std::{
+    collections::BTreeMap,
+    env,
+    fmt::Write,
+    fs,
+    path::{Path, PathBuf},
 };
 
-/// The version of the database every table is built from.
+/// The version of the database every table is built from, which names the directory its files are kept in: the version `xtask/tasks.toml` pins, where a build that names another finds nothing kept.
 const VERSION: &str = "18.0.0";
 
-/// Every file the tables are built from, by its path under the version's `ucd/` directory, with its SHA-256: the conformance files beside them are test support's, `src/test_support.rs`, which no build reads.
-const FILES: [(&str, &str); 9] = [
-    (
-        "EastAsianWidth.txt",
-        "a0cf29eacd00cfcaec4381c6b7c281685f18dbb4e7ff82b4076ccb342ca839aa",
-    ),
-    (
-        "emoji/emoji-data.txt",
-        "80d00f8e616a0ef27fd6b8de3b758c06383b5d917e2977709578e68baf733bf1",
-    ),
-    (
-        "auxiliary/GraphemeBreakProperty.txt",
-        "0839dcb79e4ac639ecd538b1abf7c9d22e3f9dd265b7e182d33627aa4d75b45a",
-    ),
-    (
-        "DerivedCoreProperties.txt",
-        "09c928886a178fcafd93c29e4bd59073a058e5a100b716d425cb563ab50f68c9",
-    ),
-    (
-        "UnicodeData.txt",
-        "0736451de439ae7baf1425136617da495e09ee5afbe6e394374db7009ea08950",
-    ),
-    (
-        "PropList.txt",
-        "f438f532e8737bb8a2702126cdf9c4af5e357c58c7acf9d9eb2fc7c1a1d955d6",
-    ),
-    (
-        "SpecialCasing.txt",
-        "8538dea57c184f1ef3783885ea79677b10f6efa06423717157e63712f14d1ad2",
-    ),
-    (
-        "CaseFolding.txt",
-        "a004797658a457bec4dc11683e39f69249ea3b595b752dbea6721c4c9f587b0d",
-    ),
-    (
-        "DerivedNormalizationProps.txt",
-        "98ac7f67d985fe781e317f6182e885e94cabb0c314769e6dd73e48b226931ccd",
-    ),
+/// Every file the tables are built from, by its path under the version's `ucd/` directory, which is its path where the database is kept: the conformance files beside them are test support's, `src/test_support.rs`, which no build reads.
+const FILES: [&str; 9] = [
+    "EastAsianWidth.txt",
+    "emoji/emoji-data.txt",
+    "auxiliary/GraphemeBreakProperty.txt",
+    "DerivedCoreProperties.txt",
+    "UnicodeData.txt",
+    "PropList.txt",
+    "SpecialCasing.txt",
+    "CaseFolding.txt",
+    "DerivedNormalizationProps.txt",
 ];
 
 /// One past the last scalar value.
 const SCALARS: usize = 0x11_0000;
 
-fn url(path: &str) -> String {
-    format!("https://www.unicode.org/Public/{VERSION}/ucd/{path}")
-}
-
-/// Where a file is kept between builds: its own name under the version's cache directory.
-fn kept(path: &str) -> PathBuf {
-    let name = Path::new(path).file_name().expect("a file name");
-
+/// Where the database is kept: beside this crate, under its name and version in the task files, where `cargo xtask` files it.
+fn kept() -> PathBuf {
     Path::new(&env::var("CARGO_MANIFEST_DIR").expect("cargo sets the manifest directory"))
         .join(".artifacts")
-        .join(VERSION)
-        .join(name)
+        .join(format!("unicode-{VERSION}"))
 }
 
-/// The text of one pinned file, checked against its hash: the copy an earlier build kept or a hand placed, or else a download, kept once it is checked.
-fn text(path: &str, sha256: &str) -> String {
-    let url = url(path);
-    let place = kept(path);
-    let bytes = Download {
-        what: "a file of the Unicode Character Database curios-unicode is built from",
-        url: &url,
-        sha256,
-        place: &place,
-    }
-    .kept()
-    .unwrap_or_else(|unobtained| panic!("{unobtained}"));
+/// The text of one file of the database, read where it is kept, and read again by the next build only where it changed.
+fn text(path: &str) -> String {
+    let kept = kept().join(path);
+    println!("cargo::rerun-if-changed={}", kept.display());
+    let bytes = fs::read(&kept).unwrap_or_else(|error| {
+        panic!(
+            "the Unicode Character Database is not kept at {}: {error}\n\nEvery `cargo xtask` run fetches it before its first step, at the version and the digest `xtask/tasks.toml` pins, and no build fetches: run `cargo xtask compiler launcher`, then build again. This crate reads version {VERSION}.",
+            kept.display()
+        )
+    });
 
     String::from_utf8(bytes).unwrap_or_else(|error| panic!("{path} is not UTF-8: {error}"))
 }
@@ -529,8 +490,11 @@ fn composition_table(out: &mut String, pairs: &[(usize, usize, usize)]) {
 
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");
-    // The version is stated once, here, and test support fetches the conformance files at it.
-    println!("cargo::rustc-env=CURIOS_UNICODE_VERSION={VERSION}");
+    // Test support reads the conformance files where the database is kept, which is stated once, here.
+    println!(
+        "cargo::rustc-env=CURIOS_UNICODE_DATABASE={}",
+        kept().display()
+    );
 
     let [
         width,
@@ -542,7 +506,7 @@ fn main() {
         special,
         folded,
         normalization,
-    ] = FILES.map(|(path, sha256)| text(path, sha256));
+    ] = FILES.map(text);
 
     let second = |fields: &[&str]| fields.get(1).map(|class| (*class).to_string());
     let conjunct = |fields: &[&str]| {

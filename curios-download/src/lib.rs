@@ -1,6 +1,6 @@
 //! A file a build pins by its SHA-256: read where a hand placed it or an earlier run kept it, else downloaded, and checked against its digest either way, a failure saying how to place it by hand where it cannot be had; a directory pinned by the digest of its files, one of an archive a forge generates or one of files a site publishes one by one; and the pieces that keep what it holds, unpacked or as an executable.
 //!
-//! What takes something from the network takes it through [`Download`] — the build scripts, `curios-unicode`'s database, `curios-binaryen`'s source archive and `curios-profile`'s trace schema, and `xtask`, each tool a step runs — so how a pinned file is obtained, checked and kept, and what an offline build is told, is written once. Why this is a crate of its own is `README.md`'s decision.
+//! What takes something from the network takes it through this crate — the build scripts, `curios-binaryen`'s source archive and `curios-profile`'s trace schema, and `xtask`, each tool a step runs and the data its steps and the builds read, `curios-unicode`'s database among it — so how a pinned file is obtained, checked and kept, and what an offline build is told, is written once. Why this is a crate of its own is `README.md`'s decision.
 //!
 //! **Whole or not at all.** Whatever is kept is written beside its place under a name of this process's own and renamed onto it, so a run that stops midway leaves nothing another reads as the whole, and two runs keeping one thing at once each finish with it whole.
 
