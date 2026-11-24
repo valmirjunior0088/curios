@@ -1,4 +1,4 @@
-//! Canonical compiler-known names, owned by the `/sys` and `/std` declarations this crate supplies.
+//! Canonical compiler-known names, owned by the `/sys` and `/std` declarations this crate supplies, and by `/test`, the runner's half of a test program.
 
 use curios_common::{
     CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax, EqlDerivation,
@@ -19,6 +19,9 @@ const fn field(segments: &'static [&'static str], label: &'static str) -> Concep
         field: label,
     }
 }
+
+/// The prefix `/test` mounts at: the runner's half of a test program, which declares the scheduler [`SYNTAX`]'s `test.main` names and which a test compilation alone links. The one spelling of it, which the registry's fill, the fold that compiles the unit and a manifest's refusal of a package claiming the prefix each read.
+pub const TEST_UNIT: &str = "test";
 
 pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     option: OptionSyntax {
@@ -67,7 +70,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     },
     test: TestSyntax {
         test_type: name(&["std", "Test", "Test"]),
-        main: name(&["test", "main"]),
+        main: name(&[TEST_UNIT, "main"]),
     },
     program: ProgramSyntax {
         execute: field(&["std", "Program", "Program"], "execute"),

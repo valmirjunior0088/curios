@@ -613,7 +613,7 @@ A `curios.toml` declares a package or an umbrella, never both, and one that decl
 
 | Package key | Is |
 | --- | --- |
-| `name` | required: the package's canonical name, its mount prefix and every consumer's only way to refer to it |
+| `name` | required: the package's canonical name, its mount prefix and every consumer's only way to refer to it — one identifier and no keyword, and not `test`, the prefix of the toolchain's unit a test compilation links, which a dependency's key cannot name either |
 | `compiler` | required for a standalone package: the Curios version it is written for, a bare SemVer version, or the oldest one, after `>=`; an umbrella member inherits this from its umbrella instead |
 | `description` | one line, which opens the landing page [`document`](#document) writes |
 | `default` | which executable a bare `run`, `compile` or `test` means; it may name a key of `[executables]` or the package's own `exe.crs` program |

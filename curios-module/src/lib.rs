@@ -41,7 +41,7 @@ pub use into_core::{
 };
 
 mod registry;
-pub use registry::SYNTAX;
+pub use registry::{SYNTAX, TEST_UNIT};
 
 mod load;
 pub use load::{open_entrypoint, overlay_entrypoint, read_module, supply_entrypoint};

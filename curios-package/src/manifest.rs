@@ -20,6 +20,7 @@ use {
         TreeHash, decode, misshapen,
     },
     curios_common::{About, Code, OsError, Report, Said, Source, is_identifier, is_reserved},
+    curios_module::TEST_UNIT,
     serde::Deserialize,
     std::{
         collections::BTreeMap,
@@ -267,7 +268,7 @@ impl Document {
                 .stating("this package declares no `name`")
                 .stating("a name is its mount prefix, and every consumer's way to refer to it"));
         };
-        let name = canonical(&spelling).map_err(|refused| refused.value(["name"]))?;
+        let name = package_name(&spelling).map_err(|refused| refused.value(["name"]))?;
 
         let mut executables = BTreeMap::new();
         for (written, row) in self.executables.unwrap_or_default() {
@@ -980,7 +981,7 @@ fn table(
             let placed = |refused: Refused| refused.under([key, written.as_str()]);
 
             Ok((
-                canonical(&written).map_err(placed)?,
+                package_name(&written).map_err(placed)?,
                 row.dependency().map_err(placed)?,
             ))
         })
@@ -1004,5 +1005,21 @@ pub fn canonical(written: &str) -> Result<String, Refused> {
         _ if !is_identifier(written) => Err(refuse("it is no identifier")),
         _ if is_reserved(written) => Err(refuse("it is a keyword")),
         _ => Ok(written.to_string()),
+    }
+}
+
+/// The canonical name `written` states for a package — a manifest's own `name`, a dependency's key, what `new` starts — refused where [`canonical`] refuses it and where it is the prefix the toolchain's `/test` mounts at.
+///
+/// **`/sys` and `/std` collide everywhere; `/test` would collide late.** The prelude's roots are in every compilation, so a package claiming either is refused by the fold wherever it is compiled; `/test` is linked into a test compilation alone, so a package of that name would build, and collide only once its tests ran. Refused where the name is read, it never builds.
+pub fn package_name(written: &str) -> Result<String, Refused> {
+    let name = canonical(written)?;
+
+    match name == TEST_UNIT {
+        true => Err(Refused::of("invalid name")
+            .stating(format_args!(
+                "`{written}` names `/{TEST_UNIT}`, the toolchain's unit a test compilation links"
+            ))
+            .stating("a package mounted there would collide with it once its tests ran")),
+        false => Ok(name),
     }
 }

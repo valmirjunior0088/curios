@@ -9,7 +9,8 @@ mod tests;
 
 use {
     crate::{
-        CompilerVersion, EXECUTABLE, LIBRARY, MANIFEST, PRODUCTS, Refused, canonical, umbrella_over,
+        CompilerVersion, EXECUTABLE, LIBRARY, MANIFEST, PRODUCTS, Refused, package_name,
+        umbrella_over,
     },
     curios_common::{OsError, Report},
     std::{
@@ -33,7 +34,7 @@ pub fn scaffold(directory: &Path) -> Result<Vec<PathBuf>, Box<Report>> {
         })?;
 
     // The same predicate the manifest parser applies, rather than a second opinion about what a name may be.
-    canonical(&name).map_err(|refused| refused.about_path(directory))?;
+    package_name(&name).map_err(|refused| refused.about_path(directory))?;
 
     let manifest = directory.join(MANIFEST);
     if manifest.exists() {

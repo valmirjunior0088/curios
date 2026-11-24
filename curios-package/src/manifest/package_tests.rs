@@ -156,6 +156,21 @@ fn a_name_no_path_could_spell_is_refused() {
     }
 }
 
+/// `/test` is the toolchain's unit, linked into a test compilation alone, so a package named `test` would build and collide only once its tests ran: the name is refused where a manifest reads it, its own or a dependency's, naming the unit.
+#[test]
+fn a_package_named_for_the_toolchains_test_unit_is_refused() {
+    for manifest in [
+        "name = \"test\"",
+        "name = \"app\"\n\n[dependencies]\ntest = { member = true }",
+    ] {
+        let refusal = refuse(manifest);
+        assert!(
+            refusal.contains("names `/test`, the toolchain's unit a test compilation links"),
+            "{manifest}: {refusal}"
+        );
+    }
+}
+
 /// An executable's name is what `curios run <name>` dispatches on, so it cannot be spelled like a file.
 #[test]
 fn an_executable_named_by_no_identifier_is_refused() {
