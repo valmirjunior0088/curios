@@ -4,7 +4,7 @@
 
 ## What is wrong today
 
-Each is probed at `30a577452`, over `struct P { x: Nat, y: Nat }`.
+Each is probed at `249545b42`, over `struct P { x: Nat, y: Nat }`.
 
 - **An index equation over a field read specializes nothing.** The unifier's solution rule takes a variable (`Unifier::flexible`, `curios-analysis/src/invert.rs`), and a projection falls to `decompose`'s last arm and stands aside. Matching `refl()` on a proof of `Eq()(a.x, b.x)` is admitted and teaches the arm nothing, whether or not `a` and `b` were taken apart first, a struct or tuple pattern binding projections: after one such match for each field, `Eq/refl()` is refused at `Eq()(a, b)`, for a struct and for a tuple alike. Under `h: Eq()(p.x, 3)` matched to `refl()`, `Holds(p.x == 3)` is not proved by `True/qed()`. Under `h: Eq()(a.T, Nat)` over `struct Any { T: Type, v: T }`, `a.v + 1` is refused, `a.v` standing at `a.T`.
 - **A struct literal is not taken apart.** `decompose` has an arm for two variants and one for two tuples and none for two struct literals, though the comment over the variant arm argues the structure's case. From a proof of `Eq()(P { x = u, y = v }, P { x = 1, y = 2 })` matched to `refl()`, `Eq()(u, 1)` is refused; the same over `(u, v)` and `(1, 2)` is accepted.

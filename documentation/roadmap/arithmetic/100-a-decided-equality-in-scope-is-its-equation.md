@@ -4,7 +4,7 @@
 
 ## What is wrong today
 
-Each is probed at `efbd8b48c`.
+Each is probed at `2563b33f5`.
 
 - **Three names cross, where the decision has one.** `Eql/eq_of_eql` is the law. `/std/Nat/eq_of_eql` and `/std/Int/eq_of_eql` are each the proof its carrier's witness names for that law, as `Byte`'s and `Bytes`'s are, which are private; these two are `pub` because the registry's order rows name them (`OrderSyntax::eq_of_eql`, `curios-common/src/syntax.rs`), and a note over each says so.
 - **The reader crosses carrier by carrier, at four places.** `curios-elab/src/entailment/facts.rs` writes the carrier's lemma over the two sides and the proof where a hypothesis, a field or a conjunct states an equality (`Reader::comparison`), in an `==` guard's true arm (`Reader::guard`), where a comparison kept for last is read (`Reader::last`), and where a `!=` goal is negated (`negated`). Each then reads the equation as its two bounds (`Reader::equation`), as it reads one a fact states as `Eq`.
@@ -28,7 +28,7 @@ Each is probed at `efbd8b48c`.
 ## Settled
 
 - **The call names its type.** The law is written as the goal's step writes it, `Term::registered_method` applied at the carrier with the type given, so its witness slot is resolved where it is born: a candidate is checked where parking is suppressed (`check`, `curios-elab/src/entailment.rs`), and a slot left to the first argument would wait.
-- **The law is no target of the vocabulary.** `EntailmentSyntax::decided` stands outside `targets()`, as it landed: a concept among the targets reorders `/std`'s build, 52 derived `Spell` witnesses meeting `call` out of scope where it was tried at `41c5e3188`.
+- **The law is no target of the vocabulary.** `EntailmentSyntax::decided` stands outside `targets()`, as it landed: a concept among the targets reorders `/std`'s build, 52 derived `Spell` witnesses meeting `call` out of scope where it was tried at `d6c96c612`.
 - **`Eql/eq_of_eql` stays a law a program may call**, written where nothing names the sides. The work removes the other names, never this one.
 - **The derivation writes the law in the proofs it writes**, as a program does (`equal_where_eql`, `curios-elab/src/derive.rs`); it is no crossing of the procedure's and is not moved.
 - **A true `==` rewrites no type.** A value is still carried along the equation by `Eq/subst`, the equation left to the elaborator; no hypothesis enters conversion, the first rejection of the bound's decision.
@@ -37,7 +37,7 @@ Each is probed at `efbd8b48c`.
 
 ## Open
 
-- **Whether `/std` builds with the reader crossing by the law.** Tried at `41c5e3188` with the slot moved to the concept's method, its build refused 71 declarations, `Nat/ord.crs`'s bounds among them with `a proof was found and did not check`. Two causes were the trial's own and are corrected in the goal's step as it landed: the type left for unification, and the method named as a plain global. The third is not known: the procedure's vocabulary is elaborated before any witness, and a candidate never makes its declaration wait, so a declaration of `/std` elaborated before `Eql(Nat)`'s witness may have no crossing to write, where today it has `Nat`'s lemma. Stage 1's investigation answers it.
+- **Whether `/std` builds with the reader crossing by the law.** Tried at `d6c96c612` with the slot moved to the concept's method, its build refused 71 declarations, `Nat/ord.crs`'s bounds among them with `a proof was found and did not check`. Two causes were the trial's own and are corrected in the goal's step as it landed: the type left for unification, and the method named as a plain global. The third is not known: the procedure's vocabulary is elaborated before any witness, and a candidate never makes its declaration wait, so a declaration of `/std` elaborated before `Eql(Nat)`'s witness may have no crossing to write, where today it has `Nat`'s lemma. Stage 1's investigation answers it.
 - **Whether a conjunct that is a decided equality at a type the search does not read is a fact.** The bound's decision rejects it: "a search over the facts for a bound that is no comparison — congruence, symmetry, or a fact's consequence such as one conjunct of an opaque conjunction." The reader takes a stated conjunction apart all the same for the comparisons it reads, so one hypothesis answers at one type and not at another: under `h: Holds(a.0 == b.0 && a.1 == b.1)` an omitted `Eq()(a.1, b.1)` is filled over two `{Nat, Nat}` and refused over two `{Str, Str}`, `nothing discharged`, with `Holds(a.1 == b.1)` beside it, and is filled there once a local is bound to the conjunct, `let p1 = Bool/and/first(…)`. A conjunct held as the fact it states is no search: it adds no congruence and no symmetry, and it is bounded by the statement's own shape. Answered for it, the 3 crossings of `List.crs` and `Map/internal/Node.crs` read `proved()`, each splitting a hypothesis that reduces to a conjunction in its arm. The 28 of `Tuple.crs` and their 7 locals split one over the witness's own method, which the reader does not open: they follow only where that is opened too, the opaque conjunction the rejection names. The answer is the user's, and a stage is written here where it is yes.
 
 ## Stages
