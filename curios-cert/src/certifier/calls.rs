@@ -17,7 +17,7 @@ use {
         refined_by_arm,
     },
     curios_common::Keyed,
-    curios_core::{CallMatrix, Free, Global, Intrinsic, RecGroup, Subterm, Term, Totality},
+    curios_core::{Free, Global, Intrinsic, RecGroup, Subterm, Term, Totality},
     std::{
         collections::{HashMap, HashSet},
         mem,
@@ -430,8 +430,9 @@ impl Certifier<'_> {
             let call = grade(self, &context, caller, &params, callee, arity, &arguments);
             self.calls.context = context;
             let call = call?;
+            // Graded against the parameters the caller part had bound where the call stands, and read over every parameter of the part: a call typed in the type of one of the part's own binders stands before the binders after it, which it hands nothing it is graded against, and the shared walk grades it against all of them, so the two checkers close one set of calls and the closure composes it with the part's other calls.
             self.calls.frames[frame].calls.push(Call {
-                matrix: over_every_parameter(call.matrix, rows),
+                matrix: call.matrix.over(rows),
                 ..call
             });
         }
@@ -576,7 +577,7 @@ impl Certifier<'_> {
                 let context = mem::take(&mut self.calls.context);
                 let call = grade(self, &context, caller, &params, base, arity, &arguments);
                 self.calls.context = context;
-                Some(over_every_parameter(call?.matrix, rows))
+                Some(call?.matrix.over(rows))
             }
             Some(_) => return self.record_call(member, &steps),
         };
@@ -716,18 +717,4 @@ impl Certifier<'_> {
     pub(crate) fn note_enclosing_partial(&mut self, name: &Global) {
         self.calls.definitions_enclosing.insert(*name);
     }
-}
-
-/// `matrix`, graded against the parameters its caller part had bound where the call stands, over every parameter of the part: a call typed in the type of one of the part's own binders stands before the binders after it, which it hands nothing it is graded against, and the shared walk grades it against all of them, so the two checkers close one set of calls and the closure composes it with the part's other calls.
-fn over_every_parameter(matrix: CallMatrix, rows: usize) -> CallMatrix {
-    if matrix.rows() >= rows {
-        return matrix;
-    }
-    let mut padded = CallMatrix::unknown(rows, matrix.columns());
-    for row in 0..matrix.rows() {
-        for column in 0..matrix.columns() {
-            padded.set(row, column, matrix.entry(row, column));
-        }
-    }
-    padded
 }

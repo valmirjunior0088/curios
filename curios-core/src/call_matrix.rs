@@ -131,6 +131,15 @@ impl CallMatrix {
         (0..self.rows.min(self.columns)).any(|index| self.entry(index, index) == Size::Less)
     }
 
+    /// `self` over `rows` parameters where it grades fewer: its own rows, and the rows after them claiming nothing. What was graded against a part's first parameters, read against every one of them.
+    pub fn over(mut self, rows: usize) -> CallMatrix {
+        if self.rows < rows {
+            self.entries.resize(rows, Vec::new());
+            self.rows = rows;
+        }
+        self
+    }
+
     /// `self`'s columns followed by `other`'s, over the same rows: a call whose first arguments `self` grades and whose later ones `other` does — a member's own arguments, then a field lambda's. `None` where the rows differ.
     pub fn beside(&self, other: &CallMatrix) -> Option<CallMatrix> {
         if self.rows != other.rows {

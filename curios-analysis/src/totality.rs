@@ -96,7 +96,7 @@ pub fn group_totality<D: Driver>(driver: &mut D, group: &RecGroup) -> Result<Tot
 /// How many matrices a parameter's applications may close to before the parameter is summarized as used otherwise: the conservative direction, as a closure past its bound is `Unfounded`.
 const APPLICATIONS_LIMIT: usize = 64;
 
-/// How each part of each member of `group` applies its parameters ([`Applications`]): for a parameter at a position no part uses otherwise than as the head of an application, a field of it applied, or handed on unchanged — at that position to a member taking a parameter there, or to a definition whose summary applies what it is handed — every application of it the part makes, graded against the part's parameters, and every one reached through a path of the group's calls, graded through the path. A member's leading lambdas are one part, and each field lambda of the record under them another ([`PartShape`]), over the member's parameters and then its own; a member's parameter a field lambda applies is applied wherever the field is called, so the leading lambdas' summary states nothing of it and the field's does.
+/// How each part of each member of `group` applies its parameters ([`Applications`]): for a parameter at a position no part uses otherwise than as the head of an application, a field of it applied, or handed on unchanged — at that position to a member taking a parameter there, or to a definition whose summary applies what it is handed — every application of it the part makes, graded against the part's parameters, and every one reached through a path of the group's calls, graded through the path. A member's leading lambdas are one part, and each field lambda of the record under them another ([`PartShape`]), over the member's parameters and then its own; a member's parameter a field lambda applies is applied wherever the field is called, so the leading lambdas' summary states nothing of it and the field's does, beside what the leading lambdas apply of it themselves: a field is called on a record they answered.
 ///
 /// **Only where every use is seen.** A use the walk cannot follow — the parameter stored, returned, handed to a definition that states nothing of it, handed to a member at another position or past its parameters, or named in a type — leaves the position unsummarized in every part, and a call through it is graded as it is without a summary. A member call handing a position something other than the caller's own parameter there hands the callee another function, whose applications the summary then counts as well: more matrices claim less, never more.
 pub fn group_applications<D: Driver>(
@@ -184,15 +184,20 @@ fn summaries<D: Driver>(
                             let unseen = leading && applied_in_a_field(member, position);
                             let closed = closed.as_ref().filter(|_| seen[position] && !unseen)?;
                             // The applications of the parameter, or of its field at `path`: this part's, and each reached through a path of the group's calls. A field is applied through a call that hands the parameter on at its own place as the parameter is.
+                            //
+                            // A field lambda is called on a record its member's leading lambdas answered, so what they apply of the parameter where they answer it is applied wherever the field is called too: stated beside the field's own, over the field's parameters, of which the leading lambdas' rows claim nothing past their own.
                             let reached = |path: Option<&[usize]>| {
-                                let mut matrices = uses[part]
-                                    .at(position, path)
-                                    .into_iter()
-                                    .collect::<BTreeSet<_>>();
-                                for call in closed.iter().filter(|call| call.caller == part) {
-                                    for applied in uses[call.callee].at(position, path) {
-                                        if let Some(through) = call.matrix.compose(&applied) {
-                                            matrices.insert(through);
+                                let answering = (!leading).then(|| base_part(&shapes, member));
+                                let mut matrices = BTreeSet::new();
+                                for caller in [Some(part), answering].into_iter().flatten() {
+                                    for applied in uses[caller].at(position, path) {
+                                        matrices.insert(applied.over(arities[part]));
+                                    }
+                                    for call in closed.iter().filter(|call| call.caller == caller) {
+                                        for applied in uses[call.callee].at(position, path) {
+                                            if let Some(through) = call.matrix.compose(&applied) {
+                                                matrices.insert(through.over(arities[part]));
+                                            }
                                         }
                                     }
                                 }

@@ -186,3 +186,36 @@ fn a_field_lambdas_summary_closes_over_the_calls_its_group_hands_the_parameter_o
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
+
+// A field lambda is called on a record its definition's leading lambdas answered, so what they apply of a parameter where they answer it is applied wherever the field is called: `d`'s plain field holds a number and its field lambda applies `f` below its own argument, so `g`, which calls the field by its path, descends. The refusal has the plain field hold `f(100)`: read by the field lambda's own applications alone, `g` would be known to terminate while answering the record calls `g(100)`.
+#[test]
+fn a_field_called_by_its_path_states_what_its_record_applied_where_it_was_answered() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+
+        struct Handlers: Type {
+            y: Nat,
+            m: (Nat) -> Nat,
+        }
+
+        let d(f: (Nat) -> Nat) -> Handlers =
+            Handlers { y = 0, m = (x) => match x | 0 => 0 | n + 1 => f(n) end };
+
+        let g(t: Nat) -> Nat = d(g).m(t);
+
+        let Small(t: Nat) -> /std/Bool/True =
+            match g(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("y = 0,", "y = f(100),")])
+    .by_elaborator_in("/Small", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Small", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
