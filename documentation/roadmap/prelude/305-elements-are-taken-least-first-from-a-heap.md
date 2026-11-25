@@ -1,6 +1,6 @@
 # Elements are taken least first from a heap
 
-**Adopted by the user on 2026-11-22; its next step is stage 1, a ready delivery.** A scheduler, a shortest-path search or a merge of sorted streams takes the least element next, and `/std` answers that only through `Map/least`, which holds one entry a key, so equal priorities need a key made distinct by hand. `/std/Heap` is a persistent min-heap ordered by its elements' `Ord`, as Rust's `BinaryHeap`, Python's `heapq`, Java's `PriorityQueue` and Go's `container/heap` each ship one.
+**Its next step is stage 1, a ready delivery.** A scheduler, a shortest-path search or a merge of sorted streams takes the least element next, and `/std` answers that only through `Map/least`, which holds one entry a key, so equal priorities need a key made distinct by hand. `/std/Heap` is a persistent min-heap ordered by its elements' `Ord`, as Rust's `BinaryHeap`, Python's `heapq`, Java's `PriorityQueue` and Go's `container/heap` each ship one.
 
 ## Goal
 
