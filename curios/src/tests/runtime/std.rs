@@ -1,6 +1,6 @@
 //! The `/std` surfaces a program reaches at runtime that need what `/std`'s own tests cannot hold: a scripted clock, a decided bound's cost over a computed subject, and a refusal.
 
-use {crate::tests::test_support::*, curios_native::test_support::*};
+use {crate::test_support::*, curios_native::test_support::*};
 
 #[test]
 fn flt_of_str_returns_option() {

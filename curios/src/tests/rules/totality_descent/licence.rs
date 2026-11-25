@@ -1,7 +1,7 @@
 //! What licenses a decrease and what does not: a dispatch or guard that rules out zero, a shrinking literal operand, a subtraction past a layer, a payload, an element below its list, and arguments handed on exchanged.
 
 use {
-    crate::tests::{rules::test_support::*, test_support::*},
+    crate::{test_support::*, tests::rules::test_support::*},
     curios_analysis::Erased,
     curios_common::fill,
 };

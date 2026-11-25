@@ -4,7 +4,7 @@ mod test_support;
 use test_support::*;
 
 use {
-    super::structural::test_support::*,
+    crate::test_support::*,
     curios_native::{Compiled, ForeignBindings, test_support::*},
     curios_wasm::{Names, to_bytes},
 };

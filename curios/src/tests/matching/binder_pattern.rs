@@ -1,6 +1,6 @@
 //! A constructor written where a binder stands: held to its one case as a match's lone arm is, refining what follows, and refused where its value's type has another case the facts in scope do not refute.
 
-use crate::tests::test_support::*;
+use crate::test_support::*;
 
 // A constructor pattern binds its payloads at a `let`, at a lambda's parameter and at a function's, and `refl()` refines what follows it as an arm of it would: `Eq/refl()` is checked at `Eq()(y, x)` once the case has solved `y` to `x`.
 #[test]

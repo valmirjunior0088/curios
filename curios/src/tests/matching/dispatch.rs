@@ -1,6 +1,6 @@
 //! A dispatch on a natural's literals: what it takes on an open successor, and what its catch-all knows of the keys it was reached past.
 
-use {crate::tests::test_support::*, curios_common::fill};
+use {crate::test_support::*, curios_common::fill};
 
 /// A Fibonacci written by its literals and a catch-all over `n - 1` and `n - 2`, and a law of it at every `k + 2`.
 const FIBONACCI: &str = r#"

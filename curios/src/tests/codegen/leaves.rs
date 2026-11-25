@@ -1,6 +1,6 @@
 //! A body a match writes at more than one leaf is emitted once.
 
-use {super::structural::test_support::*, crate::tests::test_support::*};
+use crate::test_support::*;
 
 /// `pick`'s second arm, `(_, none())`, is written at two leaves of the match, `(some(_), none())` and `(none(), none())`, and reads only `n`: a sum of forty products of `n` modulo primes, each product reduced modulo `65537`. Its input is the count of the program's arguments plus seven, so each leaf is reached by a run.
 const SHARED: &str = r#"

@@ -1,6 +1,6 @@
 //! Descriptions run side by side through `/std/Io`'s public surface: waiting on a handle, a timer or a cell and resuming, a scope and its children, the combinators and the branches they cancel, brackets released on every exit, and the deadlock the host reports.
 
-use {super::test_support::*, curios_native::test_support::*};
+use {crate::test_support::*, curios_native::test_support::*};
 
 /// A host whose monotonic clock climbs one second per reading, so a sleeper's deadline is passed by the scripted ramp rather than by waiting.
 fn ticking() -> (MockHost, MockIo) {

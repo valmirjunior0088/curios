@@ -1,6 +1,6 @@
 //! A top-level value: computed where a program first reads it, and not where nothing reads it.
 
-use {crate::tests::test_support::*, curios_common::fill, curios_native::test_support::*};
+use {crate::test_support::*, curios_common::fill, curios_native::test_support::*};
 
 /// `boom` is a step of `spin`, which then shifts past what the runtime can hold and refuses; nothing a checker reduces says so, since the shift's count is a parameter. `${tail}` is the program's final term.
 fn reading_boom(tail: &str) -> String {

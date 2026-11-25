@@ -1,6 +1,6 @@
 //! A literal pattern is realized at its column's type, as a literal term is at its expected one, and a numeral's sign names an `Int`.
 
-use {crate::tests::test_support::*, curios_common::fill};
+use {crate::test_support::*, curios_common::fill};
 
 /// A `Bool` is taken apart by `0` and `1`, its `false` and `true`, beside the truth values themselves and in a row typed by its own walk, and each arm knows the value it took.
 #[test]

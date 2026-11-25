@@ -1,7 +1,7 @@
 //! Where a type is sized: a type former by its parts as written, a field and a parameter at their written type's level, an open element at its birth, and a stuck match, a recursive group and a cycle of levels at what they hold.
 
 use {
-    crate::tests::{test_support::*, universes::test_support::*},
+    crate::{test_support::*, tests::universes::test_support::*},
     curios_common::fill,
 };
 

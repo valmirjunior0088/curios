@@ -1,6 +1,6 @@
 //! The bound `Option/get` carries, and the report naming it when nothing fills it. The `Option` and `Result` surface itself is `/std`'s own `tests/option_result`.
 
-use crate::tests::test_support::*;
+use crate::test_support::*;
 
 // An opaque option's bound reduces to nothing, and the report names the binder that was not filled rather than guessing.
 #[test]

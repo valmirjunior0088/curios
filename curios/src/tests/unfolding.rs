@@ -5,7 +5,7 @@
 //! None asserts. A measurement that fails is a measurement with an opinion, and what these read is a cost, not a contract.
 
 use {
-    super::test_support::*,
+    crate::test_support::*,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_pipeline::{compile_with_prelude, test_support::*},

@@ -8,6 +8,3 @@ mod fusion;
 mod layout;
 mod loop_;
 mod measurement;
-
-// The shapes the sibling codegen suites also assert through.
-pub mod test_support;

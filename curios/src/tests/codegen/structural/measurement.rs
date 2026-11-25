@@ -1,7 +1,7 @@
 //! Recorded figures for the structural shapes, each taken by `cargo xbench measure <name>`. None asserts.
 
 use {
-    super::test_support::*,
+    crate::test_support::*,
     curios_wasm::{Names, to_bytes},
     xbench::{Measure, read},
 };

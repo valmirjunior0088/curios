@@ -15,7 +15,6 @@
 //! A change that moves this ladder owes a reading of the two harness workloads beside it, because "moved the column it aimed at" is only a claim if the other columns were looked at.
 
 use {
-    super::structural::test_support::*,
     crate::test_support::*,
     curios_native::{Compiled, ForeignBindings, test_support::*},
     curios_wasm::{Names, to_bytes},

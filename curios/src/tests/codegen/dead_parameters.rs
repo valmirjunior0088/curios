@@ -1,6 +1,5 @@
 //! Unused arguments preserve ordering, effects and captures across suspension through both Wasm paths, and a parameter read only to build its own next value is no use.
 use {
-    super::structural::test_support::*,
     crate::test_support::*,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,

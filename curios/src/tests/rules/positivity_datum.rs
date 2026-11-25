@@ -1,9 +1,6 @@
 //! A value standing where data is expected, read past the type parameters it carries: a list beside a proof of its length, a vector, a proposition a stuck `match` computes, a callback, and what is no datum.
 
-use {
-    super::test_support::*, crate::tests::test_support::*, curios_core::Polarity,
-    curios_elab::Error,
-};
+use {super::test_support::*, crate::test_support::*, curios_core::Polarity, curios_elab::Error};
 
 // `Box`'s `T` stands in its list, strictly, and as `#ListLen`'s element type inside an index of `Eq` at `Nat`, a datum: one value at every instance of `T`. So `N`, holding a `Box` of itself, is admitted. The control stores `T` left of an arrow in the list.
 #[test]

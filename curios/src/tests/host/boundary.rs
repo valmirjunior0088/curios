@@ -1,7 +1,7 @@
 //! What a program makes of a host's reply. A reply is a value of its wire type because whatever answered the row lowered it as one, so the program checks nothing where it receives one: the library reads the status as the outcome it names, whatever the status, and a failure's padding reaches no reader. Each reply here is written raw, past the native adapter, to show what that reading does with it.
 
 use {
-    crate::tests::test_support::*,
+    crate::test_support::*,
     curios_abi::{HostOp, StatusCodes},
     curios_native::{ForeignBindings, test_support::*},
 };
@@ -10,7 +10,7 @@ use {
 fn answering(source: &str, host: MockHost, op: HostOp, reply: Vec<RawValue>) -> Result<u8, String> {
     let compiled = compile(source).expect("the program compiles");
 
-    run_raw(&compiled, host, vec![(op, reply)], ForeignBindings::empty())
+    run_answering_raw(&compiled, host, vec![(op, reply)], ForeignBindings::empty())
         .map_err(|stop| stop.to_string())
 }
 
@@ -168,7 +168,7 @@ fn an_io_never_performed_asks_the_host_nothing() {
     )
     .expect("the program compiles");
 
-    run_raw(&compiled, host, vec![], ForeignBindings::empty()).expect("the program runs");
+    run_answering_raw(&compiled, host, vec![], ForeignBindings::empty()).expect("the program runs");
     assert_eq!(io.output(), b"done");
 }
 

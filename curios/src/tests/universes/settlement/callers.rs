@@ -1,7 +1,7 @@
 //! Which of a declaration's levels its callers choose and where every other one lands: minimized rather than generalized, a witness's and a field's, a weak equation's, and one nothing holds.
 
 use {
-    crate::tests::{test_support::*, universes::test_support::*},
+    crate::{test_support::*, tests::universes::test_support::*},
     curios_common::fill,
 };
 

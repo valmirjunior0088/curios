@@ -49,7 +49,6 @@ mod concurrent;
 mod runtime;
 mod strings;
 mod structs;
-mod test_support;
 mod towers;
 // Only the tower measurement builds the shapes the fixtures compile.
 use towers::*;

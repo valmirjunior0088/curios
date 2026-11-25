@@ -1,7 +1,7 @@
 //! What deciding the class of a written site spends of the lint's allowance, counted.
 
 use {
-    crate::{tests::test_support::*, *},
+    crate::{test_support::*, *},
     curios_elab::{DEFAULT_BUDGET, LINT_ALLOWANCE},
     curios_module::Overlay,
     curios_prelude_build::std_source,

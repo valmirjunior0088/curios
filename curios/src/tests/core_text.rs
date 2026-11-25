@@ -1,7 +1,7 @@
 //! What a dump of Core writes a program's declarations as: a test and a foreign row in their forms, which imply their definitions, where the dump is handed what those are made against.
 
 use {
-    super::test_support::*,
+    crate::test_support::*,
     curios_elab::DEFAULT_BUDGET,
     curios_module::{RootSource, SYNTAX},
     curios_pipeline::test_support::*,

@@ -1,7 +1,7 @@
 //! Resolving a witness through the table: a method called by its path or passed as a value, an explicit override, several parameters, a later declaration, the operator concepts, and how a witness is keyed.
 
 use {
-    crate::tests::test_support::*,
+    crate::test_support::*,
     curios_common::Qualifier,
     curios_core::{Field, Global, Item, Proj, Subterm},
     curios_elab::DEFAULT_BUDGET,

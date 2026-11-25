@@ -1,6 +1,6 @@
 //! A successor pattern's step, `p + k` taking `k` successors apart, its predecessor what is left of the value, and the literals beside it, each the successors it builds over zero.
 
-use {crate::tests::test_support::*, curios_common::fill};
+use {crate::test_support::*, curios_common::fill};
 
 // `half` halves by a step of two, its `_` taking the one value the step leaves, so each arm answers as stated and the recursion descends on the predecessor; the law at `k + 2` holds by reduction alone, through both checkers.
 #[test]

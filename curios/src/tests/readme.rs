@@ -1,7 +1,7 @@
 //! The README's examples are what the compiler makes of them: every `crs` block of `README.md` is written as `curios format` writes it, and the error it shows, its one `text` block, is what `curios wonder` prints for the `crs` block before it.
 
 use {
-    super::test_support::*,
+    crate::test_support::*,
     curios_common::{Source, Style},
     curios_elab::DEFAULT_BUDGET,
     curios_module::Overlay,

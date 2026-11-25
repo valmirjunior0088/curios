@@ -1,6 +1,6 @@
 //! An arm's alternatives: the arms they abbreviate, each typed under its own cases, matching no value in common and binding the same names.
 
-use crate::tests::test_support::*;
+use crate::test_support::*;
 
 #[test]
 fn an_arm_is_taken_by_a_value_any_of_its_alternatives_matches() {

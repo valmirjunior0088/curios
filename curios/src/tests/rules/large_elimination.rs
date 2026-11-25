@@ -1,6 +1,6 @@
 //! A proposition taken apart into data: the sort the guard reads off a goal however a term computes it, a universe among the data, what the singleton rung counts as pinned, the instance a match on a proof fires on, and the sizing that keeps a cast from unfolding without end and a tree from holding itself.
 
-use {super::test_support::*, crate::tests::test_support::*, curios_elab::Error};
+use {super::test_support::*, crate::test_support::*, curios_elab::Error};
 
 // The guard reads the result's sort off the goal, and a goal is held to land in a sort. `F(b)` is the proposition `True` at `true` and `Nat` at `false`, so read at each arm's case the goal would pass the guard at `qa` and type `qb`'s arm as data out of a proposition of two constructors. At the open index `b` it lands in no sort, and the declaration stating it is refused before the match is read. `curios-cert`'s `certifier::infer::eliminate::proof_match_tests` puts the same goal to the certifier under this name. The control's goal is a proposition at every index.
 #[test]

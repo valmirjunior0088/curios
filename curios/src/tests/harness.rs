@@ -4,7 +4,6 @@ mod resource;
 mod sequence;
 
 use {
-    super::test_support::*,
     crate::{FailedCheck, Outcome, test_support::*},
     curios_abi::DEADLOCK,
     curios_common::{Qualifier, RootKind},

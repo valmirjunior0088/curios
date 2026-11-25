@@ -1,6 +1,6 @@
 //! Guards: the tests an arm writes after its patterns, what a guard that fails teaches the arms after it, and guards at each level of a recursion.
 
-use {crate::tests::test_support::*, curios_common::fill};
+use {crate::test_support::*, curios_common::fill};
 
 // A guarded arm takes the values its guards pass, from the left, each only where the ones before it held: `100 / n` reads `n != 0` from the guard before it. A value whose guards fail goes on to the arms after it, in the order they are written. Runtime-tainted, so it runs as wasm.
 #[test]

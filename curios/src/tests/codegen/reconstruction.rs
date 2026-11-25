@@ -1,7 +1,7 @@
 //! Reconstruction disappears before lowering, and recursive transfers remain tail calls or loop backedges through raw and optimized Wasm.
 
 use {
-    super::structural::test_support::*,
+    crate::test_support::*,
     curios_abi::ForeignStore,
     curios_common::fill,
     curios_elab::DEFAULT_BUDGET,

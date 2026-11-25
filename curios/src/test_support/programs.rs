@@ -1,7 +1,8 @@
 //! What the suites share: a program compiled and run as a fixture states it, the refusal or the stage a fixture reads off it, and a host that answers one row with a scripted reply and every other with a [`MockHost`]'s, which is how one call of a row fails where the mock's script only succeeds.
 
 use {
-    crate::{Outcome, test_support::*},
+    super::*,
+    crate::Outcome,
     curios_abi::{
         Answer, ChildExit, ChildHandles, ClockReading, Failure, FileStat, Handle, HostOp, HostOps,
         Later, Mode, Refusal, SerialFlow, SerialOp, SerialParity, Settled, StdioMode, Termination,
@@ -281,7 +282,7 @@ pub fn unlaid(text: &str) -> String {
         .collect()
 }
 
-/// The elaborated Core printout of `source`, observed as [`core`] observes the lowered one.
+/// The elaborated Core printout of `source`, observed as [`core()`] observes the lowered one.
 pub fn core_elab(source: &str) -> String {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
 

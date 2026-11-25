@@ -1,6 +1,6 @@
 //! A character's and a string's literals: a `Char` column is dispatched on its code point, and a `Str` column taken apart by its bytes, each read at the field its literal term fills.
 
-use {crate::tests::test_support::*, curios_common::fill};
+use {crate::test_support::*, curios_common::fill};
 
 /// A character is dispatched on its characters, alternatives among them, the rest taking every other value.
 #[test]

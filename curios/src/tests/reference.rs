@@ -1,7 +1,7 @@
 //! The language reference's examples check clean: every `crs` block of `documentation/language.md` is a whole program or module, asked about as `curios wonder -` asks about standard input, and reports nothing — no error, goal or lint — and is canonical, as `curios format --check -` asks. A form shown on its own, outside a program, is a `text` block, which nothing compiles.
 
 use {
-    super::test_support::*,
+    crate::test_support::*,
     curios_common::{Kind, Source, SourceName, Style},
     curios_elab::DEFAULT_BUDGET,
     curios_module::Overlay,

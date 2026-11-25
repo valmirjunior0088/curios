@@ -1,6 +1,6 @@
 //! The matrix form's own rules: consistent arity, no duplicate row or tag, and where the row that cannot fail is typed.
 
-use crate::tests::test_support::*;
+use crate::test_support::*;
 
 // Two rows write a tuple pattern of different arity in the same column — there is no single shape to explode into projections — and the refusal names both shapes.
 #[test]

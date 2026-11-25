@@ -1,6 +1,6 @@
 //! What a premise and a witness's declaration may be: a premise resolved recursively or through a constant's edge, and refused where it is no smaller than its head, at a proposition, or at a concept nothing mentions; a witness's head computed, keyed under a binder or applying no concept.
 
-use {crate::tests::test_support::*, curios_common::fill};
+use {crate::test_support::*, curios_common::fill};
 
 // A premised witness: `Show(List(A))`'s needs a `Show(A)` to show its elements. The resolver instantiates its telescope — `@A := ?B` with premise goal `Show(?B)` — unifies `Show(List(?B)) ≡ Show(List(Nat))` to solve `?B := Nat`, then resolves the premise to the `Show(Nat)` witness.
 #[test]

@@ -1,6 +1,6 @@
 //! A byte's literals: a `Byte` column is dispatched on its values, as the natural `Byte/to_nat` gives, and a packed run's elements take them.
 
-use {crate::tests::test_support::*, curios_common::fill};
+use {crate::test_support::*, curios_common::fill};
 
 /// A byte is dispatched on its numerals and characters, `0` among them, the rest taking every other value.
 #[test]

@@ -1,7 +1,7 @@
 //! How a row's outcome reaches a program: `/std` reads the status before any payload, and hands the failure on as the error it names. Every fallible row is scripted to fail, and the program ends with the code its failure maps to; the two failures `/std` absorbs by design are absorbed; and the payload shapes no other suite reaches arrive whole. Each reply is written raw, past the native adapter, as any host could answer it.
 
 use {
-    crate::tests::test_support::*,
+    crate::test_support::*,
     curios_abi::{HostOp, StatusCodes},
     curios_native::{ForeignBindings, test_support::*},
 };
@@ -32,7 +32,7 @@ main()
     let source = format!("{PRELUDE}{}", tail.replace("SUBJECT", subject));
     let compiled = compile(&source).expect("the fixture compiles");
 
-    run_raw(
+    run_answering_raw(
         &compiled,
         MockHost::builder().build().0,
         replies,
@@ -343,7 +343,7 @@ fn an_empty_variable_is_set_and_an_absent_one_is_not() {
     )
     .expect("the program compiles");
 
-    run_raw(&compiled, host, vec![], ForeignBindings::empty()).expect("the program runs");
+    run_answering_raw(&compiled, host, vec![], ForeignBindings::empty()).expect("the program runs");
 
     assert_eq!(io.output(), b"empty unset");
 }
@@ -363,7 +363,7 @@ fn a_bytes_payload_arrives_whole() {
     )
     .expect("the program compiles");
 
-    run_raw(
+    run_answering_raw(
         &compiled,
         host,
         vec![(HostOp::ProcCwd, ok(vec![bytes(b"/work")]))],

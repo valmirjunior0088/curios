@@ -1,7 +1,7 @@
 //! The few programs that run against the real host rather than a scripted one: what they assert is that the scheduler's park-poll-resume path works over a descriptor the certifier decides on, and how the filesystem's symbolic links are read, which the scripted disk holds none of. The real host's standard output cannot be captured, so a program reports through a file the test reads back.
 
 use {
-    crate::tests::test_support::*,
+    crate::test_support::*,
     curios_common::{fill, test_support::*},
     curios_native::OsHost,
     std::os::unix,

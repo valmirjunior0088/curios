@@ -1,6 +1,6 @@
 //! How a group is judged and computes in a type: a local recursion and an applied call in a type, a family read as a relation, and what a judgment inside a group reads of its members — by value, withheld, typed at a sibling, in a signature and in a slot.
 
-use {crate::tests::test_support::*, curios_common::fill};
+use {crate::test_support::*, curios_common::fill};
 
 /// A local recursive definition computes in a type stated in the function that declares it, as a top-level one does anywhere and a `let`-bound value does in its tail: both checkers read a member as its group there. `_held` leaves `Eq/refl`'s implicit to be solved, to a term that spells `halve` by value, and `_one_body` puts two definitions of one body to each other. The certifier typed a group's tail over members that stood for nothing, and refused each of the five where the elaborator accepted it.
 #[test]

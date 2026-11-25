@@ -1,6 +1,6 @@
 //! The `Flt` decimal codec, whose renderer and parser compute over unbounded `Nat` and whose expectations come from Rust's own `{:+}` and `str::parse::<f64>`. That oracle is why these two stay here; the arithmetic under them is `/std`'s own `tests/big_num`.
 
-use {super::test_support::*, curios_common::fill};
+use {crate::test_support::*, curios_common::fill};
 
 #[test]
 fn flt_to_str_matches_rust_shortest_format() {

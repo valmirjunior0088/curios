@@ -1,6 +1,6 @@
 //! The bound a read of a vector's list carries past the vector's count, which nothing fills. `Vec`'s surface — its list read under its count, the list round trip and `zip` — is `/std/Vec`'s own tests'.
 
-use crate::tests::test_support::*;
+use crate::test_support::*;
 
 // Past the count the bound the vector's count carries onto its list reduces to `False`, and nothing fills it: the report names `List/get`'s binder.
 #[test]

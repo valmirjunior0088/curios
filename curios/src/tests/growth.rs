@@ -5,7 +5,7 @@
 //! A growth that compiles past the size a stage once refused or never answered at is a fixture here; `growth_slopes`, among the instrumented tests, counts what each stage does at three sizes and holds the growths that are linear today to it.
 
 use {
-    super::test_support::*,
+    crate::test_support::*,
     curios_common::fill,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,

@@ -1,7 +1,7 @@
 //! What the rules' suites share: the programs more than one of them puts, the control a refusal is derived from, and what a refusal is held to.
 
 use {
-    crate::tests::test_support::*,
+    crate::test_support::*,
     curios_cert::Refusal,
     curios_common::{Qualifier, Variants},
     curios_core::{Global, Polarity, Term, WitnessKey},

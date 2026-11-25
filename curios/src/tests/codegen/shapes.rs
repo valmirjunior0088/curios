@@ -2,7 +2,7 @@
 
 use {
     super::test_support::{run, *},
-    crate::tests::test_support::*,
+    crate::test_support::*,
     curios_anf::{FieldShape, Module},
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,

@@ -1,6 +1,6 @@
 //! How a recursion is declared: a definition that names itself, at the top level and locally, a group declared with `and`, and two spellings of one recursion read as one function.
 
-use crate::tests::test_support::*;
+use crate::test_support::*;
 
 #[test]
 fn a_declared_group_of_definitions_is_mutually_recursive() {

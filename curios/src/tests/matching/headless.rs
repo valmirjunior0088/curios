@@ -1,6 +1,6 @@
 //! A match with no head: arm order, bind guards, the fallthrough a nested bind shares, what the arms after a failed guard learn, and a program closed in each arm.
 
-use crate::tests::test_support::*;
+use crate::test_support::*;
 
 // An arm whose guard is a condition before one whose guard is a bind: each is tried in turn, and the bind's arm is taken where the condition's failed and its pattern matches.
 #[test]

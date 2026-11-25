@@ -1,7 +1,7 @@
 //! Compiling a fixture to raw pre-Binaryen wasm and asserting a structural property of the module.
 
 use {
-    crate::test_support::*,
+    super::*,
     curios_abi::ForeignStore,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
@@ -101,7 +101,7 @@ pub const FUNCTION_ONLY: &str = r#"
     entry()
     "#;
 
-/// Two mutually recursive functions entered from two arms of a runtime match — the closest surface shape to an irreducible cycle. Curios has no unstructured jump, so the structurizer lays this out reducibly (no dispatcher); see [`mutual_recursion_stays_reducible`].
+/// Two mutually recursive functions entered from two arms of a runtime match — the closest surface shape to an irreducible cycle. Curios has no unstructured jump, so the structurizer lays this out reducibly (no dispatcher); see `mutual_recursion_stays_reducible`.
 pub const MUTUAL_RECURSION: &str = r#"
     use /std/{Nat, List, Proc};
     let ping(n : Nat) -> Nat =
@@ -118,7 +118,7 @@ pub const MUTUAL_RECURSION: &str = r#"
 
 /// A callee returning two distinct constructors to two different callers — the intersection no existing pass reaches. Two external call sites is one too many for contification, whose whole admissibility rests on there being a single return context; the body is past the multi-site inline budget; and neither caller can see the construction, since it is built inside `advance` and arrives as an opaque continuation parameter. `more` carries three fields and `done` two, so the class is four slots wide and the shorter constructor exercises the filler. Neither constructor is unary on purpose: the immediate encoding hands a lone `done(Nat)` edge back as a bare payload rather than a construction, which would quietly retire this fixture's premise — exactly the decay the test's premise check exists to catch.
 ///
-/// **The arithmetic in `advance` is sized, not decorative.** The middle premise is a claim about `MULTI_SITE_INLINE_LIMIT`, which the fixture stops holding when that constant moves — so the body carries enough operations to stay well clear rather than to just clear the value of the day. Each of the three functions also owns a distinct modulus, which is what lets [`a_returned_constructor_is_delivered_as_its_fields`] state that the callee is a different function from its callers instead of merely that some function exists.
+/// **The arithmetic in `advance` is sized, not decorative.** The middle premise is a claim about `MULTI_SITE_INLINE_LIMIT`, which the fixture stops holding when that constant moves — so the body carries enough operations to stay well clear rather than to just clear the value of the day. Each of the three functions also owns a distinct modulus, which is what lets `a_returned_constructor_is_delivered_as_its_fields` state that the callee is a different function from its callers instead of merely that some function exists.
 pub const SPLIT_RETURN: &str = r#"
     use /std/{Nat, List, Proc};
     induct Step : Type
@@ -157,7 +157,7 @@ pub const SPLIT_RETURN: &str = r#"
 ///
 /// Nothing existing reaches it. The two lambdas leave as return values, so the recursion `walk → (s) => walk(m)(…) → walk` closes through an application of a value and no known-callee analysis sees a cycle at all; the closure is genuinely built and genuinely called through.
 ///
-/// Two details of its shape are load-bearing rather than decoration, and a smaller fixture measures nothing. The arithmetic puts `walk`'s extent past the multi-site inline budget — without it the inliner *peels* the recursion into itself, since the same invisible cycle that hides the loop from this transform also leaves `walk` unmarked as recursive, and no known call site survives to rewrite. And the applied argument is bound to `c` ahead of the call rather than written into the call, because an argument computed inside the continuation that receives the closure cannot move above it. See [`a_returned_closure_every_caller_applies_is_absorbed`].
+/// Two details of its shape are load-bearing rather than decoration, and a smaller fixture measures nothing. The arithmetic puts `walk`'s extent past the multi-site inline budget — without it the inliner *peels* the recursion into itself, since the same invisible cycle that hides the loop from this transform also leaves `walk` unmarked as recursive, and no known call site survives to rewrite. And the applied argument is bound to `c` ahead of the call rather than written into the call, because an argument computed inside the continuation that receives the closure cannot move above it. See `a_returned_closure_every_caller_applies_is_absorbed`.
 pub const UNCURRY: &str = r#"
     use /std/{Nat, List, Proc};
     let walk(n : Nat) -> (Nat) -> Nat =
@@ -627,7 +627,7 @@ pub fn functions(wat: &str) -> Vec<Function<'_>> {
 ///
 /// "Exactly one function mentions it" is not that fact, and the gap is what a moved budget walks straight into. Inlining a callee into two callers puts the needle in both, and the count catches it — but inlining those callers into a common ancestor merges the mentions back down to one, and the count passes while handing back the ancestor. Raising `MULTI_SITE_INLINE_LIMIT` does exactly that to `SPLIT_RETURN`: `first` and `second` fold into `main` and `advance` into both, so a count would hand back `main` — the wrong function entirely, and one lucky substring away from passing while asserting nothing.
 ///
-/// Excluding the entry closes that case and reports it in the terms the reader needs, which is what the fixture must change rather than what the assertion saw. A fixture wanting more than this — that the callee is distinct from a *particular* caller rather than merely from the entry — gives each participant its own constant and compares the names, as [`a_returned_constructor_is_delivered_as_its_fields`] does.
+/// Excluding the entry closes that case and reports it in the terms the reader needs, which is what the fixture must change rather than what the assertion saw. A fixture wanting more than this — that the callee is distinct from a *particular* caller rather than merely from the entry — gives each participant its own constant and compares the names, as `a_returned_constructor_is_delivered_as_its_fields` does.
 ///
 /// A heap twin's `$heap/` functions repeat the native one's body for the frames past the budget, so they are no mention of their own.
 pub fn function_with<'a>(functions: &'a [Function<'a>], needle: &str) -> &'a Function<'a> {

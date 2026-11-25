@@ -1,7 +1,7 @@
 //! The differential grid: every `Nat` and `Int` operation, run by the compiled program across the i31, limb and sign boundaries, against `curios-num`'s carrier arithmetic.
 
 use {
-    crate::tests::test_support::*,
+    crate::test_support::*,
     curios_native::test_support::*,
     curios_num::{Floating, Integer, Natural, Rounding},
 };

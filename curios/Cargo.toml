@@ -9,10 +9,18 @@ description = "The Curios native compiler: the CLI, Binaryen optimization, Wasmt
 workspace = true
 
 [features]
-# `test_support`: a module compiled and run in this process, which `curios-prelude`'s suite runs the library's programs by. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness. **Never add this to `default`.**
-test-support = []
+# `test_support`: what this crate's suites, `curios-prelude`'s and the bench's measurements share — a module compiled and run in this process, the programs a suite compiles and runs, and the structural fixtures. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness. **Never add this to `default`.**
+test-support = [
+    "dep:curios-anf",
+    "curios-anf/test-support",
+    "dep:curios-cps",
+    "curios-native/test-support",
+]
 
 [dependencies]
+# The modules an ANF and a CPS stage hand back, for the test support's compiles to them alone.
+curios-anf = { workspace = true, optional = true }
+curios-cps = { workspace = true, optional = true }
 curios-profile = { workspace = true }
 # The look count a recorder this crate opens is handed (`TALLIES`), which `curios-profile` names nothing of: the one item of `curios-core` the product reads.
 curios-core = { workspace = true }

@@ -1,7 +1,7 @@
 //! A descent through what stands between a call and its argument: a function a parameter binds, a callback and where its callee applies it, a lambda's binder, a let, a convoy, the library's recursion on a bound, and a member named only in its goal.
 
 use {
-    crate::tests::{rules::test_support::*, test_support::*},
+    crate::{test_support::*, tests::rules::test_support::*},
     curios_analysis::Erased,
 };
 

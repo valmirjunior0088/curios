@@ -1,6 +1,6 @@
 //! Coverage: an elimination enumerates its constructors, a clash is told from an index that may still meet, and a case the facts in scope refute is left unwritten.
 
-use {super::test_support::*, crate::tests::test_support::*, curios_elab::Error};
+use {super::test_support::*, crate::test_support::*, curios_elab::Error};
 
 // Coverage. A missing arm leaves an elimination undefined at that constructor, which is a proof of the goal at an index nothing established. The control writes `none`'s arm.
 #[test]

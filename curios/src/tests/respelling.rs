@@ -6,7 +6,7 @@
 
 use {
     super::laws::{Binder, orders},
-    super::test_support::*,
+    crate::test_support::*,
     curios_common::fill,
 };
 

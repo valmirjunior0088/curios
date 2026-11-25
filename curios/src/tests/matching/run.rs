@@ -1,6 +1,6 @@
 //! Runs: a sequence pattern's elements are patterns of their own, a closed run ends where they do, and an open one's rest follows them.
 
-use crate::tests::test_support::*;
+use crate::test_support::*;
 
 /// A closed run matches a list of exactly its elements, and an open one a list they begin.
 #[test]

@@ -1,6 +1,6 @@
 //! The refusals that carry the rule: a cycle the source did not declare, one through a registry entry, a declared group that is no cycle, a value that reads itself, and a rebinding that shadows into a self-reference.
 
-use crate::tests::test_support::*;
+use crate::test_support::*;
 
 #[test]
 fn an_undeclared_cycle_is_refused_with_the_way_out() {

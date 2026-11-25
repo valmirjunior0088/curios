@@ -1,6 +1,6 @@
 //! A checking problem that cannot proceed yet, and what wakes it.
 
-use {crate::tests::test_support::*, curios_common::fill};
+use {crate::test_support::*, curios_common::fill};
 
 #[test]
 fn parked_constraints_let_nested_constructor_metas_resolve() {

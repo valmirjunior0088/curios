@@ -1,6 +1,6 @@
 //! The goal a match is checked at: the expected type with the case in its scrutinee's place, over a variable, an expression and a free monoid, and the sort a goal nothing states is given by its arms.
 
-use {crate::tests::test_support::*, curios_common::fill};
+use {crate::test_support::*, curios_common::fill};
 
 // A `| _ =>` catch-all on an indexed family: the enumerated arms are checked at their own case target indices and the default at the scrutinee's actual ones.
 #[test]

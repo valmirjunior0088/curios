@@ -1,7 +1,7 @@
 //! `!` sequencing through a user monad witness, including a two-parameter region.
 
 use {
-    crate::tests::test_support::*, curios_common::fill, curios_elab::DEFAULT_BUDGET,
+    crate::test_support::*, curios_common::fill, curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource, curios_pipeline::test_support::*, curios_surface::Entrypoint,
 };
 

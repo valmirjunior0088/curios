@@ -1,6 +1,6 @@
 //! What descends: a call through a local definition, graded wherever it stands and refused where it does not descend, a type reaching partial definitions, and a split of a lambda's binder applied on the spot.
 
-use {crate::tests::test_support::*, curios_common::fill};
+use {crate::test_support::*, curios_common::fill};
 
 #[test]
 fn a_descent_through_a_local_definition_is_graded_wherever_the_call_stands() {

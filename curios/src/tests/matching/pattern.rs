@@ -1,6 +1,6 @@
 //! Nested constructor patterns over every carrier, and the shapes that lower without synthetic indirection.
 
-use crate::tests::test_support::*;
+use crate::test_support::*;
 
 // A single, unnested constructor arm reuses the written name rather than minting a synthetic binder: a core binder whose only label is a gensym is chained by the erasure pass's hint-based fresh naming into another gensym, compounding until a reference outruns its own binding. A plain flat match lowers with no such indirection.
 #[test]

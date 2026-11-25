@@ -1,6 +1,6 @@
 //! A hot loop's scalars: the LCG's single-entry natural loop in registers, and floats seeded, captured, stepped and returned across calls without a box.
 
-use crate::tests::{codegen::structural::test_support::*, test_support::*};
+use crate::test_support::*;
 
 /// Whether some float box in `hot_loop` is on the way round: its straight run of instructions ends at the loop's back edge rather than leaving it.
 fn boxes_a_round(hot_loop: &str) -> bool {

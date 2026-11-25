@@ -1,7 +1,7 @@
 //! Entry ABI selection is checked before Binaryen and exercised through both native compilation paths.
 
 use {
-    super::structural::test_support::*,
+    crate::test_support::*,
     curios_native::{Compiled, ForeignBindings, test_support::*},
     curios_wasm::{Names, to_bytes},
 };

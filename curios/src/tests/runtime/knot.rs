@@ -1,6 +1,6 @@
 //! A recursive value knot: what is forced before it is read, and what traps rather than reading a hole.
 
-use {crate::tests::test_support::*, curios_common::fill};
+use {crate::test_support::*, curios_common::fill};
 
 /// A knot mixing a function member with value members whose initializers build closures *through a call* — `wrap(…)` here, the `bind`/`peek` combinators in `/std/Toml/values` — where one value's closure captures, via the function member, a value initialized later. Every knot ties through cells, so `second`'s closure — a non-member born inside an initializer, calling `helper`, which reads `first` — reads a cell rather than capturing a value that does not exist yet. The random byte keeps both closures live as values, so neither is folded away before the knot is lowered.
 #[test]

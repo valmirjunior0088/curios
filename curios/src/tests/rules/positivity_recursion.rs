@@ -1,8 +1,8 @@
 //! A type a recursive member computes, met again on its own path and read by the least fixpoint of its unfolding: a proposition over a tree, a mutual pair over a list of trees, a group closed over the declaration's parameter, a call wrapped left of an arrow, and a predicate over a list of the family itself.
 
 use {
-    super::test_support::*, crate::tests::test_support::*, curios_common::fill,
-    curios_core::Polarity, curios_elab::Error,
+    super::test_support::*, crate::test_support::*, curios_common::fill, curios_core::Polarity,
+    curios_elab::Error,
 };
 
 // `Balanced` meets itself on its own path; read by its summary, `V` stands in its body only as the argument its recursive calls hand back, so it is no occurrence, and `U`, holding a `B` of itself, is admitted. The control's leaf arm puts `V` left of an arrow, which every unfolding holds.

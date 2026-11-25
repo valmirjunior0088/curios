@@ -2,7 +2,6 @@
 
 use {
     crate::test_support::*,
-    crate::tests::test_support::*,
     curios_abi::Termination,
     curios_common::{fill, test_support::*},
     curios_elab::DEFAULT_BUDGET,

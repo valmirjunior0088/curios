@@ -1,6 +1,6 @@
 //! `List/each` under `Io`, whose claim is the order its effects reach the host. The pure `List` surface — predicates, searches, builders, `traverse` and the stable sort — is `/std/List`'s own tests'.
 
-use {super::test_support::*, crate::tests::test_support::*, curios_native::test_support::*};
+use {super::test_support::*, crate::test_support::*, curios_native::test_support::*};
 
 // `each` sequences under a `Monad`, and over `Io` the effects run in element order — which only host output can witness.
 #[test]

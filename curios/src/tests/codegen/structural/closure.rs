@@ -1,6 +1,6 @@
 //! The closure ABI: table indices, interned capture-free closures, the escaping uses that coexist with direct ones, and the convoys that need none.
 
-use super::test_support::*;
+use crate::test_support::*;
 
 // -- general corpus ---------------------------------------------------------
 

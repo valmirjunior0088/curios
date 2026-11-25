@@ -1,6 +1,6 @@
 //! `Bytes` and `List` as free monoids: a value does not depend on how its run is grouped, and a window must meet at its seam.
 
-use crate::tests::test_support::*;
+use crate::test_support::*;
 
 #[test]
 fn a_recursion_on_a_lists_tail_is_a_right_fold() {

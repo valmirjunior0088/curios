@@ -2,7 +2,7 @@
 //!
 //! Two things, and they are why a match writes no result: the result type inferred from the arms, and the definitional refinement each arm carries for its own body. A guard is the same mechanism written after an arm's pattern.
 
-use crate::tests::test_support::*;
+use crate::test_support::*;
 
 #[test]
 fn a_recursion_matches_at_its_declared_result() {

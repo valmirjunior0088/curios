@@ -1,6 +1,6 @@
 //! Recursion kept direct and reducible: trees built and summed, a walk allocating no closure, mutual recursion, a conjunction's calls, a fold's known step, and unread calls and folds dropped.
 
-use crate::tests::{codegen::structural::test_support::*, test_support::*};
+use crate::test_support::*;
 
 /// Every node of `continuation`'s body and of the continuations it binds, and none of a function's.
 fn region(

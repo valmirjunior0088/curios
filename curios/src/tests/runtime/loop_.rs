@@ -1,7 +1,7 @@
 //! Loops that stay linear, and the values they carry through storage and retrieval.
 
 use {
-    crate::tests::test_support::*,
+    crate::test_support::*,
     curios_common::fill,
     curios_cps::{Atom, Intrinsic, Literal, Node, ValueExpr},
     curios_native::test_support::*,

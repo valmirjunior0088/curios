@@ -1,4 +1,23 @@
-//! A module compiled and run in this process: what this crate's suites and `curios-prelude`'s run a program by, where a shipped build runs one from its `.cwasm` alone.
+//! What this crate's suites, `curios-prelude`'s and the bench's measurements share, a module by subject: here, a module compiled and run in this process, where a shipped build runs one from its `.cwasm` alone; in `programs`, a program compiled and run as a fixture states it; in `structural`, the structural fixtures, compiled to raw pre-Binaryen wasm and read as text.
+
+mod programs;
+pub use programs::{
+    Lying, anf_optm, anf_optm_tests, census_settles, compile, core, core_elab, cps_operations,
+    cps_optm, cps_optm_module, emits, error, fenced, host_writes, programs, reads_nat, run,
+    run_entrypoint, run_tests_program, run_tests_under, run_text, test_program, tests_error,
+    typecheck, typecheck_within, unlaid, workspace,
+};
+
+mod structural;
+pub use structural::{
+    CALL_RESULT_SEED, CAPTURED_FLOAT, COMPUTED_TYPE, CONJUNCTION_CALL, DIRECT_ESCAPING,
+    FLOAT_LITERAL_LOOP, FUNCTION_ONLY, Function, HIGHER_ORDER, KNOWN_PARAMETER_SEED, LCG,
+    LIST_EQUALITY, LOOPED_PICK, MUTUAL_RECURSION, PAIR_STEP, PARSED_FLOAT, SHARED_PAYLOAD,
+    SPLIT_RETURN, STATED_SEEDS, STRING_WALK, TREES, UNCURRY, UNCURRY_CAPTURED,
+    UNCURRY_THROUGH_A_CALL, VARIANT_FILLER, compile_raw, compile_raw_program, function_with,
+    functions, in_heap_function, indices, loops_containing, row_declaration, run_binaryen, run_raw,
+    user_allocations, user_functions_with, wat,
+};
 
 use {
     crate::compile::optimize,
