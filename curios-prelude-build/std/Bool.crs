@@ -65,7 +65,7 @@ let eq_of_eql(a: Bool, b: Bool, h: Holds(eql(a, b))) -> Eq()(a, b) =
 
 satisfy Eql(Bool) {
     eql = eql,
-    eq_of_eql = eq_of_eql,
+    eq = eq_of_eql,
     refl(a) = match a | true => True/qed() | false => True/qed() end,
 }
 
@@ -102,7 +102,7 @@ satisfy Ord(Bool) {
         | false => match b | false => Eq/refl() | true => Eq/refl() end
         | true => match b | false => Eq/refl() | true => Eq/refl() end
         end,
-    transitive(a, b, c, p, q) =
+    trans(a, b, c, p, q) =
         match a
         | false => match c | false => True/qed() | true => True/qed() end
         | true =>
@@ -115,7 +115,7 @@ satisfy Ord(Bool) {
                 end
             end
         end,
-    eq_of_ord(a, b, h) =
+    eq(a, b, h) =
         match a
         | false =>
             match b

@@ -20,7 +20,7 @@ pub let cancel_r(a: Int, b: Int, k: Int, e: Eq()(a * k, b * k), @nz: Int/NonZero
     | lt() =>
         cancel_positive(a, b, +0 - k, Eq/cong((x: Int) => +0 - x, e), Ord/below(k, +0, Eq/refl()))
     | eq() =>
-        match Eq/subst((x: Int) => Int/NonZero(x), Ord/eq_of_ord(k, +0, Eq/refl()), nz)
+        match Eq/subst((x: Int) => Int/NonZero(x), Ord/eq(k, +0, Eq/refl()), nz)
         end
     | gt() => cancel_positive(a, b, k, e, Ord/above(k, +0, Eq/refl()))
     end;

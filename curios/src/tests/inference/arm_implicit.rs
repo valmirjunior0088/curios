@@ -221,7 +221,7 @@ fn an_implicit_born_in_an_arm_is_solved_under_the_arms_guard() {
             | true =>
                 match Bytes/get(b, k) == f
                 | true =>
-                    let found = Eql/eq_of_eql(Bytes/get(b, k), f, True/qed());
+                    let found = Eql/eq(Bytes/get(b, k), f, True/qed());
                     consume(Bytes/get(b, k), Eq/subst((c: Byte) => P(c), Eq/sym(found), lead))
                 | false => fallback
                 end

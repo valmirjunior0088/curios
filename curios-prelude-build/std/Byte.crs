@@ -79,7 +79,7 @@ pub let ord(a: Byte, b: Byte) -> Ordering =
 
 satisfy Eql(Byte) {
     eql = eql,
-    eq_of_eql = eq_of_eql,
+    eq = eq_of_eql,
     refl(_) = Bool/True/qed(),
 }
 
@@ -105,9 +105,8 @@ satisfy Ord(Byte) {
     lt = lt,
     le = le,
     flips(a, b) = Ord/flips(to_nat(a), to_nat(b)),
-    transitive(a, b, c, p, q) = Ord/transitive(to_nat(a), to_nat(b), to_nat(c), p, q),
-    eq_of_ord(a, b, h) =
-        Eq/cong((n) => Nat/to_byte(n % 256), Ord/eq_of_ord(to_nat(a), to_nat(b), h)),
+    trans(a, b, c, p, q) = Ord/trans(to_nat(a), to_nat(b), to_nat(c), p, q),
+    eq(a, b, h) = Eq/cong((n) => Nat/to_byte(n % 256), Ord/eq(to_nat(a), to_nat(b), h)),
     lt_of_ord(a, b) = Ord/lt_of_ord(to_nat(a), to_nat(b)),
     le_of_ord(a, b) = Ord/le_of_ord(to_nat(a), to_nat(b)),
 }

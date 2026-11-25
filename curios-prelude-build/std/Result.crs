@@ -114,13 +114,13 @@ satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Ord(Result(E, A)) {
         | failure(e) => match b | failure(f) => Ord/flips(e, f) | success(_) => Eq/refl() end
         | success(x) => match b | failure(_) => Eq/refl() | success(y) => Ord/flips(x, y) end
         end,
-    transitive(a, b, c, p, q) =
+    trans(a, b, c, p, q) =
         match a
         | failure(e) =>
             match b
             | failure(f) =>
                 match c
-                | failure(g) => Ord/transitive(e, f, g, p, q)
+                | failure(g) => Ord/trans(e, f, g, p, q)
                 | success(_) => Bool/True/qed()
                 end
             | success(_) =>
@@ -135,16 +135,16 @@ satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Ord(Result(E, A)) {
             | success(y) =>
                 match c
                 | failure(_) => match q end
-                | success(z) => Ord/transitive(x, y, z, p, q)
+                | success(z) => Ord/trans(x, y, z, p, q)
                 end
             end
         end,
-    eq_of_ord(a, b, h) =
+    eq(a, b, h) =
         match a
         | failure(e) =>
             match b
             | failure(f) =>
-                let refl() = Ord/eq_of_ord(e, f, h);
+                let refl() = Ord/eq(e, f, h);
                 Eq/refl()
             | success(_) => match h end
             end
@@ -152,7 +152,7 @@ satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Ord(Result(E, A)) {
             match b
             | failure(_) => match h end
             | success(y) =>
-                let refl() = Ord/eq_of_ord(x, y, h);
+                let refl() = Ord/eq(x, y, h);
                 Eq/refl()
             end
         end,

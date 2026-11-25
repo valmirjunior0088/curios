@@ -150,8 +150,8 @@ fn the_standard_library_documents_from_the_archive() {
             "lt",
             "le",
             "flips",
-            "transitive",
-            "eq_of_ord",
+            "trans",
+            "eq",
             "lt_of_ord",
             "le_of_ord"
         ],

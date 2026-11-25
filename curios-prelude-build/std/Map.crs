@@ -193,7 +193,7 @@ pub let rekey(@K: Type, @from: Key(K), use Key(K), @V: Type, m: Map(K, use from,
 satisfy (@K: Type, use Key(K), @V: Type, use Eql(V)) => Eql(Map(K, V)) {
     eql(a, b) = Node/same(a.root, b.root),
     -- A congruence written over the fields and applied at the projections, where an equation between two projections solves nothing: once the roots are one, the two proofs that they are sound are.
-    eq_of_eql(a, b, h) =
+    eq(a, b, h) =
         let fields(
             root1: Node(K, V),
             sound1: Node/Sound(root1),

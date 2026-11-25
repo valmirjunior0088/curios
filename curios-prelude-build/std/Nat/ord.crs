@@ -80,7 +80,7 @@ pub let flips: Ord/Flips(ord) =
 
 -- By recursion on the three, as [`flips`] is on its two.
 --- `ord` as a relation carries across a middle element.
-pub let transitive: Ord/Transitive(Ord/le_by(ord)) =
+pub let trans: Ord/Trans(Ord/le_by(ord)) =
     (a, b, c, p, q) =>
         match a
         | 0 => match c | 0 => Bool/True/qed() | _ + 1 => Bool/True/qed() end
@@ -90,7 +90,7 @@ pub let transitive: Ord/Transitive(Ord/le_by(ord)) =
             | bp + 1 =>
                 match c
                 | 0 => match q end
-                | cp + 1 => transitive(ap, bp, cp, p, q)
+                | cp + 1 => trans(ap, bp, cp, p, q)
                 end
             end
         end;

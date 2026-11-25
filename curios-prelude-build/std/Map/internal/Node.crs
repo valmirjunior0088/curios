@@ -2162,7 +2162,7 @@ pub let eq_of_same(
             let refl() =
                 Key/same(k1, k2, Bool/and/first(Hash/hash(k1) == Hash/hash(k2), v1 == v2, h));
             let refl() =
-                Eql/eq_of_eql(v1, v2, Bool/and/second(Hash/hash(k1) == Hash/hash(k2), v1 == v2, h));
+                Eql/eq(v1, v2, Bool/and/second(Hash/hash(k1) == Hash/hash(k2), v1 == v2, h));
             Eq/refl()
         | branch(_, _) => match h end
         end
@@ -2171,8 +2171,7 @@ pub let eq_of_same(
         | empty() => match h end
         | leaf(_, _) => match h end
         | branch(at2, t2) =>
-            let refl() =
-                Eql/eq_of_eql(at1, at2, Bool/and/first(at1 == at2, same_in(t1.list, t2.list), h));
+            let refl() = Eql/eq(at1, at2, Bool/and/first(at1 == at2, same_in(t1.list, t2.list), h));
             let refl() =
                 Vec/eq_of_list(
                     t1,

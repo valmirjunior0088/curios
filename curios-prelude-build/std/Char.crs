@@ -309,7 +309,7 @@ let eq_of_eql(a: Char, b: Char, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
 
 satisfy Eql(Char) {
     eql = eql,
-    eq_of_eql = eq_of_eql,
+    eq = eq_of_eql,
     refl(c) = Eql/refl(c.code),
 }
 
@@ -338,8 +338,8 @@ satisfy Ord(Char) {
     lt = lt,
     le = le,
     flips(a, b) = Ord/flips(a.code, b.code),
-    transitive(a, b, c, p, q) = Ord/transitive(a.code, b.code, c.code, p, q),
-    eq_of_ord(a, b, h) = eq_of_code(a, b, Ord/eq_of_ord(a.code, b.code, h)),
+    trans(a, b, c, p, q) = Ord/trans(a.code, b.code, c.code, p, q),
+    eq(a, b, h) = eq_of_code(a, b, Ord/eq(a.code, b.code, h)),
     lt_of_ord(a, b) = Ord/lt_of_ord(a.code, b.code),
     le_of_ord(a, b) = Ord/le_of_ord(a.code, b.code),
 }

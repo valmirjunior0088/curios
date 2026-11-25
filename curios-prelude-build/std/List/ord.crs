@@ -74,7 +74,7 @@ pub let chains(
     end;
 
 --- `ord` as a relation carries across a middle list.
-pub let transitive(
+pub let trans(
     @T: Type,
     use Ord(T),
     a: List(T),
@@ -103,7 +103,7 @@ pub let eq(
         match b
         | [] => match h end
         | [y, ..ys] =>
-            let refl() = Ord/eq_of_ord(x, y, Ordering/then/first(Ord/ord(x, y), ord(xs, ys), h));
+            let refl() = Ord/eq(x, y, Ordering/then/first(Ord/ord(x, y), ord(xs, ys), h));
             let refl() = eq(xs, ys, Ordering/then/second(Ord/ord(x, y), ord(xs, ys), h));
             Eq/refl()
         end

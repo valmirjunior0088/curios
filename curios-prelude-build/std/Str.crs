@@ -891,7 +891,7 @@ let eq_of_eql(a: Str, b: Str, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
 
 satisfy Eql(Str) {
     eql = eql,
-    eq_of_eql = eq_of_eql,
+    eq = eq_of_eql,
     refl(_) = Bool/True/qed(),
 }
 
@@ -923,8 +923,8 @@ satisfy Ord(Str) {
     lt(a, b) = Ordering/is_lt(ord(a, b)),
     le(a, b) = Ordering/is_le(ord(a, b)),
     flips(a, b) = Ord/flips(to_bytes(a), to_bytes(b)),
-    transitive(a, b, c, p, q) = Ord/transitive(to_bytes(a), to_bytes(b), to_bytes(c), p, q),
-    eq_of_ord(a, b, h) = eq_of_bytes(a, b, Ord/eq_of_ord(to_bytes(a), to_bytes(b), h)),
+    trans(a, b, c, p, q) = Ord/trans(to_bytes(a), to_bytes(b), to_bytes(c), p, q),
+    eq(a, b, h) = eq_of_bytes(a, b, Ord/eq(to_bytes(a), to_bytes(b), h)),
     lt_of_ord(_, _) = Eq/refl(),
     le_of_ord(_, _) = Eq/refl(),
 }

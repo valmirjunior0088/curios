@@ -318,7 +318,7 @@ const A_PROOF_WHOSE_GUARDS_EVERY_ARM_SETTLES_AGAIN: &str = r#"
                 quotient = Nat/to_int(m / d),
                 remainder = m % d,
                 joined =
-                    Eql/eq_of_eql(
+                    Eql/eq(
                         Nat/to_int(m),
                         Nat/to_int(m / d) * Nat/to_int(d) + Nat/to_int(m % d),
                         proved()),
@@ -328,7 +328,7 @@ const A_PROOF_WHOSE_GUARDS_EVERY_ARM_SETTLES_AGAIN: &str = r#"
                 quotient = -1 - Nat/to_int(m / d),
                 remainder = d - 1 - m % d,
                 joined =
-                    Eql/eq_of_eql(
+                    Eql/eq(
                         -1 - Nat/to_int(m),
                         (-1 - Nat/to_int(m / d)) * Nat/to_int(d) + Nat/to_int(d - 1 - m % d),
                         proved()),
@@ -348,7 +348,7 @@ const A_PROOF_WHOSE_GUARDS_EVERY_ARM_SETTLES_AGAIN: &str = r#"
         let same: Bool/Holds(
             q * Nat/to_int(d) + Nat/to_int(r)
                 == split.quotient * Nat/to_int(d) + Nat/to_int(split.remainder)) = proved();
-        let quotient: Eq()(q, split.quotient) = Eql/eq_of_eql(q, split.quotient, proved());
+        let quotient: Eq()(q, split.quotient) = Eql/eq(q, split.quotient, proved());
         let rest: Bool/Holds(
             split.quotient * Nat/to_int(d) + Nat/to_int(r)
                 == split.quotient * Nat/to_int(d) + Nat/to_int(split.remainder)) =
@@ -359,7 +359,7 @@ const A_PROOF_WHOSE_GUARDS_EVERY_ARM_SETTLES_AGAIN: &str = r#"
                             == split.quotient * Nat/to_int(d) + Nat/to_int(split.remainder)),
                 quotient,
                 same);
-        (quotient = quotient, remainder = Eql/eq_of_eql(r, split.remainder, proved()));
+        (quotient = quotient, remainder = Eql/eq(r, split.remainder, proved()));
 
     Io/pure(())
     "#;

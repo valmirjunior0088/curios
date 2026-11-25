@@ -295,13 +295,13 @@ impl OperatorSyntax {
     }
 }
 
-/// `/std/ops/Eql`: the method `==` and `!=` dispatch through, and the two laws that hold it to `Eq`. A group of its own because three features read it: the operators dispatch through `eql`, the `Eql` derivation writes a witness of all three — this group is its row — and the procedure that proves a bound crosses a decided equality to its equation by `eq_of_eql`. The law is no lemma of that procedure's vocabulary ([`EntailmentSyntax::targets`]): a proof names it where its witness resolves.
+/// `/std/ops/Eql`: the method `==` and `!=` dispatch through, and the two laws that hold it to `Eq`. A group of its own because three features read it: the operators dispatch through `eql`, the `Eql` derivation writes a witness of all three — this group is its row — and the procedure that proves a bound crosses a decided equality to its equation by `eq`. The law is no lemma of that procedure's vocabulary ([`EntailmentSyntax::targets`]): a proof names it where its witness resolves.
 #[derive(Debug, Clone, Copy)]
 pub struct EqlSyntax {
     /// Whether the two are equal.
     pub eql: ConceptField,
     /// The law that two values `eql` holds equal are one value.
-    pub eq_of_eql: ConceptField,
+    pub eq: ConceptField,
     /// The law that a value is `eql` to itself.
     pub refl: ConceptField,
 }
@@ -312,13 +312,9 @@ impl EqlSyntax {
     }
 
     fn concept_fields(self) -> impl Iterator<Item = ConceptField> {
-        let Self {
-            eql,
-            eq_of_eql,
-            refl,
-        } = self;
+        let Self { eql, eq, refl } = self;
 
-        [eql, eq_of_eql, refl].into_iter()
+        [eql, eq, refl].into_iter()
     }
 }
 
@@ -733,13 +729,13 @@ pub struct OrdDerivation {
 
 /// The names the proofs of a derived `Ord`'s laws apply, beside what the comparison itself is written with.
 ///
-/// Two laws of the concept, each applied to a payload as the method is; the law every order's answers obey at three values, which is each payload's part of `transitive`; the laws of the step `lexicographic` folds by, which carry a proof from one payload to the next; and `by_tag`'s, which ask for the payloads' part where two constructors are one. The proofs also conclude equations and close on the inhabitant of `True`, which [`SyntaxRegistry::equality`] and [`SyntaxRegistry::proof`] name.
+/// Two laws of the concept, each applied to a payload as the method is; the law every order's answers obey at three values, which is each payload's part of `trans`; the laws of the step `lexicographic` folds by, which carry a proof from one payload to the next; and `by_tag`'s, which ask for the payloads' part where two constructors are one. The proofs also conclude equations and close on the inhabitant of `True`, which [`SyntaxRegistry::equality`] and [`SyntaxRegistry::proof`] name.
 #[derive(Debug, Clone, Copy)]
 pub struct OrdLaws {
     /// The law that `ord` answers the flipped answer with its operands swapped.
     pub flips: ConceptField,
     /// The law that two values `ord` answers `eq` at are one value.
-    pub eq_of_ord: ConceptField,
+    pub eq: ConceptField,
     /// That an order's answers at three values chain, from its laws.
     pub chains: SyntaxName,
     /// A step flips to the step of the flipped answers.
@@ -750,7 +746,7 @@ pub struct OrdLaws {
     pub then_second: SyntaxName,
     /// Three steps chain where their answers do.
     pub chains_then: SyntaxName,
-    /// The third of three answers that chain is `lt` or `eq` where the first two are, which closes `transitive`.
+    /// The third of three answers that chain is `lt` or `eq` where the first two are, which closes `trans`.
     pub chains_le: SyntaxName,
     /// `by_tag` flips where the answers it is handed do at one constructor.
     pub by_tag_flips: SyntaxName,
@@ -765,7 +761,7 @@ impl OrdLaws {
     fn lemmas(self) -> [SyntaxName; 9] {
         let Self {
             flips: _,
-            eq_of_ord: _,
+            eq: _,
             chains,
             then_flips,
             then_first,
@@ -824,7 +820,7 @@ impl Derivation<'_> {
     fn concept_fields(self) -> Vec<ConceptField> {
         match self {
             Derivation::Eql(row) => row.concept_fields().collect(),
-            Derivation::Ord(row) => vec![row.ord, row.laws.flips, row.laws.eq_of_ord],
+            Derivation::Ord(row) => vec![row.ord, row.laws.flips, row.laws.eq],
             Derivation::Spell(_) | Derivation::Hash(_) => vec![self.concept_field()],
         }
     }

@@ -51,7 +51,7 @@ satisfy Ord(OffsetDateTime) {
                 Ord/flips(to_timestamp(a), to_timestamp(b)),
                 (_) => Ord/flips(a.date_time, b.date_time)),
             (_) => Ord/flips(a.offset, b.offset)),
-    transitive(a, b, c, p, q) =
+    trans(a, b, c, p, q) =
         Ordering/chains/le(
             ord(a, b),
             ord(b, c),
@@ -81,7 +81,7 @@ satisfy Ord(OffsetDateTime) {
                 (_, _) => Ord/chains(a.offset, b.offset, c.offset)),
             p,
             q),
-    eq_of_ord(a, b, h) =
+    eq(a, b, h) =
         let fields(
             date_time1: DateTime,
             offset1: Offset,
@@ -107,14 +107,14 @@ satisfy Ord(OffsetDateTime) {
             a.offset,
             b.date_time,
             b.offset,
-            Ord/eq_of_ord(
+            Ord/eq(
                 a.date_time,
                 b.date_time,
                 Ordering/then/second(
                     Ord/ord(to_timestamp(a), to_timestamp(b)),
                     Ord/ord(a.date_time, b.date_time),
                     leading)),
-            Ord/eq_of_ord(
+            Ord/eq(
                 a.offset,
                 b.offset,
                 Ordering/then/second(

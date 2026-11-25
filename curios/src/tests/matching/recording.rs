@@ -50,7 +50,7 @@ fn a_dispatch_that_resolves_to_a_closed_comparison_records_nothing() {
 
         satisfy Eql(U) {
             eql(a, b) = Nat/lt(3, 2),
-            eq_of_eql(a, _, _) = match a end,
+            eq(a, _, _) = match a end,
             refl(a) = match a end,
         }
 

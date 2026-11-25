@@ -354,7 +354,7 @@ let eq_of_offset(@s: Str, a: At(s), b: At(s), offset: Eq()(a.offset, b.offset)) 
 --- Two positions are equal when their offsets are.
 satisfy (@s: Str) => Eql(At(s)) {
     eql(a, b) = a.offset == b.offset,
-    eq_of_eql(a, b, h) = eq_of_offset(a, b, proved()),
+    eq(a, b, h) = eq_of_offset(a, b, proved()),
     refl(a) = Eql/refl(a.offset),
 }
 
@@ -364,8 +364,8 @@ satisfy (@s: Str) => Ord(At(s)) {
     lt(a, b) = a.offset < b.offset,
     le(a, b) = a.offset <= b.offset,
     flips(a, b) = Ord/flips(a.offset, b.offset),
-    transitive(a, b, c, p, q) = Ord/transitive(a.offset, b.offset, c.offset, p, q),
-    eq_of_ord(a, b, h) = eq_of_offset(a, b, Ord/eq_of_ord(a.offset, b.offset, h)),
+    trans(a, b, c, p, q) = Ord/trans(a.offset, b.offset, c.offset, p, q),
+    eq(a, b, h) = eq_of_offset(a, b, Ord/eq(a.offset, b.offset, h)),
     lt_of_ord(a, b) = Ord/lt_of_ord(a.offset, b.offset),
     le_of_ord(a, b) = Ord/le_of_ord(a.offset, b.offset),
 }

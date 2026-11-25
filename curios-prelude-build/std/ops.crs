@@ -7,7 +7,7 @@ pub concept Eql(A: Type): pub Type {
     --- Whether the two are equal.
     eql(A, A) -> Bool,
     --- Two values `eql` holds equal are one: the bridge from a decided equality to an equation.
-    eq_of_eql(a: A, b: A, h: Bool/Holds(eql(a, b))) -> Eq()(a, b),
+    eq(a: A, b: A, h: Bool/Holds(eql(a, b))) -> Eq()(a, b),
     --- A value is equal to itself.
     refl(a: A) -> Bool/Holds(eql(a, a)),
 }

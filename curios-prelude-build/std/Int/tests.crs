@@ -24,7 +24,7 @@ let _the_order_is_transitive(
     p: Holds(Ordering/is_le(Int/ord(a, b))),
     q: Holds(Ordering/is_le(Int/ord(b, c))),
 ) -> Holds(Ordering/is_le(Int/ord(a, c))) =
-    Int/ord/transitive(a, b, c, p, q);
+    Int/ord/trans(a, b, c, p, q);
 
 let _the_naturals_order_the_same_way(
     a: Nat,

@@ -37,7 +37,7 @@ fn a_witness_never_writes_its_superclass_slot() {
         let other: Eql(Mine) =
             Eql {
                 eql(x, y) = x == y,
-                eq_of_eql(x, y, h) = Eql/eq_of_eql(x, y, h),
+                eq(x, y, h) = Eql/eq(x, y, h),
                 refl(x) = Eql/refl(x) };
         satisfy Ord(Mine) {
             use other,

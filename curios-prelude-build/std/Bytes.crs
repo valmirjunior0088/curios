@@ -297,7 +297,7 @@ pub let split(b: Bytes, sep: Byte) -> List(Bytes) =
 
 satisfy Eql(Bytes) {
     eql = eql,
-    eq_of_eql = eq_of_eql,
+    eq = eq_of_eql,
     refl(_) = Bool/True/qed(),
 }
 
@@ -306,8 +306,8 @@ satisfy Ord(Bytes) {
     lt(a, b) = Ordering/is_lt(ord(a, b)),
     le(a, b) = Ordering/is_le(ord(a, b)),
     flips = ord/flips,
-    transitive = ord/transitive,
-    eq_of_ord = ord/eq,
+    trans = ord/trans,
+    eq = ord/eq,
     lt_of_ord(_, _) = Eq/refl(),
     le_of_ord(_, _) = Eq/refl(),
 }

@@ -149,7 +149,7 @@ fn the_standard_library_derives_option_result_and_order() {
     );
 }
 
-// --- The laws: `eq_of_eql`, that two values `eql` holds equal are one, and `refl`, that a value is equal to itself, proved where a witness is declared. ---
+// --- The laws: `eq`, that two values `eql` holds equal are one, and `refl`, that a value is equal to itself, proved where a witness is declared. ---
 
 // The derivation writes both proofs, which a program reads through the concept as it reads the method: over a recursive family, a family nested through `List`'s witness and through a pair's inside it, a parameterized family under a premise, a constructor holding a proof, and a struct holding a proof of its own field. Each law is used at a variable, where only the proof answers, and the bridge at two closed values, where the comparison reduces.
 #[test]
@@ -172,7 +172,7 @@ fn a_derived_witness_proves_both_laws() {
         satisfy Eql(Small) { .. }
 
         let one(@A: Type, use Eql(A), a: A, b: A, h: Holds(a == b)) -> Eq()(a, b) =
-            Eql/eq_of_eql(a, b, h);
+            Eql/eq(a, b, h);
         let itself(@A: Type, use Eql(A), a: A) -> Holds(a == a) = Eql/refl(a);
 
         let _trees(a: Tree, b: Tree, h: Holds(a == b)) -> Eq()(a, b) = one(a, b, h);
@@ -187,7 +187,7 @@ fn a_derived_witness_proves_both_laws() {
         let _a_small(a: Small) -> Holds(a == a) = itself(a);
 
         let _closed: Eq()(Doc/obj([("a", Doc/arr([Doc/num(1)]))]), Doc/obj([("a", Doc/arr([Doc/num(1)]))])) =
-            Eql/eq_of_eql(
+            Eql/eq(
                 Doc/obj([("a", Doc/arr([Doc/num(1)]))]),
                 Doc/obj([("a", Doc/arr([Doc/num(1)]))]),
                 True/qed());
@@ -221,7 +221,7 @@ fn a_witness_whose_equality_breaks_a_law_is_refused_where_it_is_declared() {
                     | left() => match b | left() => true | right() => false end
                     | right() => match b | left() => false | right() => true end
                     end,
-                eq_of_eql(a, b, h) =
+                eq(a, b, h) =
                     match a
                     | left() => match b | left() => Eq/refl() | right() => match h end end
                     | right() => match b | left() => match h end | right() => Eq/refl() end
@@ -232,14 +232,14 @@ fn a_witness_whose_equality_breaks_a_law_is_refused_where_it_is_declared() {
     let conflating = program(
         r#"satisfy Eql(Side) {
                 eql(a, b) = true,
-                eq_of_eql(a, b, h) = Eq/refl(),
+                eq(a, b, h) = Eq/refl(),
                 refl(a) = True/qed(),
             }"#,
     );
     let parting = program(
         r#"satisfy Eql(Side) {
                 eql(a, b) = false,
-                eq_of_eql(a, b, h) = match h end,
+                eq(a, b, h) = match h end,
                 refl(a) = True/qed(),
             }"#,
     );
@@ -262,7 +262,7 @@ fn a_witness_whose_equality_breaks_a_law_is_refused_where_it_is_declared() {
     );
     let report = error(&lawless);
     assert!(
-        report.contains("method count mismatch") && report.contains("missing: `eq_of_eql`, `refl`"),
+        report.contains("method count mismatch") && report.contains("missing: `eq`, `refl`"),
         "{report}"
     );
 }

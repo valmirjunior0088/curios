@@ -198,7 +198,7 @@ fn a_disequality_is_the_negation_of_its_witness_s_equality() {
             induct Any : pub Type | any() end
             satisfy Eql(Any) {
                 eql(_, _) = true,
-                eq_of_eql(a, b, _) = match a | any() => match b | any() => Eq/refl() end end,
+                eq(a, b, _) = match a | any() => match b | any() => Eq/refl() end end,
                 refl(_) = True/qed(),
             }
             let a : Any = Any/any();

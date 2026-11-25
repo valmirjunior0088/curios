@@ -155,7 +155,7 @@ pub let eq_of_bytes(a: Uuid, b: Uuid, p: Eq()(a.bytes, b.bytes)) -> Eq()(a, b) =
 
 satisfy Eql(Uuid) {
     eql(a, b) = a.bytes == b.bytes,
-    eq_of_eql(a, b, h) = eq_of_bytes(a, b, proved()),
+    eq(a, b, h) = eq_of_bytes(a, b, proved()),
     refl(a) = Eql/refl(a.bytes),
 }
 
@@ -165,8 +165,8 @@ satisfy Ord(Uuid) {
     lt(a, b) = Ordering/is_lt(Bytes/ord(a.bytes, b.bytes)),
     le(a, b) = Ordering/is_le(Bytes/ord(a.bytes, b.bytes)),
     flips(a, b) = Ord/flips(a.bytes, b.bytes),
-    transitive(a, b, c, p, q) = Ord/transitive(a.bytes, b.bytes, c.bytes, p, q),
-    eq_of_ord(a, b, h) = eq_of_bytes(a, b, Ord/eq_of_ord(a.bytes, b.bytes, h)),
+    trans(a, b, c, p, q) = Ord/trans(a.bytes, b.bytes, c.bytes, p, q),
+    eq(a, b, h) = eq_of_bytes(a, b, Ord/eq(a.bytes, b.bytes, h)),
     lt_of_ord(_, _) = Eq/refl(),
     le_of_ord(_, _) = Eq/refl(),
 }

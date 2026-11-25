@@ -52,7 +52,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     },
     eql: EqlSyntax {
         eql: registry_field(&["std", "Equal", "Equal"], "eql"),
-        eq_of_eql: registry_field(&["std", "Equal", "Equal"], "eq_of_eql"),
+        eq: registry_field(&["std", "Equal", "Equal"], "eq"),
         refl: registry_field(&["std", "Equal", "Equal"], "refl"),
     },
     character: CharacterSyntax {
@@ -107,7 +107,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             is_le: registry_name(&["std", "Ord", "Ordering", "is_le"]),
             laws: OrdLaws {
                 flips: registry_field(&["std", "Ord", "Ord"], "flips"),
-                eq_of_ord: registry_field(&["std", "Ord", "Ord"], "eq_of_ord"),
+                eq: registry_field(&["std", "Ord", "Ord"], "eq"),
                 chains: registry_name(&["std", "Ord", "chains"]),
                 then_flips: registry_name(&["std", "Ord", "Ordering", "then", "flips"]),
                 then_first: registry_name(&["std", "Ord", "Ordering", "then", "first"]),

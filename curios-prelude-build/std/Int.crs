@@ -81,7 +81,7 @@ pub let view(i: Int) -> Sign(i) =
 let absurd_succ(@P: Sort, x: Nat, h: Bool/Holds(eql(+0, Nat/to_int(x) + 1))) -> P =
     match h end;
 
--- Stated over `eql`, and decided through `lt` and `le`, each by name: an operator here would read the witness that names this. Public for the elaborator's own proofs alone, which name it where a bound follows from an `==` guard, before any witness is elaborated: a program crosses by `Eql/eq_of_eql`.
+-- Stated over `eql`, and decided through `lt` and `le`, each by name: an operator here would read the witness that names this. Public for the elaborator's own proofs alone, which name it where a bound follows from an `==` guard, before any witness is elaborated: a program crosses by `Eql/eq`.
 --- `Eql`'s law at `Int`: a decided equality is an equation.
 pub let eq_of_eql(a: Int, b: Int, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
     match lt(a, b)
@@ -135,7 +135,7 @@ pub let non_neg(n: Int) -> Option(NonNeg(n)) =
 
 satisfy Eql(Int) {
     eql = eql,
-    eq_of_eql = eq_of_eql,
+    eq = eq_of_eql,
     refl(_) = Bool/True/qed(),
 }
 
@@ -176,8 +176,8 @@ satisfy Ord(Int) {
     lt = lt,
     le = le,
     flips = ord/flips,
-    transitive = ord/transitive,
-    eq_of_ord = ord/eq,
+    trans = ord/trans,
+    eq = ord/eq,
     lt_of_ord = ord/is_lt,
     le_of_ord = ord/is_le,
 }

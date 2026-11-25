@@ -10,9 +10,9 @@
 //!
 //! **The `Spell` body.** One match arm per constructor in declaration order, its goal a hole as a written match's is, and per arm a single renderer application over structured pieces: `Spell/call("Tree/node", [spell(l), …])` for a constructor, `Spell/record("Point", [("x", spell(x)), …])` for a struct, whose fields are projected. A value therefore spells as its type's name and constructor tag applied to its payloads, a hidden one under its mark (`Spell/hidden`), so the text re-parses wherever the type's name is visible unqualified; a struct spells labeled, or positionally where its field has no label; a proof payload spells as the written goal `"?"`.
 //!
-//! **The `Eql` body.** `eql` matches its two arguments in turn: an arm per constructor on the first, and inside it a one-arm match on the second at the same constructor — its payloads compared pairwise through `Eql/eql` under `&&`, `true` when there is nothing to compare — with a `| _ => false` default for every other constructor. A struct compares its projections the same way, with no match. Proofs do not take part. The two laws are proved of that comparison, each over the comparison built again, so each proof reads the method's own spelling by reduction: `eq_of_eql` by an arm for every pair of constructors ([`equal_where_eql`]), and `refl` by an arm a constructor ([`eql_to_itself`]), each payload's part through the concept's own law at that payload, a witness goal of its own as the method's is.
+//! **The `Eql` body.** `eql` matches its two arguments in turn: an arm per constructor on the first, and inside it a one-arm match on the second at the same constructor — its payloads compared pairwise through `Eql/eql` under `&&`, `true` when there is nothing to compare — with a `| _ => false` default for every other constructor. A struct compares its projections the same way, with no match. Proofs do not take part. The two laws are proved of that comparison, each over the comparison built again, so each proof reads the method's own spelling by reduction: `eq` by an arm for every pair of constructors ([`equal_where_eql`]), and `refl` by an arm a constructor ([`eql_to_itself`]), each payload's part through the concept's own law at that payload, a witness goal of its own as the method's is.
 //!
-//! **The `Ord` body.** The constructors decide before the payloads do, which that shape cannot express: its inner default is one *constant* for every mismatched tag, and a mismatched pair orders by which constructor is which. So `ord` matches each argument once for its constructor's declaration position and hands both ordinals, with the lockstep comparison, to `/std/Ord`'s `by_tag` — which answers the tag order unless they agree and the comparison otherwise. The lockstep half is then `compare`'s shape exactly, `Ordering/eq` filling a default the tag decision has already made unreachable, and the payload answers fold through `lexicographic` first-difference-wins. A proof contributes no piece, which under that fold is answering `eq`. Linear in the constructor count; an arm per pair would be quadratic. The concept's superclass slot is left unfilled, so the key's `Eql` witness is resolved as it would be for a written literal that omitted it. `lt` and `le` are `Ordering/is_lt` and `is_le` of that comparison built again, so the two laws that say so are `Eq/refl()`. The three laws of the order are proved of the comparison built again too, each payload's part through the concept's own law at that payload: `lexicographic` folds by a step, `Ordering/then`, whose laws carry `flips` ([`flipped_with_operands`]) and the chaining `transitive` closes on ([`carried_across`]) from one payload to the next, and whose two answers are `eq` where it is, which gives each payload's equation ([`equal_where_tied`]). An inductive goes through `by_tag`'s laws, which ask for the payloads' part where the two positions are one: under that equation the proof matches every value at one constructor, and two values at two constructors are closed by the equation itself ([`facing`]), so a law over three values is quadratic in the constructor count where an arm a triple would be cubic.
+//! **The `Ord` body.** The constructors decide before the payloads do, which that shape cannot express: its inner default is one *constant* for every mismatched tag, and a mismatched pair orders by which constructor is which. So `ord` matches each argument once for its constructor's declaration position and hands both ordinals, with the lockstep comparison, to `/std/Ord`'s `by_tag` — which answers the tag order unless they agree and the comparison otherwise. The lockstep half is then `compare`'s shape exactly, `Ordering/eq` filling a default the tag decision has already made unreachable, and the payload answers fold through `lexicographic` first-difference-wins. A proof contributes no piece, which under that fold is answering `eq`. Linear in the constructor count; an arm per pair would be quadratic. The concept's superclass slot is left unfilled, so the key's `Eql` witness is resolved as it would be for a written literal that omitted it. `lt` and `le` are `Ordering/is_lt` and `is_le` of that comparison built again, so the two laws that say so are `Eq/refl()`. The three laws of the order are proved of the comparison built again too, each payload's part through the concept's own law at that payload: `lexicographic` folds by a step, `Ordering/then`, whose laws carry `flips` ([`flipped_with_operands`]) and the chaining `trans` closes on ([`carried_across`]) from one payload to the next, and whose two answers are `eq` where it is, which gives each payload's equation ([`equal_where_tied`]). An inductive goes through `by_tag`'s laws, which ask for the payloads' part where the two positions are one: under that equation the proof matches every value at one constructor, and two values at two constructors are closed by the equation itself ([`facing`]), so a law over three values is quadratic in the constructor count where an arm a triple would be cubic.
 
 use {
     super::{Context, Error, Mode, Opened, Underivable, elaborate, method_type, reduce_with},
@@ -818,10 +818,10 @@ fn eql_body(
         ],
         compared,
     );
-    let eq_of_eql = equal_where_eql(context, site, subject, row)?;
+    let eq = equal_where_eql(context, site, subject, row)?;
     let refl = eql_to_itself(context, site, subject, row)?;
 
-    Ok(site.at(dictionary(site, [eql, eq_of_eql, refl])))
+    Ok(site.at(dictionary(site, [eql, eq, refl])))
 }
 
 /// The comparisons `eql` joins for one constructor or one struct: the parts that are values, in order, and the two terms each is compared at. A proof takes no part.
@@ -963,7 +963,7 @@ fn compare(
     }
 }
 
-/// `eq_of_eql`: that two values `eql` holds equal are one, as a function of the two and of the proof that it does.
+/// `eq`: that two values `eql` holds equal are one, as a function of the two and of the proof that it does.
 ///
 /// **An inductive is matched on both sides, an arm for every pair of constructors.** At two different constructors `eql` answered `false`, so the hypothesis reduces to a proposition nothing proves and the arm is its zero-arm match; at the same constructor the comparisons hold part by part ([`equated`]). A default cannot stand for the mismatched arms as it does in `eql`: the hypothesis reduces only where the second constructor is known.
 ///
@@ -1234,13 +1234,7 @@ fn equations(
                 }
             };
             let (this, that) = compared.pair(index);
-            compared.applied(
-                context,
-                site,
-                row.eq_of_eql,
-                index,
-                vec![this, that, evidence],
-            )
+            compared.applied(context, site, row.eq, index, vec![this, that, evidence])
         })
         .collect();
 
@@ -1405,15 +1399,13 @@ fn ord_body(
     let lt = method(context, Some(row.is_lt))?;
     let le = method(context, Some(row.is_le))?;
     let flips = flipped_with_operands(context, site, subject, row)?;
-    let transitive = carried_across(context, site, subject, row)?;
-    let eq_of_ord = equal_where_tied(context, site, subject, row)?;
+    let trans = carried_across(context, site, subject, row)?;
+    let eq = equal_where_tied(context, site, subject, row)?;
     let lt_of_ord = agreed(context);
     let le_of_ord = agreed(context);
     Ok(site.at(dictionary(
         site,
-        [
-            ord, lt, le, flips, transitive, eq_of_ord, lt_of_ord, le_of_ord,
-        ],
+        [ord, lt, le, flips, trans, eq, lt_of_ord, le_of_ord],
     )))
 }
 
@@ -1628,7 +1620,7 @@ impl<'c> Pieces<'c> {
                     .into_iter()
                     .chain([evidence])
                     .collect::<Vec<_>>();
-                self.applied(context, site, laws.eq_of_ord, index, arguments)
+                self.applied(context, site, laws.eq, index, arguments)
             })
             .collect();
 
@@ -1893,7 +1885,7 @@ fn flipped_with_operands(
     ))
 }
 
-/// `transitive`: that `ord` as a relation carries across a middle value, as a function of the three and of the two bounds.
+/// `trans`: that `ord` as a relation carries across a middle value, as a function of the three and of the two bounds.
 ///
 /// The three answers chain ([`Pieces::chained`]), a struct's through its fields and an inductive's through `by_tag`'s law at the three positions, handed the payloads' part where the positions are one ([`facing`]); and the third of three answers that chain is `lt` or `eq` where the first two are. The three comparisons that law is over are built again and written, as a step's answers are.
 fn carried_across(
@@ -1966,7 +1958,7 @@ fn carried_across(
     ))
 }
 
-/// `eq_of_ord`: that two values `ord` answers `eq` at are one, as a function of the two and of the proof that it does.
+/// `eq`: that two values `ord` answers `eq` at are one, as a function of the two and of the proof that it does.
 ///
 /// Each value's equation comes from its answer being `eq` ([`Pieces::equations`]). A struct's are handed to its congruence ([`congruent`]). An inductive's are matched in turn at one constructor ([`matched`]), under the equation of the two positions `by_tag`'s law reads off the hypothesis ([`facing`]).
 fn equal_where_tied(

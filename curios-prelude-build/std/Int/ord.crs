@@ -153,7 +153,7 @@ pub let is_le(a: Int, b: Int) -> Eq()(Int/le(a, b), Ordering/is_le(ord(a, b))) =
 
 -- `Int/le/trans`, each bound read through [`is_le`].
 --- `ord` as a relation carries across a middle element.
-pub let transitive: Ord/Transitive(Ord/le_by(ord)) =
+pub let trans: Ord/Trans(Ord/le_by(ord)) =
     (a, b, c, p, q) =>
         let below: Bool/Holds(Int/le(a, b)) =
             Eq/subst((x: Bool) => Bool/Holds(x), Eq/sym(is_le(a, b)), p);

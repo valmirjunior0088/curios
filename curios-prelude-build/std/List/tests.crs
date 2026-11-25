@@ -114,7 +114,7 @@ test ordered_decides_each_adjacent_pair =
 let _adjacent_order_reaches_every_pair(
     @T: Type,
     le: (T, T) -> Bool,
-    carries: Ord/Transitive(le),
+    carries: Ord/Trans(le),
     l: List(T),
     given: Holds(List/ordered(l, le)),
 ) -> Pairwise(le)(l) =
@@ -172,7 +172,7 @@ let _two_sorts_order_by_both_keys(
     earlier: (T, T) -> Ordering,
     later_flips: Ord/Flips(later),
     earlier_flips: Ord/Flips(earlier),
-    earlier_carries: Ord/Transitive(Ord/le_by(earlier)),
+    earlier_carries: Ord/Trans(Ord/le_by(earlier)),
     l: List(T),
 ) -> Holds(
     List/ordered(

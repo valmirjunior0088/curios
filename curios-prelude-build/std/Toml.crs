@@ -74,7 +74,7 @@ satisfy Eql(Toml) {
         | table(x) => match b | table(y) => x == y | _ => false end
         end,
     -- An arm for every pair of cases: at two different ones `eql` answered `false`, and at the same one the values are one by their own law.
-    eq_of_eql(a, b, h) =
+    eq(a, b, h) =
         match a
         | str(x) =>
             match b

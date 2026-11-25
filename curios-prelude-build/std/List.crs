@@ -245,7 +245,7 @@ let eq_of_eql(
         match b
         | [] => match h end
         | [y, ..ys] =>
-            let refl() = Eql/eq_of_eql(x, y, Bool/and/first(x == y, eql(xs, ys), h));
+            let refl() = Eql/eq(x, y, Bool/and/first(x == y, eql(xs, ys), h));
             let refl() = eq_of_eql(xs, ys, Bool/and/second(x == y, eql(xs, ys), h));
             Eq/refl()
         end
@@ -260,7 +260,7 @@ let eql_refl(@A: Type, use Eql(A), a: List(A)) -> Bool/Holds(eql(a, a)) =
 
 satisfy (@A: Type, use Eql(A)) => Eql(List(A)) {
     eql = eql,
-    eq_of_eql = eq_of_eql,
+    eq = eq_of_eql,
     refl = eql_refl,
 }
 
@@ -282,8 +282,8 @@ satisfy (@T: Type, use Ord(T)) => Ord(List(T)) {
     lt(a, b) = Ordering/is_lt(ord(a, b)),
     le(a, b) = Ordering/is_le(ord(a, b)),
     flips = ord/flips,
-    transitive = ord/transitive,
-    eq_of_ord = ord/eq,
+    trans = ord/trans,
+    eq = ord/eq,
     lt_of_ord(_, _) = Eq/refl(),
     le_of_ord(_, _) = Eq/refl(),
 }

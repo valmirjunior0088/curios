@@ -198,9 +198,9 @@ fn a_derived_witness_proves_the_orders_laws() {
             p: Holds(Ordering/is_le(Ord/ord(a, b))),
             q: Holds(Ordering/is_le(Ord/ord(b, c))),
         ) -> Holds(Ordering/is_le(Ord/ord(a, c))) =
-            Ord/transitive(a, b, c, p, q);
+            Ord/trans(a, b, c, p, q);
         let tied(@A: Type, use Ord(A), a: A, b: A, h: Eq()(Ord/ord(a, b), Ordering/eq())) -> Eq()(a, b) =
-            Ord/eq_of_ord(a, b, h);
+            Ord/eq(a, b, h);
         let below(@A: Type, use Ord(A), a: A, b: A) -> Eq()(a < b, Ordering/is_lt(Ord/ord(a, b))) =
             Ord/lt_of_ord(a, b);
         let at_most(@A: Type, use Ord(A), a: A, b: A) -> Eq()(a <= b, Ordering/is_le(Ord/ord(a, b))) =
@@ -276,9 +276,9 @@ fn a_witness_whose_order_breaks_a_law_is_refused_where_it_is_declared() {
                 le(a, b) = Ordering/is_le(ord(a, b)),
                 flips(a, b) =
                     ${flips},
-                transitive(a, b, c, p, q) =
+                trans(a, b, c, p, q) =
                     ${carries},
-                eq_of_ord(a, b, h) =
+                eq(a, b, h) =
                     ${tied},
                 lt_of_ord(_, _) = Eq/refl(),
                 le_of_ord(_, _) = Eq/refl(),
@@ -363,8 +363,7 @@ fn a_witness_whose_order_breaks_a_law_is_refused_where_it_is_declared() {
     let report = error(lawless);
     assert!(
         report.contains("method count mismatch")
-            && report
-                .contains("missing: `flips`, `transitive`, `eq_of_ord`, `lt_of_ord`, `le_of_ord`"),
+            && report.contains("missing: `flips`, `trans`, `eq`, `lt_of_ord`, `le_of_ord`"),
         "{report}"
     );
 }

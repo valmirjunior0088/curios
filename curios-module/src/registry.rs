@@ -54,7 +54,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     },
     eql: EqlSyntax {
         eql: field(&["std", "ops", "Eql"], "eql"),
-        eq_of_eql: field(&["std", "ops", "Eql"], "eq_of_eql"),
+        eq: field(&["std", "ops", "Eql"], "eq"),
         refl: field(&["std", "ops", "Eql"], "refl"),
     },
     character: CharacterSyntax {
@@ -108,7 +108,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             is_le: name(&["std", "Ord", "Ordering", "is_le"]),
             laws: OrdLaws {
                 flips: field(&["std", "Ord", "Ord"], "flips"),
-                eq_of_ord: field(&["std", "Ord", "Ord"], "eq_of_ord"),
+                eq: field(&["std", "Ord", "Ord"], "eq"),
                 chains: name(&["std", "Ord", "chains"]),
                 then_flips: name(&["std", "Ord", "Ordering", "then", "flips"]),
                 then_first: name(&["std", "Ord", "Ordering", "then", "first"]),

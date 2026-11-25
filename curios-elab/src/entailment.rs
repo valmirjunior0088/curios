@@ -263,7 +263,7 @@ fn conjoined(
     Ok(Entailed::Proved(proof))
 }
 
-/// A bound that is an equation at a type that decides its equality, proved by a fact that states it or through the decision — the proof a reader writes, `Eql/eq_of_eql(a, b, proved())`: `Holds(a == b)` is a bound of its own, asked of the fill and then of this procedure, and `Eql`'s law takes its proof to the equation. `None` where `reduced` is no equation, where the law is not in scope, and where `==` has no witness at the type, as at `Flt`: the equation is then read as any proposition the procedure reads nothing in.
+/// A bound that is an equation at a type that decides its equality, proved by a fact that states it or through the decision — the proof a reader writes, `Eql/eq(a, b, proved())`: `Holds(a == b)` is a bound of its own, asked of the fill and then of this procedure, and `Eql`'s law takes its proof to the equation. `None` where `reduced` is no equation, where the law is not in scope, and where `==` has no witness at the type, as at `Flt`: the equation is then read as any proposition the procedure reads nothing in.
 fn equated(context: &mut Context, bound: &Term, reduced: &Term) -> Result<Option<Entailed>, Error> {
     let Subterm::InductType(equation) = &**reduced else {
         return Ok(None);
@@ -276,7 +276,7 @@ fn equated(context: &mut Context, bound: &Term, reduced: &Term) -> Result<Option
     ) else {
         return Ok(None);
     };
-    let law = context.syntax().eql.eq_of_eql;
+    let law = context.syntax().eql.eq;
     if !in_scope(context, &[law.concept]) {
         return Ok(None);
     }

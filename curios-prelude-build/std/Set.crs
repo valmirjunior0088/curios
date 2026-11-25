@@ -57,7 +57,7 @@ pub let difference(@K: Type, use Map/Key(K), a: Set(K), b: Set(K)) -> Set(K) =
 satisfy (@K: Type, use Map/Key(K)) => Eql(Set(K)) {
     eql(a, b) = a.map == b.map,
     -- A congruence written over the fields and applied at the projections, where an equation between two projections solves nothing. The law is applied outside it, at the projections: a field is below its record, so a family nested through this one descends through the law as it does through `eql`.
-    eq_of_eql(a, b, h) =
+    eq(a, b, h) =
         let fields(
             m1: Map(K, {}),
             m2: Map(K, {}),

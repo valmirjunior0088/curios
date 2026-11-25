@@ -389,8 +389,8 @@ fn a_member_bound_discharges_through_a_row_the_module_declares() {
             lt = lt,
             le = le,
             flips(a, b) = Ord/flips(a.n, b.n),
-            transitive(a, b, c, p, q) = Ord/transitive(a.n, b.n, c.n, p, q),
-            eq_of_ord(a, b, h) = one(a.n, b.n, Ord/eq_of_ord(a.n, b.n, h)),
+            trans(a, b, c, p, q) = Ord/trans(a.n, b.n, c.n, p, q),
+            eq(a, b, h) = one(a.n, b.n, Ord/eq(a.n, b.n, h)),
             lt_of_ord(a, b) = Ord/lt_of_ord(a.n, b.n),
             le_of_ord(a, b) = Ord/le_of_ord(a.n, b.n),
         }

@@ -487,25 +487,25 @@ let same8(
 satisfy Eql({}) {
     eql((), ()) = true,
     -- The unit has one value, so any two are one.
-    eq_of_eql((), (), _) = Eq/refl(),
+    eq((), (), _) = Eq/refl(),
     refl(()) = Bool/True/qed(),
 }
 
 satisfy (@A: Type, use Eql(A)) => Eql({A}) {
     eql(a, b) = a.0 == b.0,
-    eq_of_eql(a, b, h) = same1(a.0, b.0, proved()),
+    eq(a, b, h) = same1(a.0, b.0, proved()),
     refl(a) = Eql/refl(a.0),
 }
 
 satisfy (@A: Type, @B: Type, use Eql(A), use Eql(B)) => Eql({A, B}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1,
-    eq_of_eql(a, b, h) = same2(a.0, a.1, b.0, b.1, proved(), proved()),
+    eq(a, b, h) = same2(a.0, a.1, b.0, b.1, proved(), proved()),
     refl(a) = Bool/and/both(a.0 == a.0, a.1 == a.1, Eql/refl(a.0), Eql/refl(a.1)),
 }
 
 satisfy (@A: Type, @B: Type, @C: Type, use Eql(A), use Eql(B), use Eql(C)) => Eql({A, B, C}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2,
-    eq_of_eql(a, b, h) = same3(a.0, a.1, a.2, b.0, b.1, b.2, proved(), proved(), proved()),
+    eq(a, b, h) = same3(a.0, a.1, a.2, b.0, b.1, b.2, proved(), proved(), proved()),
     refl(a) =
         Bool/and/both(
             a.0 == a.0 && a.1 == a.1,
@@ -525,7 +525,7 @@ satisfy (
     use Eql(D),
 ) => Eql({A, B, C, D}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3,
-    eq_of_eql(a, b, h) =
+    eq(a, b, h) =
         same4(a.0, a.1, a.2, a.3, b.0, b.1, b.2, b.3, proved(), proved(), proved(), proved()),
     refl(a) =
         Bool/and/both(
@@ -552,7 +552,7 @@ satisfy (
     use Eql(E),
 ) => Eql({A, B, C, D, E}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4,
-    eq_of_eql(a, b, h) =
+    eq(a, b, h) =
         same5(
             a.0,
             a.1,
@@ -600,7 +600,7 @@ satisfy (
     use Eql(F),
 ) => Eql({A, B, C, D, E, F}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5,
-    eq_of_eql(a, b, h) =
+    eq(a, b, h) =
         same6(
             a.0,
             a.1,
@@ -659,7 +659,7 @@ satisfy (
     eql(a, b) =
         a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5
             && a.6 == b.6,
-    eq_of_eql(a, b, h) =
+    eq(a, b, h) =
         same7(
             a.0,
             a.1,
@@ -728,7 +728,7 @@ satisfy (
         a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5
             && a.6 == b.6
             && a.7 == b.7,
-    eq_of_eql(a, b, h) =
+    eq(a, b, h) =
         same8(
             a.0,
             a.1,
@@ -788,9 +788,9 @@ satisfy Ord({}) {
     lt((), ()) = false,
     le((), ()) = true,
     flips((), ()) = Eq/refl(),
-    transitive((), (), (), _, _) = Bool/True/qed(),
+    trans((), (), (), _, _) = Bool/True/qed(),
     -- The unit has one value, so any two are one.
-    eq_of_ord((), (), _) = Eq/refl(),
+    eq((), (), _) = Eq/refl(),
     lt_of_ord((), ()) = Eq/refl(),
     le_of_ord((), ()) = Eq/refl(),
 }
@@ -800,13 +800,13 @@ satisfy (@A: Type, use Ord(A)) => Ord({A}) {
     lt(a, b) = Ordering/is_lt(Ord/ord(a.0, b.0)),
     le(a, b) = Ordering/is_le(Ord/ord(a.0, b.0)),
     flips(a, b) = Ord/flips(a.0, b.0),
-    transitive(a, b, c, p, q) = Ord/transitive(a.0, b.0, c.0, p, q),
-    eq_of_ord(a, b, h) = same1(a.0, b.0, Ord/eq_of_ord(a.0, b.0, h)),
+    trans(a, b, c, p, q) = Ord/trans(a.0, b.0, c.0, p, q),
+    eq(a, b, h) = same1(a.0, b.0, Ord/eq(a.0, b.0, h)),
     lt_of_ord(_, _) = Eq/refl(),
     le_of_ord(_, _) = Eq/refl(),
 }
 
--- The order of two tuples of each number of fields past one: by the first field, and by the rest where it ties. Each is a function of its own, so its witness states `lt` and `le` over it and the laws read all three by reduction. The laws are the step's ([`Ordering/then`]), a field at a time: `flips` and the chaining `transitive` closes on through each field's own, each step's answers written at its call, and the two tuples one where each step's two answers are `eq`.
+-- The order of two tuples of each number of fields past one: by the first field, and by the rest where it ties. Each is a function of its own, so its witness states `lt` and `le` over it and the laws read all three by reduction. The laws are the step's ([`Ordering/then`]), a field at a time: `flips` and the chaining `trans` closes on through each field's own, each step's answers written at its call, and the two tuples one where each step's two answers are `eq`.
 let ord2(@A: Type, @B: Type, use Ord(A), use Ord(B), a: {A, B}, b: {A, B}) -> Ordering =
     then(Ord/ord(a.0, b.0), (()) => Ord/ord(a.1, b.1));
 
@@ -822,7 +822,7 @@ satisfy (@A: Type, @B: Type, use Ord(A), use Ord(B)) => Ord({A, B}) {
             Ord/ord(b.1, a.1),
             Ord/flips(a.0, b.0),
             (_) => Ord/flips(a.1, b.1)),
-    transitive(a, b, c, p, q) =
+    trans(a, b, c, p, q) =
         Ordering/chains/le(
             ord2(a, b),
             ord2(b, c),
@@ -838,15 +838,15 @@ satisfy (@A: Type, @B: Type, use Ord(A), use Ord(B)) => Ord({A, B}) {
                 (_, _) => Ord/chains(a.1, b.1, c.1)),
             p,
             q),
-    eq_of_ord(a, b, h) =
+    eq(a, b, h) =
         let h1 = Ordering/then/second(Ord/ord(a.0, b.0), Ord/ord(a.1, b.1), h);
         same2(
             a.0,
             a.1,
             b.0,
             b.1,
-            Ord/eq_of_ord(a.0, b.0, Ordering/then/first(Ord/ord(a.0, b.0), Ord/ord(a.1, b.1), h)),
-            Ord/eq_of_ord(a.1, b.1, h1)),
+            Ord/eq(a.0, b.0, Ordering/then/first(Ord/ord(a.0, b.0), Ord/ord(a.1, b.1), h)),
+            Ord/eq(a.1, b.1, h1)),
     lt_of_ord(_, _) = Eq/refl(),
     le_of_ord(_, _) = Eq/refl(),
 }
@@ -882,7 +882,7 @@ satisfy (@A: Type, @B: Type, @C: Type, use Ord(A), use Ord(B), use Ord(C)) => Or
                     Ord/ord(b.2, a.2),
                     Ord/flips(a.1, b.1),
                     (_) => Ord/flips(a.2, b.2))),
-    transitive(a, b, c, p, q) =
+    trans(a, b, c, p, q) =
         Ordering/chains/le(
             ord3(a, b),
             ord3(b, c),
@@ -907,7 +907,7 @@ satisfy (@A: Type, @B: Type, @C: Type, use Ord(A), use Ord(B), use Ord(C)) => Or
                         (_, _) => Ord/chains(a.2, b.2, c.2))),
             p,
             q),
-    eq_of_ord(a, b, h) =
+    eq(a, b, h) =
         let h1 =
             Ordering/then/second(
                 Ord/ord(a.0, b.0),
@@ -921,15 +921,15 @@ satisfy (@A: Type, @B: Type, @C: Type, use Ord(A), use Ord(B), use Ord(C)) => Or
             b.0,
             b.1,
             b.2,
-            Ord/eq_of_ord(
+            Ord/eq(
                 a.0,
                 b.0,
                 Ordering/then/first(
                     Ord/ord(a.0, b.0),
                     Ordering/then(Ord/ord(a.1, b.1), Ord/ord(a.2, b.2)),
                     h)),
-            Ord/eq_of_ord(a.1, b.1, Ordering/then/first(Ord/ord(a.1, b.1), Ord/ord(a.2, b.2), h1)),
-            Ord/eq_of_ord(a.2, b.2, h2)),
+            Ord/eq(a.1, b.1, Ordering/then/first(Ord/ord(a.1, b.1), Ord/ord(a.2, b.2), h1)),
+            Ord/eq(a.2, b.2, h2)),
     lt_of_ord(_, _) = Eq/refl(),
     le_of_ord(_, _) = Eq/refl(),
 }
@@ -986,7 +986,7 @@ satisfy (
                             Ord/ord(b.3, a.3),
                             Ord/flips(a.2, b.2),
                             (_) => Ord/flips(a.3, b.3)))),
-    transitive(a, b, c, p, q) =
+    trans(a, b, c, p, q) =
         Ordering/chains/le(
             ord4(a, b),
             ord4(b, c),
@@ -1026,7 +1026,7 @@ satisfy (
                                 (_, _) => Ord/chains(a.3, b.3, c.3)))),
             p,
             q),
-    eq_of_ord(a, b, h) =
+    eq(a, b, h) =
         let h1 =
             Ordering/then/second(
                 Ord/ord(a.0, b.0),
@@ -1049,7 +1049,7 @@ satisfy (
             b.1,
             b.2,
             b.3,
-            Ord/eq_of_ord(
+            Ord/eq(
                 a.0,
                 b.0,
                 Ordering/then/first(
@@ -1058,15 +1058,15 @@ satisfy (
                         Ord/ord(a.1, b.1),
                         Ordering/then(Ord/ord(a.2, b.2), Ord/ord(a.3, b.3))),
                     h)),
-            Ord/eq_of_ord(
+            Ord/eq(
                 a.1,
                 b.1,
                 Ordering/then/first(
                     Ord/ord(a.1, b.1),
                     Ordering/then(Ord/ord(a.2, b.2), Ord/ord(a.3, b.3)),
                     h1)),
-            Ord/eq_of_ord(a.2, b.2, Ordering/then/first(Ord/ord(a.2, b.2), Ord/ord(a.3, b.3), h2)),
-            Ord/eq_of_ord(a.3, b.3, h3)),
+            Ord/eq(a.2, b.2, Ordering/then/first(Ord/ord(a.2, b.2), Ord/ord(a.3, b.3), h2)),
+            Ord/eq(a.3, b.3, h3)),
     lt_of_ord(_, _) = Eq/refl(),
     le_of_ord(_, _) = Eq/refl(),
 }
@@ -1151,7 +1151,7 @@ satisfy (
                                     Ord/ord(b.4, a.4),
                                     Ord/flips(a.3, b.3),
                                     (_) => Ord/flips(a.4, b.4))))),
-    transitive(a, b, c, p, q) =
+    trans(a, b, c, p, q) =
         Ordering/chains/le(
             ord5(a, b),
             ord5(b, c),
@@ -1212,7 +1212,7 @@ satisfy (
                                         (_, _) => Ord/chains(a.4, b.4, c.4))))),
             p,
             q),
-    eq_of_ord(a, b, h) =
+    eq(a, b, h) =
         let h1 =
             Ordering/then/second(
                 Ord/ord(a.0, b.0),
@@ -1246,7 +1246,7 @@ satisfy (
             b.2,
             b.3,
             b.4,
-            Ord/eq_of_ord(
+            Ord/eq(
                 a.0,
                 b.0,
                 Ordering/then/first(
@@ -1257,7 +1257,7 @@ satisfy (
                             Ord/ord(a.2, b.2),
                             Ordering/then(Ord/ord(a.3, b.3), Ord/ord(a.4, b.4)))),
                     h)),
-            Ord/eq_of_ord(
+            Ord/eq(
                 a.1,
                 b.1,
                 Ordering/then/first(
@@ -1266,15 +1266,15 @@ satisfy (
                         Ord/ord(a.2, b.2),
                         Ordering/then(Ord/ord(a.3, b.3), Ord/ord(a.4, b.4))),
                     h1)),
-            Ord/eq_of_ord(
+            Ord/eq(
                 a.2,
                 b.2,
                 Ordering/then/first(
                     Ord/ord(a.2, b.2),
                     Ordering/then(Ord/ord(a.3, b.3), Ord/ord(a.4, b.4)),
                     h2)),
-            Ord/eq_of_ord(a.3, b.3, Ordering/then/first(Ord/ord(a.3, b.3), Ord/ord(a.4, b.4), h3)),
-            Ord/eq_of_ord(a.4, b.4, h4)),
+            Ord/eq(a.3, b.3, Ordering/then/first(Ord/ord(a.3, b.3), Ord/ord(a.4, b.4), h3)),
+            Ord/eq(a.4, b.4, h4)),
     lt_of_ord(_, _) = Eq/refl(),
     le_of_ord(_, _) = Eq/refl(),
 }
@@ -1385,7 +1385,7 @@ satisfy (
                                             Ord/ord(b.5, a.5),
                                             Ord/flips(a.4, b.4),
                                             (_) => Ord/flips(a.5, b.5)))))),
-    transitive(a, b, c, p, q) =
+    trans(a, b, c, p, q) =
         Ordering/chains/le(
             ord6(a, b),
             ord6(b, c),
@@ -1473,7 +1473,7 @@ satisfy (
                                                 (_, _) => Ord/chains(a.5, b.5, c.5)))))),
             p,
             q),
-    eq_of_ord(a, b, h) =
+    eq(a, b, h) =
         let h1 =
             Ordering/then/second(
                 Ord/ord(a.0, b.0),
@@ -1520,7 +1520,7 @@ satisfy (
             b.3,
             b.4,
             b.5,
-            Ord/eq_of_ord(
+            Ord/eq(
                 a.0,
                 b.0,
                 Ordering/then/first(
@@ -1533,7 +1533,7 @@ satisfy (
                                 Ord/ord(a.3, b.3),
                                 Ordering/then(Ord/ord(a.4, b.4), Ord/ord(a.5, b.5))))),
                     h)),
-            Ord/eq_of_ord(
+            Ord/eq(
                 a.1,
                 b.1,
                 Ordering/then/first(
@@ -1544,7 +1544,7 @@ satisfy (
                             Ord/ord(a.3, b.3),
                             Ordering/then(Ord/ord(a.4, b.4), Ord/ord(a.5, b.5)))),
                     h1)),
-            Ord/eq_of_ord(
+            Ord/eq(
                 a.2,
                 b.2,
                 Ordering/then/first(
@@ -1553,15 +1553,15 @@ satisfy (
                         Ord/ord(a.3, b.3),
                         Ordering/then(Ord/ord(a.4, b.4), Ord/ord(a.5, b.5))),
                     h2)),
-            Ord/eq_of_ord(
+            Ord/eq(
                 a.3,
                 b.3,
                 Ordering/then/first(
                     Ord/ord(a.3, b.3),
                     Ordering/then(Ord/ord(a.4, b.4), Ord/ord(a.5, b.5)),
                     h3)),
-            Ord/eq_of_ord(a.4, b.4, Ordering/then/first(Ord/ord(a.4, b.4), Ord/ord(a.5, b.5), h4)),
-            Ord/eq_of_ord(a.5, b.5, h5)),
+            Ord/eq(a.4, b.4, Ordering/then/first(Ord/ord(a.4, b.4), Ord/ord(a.5, b.5), h4)),
+            Ord/eq(a.5, b.5, h5)),
     lt_of_ord(_, _) = Eq/refl(),
     le_of_ord(_, _) = Eq/refl(),
 }
@@ -1703,7 +1703,7 @@ satisfy (
                                                     Ord/ord(b.6, a.6),
                                                     Ord/flips(a.5, b.5),
                                                     (_) => Ord/flips(a.6, b.6))))))),
-    transitive(a, b, c, p, q) =
+    trans(a, b, c, p, q) =
         Ordering/chains/le(
             ord7(a, b),
             ord7(b, c),
@@ -1824,7 +1824,7 @@ satisfy (
                                                         (_, _) => Ord/chains(a.6, b.6, c.6))))))),
             p,
             q),
-    eq_of_ord(a, b, h) =
+    eq(a, b, h) =
         let h1 =
             Ordering/then/second(
                 Ord/ord(a.0, b.0),
@@ -1886,7 +1886,7 @@ satisfy (
             b.4,
             b.5,
             b.6,
-            Ord/eq_of_ord(
+            Ord/eq(
                 a.0,
                 b.0,
                 Ordering/then/first(
@@ -1901,7 +1901,7 @@ satisfy (
                                     Ord/ord(a.4, b.4),
                                     Ordering/then(Ord/ord(a.5, b.5), Ord/ord(a.6, b.6)))))),
                     h)),
-            Ord/eq_of_ord(
+            Ord/eq(
                 a.1,
                 b.1,
                 Ordering/then/first(
@@ -1914,7 +1914,7 @@ satisfy (
                                 Ord/ord(a.4, b.4),
                                 Ordering/then(Ord/ord(a.5, b.5), Ord/ord(a.6, b.6))))),
                     h1)),
-            Ord/eq_of_ord(
+            Ord/eq(
                 a.2,
                 b.2,
                 Ordering/then/first(
@@ -1925,7 +1925,7 @@ satisfy (
                             Ord/ord(a.4, b.4),
                             Ordering/then(Ord/ord(a.5, b.5), Ord/ord(a.6, b.6)))),
                     h2)),
-            Ord/eq_of_ord(
+            Ord/eq(
                 a.3,
                 b.3,
                 Ordering/then/first(
@@ -1934,15 +1934,15 @@ satisfy (
                         Ord/ord(a.4, b.4),
                         Ordering/then(Ord/ord(a.5, b.5), Ord/ord(a.6, b.6))),
                     h3)),
-            Ord/eq_of_ord(
+            Ord/eq(
                 a.4,
                 b.4,
                 Ordering/then/first(
                     Ord/ord(a.4, b.4),
                     Ordering/then(Ord/ord(a.5, b.5), Ord/ord(a.6, b.6)),
                     h4)),
-            Ord/eq_of_ord(a.5, b.5, Ordering/then/first(Ord/ord(a.5, b.5), Ord/ord(a.6, b.6), h5)),
-            Ord/eq_of_ord(a.6, b.6, h6)),
+            Ord/eq(a.5, b.5, Ordering/then/first(Ord/ord(a.5, b.5), Ord/ord(a.6, b.6), h5)),
+            Ord/eq(a.6, b.6, h6)),
     lt_of_ord(_, _) = Eq/refl(),
     le_of_ord(_, _) = Eq/refl(),
 }
@@ -2128,7 +2128,7 @@ satisfy (
                                                             Ord/ord(b.7, a.7),
                                                             Ord/flips(a.6, b.6),
                                                             (_) => Ord/flips(a.7, b.7)))))))),
-    transitive(a, b, c, p, q) =
+    trans(a, b, c, p, q) =
         Ordering/chains/le(
             ord8(a, b),
             ord8(b, c),
@@ -2310,7 +2310,7 @@ satisfy (
                                                                         c.7)))))))),
             p,
             q),
-    eq_of_ord(a, b, h) =
+    eq(a, b, h) =
         let h1 =
             Ordering/then/second(
                 Ord/ord(a.0, b.0),
@@ -2389,7 +2389,7 @@ satisfy (
             b.5,
             b.6,
             b.7,
-            Ord/eq_of_ord(
+            Ord/eq(
                 a.0,
                 b.0,
                 Ordering/then/first(
@@ -2406,7 +2406,7 @@ satisfy (
                                         Ord/ord(a.5, b.5),
                                         Ordering/then(Ord/ord(a.6, b.6), Ord/ord(a.7, b.7))))))),
                     h)),
-            Ord/eq_of_ord(
+            Ord/eq(
                 a.1,
                 b.1,
                 Ordering/then/first(
@@ -2421,7 +2421,7 @@ satisfy (
                                     Ord/ord(a.5, b.5),
                                     Ordering/then(Ord/ord(a.6, b.6), Ord/ord(a.7, b.7)))))),
                     h1)),
-            Ord/eq_of_ord(
+            Ord/eq(
                 a.2,
                 b.2,
                 Ordering/then/first(
@@ -2434,7 +2434,7 @@ satisfy (
                                 Ord/ord(a.5, b.5),
                                 Ordering/then(Ord/ord(a.6, b.6), Ord/ord(a.7, b.7))))),
                     h2)),
-            Ord/eq_of_ord(
+            Ord/eq(
                 a.3,
                 b.3,
                 Ordering/then/first(
@@ -2445,7 +2445,7 @@ satisfy (
                             Ord/ord(a.5, b.5),
                             Ordering/then(Ord/ord(a.6, b.6), Ord/ord(a.7, b.7)))),
                     h3)),
-            Ord/eq_of_ord(
+            Ord/eq(
                 a.4,
                 b.4,
                 Ordering/then/first(
@@ -2454,15 +2454,15 @@ satisfy (
                         Ord/ord(a.5, b.5),
                         Ordering/then(Ord/ord(a.6, b.6), Ord/ord(a.7, b.7))),
                     h4)),
-            Ord/eq_of_ord(
+            Ord/eq(
                 a.5,
                 b.5,
                 Ordering/then/first(
                     Ord/ord(a.5, b.5),
                     Ordering/then(Ord/ord(a.6, b.6), Ord/ord(a.7, b.7)),
                     h5)),
-            Ord/eq_of_ord(a.6, b.6, Ordering/then/first(Ord/ord(a.6, b.6), Ord/ord(a.7, b.7), h6)),
-            Ord/eq_of_ord(a.7, b.7, h7)),
+            Ord/eq(a.6, b.6, Ordering/then/first(Ord/ord(a.6, b.6), Ord/ord(a.7, b.7), h6)),
+            Ord/eq(a.7, b.7, h7)),
     lt_of_ord(_, _) = Eq/refl(),
     le_of_ord(_, _) = Eq/refl(),
 }

@@ -508,9 +508,9 @@ Every infix operator needs whitespace on both sides, and associates to the left.
 
 An operator is a call of its concept's method, resolved as any witness is, intrinsic operands included. `/std` declares the witnesses for the intrinsic types and for some of its own, and a `satisfy` declares one for any other type. Both operands have one type. `+`, `-`, `*`, `/`, `%`, `&&` and `||` answer that type, and `==`, `!=`, `<`, `>`, `<=` and `>=` answer `Bool`.
 
-`==` is `Eql`'s method `eql`, and `a != b` is `Bool/not(a == b)`: a witness states equality once, so the two never disagree. Beside `eql` a witness proves the concept's two laws, `eq_of_eql`, that two values it holds equal are one, and `refl`, that a value is equal to itself, so `==` decides equality wherever a type has it; a [derived witness](#derived-witnesses) has both written for it.
+`==` is `Eql`'s method `eql`, and `a != b` is `Bool/not(a == b)`: a witness states equality once, so the two never disagree. Beside `eql` a witness proves the concept's two laws, `eq`, that two values it holds equal are one, and `refl`, that a value is equal to itself, so `==` decides equality wherever a type has it; a [derived witness](#derived-witnesses) has both written for it.
 
-`<` and `<=` are `Ord`'s methods `lt` and `le`, and `a > b` and `a >= b` are `b < a` and `b <= a`. Beside `ord`, `lt` and `le` a witness proves the order's five laws: `flips`, that `ord` answers the flipped answer with its operands swapped; `transitive`, that it carries across a middle value; `eq_of_ord`, that two values it answers `eq` at are one; and `lt_of_ord` and `le_of_ord`, that `lt` and `le` are what `ord` answers. So `<` is a total order wherever a type has it; a [derived witness](#derived-witnesses) has the five written for it.
+`<` and `<=` are `Ord`'s methods `lt` and `le`, and `a > b` and `a >= b` are `b < a` and `b <= a`. Beside `ord`, `lt` and `le` a witness proves the order's five laws: `flips`, that `ord` answers the flipped answer with its operands swapped; `trans`, that it carries across a middle value; `eq`, that two values it answers `eq` at are one; and `lt_of_ord` and `le_of_ord`, that `lt` and `le` are what `ord` answers. So `<` is a total order wherever a type has it; a [derived witness](#derived-witnesses) has the five written for it.
 
 `Flt` answers none of `==`, `!=`, `<`, `<=`, `>` and `>=`: IEEE's comparisons are no equality and no total order, false between a NaN and itself and true both ways between `+0.0` and `-0.0`, so a float is compared by name, `Flt/eql`, `Flt/lt`, `Flt/le`, `Flt/gt` and `Flt/ge`, or by its bit pattern, `Flt/identical`.
 
@@ -1332,8 +1332,8 @@ pub let descending(values: List(Nat)) -> List(Nat) =
             lt(a, b) = b < a,
             le(a, b) = b <= a,
             flips(a, b) = Ord/flips(b, a),
-            transitive(a, b, c, p, q) = Ord/transitive(c, b, a, q, p),
-            eq_of_ord(a, b, h) = Eq/sym(Ord/eq_of_ord(b, a, h)),
+            trans(a, b, c, p, q) = Ord/trans(c, b, a, q, p),
+            eq(a, b, h) = Eq/sym(Ord/eq(b, a, h)),
             lt_of_ord(a, b) = Ord/lt_of_ord(b, a),
             le_of_ord(a, b) = Ord/le_of_ord(b, a) };
     List/sort(@_, use reverse, values);
@@ -1383,7 +1383,7 @@ The key is a declared `induct` or `struct` whose representation is open where th
 A concept's superclasses are hidden members of a concept value. They take no position when it is read — a projection `.N` and a pattern's positional fields count the methods alone — and a literal's entries follow the declaration as a call's arguments follow a function's parameters: the fields in order, and before each, `use value` entries filling the superclass slots before it, from the first. A slot left out is resolved, and `use _` holds a slot's place to the same effect, so `Both { use _, use second, both = … }` supplies the second of two superclasses alone.
 
 ```text
-Ord { use custom_eql, ord = reversed, lt = below, le = at_most, flips = flips, transitive = transitive, eq_of_ord = tied, lt_of_ord = is_below, le_of_ord = is_at_most }
+Ord { use custom_eql, ord = reversed, lt = below, le = at_most, flips = flips, trans = trans, eq = tied, lt_of_ord = is_below, le_of_ord = is_at_most }
 ```
 
 A witness's body writes none: a `use` entry in a `satisfy` is refused by name, and resolution fills every superclass of a registered witness.
@@ -1500,7 +1500,7 @@ pub let pick(n: Nat, q: Holds(n < 3)) -> Nat =
     match n | 0 => 10 | 1 => 11 | 2 => 12 end;
 ```
 
-An equation at a type whose equality is decided, one with an `Eql` witness, is proved as its decision is: `proved()` at `Eq()(a, b)` asks for `Holds(a == b)` from the facts in scope and crosses `Eql`'s law to the equation. A program writes the equation's proof as `proved()` where the expected type names both sides, and as `proved(@Eq()(a, b))` where nothing does — the equation `Eq/subst` or `Eq/cong` rewrites along, or a `let` with no type. `Eql/eq_of_eql` is written by name only where the decision lies beyond what the facts state, as a conjunct of a conjunction that only a match arm's reduct holds.
+An equation at a type whose equality is decided, one with an `Eql` witness, is proved as its decision is: `proved()` at `Eq()(a, b)` asks for `Holds(a == b)` from the facts in scope and crosses `Eql`'s law to the equation. A program writes the equation's proof as `proved()` where the expected type names both sides, and as `proved(@Eq()(a, b))` where nothing does — the equation `Eq/subst` or `Eq/cong` rewrites along, or a `let` with no type. `Eql/eq` is written by name only where the decision lies beyond what the facts state, as a conjunct of a conjunction that only a match arm's reduct holds.
 
 ```crs
 use /std/{Eq, Str, proved};

@@ -41,7 +41,7 @@ pub let tail(
 let below(
     @T: Type,
     le: (T, T) -> Bool,
-    transitive: Ord/Transitive(le),
+    trans: Ord/Trans(le),
     l: List(T),
     a: T,
     lead: Bool/Holds(ordered/leads(le, a, l)),
@@ -56,14 +56,14 @@ let below(
             i,
             (e) => Eq/subst((z: T) => Bool/Holds(le(a, z)), Eq/sym(e), lead),
             (rest) =>
-                transitive(
+                trans(
                     a,
                     k,
                     y,
                     lead,
                     below(
                         le,
-                        transitive,
+                        trans,
                         r,
                         k,
                         ordered/head(le, k, r, given),
@@ -76,7 +76,7 @@ let below(
 pub let of_ordered(
     @T: Type,
     le: (T, T) -> Bool,
-    transitive: Ord/Transitive(le),
+    trans: Ord/Trans(le),
     l: List(T),
     given: Bool/Holds(ordered(l, le)),
 ) -> Pairwise(le)(l) =
@@ -87,14 +87,14 @@ pub let of_ordered(
             (y, i) =>
                 below(
                     le,
-                    transitive,
+                    trans,
                     t,
                     h,
                     ordered/head(le, h, t, given),
                     ordered/tail(le, h, t, given),
                     y,
                     i),
-            of_ordered(le, transitive, t, ordered/tail(le, h, t, given)))
+            of_ordered(le, trans, t, ordered/tail(le, h, t, given)))
     end;
 
 --- A relation that holds of every pair has every list pairwise in it.
