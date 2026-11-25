@@ -35,7 +35,7 @@ fn an_allocation_no_one_reads_is_not_counted() {
 // A trace counts while its closure runs, and stops when the closure returns.
 #[test]
 fn counting_ends_with_the_trace() {
-    let counted = trace(sink(), || {
+    let counted = trace(sink(), &[], || {
         let before = allocated_bytes();
         take_and_return();
 
@@ -52,7 +52,7 @@ fn counting_ends_with_the_trace() {
 // However a trace's closure ends, counting ends with it: a panic passes through the trace once counting has stopped.
 #[test]
 fn counting_ends_with_a_trace_whose_closure_panics() {
-    let ended = panic::catch_unwind(|| trace(sink(), || panic!("the closure fails")));
+    let ended = panic::catch_unwind(|| trace(sink(), &[], || panic!("the closure fails")));
     assert!(ended.is_err(), "the panic passes through the trace");
 
     let before = allocated_bytes();

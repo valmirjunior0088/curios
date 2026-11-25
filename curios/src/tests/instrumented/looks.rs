@@ -1,7 +1,10 @@
 //! The look count under a recorder: what the checkers sample of it, declaration by declaration, is part of what a reading around their check reads.
 
 use {
-    crate::tests::{Shape, Stands, tower},
+    crate::{
+        tests::{Shape, Stands, tower},
+        *,
+    },
     curios_common::test_support::*,
     curios_core::looks,
     curios_elab::DEFAULT_BUDGET,
@@ -23,7 +26,7 @@ fn a_check_s_samples_of_its_looks_are_part_of_a_reading_around_it() {
     let root = Temporary::new("instrumented", "looks");
     let stream = root.join("stream.pftrace");
     let before = looks();
-    let checked = trace(Destination::File(stream.clone()), || {
+    let checked = trace(Destination::File(stream.clone()), TALLIES, || {
         typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
     })
     .expect("the stream opens");

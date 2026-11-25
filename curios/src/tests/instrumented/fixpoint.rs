@@ -3,7 +3,7 @@
 //! Instrumented because the per-pass spans and fired-samples `curios_cps::optimize` carries are recorded only while a trace listens. It reports costs without asserting thresholds, in the shape of `unfolding.rs`'s measurements, and its subject is the census's `TOML_DRIVER`, so the program a figure is taken over is named.
 
 use {
-    crate::tests::TOML_DRIVER,
+    crate::{tests::TOML_DRIVER, *},
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_pipeline::compile_with_prelude,
@@ -95,9 +95,11 @@ fn fixpoint_pass_measurements() {
     let entrypoint = TOML_DRIVER.parse::<Entrypoint>().expect("driver parses");
     // The stream goes to a buffer and is folded back here: this test wants the aggregate, which is one consumer of the stream.
     let stream = Stream::default();
-    let outcome = trace(Destination::Stream(Box::new(stream.clone())), || {
-        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
-    })
+    let outcome = trace(
+        Destination::Stream(Box::new(stream.clone())),
+        TALLIES,
+        || compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {}),
+    )
     .expect("a stream destination opens");
     outcome.expect("driver compiles");
     let report = fold(stream.bytes().as_slice()).expect("the stream folds");

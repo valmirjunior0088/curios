@@ -1,15 +1,37 @@
-//! What the writer puts in the file: a sequence a thread, opened with its defaults and stamped in steps, a span's slices on its thread's track, a name and a string interned once, the fields a span and an event carry, the allocator's readings where it counts and a thread's own allocations, a filed stream kept whole and started over, and a stream ended at the first write that fails.
+//! What the writer puts in the file: a sequence a thread, opened with its defaults and stamped in steps, a span's slices on its thread's track, a name and a string interned once, the fields a span and an event carry, the allocator's readings where it counts and a thread's own allocations, a tally its program hands it, a filed stream kept whole and started over, and a stream ended at the first write that fails.
 
 use {
     super::*,
     curios_common::test_support::*,
     std::{
+        cell::Cell,
         collections::BTreeSet,
         io::Read,
         sync::{Arc, Mutex},
         time::Duration,
     },
 };
+
+thread_local! {
+    /// A count a test keeps for its thread, which [`COUNTED`] hands the recorder as a tally.
+    static KEPT: Cell<u64> = const { Cell::new(0) };
+}
+
+/// The count [`KEPT`] holds on the calling thread.
+fn kept() -> u64 {
+    KEPT.with(Cell::get)
+}
+
+/// [`KEPT`] grown by `by` on the calling thread.
+fn keep(by: u64) {
+    KEPT.with(|kept| kept.set(kept.get() + by));
+}
+
+/// The one tally the tests that read one hand the recorder.
+const COUNTED: &[Tally] = &[Tally {
+    name: "counted",
+    read: kept,
+}];
 
 /// A destination that keeps its bytes in memory, so a test can read what was written without a file.
 #[derive(Clone, Default)]
@@ -108,7 +130,7 @@ fn interned(packets: &[TracePacket]) -> InternedData {
 #[test]
 fn a_span_is_written_as_a_slice_begun_and_ended_on_its_thread_s_track() {
     let buffer = Buffer::default();
-    trace(buffer.destination(), || {
+    trace(buffer.destination(), &[], || {
         let _span = tracing::trace_span!("outer").entered();
     })
     .expect("a stream destination opens");
@@ -157,7 +179,7 @@ fn a_span_is_written_as_a_slice_begun_and_ended_on_its_thread_s_track() {
 #[test]
 fn a_name_is_interned_once_however_many_spans_it_names() {
     let buffer = Buffer::default();
-    trace(buffer.destination(), || {
+    trace(buffer.destination(), &[], || {
         for _ in 0..3 {
             let _span = tracing::trace_span!("repeated").entered();
         }
@@ -179,7 +201,7 @@ fn a_name_is_interned_once_however_many_spans_it_names() {
 #[test]
 fn every_field_a_span_or_an_event_carries_is_written() {
     let buffer = Buffer::default();
-    trace(buffer.destination(), || {
+    trace(buffer.destination(), &[], || {
         let _span = tracing::trace_span!("grouped", group = %"Nat/add", extra = 7).entered();
         curios_common::sample!("magnitude", 42);
     })
@@ -234,7 +256,7 @@ fn every_field_a_span_or_an_event_carries_is_written() {
 #[test]
 fn a_string_value_many_spans_carry_is_written_once() {
     let buffer = Buffer::default();
-    trace(buffer.destination(), || {
+    trace(buffer.destination(), &[], || {
         for _ in 0..3 {
             let _span = tracing::trace_span!("settled", key = %"the same term").entered();
         }
@@ -253,7 +275,7 @@ fn a_slice_carries_the_allocator_readings() {
     const HELD: usize = 4 * 1024 * 1024;
 
     let buffer = Buffer::default();
-    trace(buffer.destination(), || {
+    trace(buffer.destination(), &[], || {
         let _span = tracing::trace_span!("holds").entered();
         let held = vec![0_u8; HELD];
 
@@ -295,7 +317,7 @@ fn a_slice_carries_the_allocator_readings() {
 #[test]
 fn a_span_is_charged_nothing_the_recorder_takes() {
     let buffer = Buffer::default();
-    trace(buffer.destination(), || {
+    trace(buffer.destination(), &[], || {
         let _span = tracing::trace_span!("around").entered();
         for round in 0..64_u64 {
             let _inside = tracing::trace_span!("inside", round).entered();
@@ -316,13 +338,48 @@ fn a_span_is_charged_nothing_the_recorder_takes() {
     }
 }
 
+// A slice carries each tally its program handed the recorder, and the fold reports what a span's work added to it, its children's within it, and the part of that its own: no child's is its own, and a span entered twice adds both.
+#[test]
+fn a_span_carries_what_its_work_added_to_each_tally() {
+    let buffer = Buffer::default();
+    trace(buffer.destination(), COUNTED, || {
+        let _outer = tracing::trace_span!("outer").entered();
+        keep(3);
+        for _ in 0..2 {
+            let _inner = tracing::trace_span!("inner").entered();
+            keep(5);
+        }
+    })
+    .expect("a stream destination opens");
+
+    let report = buffer.folded();
+    let tallied = |name: &str| {
+        report
+            .summaries
+            .iter()
+            .find(|summary| summary.name == name)
+            .unwrap_or_else(|| panic!("the span {name} folds"))
+            .tallies
+            .clone()
+    };
+    let counted = |added, self_added| {
+        [crate::Tallied {
+            name: "counted".to_string(),
+            added,
+            self_added,
+        }]
+    };
+    assert_eq!(tallied("outer"), counted(13, 3));
+    assert_eq!(tallied("inner"), counted(10, 10));
+}
+
 // A span is charged what its own thread took, read back through the stream: another thread's allocation made while it is entered is that thread's span's, and what its thread took before it entered is no part of it.
 #[test]
 fn a_span_is_charged_what_its_own_thread_allocated() {
     const HELD: usize = 4 * 1024 * 1024;
 
     let buffer = Buffer::default();
-    trace(buffer.destination(), || {
+    trace(buffer.destination(), &[], || {
         let dispatch = tracing::dispatcher::get_default(Clone::clone);
         drop(std::hint::black_box(vec![0_u8; 2 * HELD]));
         let _span = tracing::trace_span!("here").entered();
@@ -358,7 +415,7 @@ fn a_thread_s_packets_are_stamped_as_steps_from_the_one_before() {
 
     let buffer = Buffer::default();
     let began = Instant::now();
-    trace(buffer.destination(), || {
+    trace(buffer.destination(), &[], || {
         for _ in 0..2 {
             let _span = tracing::trace_span!("sleeps").entered();
             std::thread::sleep(SLEPT);
@@ -384,7 +441,8 @@ fn a_thread_s_packets_are_stamped_as_steps_from_the_one_before() {
 #[test]
 fn a_recorder_whose_allocator_does_not_count_carries_no_reading() {
     let buffer = Buffer::default();
-    let recorder = Recorder::new(buffer.destination(), false).expect("a stream destination opens");
+    let recorder =
+        Recorder::new(buffer.destination(), false, &[]).expect("a stream destination opens");
     tracing::subscriber::with_default(recorder, || {
         let _span = tracing::trace_span!("uncounted").entered();
     });
@@ -407,7 +465,7 @@ fn a_recorder_whose_allocator_does_not_count_carries_no_reading() {
 #[test]
 fn two_threads_record_on_two_sequences_and_two_tracks() {
     let buffer = Buffer::default();
-    trace(buffer.destination(), || {
+    trace(buffer.destination(), &[], || {
         let dispatch = tracing::dispatcher::get_default(Clone::clone);
         let _span = tracing::trace_span!("here").entered();
         std::thread::scope(|scope| {
@@ -457,7 +515,7 @@ fn a_filed_stream_keeps_every_packet_its_run_wrote() {
     let directory = Temporary::new("profile", "whole");
     let path = directory.join("nested").join("profile.pftrace");
 
-    trace(Destination::File(path.clone()), || {
+    trace(Destination::File(path.clone()), &[], || {
         for _ in 0..SPANS {
             let _span = tracing::trace_span!("churn").entered();
         }
@@ -494,12 +552,12 @@ fn a_filed_stream_keeps_every_packet_its_run_wrote() {
 fn opening_a_file_destination_starts_the_stream_over() {
     let directory = Temporary::new("profile", "started-over");
     let path = directory.join("profile.pftrace");
-    trace(Destination::File(path.clone()), || {
+    trace(Destination::File(path.clone()), &[], || {
         let _span = tracing::trace_span!("earlier").entered();
     })
     .expect("a file destination opens");
 
-    trace(Destination::File(path.clone()), || {
+    trace(Destination::File(path.clone()), &[], || {
         let _span = tracing::trace_span!("later").entered();
     })
     .expect("a file destination opens");
@@ -552,7 +610,7 @@ fn a_write_that_fails_ends_the_stream_and_the_run_goes_on() {
         refused: Arc::default(),
         after: Arc::default(),
     };
-    let ran = trace(Destination::Stream(Box::new(filling.clone())), || {
+    let ran = trace(Destination::Stream(Box::new(filling.clone())), &[], || {
         for _ in 0..200 {
             let _span = tracing::trace_span!("fills", group = %"the disk").entered();
         }

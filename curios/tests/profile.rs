@@ -1,7 +1,7 @@
 //! What `--profile` asks of an invocation: the stream it files, which `curios profile` folds, and the map a sampling profiler names a hosted program's functions by, written only where it is asked; and the prelude's build under a recorder, a measurement `cargo xtask profile prelude` runs.
 
 use {
-    curios::CABINET,
+    curios::{CABINET, TALLIES},
     curios_common::{Style, test_support::*},
     curios_prelude_build::compile,
     curios_profile::{CountingAllocator, Destination, fold_at, trace},
@@ -101,7 +101,7 @@ fn prelude_build_profile() {
     let out = Temporary::new("profile", "prelude");
     fs::create_dir_all(&out).unwrap();
 
-    trace(Destination::File(stream.clone()), || {
+    trace(Destination::File(stream.clone()), TALLIES, || {
         compile(&out);
     })
     .unwrap_or_else(|error| panic!("{}: {error}", stream.display()));

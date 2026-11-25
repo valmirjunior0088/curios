@@ -29,7 +29,7 @@ mod test_runner;
 use test_runner::*;
 
 use {
-    curios::{CABINET, bindings_of, fault, unlinked},
+    curios::{CABINET, TALLIES, bindings_of, fault, unlinked},
     curios_abi::RunAs,
     curios_common::{Code, Kind, OsError, Report, Source, SourceName, Style},
     curios_cranelift::module_exports,
@@ -73,7 +73,7 @@ static ALLOCATOR: CountingAllocator = CountingAllocator;
 ///
 /// A failure to open is reported and the invocation proceeds. The alternative is refusing to compile because a measurement could not be filed, which inverts which of the two the caller asked for. Success says nothing: the caller named the path, so it has nothing to be told.
 fn install_profiling(path: PathBuf) {
-    if let Err(error) = install(Destination::File(path)) {
+    if let Err(error) = install(Destination::File(path), TALLIES) {
         said(format!("profiling unavailable: {error}"));
     }
 }

@@ -291,12 +291,16 @@ fn row<'a>(report: &'a Profile, name: &str) -> &'a Summary {
 fn a_written_stream_folds_back_into_its_summaries() {
     let buffer = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let sink = buffer.clone();
-    crate::trace(crate::Destination::Stream(Box::new(Sink(sink))), || {
-        let _outer = tracing::trace_span!("outer").entered();
-        for _ in 0..2 {
-            let _inner = tracing::trace_span!("inner").entered();
-        }
-    })
+    crate::trace(
+        crate::Destination::Stream(Box::new(Sink(sink))),
+        &[],
+        || {
+            let _outer = tracing::trace_span!("outer").entered();
+            for _ in 0..2 {
+                let _inner = tracing::trace_span!("inner").entered();
+            }
+        },
+    )
     .expect("a stream destination opens");
 
     let bytes = buffer.lock().expect("buffer lock").clone();

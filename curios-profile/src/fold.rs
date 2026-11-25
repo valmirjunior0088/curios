@@ -119,6 +119,19 @@ pub struct Summary {
     pub max: Duration,
     /// What the allocator counted while the spans were entered, `None` where it did not count: a stream recorded by a program that installed no `CountingAllocator` reads no memory, never nought.
     pub memory: Option<Memory>,
+    /// What the spans' work added to each tally their program handed the recorder, by the tally's name; none where it handed none.
+    pub tallies: Vec<Tallied>,
+}
+
+/// What a row's spans added to one tally: differences of the readings their slices carried, a tally being a count its program keeps for each thread and hands the recorder (`Tally`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Tallied {
+    /// The name the tally was handed under.
+    pub name: String,
+    /// What the spans' own thread added to it while they were entered.
+    pub added: u64,
+    /// The part of [`added`](Self::added) no span entered inside these ones accounts for.
+    pub self_added: u64,
 }
 
 /// What the allocator counted over a row's spans: differences of the readings their slices carried.
@@ -422,8 +435,16 @@ struct Open {
     group: Option<String>,
     at: u64,
     readings: Option<Readings>,
+    tallies: Vec<(String, u64)>,
     nested: u64,
     nested_allocated: u64,
+    nested_tallied: BTreeMap<String, u64>,
+}
+
+/// What one slice boundary carries: the allocator's four readings where it counts, and each tally its program handed the recorder, by name.
+struct Carried {
+    readings: Option<Readings>,
+    tallies: Vec<(String, u64)>,
 }
 
 #[derive(Clone, Copy)]
@@ -450,6 +471,8 @@ struct Aggregate {
     min: Option<u128>,
     max: u128,
     memory: Option<Memory>,
+    /// Each tally's name, with what the row's slices added to it and the part of that their own.
+    tallies: BTreeMap<String, (u64, u64)>,
 }
 
 #[derive(Default)]
@@ -560,8 +583,14 @@ impl Sequence {
 
 /// A counter track the stream described: what it counts, and whether its values are steps.
 struct Described {
-    counter: Counter,
+    counted: Counted,
     stepped: bool,
+}
+
+/// What a counter track counts: one of the allocator's readings, by the one statement of their names, or a tally its program handed the recorder, by the name it handed it under.
+enum Counted {
+    Allocator(Counter),
+    Tally(String),
 }
 
 #[derive(Default)]
@@ -649,16 +678,19 @@ impl Fold {
                 Some(track_descriptor::StaticOrDynamicName::Name(name)) => name.as_str(),
                 None => "",
             };
-            let Some(counted) = Counter::ALL
+            // A counter the allocator's names do not name is a tally, which the recorder writes as a thread's count, in steps; one written whole is no counter of this recorder's.
+            let counted = match Counter::ALL
                 .into_iter()
                 .find(|counted| counted.name() == name)
-            else {
-                return Err(refused(format_args!("a counter track named `{name}`")));
+            {
+                Some(counted) => Counted::Allocator(counted),
+                None if counter.is_incremental() => Counted::Tally(name.to_string()),
+                None => return Err(refused(format_args!("a counter track named `{name}`"))),
             };
             self.counters.insert(
                 track.uuid(),
                 Described {
-                    counter: counted,
+                    counted,
                     stepped: counter.is_incremental(),
                 },
             );
@@ -686,17 +718,17 @@ impl Fold {
             Some(&category) => defined(&sequence.categories, category, "category")?.clone(),
             None => String::new(),
         };
-        let readings = self.readings(sequence, &event)?;
-        if let Some(readings) = readings {
+        let carried = self.carried(sequence, &event)?;
+        if let Some(readings) = carried.readings {
             self.peak = Some(self.peak.unwrap_or(0).max(readings.peak));
         }
         let annotations = Self::annotations(sequence, &event)?;
 
         match event.r#type() {
             track_event::Type::SliceBegin => {
-                self.begin(track, at, target, name, annotations, readings);
+                self.begin(track, at, target, name, annotations, carried);
             }
-            track_event::Type::SliceEnd => self.end(track, at, readings),
+            track_event::Type::SliceEnd => self.end(track, at, carried),
             track_event::Type::Instant => self.instant(target, name, &annotations),
             _ => {}
         }
@@ -704,14 +736,13 @@ impl Fold {
         Ok(())
     }
 
-    /// The allocator's four readings a slice carries, `None` where it carries none: each value is of the counter track its sequence's defaults name in its place, and a counter's steps are added to where the sequence last left it.
-    fn readings(
-        &self,
-        sequence: &mut Sequence,
-        event: &TrackEvent,
-    ) -> io::Result<Option<Readings>> {
+    /// What a slice boundary carries: the allocator's four readings, `None` where it carries none, and each tally's: each value is of the counter track its sequence's defaults name in its place, and a counter's steps are added to where the sequence last left it.
+    fn carried(&self, sequence: &mut Sequence, event: &TrackEvent) -> io::Result<Carried> {
         if event.extra_counter_values.is_empty() {
-            return Ok(None);
+            return Ok(Carried {
+                readings: None,
+                tallies: Vec::new(),
+            });
         }
         if event.extra_counter_values.len() != sequence.counters.len() {
             return Err(refused(format_args!(
@@ -721,6 +752,7 @@ impl Fold {
             )));
         }
         let mut read = Vec::with_capacity(sequence.counters.len());
+        let mut tallies = Vec::new();
         for (&track, &value) in sequence.counters.iter().zip(&event.extra_counter_values) {
             let Some(described) = self.counters.get(&track) else {
                 return Err(refused(format_args!(
@@ -735,7 +767,16 @@ impl Fold {
                 }
                 false => value,
             };
-            read.push((described.counter, value));
+            match &described.counted {
+                Counted::Allocator(counter) => read.push((*counter, value)),
+                Counted::Tally(name) => tallies.push((name.clone(), value as u64)),
+            }
+        }
+        if read.is_empty() {
+            return Ok(Carried {
+                readings: None,
+                tallies,
+            });
         }
         let reading = |counter: Counter| {
             read.iter()
@@ -749,12 +790,15 @@ impl Fold {
                 })
         };
 
-        Ok(Some(Readings {
-            live: reading(Counter::Live)?,
-            allocated: reading(Counter::Allocated)? as u64,
-            allocations: reading(Counter::Allocations)? as u64,
-            peak: reading(Counter::Peak)? as u64,
-        }))
+        Ok(Carried {
+            readings: Some(Readings {
+                live: reading(Counter::Live)?,
+                allocated: reading(Counter::Allocated)? as u64,
+                allocations: reading(Counter::Allocations)? as u64,
+                peak: reading(Counter::Peak)? as u64,
+            }),
+            tallies,
+        })
     }
 
     /// A slice's annotations as names and values, each id read off what its sequence interned.
@@ -794,7 +838,7 @@ impl Fold {
         target: String,
         name: String,
         annotations: Vec<(String, Annotated)>,
-        readings: Option<Readings>,
+        carried: Carried,
     ) {
         let group = annotations
             .into_iter()
@@ -809,14 +853,17 @@ impl Fold {
             name,
             group,
             at,
-            readings,
+            readings: carried.readings,
+            tallies: carried.tallies,
             nested: 0,
             nested_allocated: 0,
+            nested_tallied: BTreeMap::new(),
         });
     }
 
     /// The innermost slice of `track` ended: its extent and readings differenced, credited to the slice it was begun inside, and aggregated under its row.
-    fn end(&mut self, track: u64, at: u64, readings: Option<Readings>) {
+    fn end(&mut self, track: u64, at: u64, carried: Carried) {
+        let readings = carried.readings;
         let track = self
             .tracks
             .get_mut(&track)
@@ -837,9 +884,23 @@ impl Fold {
                 allocations: ended.allocations.saturating_sub(began.allocations),
             }
         });
+        // A tally the slice began and ended with, by name: what its work added, and the part of that no slice begun inside it accounts for.
+        let tallied = slice
+            .tallies
+            .iter()
+            .filter_map(|(name, began)| {
+                let (_, ended) = carried.tallies.iter().find(|(ended, _)| ended == name)?;
+                let added = ended.saturating_sub(*began);
+                let nested = slice.nested_tallied.get(name).copied().unwrap_or(0);
+                Some((name.clone(), added, added.saturating_sub(nested)))
+            })
+            .collect::<Vec<_>>();
         if let Some(parent) = track.stack.last_mut() {
             parent.nested += elapsed;
             parent.nested_allocated += memory.map_or(0, |memory| memory.allocated);
+            for (name, added, _) in &tallied {
+                *parent.nested_tallied.entry(name.clone()).or_default() += added;
+            }
         }
 
         let aggregate = self
@@ -858,6 +919,11 @@ impl Fold {
             sum.allocated = sum.allocated.saturating_add(memory.allocated);
             sum.self_allocated = sum.self_allocated.saturating_add(memory.self_allocated);
             sum.allocations = sum.allocations.saturating_add(memory.allocations);
+        }
+        for (name, added, own) in tallied {
+            let sum = aggregate.tallies.entry(name).or_default();
+            sum.0 = sum.0.saturating_add(added);
+            sum.1 = sum.1.saturating_add(own);
         }
     }
 
@@ -892,6 +958,15 @@ impl Fold {
                 min: nanos(aggregate.min.unwrap_or_default()),
                 max: nanos(aggregate.max),
                 memory: aggregate.memory,
+                tallies: aggregate
+                    .tallies
+                    .into_iter()
+                    .map(|(name, (added, self_added))| Tallied {
+                        name,
+                        added,
+                        self_added,
+                    })
+                    .collect(),
             })
             .collect::<Vec<_>>();
         summaries.sort_by(|left, right| {

@@ -1,7 +1,7 @@
 //! What deciding the class of a written site spends of the lint's allowance, counted.
 
 use {
-    crate::tests::test_support::*,
+    crate::{tests::test_support::*, *},
     curios_elab::{DEFAULT_BUDGET, LINT_ALLOWANCE},
     curios_module::Overlay,
     curios_prelude_build::std_source,
@@ -58,7 +58,7 @@ fn classification_allowance_measurements() {
         units: vec![std_source().tested()],
     });
 
-    trace(Destination::File(stream.clone()), || {
+    trace(Destination::File(stream.clone()), TALLIES, || {
         for subject in subjects {
             diagnostics(
                 DEFAULT_BUDGET,

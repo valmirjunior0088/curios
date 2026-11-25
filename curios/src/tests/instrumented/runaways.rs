@@ -1,7 +1,10 @@
 //! What each runaway costs at a budget and at twice it, counted.
 
 use {
-    crate::tests::{Runaway, runaway},
+    crate::{
+        tests::{Runaway, runaway},
+        *,
+    },
     curios_module::RootSource,
     curios_pipeline::compile_with_prelude,
     curios_profile::{Destination, Profile, fold_at, trace},
@@ -60,7 +63,7 @@ struct Cost {
 /// A refusal carries no consumption, which is why the stream is read and not the answer.
 fn cost(budget: u64, source: &str, stream: &Path) -> Cost {
     let entrypoint = source.parse::<Entrypoint>().expect("a runaway parses");
-    let answer = trace(Destination::File(stream.to_path_buf()), || {
+    let answer = trace(Destination::File(stream.to_path_buf()), TALLIES, || {
         compile_with_prelude(budget, &entrypoint, &RootSource::none(), |_| {})
             .map(|_| ())
             .map_err(|error| error.to_string())

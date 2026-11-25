@@ -14,6 +14,8 @@ test-support = []
 
 [dependencies]
 curios-profile = { workspace = true }
+# The look count a recorder this crate opens is handed (`TALLIES`), which `curios-profile` names nothing of: the one item of `curios-core` the product reads.
+curios-core = { workspace = true }
 curios-wasm = { workspace = true }
 # For the `ffi` rows a compilation harvests and a link is typed by: this crate carries them from the pipeline to the runtime, and names no other part of the wire contract.
 curios-abi = { workspace = true }

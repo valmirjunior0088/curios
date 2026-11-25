@@ -2,7 +2,10 @@
 
 use {
     super::test_support::*,
-    crate::tests::{LISTING_PROGRAM, test_support::*},
+    crate::{
+        tests::{LISTING_PROGRAM, test_support::*},
+        *,
+    },
     curios_native::{ForeignBindings, test_support::*},
     curios_profile::{Destination, fold, trace},
     std::{
@@ -130,7 +133,7 @@ fn host_boundary_measurements() {
             };
             let path = directory.join(format!("{workload}-{sample}.pftrace"));
             let sink = BufWriter::new(File::create(&path).expect("capture file"));
-            trace(Destination::Stream(Box::new(sink)), || {
+            trace(Destination::Stream(Box::new(sink)), TALLIES, || {
                 let compiled = curios_common::profile!("host_boundary_compile" => compile(source))
                     .expect("workload compiles");
                 let status = curios_common::profile!("host_boundary_run" => compiled.run(host, ForeignBindings::empty()))

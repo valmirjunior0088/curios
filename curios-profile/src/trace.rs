@@ -6,6 +6,8 @@
 //!
 //! **The allocator's readings ride each slice.** Where the counting allocator counts (`CountingAllocator`), each slice's beginning and end carries four readings as extra counter values. Two are its thread's allocated bytes and allocations, counters of the thread written as steps on its sequence, as Perfetto writes a thread's time. The other two are the process's live bytes and peak, gauges every sequence reads, so each is written whole. Where it does not count, no counter track is described and no reading carried.
 //!
+//! **A count its program hands it rides each slice too.** A program hands the recorder the counts it keeps for each thread, each a [`Tally`] — the look count `curios-core` keeps among them, which this crate cannot name — and each slice carries a reading of each after the allocator's, a counter of the thread written as steps on its sequence as the allocator's two are, whether or not the allocator counts.
+//!
 //! **No slice is charged the recorder's own work.** Every callback the recorder answers allocates — a span's fields kept, a name interned, a packet built — on the thread of the span it records, inside whatever span that thread has entered. So each callback counts apart what it took, and a slice reads its thread's two counts less what was counted apart: a span is charged what the work inside it took, however many spans and samples the recorder wrote there.
 //!
 //! **A stream is a whole prefix of its run.** Each packet is flushed as it is written, so a run that is killed has filed all it did up to its last whole packet; and the first write that fails ends the stream, the run going on, so a disk that filled leaves a file read the same way, never one with packets missing from its middle.
@@ -57,7 +59,7 @@ const PROCESS_TRACK: u64 = 1;
 const LIVE_TRACK: u64 = 2;
 const PEAK_TRACK: u64 = 3;
 
-/// The first thread's track. Each thread takes [`TRACKS_A_THREAD`] ids in the order the threads first record: its own track's, then its two counters'.
+/// The first thread's track. Each thread takes [`TRACKS_A_THREAD`] ids and one for each [`Tally`] its recorder was handed, in the order the threads first record: its own track's, its two counters', then each tally's.
 const FIRST_THREAD_TRACK: u64 = 16;
 const TRACKS_A_THREAD: u64 = 3;
 
@@ -112,6 +114,35 @@ impl Counter {
     }
 }
 
+/// A count its program keeps for each thread, handed to the recorder, which reads it at every span boundary as it reads the allocator's: what a span's work added to it is the difference of its slice's two readings.
+///
+/// The count is its program's because what it counts is a crate this one names nothing of: `curios-core`'s look count is read where a program reaches both, and handed to [`trace`] and [`install`] beside the destination, an argument at the call site as the destination is.
+#[derive(Debug, Clone, Copy)]
+pub struct Tally {
+    /// What its counter track is named and a fold reports it by: no two tallies a recorder is handed share one, nor any of the allocator's counter tracks.
+    pub name: &'static str,
+    /// The count as it stands on the calling thread, never decreasing.
+    pub read: fn() -> u64,
+}
+
+impl Tally {
+    /// The tally's track, `uuid` under its thread's `parent`: a count of the thread written as steps.
+    fn track(self, uuid: u64, parent: u64) -> TrackDescriptor {
+        TrackDescriptor {
+            uuid: Some(uuid),
+            parent_uuid: Some(parent),
+            static_or_dynamic_name: Some(track_descriptor::StaticOrDynamicName::Name(
+                self.name.to_string(),
+            )),
+            counter: Some(CounterDescriptor {
+                unit: Some(counter_descriptor::Unit::Count as i32),
+                is_incremental: Some(true),
+            }),
+            ..TrackDescriptor::default()
+        }
+    }
+}
+
 /// Where a trace is written.
 pub enum Destination {
     /// A writer its caller holds: standard output, or a buffer a caller folds back in the same process.
@@ -124,10 +155,14 @@ pub enum Destination {
 ///
 /// The error is the destination's: a file that cannot be opened is worth refusing, because a caller asked for a trace and would otherwise get a silent compile. A write that fails *after* that ends the stream rather than raising — a span callback has no caller to return to, and taking a compilation down because a disk filled would be a worse failure than losing the rest of a measurement.
 ///
-/// The allocator counts for as long as `operation` runs, and stops however it ends: a panic passes on through, once counting has stopped.
-pub fn trace<T>(destination: Destination, operation: impl FnOnce() -> T) -> io::Result<T> {
+/// The allocator counts for as long as `operation` runs, and stops however it ends: a panic passes on through, once counting has stopped. Each of `tallies` rides every slice beside the allocator's readings.
+pub fn trace<T>(
+    destination: Destination,
+    tallies: &'static [Tally],
+    operation: impl FnOnce() -> T,
+) -> io::Result<T> {
     begin_counting();
-    let recorder = match Recorder::new(destination, allocator_counts()) {
+    let recorder = match Recorder::new(destination, allocator_counts(), tallies) {
         Ok(recorder) => recorder,
         Err(error) => {
             end_counting();
@@ -151,11 +186,11 @@ pub fn trace<T>(destination: Destination, operation: impl FnOnce() -> T) -> io::
 ///
 /// The two compose rather than compete. `set_global_default` is consulted only where no thread-local subscriber is set, so a [`trace`] on any thread still overrides this for the duration of its closure, and the callers that need a scoped capture keep it.
 ///
-/// Configuration is still in code: the caller's argument decides that this is called at all, and the [`Destination`] it names decides where it writes. Neither is readable from the environment, so there is no second specification to disagree with the first. Once it is installed, the allocator counts for the rest of the process.
-pub fn install(destination: Destination) -> io::Result<()> {
+/// Configuration is still in code: the caller's argument decides that this is called at all, and the [`Destination`] and the `tallies` it names decide where it writes and what rides each slice. None is readable from the environment, so there is no second specification to disagree with the first. Once it is installed, the allocator counts for the rest of the process.
+pub fn install(destination: Destination, tallies: &'static [Tally]) -> io::Result<()> {
     begin_counting();
     let recorder =
-        Recorder::new(destination, allocator_counts()).inspect_err(|_| end_counting())?;
+        Recorder::new(destination, allocator_counts(), tallies).inspect_err(|_| end_counting())?;
     tracing::subscriber::set_global_default(recorder).map_err(io::Error::other)
 }
 
@@ -167,9 +202,9 @@ struct Recorder {
 }
 
 impl Recorder {
-    fn new(destination: Destination, counted: bool) -> io::Result<Self> {
+    fn new(destination: Destination, counted: bool, tallies: &'static [Tally]) -> io::Result<Self> {
         Ok(Self {
-            sink: Mutex::new(Sink::new(destination, counted)?),
+            sink: Mutex::new(Sink::new(destination, counted, tallies)?),
             shared: Mutex::new(HashMap::new()),
             sequence: AtomicU64::new(1),
         })
@@ -293,17 +328,18 @@ struct Created {
     fields: Vec<Value>,
 }
 
-/// The open stream: where its packets go, when it opened, whether the allocator counts, each thread's sequence and each live span.
+/// The open stream: where its packets go, when it opened, whether the allocator counts, the tallies it was handed, each thread's sequence and each live span.
 struct Sink {
     out: Out,
     opened: Instant,
     counted: bool,
+    tallies: &'static [Tally],
     threads: HashMap<ThreadId, Sequence>,
     spans: HashMap<u64, Created>,
 }
 
 impl Sink {
-    fn new(destination: Destination, counted: bool) -> io::Result<Self> {
+    fn new(destination: Destination, counted: bool, tallies: &'static [Tally]) -> io::Result<Self> {
         let writer: Box<dyn Write + Send> = match destination {
             Destination::Stream(writer) => writer,
             Destination::File(path) => {
@@ -320,6 +356,7 @@ impl Sink {
             out: Out(Some(writer)),
             opened: Instant::now(),
             counted,
+            tallies,
             threads: HashMap::new(),
             spans: HashMap::new(),
         };
@@ -376,6 +413,7 @@ impl Sink {
             Entry::Vacant(first) => first.insert(Sequence::opened(
                 &mut self.out,
                 self.counted,
+                self.tallies,
                 index,
                 current.name(),
                 now,
@@ -398,10 +436,15 @@ impl Sink {
         self.spans.remove(&id);
     }
 
-    /// A span entered or exited: a slice begun or ended on the thread's track, the allocator's readings beside it where it counts.
+    /// A span entered or exited: a slice begun or ended on the thread's track, the allocator's readings beside it where it counts, and each tally's.
     fn boundary(&mut self, id: u64, kind: track_event::Type) {
         // Read before anything of the packet is built: what building it takes is counted apart as the recorder's once this callback returns, so a reading taken after would charge it to the slice.
         let counts = self.counted.then(Counts::now);
+        let tallied = self
+            .tallies
+            .iter()
+            .map(|tally| (tally.read)())
+            .collect::<Vec<_>>();
         let Some(span) = self.spans.get(&id) else {
             return;
         };
@@ -417,7 +460,9 @@ impl Sink {
             r#type: Some(kind as i32),
             ..sequence.event(callsite, &fields, &mut interned)
         };
-        let extra_counter_values = counts.map_or_else(Vec::new, |counts| sequence.carried(counts));
+        let mut extra_counter_values =
+            counts.map_or_else(Vec::new, |counts| sequence.carried(counts));
+        extra_counter_values.extend(sequence.tallied(&tallied));
         let packet = sequence.packet(
             now,
             interned,
@@ -463,7 +508,7 @@ impl Counts {
     }
 }
 
-/// A thread's packet sequence: its id, the strings interned on it, the time its last packet was stamped at, and its thread's counts as its last slice carried them.
+/// A thread's packet sequence: its id, the strings interned on it, the time its last packet was stamped at, and its thread's counts and tallies as its last slice carried them.
 struct Sequence {
     id: u32,
     names: Interned,
@@ -473,16 +518,28 @@ struct Sequence {
     stamped: u64,
     allocated: u64,
     allocations: u64,
+    /// Each tally, in the order the recorder was handed them.
+    tallies: Vec<u64>,
 }
 
 impl Sequence {
-    /// The sequence of the `index`th thread to record, named `name`. Its first packet clears its state, declares its clock beside the stream's and states its defaults; its track, and its counters where the allocator counts, are described after it.
-    fn opened(out: &mut Out, counted: bool, index: u64, name: Option<&str>, now: u64) -> Self {
-        let track = FIRST_THREAD_TRACK + index * TRACKS_A_THREAD;
+    /// The sequence of the `index`th thread to record, named `name`. Its first packet clears its state, declares its clock beside the stream's and states its defaults; its track, its counters where the allocator counts, and each tally's counter are described after it.
+    fn opened(
+        out: &mut Out,
+        counted: bool,
+        tallies: &[Tally],
+        index: u64,
+        name: Option<&str>,
+        now: u64,
+    ) -> Self {
+        let track = FIRST_THREAD_TRACK + index * (TRACKS_A_THREAD + tallies.len() as u64);
         let counters = [
             (track + 1, Counter::Allocated),
             (track + 2, Counter::Allocations),
         ];
+        let tallied = (0..tallies.len() as u64)
+            .map(|place| track + TRACKS_A_THREAD + place)
+            .collect::<Vec<_>>();
         let mut sequence = Self {
             id: PROCESS_SEQUENCE + 1 + index as u32,
             names: Interned::default(),
@@ -492,11 +549,13 @@ impl Sequence {
             stamped: now,
             allocated: 0,
             allocations: 0,
+            tallies: vec![0; tallies.len()],
         };
-        let read = match counted {
+        let mut read = match counted {
             true => vec![track + 1, track + 2, LIVE_TRACK, PEAK_TRACK],
             false => Vec::new(),
         };
+        read.extend(&tallied);
         let stream = BuiltinClock::Boottime as u32;
         out.put(TracePacket {
             timestamp: Some(now),
@@ -552,6 +611,13 @@ impl Sequence {
                     trace_packet::Data::TrackDescriptor(counter.track(uuid, track)),
                 ));
             }
+        }
+        for (&uuid, tally) in tallied.iter().zip(tallies) {
+            out.put(sequence.packet(
+                now,
+                InternedData::default(),
+                trace_packet::Data::TrackDescriptor(tally.track(uuid, track)),
+            ));
         }
 
         sequence
@@ -649,6 +715,19 @@ impl Sequence {
             counts.live as i64,
             counts.peak as i64,
         ]
+    }
+
+    /// The tallies read now, in the order the recorder was handed them, as steps from what this sequence's last slice carried, which only grow.
+    fn tallied(&mut self, read: &[u64]) -> Vec<i64> {
+        self.tallies
+            .iter_mut()
+            .zip(read)
+            .map(|(last, &now)| {
+                let step = now - *last;
+                *last = now;
+                step as i64
+            })
+            .collect()
     }
 }
 
