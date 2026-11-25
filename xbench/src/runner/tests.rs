@@ -62,3 +62,59 @@ fn a_figure_read_at_two_sizes_refuses_the_sitting() {
 
     assert!(refused.is_err_and(|why| why.contains("looks")));
 }
+
+/// A measurement of no figure, stated so.
+fn stated(spread: Spread) -> Measurement {
+    Measurement {
+        name: "probe",
+        spread,
+        take: || {},
+    }
+}
+
+/// A figure counted in `measure`, read once.
+fn counted_in(measure: Measure) -> Figure {
+    Figure {
+        name: "a figure".to_string(),
+        measure,
+        size: None,
+        readings: vec![vec![1]],
+    }
+}
+
+/// A measurement stated to repeat may read nothing that moves from run to run, since its two groups are too few to compare a time by.
+#[test]
+fn a_time_read_by_a_measurement_stated_to_repeat_refuses_the_sitting() {
+    assert_eq!(
+        spread_held(&stated(Spread::Repeats), &[counted_in(Measure::Count), counted_in(Measure::Instructions)]),
+        Err("probe is stated to repeat, and reads a figure in instructions, which moves from run to run".to_string())
+    );
+}
+
+/// A measurement stated to move reads something that does, or its five groups were spent on readings that repeat.
+#[test]
+fn a_measurement_stated_to_move_that_reads_none_that_moves_refuses_the_sitting() {
+    assert_eq!(
+        spread_held(&stated(Spread::Moves), &[counted_in(Measure::Bytes)]),
+        Err("probe is stated to move, and every figure it reads repeats".to_string())
+    );
+}
+
+/// Figures that agree with the statement leave the sitting to be filed, either way.
+#[test]
+fn figures_a_spread_describes_are_filed() {
+    assert_eq!(
+        spread_held(&stated(Spread::Repeats), &[counted_in(Measure::Count)]),
+        Ok(())
+    );
+    assert_eq!(
+        spread_held(
+            &stated(Spread::Moves),
+            &[
+                counted_in(Measure::Count),
+                counted_in(Measure::Microseconds)
+            ]
+        ),
+        Ok(())
+    );
+}

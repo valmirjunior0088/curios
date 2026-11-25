@@ -94,6 +94,11 @@ impl Measure {
         }
     }
 
+    /// Whether a figure in this measure moves from run to run on one machine: a time, and the instructions a run retires, which the code a process is handed and what it waits on move, where a count the compiler or a pinned build decides repeats.
+    pub fn moves(self) -> bool {
+        matches!(self, Self::Microseconds | Self::Instructions)
+    }
+
     /// The measure named `name`, where one is.
     pub fn named(name: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|measure| measure.name() == name)

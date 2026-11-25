@@ -9,7 +9,8 @@ mod tests;
 
 use {
     crate::{
-        Figure, Line, Record, asked, capture, file, held, measurement_named, root, subject, today,
+        Figure, Line, Measurement, Record, Spread, asked, capture, file, held, measurement_named,
+        root, subject, today,
     },
     serde::Deserialize,
     std::{
@@ -17,9 +18,6 @@ use {
         process::{Command, Stdio},
     },
 };
-
-/// The groups a sitting takes, each a process: five, the fewest whose ranks separate two records entirely at about p = 0.008, as the decision reads a comparison.
-const GROUPS: usize = 5;
 
 /// What cargo says of an artifact it built, as much of it as names the bench's executable.
 #[derive(Deserialize)]
@@ -136,29 +134,51 @@ fn grouped(sittings: Vec<Vec<Line>>) -> Result<Vec<Figure>, String> {
     Ok(figures)
 }
 
+/// Refuse figures `measurement`'s spread does not describe: one that moves from run to run read by a measurement stated to repeat, which its groups are too few to compare, or none read by one stated to move, which spends groups on readings that repeat.
+fn spread_held(measurement: &Measurement, figures: &[Figure]) -> Result<(), String> {
+    let moving = figures.iter().find(|figure| figure.measure.moves());
+
+    match (measurement.spread, moving) {
+        (Spread::Repeats, Some(figure)) => Err(format!(
+            "{} is stated to repeat, and reads {} in {}, which moves from run to run",
+            measurement.name,
+            figure.name,
+            figure.measure.name()
+        )),
+        (Spread::Moves, None) => Err(format!(
+            "{} is stated to move, and every figure it reads repeats",
+            measurement.name
+        )),
+        _ => Ok(()),
+    }
+}
+
 /// Take a sitting of the measurement `measurement` and file it as its next record, numbered after `filed`, the ones already filed.
 pub fn measurement_sitting(measurement: &str, filed: usize) -> Result<(), String> {
     let root = root();
 
     // Before anything is built: building with the wrong compiler and measuring it afterwards spends the run to produce the wrong record.
-    measurement_named(measurement)?;
+    let named = measurement_named(measurement)?;
     let subject = subject(&root)?;
     let pinned = held(&root)?;
     let platform = capture();
 
     let bench = built(&root)?;
     let mut sittings = Vec::new();
-    for group in 1..=GROUPS {
-        eprintln!(">> {measurement}, group {group} of {GROUPS}");
+    let groups = named.spread.groups();
+    for group in 1..=groups {
+        eprintln!(">> {measurement}, group {group} of {groups}");
         sittings.push(sat(&bench, measurement, &root)?);
     }
+    let figures = grouped(sittings)?;
+    spread_held(named, &figures)?;
 
     let record = Record {
         taken: today(&asked("date", &["-I"], &root)?)?,
         subject,
         platform,
         pinned,
-        figures: grouped(sittings)?,
+        figures,
     };
 
     file(&root, measurement, filed, &record)
