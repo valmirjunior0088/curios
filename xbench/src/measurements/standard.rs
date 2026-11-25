@@ -16,6 +16,9 @@ use {
     std::{
         collections::{BTreeMap, BTreeSet},
         fs,
+        num::NonZero,
+        sync::atomic::{AtomicUsize, Ordering},
+        thread,
         time::Instant,
     },
     xbench::{Measure, read, read_elapsed},
@@ -426,8 +429,66 @@ fn differences(
 /// How many unrelated definitions the replay elaborates ahead of a declaration, one pass each.
 const PADDINGS: [usize; 2] = [0, 1];
 
-/// What each declaration of the standard library elaborates to where it alone is elaborated again: the library as its sources lower it, compiled over the archived unit with every declaration but one offered as kept, so the walk elaborates that one and keeps the others by their traces. The declaration is compared with what the archive holds for it, and so is what it asked; what else the walk elaborated again is counted. And again with unrelated authored definitions elaborated beside it, which nothing it reads distinguishes. A declaration is a function of what it reads exactly when this reports nothing (`documentation/design/compilation/a-declaration-is-a-function-of-what-it-reads.md`). `cargo xbench measure std_replay_census` takes it: for each padding, `beside <padding>/declarations`, and a figure of one for each declaration of `beside <padding>/refused/<declaration>`, `/differing/<declaration>` and `/asked otherwise/<declaration>`, with `/others/<declaration>` the names the walk elaborated again beyond those it was handed; how a declaration differs, or why it is refused, is written to standard error beside them.
+/// What each declaration of the standard library elaborates to where it alone is elaborated again: the library as its sources lower it, compiled over the archived unit with every declaration but one offered as kept, so the walk elaborates that one and keeps the others by their traces. The declaration is compared with what the archive holds for it, and so is what it asked; what else the walk elaborated again is counted. And again with unrelated authored definitions elaborated beside it, which nothing it reads distinguishes. A declaration is a function of what it reads exactly when this reports nothing (`documentation/design/compilation/a-declaration-is-a-function-of-what-it-reads.md`). It is the slowest of the bench's measurements: a sit recompiles the library once for each of its declarations at each padding, minutes on one core, so the declarations are split among a worker a core. `cargo xbench measure std_replay_census` takes it: for each padding, `beside <padding>/declarations`, and a figure of one for each declaration of `beside <padding>/refused/<declaration>`, `/differing/<declaration>` and `/asked otherwise/<declaration>`, with `/others/<declaration>` the names the walk elaborated again beyond those it was handed; how a declaration differs, or why it is refused, is written to standard error beside them.
 pub fn std_replay_census() {
+    // A declaration's replay is elaborated in identities and a state of its own, so a worker a core, each restoring the prelude and lowering the library for itself, takes the next replay none has taken, and their readings are printed in declaration order once every worker has answered.
+    let workers = thread::available_parallelism().map_or(1, NonZero::get);
+    let next = AtomicUsize::new(0);
+    let next = &next;
+    let answers = thread::scope(|scope| {
+        let handles = (0..workers)
+            .map(|_| scope.spawn(move || replays(next)))
+            .collect::<Vec<_>>();
+        handles
+            .into_iter()
+            .map(|handle| handle.join().expect("a worker replays its share"))
+            .collect::<Vec<_>>()
+    });
+    let declarations = answers[0].declarations;
+    let mut replays = answers
+        .into_iter()
+        .flat_map(|share| share.replays)
+        .collect::<Vec<_>>();
+    replays.sort_by_key(|replay| (replay.padding, replay.place));
+
+    for (at, padding) in PADDINGS.into_iter().enumerate() {
+        read(
+            &format!("beside {padding}/declarations"),
+            Measure::Count,
+            None,
+            declarations as u64,
+        );
+        for replay in replays.iter().filter(|replay| replay.padding == at) {
+            for (name, value) in &replay.figures {
+                read(name, Measure::Count, None, *value);
+            }
+            for said in &replay.said {
+                eprintln!("{said}");
+            }
+        }
+    }
+}
+
+/// What one declaration's replay read at one padding.
+struct Replay {
+    /// The padding's place in [`PADDINGS`].
+    pub padding: usize,
+    /// The declaration's place among the library's.
+    pub place: usize,
+    /// Its figures, each a name and a count.
+    pub figures: Vec<(String, u64)>,
+    /// What it says on standard error of how it differs or why it is refused.
+    pub said: Vec<String>,
+}
+
+/// What one worker replayed: the replays it took, and how many declarations the library holds.
+struct Share {
+    pub declarations: usize,
+    pub replays: Vec<Replay>,
+}
+
+/// The replays a worker takes from `next`, the place of the next none has taken among every declaration at every padding, until none is left; a worker that draws the costly declarations leaves the rest to the others, so none waits on it idle.
+fn replays(next: &AtomicUsize) -> Share {
     with_prelude(|prelude| {
         let [sys, std] = prelude else {
             panic!("the prelude has two roots")
@@ -452,98 +513,97 @@ pub fn std_replay_census() {
             .collect::<BTreeMap<_, _>>();
 
         let declarations = declarations(lowered_core);
-        for padding in PADDINGS {
+        let mut replays = Vec::new();
+        loop {
+            let taken = next.fetch_add(1, Ordering::Relaxed);
+            let (at, place) = (taken / declarations.len(), taken % declarations.len());
+            let Some(padding) = PADDINGS.get(at).copied() else {
+                break;
+            };
+            let names = &declarations[place];
             let beside = format!("beside {padding}");
-            read(
-                &format!("{beside}/declarations"),
-                Measure::Count,
-                None,
-                declarations.len() as u64,
-            );
-            for names in &declarations {
-                let first = names
+            let first = names
+                .iter()
+                .filter_map(|name| position.get(name))
+                .min()
+                .copied()
+                .expect("a declaration declares a lowered name");
+            let own = &lowered_core.items[first];
+            let written = own.declared_names()[0];
+            let mut again = names.clone();
+            let reach = lowered_core.reaches(own);
+            again.extend(
+                lowered_core
+                    .items
                     .iter()
-                    .filter_map(|name| position.get(name))
-                    .min()
-                    .copied()
-                    .expect("a declaration declares a lowered name");
-                let own = &lowered_core.items[first];
-                let written = own.declared_names()[0];
-                let mut again = names.clone();
-                let reach = lowered_core.reaches(own);
-                again.extend(
-                    lowered_core
-                        .items
-                        .iter()
-                        .take(first)
-                        .rev()
-                        .filter_map(|item| match item {
-                            Item::Let(definition)
-                                if matches!(definition.kind, DefinitionKind::Authored)
-                                    && !reach.contains(&definition.name) =>
-                            {
-                                Some(definition.name)
-                            }
-                            _ => None,
-                        })
-                        .take(padding),
-                );
+                    .take(first)
+                    .rev()
+                    .filter_map(|item| match item {
+                        Item::Let(definition)
+                            if matches!(definition.kind, DefinitionKind::Authored)
+                                && !reach.contains(&definition.name) =>
+                        {
+                            Some(definition.name)
+                        }
+                        _ => None,
+                    })
+                    .take(padding),
+            );
 
-                let declaration = own.describe();
-                match elaborated_over(predecessors, std, &lowered, &again) {
-                    Err(error) => {
-                        read(
-                            &format!("{beside}/refused/{declaration}"),
-                            Measure::Count,
-                            None,
-                            1,
-                        );
-                        let refusal = error.to_string().replace('\n', " | ");
-                        eprintln!(
-                            "{beside}: {declaration} is refused: {}",
-                            refusal.chars().take(600).collect::<String>()
-                        );
+            let declaration = own.describe();
+            let mut replay = Replay {
+                padding: at,
+                place,
+                figures: Vec::new(),
+                said: Vec::new(),
+            };
+            match elaborated_over(predecessors, std, &lowered, &again) {
+                Err(error) => {
+                    replay
+                        .figures
+                        .push((format!("{beside}/refused/{declaration}"), 1));
+                    let refusal = error.to_string().replace('\n', " | ");
+                    replay.said.push(format!(
+                        "{beside}: {declaration} is refused: {}",
+                        refusal.chars().take(600).collect::<String>()
+                    ));
+                }
+                Ok(replayed) => {
+                    let differences = differences(
+                        (whole, std.traces()),
+                        (&replayed.definitions, &replayed.traces),
+                        names,
+                    );
+                    if !differences.is_empty() {
+                        replay
+                            .figures
+                            .push((format!("{beside}/differing/{declaration}"), 1));
                     }
-                    Ok(replayed) => {
-                        let differences = differences(
-                            (whole, std.traces()),
-                            (&replayed.definitions, &replayed.traces),
-                            names,
-                        );
-                        if !differences.is_empty() {
-                            read(
-                                &format!("{beside}/differing/{declaration}"),
-                                Measure::Count,
-                                None,
-                                1,
-                            );
-                        }
-                        for difference in differences {
-                            eprintln!("{beside}: {difference}");
-                        }
-                        if replayed.traces.of(&written) != std.traces().of(&written) {
-                            read(
-                                &format!("{beside}/asked otherwise/{declaration}"),
-                                Measure::Count,
-                                None,
-                                1,
-                            );
-                        }
-                        // What the walk elaborated again beyond what it was handed: a declaration that asked a part which came out another way.
-                        let others = replayed.made.difference(&again).count();
-                        if others != 0 {
-                            read(
-                                &format!("{beside}/others/{declaration}"),
-                                Measure::Count,
-                                None,
-                                others as u64,
-                            );
-                        }
+                    for difference in differences {
+                        replay.said.push(format!("{beside}: {difference}"));
+                    }
+                    if replayed.traces.of(&written) != std.traces().of(&written) {
+                        replay
+                            .figures
+                            .push((format!("{beside}/asked otherwise/{declaration}"), 1));
+                    }
+                    // What the walk elaborated again beyond what it was handed: a declaration that asked a part which came out another way.
+                    let others = replayed.made.difference(&again).count();
+                    if others != 0 {
+                        replay
+                            .figures
+                            .push((format!("{beside}/others/{declaration}"), others as u64));
                     }
                 }
             }
+            replays.push(replay);
         }
-    });
+
+        Share {
+            declarations: declarations.len(),
+            replays,
+        }
+    })
 }
 
 /// The family-slot probe: what typing a tagged family's reference fields would cost, family by family, over every family the prelude's units declare.
