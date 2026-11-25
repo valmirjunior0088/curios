@@ -23,7 +23,12 @@ fn shown(source: &str, name: &str) -> (String, String) {
         let units = predecessors
             .placed()
             .into_iter()
-            .chain([(unit.core(), unit.places(), unit.mounts(), unit.traces())])
+            .chain([(
+                unit.core(),
+                unit.places(),
+                unit.mounts(),
+                unit.classifications(),
+            )])
             .collect::<Vec<_>>();
         let established = Established::placed(&units);
         let lexicons = predecessors.lexicons();

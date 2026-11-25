@@ -89,8 +89,11 @@ fn elaborated_over(
     lowered: &PreparedText,
     relowered: &BTreeSet<Global>,
 ) -> Result<Recompiled, Error> {
-    let established =
-        Established::placed(&predecessors.placed()).keeping(std.core(), std.places(), std.traces());
+    let established = Established::placed(&predecessors.placed()).keeping(
+        std.core(),
+        std.places(),
+        std.classifications(),
+    );
     let mut context = Context::new(DEFAULT_BUDGET, SYNTAX);
     context.set_imports(lowered.imports().clone());
     context.set_broken(lowered.broken_names());
@@ -1464,8 +1467,18 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
         };
         // A term as a report raised in `owner` prints it, settled where its reader stands and read back as the tree it parses to: `None` where the translation declines it.
         let established = Established::placed(&[
-            (sys.core(), sys.places(), sys.mounts(), sys.traces()),
-            (std.core(), std.places(), std.mounts(), std.traces()),
+            (
+                sys.core(),
+                sys.places(),
+                sys.mounts(),
+                sys.classifications(),
+            ),
+            (
+                std.core(),
+                std.places(),
+                std.mounts(),
+                std.classifications(),
+            ),
         ]);
         let written = |term: &Term, owner: Global| {
             let term = &written_for_reader(&established, SYNTAX, term);

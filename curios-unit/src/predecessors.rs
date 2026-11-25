@@ -4,7 +4,7 @@ use {
     crate::Unit,
     curios_common::Mount,
     curios_core::{Anchors, Certification, Definitions, Lexicon, Places},
-    curios_elab::Traces,
+    curios_elab::Classifications,
     curios_erase::ErasedUnit,
     curios_module::PreparedText,
 };
@@ -52,11 +52,25 @@ impl<'a> Predecessors<'a> {
         self.units.iter().map(|unit| unit.core()).collect()
     }
 
-    /// The elaborated module of each predecessor beside the places its unit keeps for it, the prefixes it claims and the traces its elaboration filed, for `curios-elab`'s `Established`: a scope read by name, with nothing keyed for the compile.
-    pub fn placed(&self) -> Vec<(&'a Definitions, &'a Places, &'a [Mount], &'a Traces)> {
+    /// The elaborated module of each predecessor beside the places its unit keeps for it, the prefixes it claims and what its elaboration concluded of its definitions, for `curios-elab`'s `Established`: a scope read by name, with nothing keyed for the compile.
+    pub fn placed(
+        &self,
+    ) -> Vec<(
+        &'a Definitions,
+        &'a Places,
+        &'a [Mount],
+        &'a Classifications,
+    )> {
         self.units
             .iter()
-            .map(|unit| (unit.core(), unit.places(), unit.mounts(), unit.traces()))
+            .map(|unit| {
+                (
+                    unit.core(),
+                    unit.places(),
+                    unit.mounts(),
+                    unit.classifications(),
+                )
+            })
             .collect()
     }
 

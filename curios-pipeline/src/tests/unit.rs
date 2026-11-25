@@ -3,12 +3,16 @@
 use {
     super::test_support::*,
     curios_common::{Qualifier, fill},
-    curios_core::{Definitions, Global},
+    curios_core::{Definitions, Global, Totality},
     curios_module::{PreparedText, RootSource},
     curios_prelude::with_prelude,
     curios_surface::spell,
     curios_unit::Unit,
-    std::{collections::BTreeSet, rc::Rc},
+    std::{
+        collections::BTreeSet,
+        panic::{AssertUnwindSafe, catch_unwind},
+        rc::Rc,
+    },
 };
 
 /// Two ordinary units mounting one prefix is refused where the registry knows both, naming the prefix.
@@ -339,4 +343,27 @@ fn a_name_exported_along_several_paths_is_listed_the_same_every_time() {
 
         assert_eq!(written, ["/lib/a/x", "/lib/b/x", "/lib/c/x", "/lib/d/x"]);
     }
+}
+
+/// A unit compiled after another restores none of the other's records. What its elaboration reads of an earlier unit's is what was concluded of each definition, which the earlier unit stores with what it is for its successors ([`Unit::classifications`]): so one whose every record is unreadable stands before another as one whose records read does, the later unit's definition total because the one it calls is, where a definition nothing is concluded of passes on a partial verdict.
+#[test]
+fn a_unit_compiled_after_another_restores_none_of_its_records() {
+    let earlier = unit_of("pub let twice(n: /std/Nat) -> /std/Nat = /std/Nat/add(n, n);");
+    let unreadable = restored_with_unreadable_records(&earlier);
+    let totality = |after: &Unit| {
+        unit_after("after", "pub let four: /std/Nat = /lib/twice(2);", &[after])
+            .classifications()
+            .classified(&Global::Authored(Qualifier::from(["after", "four"])))
+            .map(|classified| classified.totality)
+    };
+
+    assert_eq!(totality(&earlier), Some(Totality::Total));
+    assert_eq!(totality(&unreadable), Some(Totality::Total));
+    assert!(
+        catch_unwind(AssertUnwindSafe(|| {
+            unreadable.traces();
+        }))
+        .is_err(),
+        "a record of the unit is read by nothing that asked for one"
+    );
 }

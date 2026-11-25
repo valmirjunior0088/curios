@@ -10,7 +10,7 @@ use {
     curios_cert::{Accepted, Filed},
     curios_common::{Blob, Digest, Mount, Recorded},
     curios_core::{Anchors, Certification, Definitions, ItemRun, Lexicon, Lint, Places},
-    curios_elab::{Candidating, Observed, Readers, Traces},
+    curios_elab::{Candidating, Classifications, Observed, Readers, Traces},
     curios_erase::ErasedUnit,
     curios_module::{PackageRoot, PreparedText},
     std::{borrow::Cow, cell::OnceCell, collections::BTreeSet, rc::Rc},
@@ -63,6 +63,8 @@ struct Produced {
     /// **Of the unit's baseline half, with the text's** ([`PreparedText::baseline_digests`]): nothing compiled after the unit reads it, so it is stored beside what the unit is for its successors, each declaration's trace a blob, and read when a compile over the unit first asks.
     #[archived_with(curios_archive::Skip)]
     traces: Rc<Recorded<Traces>>,
+    /// What elaboration concluded of each of the unit's definitions besides their terms ([`Classifications`]): all that the elaboration of a unit compiled after this one reads of it. Gathered off the traces where the unit is made and stored with the unit, of its successors' half, so a compile after the unit restores none of its declarations' records.
+    classifications: Rc<Classifications>,
     /// Who asked what, of the unit's traces read backwards: what a recompile over the unit finds what an edit could reach by. Made the first time a recompile over the unit asks, or handed over by the recompile that made the unit, and kept beside its places; never stored, being read off the traces.
     #[archived_with(curios_archive::Skip)]
     readers: Rc<OnceCell<Readers>>,
@@ -81,6 +83,7 @@ impl Produced {
             places: Rc::default(),
             lexicon: Rc::default(),
             erased: Rc::new(erased),
+            classifications: Rc::new(traces.classifications()),
             traces: Rc::new(Recorded::held(traces)),
             readers: Rc::default(),
             fixed: false,
@@ -165,6 +168,11 @@ impl Produced {
         self.traces
             .get()
             .unwrap_or_else(|error| panic!("a unit's traces failed to restore: {error}"))
+    }
+
+    /// See [`Unit::classifications`].
+    pub fn classifications(&self) -> &Classifications {
+        &self.classifications
     }
 
     /// See [`Unit::readers`].
@@ -352,6 +360,7 @@ impl Produced {
                     .with_items(found(&forms, find)?)?,
             ),
             traces: Rc::new(Recorded::stored(traces_table, found(&traces, find)?)),
+            classifications: self.classifications,
             readers: Rc::default(),
             core: Rc::new(Rc::unwrap_or_clone(self.core).with_items(found(&elaborated, find)?)?),
             places: Rc::default(),
@@ -506,6 +515,11 @@ impl Unit {
     /// What each of this unit's declarations asked as it elaborated. See the field. Read out of the unit's baseline half now, where the unit was restored and no compile over it has asked before.
     pub fn traces(&self) -> &Traces {
         self.unit.traces()
+    }
+
+    /// What elaboration concluded of each of this unit's definitions besides their terms: what a unit compiled after this one reads of its elaboration, with no record of it restored. See the field.
+    pub fn classifications(&self) -> &Classifications {
+        self.unit.classifications()
     }
 
     /// Who asked what, of this unit's traces. See the field.

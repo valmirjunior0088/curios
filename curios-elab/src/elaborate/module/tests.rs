@@ -285,8 +285,8 @@ fn a_published_proof_is_marked_and_unfolds_to_nothing() {
     assert!(context.value_at(&same, &Universes::default()).is_none());
     assert!(context.declaration_body(&two).is_some());
 
-    let traces = Traces::default();
-    let scope = Established::over(&[(&elaborated, &[], &traces)]);
+    let classifications = Classifications::default();
+    let scope = Established::over(&[(&elaborated, &[], &classifications)]);
     let unfolds = |path| {
         scope
             .definition(&nominal(path))

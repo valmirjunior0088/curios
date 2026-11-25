@@ -141,7 +141,14 @@ pub fn definition_variances(source: &str) -> BTreeMap<String, String> {
         .expect("the fixture lowers");
         let placed = prelude
             .iter()
-            .map(|unit| (unit.core(), unit.places(), unit.mounts(), unit.traces()))
+            .map(|unit| {
+                (
+                    unit.core(),
+                    unit.places(),
+                    unit.mounts(),
+                    unit.classifications(),
+                )
+            })
             .collect::<Vec<_>>();
         let established = Established::placed(&placed);
         let mut context = Context::new(DEFAULT_BUDGET, SYNTAX);

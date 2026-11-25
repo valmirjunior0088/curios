@@ -10,7 +10,7 @@
 
 use {
     super::{Defined, Error, InScope, Question, part_digest},
-    crate::{DefinedGroup, Traces},
+    crate::{Classifications, DefinedGroup},
     curios_common::{Mount, Qualifier},
     curios_core::{
         ConceptDecl, Definitions, Global, InductDecl, Item, Place, Places, RecGroup, RecItem,
@@ -34,8 +34,8 @@ enum Placed<'a> {
 struct Standing<'a> {
     definitions: &'a Definitions,
     places: Placed<'a>,
-    /// What its elaboration concluded of each of its definitions besides their terms ([`crate::Classified`]).
-    traces: &'a Traces,
+    /// What its elaboration concluded of each of its definitions besides their terms ([`Classified`](crate::Classified)).
+    classifications: &'a Classifications,
     /// Which of its items this unit answers for, where it is a baseline ([`Answering`]). `None` for a unit in scope, which answers for every name it holds.
     answering: Option<RefCell<Answering>>,
     /// Whether this unit is other than the one the baseline was compiled after ([`Established::after`]).
@@ -103,7 +103,7 @@ impl<'a> Standing<'a> {
         }
 
         let place = self.places().place(name)?;
-        let classified = self.traces.classified(name);
+        let classified = self.classifications.classified(name);
         let totality = classified.map_or(Totality::Partial, |classified| classified.totality);
         let applications = classified
             .map(|classified| &classified.applications)
@@ -267,15 +267,15 @@ impl<'a> Established<'a> {
         Self::default()
     }
 
-    /// Everything `modules` established, in dependency order, as scope, each beside the prefixes its unit claims and the traces its elaboration filed: each read by places made here, for a module no unit holds.
-    pub fn over(modules: &[(&'a Definitions, &'a [Mount], &'a Traces)]) -> Self {
+    /// Everything `modules` established, in dependency order, as scope, each beside the prefixes its unit claims and what its elaboration concluded of its definitions: each read by places made here, for a module no unit holds.
+    pub fn over(modules: &[(&'a Definitions, &'a [Mount], &'a Classifications)]) -> Self {
         Self {
             units: modules
                 .iter()
-                .map(|(definitions, _, traces)| Standing {
+                .map(|(definitions, _, classifications)| Standing {
                     definitions,
                     places: Placed::Made(Places::of(definitions)),
-                    traces,
+                    classifications,
                     answering: None,
                     moved: false,
                     fixed: false,
@@ -290,15 +290,22 @@ impl<'a> Established<'a> {
         }
     }
 
-    /// Everything `units` established, in dependency order, as scope: each module read by the places its unit keeps for it, beside the prefixes its unit claims and the traces its elaboration filed.
-    pub fn placed(units: &[(&'a Definitions, &'a Places, &'a [Mount], &'a Traces)]) -> Self {
+    /// Everything `units` established, in dependency order, as scope: each module read by the places its unit keeps for it, beside the prefixes its unit claims and what its elaboration concluded of its definitions.
+    pub fn placed(
+        units: &[(
+            &'a Definitions,
+            &'a Places,
+            &'a [Mount],
+            &'a Classifications,
+        )],
+    ) -> Self {
         Self {
             units: units
                 .iter()
-                .map(|(definitions, places, _, traces)| Standing {
+                .map(|(definitions, places, _, classifications)| Standing {
                     definitions,
                     places: Placed::Kept(places),
-                    traces,
+                    classifications,
                     answering: None,
                     moved: false,
                     fixed: false,
@@ -343,17 +350,17 @@ impl<'a> Established<'a> {
         self
     }
 
-    /// This scope with `baseline` above it: the unit being compiled, as an earlier text of it elaborated, with the places and traces its unit keeps, answering for none of its declarations until the walk over the unit says which it answers for (`Established::answer_but`) or keeps one (`Established::keep`). Nothing of it is brought in: a kept declaration is read where the baseline holds it, as a scope's is.
+    /// This scope with `baseline` above it: the unit being compiled, as an earlier text of it elaborated, with the places its unit keeps and what its elaboration concluded of its definitions, answering for none of its declarations until the walk over the unit says which it answers for (`Established::answer_but`) or keeps one (`Established::keep`). Nothing of it is brought in: a kept declaration is read where the baseline holds it, as a scope's is.
     pub fn keeping(
         mut self,
         baseline: &'a Definitions,
         places: &'a Places,
-        traces: &'a Traces,
+        classifications: &'a Classifications,
     ) -> Self {
         self.units.push(Standing {
             definitions: baseline,
             places: Placed::Kept(places),
-            traces,
+            classifications,
             answering: Some(RefCell::new(Answering::Kept(HashSet::new()))),
             moved: false,
             fixed: false,
@@ -425,7 +432,12 @@ impl<'a> Established<'a> {
             return Ok(None);
         };
 
-        part_digest(unit.definitions, unit.places(), unit.traces, question)
+        part_digest(
+            unit.definitions,
+            unit.places(),
+            |name| unit.classifications.classified(name),
+            question,
+        )
     }
 
     /// Refuse a scope two of whose units declare a witness at one concept and one key.

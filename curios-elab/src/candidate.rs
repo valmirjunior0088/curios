@@ -166,9 +166,14 @@ impl<'a> Candidating<'a> {
         }
 
         let read = match self.places.place(subject) {
-            Some(_) => part_digest(self.definitions, self.places, self.traces, question)
-                .ok()
-                .map(|digest| digest.and_then(|digest| bytes_of(&digest))),
+            Some(_) => part_digest(
+                self.definitions,
+                self.places,
+                |name| self.traces.classified(name),
+                question,
+            )
+            .ok()
+            .map(|digest| digest.and_then(|digest| bytes_of(&digest))),
             // What a unit records of a read of another is every read but a fixed unit's.
             None => match self.traces.foreign().digest(question) {
                 Some(digest) => Some(digest.as_deref().and_then(bytes_of)),

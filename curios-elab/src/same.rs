@@ -10,7 +10,7 @@
 mod tests;
 
 use {
-    crate::{Classified, Parts, Question, Traces},
+    crate::{Classified, Parts, Question},
     curios_common::{Qualifier, digest},
     curios_core::{
         Bound, ConceptDecl, Definition, DefinitionKind, Definitions, Global, InductDecl, Item,
@@ -180,13 +180,13 @@ impl Same {
     }
 }
 
-/// The digest of the part of a declaration `question` asks, where `module` holds the declaration at the place `places` keeps for it: what a unit records of a part it read of another unit, and what the part is asked again by, once the unit it was read from is no longer the one in scope. `Ok(None)` where the name declares no such part, which is an answer as any other is; `Err` where the part will not archive.
+/// The digest of the part of a declaration `question` asks, where `module` holds the declaration at the place `places` keeps for it and `classified` answers what elaboration concluded of the definition it names: what a unit records of a part it read of another unit, and what the part is asked again by, once the unit it was read from is no longer the one in scope. `Ok(None)` where the name declares no such part, which is an answer as any other is; `Err` where the part will not archive.
 ///
 /// **Two parts digest alike exactly where [`Same`] calls them one.** A part is consed alone ([`Sharing`]), which leaves one node for each structure under its binders' names and no position on any, then archived and digested, so what `spelled_alike` compares is what the bytes spell; a universe scheme is its inequalities alone ([`UniverseContext`]), so its bytes are what its equality reads. Each part holds what [`Same`] reads of it and nothing else: a signature its kind, a body its signature, and a group's member the group whole.
-pub fn part_digest(
+pub fn part_digest<'c>(
     definitions: &Definitions,
     places: &Places,
-    traces: &Traces,
+    classified: impl FnOnce(&Global) -> Option<&'c Classified>,
     question: &Question,
 ) -> Result<Option<String>, String> {
     let Some((name, place)) = question
@@ -196,7 +196,7 @@ pub fn part_digest(
         return Ok(None);
     };
     let unclassified = Classified::default();
-    let classified = traces.classified(name).unwrap_or(&unclassified);
+    let classified = classified(name).unwrap_or(&unclassified);
 
     item_part_digest(
         &definitions.items[place.item()],

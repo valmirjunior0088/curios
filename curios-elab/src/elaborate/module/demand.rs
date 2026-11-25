@@ -1186,7 +1186,12 @@ impl<'a> Demand<'a> {
                     return None;
                 }
                 match self.held.get(&owner).is_none_or(|held| held.kept) {
-                    true => part_digest(over.baseline, over.places, over.traces, question),
+                    true => part_digest(
+                        over.baseline,
+                        over.places,
+                        |name| over.traces.classified(name),
+                        question,
+                    ),
                     false => {
                         let item = context.carrying(self.survivors.item(subject)?.clone());
                         let place = place_in(&item, subject)?;

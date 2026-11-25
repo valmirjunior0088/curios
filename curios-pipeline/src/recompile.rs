@@ -105,7 +105,11 @@ pub fn compile_lowered_over(
     let established = Established::placed(&predecessors.placed())
         .fixed(&fixed)
         .after(moved)
-        .keeping(baseline.core(), baseline.places(), baseline.traces());
+        .keeping(
+            baseline.core(),
+            baseline.places(),
+            baseline.classifications(),
+        );
     let recompile = Recompile {
         baseline: baseline.core(),
         places: baseline.places(),

@@ -15,7 +15,7 @@ use {
     curios_unit::{Pack, Predecessors, Unit, packed},
     std::{
         cell::{Cell, RefCell},
-        collections::BTreeMap,
+        collections::{BTreeMap, BTreeSet},
         fs,
         rc::Rc,
     },
@@ -646,6 +646,36 @@ pub fn restored(unit: &Unit) -> Unit {
         Pack::read(curios_archive::Bytes::from(packed(&blobs))).expect("a unit's blobs pack");
 
     Unit::restored(stored.index(), |digest| pack.get(digest)).expect("a stored unit restores")
+}
+
+/// `unit` stored and restored as [`restored`] restores one, with every record its elaboration filed unreadable: its bytes are no run of traces, so a compile that restored one stops there.
+pub fn restored_with_unreadable_records(unit: &Unit) -> Unit {
+    let stored = unit.stored().expect("a unit serializes");
+    let blobs = stored.blobs(|_| true).expect("a unit's blobs serialize");
+    let pack =
+        Pack::read(curios_archive::Bytes::from(packed(&blobs))).expect("a unit's blobs pack");
+    let records = unit
+        .traces()
+        .declarations()
+        .map(|(name, held)| {
+            held.digest(Facet::Elaboration, name)
+                .expect("a record is named")
+        })
+        .collect::<BTreeSet<_>>();
+    assert!(!records.is_empty(), "the unit files a record");
+
+    Unit::restored(stored.index(), |digest| {
+        let blob = pack.get(digest)?;
+
+        Some(match records.contains(digest) {
+            true => Blob {
+                bytes: curios_archive::Bytes::from(vec![0xff; 8]),
+                ..blob
+            },
+            false => blob,
+        })
+    })
+    .expect("a stored unit restores")
 }
 
 /// That `incremental` is filed as `whole` is: each with its records completed as a filing completes them ([`complete_records`]), the same index, which names each blob by its digest, and where they are not, which parts.

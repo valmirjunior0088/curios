@@ -196,7 +196,7 @@ pub fn elaboration_paths(src: &str) -> (curios_core::Program, curios_core::Progr
     let full = elaborate_program(src, &nothing);
     let cached = elaborate_program(
         src,
-        &curios_elab::Established::over(&[(&prelude, &mounts, &traces)]),
+        &curios_elab::Established::over(&[(&prelude, &mounts, &traces.classifications())]),
     );
     (full, cached)
 }

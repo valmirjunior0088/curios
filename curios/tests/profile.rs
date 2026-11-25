@@ -56,7 +56,7 @@ fn a_profiled_run_files_a_stream_its_compiler_folds() {
         .unwrap();
     assert!(folded.status.success(), "{folded:?}");
     let summary = String::from_utf8(folded.stdout).unwrap();
-    assert!(summary.contains("compile_entrypoint"), "{summary}");
+    assert!(summary.contains("every span closed"), "{summary}");
     assert!(summary.contains("└─ [trace] "), "{summary}");
 }
 

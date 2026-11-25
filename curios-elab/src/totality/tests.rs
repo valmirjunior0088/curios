@@ -77,7 +77,7 @@ fn a_filed_verdict_is_what_a_later_unit_reads_back() {
     let module = definitions(vec![caller.clone()]);
     let mut traces = Traces::default();
     let read = |traces: &Traces| {
-        Established::over(&[(&module, &[], traces)])
+        Established::over(&[(&module, &[], &traces.classifications())])
             .definition(&name("caller"))
             .expect("the unit declares it")
             .totality
@@ -127,7 +127,8 @@ fn an_unfounded_definition_of_another_unit_unfolds_to_nothing() {
             )),
         );
     }
-    let established = Established::over(&[(&module, &[], &traces)]);
+    let classifications = traces.classifications();
+    let established = Established::over(&[(&module, &[], &classifications)]);
     let body = |path: &str| {
         established
             .definition(&name(path))

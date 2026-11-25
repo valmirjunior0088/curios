@@ -241,6 +241,23 @@ pub struct Vectors {
     pub parameter_field: Option<ParameterField>,
 }
 
+/// What a unit's elaboration concluded of each definition it publishes ([`Classified`]), by the definition's name: all that a unit compiled after it reads of its elaboration.
+///
+/// **Apart from the records that conclude it.** A declaration's record is a recompile's of its own unit, a blob for each, restored where that compile first asks; what a later unit reads is gathered here where the unit is made ([`Traces::classifications`]) and stored with what the unit is for its successors, so a compile after the unit restores no record of it.
+#[derive(Debug, Clone, Default)]
+#[curios_archive::archived]
+pub struct Classifications {
+    #[archived_with(InKeyOrder)]
+    concluded: Sorted<Global, Classified>,
+}
+
+impl Classifications {
+    /// What elaboration concluded of the definition `name` as it published it, where a record of the unit concludes of it.
+    pub fn classified(&self, name: &Global) -> Option<&Classified> {
+        self.concluded.get(name)
+    }
+}
+
 /// What a unit's declarations read of declarations the unit does not hold, another unit's or no one's: each part asked of one, with the digest it had (`part_digest`), none where the name declared no such part.
 ///
 /// **What a read of another unit stands on.** A trace's question holds no answer for a part, the declaration being the one to hold it; of a declaration in the unit that is the baseline's own, and of one in another unit it is this digest. A unit compiled over a baseline asks nothing of a unit that is the one the baseline was compiled after, and of any other asks each part again by what it digests to now.
@@ -383,6 +400,18 @@ impl Traces {
     /// Every declaration's trace, in the order of the names the declarations are written as.
     pub fn each(&self) -> impl Iterator<Item = &Trace<Question, Answered>> {
         self.declarations.iter().map(|(_, trace)| &***trace)
+    }
+
+    /// What the unit's records conclude of each definition, gathered by name: what the unit hands a unit compiled after it ([`Classifications`]).
+    pub fn classifications(&self) -> Classifications {
+        let mut concluded = Sorted::new();
+        for (definition, _) in self.concluding.iter() {
+            if let Some(classified) = self.classified(definition) {
+                concluded.insert(*definition, classified.clone());
+            }
+        }
+
+        Classifications { concluded }
     }
 
     /// What elaboration concluded of the definition `name` as it published it, where a record the unit holds concludes of it.
