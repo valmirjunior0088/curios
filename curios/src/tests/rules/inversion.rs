@@ -327,3 +327,43 @@ fn a_proof_met_against_a_constructor_holding_it_is_reachable() {
         matches!(error, Error::MatrixUncovered { .. })
     });
 }
+
+// An equation the unifier leaves standing, `g(n)` against `g(m) + 1`, keeps a case's type apart from its scrutinee's: in its own arm `h` is `refl` at `Eq()(g(n), g(n))`, the type the certifier binds it at, and it is typed there by the elaborator too, so handed back where the type it was declared at is expected it is refused where it stands. The control hands back a second hypothesis of that type, which the arm re-types by nothing.
+#[test]
+fn a_scrutinee_is_typed_in_its_own_arm_as_its_case_is() {
+    control(
+        r#"
+        use /std/{Nat, Eq};
+
+        let kept(g: (Nat) -> Nat, n: Nat, m: Nat, h: Eq()(g(n), g(m) + 1), k: Eq()(g(n), g(m) + 1)) -> Eq()(g(n), g(m) + 1) =
+            match h | refl() => k end;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("refl() => k", "refl() => h")])
+    .by_elaborator_in("/kept", |error| {
+        matches!(error, Error::TypeMismatch { inferred, .. } if pinned(inferred) == "/std/Eq/Eq(Nat)(g(n), g(n))")
+    });
+}
+
+// The facts read a scrutinee in its own arm at the type it has there, so a bound asked in the arm is proved from a hypothesis that states it, and never from the equation the scrutinee was declared at, a proof the certifier would be handed at another type. The control's second hypothesis states the equation; with it stating nothing, the bound is refused where it is asked.
+#[test]
+fn a_bound_in_an_arm_follows_from_no_equation_its_scrutinee_was_declared_at() {
+    control(
+        r#"
+        use /std/{Nat, Eq, Bool, proved};
+
+        let below(g: (Nat) -> Nat, n: Nat, m: Nat, h: Eq()(g(n), g(m) + 1), k: Eq()(g(n), g(m) + 1)) -> Bool/Holds(g(m) <= g(n)) =
+            match h | refl() => proved() end;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("k: Eq()(g(n), g(m) + 1)", "k: Eq()(n, n)")])
+    .by_elaborator_in("/below", |error| {
+        matches!(error, Error::UndischargedBound { .. })
+    });
+}

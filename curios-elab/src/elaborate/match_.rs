@@ -1177,25 +1177,26 @@ impl NominalSplit {
             .with_frame(|context| {
                 let ix_c = assume_payload(context, payload, labels);
                 open_arm(context, &self.head, &ctor_val)?;
+                // The type the case's value has: the family at the case's targets.
+                let case = Term::induct_type_at(
+                    self.name,
+                    self.universes.clone(),
+                    self.params.clone(),
+                    ix_c.clone(),
+                );
 
                 // The index equations: the most-general solution of `actual indices ~ case targets` over the arm's binders and the outer variables, by the certifier's own function, and recorded as the same frame-scoped refinements. A definite clash means the arm is unreachable; it was written, so it is simply checked as is, with nothing solved, and an error it raises is reported as one in an arm that may be left out. Refinements never justify the typing (the goal at the case does); they are convertibility aids, so the body's occurrences of a solved variable reduce at the arm's indices.
                 let solutions =
                     match solve_case_indices(context, &self.actual_indices, &ix_c, labels)? {
                         Invert::Solved(solutions) => solutions,
                         Invert::Impossible => {
-                            let case = Term::induct_type_at(
-                                self.name,
-                                self.universes.clone(),
-                                self.params.clone(),
-                                ix_c.clone(),
-                            );
                             let scrutinee = Term::induct_type_at(
                                 self.name,
                                 self.universes.clone(),
                                 self.params.clone(),
                                 self.actual_indices.clone(),
                             );
-                            ruled_out = Some(context.rule_out_arm(case, scrutinee));
+                            ruled_out = Some(context.rule_out_arm(case.clone(), scrutinee));
 
                             Vec::new()
                         }
@@ -1218,7 +1219,16 @@ impl NominalSplit {
                     .filter(|(name, _)| labels.contains(name))
                     .cloned()
                     .collect::<Vec<_>>();
+                // The scrutinee, where it is a local, is typed in its own arm as its case is, at the case's targets under the solution, which is the type the certifier binds it at. An index equation the unifier leaves standing keeps that type apart from the one the scrutinee was declared at, so an occurrence typed at the declared one is a term the certifier refuses; what the declared type states is read where the match stands. A family with no index has one type for both, and nothing is assumed.
+                let cased = match self.actual_indices.is_empty() {
+                    true => None,
+                    false => scrutinee_solution(&*context, &self.head, &ctor_val)
+                        .map(|(name, _)| (name, case.substitute(&solutions))),
+                };
                 retype_locals(context, &self.head, &ctor_val, solutions);
+                if let Some((name, type_)) = cased {
+                    context.assume(&name, &type_);
+                }
 
                 body(context, expected).map(|body| (body, held))
             })

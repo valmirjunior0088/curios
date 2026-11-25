@@ -32,7 +32,7 @@ pub fn scrutinee_solution<D: Driver>(
 
 /// The locals one case re-types, each at its specialized type: every local whose type mentions a solved variable, reading through local definitions, at that type with those definitions inlined and `solutions` substituted.
 ///
-/// A solved variable's own entry is left alone. Its occurrences in the arm are read as its solution or refined, so nothing reads it at its stale type.
+/// A solved variable's own entry is left to the caller, since its type in the arm is its solution's, which no substitution of its declared one gives where an index equation is left standing: the certifier binds it there (`bind_solutions`), and the elaborator's arm assumes its scrutinee at its case's.
 ///
 /// `locals` is the scope outermost first, and so is the answer: a caller re-assuming each entry in order leaves a name bound twice innermost at its innermost binding.
 pub fn retyped<D: Driver>(
