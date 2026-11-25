@@ -37,19 +37,10 @@ pub fn convert_intrinsic(
         // The certifier is handed finished terms: operands nothing paired are not going to be.
         Outcome::Unequal | Outcome::Unpaired => Ok(false),
         Outcome::Residual(this, that) => ground(certifier, pairs, &this, &that),
-        Outcome::Congruence(Congruence {
-            this_universes,
-            that_universes,
-            operands,
-        }) => {
-            if !certifier.universes_eq(&this_universes, &that_universes) {
-                return Ok(false);
-            }
-            match operands {
-                Some(operands) => obligations_convert(certifier, pairs, operands),
-                None => Ok(false),
-            }
-        }
+        Outcome::Congruence(Congruence { operands }) => match operands {
+            Some(operands) => obligations_convert(certifier, pairs, operands),
+            None => Ok(false),
+        },
     }
 }
 

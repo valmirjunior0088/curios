@@ -57,14 +57,7 @@ impl Convert {
                 self.enqueue(Term::type_ground(), this, that);
                 Ok(true)
             }
-            Outcome::Congruence(Congruence {
-                this_universes,
-                that_universes,
-                operands,
-            }) => {
-                if !Convert::compare_universes(context, &this_universes, &that_universes)? {
-                    return Ok(false);
-                }
+            Outcome::Congruence(Congruence { operands }) => {
                 let Some(operands) = operands else {
                     return self.unsettled(context, this, that);
                 };

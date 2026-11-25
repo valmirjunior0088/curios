@@ -25,9 +25,9 @@ use {
     curios_common::SyntaxRegistry,
     curios_core::{
         Aligned, Foreign, Intrinsic, Nat, Operand, Probe, Produced, ReduceError, Reducer, Subterm,
-        Term, Universes, Var, Visit, align_comparisons, decide_bool, foreign_operands,
-        int_has_stuck_product, int_normalize, int_same, is_bool_connective, normalize_bool,
-        peel_commutative, peel_comparison, peel_lattice_leaf, peel_monomial, peel_spine, same_atom,
+        Term, Var, Visit, align_comparisons, decide_bool, foreign_operands, int_has_stuck_product,
+        int_normalize, int_same, is_bool_connective, normalize_bool, peel_commutative,
+        peel_comparison, peel_lattice_leaf, peel_monomial, peel_spine, same_atom,
     },
 };
 
@@ -63,11 +63,9 @@ pub enum Outcome {
     Unpaired,
 }
 
-/// A congruence to discharge: the two sides' result instances first, then each operand pair in order.
+/// A congruence to discharge: each operand pair in order.
 pub struct Congruence {
-    pub this_universes: Universes,
-    pub that_universes: Universes,
-    /// `None` where the two sides are not one operation, which is unequal once the instances are compared — they are compared first, since the elaborator's comparison may constrain them.
+    /// `None` where the two sides are not one operation, which is unequal.
     pub operands: Option<Vec<Obligation>>,
 }
 
@@ -194,14 +192,8 @@ fn chain(
     }
 
     // The shapes carry everything that is not a term — which operation, which literal, which successor floor, which foreign row — so comparing them settles the operation's identity in one derived equality. Their result levels are the driver's to compare.
-    let (mut this_shape, this_operands) = decompose(&this);
-    let (mut that_shape, that_operands) = decompose(&that);
-    if let Some(universes) = this_shape.result_universes_mut() {
-        *universes = Universes::default();
-    }
-    if let Some(universes) = that_shape.result_universes_mut() {
-        *universes = Universes::default();
-    }
+    let (this_shape, this_operands) = decompose(&this);
+    let (that_shape, that_operands) = decompose(&that);
     let one_operation = this_shape == that_shape && this_operands.len() == that_operands.len();
 
     let operands = match one_operation {
@@ -233,11 +225,7 @@ fn chain(
         }
     };
 
-    Ok(Pass::Settled(Outcome::Congruence(Congruence {
-        this_universes: this.result_universes().cloned().unwrap_or_default(),
-        that_universes: that.result_universes().cloned().unwrap_or_default(),
-        operands,
-    })))
+    Ok(Pass::Settled(Outcome::Congruence(Congruence { operands })))
 }
 
 /// A pair as steps 1 and 2 leave it.
@@ -395,8 +383,6 @@ pub fn read(
         return Ok(Read::Decided(match operands.is_empty() {
             true => Outcome::Equal,
             false => Outcome::Congruence(Congruence {
-                this_universes: Universes::default(),
-                that_universes: Universes::default(),
                 operands: Some(operands),
             }),
         }));

@@ -1212,16 +1212,6 @@ impl Intrinsic {
         reach
     }
 
-    /// The universe instance carried by an operation whose result names an ordinary polymorphic family; none for every other operation, and no operation's result names one today.
-    pub fn result_universes(&self) -> Option<&Universes> {
-        None
-    }
-
-    /// The instance elaboration fills from the checked result type; later traversals preserve and substitute it like a nominal occurrence's own vector.
-    pub fn result_universes_mut(&mut self) -> Option<&mut Universes> {
-        None
-    }
-
     /// Whether any operand `Term` satisfies `pred` — the `Intrinsic` leg of `Subterm::any_child_term`, layered on the private operand walker.
     pub fn any_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
         let mut found = false;

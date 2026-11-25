@@ -264,7 +264,7 @@
 #                                                                 ^ source.curios.core
 #                                                                  ^^^^^^^^^^^^ source.curios.core variable.other.constant.witness.curios
 #                                                                              ^ source.curios.core punctuation.separator.curios
->/Wit/w(#NatAdd(n, 1), #CellPoll(T, c, {levels = [u], qualities = [Param(0)]}))
+>/Wit/w(#NatAdd(n, 1), #IoSuspend(T, #List(#HandleType, []), #List(#LatchType, []), cancel, rest))
 #^ source.curios.core punctuation.separator.path.curios
 # ^^^ source.curios.core entity.name.namespace.curios
 #    ^ source.curios.core punctuation.separator.path.curios
@@ -279,37 +279,37 @@
 #                   ^ source.curios.core punctuation.bracket.curios
 #                    ^ source.curios.core punctuation.separator.curios
 #                     ^ source.curios.core
-#                      ^^^^^^^^^ source.curios.core support.function.builtin.curios
-#                               ^ source.curios.core punctuation.bracket.curios
-#                                ^ source.curios.core entity.name.type.curios
-#                                 ^ source.curios.core punctuation.separator.curios
-#                                  ^ source.curios.core
-#                                   ^ source.curios.core variable.other.curios
-#                                    ^ source.curios.core punctuation.separator.curios
-#                                     ^ source.curios.core
-#                                      ^ source.curios.core punctuation.bracket.curios
-#                                       ^^^^^^ source.curios.core variable.other.curios
-#                                             ^ source.curios.core
-#                                              ^ source.curios.core keyword.operator.assignment.curios
-#                                               ^ source.curios.core
-#                                                ^ source.curios.core punctuation.bracket.curios
-#                                                 ^ source.curios.core variable.other.curios
-#                                                  ^ source.curios.core punctuation.bracket.curios
-#                                                   ^ source.curios.core punctuation.separator.curios
-#                                                    ^ source.curios.core
-#                                                     ^^^^^^^^^ source.curios.core variable.other.curios
-#                                                              ^ source.curios.core
-#                                                               ^ source.curios.core keyword.operator.assignment.curios
-#                                                                ^ source.curios.core
+#                      ^^^^^^^^^^ source.curios.core support.function.builtin.curios
+#                                ^ source.curios.core punctuation.bracket.curios
+#                                 ^ source.curios.core entity.name.type.curios
+#                                  ^ source.curios.core punctuation.separator.curios
+#                                   ^ source.curios.core
+#                                    ^^^^^ source.curios.core support.function.builtin.curios
+#                                         ^ source.curios.core punctuation.bracket.curios
+#                                          ^^^^^^^^^^^ source.curios.core support.function.builtin.curios
+#                                                     ^ source.curios.core punctuation.separator.curios
+#                                                      ^ source.curios.core
+#                                                       ^ source.curios.core punctuation.bracket.curios
+#                                                        ^ source.curios.core punctuation.bracket.curios
+#                                                         ^ source.curios.core punctuation.bracket.curios
+#                                                          ^ source.curios.core punctuation.separator.curios
+#                                                           ^ source.curios.core
+#                                                            ^^^^^ source.curios.core support.function.builtin.curios
 #                                                                 ^ source.curios.core punctuation.bracket.curios
-#                                                                  ^^^^^ source.curios.core entity.name.type.curios
-#                                                                       ^ source.curios.core punctuation.bracket.curios
-#                                                                        ^ source.curios.core constant.numeric.decimal.curios
-#                                                                         ^ source.curios.core punctuation.bracket.curios
-#                                                                          ^ source.curios.core punctuation.bracket.curios
-#                                                                           ^ source.curios.core punctuation.bracket.curios
-#                                                                            ^ source.curios.core punctuation.bracket.curios
-#                                                                             ^ source.curios.core punctuation.bracket.curios
+#                                                                  ^^^^^^^^^^ source.curios.core support.function.builtin.curios
+#                                                                            ^ source.curios.core punctuation.separator.curios
+#                                                                             ^ source.curios.core
+#                                                                              ^ source.curios.core punctuation.bracket.curios
+#                                                                               ^ source.curios.core punctuation.bracket.curios
+#                                                                                ^ source.curios.core punctuation.bracket.curios
+#                                                                                 ^ source.curios.core punctuation.separator.curios
+#                                                                                  ^ source.curios.core
+#                                                                                   ^^^^^^ source.curios.core variable.other.curios
+#                                                                                         ^ source.curios.core punctuation.separator.curios
+#                                                                                          ^ source.curios.core
+#                                                                                           ^^^^ source.curios.core variable.other.curios
+#                                                                                               ^ source.curios.core punctuation.bracket.curios
+#                                                                                                ^ source.curios.core punctuation.bracket.curios
 >: Prop
 #^ source.curios.core keyword.operator.assignment.curios
 # ^ source.curios.core

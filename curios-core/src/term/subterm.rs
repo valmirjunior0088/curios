@@ -8,7 +8,7 @@ use {
         Apply, Argument, Bound, Carrier, Cases, Foreign, Free, Func, FuncType, Global, InductType,
         Instance, Intrinsic, Let, LetBinding, Level, Match, Mention, Metavar, Method, Nat, Proj,
         Quality, Rec, RecGroup, Sort, Struct, StructType, Term, Transient, Tuple, TupleType,
-        UniverseMetaId, Universes, Var, Variant, Visit,
+        UniverseMetaId, Var, Variant, Visit,
     },
     curios_common::SyntaxRegistry,
     curios_num::{Floating, Integer},
@@ -130,9 +130,6 @@ impl Subterm {
         let mut level_matches = |level: &Level| level.metas().any(&mut *pred);
         match self {
             Subterm::Sort(Sort { level, .. }) => level_matches(level),
-            Subterm::Intrinsic(intrinsic) => intrinsic
-                .result_universes()
-                .is_some_and(|universes| universes.levels.iter().any(level_matches)),
             Subterm::Instance(Instance { universes, .. }) => {
                 universes.levels.iter().any(&mut level_matches)
             }
@@ -538,12 +535,6 @@ impl Subterm {
             Subterm::Sort(Sort { quality, level }) => {
                 level_has_meta(level) || matches!(quality, Quality::Meta(_))
             }
-            Subterm::Intrinsic(intrinsic) => {
-                intrinsic
-                    .result_universes()
-                    .is_some_and(Universes::has_meta)
-                    || self.any_child_term(&mut |term| term.has_universe_meta())
-            }
             Subterm::Instance(Instance { universes, .. })
             | Subterm::InductType(InductType { universes, .. })
             | Subterm::Variant(Variant { universes, .. })
@@ -561,12 +552,6 @@ impl Subterm {
             // An open quality is universe data as a level is: a walk that instantiates or solves one visits the node.
             Subterm::Sort(Sort { quality, level }) => {
                 level != &Level::zero() || !quality.is_ground()
-            }
-            Subterm::Intrinsic(intrinsic) => {
-                intrinsic
-                    .result_universes()
-                    .is_some_and(|universes| !universes.is_empty())
-                    || self.any_child_term(&mut |term| term.has_universe_data())
             }
             Subterm::Instance(Instance { universes, .. }) => !universes.is_empty(),
             Subterm::InductType(InductType { universes, .. })

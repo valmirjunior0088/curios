@@ -676,17 +676,6 @@ impl<D: Driver> Walk<'_, D> {
             // A metavariable's solution may mention any level.
             Subterm::Metavar(_) => self.marked.every = true,
 
-            Subterm::Intrinsic(intrinsic) => {
-                for level in intrinsic
-                    .result_universes()
-                    .into_iter()
-                    .flat_map(|universes| &universes.levels)
-                {
-                    self.level(level);
-                }
-                self.children(&term);
-            }
-
             // A `match` the reduction left stuck, under no binder this walk has not opened, is read as conversion compares two of it: its head, goal, stated instance and a list's element type as written, and each arm opened against fresh binders and forced, a mention an arm's reduction removes being no mention.
             Subterm::Match(matched) if term.reach() == 0 => {
                 let opened = opened(self.driver, matched);
@@ -706,6 +695,7 @@ impl<D: Driver> Walk<'_, D> {
             | Subterm::Proj(_)
             | Subterm::Let(_)
             | Subterm::Foreign(_)
+            | Subterm::Intrinsic(_)
             | Subterm::Transient(_) => self.children(&term),
         }
 

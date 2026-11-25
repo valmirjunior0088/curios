@@ -3,7 +3,7 @@ A decorator above the node it decorates, and an intrinsic over its operands
 ================================================================================
 
 #{node = Variant}
-/Wit/w(#NatAdd(n, 1), #CellPoll(T, c, {levels = [u], qualities = [Param(0)]}))
+/Wit/w(#NatAdd(n, 1), #IoSuspend(T, #List(#HandleType, []), #List(#LatchType, []), cancel, rest))
 
 --------------------------------------------------------------------------------
 
@@ -37,24 +37,27 @@ A decorator above the node it decorates, and an intrinsic over its operands
                   (path
                     (identifier)))
                 (argument
+                  (call
+                    (intrinsic)
+                    (arguments
+                      (argument
+                        (intrinsic))
+                      (argument
+                        (list_literal)))))
+                (argument
+                  (call
+                    (intrinsic)
+                    (arguments
+                      (argument
+                        (intrinsic))
+                      (argument
+                        (list_literal)))))
+                (argument
                   (path
                     (identifier)))
                 (argument
-                  (decorator_struct
-                    (decorator_field
-                      (identifier)
-                      (list_literal
-                        (path
-                          (identifier))))
-                    (decorator_field
-                      (identifier)
-                      (list_literal
-                        (call
-                          (path
-                            (identifier))
-                          (arguments
-                            (argument
-                              (number))))))))))))))))
+                  (path
+                    (identifier)))))))))))
 
 ================================================================================
 Declarations by their absolute names, a group joined by `and`, and the entry's type

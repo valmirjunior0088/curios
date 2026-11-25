@@ -37,7 +37,7 @@ and /g : #NatType = /f(0);
 let /p : #{level = u} Type = (#{node = Name} /f)(#{node = NumLit} 2);
 test /held = 1;
 let /m/witness~/std/ops/Add(Nat)#1 : (use w: /C()) -> #BoolType = /m/witness~3;
-/Wit/w(#NatAdd(n, 1), #CellPoll(T, c, {levels = [u], qualities = [Param(0)]}), (#BoolType)(x), #{a = (x) => x} (y + 1))
+/Wit/w(#NatAdd(n, 1), #IoSuspend(T, #List(#HandleType, []), #List(#LatchType, []), cancel, rest), (#BoolType)(x), #{a = (x) => x} (y + 1))
 : Prop
 ";
 

@@ -57,7 +57,7 @@ fn synth_intrinsic(
     let mut done: Vec<Term> = Vec::new();
 
     loop {
-        let mut current = with_elaborated(intrinsic, done.clone());
+        let current = with_elaborated(intrinsic, done.clone());
         let signature = current.signature(&context.syntax());
         let operands = current.operands();
 
@@ -73,16 +73,6 @@ fn synth_intrinsic(
                 Produced::Fixed(type_) => check_is_sort(context, &type_)?.0,
                 Produced::Sort => sort_term(context, &Term::intrinsic(current.clone()))?,
             };
-
-            if let Some(universes) = current.result_universes_mut() {
-                let Subterm::Intrinsic(Intrinsic::IoType(result)) = &*type_ else {
-                    unreachable!("a coordination result is an Io description");
-                };
-                let Subterm::InductType(result) = &**result else {
-                    unreachable!("a coordination outcome is a nominal type");
-                };
-                *universes = result.universes.clone();
-            }
 
             return Ok((current, type_));
         };

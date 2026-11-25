@@ -19,5 +19,5 @@ let /lemma : (#{written = 0} P: Prop, #{proof = true} h: P) -> P =
         k;
 test /held = 1;
 let /m/witness~/std/ops/Add(Nat)#1 : (use w: /C()) -> #BoolType = /m/witness~3;
-/Wit/w(#NatAdd(n, 1), #CellPoll(T, c, {levels = [u], qualities = [Param(0)]}))
+/Wit/w(#NatAdd(n, 1), #IoSuspend(T, #List(#HandleType, []), #List(#LatchType, []), cancel, rest))
 : Prop
