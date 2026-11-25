@@ -16,6 +16,7 @@ use {
     curios_pipeline::{Stage, compile_with_prelude},
     curios_surface::Entrypoint,
     std::collections::{BTreeMap, BTreeSet},
+    xbench::{Unit, read},
 };
 
 const CORPUS: [(&str, &str); 14] = [
@@ -878,60 +879,25 @@ struct Survey {
     mixed_returns: BTreeMap<String, (BTreeSet<ReturnShape>, bool)>,
 }
 
-/// The census over one program, printed one region per line.
+/// The census over one program, its tuple sites, slice sites and regions read as `<program>/tuple sites`, `/slice sites` and `/regions`.
 fn survey(label: &str, source: &str) -> Survey {
     let module = cps_optm_module(source);
     let census = Census::of(&module);
     let regions = census.regions();
-    println!(
-        "== {label}: {tuples} tuple sites, {slices} slice sites, {count} regions",
-        tuples = census.tuple_sites.len(),
-        slices = census.slice_sites.len(),
-        count = regions.len(),
-    );
-    for region in &regions {
-        let tier = if region.slice_sites.is_empty() {
-            "tuple"
-        } else {
-            "rope"
-        };
-        println!(
-            "  [{bucket}/{flow}] {tier}{variant} arity {arities:?}{roster}: {ctors} ctors, {params} params, classes {classes:?}, owners {owners:?}{consumers}{mixed}",
-            bucket = region.bucket(),
-            flow = region.flow(),
-            variant = if region.variant() { " variant" } else { "" },
-            arities = region.arities,
-            roster = if region.variant() {
-                format!(
-                    " width {} tags {:?}{}",
-                    region.width(),
-                    region.tags,
-                    match region.untagged {
-                        0 => String::new(),
-                        n => format!(" +{n} untagged"),
-                    }
-                )
-            } else {
-                String::new()
-            },
-            ctors = region.tuple_sites.len() + region.slice_sites.len(),
-            params = region.params.len(),
-            classes = region.classes,
-            owners = region.owners,
-            consumers = if region.rope_consumers.is_empty() {
-                String::new()
-            } else {
-                format!(", rope consumers {:?}", region.rope_consumers)
-            },
-            mixed = if region.mixed.is_empty() {
-                String::new()
-            } else {
-                format!(", mixed {:?}", region.mixed)
-            },
+    for (figure, count) in [
+        ("tuple sites", census.tuple_sites.len()),
+        ("slice sites", census.slice_sites.len()),
+        ("regions", regions.len()),
+    ] {
+        read(
+            &format!("{label}/{figure}"),
+            Unit::Count,
+            None,
+            count as u64,
         );
     }
 
-    // Escapement is reported beside the shapes because it is the *other* reason the return protocol declines a component, and a mixed-shape component that also escapes is not evidence for a variant-width mechanism.
+    // Escapement is kept beside the shapes because it is the *other* reason the return protocol declines a component, and a mixed-shape component that also escapes is not evidence for a variant-width mechanism.
     let mixed_returns = census
         .return_shapes()
         .into_iter()
@@ -941,12 +907,6 @@ fn survey(label: &str, source: &str) -> Survey {
             (census.owner_name(fun), (shapes, escapes))
         })
         .collect::<BTreeMap<_, _>>();
-    for (owner, (shapes, escapes)) in &mixed_returns {
-        println!(
-            "  [return] {owner} hands back {shapes:?}{}",
-            if *escapes { " (escapes)" } else { "" }
-        );
-    }
 
     Survey {
         regions,
@@ -954,11 +914,7 @@ fn survey(label: &str, source: &str) -> Survey {
     }
 }
 
-/// The corpus survey. Run explicitly:
-///
-/// ```sh
-/// cargo test --package curios -- codegen::census::aggregate_flow_census --ignored --nocapture
-/// ```
+/// The corpus survey, which `cargo xbench measure aggregate_flow_census` takes: each program's `<program>/tuple sites`, `/slice sites` and `/regions` ([`survey`]); over the corpus, `buckets/<bucket>` the regions in each bucket, `variant regions`, `variant flows/<flow>`, `variant shapes/roster <size> width <width>`, `never rest/<population>`, and `tag-led constructions` with `tag-led constructions/never read back`; and each set's members as figures of one, `needs-workers owners/<owner>`, `reachable owners outside the library/<owner>`, `variant owners/<flow>/<owner>`, and `returns/<owner>/<shape>` for each shape a function's returns take where they take more than one, with `returns/<owner>/escapes` where it escapes.
 ///
 /// # What it last printed
 ///
@@ -968,7 +924,7 @@ fn survey(label: &str, source: &str) -> Survey {
 ///
 /// The class merge is degenerate, which is why no width budget is selected here: `curios-emit` types every tuple field `(ref null any)` and a row is padded to one width, so the class-merged width is the plain maximum arity, and `PARAM_SPLIT_GROWTH_LIMIT`'s 16 clears every candidate the corpus holds.
 #[test]
-#[ignore = "measurement, counted: surveys the corpus rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn aggregate_flow_census() {
     let mut buckets = BTreeMap::<&'static str, usize>::new();
     let mut worker_owners = BTreeSet::new();
@@ -1030,42 +986,84 @@ fn aggregate_flow_census() {
         }
     }
 
-    println!("== aggregate");
-    println!("  buckets: {buckets:?}");
-    println!("  needs-workers owners: {worker_owners:?}");
-    println!("  reachable-region owners outside /std: {reachable_outside:?}");
-    println!("== variant-width");
-    println!("  variant regions: {variants}");
-    println!("  by flow class: {variant_flows:?}");
-    println!("  by (roster size, class-merged width): {variant_shapes:?}");
-    println!(
-        "  known-call owners: {:?}",
-        variant_owners
-            .get("known-call")
-            .cloned()
-            .unwrap_or_default(),
-    );
-    println!(
-        "  continuation-only owners: {:?}",
-        variant_owners
-            .get("continuation-only")
-            .cloned()
-            .unwrap_or_default(),
-    );
-    println!(
-        "  return owners: {:?}",
-        variant_owners.get("return").cloned().unwrap_or_default(),
-    );
-    println!("  populations that never rest (uniform-width gate): {restless:?}");
-    println!(
-        "  tag-led constructions: {tagged_constructions}, of them never read back: {unread_tags}"
-    );
-    println!("  variant-width return components: {}", mixed_returns.len());
-    for (owner, (shapes, escapes)) in &mixed_returns {
-        println!(
-            "    {owner}: {shapes:?}{}",
-            if *escapes { " (escapes)" } else { "" }
+    for (bucket, regions) in &buckets {
+        read(
+            &format!("buckets/{bucket}"),
+            Unit::Count,
+            None,
+            *regions as u64,
         );
+    }
+    for owner in &worker_owners {
+        read(
+            &format!("needs-workers owners/{owner}"),
+            Unit::Count,
+            None,
+            1,
+        );
+    }
+    for owner in &reachable_outside {
+        read(
+            &format!("reachable owners outside the library/{owner}"),
+            Unit::Count,
+            None,
+            1,
+        );
+    }
+    read("variant regions", Unit::Count, None, variants as u64);
+    for (flow, regions) in &variant_flows {
+        read(
+            &format!("variant flows/{flow}"),
+            Unit::Count,
+            None,
+            *regions as u64,
+        );
+    }
+    for ((roster, width), regions) in &variant_shapes {
+        read(
+            &format!("variant shapes/roster {roster} width {width}"),
+            Unit::Count,
+            None,
+            *regions as u64,
+        );
+    }
+    for (flow, owners) in &variant_owners {
+        for owner in owners {
+            read(
+                &format!("variant owners/{flow}/{owner}"),
+                Unit::Count,
+                None,
+                1,
+            );
+        }
+    }
+    for (population, regions) in &restless {
+        read(
+            &format!("never rest/{population}"),
+            Unit::Count,
+            None,
+            *regions as u64,
+        );
+    }
+    read(
+        "tag-led constructions",
+        Unit::Count,
+        None,
+        tagged_constructions as u64,
+    );
+    read(
+        "tag-led constructions/never read back",
+        Unit::Count,
+        None,
+        unread_tags as u64,
+    );
+    for (owner, (shapes, escapes)) in &mixed_returns {
+        for shape in shapes {
+            read(&format!("returns/{owner}/{shape:?}"), Unit::Count, None, 1);
+        }
+        if *escapes {
+            read(&format!("returns/{owner}/escapes"), Unit::Count, None, 1);
+        }
     }
 }
 
@@ -1132,6 +1130,29 @@ struct Rebirth {
     linear_extends: usize,
     /// The functions that carry pairs, for locating concentrations.
     owners: BTreeSet<String>,
+}
+
+impl Rebirth {
+    /// Read the tally as the figures of `label`: `<label>/tuple sites`, `/constructed-width pairs`, `/projected-width pairs`, `/row sites`, `/same-row pairs`, `/map spine pairs`, `/extends` and `/linear extends`.
+    fn read(&self, label: &str) {
+        for (figure, count) in [
+            ("tuple sites", self.tuple_sites),
+            ("constructed-width pairs", self.constructed_pairs),
+            ("projected-width pairs", self.projected_pairs),
+            ("row sites", self.row_sites),
+            ("same-row pairs", self.row_pairs),
+            ("map spine pairs", self.spine_pairs),
+            ("extends", self.extends),
+            ("linear extends", self.linear_extends),
+        ] {
+            read(
+                &format!("{label}/{figure}"),
+                Unit::Count,
+                None,
+                count as u64,
+            );
+        }
+    }
 }
 
 /// A value whose every recorded use takes it apart — projection or scrutinee — inside one function: the death half of a pair, with its width known exactly when it is itself a visible construction and by its widest projection otherwise.
@@ -1306,11 +1327,7 @@ let entry() -> /std/Io({}) =
 entry()
 "#;
 
-/// The death-birth census. Run explicitly:
-///
-/// ```sh
-/// cargo test --package curios -- codegen::census::death_birth_census --ignored --nocapture
-/// ```
+/// The death-birth census, which `cargo xbench measure death_birth_census` takes: each program's tally ([`Rebirth::read`]) under its label, the corpus's under `corpus`, and `pair owners/<owner>` a figure of one for each function that carries a pair.
 ///
 /// # What it last printed
 ///
@@ -1326,7 +1343,7 @@ entry()
 ///
 /// The population is real and pervasive — 508 of 2130 row sites stand beside a dying value of their row and 359 of 843 tuple sites beside one of their width, the TOML driver holding most of both. Among tuples it is *entirely* the cross-frame shape: zero constructed-width pairs means no dying value pairs with a construction from its own function — every death arrives as a parameter taken apart where the matching birth happens, which is exactly a tail-recursive rebuild loop, and which any reuse mechanism keyed to intra-function allocation sites would miss completely. None of it stands under `/std/Map`: `Node/insert` hands back the node it was given where the new key parts above it, so that node has a use that takes nothing apart and is no death here. And 331 of 383 rope extends are linearly threaded — the base's only use is the extend that consumes it.
 #[test]
-#[ignore = "measurement, counted: surveys the corpus rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn death_birth_census() {
     let mut owners = BTreeSet::new();
     let mut totals = Rebirth::default();
@@ -1339,18 +1356,7 @@ fn death_birth_census() {
         let module = cps_optm_module(source);
         let census = Census::of(&module);
         let tally = rebirth(&census);
-
-        println!(
-            "  {label}: {sites} tuple sites, {constructed} constructed-width pairs, {projected} projected-width pairs; {rows} row sites, {row_pairs} same-row pairs; {spines} under /std/Map; {linear}/{extends} extends linear",
-            sites = tally.tuple_sites,
-            constructed = tally.constructed_pairs,
-            projected = tally.projected_pairs,
-            rows = tally.row_sites,
-            row_pairs = tally.row_pairs,
-            spines = tally.spine_pairs,
-            linear = tally.linear_extends,
-            extends = tally.extends,
-        );
+        tally.read(label);
 
         totals.tuple_sites += tally.tuple_sites;
         totals.constructed_pairs += tally.constructed_pairs;
@@ -1363,18 +1369,10 @@ fn death_birth_census() {
         owners.extend(tally.owners);
     }
 
-    println!(
-        "== death-birth totals: {sites} tuple sites, {constructed} constructed-width pairs, {projected} projected-width pairs; {rows} row sites, {row_pairs} same-row pairs; {spines} under /std/Map; {linear}/{extends} extends linear",
-        sites = totals.tuple_sites,
-        constructed = totals.constructed_pairs,
-        projected = totals.projected_pairs,
-        rows = totals.row_sites,
-        row_pairs = totals.row_pairs,
-        spines = totals.spine_pairs,
-        linear = totals.linear_extends,
-        extends = totals.extends,
-    );
-    println!("== pair owners: {owners:?}");
+    totals.read("corpus");
+    for owner in &owners {
+        read(&format!("pair owners/{owner}"), Unit::Count, None, 1);
+    }
 }
 
 /// The classifier pinned on the canonical pair, so the census above stays a measurement: a cons rebuilt from a predecessor dying in the same function pairs at its row, and a program whose constructions never see a dying same-layout value reports none.

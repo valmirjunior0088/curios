@@ -1,14 +1,6 @@
-//! The `spines` insert slope, the end-to-end instrument behind `documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md`, kept in the `stored_prelude_measurements` pattern — the command and what it last printed, beside the code so a number cannot drift from the thing that would check it.
+//! What a `/std/Map` insert costs: the `spines` insert slope, the end-to-end instrument behind `documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md`, and the share of it an insert's key encodings take.
 
-use {
-    crate::test_support::*,
-    curios_elab::DEFAULT_BUDGET,
-    curios_module::RootSource,
-    curios_native::{Compiled, ForeignBindings, test_support::*},
-    curios_pipeline::compile_with_prelude,
-    curios_surface::Entrypoint,
-    std::time::Instant,
-};
+use super::test_support::*;
 
 /// The cross-language workload, read from the corpus so the probe measures the program the results files time.
 const SPINES: &str = include_str!(concat!(
@@ -16,55 +8,11 @@ const SPINES: &str = include_str!(concat!(
     "/../programs/spines/spines.crs"
 ));
 
-pub fn compiled_of(source: &str) -> Compiled {
-    let entrypoint = source
-        .parse::<Entrypoint>()
-        .map_err(|error| error.format())
-        .expect("the workload parses");
-    let (module, foreigns) =
-        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
-            .expect("the workload compiles");
-
-    to_compiled(&module, foreigns).expect("the workload compiles")
-}
-
-/// One run, its size handed as the program's one argument: milliseconds around it — instantiate, and the whole call — and what the program printed.
-pub fn run(compiled: &Compiled, n: u64) -> (f64, Vec<u8>) {
-    let (host, io) = MockHost::builder()
-        .args(["program".to_string(), n.to_string()])
-        .build();
-    let start = Instant::now();
-    let code = compiled
-        .run(host, ForeignBindings::empty())
-        .expect("the workload runs");
-    let elapsed = start.elapsed().as_secs_f64() * 1000.0;
-    assert_eq!(code, 0, "the workload exits cleanly");
-
-    (elapsed, io.output())
-}
-
-/// Best of five: a timing floor is what the slope subtracts.
-pub fn timed(compiled: &Compiled, n: u64) -> f64 {
-    (0..5)
-        .map(|_| run(compiled, n).0)
-        .fold(f64::INFINITY, f64::min)
-}
-
 /// Nanoseconds per `/std/Map` insert, as the slope of `spines` between two Ns so deserialization, instantiation, and the workload's fixed phases cancel.
-///
-/// # Why it is in-tree
-///
-/// A figure whose probe was thrown away decays into a claim about history — the `stored_prelude_measurements` lesson — so the probe that retakes this one is kept here.
 ///
 /// # How to read it
 ///
-/// Numbers are only comparable to the recorded ones in `--release` — a debug build measures a different program:
-///
-/// ```sh
-/// cargo test --release --package curios --lib -- --ignored --nocapture map_wall_spines_slope
-/// ```
-///
-/// The slope isolates the marginal insert between N=25 000 and N=75 000 — deeper-than-average descents plus the replace churn of returning keys — so it reads *steeper* than the harness's total-over-N average and is not comparable to that table. It is one fixed method compared against itself across steps, not a decomposition. The anchor `spines(8) = 28` fails the probe before any figure is read if the workload mistranslates.
+/// `cargo xbench measure spines_insert_slope` takes it: `spines at 25000` and `spines at 75000`, each run's time, the two turned round-robin, and the slope the difference of their medians over the 50 000 inserts between them. The slope isolates the marginal insert between N=25 000 and N=75 000 — deeper-than-average descents plus the replace churn of returning keys — so it reads *steeper* than the harness's total-over-N average and is not comparable to that table. It is one fixed method compared against itself across steps, not a decomposition. The anchor `spines(8) = 28` fails the probe before any figure is read if the workload mistranslates.
 ///
 /// # What it last printed
 ///
@@ -77,21 +25,17 @@ pub fn timed(compiled: &Compiled, n: u64) -> f64 {
 /// - **The trie forks sixteen ways.** A branch reads its twig by the key's digit and the descent writes each level's twig back in place where nothing else holds the list, so a level costs a read and a write of one slot and a key's five levels replace seventeen ([`Map` is a trie forking sixteen ways](../../../../curios-prelude-build/README.md#map-is-a-trie-forking-sixteen-ways-and-its-shape-is-its-api)).
 /// - **The map walks once.** `Node/insert` and `Node/remove` descend once and decide on the way back up.
 #[test]
-#[ignore = "measurement, timed: reports timings rather than asserting"]
-fn map_wall_spines_slope() {
+#[ignore = "measurement: taken by cargo xbench measure"]
+fn spines_insert_slope() {
     let compiled = compiled_of(SPINES);
 
     // The documented cross-language anchor, so a mistranslation fails before any figure is read.
     let (_, output) = run(&compiled, 8);
     assert_eq!(output, b"28\n", "spines(8) anchor");
 
-    println!("== map wall: spines insert slope");
-
-    let (n1, n2) = (25_000u64, 75_000u64);
-    let (t1, t2) = (timed(&compiled, n1), timed(&compiled, n2));
-    println!(
-        "  N={n1}: {t1:.1} ms, N={n2}: {t2:.1} ms, slope {:.0} ns/insert",
-        (t2 - t1) * 1_000_000.0 / (n2 - n1) as f64,
+    turn_runs(
+        7,
+        &[("spines", &compiled, 25_000), ("spines", &compiled, 75_000)],
     );
 }
 
@@ -156,17 +100,13 @@ entry()
 
 /// The key's share of the insert: what the two encodings an insert builds cost at `spines`' key magnitudes, isolated from the map. Sound as a pair of scalar loops because the collector's share of this workload measured nil (`spines_collection_decomposition`) — the live-set confound that would invalidate a whole-process ablation has no collections left to misattribute.
 ///
-/// # How to run it
+/// # How to read it
 ///
-/// ```sh
-/// cargo test --release --package curios --lib -- --ignored --nocapture map_wall_key_share
-/// ```
-///
-/// The control folds a constant where the probe folds the lengths of `Hash/hash` of this step's key and of the last's, so the delta is two encodings and two immediate `len`s — read it as a slight upper bound on the key class. An insert into a `Map(Nat, V)` builds those two, the map holding its keys and deriving their encodings where it compares them, so the share arithmetic is direct against `map_wall_spines_slope`'s figure read in the same sitting.
+/// `cargo xbench measure map_insert_key_share` takes it: `encoded` and `control`, each at 25 000 and 75 000 iterations, the four runs turned round-robin, each slope the difference of its two medians over the 50 000 iterations between them. The control folds a constant where the probe folds the lengths of `Hash/hash` of this step's key and of the last's, so the delta is two encodings and two immediate `len`s — read it as a slight upper bound on the key class. An insert into a `Map(Nat, V)` builds those two, the map holding its keys and deriving their encodings where it compares them, so the share arithmetic is direct against `spines_insert_slope`'s figure read in the same sitting.
 ///
 /// # What it last printed
 ///
-/// Taken at `5bccb9ebd`, release, x86-64 Linux, seven readings in the sitting `map_wall_spines_slope`'s were taken in, alternating with its, the first of which printed:
+/// Taken at `5bccb9ebd`, release, x86-64 Linux, seven readings in the sitting `spines_insert_slope`'s were taken in, alternating with its, the first of which printed:
 ///
 /// ```text
 /// outputs at N=1000: encoded "927554", control "925689"
@@ -177,28 +117,22 @@ entry()
 ///
 /// Beside the key class, the collector's share measured nil (`spines_collection_decomposition`). Of the emitted `spines` module's 25 `br_table`s, as `wonder --stage wasm` prints it at `06ea35a7d`, fourteen sit in the program's entry, the `io/bind` its description runs, three in `/std/Map/internal/Node/insert` itself and one in its heap version, two in the heap version's resumption, one in each of `/std/Map/internal/Node/fold`'s two copies and one in its heap version, one in `/std/answered` and one in a handle's retry, none in a digit read, so the descent still holds tables. What else remains of the insert is the uniform-representation tax, which `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` takes up.
 #[test]
-#[ignore = "measurement, timed: reports timings rather than asserting"]
-fn map_wall_key_share() {
+#[ignore = "measurement: taken by cargo xbench measure"]
+fn map_insert_key_share() {
     let encoded = compiled_of(KEY_ENCODED);
     let control = compiled_of(KEY_CONTROL);
 
-    // Self-pinned outputs: the two arms legitimately differ (the lengths versus the constant), so each pins its own.
-    let (_, encoded_out) = run(&encoded, 1000);
-    let (_, control_out) = run(&control, 1000);
-    println!(
-        "outputs at N=1000: encoded {:?}, control {:?}",
-        String::from_utf8_lossy(&encoded_out).trim(),
-        String::from_utf8_lossy(&control_out).trim(),
-    );
+    // Each arm pins its own output, since the two legitimately differ: the lengths against the constant.
+    assert_eq!(run(&encoded, 1000).1, b"927554\n", "encoded at N = 1000");
+    assert_eq!(run(&control, 1000).1, b"925689\n", "control at N = 1000");
 
-    let (n1, n2) = (25_000u64, 75_000u64);
-    let slope = |compiled: &Compiled| {
-        (timed(compiled, n2) - timed(compiled, n1)) * 1_000_000.0 / (n2 - n1) as f64
-    };
-    let encoded_ns = slope(&encoded);
-    let control_ns = slope(&control);
-    println!(
-        "  encoded {encoded_ns:.0} ns/iter, control {control_ns:.0} ns/iter, key construction {:.0} ns/insert",
-        encoded_ns - control_ns,
+    turn_runs(
+        7,
+        &[
+            ("encoded", &encoded, 25_000),
+            ("encoded", &encoded, 75_000),
+            ("control", &control, 25_000),
+            ("control", &control, 75_000),
+        ],
     );
 }

@@ -1,15 +1,15 @@
-//! The typed-fields census: what the recorded field shapes say about the corpus, and what the uniform representation's box/unbox and cast classes cost statically and dynamically. `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` is the decision these instrument; the figures live here, in the `stored_prelude_measurements` pattern — the command and what each probe last printed, beside the code that retakes it.
+//! The typed-fields census: what the recorded field shapes say about the corpus, and what the uniform representation's box/unbox and cast classes cost statically and dynamically. `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` is the decision these instrument, each taken by `cargo xbench measure <name>`.
 
 use {
-    super::{run, *},
+    super::test_support::{run, *},
     crate::tests::test_support::*,
     curios_anf::{FieldShape, Module},
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
-    curios_native::Compiled,
     curios_pipeline::compile_with_prelude,
     curios_surface::Entrypoint,
     std::collections::BTreeMap,
+    xbench::{Unit, read},
 };
 
 const SPINES: &str = include_str!(concat!(
@@ -144,13 +144,7 @@ fn emitted_wat(source: &str) -> String {
 
 /// The typed-fields census: the recorded-shape population, the per-program static populations of the box/unbox and cast classes shaping deletes, and the type count nominal rows mint.
 ///
-/// # How to run it
-///
-/// ```sh
-/// cargo test --release --package curios --lib -- --ignored --nocapture field_shape_census
-/// ```
-///
-/// The schema half is taken over one program's module, which holds the schemas of what that program links, so the population is `spines`' own. The static half is per program over the emitted WAT.
+/// `cargo xbench measure field_shape_census` takes it: `roster/products`, `roster/families` and `roster/constructors` the schemas `spines` links, `shapes/<class>` how many of its recorded fields are of each shape class, and `<program>/<class>` each static class's sites in a program's emitted WAT. The schema half is taken over one program's module, which holds the schemas of what that program links, so the population is `spines`' own. The static half is per program over the emitted WAT.
 ///
 /// # What it last printed
 ///
@@ -170,20 +164,28 @@ fn emitted_wat(source: &str) -> String {
 ///
 /// **42 of the 56 recorded fields `spines` links — 75% — are monomorphic at erasure**, so typed slots have a population; the opaque quarter is dominated by genuinely polymorphic payloads (`Option`'s, `List`'s, the dictionary fields). The i31 box/unbox class is the largest static population in every program, and the rope-base casts, each a Wasmtime `is_subtype` libcall, stand at 107 to 114 sites. The static counts rank *populations*, not costs: a static census cannot price a dynamic class, which is what `boxed_field_read_measurements` below is for.
 #[test]
-#[ignore = "measurement, counted: reports the census rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn field_shape_census() {
     let module = anf_optm(SPINES);
     let mut classes = BTreeMap::<&str, usize>::new();
     for shape in field_shapes(&module) {
         *classes.entry(shape_class(shape)).or_default() += 1;
     }
-    println!(
-        "schema roster: {} products, {} families, {} constructors",
-        module.products().len(),
-        module.families().len(),
-        module.constructors().len(),
-    );
-    println!("recorded field shapes (what the program links): {classes:?}");
+    for (schemas, count) in [
+        ("products", module.products().len()),
+        ("families", module.families().len()),
+        ("constructors", module.constructors().len()),
+    ] {
+        read(
+            &format!("roster/{schemas}"),
+            Unit::Count,
+            None,
+            count as u64,
+        );
+    }
+    for (class, fields) in classes {
+        read(&format!("shapes/{class}"), Unit::Count, None, fields as u64);
+    }
 
     for (label, source) in [
         ("spines", SPINES),
@@ -195,18 +197,23 @@ fn field_shape_census() {
         ("parse_digits", PARSE_DIGITS),
     ] {
         let wat = emitted_wat(source);
-        let count = |needle: &str| wat.matches(needle).count();
-        println!(
-            "{label}: i31-cast {}, box {}, unbox {}, rope-cast {}, envr-cast {}, tuple-cast {}, tuple-test {}, tuple-types {}",
-            count("ref.cast (ref i31)"),
-            count("ref.i31"),
-            count("i31.get"),
-            count("ref.cast (ref $rope/"),
-            count("ref.cast (ref $envr/"),
-            count("ref.cast (ref $tuple/"),
-            count("ref.test (ref $tuple/"),
-            count("(type $tuple/"),
-        );
+        for (class, needle) in [
+            ("i31-cast", "ref.cast (ref i31)"),
+            ("box", "ref.i31"),
+            ("unbox", "i31.get"),
+            ("rope-cast", "ref.cast (ref $rope/"),
+            ("envr-cast", "ref.cast (ref $envr/"),
+            ("tuple-cast", "ref.cast (ref $tuple/"),
+            ("tuple-test", "ref.test (ref $tuple/"),
+            ("tuple-types", "(type $tuple/"),
+        ] {
+            read(
+                &format!("{label}/{class}"),
+                Unit::Count,
+                None,
+                wat.matches(needle).count() as u64,
+            );
+        }
     }
 }
 
@@ -293,11 +300,7 @@ entry()
 
 /// The census's dynamic probe: nanoseconds per element-visit for the bare and payload-carrying folds, and the delta — the price of one boxed scalar field read.
 ///
-/// # How to run it
-///
-/// ```sh
-/// cargo test --release --package curios --lib -- --ignored --nocapture boxed_field_read_measurements
-/// ```
+/// `cargo xbench measure boxed_field_read_measurements` takes it: `bare` and `payload`, each at 100 and 300 rounds over the 65 536-element list, the four runs turned round-robin; a fold's nanoseconds an element are the difference of its two medians over the 200 rounds' 13 107 200 visits, and the boxed-field read is the payload's less the bare's.
 ///
 /// # What it last printed
 ///
@@ -310,9 +313,8 @@ entry()
 ///
 /// What the figure decided: one always-boxed scalar field costs about a seventh of even this dispatch-heavy loop's per-element budget, and it is pure representation tax — the same fold over the same list, differing by one `ref.i31` at the store and one `ref.cast (ref i31)` + `i31.get_u` at the read. Across takes that cut the fold's per-dispatch cost out from under it, the *relative* share held or grew: the class scales with the loop around it, which is what makes it worth deleting at the representation rather than the site.
 #[test]
-#[ignore = "measurement, timed: reports timings rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn boxed_field_read_measurements() {
-    const ELEMENTS: f64 = 65536.0;
     const LOW: u64 = 100;
     const HIGH: u64 = 300;
 
@@ -320,25 +322,20 @@ fn boxed_field_read_measurements() {
     let payload = compiled_of(FOLD_PAYLOAD);
 
     // Outputs are pinned before any figure is read, so a fixture drift fails loudly.
-    let (_, bare_out) = run(&bare, HIGH);
-    let (_, payload_out) = run(&payload, HIGH);
-    println!(
-        "outputs at {HIGH} rounds: bare {:?}, payload {:?}",
-        String::from_utf8_lossy(&bare_out).trim(),
-        String::from_utf8_lossy(&payload_out).trim(),
+    assert_eq!(run(&bare, HIGH).1, b"491113\n", "bare at {HIGH} rounds");
+    assert_eq!(
+        run(&payload, HIGH).1,
+        b"161671\n",
+        "payload at {HIGH} rounds"
     );
 
-    let slope = |compiled: &Compiled| {
-        let low = timed(compiled, LOW);
-        let high = timed(compiled, HIGH);
-        (high - low) * 1e6 / ((HIGH - LOW) as f64 * ELEMENTS)
-    };
-
-    let bare_ns = slope(&bare);
-    let payload_ns = slope(&payload);
-    println!(
-        "bare {bare_ns:.2} ns/element, payload {payload_ns:.2} ns/element, boxed-field read {:.2} ns ({:.0}%)",
-        payload_ns - bare_ns,
-        (payload_ns - bare_ns) / payload_ns * 100.0,
+    turn_runs(
+        7,
+        &[
+            ("bare", &bare, LOW),
+            ("bare", &bare, HIGH),
+            ("payload", &payload, LOW),
+            ("payload", &payload, HIGH),
+        ],
     );
 }

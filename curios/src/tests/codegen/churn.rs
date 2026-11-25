@@ -3,13 +3,8 @@
 //! What the thirty-two-mebibyte initial heap buys: under death-birth churn an unsized heap parks within a doubling of the live set and the collector recopies it continually; sized, those collections are gone, the allocation-free `churn` does not move — the empirical pin on its exit from the churn class — and `trees` gains little, because an all-live tree must outgrow any constant.
 
 use {
-    crate::test_support::*,
-    curios_elab::DEFAULT_BUDGET,
-    curios_module::RootSource,
-    curios_native::{Compiled, ForeignBindings, test_support::*},
-    curios_pipeline::compile_with_prelude,
-    curios_surface::Entrypoint,
-    std::time::Instant,
+    super::test_support::*,
+    curios_native::{Compiled, test_support::*},
 };
 
 /// The cross-language workloads, read from the corpus so the probes measure the programs the results files time.
@@ -79,59 +74,20 @@ let entry() -> /std/Io({}) =
 entry()
 "#;
 
-/// The churn phase is measured as T(K) − T(0) at this K, which subtracts startup, the initial build, and — in the ballast arms — the whole ballast phase.
+/// The churn phase is read at this K and at none, and costs the difference, which subtracts startup, the initial build, and — in the ballast arms — the whole ballast phase.
 const ROUNDS: u64 = 400;
 
-fn compiled_of(source: &str) -> Compiled {
-    let entrypoint = source
-        .parse::<Entrypoint>()
-        .map_err(|error| error.format())
-        .expect("the workload parses");
-    let (module, foreigns) =
-        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
-            .expect("the workload compiles");
-
-    to_compiled(&module, foreigns).expect("the workload compiles")
+/// Read each of `runs`, a label, its program and the size it runs at, as a decomposition reads one: what the collector did over a run of it, once ([`read_collected`]), and its time, the runs turned round-robin `rounds` times ([`turn_runs`]).
+fn decomposed(rounds: usize, runs: &[(&str, &Compiled, u64)]) {
+    for &(label, compiled, n) in runs {
+        read_collected(label, compiled, n);
+    }
+    turn_runs(rounds, runs);
 }
 
-/// One run: milliseconds around it — instantiate, and the whole call — and what the program printed.
-fn run(compiled: &Compiled, k: u64) -> (f64, Vec<u8>) {
-    let (host, io) = MockHost::builder()
-        .args(["program".to_string(), k.to_string()])
-        .build();
-    let start = Instant::now();
-    let code = compiled
-        .run(host, ForeignBindings::empty())
-        .expect("the workload runs");
-    let elapsed = start.elapsed().as_secs_f64() * 1000.0;
-    assert_eq!(code, 0, "the workload exits cleanly");
-
-    (elapsed, io.output())
-}
-
-/// Best of three, since a timing floor is what the decomposition subtracts.
-fn timed(compiled: &Compiled, k: u64) -> f64 {
-    (0..3)
-        .map(|_| run(compiled, k).0)
-        .fold(f64::INFINITY, f64::min)
-}
-
-/// Collections and the heap's final size during one run at `k`, from the engine's own records. The counted run's duration is discarded: the raised log level prices every suppressed record, so timing and counting are separate runs.
-fn collections(compiled: &Compiled, k: u64) -> (usize, Option<String>) {
-    let (_, collected) = collected(|| run(compiled, k));
-
-    (collected.collections, collected.growth)
-}
-
-/// # What this measures, and how to retake it
+/// # What this measures
 ///
-/// ```sh
-/// cargo test --package curios --release -- codegen::churn::chain_collection_decomposition --ignored --nocapture
-/// ```
-///
-/// `--release` is load-bearing: the collector under measurement is host-side wasmtime code, and a debug build inflates exactly the share this probe exists to isolate.
-///
-/// Three arrangements run the identical churn phase — `ROUNDS` rounds over the harness's 10 000-cell chain — inside heaps the dead ballast pre-grows to different sizes, and the churn cost is the K = `ROUNDS` time minus the K = 0 time, which cancels startup and the ballast phase itself. Collections are counted from the engine's own `Begin GC` records through `curios_native::test_support::collected`, in separate runs so the raised log level never touches a timed figure.
+/// `cargo xbench measure chain_collection_decomposition` takes it. Three arrangements run the identical churn phase — `ROUNDS` rounds over the harness's 10 000-cell chain — inside heaps the dead ballast pre-grows to different sizes, `stock`, `ballast 500k` (about 32 MiB) and `ballast 4M` (about 256 MiB), each read at K = `ROUNDS` and at K = 0 ([`decomposed`]): `<arrangement> at <K>` the time of a run, the runs turned round-robin, the churn cost the first's median less the second's, which cancels startup and the ballast phase itself; and `/collections` and `/grown` what the collector did, counted from the engine's own records through `curios_native::test_support::collected` in a run of its own, so the raised log level never touches a timed figure.
 ///
 /// # What it last printed
 ///
@@ -148,7 +104,7 @@ fn collections(compiled: &Compiled, k: u64) -> (usize, Option<String>) {
 ///
 /// The engine grows the heap only when a single post-collection allocation cannot fit, so a heap left unsized parks barely above a tiny live set, a collection fires more than once a round, and every cell is copied more often than it is born. Under the default, stock *is* the sized arrangement — no growth is ever recorded because the initial size absorbs the whole run — and it matches the 32 MiB ballast arm in collections, which is the ballast-to-initial-size equivalence this probe's method assumes. The 500k arm reads under stock in time because its ballast phase pre-touches the pages stock first meets cold, and over-sizing (the 256 MiB arm) gives the win back to cold pages and TLB misses, so the lever is a sizing *policy*, not a maximal pre-grow. The residual warm-heap floor is the compiler-side birth path. Collection counts are deterministic and transport across machines; the time shares are this machine's.
 #[test]
-#[ignore = "measurement, mixed: times the churn workload and counts its collections rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn chain_collection_decomposition() {
     let stock = compiled_of(CHAIN);
 
@@ -156,30 +112,20 @@ fn chain_collection_decomposition() {
     let (_, output) = run(&stock, 8);
     assert_eq!(output, b"819185\n", "chain(8) anchor");
 
-    println!("== chain collection decomposition (K = {ROUNDS})");
-
-    let arrangements: [(&str, Option<u64>); 3] = [
-        ("stock", None),
-        ("ballast 500k (~32 MiB heap)", Some(500_000)),
-        ("ballast 4M (~256 MiB heap)", Some(4_000_000)),
-    ];
-
-    for (label, ballast) in arrangements {
-        let ballasted = ballast
-            .map(|cells| compiled_of(&CHAIN_BALLAST.replace("BALLAST_CELLS", &cells.to_string())));
-        let compiled = ballasted.as_ref().unwrap_or(&stock);
-
-        let churn_ms = timed(compiled, ROUNDS) - timed(compiled, 0);
-        let (gc_churn, heap) = collections(compiled, ROUNDS);
-        let (gc_base, _) = collections(compiled, 0);
-
-        println!(
-            "  {label}: churn {:.3} ms/round, {:.3} collections/round, {}",
-            churn_ms / ROUNDS as f64,
-            (gc_churn as f64 - gc_base as f64) / ROUNDS as f64,
-            heap.as_deref().unwrap_or("no heap growth recorded"),
-        );
-    }
+    let ballasted =
+        |cells: u64| compiled_of(&CHAIN_BALLAST.replace("BALLAST_CELLS", &cells.to_string()));
+    let (small, large) = (ballasted(500_000), ballasted(4_000_000));
+    decomposed(
+        3,
+        &[
+            ("stock", &stock, 0),
+            ("stock", &stock, ROUNDS),
+            ("ballast 500k", &small, 0),
+            ("ballast 500k", &small, ROUNDS),
+            ("ballast 4M", &large, 0),
+            ("ballast 4M", &large, ROUNDS),
+        ],
+    );
 }
 
 /// The `churn` workload's threaded record travels as fields: over a million spread-update steps the emitted program allocates so little that the collector never runs, because continuation scalar replacement and the known-function field split erase the reconstruction the source spells. The workload's Curios column therefore prices dispatch and checked arithmetic rather than allocation, and a record update worth measuring is a record at rest — what `spines` and the census reach. Collection counts are deterministic, which is what makes the absence assertable rather than merely measurable; the anchor is cross-checked against the Rust and Node contestants.
@@ -265,7 +211,7 @@ let entry() -> /std/Io({}) =
 entry()
 "#;
 
-/// The `spines` half of the heap-sizing evidence, by the method `chain_collection_decomposition` documents — `--release`, timed and counted runs separate. The one difference is the subject: `spines`' live set grows toward the map's plateau instead of holding still, so an unsized heap's collections copy a growing structure and the per-insert cost is superlinear until the plateau.
+/// The `spines` half of the heap-sizing evidence, by the method `chain_collection_decomposition` documents, `cargo xbench measure spines_collection_decomposition` taking it: `stock` read at none, 12 500 and 25 000 inserts, and the two ballast arms at none and 25 000, an insert's cost the difference of two sizes' medians over the inserts between them. The one difference is the subject: `spines`' live set grows toward the map's plateau instead of holding still, so an unsized heap's collections copy a growing structure and the per-insert cost is superlinear until the plateau.
 ///
 /// # What it last printed
 ///
@@ -279,9 +225,9 @@ entry()
 ///   ballast 4M, N=25000: churn 0.51 us/insert, 0.0 collections per 1000 inserts, -> grew GC heap by 0x8000000 bytes: new size is 0x10000000 bytes
 /// ```
 ///
-/// **The collector's share of the remaining insert is nil** — zero collections per thousand inserts at stock, at both Ns. The remaining insert cost (`map_wall_spines_slope`) is mutator work, so a rebuild-and-collection lever — a generational nursery among them — has nothing to take on this workload; what is left to rank is the representation tax against per-insert key construction, which `shapes.rs`'s instruments measure.
+/// **The collector's share of the remaining insert is nil** — zero collections per thousand inserts at stock, at both Ns. The remaining insert cost (`spines_insert_slope`) is mutator work, so a rebuild-and-collection lever — a generational nursery among them — has nothing to take on this workload; what is left to rank is the representation tax against per-insert key construction, which `shapes.rs`'s instruments measure.
 #[test]
-#[ignore = "measurement, mixed: times the spines workload and counts its collections rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn spines_collection_decomposition() {
     let stock = compiled_of(SPINES);
 
@@ -289,31 +235,21 @@ fn spines_collection_decomposition() {
     let (_, output) = run(&stock, 8);
     assert_eq!(output, b"28\n", "spines(8) anchor");
 
-    println!("== spines collection decomposition");
-
-    let arrangements: [(&str, Option<u64>, u64); 4] = [
-        ("stock, N=12500", None, 12_500),
-        ("stock, N=25000", None, 25_000),
-        ("ballast 500k, N=25000", Some(500_000), 25_000),
-        ("ballast 4M, N=25000", Some(4_000_000), 25_000),
-    ];
-
-    for (label, ballast, inserts) in arrangements {
-        let ballasted = ballast
-            .map(|cells| compiled_of(&SPINES_BALLAST.replace("BALLAST_CELLS", &cells.to_string())));
-        let compiled = ballasted.as_ref().unwrap_or(&stock);
-
-        let churn_ms = timed(compiled, inserts) - timed(compiled, 0);
-        let (gc_churn, heap) = collections(compiled, inserts);
-        let (gc_base, _) = collections(compiled, 0);
-
-        println!(
-            "  {label}: churn {:.2} us/insert, {:.1} collections per 1000 inserts, {}",
-            churn_ms * 1000.0 / inserts as f64,
-            (gc_churn as f64 - gc_base as f64) * 1000.0 / inserts as f64,
-            heap.as_deref().unwrap_or("no heap growth recorded"),
-        );
-    }
+    let ballasted =
+        |cells: u64| compiled_of(&SPINES_BALLAST.replace("BALLAST_CELLS", &cells.to_string()));
+    let (small, large) = (ballasted(500_000), ballasted(4_000_000));
+    decomposed(
+        3,
+        &[
+            ("stock", &stock, 0),
+            ("stock", &stock, 12_500),
+            ("stock", &stock, 25_000),
+            ("ballast 500k", &small, 0),
+            ("ballast 500k", &small, 25_000),
+            ("ballast 4M", &large, 0),
+            ("ballast 4M", &large, 25_000),
+        ],
+    );
 }
 
 /// `spines` over a map of byte keys, `KEY` its key of `y`: the stock program's walk with the key widened, read the same way.
@@ -353,13 +289,9 @@ entry()
 
 /// The `spines` half read over its keys' width, the floor's other side: a key past an immediate makes every node of the map a heap object, so the live set the collector recopies grows with the map, and a heap that holds a map of immediates at its plateau holds a map of text past its knee.
 ///
-/// # What this measures, and how to retake it
+/// # What this measures
 ///
-/// ```sh
-/// cargo test --package curios --release -- codegen::churn::spines_key_width_measurements --ignored --nocapture
-/// ```
-///
-/// Four programs, `spines` as it is and over `Bytes` keys of three, five and ten bytes (`Bytes/of_nat(y * 251)`, `Bytes/of_nat(y * 70001)`, `Str/to_bytes(Nat/to_str(y * 70001))`): the slope between two sizes, at 4 000 and 12 000 inserts and at 25 000 and 75 000, the median and span of five readings each the least of three runs, and the collections each size makes, counted in runs of their own.
+/// `cargo xbench measure spines_key_width_measurements` takes it. Four programs, `spines` as it is (`nat`) and over `Bytes` keys of three, five and ten bytes (`bytes3`, `Bytes/of_nat(y * 251)`; `bytes5`, `Bytes/of_nat(y * 70001)`; `text10`, `Str/to_bytes(Nat/to_str(y * 70001))`), each read at 4 000, 12 000, 25 000 and 75 000 inserts as [`decomposed`] reads a run: the slope between two sizes, at 4 000 and 12 000 inserts and at 25 000 and 75 000, is the difference of their medians over the inserts between them, and the collections each size makes are counted in a run of their own.
 ///
 /// # What it last printed
 ///
@@ -383,7 +315,7 @@ entry()
 ///
 /// **No width sits at the knee by seventy-five thousand inserts.** An insert between 25 000 and 75 000 inserts costs within a tenth of what it cost between 4 000 and 12 000 at every width — up to 7% more over immediates and three-byte keys, less over five and ten — and a map of ten-byte keys, the widest, is collected 19 times in its 75 000 inserts. Collection counts are deterministic and transport across machines; the slopes are this machine's.
 #[test]
-#[ignore = "measurement, mixed: times the slope of each key width and counts its collections rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn spines_key_width_measurements() {
     let programs = [
         ("nat", SPINES.to_string()),
@@ -401,29 +333,18 @@ fn spines_key_width_measurements() {
         ),
     ];
 
-    println!("== spines key width");
-    for (label, source) in programs {
+    let compiled = programs.map(|(label, source)| {
         let compiled = compiled_of(&source);
         let (_, anchor) = run(&compiled, 8);
         assert_eq!(anchor, b"28\n", "{label}(8) anchor");
 
-        for (low, high) in [(4_000, 12_000), (25_000, 75_000)] {
-            let mut slopes = (0..5)
-                .map(|_| {
-                    (timed(&compiled, high) - timed(&compiled, low)) * 1e6 / (high - low) as f64
-                })
-                .collect::<Vec<_>>();
-            slopes.sort_by(f64::total_cmp);
-            println!(
-                "  {label}, {low}-{high}: {:.0} ns/insert [{:.0}-{:.0}]",
-                slopes[2], slopes[0], slopes[4]
-            );
-        }
-        let counted = [4_000, 12_000, 25_000, 75_000]
-            .map(|inserts| collections(&compiled, inserts).0.to_string());
-        println!(
-            "  {label}, collections at 4k, 12k, 25k, 75k: {}",
-            counted.join(", ")
-        );
-    }
+        (label, compiled)
+    });
+    let runs = compiled
+        .iter()
+        .flat_map(|(label, compiled)| {
+            [4_000, 12_000, 25_000, 75_000].map(|inserts| (*label, compiled, inserts))
+        })
+        .collect::<Vec<_>>();
+    decomposed(5, &runs);
 }

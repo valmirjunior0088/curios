@@ -19,7 +19,8 @@ use {
     crate::test_support::*,
     curios_native::{Compiled, ForeignBindings, test_support::*},
     curios_wasm::{Names, to_bytes},
-    std::time::Instant,
+    std::{cell::RefCell, collections::BTreeMap, time::Instant},
+    xbench::{Unit, read, read_elapsed, turn},
 };
 
 const PARSE_DIGITS: &str = include_str!(concat!(
@@ -62,13 +63,7 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 
 /// Every static figure this attribution leans on, taken over the three programs above.
 ///
-/// # How to run it
-///
-/// ```sh
-/// cargo test --package curios --lib -- --ignored --nocapture string_walk_ladder_measurements
-/// ```
-///
-/// It asserts nothing and cannot fail — a measurement that fails is a measurement with an opinion. Allocation *sites* are counted, not allocations: a site inside the per-character walk runs once per character and a site in the program's setup runs once, and this instrument cannot tell them apart. That is what the timings below are for, and why neither half is quoted without the other.
+/// `cargo xbench measure string_walk_ladder_measurements` takes it: `<rung>/closure sites`, `/env sites`, `/slice calls` and `/wat bytes`, and `<rung>/walk/<environment>` the sites of each environment the walk itself allocates. It asserts nothing and cannot fail — a measurement that fails is a measurement with an opinion. Allocation *sites* are counted, not allocations: a site inside the per-character walk runs once per character and a site in the program's setup runs once, and this instrument cannot tell them apart. That is what the timings below are for, and why neither half is quoted without the other.
 ///
 /// # The dynamic half, and how to retake it
 ///
@@ -104,7 +99,7 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 ///
 /// Four env sites in every rung, `parse_manual` included, carry the hint of a local `go`: two loops, each of which builds its environment once in `$start` and once in its own body. `parse_bindless` adds `/decode/1` and `/std/Nat/of_str/1`, the one site the walk's own filter names. **A site count cannot see a loop.** It is kept because it is the half that survives a machine change, and because a site appearing or vanishing is a real event; it is never the half that answers "what does this cost".
 #[test]
-#[ignore = "measurement, counted: divides the string-walk gap rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn string_walk_ladder_measurements() {
     for (label, source) in [
         ("parse_digits", PARSE_DIGITS),
@@ -123,21 +118,36 @@ fn string_walk_ladder_measurements() {
                 line.starts_with("call $bytes/slice") || line.starts_with("call $list/slice")
             })
             .count();
-        println!(
-            "{label}: {closures} closure sites, {} env sites, {slices} slice calls, {} bytes of wat",
-            envs.len(),
-            wat.len(),
-        );
+        for (figure, count) in [
+            ("closure sites", closures),
+            ("env sites", envs.len()),
+            ("slice calls", slices),
+            ("wat bytes", wat.len()),
+        ] {
+            read(
+                &format!("{label}/{figure}"),
+                Unit::Count,
+                None,
+                count as u64,
+            );
+        }
 
         // Which environments the string walk itself allocates. A site is static and the walk is a loop, so each of these runs once per character rather than once per program — which is exactly why this half cannot be read without the timings above.
-        let mut walk: Vec<&str> = envs
+        let mut walk = BTreeMap::<&str, usize>::new();
+        for name in envs
             .iter()
             .filter_map(|line| line.split("struct.new ").nth(1))
             .filter(|name| name.contains("/Str/") || name.contains("/Nat/of_str"))
-            .collect();
-        walk.sort_unstable();
-        for name in walk {
-            println!("    {name}");
+        {
+            *walk.entry(name).or_default() += 1;
+        }
+        for (name, sites) in walk {
+            read(
+                &format!("{label}/walk/{name}"),
+                Unit::Count,
+                None,
+                sites as u64,
+            );
         }
     }
 }
@@ -374,15 +384,13 @@ fn reading_loops(wat: &str) -> Vec<Vec<&str>> {
         .collect()
 }
 
-/// The attribution measurement over the mirror family: static counts, raw-and-Binaryen agreement at a small input, and the recorded native timing protocol. Run explicitly:
+/// The attribution measurement over the mirror family: static counts, raw-and-Binaryen agreement, and the family timed.
 ///
-/// ```sh
-/// cargo test --package curios --lib -- --ignored --nocapture walk_mirror_attribution_measurements
-/// ```
+/// `cargo xbench measure walk_mirror_attribution_measurements` takes it: `<member>/tuple4`, `/tuple2`, `/slice calls` and `/mstep calls`, the module-wide counts the family's claims are stated over, and `<member>/raw` and `<member>/binaryen`, a run's time on each path at N = 300 000, every member's two runs turned round-robin seven times after an untimed round, so no member is measured on a warmer machine than another.
 ///
 /// # The dynamic half, and how to retake it
 ///
-/// The test times the family in process, in the test profile, which is optimized as release is, so an allocation share reads as the shipped runtime's. The native protocol of [`string_walk_ladder_measurements`] retakes it outside a test:
+/// The test times the family in process, under the release build the runner takes it in, so an allocation share reads as the shipped runtime's. The native protocol of [`string_walk_ladder_measurements`] retakes it outside a test:
 ///
 /// ```sh
 /// cargo xtask distribution build
@@ -404,15 +412,12 @@ fn reading_loops(wat: &str) -> Vec<Vec<&str>> {
 ///
 /// **What this family can and cannot attribute.** One obligation is measurable here: the returned scan state and its call, which `inline_step` removes for about a sixth of the walk once optimized. The accumulator tuple is not: `flat_acc` reads inside the baseline's span on both paths. Nor, once optimized, is the scan argument reconstruction: `held_scan`'s raw excess of 2% is gone once Binaryen has run. The suffix view cannot be attributed by this family, since `indexed` replaces it with a path that costs more.
 #[test]
-#[ignore = "measurement, mixed: attributes the walk's obligations rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn walk_mirror_attribution_measurements() {
     // The size the family's own recorded protocol uses. At 2000 the walk is a minority of each run — module
     // instantiation is the rest, and it scales with a member's module rather than with what the member removed,
     // which prices the largest module slowest whatever its walk costs.
     let input = "300000";
-    // One untimed round opens the sitting, then each round times every member once.
-    const WARMUP: usize = 1;
-    const ROUNDS: usize = 7;
 
     // Every member is compiled before anything is timed: a compile between two timings is a position
     // effect, and this family exists to compare its members to each other.
@@ -437,43 +442,51 @@ fn walk_mirror_attribution_measurements() {
         (label, counts, raw, optimized)
     });
 
-    for (label, counts, _, _) in &prepared {
-        println!("{label:12} {counts:?} (tuple4, tuple2, slice, mstep calls)");
+    for (label, (tuple4, tuple2, slices, steps), _, _) in &prepared {
+        for (figure, count) in [
+            ("tuple4", tuple4),
+            ("tuple2", tuple2),
+            ("slice calls", slices),
+            ("mstep calls", steps),
+        ] {
+            read(
+                &format!("{label}/{figure}"),
+                Unit::Count,
+                None,
+                *count as u64,
+            );
+        }
     }
 
-    let mut agreed = None;
-    let mut taken = vec![[Vec::new(), Vec::new()]; prepared.len()];
-    for round in 0..WARMUP + ROUNDS {
-        // A round over the whole family, so a disturbance during the sitting reaches every member alike.
-        for (member, (label, _, raw, optimized)) in prepared.iter().enumerate() {
-            for (kind, compiled) in [(0, raw), (1, optimized)] {
+    // What the first run printed, which every member's every run must print too.
+    let agreed = RefCell::new(None);
+    let mut runs = prepared
+        .iter()
+        .flat_map(|(label, _, raw, optimized)| {
+            [("raw", raw), ("binaryen", optimized)].map(|(path, compiled)| (*label, path, compiled))
+        })
+        .map(|(label, path, compiled)| {
+            let agreed = &agreed;
+            move || {
                 let (system, io) = MockHost::builder().args(["program", input]).build();
                 let start = Instant::now();
                 compiled
                     .run(system, ForeignBindings::empty())
                     .expect("mirror executes");
-                let elapsed = start.elapsed().as_secs_f64();
-
-                if round >= WARMUP {
-                    taken[member][kind].push(elapsed);
-                }
+                read_elapsed(&format!("{label}/{path}"), None, start.elapsed());
 
                 let printed = String::from_utf8_lossy(&io.output()).trim().to_string();
+                let mut agreed = agreed.borrow_mut();
                 let agreed = agreed.get_or_insert_with(|| printed.clone());
                 assert_eq!(*agreed, printed, "{label} disagrees with the family");
             }
-        }
-    }
-
-    println!("\n{ROUNDS} rounds, interleaved; median and span of each member's rounds");
-    for ((label, ..), rounds) in prepared.iter().zip(&taken) {
-        for (kind, mut times) in [("raw", rounds[0].clone()), ("binaryen", rounds[1].clone())] {
-            times.sort_by(f64::total_cmp);
-            let middle = times[times.len() / 2];
-            let (least, most) = (times[0], times[times.len() - 1]);
-            println!("{label:12} {kind:9} {middle:.4}s  [{least:.4}-{most:.4}]");
-        }
-    }
+        })
+        .collect::<Vec<_>>();
+    let mut turned = runs
+        .iter_mut()
+        .map(|run| run as &mut dyn FnMut())
+        .collect::<Vec<_>>();
+    turn(7, &mut turned);
 }
 
 // -- the doubling measurement ------------------------------------------------
@@ -529,27 +542,22 @@ entry()
 
 /// What a decoder's time does when its document doubles: `Json/decode` over `[1, 1, …]`, `Html/decode` over `<p>x</p>…` and a `take_while` and `expect` token walk over `abcdefgh,…`, each at three sizes that double, timed in process over the Binaryen path. A decoder that costs what it reads doubles; one whose walk reads what is left of its input at every token quadruples.
 ///
-/// ```sh
-/// cargo test --package curios --lib -- --ignored --nocapture decoder_doubling_slope
-/// ```
-///
-/// It asserts nothing about time, which a busy machine moves: the ratio between neighbouring sizes is the reading, a median over interleaved rounds, and a size is only read against its neighbours in the same sitting.
+/// `cargo xbench measure decoder_doubling_slope` takes it: `<decoder> at <size>`, a run's time, every decoder at every size turned round-robin five times after an untimed round. It asserts nothing about time, which a busy machine moves: the ratio of a size's median to its smaller neighbour's is the reading, and a size is only read against its neighbours in the same sitting.
 #[test]
-#[ignore = "measurement, timed: reports how each decoder's time grows as its input doubles rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn decoder_doubling_slope() {
-    const WARMUP: usize = 1;
-    const ROUNDS: usize = 5;
-    const SIZES: [usize; 3] = [20_000, 40_000, 80_000];
+    const SIZES: [u64; 3] = [20_000, 40_000, 80_000];
     const DECODERS: [&str; 3] = ["json", "html", "tokens"];
 
     let (module, foreigns) = compile_raw_program(DECODER_DOUBLING);
     let compiled = to_compiled(&module, foreigns).expect("binaryen path compiles");
 
-    let mut taken = vec![vec![Vec::new(); SIZES.len()]; DECODERS.len()];
-    for round in 0..WARMUP + ROUNDS {
-        // A round over every decoder and size, so a disturbance during the sitting reaches each alike.
-        for (decoder, mode) in DECODERS.iter().enumerate() {
-            for (index, size) in SIZES.iter().enumerate() {
+    let mut runs = DECODERS
+        .iter()
+        .flat_map(|mode| SIZES.map(|size| (*mode, size)))
+        .map(|(mode, size)| {
+            let compiled = &compiled;
+            move || {
                 let (system, io) = MockHost::builder()
                     .args(["program".to_string(), mode.to_string(), size.to_string()])
                     .build();
@@ -557,31 +565,16 @@ fn decoder_doubling_slope() {
                 compiled
                     .run(system, ForeignBindings::empty())
                     .expect("the decoder executes");
-                let elapsed = start.elapsed().as_secs_f64();
-
-                if round >= WARMUP {
-                    taken[decoder][index].push(elapsed);
-                }
+                read_elapsed(&format!("{mode} at {size}"), Some(size), start.elapsed());
 
                 let printed = String::from_utf8_lossy(&io.output()).trim().to_string();
                 assert_ne!(printed, "0", "{mode} refused its input at {size}");
             }
-        }
-    }
-
-    println!(
-        "\n{ROUNDS} rounds, interleaved; median of each size's rounds, and its ratio to the size below"
-    );
-    for (mode, sizes) in DECODERS.iter().zip(&taken) {
-        let mut below = None;
-        for (size, rounds) in SIZES.iter().zip(sizes) {
-            let mut times = rounds.clone();
-            times.sort_by(f64::total_cmp);
-            let middle = times[times.len() / 2];
-            let (least, most) = (times[0], times[times.len() - 1]);
-            let ratio = below.map_or(String::new(), |b: f64| format!("  x{:.2}", middle / b));
-            println!("{mode:8} {size:>7} {middle:.4}s  [{least:.4}-{most:.4}]{ratio}");
-            below = Some(middle);
-        }
-    }
+        })
+        .collect::<Vec<_>>();
+    let mut turned = runs
+        .iter_mut()
+        .map(|run| run as &mut dyn FnMut())
+        .collect::<Vec<_>>();
+    turn(5, &mut turned);
 }

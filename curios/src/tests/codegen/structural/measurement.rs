@@ -1,19 +1,14 @@
-//! Recorded figures for the structural shapes, each with the command that retakes it. None asserts.
+//! Recorded figures for the structural shapes, each taken by `cargo xbench measure <name>`. None asserts.
 
 use {
     super::test_support::*,
     curios_wasm::{Names, to_bytes},
+    xbench::{Unit, read},
 };
 
 /// What the closure table index is worth at product level.
 ///
-/// Run it with:
-///
-/// ```sh
-/// cargo test --package curios --lib -- --ignored --nocapture closure_index_dispatch_measurements
-/// ```
-///
-/// It asserts nothing. The structural claim is [`closures_carry_their_code_as_a_table_index`]'s to make; this prints the static shape of the dispatch over the corpus — table slots, dispatch sites, environment allocations — so the timings below stay pinned to the modules that produced them.
+/// It asserts nothing. The structural claim is [`closures_carry_their_code_as_a_table_index`]'s to make; this reads the static shape of the dispatch over the corpus — `<program>/table slots`, `/dispatch sites`, `/environment constructions` and `/interned as consts` — so the timings below stay pinned to the modules that produced them.
 ///
 /// # What it last printed
 ///
@@ -56,7 +51,7 @@ use {
 ///
 /// The final column counts environments materialized once in `$start` — closures whose captures are all interned constants, which the hoister interns because the code field is an `i32`. The population is everywhere: at least one per corpus fixture, and 9 of the 19–21 environment constructions in each stdin-driven program, the `/std` description machinery's capture-free thunks most of them.
 #[test]
-#[ignore = "measurement, counted: records what the closure table costs and saves rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn closure_index_dispatch_measurements() {
     const MONAD_IO: &str = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -95,21 +90,25 @@ fn closure_index_dispatch_measurements() {
             .iter()
             .find(|function| function.name == "$start")
             .map_or(0, |start| start.body.matches("struct.new $envr/").count());
-        println!(
-            "{label}: {slots} table slots, {dispatches} dispatch sites, {environments} environment constructions, {interned} interned as consts"
-        );
+        for (figure, count) in [
+            ("table slots", slots),
+            ("dispatch sites", dispatches),
+            ("environment constructions", environments),
+            ("interned as consts", interned),
+        ] {
+            read(
+                &format!("{label}/{figure}"),
+                Unit::Count,
+                None,
+                count as u64,
+            );
+        }
     }
 }
 
 /// What the return protocol removes from the corpus, and what that is worth.
 ///
-/// Run it with:
-///
-/// ```sh
-/// cargo test --package curios --lib -- --ignored --nocapture split_return_measurements
-/// ```
-///
-/// It asserts nothing. The structural claim is [`a_returned_constructor_is_delivered_as_its_fields`]'s to make and it fails when it stops holding; this only reports how much of the corpus the protocol reaches, which is a question with no right answer to assert against.
+/// It asserts nothing. The structural claim is [`a_returned_constructor_is_delivered_as_its_fields`]'s to make and it fails when it stops holding; this only reads how much of the corpus the protocol reaches, `<fixture>/multi-result types` and `<fixture>/allocation sites`, which is a question with no right answer to assert against.
 ///
 /// # What it last printed
 ///
@@ -129,7 +128,7 @@ fn closure_index_dispatch_measurements() {
 ///
 /// The allocation counts are taken pre-Binaryen, so some of what the pass removes earlier, Binaryen may remove later; only a runtime figure accounts for that. Withholding the pass on `programs/parse_digits.crs`, as [`copy_growth_measurements`] says how, and nothing else, moves the native binary at N = 1 000 000 from 0.226 s [0.224–0.230] to 0.230 s [0.228–0.236] of wall time, and leaves its `user` time at 0.21 s at the clock's ten-millisecond grain, each the median and span of five runs, the two interleaved and printing the same answer, both binaries built by a release compiler, timed at `00627ea06`: the per-character loop is not allocation-bound on the tuple the protocol removes.
 #[test]
-#[ignore = "measurement, counted: reports what the return protocol reaches rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn split_return_measurements() {
     for (label, source) in [
         ("lcg", LCG),
@@ -153,17 +152,22 @@ fn split_return_measurements() {
             })
             .count();
         let allocations = wat.matches("struct.new").count() + wat.matches("array.new").count();
-        println!("{label}: {split} multi-result types, {allocations} allocation sites");
+        read(
+            &format!("{label}/multi-result types"),
+            Unit::Count,
+            None,
+            split as u64,
+        );
+        read(
+            &format!("{label}/allocation sites"),
+            Unit::Count,
+            None,
+            allocations as u64,
+        );
     }
 }
 
 /// What copying more costs, in the two units that can see it.
-///
-/// Run it with:
-///
-/// ```sh
-/// cargo test --package curios --lib -- --ignored --nocapture copy_growth_measurements
-/// ```
 ///
 /// It asserts nothing. The inliner and both specializers copy bodies that nest definitions, and copying is the one thing that trades size for speed in both directions at once — so a change to what they copy is read against a recorded baseline rather than one reconstructed after it.
 ///
@@ -182,9 +186,9 @@ fn split_return_measurements() {
 /// | `parse_digits` | 1000000 | 0.20 s | 20 992 000 B | 5 140 109 B |
 /// | `trees` | 21 | 0.17 s | 138 760 192 B | 5 136 045 B |
 ///
-/// What this test itself prints is the third unit — the raw pre-Binaryen module size for each structural fixture, which is where code growth shows up first and without a runtime at all. Taken at the same commit: `lcg` 22499, `trees` 23606, `higher-order` 22887, `direct/escaping` 22624, `function-only` 22043, `mutual-recursion` 22190, `split-return` 29002 bytes, so the three units are read together.
+/// What this test itself reads is the third unit — `<fixture>/emitted bytes`, the raw pre-Binaryen module size for each structural fixture, which is where code growth shows up first and without a runtime at all. Taken at the same commit: `lcg` 22499, `trees` 23606, `higher-order` 22887, `direct/escaping` 22624, `function-only` 22043, `mutual-recursion` 22190, `split-return` 29002 bytes, so the three units are read together.
 #[test]
-#[ignore = "measurement, counted: reports emitted size rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn copy_growth_measurements() {
     for (label, source) in [
         ("lcg", LCG),
@@ -197,6 +201,11 @@ fn copy_growth_measurements() {
     ] {
         let module = compile_raw(source);
         let bytes = to_bytes(&module, &Names::EVERY).len();
-        println!("{label}: {bytes} bytes");
+        read(
+            &format!("{label}/emitted bytes"),
+            Unit::Count,
+            None,
+            bytes as u64,
+        );
     }
 }

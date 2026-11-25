@@ -18,6 +18,9 @@
 //!
 //! And a terminal as a drawing that redraws in place writes to one, [`Screen`](crate::test_support::Screen): what the command line's live transcript is checked against, frame by frame and over a whole run.
 
+#[cfg(test)]
+mod tests;
+
 mod mock_host;
 pub use mock_host::{MockHost, MockHostBuilder, MockIo, SocketEvent};
 
@@ -173,16 +176,24 @@ const GC_TARGET: &str = "wasmtime::runtime::store::gc";
 /// How a record on [`GC_TARGET`] says a collection began.
 const GC_BEGAN: &str = "Begin GC";
 
-/// How one says the heap grew, and to what size.
-const GC_GREW: &str = "new size is";
+/// How one says the heap grew, before the bytes it grew by.
+const GC_GREW: &str = "grew GC heap by ";
+
+/// The bytes a record on [`GC_TARGET`] says the heap grew by, where it says the heap grew: the engine spells them in hex, `-> grew GC heap by 0x8000000 bytes: new size is 0x10000000 bytes`.
+fn grown_by(message: &str) -> Option<u64> {
+    let (_, told) = message.split_once(GC_GREW)?;
+    let hex = told.split_whitespace().next()?.strip_prefix("0x")?;
+
+    u64::from_str_radix(hex, 16).ok()
+}
 
 /// What the engine's collector did during one operation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Collected {
     /// How many collections began.
     pub collections: usize,
-    /// The engine's own sentence for the heap's last growth, where it grew.
-    pub growth: Option<String>,
+    /// The bytes the heap grew by, over every growth the engine announced: nought where it never grew.
+    pub grown: u64,
 }
 
 /// What the engine has said of its collector since a count opened, where one is open.
@@ -240,10 +251,13 @@ pub fn collected<T>(operation: impl FnOnce() -> T) -> (T, Collected) {
             .iter()
             .filter(|message| message.contains(GC_BEGAN))
             .count(),
-        growth: heard
+        grown: heard
             .iter()
-            .rfind(|message| message.contains(GC_GREW))
-            .map(|message| message.trim().to_string()),
+            .filter(|message| message.contains(GC_GREW))
+            .map(|message| {
+                grown_by(message).expect("the engine names the bytes its heap grew by in hex")
+            })
+            .sum(),
     };
 
     (result, collected)
