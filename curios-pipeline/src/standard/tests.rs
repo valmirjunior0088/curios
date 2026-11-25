@@ -30,8 +30,9 @@ use {
         fs,
         path::{Path, PathBuf},
         rc::Rc,
-        time::{Duration, Instant},
+        time::Instant,
     },
+    xbench::{Measure, read, read_elapsed},
 };
 
 /// The standard library's own tree, as the package claiming `/std` from it.
@@ -66,16 +67,16 @@ struct Edit {
     edit: fn(&str) -> String,
 }
 
-/// The two edits the standard library is measured over: a leaf, which nothing reads, and a hub, which most of the library reaches.
+/// The two edits the standard library is measured over: `leaf`, a declaration added to `/std/Nat`, which nothing reads, and `hub`, the body of `/std/Bool/not` respelled, which most of the library reaches.
 fn edits() -> [Edit; 2] {
     [
         Edit {
-            label: "a leaf: a declaration added to /std/Nat",
+            label: "leaf",
             file: "Nat.crs",
             edit: |text| format!("{text}\npub let _census_probe(a: Nat) -> Nat =\n    a;\n"),
         },
         Edit {
-            label: "a hub: the body of /std/Bool/not respelled",
+            label: "hub",
             file: "Bool.crs",
             edit: |text| text.replacen("xor(b, true)", "xor(true, b)", 1),
         },
@@ -130,9 +131,9 @@ fn elaborated_over(
     )
 }
 
-/// What a question about the standard library costs after an edit to one declaration: how many names are lowered again and how many elaborated again, and the time each phase takes, for a leaf and for a hub. A measurement, so it reports rather than asserts, and its timings are the profile it was built under.
+/// What a question about the standard library costs after an edit to one declaration: how many names are lowered again and how many elaborated again, and the time each phase takes, for a leaf and for a hub. `cargo xbench measure std_recompile_census` takes it: for each edit, `<edit>/names`, `/lowered again` and `/elaborated again`, and `/lower`, `/elaborate` and `/recompile`, each phase's time, the last lowering, elaborating, judging and erasing.
 #[test]
-#[ignore = "measurement, mixed: lowers the standard library and recompiles it over the archive, reporting what is done again and per-phase timings"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn std_recompile_census() {
     let directory = std_directory();
 
@@ -143,7 +144,6 @@ fn std_recompile_census() {
         let roots = [*sys];
         let predecessors = Predecessors::over(&roots);
 
-        println!("\n=== recompiling /std over the archive ===");
         for Edit { label, file, edit } in edits() {
             let path = directory.join(file);
             let text = edit(&fs::read_to_string(&path).expect("an authored source"));
@@ -191,25 +191,32 @@ fn std_recompile_census() {
                 .iter()
                 .flat_map(Item::declared_names)
                 .count();
-            println!("{label}");
-            println!(
-                "  lowered     {:>6} names again of {names}",
-                relowered.len()
-            );
-            println!(
-                "  elaborated  {:>6} names again of {names}",
-                elaborated.made.len()
-            );
-            println!("  lower       {lowered_in:>10.1?}");
-            println!("  elaborate   {elaborated_in:>10.1?}");
-            println!("  recompile   {recompiled_in:>10.1?}   (lower, elaborate, judge, erase)");
+            for (figure, count) in [
+                ("names", names),
+                ("lowered again", relowered.len()),
+                ("elaborated again", elaborated.made.len()),
+            ] {
+                read(
+                    &format!("{label}/{figure}"),
+                    Measure::Count,
+                    None,
+                    count as u64,
+                );
+            }
+            for (phase, took) in [
+                ("lower", lowered_in),
+                ("elaborate", elaborated_in),
+                ("recompile", recompiled_in),
+            ] {
+                read_elapsed(&format!("{label}/{phase}"), None, took);
+            }
         }
     });
 }
 
-/// Whether the standard library compiles to one unit: its tree compiled whole twice in one process, the two stored units compared byte for byte, and where they differ, the parts and the items that do. A measurement, since each compile is the whole library; counted, and it asserts, since a second unit is the fault it is here to name.
+/// Whether the standard library compiles to one unit: its tree compiled whole twice in one process, the two stored units compared byte for byte, and where they differ, the parts and the items that do. A check the suite ignores, since each compile is the whole library; a second unit is the fault it is here to name.
 #[test]
-#[ignore = "measurement, counted: compiles the standard library whole twice and compares the two stored units byte for byte"]
+#[ignore = "check: compiles the standard library whole twice and compares the two stored units byte for byte, minutes a run"]
 fn std_unit_reproduction() {
     with_prelude(|prelude| {
         let [sys, _] = prelude else {
@@ -272,21 +279,19 @@ fn std_unit_reproduction() {
             }
         }
 
-        println!("\n=== /std compiled whole twice ===");
-        println!("  items       {}", first.core().items.len());
-        println!("  differing   {differing:?}");
         assert!(
             first.stored().expect("a unit serializes").index()
                 == second.stored().expect("a unit serializes").index()
                 && stored!(&first) == stored!(&second),
-            "two compilations of the standard library store two units, differing in {differing:?}"
+            "two compilations of the standard library's {} items store two units, differing in {differing:?}",
+            first.core().items.len()
         );
     });
 }
 
-/// Whether the standard library elaborates to one module however far its declarations' binder counters had run: its tree lowered once and elaborated with every declaration's binders counted from its lowering's count and from a thousand above it, the two modules compared by value, and where they differ, the items that do. A measurement, since each elaboration is the whole library; counted, and it asserts, since a module that moves is the fault it is here to name: an order the elaborator puts atoms in reading an identity by its value.
+/// Whether the standard library elaborates to one module however far its declarations' binder counters had run: its tree lowered once and elaborated with every declaration's binders counted from its lowering's count and from a thousand above it, the two modules compared by value, and where they differ, the items that do. A check the suite ignores, since each elaboration is the whole library; a module that moves is the fault it is here to name: an order the elaborator puts atoms in reading an identity by its value.
 #[test]
-#[ignore = "measurement, counted: elaborates the standard library from two floors of its binder counters and compares the two modules item by item"]
+#[ignore = "check: elaborates the standard library from two floors of its binder counters and compares the two modules item by item, minutes a run"]
 fn std_identity_census() {
     with_prelude(|prelude| {
         let [sys, _] = prelude else {
@@ -305,19 +310,17 @@ fn std_identity_census() {
             .filter(|(one, other)| one != other)
             .map(|(one, _)| one.describe())
             .collect::<Vec<_>>();
-        println!("\n=== /std elaborated from two floors ===");
-        println!("  items       {}", first.items.len());
-        println!("  differing   {differing:?}");
         assert!(
             first == second,
-            "two floors elaborate two modules, differing in {differing:?}"
+            "two floors elaborate two modules of {} items, differing in {differing:?}",
+            first.items.len()
         );
     });
 }
 
-/// Whether the standard library elaborates to one module however long its tables keep an answer: its tree lowered once and elaborated with every table cleared at every boundary, and with each answer kept for as long as what it read stands, the two modules compared by value, and where they differ, the items that do. A measurement, since each elaboration is the whole library; counted, and it asserts, since a module that moves is an answer kept past something it read (`documentation/design/soundness/a-reduction-step-costs-what-it-builds.md`).
+/// Whether the standard library elaborates to one module however long its tables keep an answer: its tree lowered once and elaborated with every table cleared at every boundary, and with each answer kept for as long as what it read stands, the two modules compared by value, and where they differ, the items that do. A check the suite ignores, since each elaboration is the whole library; a module that moves is an answer kept past something it read (`documentation/design/soundness/a-reduction-step-costs-what-it-builds.md`).
 #[test]
-#[ignore = "measurement, counted: elaborates the standard library with every table cleared at every boundary and with each answer kept as long as what it read stands, and compares the two modules item by item"]
+#[ignore = "check: elaborates the standard library with every table cleared at every boundary and with each answer kept as long as what it read stands, and compares the two modules item by item, minutes a run"]
 fn std_memo_census() {
     with_prelude(|prelude| {
         let [sys, _] = prelude else {
@@ -336,19 +339,17 @@ fn std_memo_census() {
             .filter(|(one, other)| one != other)
             .map(|(one, _)| one.describe())
             .collect::<Vec<_>>();
-        println!("\n=== /std elaborated with its tables cleared and kept ===");
-        println!("  items       {}", wholesale.items.len());
-        println!("  differing   {differing:?}");
         assert!(
             wholesale == kept,
-            "keeping an answer moves the module, in {differing:?}"
+            "keeping an answer moves the module of {} items, in {differing:?}",
+            wholesale.items.len()
         );
     });
 }
 
-/// Whether the standard library compiled over a baseline is the unit it is compiled whole: for a leaf edit and for a hub, its edited tree compiled whole and over the archived unit, the two compared as each is stored. A measurement, since each edit compiles the library whole; counted, and it asserts, since a second unit is the fault it is here to name.
+/// Whether the standard library compiled over a baseline is the unit it is compiled whole: for a leaf edit and for a hub, its edited tree compiled whole and over the archived unit, the two compared as each is stored. A check the suite ignores, since each edit compiles the library whole; a second unit is the fault it is here to name.
 #[test]
-#[ignore = "measurement, counted: for a leaf edit and a hub, compiles the edited standard library whole and over the archive and compares the two stored units byte for byte"]
+#[ignore = "check: for a leaf edit and a hub, compiles the edited standard library whole and over the archive and compares the two stored units byte for byte, minutes a run"]
 fn std_recompile_reproduction() {
     let directory = std_directory();
 
@@ -359,8 +360,7 @@ fn std_recompile_reproduction() {
         let roots = [*sys];
         let predecessors = Predecessors::over(&roots);
 
-        println!("\n=== /std compiled whole and over the archive ===");
-        for Edit { label, file, edit } in edits() {
+        for Edit { file, edit, .. } in edits() {
             let path = directory.join(file);
             let text = edit(&fs::read_to_string(&path).expect("an authored source"));
             let source = std_from_its_tree().with_overlay(Overlay::of([(path, text)]));
@@ -390,19 +390,14 @@ fn std_recompile_reproduction() {
             )
             .expect("the edited library recompiles");
 
-            println!("{label}");
             assert_stored_alike(&whole, &over);
-            println!(
-                "  indexed     {:>10} bytes either way",
-                whole.stored().expect("a unit serializes").index().len()
-            );
         }
     });
 }
 
-/// Whether the standard library, an edit to it undone, takes each declaration the edit made again from what a cabinet filed of it before: for a leaf edit and for a hub, the library compiled whole and filed, the edit compiled over it and filed, and the library's own tree compiled over the edit with the cabinet's candidates, compared as stored with the first, and every verdict it holds one a filing completed, none judged again. A measurement, since each edit compiles the library whole; counted, and it asserts, since a unit other than the first, or a verdict judged again, is the fault it is here to name.
+/// Whether the standard library, an edit to it undone, takes each declaration the edit made again from what a cabinet filed of it before: for a leaf edit and for a hub, the library compiled whole and filed, the edit compiled over it and filed, and the library's own tree compiled over the edit with the cabinet's candidates, compared as stored with the first, and every verdict it holds one a filing completed, none judged again. A check the suite ignores, since each edit compiles the library whole; a unit other than the first, or a verdict judged again, is the fault it is here to name.
 #[test]
-#[ignore = "measurement, counted: for a leaf edit and a hub, files the standard library and the edit, undoes the edit over the cabinet's candidates, and compares the result with the first unit byte for byte"]
+#[ignore = "check: for a leaf edit and a hub, files the standard library and the edit, undoes the edit over the cabinet's candidates, and compares the result with the first unit byte for byte, minutes a run"]
 fn std_undo_reproduction() {
     let directory = std_directory();
 
@@ -424,7 +419,6 @@ fn std_undo_reproduction() {
         )
         .expect("the library compiles");
 
-        println!("\n=== /std with an edit undone over the cabinet ===");
         for Edit { label, file, edit } in edits() {
             let mut cabinet = Cabinet::default();
             cabinet.file(&original);
@@ -469,18 +463,15 @@ fn std_undo_reproduction() {
                 .filter(|(_, record)| !record.completed())
                 .map(|(name, _)| *name)
                 .collect::<Vec<_>>();
-            println!("{label}");
-            println!("  blobs read {:>9}", cabinet.read().len());
-            println!("  judged       {:>9}", judged.len());
             assert_eq!(judged, Vec::new(), "{label}: judged again");
             assert_stored_alike(&original, &undone);
         }
     });
 }
 
-/// Whether every part of the standard library digests alike held in hand and restored from a cabinet: what a unit compiled over the library records of a read, of its own or of another unit, is asked again by its digest, and a unit restored is read alike only where the two agree ([`part_digests`]); and so does what the certifier completes each judgment's record with, its own digest of each part read ([`complete_records`]). A measurement, since it compiles the library whole; counted, and it asserts.
+/// Whether every part of the standard library digests alike held in hand and restored from a cabinet: what a unit compiled over the library records of a read, of its own or of another unit, is asked again by its digest, and a unit restored is read alike only where the two agree ([`part_digests`]); and so does what the certifier completes each judgment's record with, its own digest of each part read ([`complete_records`]). A check the suite ignores, since it compiles the library whole.
 #[test]
-#[ignore = "measurement, counted: compiles the standard library whole, stores and restores it, and compares the digest of every part, binding and form the two hold, and how each completes its certifier's records"]
+#[ignore = "check: compiles the standard library whole, stores and restores it, and compares the digest of every part, binding and form the two hold, and how each completes its certifier's records, minutes a run"]
 fn std_part_digest_census() {
     with_prelude(|prelude| {
         let [sys, _] = prelude else {
@@ -525,19 +516,12 @@ fn std_part_digest_census() {
                 .collect::<Vec<_>>()
         };
         let (judged_now, judged_then) = (judgments(&held), judgments(&stored));
-        let completed = judged_now.iter().filter(|(_, made)| made.is_some()).count();
         let moved = judged_now
             .iter()
             .zip(&judged_then)
             .filter(|(now, then)| now != then)
             .map(|((name, _), _)| *name)
             .collect::<Vec<_>>();
-        println!("\n=== /std's parts held in hand and restored ===");
-        println!("  parts digested        {:>10}", now.len());
-        println!("  parts differing       {:>10}", differing.len());
-        println!("  judgments             {:>10}", judged_now.len());
-        println!("  judgments completed   {:>10}", completed);
-        println!("  judgments differing   {:>10}", moved.len());
         assert_eq!(now.len(), then.len(), "the two hold the same parts");
         assert!(
             differing.is_empty(),
@@ -555,34 +539,32 @@ fn std_part_digest_census() {
     });
 }
 
-/// How the standard library's stored unit divides between its parts: the bytes of each archived alone, and how long each takes to restore out of them. What only a recompile of the unit reads is its baseline half, and the rest is what every compilation after the unit restores. A measurement, so it reports rather than asserts; mixed, its bytes counted and its times the median of five readings with their span, the profile it was built under.
+/// How the standard library's stored unit divides between its parts: the bytes of each archived alone, and how long each takes to restore out of them. What only a recompile of the unit reads is its baseline half, and the rest is what every compilation after the unit restores. `cargo xbench measure std_image_division` takes it: each part's `<part>/bytes` and, where it is restored alone, five readings of `<part>/restore`, a part named under the whole it is of; `structures/…`, the structures the module conses into in one table and item by item; and five readings of each of a filing's steps, `a filing's steps/<step>`.
 #[test]
-#[ignore = "measurement, mixed: archives each part of the standard library's unit alone and reports its bytes and how long it takes to restore"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn std_image_division() {
     with_prelude(|prelude| {
         let [_, std] = prelude else {
             panic!("the prelude has two roots")
         };
-        let row = |part: &str, bytes: usize, times: Option<[Duration; 3]>| match times {
-            Some([least, median, most]) => println!(
-                "  {part:<42}{bytes:>12} bytes   {median:>9.1?}  ({least:.1?} to {most:.1?})"
-            ),
-            None => println!("  {part:<42}{bytes:>12} bytes"),
+        let sized = |part: &str, length: usize| {
+            read(
+                &format!("{part}/bytes"),
+                Measure::Count,
+                None,
+                length as u64,
+            );
         };
-        // The least, the median and the most of five restorations of `$bytes` as a `$type`.
+        // Five restorations of `$bytes` as a `$type`, each a reading of `$part`'s restore.
         macro_rules! restored {
-            ($type:ty, $bytes:expr) => {{
-                let mut readings = [Duration::ZERO; 5];
-                for reading in &mut readings {
+            ($part:expr, $type:ty, $bytes:expr) => {{
+                for _ in 0..5 {
                     let start = Instant::now();
                     let value =
                         curios_archive::from_bytes::<$type>($bytes).expect("a part restores");
-                    *reading = start.elapsed();
+                    read_elapsed(concat!($part, "/restore"), None, start.elapsed());
                     drop(value);
                 }
-                readings.sort();
-
-                [readings[0], readings[2], readings[4]]
             }};
         }
         // What `$definitions`' items are of it: archived as it holds them, and each alone, which stores a structure two of them share once for each.
@@ -600,17 +582,15 @@ fn std_image_division() {
                             .len()
                     })
                     .sum::<usize>();
-                row($name, whole.len(), None);
-                row(concat!($name, ", each archived alone"), alone, None);
+                sized($name, whole.len());
+                sized(concat!($name, ", each archived alone"), alone);
             }};
         }
         macro_rules! part {
             ($name:expr, $type:ty, $value:expr) => {{
-                let bytes = curios_archive::to_bytes($value).expect("a part serializes");
-                let length = bytes.len();
-                row($name, length, Some(restored!($type, &bytes)));
-
-                length
+                let encoded = curios_archive::to_bytes($value).expect("a part serializes");
+                sized($name, encoded.len());
+                restored!($name, $type, &encoded);
             }};
         }
 
@@ -682,7 +662,6 @@ fn std_image_division() {
         )
         .len();
 
-        println!("\n=== how /std's stored unit divides ===");
         // Every blob once, a run its members share counted once.
         let blobs_held = blobs
             .iter()
@@ -693,52 +672,78 @@ fn std_image_division() {
             .collect::<BTreeMap<_, _>>()
             .values()
             .sum::<usize>();
-        row("the index", stored.index().len(), None);
-        row("its blobs", blobs_held, None);
-        row(
-            "what a successor restores",
-            unit.len(),
-            Some(restored!(Unit, unit)),
-        );
+        sized("the index", stored.index().len());
+        sized("its blobs", blobs_held);
+        sized("what a successor restores", unit.len());
+        restored!("what a successor restores", Unit, unit);
         part!(
-            "  the lowering's state",
+            "what a successor restores/the lowering's state",
             PreparedText,
             std.text().expect("a program's unit holds its lowering")
         );
         let consed = std.core().shared(&Sharing::new());
-        part!("  the elaborated module, consed", Definitions, &consed);
-        items!("    its items", &consed);
-        part!("  its erased forms' index", ErasedUnit, std.erased());
         part!(
-            "  the certifier's record",
+            "what a successor restores/the elaborated module, consed",
+            Definitions,
+            &consed
+        );
+        items!(
+            "what a successor restores/the elaborated module, consed/its items",
+            &consed
+        );
+        part!(
+            "what a successor restores/its erased forms' index",
+            ErasedUnit,
+            std.erased()
+        );
+        part!(
+            "what a successor restores/the certifier's record",
             Certification,
             std.certification()
         );
 
-        row(
+        sized(
             "what a reader of a declaration restores",
             lowered + forms + module,
-            None,
         );
-        row("  its lowered items, each stored alone", lowered, None);
-        row("  its erased forms, each stored alone", forms, None);
-        row("  its elaborated items, one run read by item", module, None);
-        row("what a report restores", anchors, None);
-        row(
-            "  where its declarations lie, each source's texts alone",
+        sized(
+            "what a reader of a declaration restores/its lowered items, each stored alone",
+            lowered,
+        );
+        sized(
+            "what a reader of a declaration restores/its erased forms, each stored alone",
+            forms,
+        );
+        sized(
+            "what a reader of a declaration restores/its elaborated items, one run read by item",
+            module,
+        );
+        sized("what a report restores", anchors);
+        sized(
+            "what a report restores/where its declarations lie, each source's texts alone",
             anchors,
-            None,
         );
-        row(
+        sized(
             "what a recompile alone restores",
             imports + records + asked + erasures + reads,
-            None,
         );
-        row("  its import scopes", imports, None);
-        row("  what its verdicts stand on", reads, None);
-        row("  the lowering's records and scans", records, None);
-        row("  what its declarations asked", asked, None);
-        row("  what its erasures asked", erasures, None);
+        sized("what a recompile alone restores/its import scopes", imports);
+        sized(
+            "what a recompile alone restores/what its verdicts stand on",
+            reads,
+        );
+        sized(
+            "what a recompile alone restores/the lowering's records and scans",
+            records,
+        );
+        sized(
+            "what a recompile alone restores/what its declarations asked",
+            asked,
+        );
+        sized(
+            "what a recompile alone restores/what its erasures asked",
+            erasures,
+        );
 
         let together = Sharing::new();
         std.core().shared(&together);
@@ -756,59 +761,59 @@ fn std_image_division() {
                 sharing.structures()
             })
             .sum::<usize>();
-        println!(
-            "  structures  {} with the module consed in one table, {} with each item in its own",
-            together.structures(),
-            alone
+        read(
+            "structures/the module consed in one table",
+            Measure::Count,
+            None,
+            together.structures() as u64,
+        );
+        read(
+            "structures/each item in its own",
+            Measure::Count,
+            None,
+            alone as u64,
         );
 
-        // The least, the median and the most of five runs of `$step`.
+        // Five runs of `$step`, each a reading of `a filing's steps/$name`.
         macro_rules! timed {
             ($name:expr, $step:expr) => {{
-                let mut readings = [Duration::ZERO; 5];
-                for reading in &mut readings {
+                for _ in 0..5 {
                     let start = Instant::now();
                     let value = $step;
-                    *reading = start.elapsed();
+                    read_elapsed(concat!("a filing's steps/", $name), None, start.elapsed());
                     drop(value);
                 }
-                readings.sort();
-                println!(
-                    "  {:<42}{:>9.1?}  ({:.1?} to {:.1?})",
-                    $name, readings[2], readings[0], readings[4]
-                );
             }};
         }
-        println!("  a filing's steps");
         timed!(
-            "    consing the elaborated module",
+            "consing the elaborated module",
             std.core().shared(&Sharing::new())
         );
         timed!(
-            "    serializing the elaborated module alone",
+            "serializing the elaborated module alone",
             curios_archive::to_bytes(&consed).expect("a module serializes")
         );
         timed!(
-            "    indexing the unit, its items named alone",
+            "indexing the unit, its items named alone",
             std.stored().expect("a unit serializes")
         );
         timed!(
-            "    serializing its blobs, one run consed",
+            "serializing its blobs, one run consed",
             stored.blobs(|_| true).expect("a unit's blobs serialize")
         );
-        timed!("    digesting the index", digest(stored.index()));
+        timed!("digesting the index", digest(stored.index()));
         let pack =
             Pack::read(curios_archive::Bytes::from(packed(&blobs))).expect("a unit's blobs pack");
         timed!(
-            "    restoring the unit",
+            "restoring the unit",
             Unit::restored(stored.index(), |digest| pack.get(digest)).expect("a unit restores")
         );
     });
 }
 
-/// Whether a declaration the prover's vocabulary comes to read is elaborated again with no lemma of the library on offer, as a whole compile elaborates it. `/std/Eq/sym`, a lemma of the vocabulary, is made to name `/std/Str/At/skip`, whose proofs the prover writes: compiled whole, `skip` is then asked for before the lemmas are offered. Compiled over the archive, `skip`'s text stands and its trace says the lemmas were on offer, so the walk elaborates it again where it now stands. The two compiles answer alike: with one stored unit, or with the same reports. A measurement, since each compile is the library's; it asserts, the two answers being one claim.
+/// Whether a declaration the prover's vocabulary comes to read is elaborated again with no lemma of the library on offer, as a whole compile elaborates it. `/std/Eq/sym`, a lemma of the vocabulary, is made to name `/std/Str/At/skip`, whose proofs the prover writes: compiled whole, `skip` is then asked for before the lemmas are offered. Compiled over the archive, `skip`'s text stands and its trace says the lemmas were on offer, so the walk elaborates it again where it now stands. The two compiles answer alike: with one stored unit, or with the same reports. A check the suite ignores, since each compile is the library's; the two answers are one claim.
 #[test]
-#[ignore = "measurement, counted: makes a lemma of the prover's vocabulary read a declaration, compiles the standard library whole and over the archive, and compares the two answers"]
+#[ignore = "check: makes a lemma of the prover's vocabulary read a declaration, compiles the standard library whole and over the archive, and compares the two answers, minutes a run"]
 fn std_vocabulary_reach_reproduction() {
     let directory = std_directory();
 
@@ -851,18 +856,10 @@ fn std_vocabulary_reach_reproduction() {
             Telling::default(),
         );
 
-        println!("\n=== /std with a lemma of the vocabulary reading /std/Str/At/skip ===");
         match (whole, over) {
-            (Ok(whole), Ok(over)) => {
-                println!("  compiles either way");
-                assert_stored_alike(&whole, &over);
-            }
+            (Ok(whole), Ok(over)) => assert_stored_alike(&whole, &over),
             (Err(whole), Err(over)) => {
                 let (whole, over) = (String::from(whole), String::from(over));
-                println!(
-                    "  refused either way: {}",
-                    whole.lines().next().unwrap_or_default()
-                );
                 assert_eq!(
                     whole, over,
                     "a compile over the archive refuses the library in other words than a whole compile"
@@ -980,9 +977,9 @@ fn every_declaration_of_the_library_is_held_to_its_record_and_its_answers() {
 /// How many unrelated definitions the replay elaborates ahead of a declaration, one pass each.
 const PADDINGS: [usize; 2] = [0, 1];
 
-/// What each declaration of the standard library elaborates to where it alone is elaborated again: the library as its sources lower it, compiled over the archived unit with every declaration but one offered as kept, so the walk elaborates that one and keeps the others by their traces. The declaration is compared with what the archive holds for it, and so is what it asked; what else the walk elaborated again is counted. And again with unrelated authored definitions elaborated beside it, which nothing it reads distinguishes. A declaration is a function of what it reads exactly when this reports nothing (`documentation/design/compilation/a-declaration-is-a-function-of-what-it-reads.md`). A measurement, so it reports rather than asserts.
+/// What each declaration of the standard library elaborates to where it alone is elaborated again: the library as its sources lower it, compiled over the archived unit with every declaration but one offered as kept, so the walk elaborates that one and keeps the others by their traces. The declaration is compared with what the archive holds for it, and so is what it asked; what else the walk elaborated again is counted. And again with unrelated authored definitions elaborated beside it, which nothing it reads distinguishes. A declaration is a function of what it reads exactly when this reports nothing (`documentation/design/compilation/a-declaration-is-a-function-of-what-it-reads.md`). `cargo xbench measure std_replay_census` takes it: for each padding, `beside <padding>/declarations`, and a figure of one for each declaration of `beside <padding>/refused/<declaration>`, `/differing/<declaration>` and `/asked otherwise/<declaration>`, with `/others/<declaration>` the names the walk elaborated again beyond those it was handed; how a declaration differs, or why it is refused, is written to standard error beside them.
 #[test]
-#[ignore = "measurement, counted: lowers the standard library and compiles it over the archive once for each of its declarations, that declaration alone elaborated again, reporting the ones that come out different"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn std_replay_census() {
     with_prelude(|prelude| {
         let [sys, std] = prelude else {
@@ -1007,10 +1004,15 @@ fn std_replay_census() {
             })
             .collect::<BTreeMap<_, _>>();
 
-        println!("\n=== elaborating each declaration of /std again, alone, over the archive ===");
         let declarations = declarations(lowered_core);
         for padding in PADDINGS {
-            let (mut refused, mut differing, mut retraced, mut beside) = (0, 0, 0, 0);
+            let beside = format!("beside {padding}");
+            read(
+                &format!("{beside}/declarations"),
+                Measure::Count,
+                None,
+                declarations.len() as u64,
+            );
             for names in &declarations {
                 let first = names
                     .iter()
@@ -1040,13 +1042,18 @@ fn std_replay_census() {
                         .take(padding),
                 );
 
+                let declaration = own.describe();
                 match elaborated_over(predecessors, std, &lowered, &again) {
                     Err(error) => {
-                        refused += 1;
+                        read(
+                            &format!("{beside}/refused/{declaration}"),
+                            Measure::Count,
+                            None,
+                            1,
+                        );
                         let refusal = error.to_string().replace('\n', " | ");
-                        println!(
-                            "  beside {padding}: {} is refused: {}",
-                            own.describe(),
+                        eprintln!(
+                            "{beside}: {declaration} is refused: {}",
                             refusal.chars().take(600).collect::<String>()
                         );
                     }
@@ -1056,30 +1063,38 @@ fn std_replay_census() {
                             (&replayed.definitions, &replayed.traces),
                             names,
                         );
-                        differing += usize::from(!differences.is_empty());
+                        if !differences.is_empty() {
+                            read(
+                                &format!("{beside}/differing/{declaration}"),
+                                Measure::Count,
+                                None,
+                                1,
+                            );
+                        }
                         for difference in differences {
-                            println!("  beside {padding}: {difference}");
+                            eprintln!("{beside}: {difference}");
                         }
                         if replayed.traces.of(&written) != std.traces().of(&written) {
-                            retraced += 1;
-                            println!("  beside {padding}: {}: what it asked", own.describe());
+                            read(
+                                &format!("{beside}/asked otherwise/{declaration}"),
+                                Measure::Count,
+                                None,
+                                1,
+                            );
                         }
                         // What the walk elaborated again beyond what it was handed: a declaration that asked a part which came out another way.
                         let others = replayed.made.difference(&again).count();
                         if others != 0 {
-                            beside += 1;
-                            println!(
-                                "  beside {padding}: {}: {others} other names elaborated again",
-                                own.describe()
+                            read(
+                                &format!("{beside}/others/{declaration}"),
+                                Measure::Count,
+                                None,
+                                others as u64,
                             );
                         }
                     }
                 }
             }
-            println!(
-                "beside {padding} unrelated definitions: {differing} of {} declarations differ, {refused} are refused, {retraced} ask otherwise, {beside} take another declaration with them",
-                declarations.len()
-            );
         }
     });
 }
@@ -1757,9 +1772,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
 ///
 /// # How to run it
 ///
-/// ```sh
-/// cargo test --package curios-pipeline --lib -- --ignored --nocapture family_slot_probe
-/// ```
+/// `cargo xbench measure family_slot_probe` takes it: `families declared` and `families holding a family-typed field`, `free/families` and `free/slots typed`, `paid/families`, `paid/slots typed` and `paid/width`, and for each family holding one, `<family>/slots uniform`, `/slots typed`, `/typed slots uniform`, `/typed slots typed` and `/paid`, one where typing its reference slots widens it.
 ///
 /// # What it last printed
 ///
@@ -1781,7 +1794,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
 ///
 /// **What the figures decide.** `/std/Map/Node/Node`, the family a typed fork's children would serve, is a paid row: four slots to five, a quarter again as much live memory on the corpus's hottest allocated structure, to replace two casts that are already exact compares against a final type. Against the `trees` finding that live bytes convert to time under an all-live collector, that is a trade to decline, and the door declines it. What the door does instead is admit the free column by the exact criterion: it types a family's reference slots iff the row's width is unchanged, which sixteen families meet, the command line's, the formatter's, the layout's and the TOML reader's among them. A product needs no such test: one writer can never widen a row, so its reference fields always type.
 #[test]
-#[ignore = "measurement, counted: reports the split rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn family_slot_probe() {
     with_prelude(|prelude| {
         let families = prelude
@@ -1856,7 +1869,6 @@ fn family_slot_probe() {
 
         let (mut free_families, mut paid_families) = (0, 0);
         let (mut free_slots, mut paid_slots, mut paid_width) = (0, 0, 0);
-        let mut report = Vec::new();
 
         for family in &families {
             let rows = &family.constructors;
@@ -1887,31 +1899,35 @@ fn family_slot_probe() {
                     paid_width += typed_width - uniform_width;
                 }
             }
-            report.push(format!(
-                "  {:<34} {} slots -> {} slots, {} typed -> {} typed   {}",
-                family.name,
-                uniform_width,
-                typed_width,
-                uniform_typed,
-                typed_typed,
-                match free {
-                    true => "FREE",
-                    false => "PAID",
-                }
-            ));
+            for (figure, count) in [
+                ("slots uniform", uniform_width),
+                ("slots typed", typed_width),
+                ("typed slots uniform", uniform_typed),
+                ("typed slots typed", typed_typed),
+                ("paid", usize::from(!free)),
+            ] {
+                read(
+                    &format!("{}/{figure}", family.name),
+                    Measure::Count,
+                    None,
+                    count as u64,
+                );
+            }
         }
 
-        println!(
-            "families declared: {}, holding a family-typed field: {}",
-            families.len(),
-            free_families + paid_families
-        );
-        println!("  free: {free_families} families, {free_slots} slots typed at no width cost");
-        println!(
-            "  paid: {paid_families} families, {paid_slots} slots typed for {paid_width} slots of width"
-        );
-        for line in report {
-            println!("{line}");
+        for (figure, count) in [
+            ("families declared", families.len()),
+            (
+                "families holding a family-typed field",
+                free_families + paid_families,
+            ),
+            ("free/families", free_families),
+            ("free/slots typed", free_slots),
+            ("paid/families", paid_families),
+            ("paid/slots typed", paid_slots),
+            ("paid/width", paid_width),
+        ] {
+            read(figure, Measure::Count, None, count as u64);
         }
     });
 }

@@ -48,3 +48,5 @@ curios-common = { workspace = true, features = ["test-support"] }
 curios-unit = { workspace = true, features = ["test-support"] }
 # The bytes a unit is stored as, which a suite compares across two compilations of it.
 curios-archive = { workspace = true }
+# The harness the measurements beside the code name their figures through, which `cargo xbench measure` takes by name.
+xbench = { workspace = true }

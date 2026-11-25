@@ -903,6 +903,7 @@ dependencies = [
  "curios-surface",
  "curios-unit",
  "curios-wasm",
+ "xbench",
 ]
 
 [[package]]
