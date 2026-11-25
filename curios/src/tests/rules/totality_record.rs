@@ -733,3 +733,71 @@ fn a_record_literal_hands_each_field_its_own_applications_alone() {
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
+
+// An arm of another case than its scrutinee already is holds no call: no reduction takes it, so the call of the witness on `x` and `y` in the `node` arm of a match on `leaf()` is none `same` makes, and the witness descends where its recursion on `a` does, which a type reaching `same` unfolds. Both checkers read it so, the certifier typing the arm and recording no call. The refusal hands the match a node, whose arm, now taken, calls the witness on binders nothing places below a parameter, which keeps it folded.
+#[test]
+fn an_arm_its_scrutinees_constructor_rules_out_holds_no_call() {
+    control(
+        r#"
+        use /std/{Eq, Bool};
+
+        induct Tree: Type | leaf() | node(Tree, Tree) end
+
+        concept Same(A: Type): Type { same(A, A) -> Bool }
+
+        satisfy Same(Tree) {
+            same(a, b) =
+                match Tree/leaf()
+                | leaf() =>
+                    match a
+                    | leaf() => match b | leaf() => true | node(_, _) => false end
+                    | node(l, r) => match b | leaf() => false | node(p, q) => Same/same(l, p) && Same/same(r, q) end
+                    end
+                | node(x, y) => Same/same(x, y)
+                end,
+        }
+
+        let both: Eq()(Same/same(Tree/leaf(), Tree/leaf()), true) = Eq/refl();
+
+        /std/print(Bool/to_str(Same/same(Tree/leaf(), Tree/leaf())))
+        "#,
+        b"true",
+    )
+    .refused(&[("match Tree/leaf()\n", "match Tree/node(Tree/leaf(), Tree/leaf())\n")])
+    .saying("is kept folded");
+}
+
+// A law closed by reflexivity has its implicit argument inferred as the literal's own `same` applied to `(leaf(), leaf())`, a redex whose binders stand for their arguments, so its `node` arms are of another case than their scrutinees and hold no call: the witness descends, and the law checks against the method it unfolds. The refusal picks a node, whose arm the redex takes and whose call of the witness descends from no parameter.
+#[test]
+fn a_law_closed_by_reflexivity_holds_no_call_of_an_arm_its_arguments_rule_out() {
+    control(
+        r#"
+        use /std/{Eq, Bool};
+
+        induct Tree: Type | leaf() | node(Tree, Tree) end
+
+        concept Pick(A: Type): Type {
+            same(A, A) -> Bool,
+            pick: A,
+            picked: Eq()(same(pick, pick), true),
+        }
+
+        satisfy Pick(Tree) {
+            same(a, b) =
+                match a
+                | leaf() => match b | leaf() => true | node(_, _) => false end
+                | node(l, r) => match b | leaf() => false | node(p, q) => Pick/same(l, p) && Pick/same(r, q) end
+                end,
+            pick = Tree/leaf(),
+            picked = Eq/refl(),
+        }
+
+        /std/print(Bool/to_str(Pick/same(Pick/pick(@Tree), Tree/leaf())))
+        "#,
+        b"true",
+    )
+    .refused(&[("pick = Tree/leaf()", "pick = Tree/node(Tree/leaf(), Tree/leaf())")])
+    .by_elaborator_in("/witness~/Pick(/Tree)", |error| {
+        matches!(error, curios_elab::Error::TypeMismatch { .. })
+    });
+}

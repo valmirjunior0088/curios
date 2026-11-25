@@ -164,7 +164,7 @@ fn fits_its_variable<J: Judge>(judge: &mut J, name: &Free, value: &Term) -> Resu
 }
 
 /// Whether the family `name` is relevant, its declared result sort read on the nose: `Some(false)` at `Prop`, and `None` where the registry cannot answer for it, which licenses neither injectivity nor a clash.
-fn relevance<D: Driver>(driver: &D, name: &Global) -> Option<bool> {
+pub fn relevance<D: Driver>(driver: &D, name: &Global) -> Option<bool> {
     let declaration = driver.induct_decl(name)?;
 
     Some(!matches!(

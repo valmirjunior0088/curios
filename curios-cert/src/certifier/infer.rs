@@ -627,14 +627,17 @@ fn check_cases(
         let expected = goal_at(goal, scrutinee, &[], &[], &value);
 
         let mut assumed = Vec::new();
-        let checked = certifier.tried(|certifier| {
-            certifier.assume_guard(sized, &value)?;
-            let mut solutions = Vec::new();
-            assumed = eliminate::assume_case_value(certifier, scrutinee, &value, &mut solutions)?;
-            certifier.assume_arm(sized, &value, &[])?;
-            eliminate::bind_solutions(certifier, &solutions)?;
+        let checked = certifier.arm_typed(sized, &value, |certifier| {
+            certifier.tried(|certifier| {
+                certifier.assume_guard(sized, &value)?;
+                let mut solutions = Vec::new();
+                assumed =
+                    eliminate::assume_case_value(certifier, scrutinee, &value, &mut solutions)?;
+                certifier.assume_arm(sized, &value, &[])?;
+                eliminate::bind_solutions(certifier, &solutions)?;
 
-            check(certifier, body, &expected)
+                check(certifier, body, &expected)
+            })
         });
 
         eliminate::unless_never_taken(certifier, checked, &assumed, &[])
@@ -778,18 +781,20 @@ fn check_free_monoid(
             let expected = goal_at(goal, scrutinee, &[], &[], &cons_value);
 
             let mut assumed = Vec::new();
-            let checked = certifier.tried(|certifier| {
-                let mut solutions = Vec::new();
-                assumed = eliminate::assume_case_value(
-                    certifier,
-                    scrutinee,
-                    &cons_value,
-                    &mut solutions,
-                )?;
-                certifier.assume_arm(sized, &size_value, &names)?;
-                eliminate::bind_solutions(certifier, &solutions)?;
+            let checked = certifier.arm_typed(sized, &size_value, |certifier| {
+                certifier.tried(|certifier| {
+                    let mut solutions = Vec::new();
+                    assumed = eliminate::assume_case_value(
+                        certifier,
+                        scrutinee,
+                        &cons_value,
+                        &mut solutions,
+                    )?;
+                    certifier.assume_arm(sized, &size_value, &names)?;
+                    eliminate::bind_solutions(certifier, &solutions)?;
 
-                check(certifier, body, &expected)
+                    check(certifier, body, &expected)
+                })
             });
 
             eliminate::unless_never_taken(certifier, checked, &assumed, &names)
@@ -1282,7 +1287,7 @@ fn infer_telescope(
             // The binder stands for its argument as a graded call reads it, a `let`-bound local by what it stands for, so what an arm rules of the binder reaches the parameter a call is graded against.
             if let Some(argument) = arguments.get(entries.len()) {
                 let graded = certifier.graded(argument);
-                certifier.refine_size(&binder, &graded)?;
+                certifier.stand_for(&binder, &graded)?;
             }
             entries.push((mark, binder, domain));
         }

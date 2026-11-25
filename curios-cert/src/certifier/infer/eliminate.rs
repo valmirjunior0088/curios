@@ -163,18 +163,20 @@ fn check_arm(
                 }
 
                 let mut assumed = Vec::new();
-                let checked = certifier.tried(|certifier| {
-                    assumed = assume_case_value(certifier, scrutinee, &value, &mut solutions)?;
-                    // What the call recorder grades under within the arm: the case the arm names, and the payload binders — an application of one reads as the payload it came from.
-                    certifier.assume_arm(sized, &value, binders)?;
-                    certifier.assume_payloads(binders)?;
+                let checked = certifier.arm_typed(sized, &value, |certifier| {
+                    certifier.tried(|certifier| {
+                        assumed = assume_case_value(certifier, scrutinee, &value, &mut solutions)?;
+                        // What the call recorder grades under within the arm: the case the arm names, and the payload binders — an application of one reads as the payload it came from.
+                        certifier.assume_arm(sized, &value, binders)?;
+                        certifier.assume_payloads(binders)?;
 
-                    let refs = payload.iter().collect::<Vec<_>>();
-                    let body = arm.open(&refs);
-                    let expected = goal_at(goal, scrutinee, &family.indices, targets, &value);
-                    bind_solutions(certifier, &solutions)?;
+                        let refs = payload.iter().collect::<Vec<_>>();
+                        let body = arm.open(&refs);
+                        let expected = goal_at(goal, scrutinee, &family.indices, targets, &value);
+                        bind_solutions(certifier, &solutions)?;
 
-                    check(certifier, &body, &expected)
+                        check(certifier, &body, &expected)
+                    })
                 });
 
                 unless_never_taken(certifier, checked, &assumed, binders)

@@ -83,15 +83,24 @@ fn marker(index: usize) -> Term {
 /// The markers minted so far, and which of them the walk is documented not to reach.
 #[derive(Default)]
 struct Markers {
-    minted: usize,
+    minted: Vec<Term>,
     unvisited: Vec<(Term, &'static str)>,
 }
 
 impl Markers {
     /// A child the walk must reach.
     fn visited(&mut self) -> Term {
-        self.minted += 1;
-        marker(self.minted)
+        let marker = marker(self.minted.len() + 1);
+        self.minted.push(marker.clone());
+        marker
+    }
+
+    /// A match's head the walk must reach: a local, distinct from every other marker, since a head that is a literal is a case, and an arm of another case than its head already is holds no call the walk would reach.
+    fn head(&mut self) -> Term {
+        let index = u64::try_from(self.minted.len() + 1).expect("a marker's index fits");
+        let head = Term::free_var(&Free::local(20_000 + index, None));
+        self.minted.push(head.clone());
+        head
     }
 
     /// A child on the whitelist, with the mechanism that keeps the walk from it.
@@ -110,9 +119,9 @@ struct Specimen {
 
 impl Specimen {
     fn of(markers: &mut Markers, build: impl FnOnce(&mut Markers) -> Term) -> Self {
-        let first = markers.minted;
+        let first = markers.minted.len();
         let term = build(markers);
-        let markers = (first + 1..=markers.minted).map(marker).collect();
+        let markers = markers.minted[first..].to_vec();
 
         Self { term, markers }
     }
@@ -209,7 +218,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
     let call = || Term::free_var(&planted());
     let matching = |markers: &mut Markers, cases: Cases| -> Term {
         Subterm::Match(Match {
-            head: markers.visited(),
+            head: markers.head(),
             goal: markers.visited(),
             cases,
         })
@@ -367,7 +376,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
         }),
         Specimen::of(&mut markers, |markers| {
             Subterm::Match(Match {
-                head: markers.visited(),
+                head: markers.head(),
                 goal: markers.visited(),
                 cases: Cases::Bool {
                     false_case: markers.visited(),
@@ -969,4 +978,41 @@ fn a_call_argument_stuck_on_a_neutral_grades_unread() {
             if defined { "defined" } else { "a neutral" },
         );
     }
+}
+
+/// An arm of another case than the one its scrutinee already is holds no call: `rec f : Nat = match a() | a() => 0 | b() => f end` descends, no reduction taking the `b` arm, where the same call in the `a` arm, which the scrutinee is, is a call with no descent. Read under the certifier, which types no such arm either.
+#[test]
+fn an_arm_of_another_case_than_its_scrutinee_holds_no_call() {
+    let mut certifier = certifier();
+    let family = declare(&mut certifier, "N", Term::type_ground());
+    let nat = || Term::intrinsic(Intrinsic::NatType);
+    let zero = || Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
+    let f = Free::local(2, Some("f"));
+    let totality = |certifier: &mut Certifier, ruled_out: Term, taken: Term| {
+        let rec = Term::rec(
+            vec![(
+                f,
+                nat(),
+                Term::induct_match(
+                    Term::variant(family, Vec::<Term>::new(), "a", Vec::<Term>::new()),
+                    nat(),
+                    [("a", vec![], taken), ("b", vec![], ruled_out)],
+                ),
+            )],
+            Term::free_var(&f),
+        );
+        let Subterm::Rec(block) = &*rec else {
+            panic!("the fixture changed shape");
+        };
+        group_totality(certifier, block.group())
+    };
+
+    assert_eq!(
+        totality(&mut certifier, Term::free_var(&f), zero()),
+        Ok(Totality::Total)
+    );
+    assert_eq!(
+        totality(&mut certifier, zero(), Term::free_var(&f)),
+        Ok(Totality::Unfounded)
+    );
 }

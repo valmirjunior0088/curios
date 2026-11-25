@@ -11,7 +11,7 @@ pub use judge::{Driver, Judge};
 mod case_equation;
 pub use case_equation::{
     Answered, RESOLVED_SPELLING_LAYERS, ReadsProofs, ScrutineeRead, another_case, answers,
-    answers_classed, catch_all_tests, could_answer, holds_no_type, read_scrutinee,
+    answers_classed, catch_all_tests, constructed, could_answer, holds_no_type, read_scrutinee,
     read_scrutinee_classed, records_case_equation,
 };
 
@@ -30,6 +30,7 @@ pub use conversion::{
 };
 
 mod invert;
+use invert::*;
 pub use invert::{
     Invert, Pinned, case_target_indices, invert_indices, pinned_by_targets, pinned_instance,
     solve_indices, wholly_pinned,
@@ -65,7 +66,7 @@ pub use totality::{
     Answer, Applied, Call, Holding, PartShape, Segment, SizeContext, Standing, base_part,
     binder_bounds, blocker, call_path, decide, definition_applications, grade, group_applications,
     group_parts, group_totality, handed, handed_member, handed_within, held_application,
-    known_to_terminate, nonzero_by, part_calls, refined_by_arm, yields_a_sort_where,
+    known_to_terminate, nonzero_by, part_calls, refined_by_arm, ruled_out, yields_a_sort_where,
 };
 
 mod erased;

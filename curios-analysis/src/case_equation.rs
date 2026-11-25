@@ -5,14 +5,15 @@ mod tests;
 
 use {
     crate::{
-        Classes, IntrinsicDriver, Invert, Judge, atoms_in, atoms_of, classable, classed,
+        Classes, Driver, IntrinsicDriver, Invert, Judge, atoms_in, atoms_of, classable, classed,
         classed_in, intrinsics_agree, invert_indices,
     },
     curios_algebra::{Carrier, Operation},
     curios_common::{SyntaxRegistry, recurse},
     curios_core::{
-        Bound, Cases, Cost, Declaration, Free, Intrinsic, Keys, Nat, ReduceError, Reducer, Subterm,
-        Term, bool_value, is_bool_connective,
+        Apply, Atom, Bound, Cases, Cost, Declaration, Free, Func, Global, Instance, Intrinsic,
+        Keys, Nat, ReduceError, Reducer, Subterm, Telescope, Term, Variant, bool_value,
+        is_bool_connective,
     },
     std::{collections::HashMap, mem, slice},
 };
@@ -84,6 +85,42 @@ fn stands_as_a_case(term: &Term) -> bool {
         }
         Subterm::Intrinsic(Intrinsic::Nat(_)) => Nat::is_zero(&Nat::decompose(term).1),
         _ => false,
+    }
+}
+
+/// The family and the constructor of the value `term` is as it is written: a constructed value's, or that of a call of a constructor's definition (`called_constructor`).
+pub fn constructed<D: Driver>(driver: &D, term: &Term) -> Option<(Global, Atom)> {
+    match &**term {
+        Subterm::Variant(Variant { name, tag, .. }) => Some((*name, tag.clone())),
+        _ => called_constructor(driver, term),
+    }
+}
+
+/// The family and the constructor of the value a call builds where it hands every argument to a definition whose body is a lambda answering a constructed value, as a constructor's definition is ([`Made::constructors`](curios_core::Made::constructors)), which the call is by one substitution. The body is read where the call names it and not reduced, and the name is asked of nothing else: a name beside it, its family's among them, may be one whose declaration waits on the term being read.
+fn called_constructor<D: Driver>(driver: &D, term: &Term) -> Option<(Global, Atom)> {
+    let Subterm::Apply(Apply { head, arguments }) = &**term else {
+        return None;
+    };
+    let Subterm::Instance(Instance { name, .. }) = &**head else {
+        return None;
+    };
+    let Subterm::Func(Func { telescope }) = &**driver.body(name)? else {
+        return None;
+    };
+    let mut taken = 0;
+    let mut entry = telescope;
+    while let Telescope::Cons(_, _, rest, ..) = entry {
+        taken += 1;
+        entry = rest.body();
+    }
+    let Telescope::Done(answer) = entry else {
+        unreachable!("a telescope past its entries is done");
+    };
+    match &***answer {
+        Subterm::Variant(Variant { name, tag, .. }) if taken == arguments.len() => {
+            Some((*name, tag.clone()))
+        }
+        _ => None,
     }
 }
 

@@ -14,7 +14,7 @@ use {
     curios_analysis::{
         Answer, Applied, Call, PartShape, Segment, SizeContext, Standing, base_part, binder_bounds,
         call_path, decide, grade, group_parts, handed, handed_member, handed_within, nonzero_by,
-        part_calls, refined_by_arm,
+        part_calls, refined_by_arm, ruled_out,
     },
     curios_common::Keyed,
     curios_core::{Free, Global, Intrinsic, RecGroup, Subterm, Term, Totality},
@@ -701,6 +701,19 @@ impl Certifier<'_> {
         judged
     }
 
+    /// Type an arm at `value` of a match on `scrutinee`, read as a graded call reads it, by `judge`: recording no call where the arm is one no reduction takes where it stands ([`ruled_out`]), as the shared walk leaves it unwalked. The scrutinee is read as the size context holds it, so a lambda's binder applied on the spot stands for its argument there as it does for the walk, where typing reads the binder as a binder.
+    pub(super) fn arm_typed<T>(
+        &mut self,
+        scrutinee: &Term,
+        value: &Term,
+        judge: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        match self.recording() && ruled_out(&*self, &self.calls.context, scrutinee, value) {
+            true => self.unrecorded(judge),
+            false => judge(self),
+        }
+    }
+
     /// Enter what one arm establishes into the size context, within the current bracket — which `Certifier::scoped` retracts it with.
     ///
     /// The context is taken out for the entry and put back: reading `value` as a shape reduces through this certifier, which must not see the context mid-change.
@@ -724,6 +737,18 @@ impl Certifier<'_> {
     /// Within the current bracket, `binder` stands for `value`.
     pub(super) fn refine_size(&mut self, binder: &Free, value: &Term) -> Result<(), Error> {
         self.enter_size(Some((*binder, value)), None, Vec::new())
+    }
+
+    /// Within the current bracket, `binder`, a lambda's applied on the spot, stands for `argument`, as a graded call reads it and as a nominal match reads its scrutinee ([`SizeContext::stand`]).
+    pub(super) fn stand_for(&mut self, binder: &Free, argument: &Term) -> Result<(), Error> {
+        if !self.recording() {
+            return Ok(());
+        }
+        let mut context = mem::take(&mut self.calls.context);
+        let entered = context.stand(self, *binder, argument);
+        self.calls.context = context;
+        self.memos.begin_sizes();
+        entered
     }
 
     /// What an arm that scrutinizes `scrutinee` at `value`, opening `binders`, establishes, within its bracket: the scrutinee, where it is a binder, stands for `value`, the arm's own spelling of the case, and where it is an expression, each of `binders` stands below the expression's value ([`SizeContext::enter_below`]).

@@ -39,7 +39,7 @@ mod grade;
 use grade::*;
 pub use grade::{
     Answer, Applied, SizeContext, Standing, binder_bounds, grade, handed, handed_within,
-    nonzero_by, refined_by_arm,
+    nonzero_by, refined_by_arm, ruled_out,
 };
 
 #[cfg(test)]
@@ -847,8 +847,13 @@ impl<D: Driver> Walk<'_, D> {
     /// Walk a match's arms, in order, each under what it establishes.
     ///
     /// Nothing is read ahead: an arm's guard, shape and binders are taken in the arm's own call, which is the ordering [`Walk::walk_term`] documents.
+    ///
+    /// **An arm of another case than the one the scrutinee already is holds no call.** No reduction takes it where it stands, so the term makes none of the calls it writes, and the arm is not walked, as the certifier types no such arm. The scrutinee is read as it stands ([`standing`]), so nothing is forced for it; a default arm states no case and is always walked.
     fn walk_arms(&mut self, head: &Term, cases: &Cases) -> Result<(), D::Error> {
         let scrutinee = refined_by_arm(head);
+        let nominal = matches!(cases, Cases::Induct { .. });
+        let stands = standing(&*self.driver, &self.context, head, nominal);
+        let reached = |case: Case| stands.as_ref().is_none_or(|stands| *stands == case);
 
         match cases {
             // A boolean arm carries no binder, but when the scrutinee compares a binder against a literal the arm still settles whether that binder can be zero — which is what an arithmetic decrease on it needs. The scrutinee is re-read as a guard per arm, because what a guard establishes depends on which way it went.
@@ -857,6 +862,9 @@ impl<D: Driver> Walk<'_, D> {
                 true_case,
             } => {
                 for (taken, body) in [(false, false_case), (true, true_case)] {
+                    if !reached(Case::Tag(Tag::Bool(taken))) {
+                        continue;
+                    }
                     let atom = self
                         .grader()
                         .guard(head)?
@@ -870,6 +878,9 @@ impl<D: Driver> Walk<'_, D> {
             Cases::Switch { keys, default } => {
                 for (literal, body) in keys.literals() {
                     let shape = self.grader().shape_of(&literal)?;
+                    if shape.case().is_some_and(|case| !reached(case)) {
+                        continue;
+                    }
                     self.scoped(refine(scrutinee, shape), None, Vec::new(), body)?;
                 }
                 // The default arm stands for every value *not* enumerated, so it refines the scrutinee to nothing — but enumerating zero is exactly what rules zero out everywhere else.
@@ -884,6 +895,9 @@ impl<D: Driver> Walk<'_, D> {
                 stated,
             } => {
                 for (tag, case) in cases {
+                    if !reached(Case::Tag(Tag::Variant(tag.clone()))) {
+                        continue;
+                    }
                     let (binders, body) = self.open_many(case.body());
                     let shape = Shape::node(
                         Tag::Variant(tag.clone()),
@@ -907,19 +921,28 @@ impl<D: Driver> Walk<'_, D> {
                     empty_case,
                     cons_case,
                 } => {
-                    self.empty_arm(&scrutinee, Carriers::Unary, empty_case)?;
-                    let (binders, body) = self.open_one(cons_case);
-                    let shape = Shape::unary_run(Natural::from(1usize), Shape::Atom(binders[0]));
-                    let refines = self.arm_refines(head, scrutinee, shape, &binders)?;
-                    self.scoped(refines, None, Vec::new(), &body)?;
+                    if reached(Case::Tag(Tag::Empty(Carriers::Unary))) {
+                        self.empty_arm(&scrutinee, Carriers::Unary, empty_case)?;
+                    }
+                    if reached(Case::Run(Carriers::Unary)) {
+                        let (binders, body) = self.open_one(cons_case);
+                        let shape =
+                            Shape::unary_run(Natural::from(1usize), Shape::Atom(binders[0]));
+                        let refines = self.arm_refines(head, scrutinee, shape, &binders)?;
+                        self.scoped(refines, None, Vec::new(), &body)?;
+                    }
                 }
                 Carrier::Bytes {
                     empty_case,
                     cons_case,
                     ..
                 } => {
-                    self.empty_arm(&scrutinee, Carriers::Bytes, empty_case)?;
-                    self.elem_cons(head, scrutinee, Carriers::Bytes, cons_case)?;
+                    if reached(Case::Tag(Tag::Empty(Carriers::Bytes))) {
+                        self.empty_arm(&scrutinee, Carriers::Bytes, empty_case)?;
+                    }
+                    if reached(Case::Run(Carriers::Bytes)) {
+                        self.elem_cons(head, scrutinee, Carriers::Bytes, cons_case)?;
+                    }
                 }
                 Carrier::List {
                     elem,
@@ -927,8 +950,12 @@ impl<D: Driver> Walk<'_, D> {
                     cons_case,
                 } => {
                     self.walk_term(elem)?;
-                    self.empty_arm(&scrutinee, Carriers::List, empty_case)?;
-                    self.elem_cons(head, scrutinee, Carriers::List, cons_case)?;
+                    if reached(Case::Tag(Tag::Empty(Carriers::List))) {
+                        self.empty_arm(&scrutinee, Carriers::List, empty_case)?;
+                    }
+                    if reached(Case::Run(Carriers::List)) {
+                        self.elem_cons(head, scrutinee, Carriers::List, cons_case)?;
+                    }
                 }
             },
         }

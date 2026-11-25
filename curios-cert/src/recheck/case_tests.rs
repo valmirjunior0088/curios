@@ -263,6 +263,65 @@ fn an_arm_at_another_case_of_a_proposition_is_typed() {
     );
 }
 
+/// A call of a constructor's definition is the value it builds, so an arm of another case than the call's is not typed either, at a family whose cases a value tells apart. `data`'s scrutinee is `Pick/l(true)` written as the call it elaborates to, and its `r` arm, which holds a `Bool` where `True` is wanted, is not typed; `prop`'s is `Two/a()` called, a proposition's, whose `b` arm is typed and refused as the constructed value's is.
+const ARMS_UNDER_A_CONSTRUCTOR_CALL: &str = r#"
+induct /Two: pub Prop
+| a()
+| b()
+end
+induct /Pick: pub Type
+| l(#BoolType)
+| r(#BoolType)
+end
+let /prop :
+    #{node = InductType}
+    /std/Bool/True() =
+    #{goal = #{node = InductType} /std/Bool/True()}
+    match
+        /Two/a()
+    | a() =>
+        /std/Bool/True/qed()
+    | b() =>
+        true
+    end;
+let /data :
+    #{node = InductType}
+    /std/Bool/True() =
+    #{goal = #{node = InductType} /std/Bool/True()}
+    match
+        /Pick/l(true)
+    | l(x) =>
+        /std/Bool/True/qed()
+    | r(x) =>
+        true
+    end;
+/std/Bool/False
+"#;
+
+// `never_taken` reads the call by value, the constructed value it builds, and asks the unifier, whose test of a family's sort keeps a proposition's cases one: `data`'s `r` arm is not typed, while `prop`'s `b` arm is typed and refused. Mutation-checked: with a constructed value read as no case, `data` is refused.
+#[test]
+fn an_arm_under_a_call_of_another_constructor_is_not_typed() {
+    let verdicts = core_text_refusals(&fill!(
+        "${PROPOSITIONS}\n${ARMS_UNDER_A_CONSTRUCTOR_CALL}",
+        PROPOSITIONS,
+        ARMS_UNDER_A_CONSTRUCTOR_CALL
+    ));
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("prop"))
+                && matches!(verdict.error, Error::Mismatch { .. })),
+        "{verdicts:?}"
+    );
+    assert!(
+        verdicts
+            .iter()
+            .all(|verdict| verdict.name != Some(global("data"))),
+        "{verdicts:?}"
+    );
+}
+
 /// `Code`'s case targets `Type`, a term of `Type 1`, and `c2`'s index is `Y`, a `let` whose value is `X : ${sort}`: the index reads by value as `X`, which inversion refines to `Type` where that fits `X`'s own sort, and the arm's `(A: X) => A` inhabits `(a: Type) -> Type` only there.
 const A_REFINEMENT_THROUGH_A_LET: &str = r#"
 induct /Code: (

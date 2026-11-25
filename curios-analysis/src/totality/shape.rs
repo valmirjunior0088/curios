@@ -40,6 +40,15 @@ pub enum Carriers {
     List,
 }
 
+/// The case a value is at its head: its constructor, its truth value, or whether a native carrier's value is the identity or holds a layer. An arm of another case is never taken at the value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Case {
+    /// A constructor, a truth value or a carrier's identity, as a shape's node names it.
+    Tag(Tag),
+    /// One layer or more of a native carrier.
+    Run(Carriers),
+}
+
 /// A call argument or a parameter, read as a constructor tree over binder atoms — the term on which the size order is a proper-subterm order.
 ///
 /// A node shares what it holds, so a shape is copied in one step and the shape of a term that holds one subterm twice holds that subterm's shape once: a reading costs the term's graph, where a tree owned outright costs every path through it ([`Grader::shape_of`](super::Grader::shape_of)).
@@ -70,6 +79,16 @@ pub enum Shape {
 }
 
 impl Shape {
+    /// The case the shape shows at its head, where it shows one: a binder, a claim about another shape and an unreadable term show none.
+    pub fn case(&self) -> Option<Case> {
+        match self {
+            Shape::Node(tag, _) => Some(Case::Tag(tag.clone())),
+            Shape::UnaryRun { .. } => Some(Case::Run(Carriers::Unary)),
+            Shape::ElemRun { carrier, .. } => Some(Case::Run(*carrier)),
+            Shape::Atom(_) | Shape::Smaller(_) | Shape::AtMost(_) | Shape::Opaque => None,
+        }
+    }
+
     /// `tag` applied to `kids`.
     pub fn node(tag: Tag, kids: impl IntoIterator<Item = Shape>) -> Shape {
         Shape::Node(tag, kids.into_iter().collect())

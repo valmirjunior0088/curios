@@ -4,10 +4,10 @@
 
 use {
     super::{
-        APPLICATIONS_LIMIT, Call, Carriers, Guard, PartShape, Segment, Shape, Tag, part_calls,
-        spine,
+        APPLICATIONS_LIMIT, Call, Carriers, Case, Guard, PartShape, Segment, Shape, Tag,
+        part_calls, spine,
     },
-    crate::{Driver, forceable},
+    crate::{Driver, constructed, forceable, relevance},
     curios_core::{
         CallMatrix, Free, FreeMonoid, Global, Intrinsic, Layer, Nat, Probe, Proj, Size, Struct,
         Subterm, Term, Tuple, Variant,
@@ -45,6 +45,40 @@ pub fn refined_by_arm(scrutinee: &Term) -> Option<Free> {
     }
 }
 
+/// The case the scrutinee `head` already is where it stands. A nominal match reads it as a value of its family as written ([`constructed`]), a binder standing for its argument read as that argument ([`SizeContext::stand`]), and only at a family whose constructors a value tells apart: at a proposition, irrelevance makes every case one value, and the certifier types each arm of a proposition's match. A binder an enclosing arm refined is read so by no nominal match, since a shape keeps no family to ask that of. Every other match reads it as the size context does ([`SizeContext::standing_case`]).
+pub fn standing<D: Driver>(
+    driver: &D,
+    context: &SizeContext,
+    head: &Term,
+    nominal: bool,
+) -> Option<Case> {
+    if !nominal {
+        return context.standing_case(head);
+    }
+    let (family, tag) = constructed(driver, context.argument_of(head))?;
+
+    (relevance(driver, &family) == Some(true)).then_some(Case::Tag(Tag::Variant(tag)))
+}
+
+/// Whether the arm at `value`, its case's value as the arm states it, is one no reduction takes where the match on `head` stands: `head` already is another case than `value` is (`standing`). Its calls are none the term makes, which both checkers read so: the shared walk leaves the arm unwalked, and the certifier's typed walk types it recording no call.
+pub fn ruled_out<D: Driver>(driver: &D, context: &SizeContext, head: &Term, value: &Term) -> bool {
+    let Some(case) = context.standing_case(value) else {
+        return false;
+    };
+    let nominal = matches!(case, Case::Tag(Tag::Variant(_)));
+
+    standing(driver, context, head, nominal).is_some_and(|stands| stands != case)
+}
+
+/// The case a literal of `carrier` is as written: its identity, or a layer over whatever follows, which is not read.
+fn written_layer(carrier: FreeMonoid, carriers: Carriers, term: &Term) -> Option<Case> {
+    match carrier.uncons(Term::unwrap_or_clone(term.clone())) {
+        Layer::Empty => Some(Case::Tag(Tag::Empty(carriers))),
+        Layer::Cons { .. } => Some(Case::Run(carriers)),
+        Layer::Stuck(_) => None,
+    }
+}
+
 /// The shape each binder an arm opens stands at where its scrutinee is an expression, the expression read as `scrutinee`: strictly below the value the expression reads at or below, a case's binders being its value's children. `None` where the expression reads at or below no value a call is measured against, and the binders stand for nothing.
 ///
 /// A case of an expression takes apart the expression's value as a case of a binder takes apart the binder's, so its binders stand below that value as a binder's payloads stand below the binder: a payload of a case on `x.next` is below `x`. The expression is read as a graded call reads its arguments, so nothing an index inversion concluded enters through it.
@@ -71,6 +105,8 @@ pub struct SizeContext {
     ///
     /// An application whose head is one of these reads as the payload itself, which is what grades `below(y, r)` below the `intro(x, below)` an arm refined the scrutinee to. A head bound anywhere else — a parameter, a lambda binder — is not in the set and reads as any other application does.
     payloads: BTreeSet<Free>,
+    /// What each binder of a lambda applied on the spot stands for, where a checker types the body with the binder in place rather than substituting the argument, as the certifier does: the argument as written, which a nominal match reads its scrutinee through (`standing`).
+    arguments: BTreeMap<Free, Term>,
     /// The binders of a lambda a call hands a parameter its callee applies as a summary states ([`Applications`](curios_core::Applications)), each with how it stands to the caller's parameters it was graded against: what an application of the parameter hands it, wherever the callee applies it.
     assumed: BTreeMap<Free, Standing>,
     /// One entry per scope [`SizeContext::enter`] has opened and [`SizeContext::exit`] has yet to close.
@@ -89,9 +125,39 @@ pub struct Undo {
     payloads: Vec<Free>,
     /// The binders this scope assumed bounds of, each with what it stood for before.
     assumed: Vec<(Free, Option<Standing>)>,
+    /// The binders this scope said stand for an argument, each with what it stood for before.
+    arguments: Vec<(Free, Option<Term>)>,
 }
 
 impl SizeContext {
+    /// The case `term` already is where it stands, read without reducing: a binder as the arms, the `let`s and the redexes around it left it standing, the binders it stands for followed and nothing beneath its head read, and a constructed value or a literal by its head as written. A term that computes its case shows none, as the certifier's rule for an arm never taken computes none.
+    pub(super) fn standing_case(&self, term: &Term) -> Option<Case> {
+        match &**term {
+            Subterm::Var(var) => {
+                let mut binder = var.as_free()?;
+                for _ in 0..EXPAND_FUEL {
+                    match self.refined.get(binder)? {
+                        Shape::Atom(next) => binder = next,
+                        shape => return shape.case(),
+                    }
+                }
+                None
+            }
+            Subterm::Variant(Variant { tag, .. }) => Some(Case::Tag(Tag::Variant(tag.clone()))),
+            Subterm::Intrinsic(Intrinsic::Bool(value)) => Some(Case::Tag(Tag::Bool(*value))),
+            Subterm::Intrinsic(Intrinsic::Nat(_)) => {
+                written_layer(FreeMonoid::Unary, Carriers::Unary, term)
+            }
+            Subterm::Intrinsic(Intrinsic::Bytes(_)) => {
+                written_layer(FreeMonoid::Bytes, Carriers::Bytes, term)
+            }
+            Subterm::Intrinsic(Intrinsic::List { .. }) => {
+                written_layer(FreeMonoid::List, Carriers::List, term)
+            }
+            _ => None,
+        }
+    }
+
     /// Enter an arm that establishes `binder` is `value`, that `nonzero` cannot be zero, and that `payloads` are the constructor's payloads — each where given.
     ///
     /// `value` is read as a shape against the context as it stands before the arm, which is where the value was built. A read the budget refuses opens nothing, so the refusal leaves the context as balanced as it found it.
@@ -111,6 +177,34 @@ impl SizeContext {
         };
         self.open(refine, nonzero, payloads);
         Ok(())
+    }
+
+    /// Enter a lambda's binder applied on the spot to `argument`: refined to the argument's shape as [`SizeContext::enter`] refines it, and standing for the argument as written (`SizeContext::argument_of`).
+    pub fn stand<D: Driver>(
+        &mut self,
+        driver: &mut D,
+        binder: Free,
+        argument: &Term,
+    ) -> Result<(), D::Error> {
+        self.enter(driver, Some((binder, argument)), None, Vec::new())?;
+        let previous = self.arguments.insert(binder, argument.clone());
+        self.scopes
+            .last_mut()
+            .expect("the entry above opened a scope")
+            .arguments
+            .push((binder, previous));
+        Ok(())
+    }
+
+    /// `term`, or where it is a binder standing for an argument ([`SizeContext::stand`]), that argument, followed to the end.
+    pub(super) fn argument_of<'t>(&'t self, term: &'t Term) -> &'t Term {
+        let mut at = term;
+        while let Subterm::Var(var) = &**at
+            && let Some(argument) = var.as_free().and_then(|free| self.arguments.get(free))
+        {
+            at = argument;
+        }
+        at
     }
 
     /// Enter an arm whose scrutinee is an expression: each of `binders`, the case's own, stands below the value `scrutinee` reads at or below (`below_scrutinee`), `scrutinee` read against the context as it stands before the arm. A read the budget refuses opens nothing, as [`SizeContext::enter`]'s does.
@@ -187,6 +281,7 @@ impl SizeContext {
             nonzero,
             payloads,
             assumed: Vec::new(),
+            arguments: Vec::new(),
         });
     }
 
@@ -201,6 +296,7 @@ impl SizeContext {
             nonzero: Vec::new(),
             payloads: Vec::new(),
             assumed,
+            arguments: Vec::new(),
         });
     }
 
@@ -222,6 +318,12 @@ impl SizeContext {
         }
         for binder in undo.payloads {
             self.payloads.remove(&binder);
+        }
+        for (binder, previous) in undo.arguments.into_iter().rev() {
+            match previous {
+                Some(previous) => self.arguments.insert(binder, previous),
+                None => self.arguments.remove(&binder),
+            };
         }
         for (binder, previous) in undo.assumed.into_iter().rev() {
             match previous {
