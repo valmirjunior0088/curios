@@ -10,6 +10,7 @@ A timing is a historical fact and cannot be re-run. That is what separates this 
 xbench/
   src/main.rs        the command line, and the timings the build embeds
   src/               what a timing is, what it is taken under, the contest, the report
+  src/bin/twin.rs    the runner `rust-wasm` runs under, on the engine the compiler embeds
   timings/NN.toml    one timing each, the file `collect` printed
 
 ../programs/
@@ -24,7 +25,7 @@ cargo xbench report 00                           # one timing in full
 
 Standard output carries the timing alone, so a redirect files the capture and nothing else; the build log, the agreement check and the live tables go to standard error.
 
-Taking a timing needs a checkout, `cargo`, and the `wasmtime` CLI at the version `Cargo.lock` resolves — `rust-wasm` runs on the CLI while `curios` runs on the engine the compiler embeds, so unless the two agree the WebAssembly comparison is between two engines rather than two compilers. A timing records both, and `collect` refuses before it builds anything where they differ. Everything else is already here: `rustc` and the `wasm32-wasip2` target come from the workspace's own `rust-toolchain.toml`. There is no image and nothing to install beyond the engine.
+Taking a timing needs a checkout and `cargo`. `rust-wasm` runs under `twin`, the bench's own runner, which links the `wasmtime` `Cargo.lock` resolves for the compiler's own, so the WebAssembly comparison is between two compilers on one engine by construction, and a timing names that engine for each. `collect` builds the runner beside the compiler, and the runner precompiles each twin once, so an execution spends a load and a run as `curios`'s self-contained executable does. Everything else is already here: `rustc` and the `wasm32-wasip2` target come from the workspace's own `rust-toolchain.toml`. There is no image and nothing to install.
 
 ## Contestants
 
@@ -32,7 +33,7 @@ Taking a timing needs a checkout, `cargo`, and the `wasmtime` CLI at the version
 | --- | --- | --- |
 | **Curios** | a self-contained executable, reading its size from its arguments | the subject |
 | **Rust (Native)** | `rustc -O`, native | the ceiling |
-| **Rust (WebAssembly)** | the same source, `--target wasm32-wasip2`, under the `wasmtime` CLI | what WebAssembly itself costs |
+| **Rust (WebAssembly)** | the same source, `--target wasm32-wasip2`, precompiled and run by `twin` on the engine the compiler embeds | what WebAssembly itself costs |
 
 Rust (Native) against Rust (WebAssembly) is one source compiled two ways, so what separates them is WebAssembly's own cost, and what remains between Curios and Rust (WebAssembly) is Curios's.
 
@@ -114,6 +115,6 @@ Software is not gated because a patch that moves a figure moves Rust with Curios
 
 **Decision.** `cargo xbench collect` runs on the host. The platform is recorded rather than standardised.
 
-**Rationale.** With three contestants the image would install the engine and nothing else, and it never made the platform uniform in any case — a container shares the host's kernel, CPU and governor. What makes two timings comparable is the protocol each carries, which a container is not.
+**Rationale.** With three contestants, the engine the bench's own runner, the image would install nothing, and it never made the platform uniform in any case — a container shares the host's kernel, CPU and governor. What makes two timings comparable is the protocol each carries, which a container is not.
 
 **Rejected.** The kitchen-sink image: it existed for the five contestants that are gone. Pinning the timed processes to one core: core 0 is the one interrupts favour, and holding one core while the rest of the machine runs free invites interference rather than excluding it.

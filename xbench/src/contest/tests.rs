@@ -52,9 +52,20 @@ fn each_contestant_is_given_its_size_as_its_argument() {
     assert_eq!(rust.arguments, ["8"]);
 
     let wasm = invocation("rust-wasm", workload, 8, root);
-    assert_eq!(wasm.program.display().to_string(), "wasmtime");
+    assert_eq!(wasm.program, root.join(TWIN));
     assert_eq!(wasm.arguments[0], "run");
     assert_eq!(wasm.arguments[2], "8");
+}
+
+/// The twin's runner loads the precompile the build wrote, never the component it was compiled from: what an execution spends is a load and a run.
+#[test]
+fn the_twin_runs_from_a_precompile_and_not_its_component() {
+    let root = Path::new("/w");
+    let workload = &WORKLOADS[0];
+    let loaded = PathBuf::from(&invocation("rust-wasm", workload, 8, root).arguments[1]);
+
+    assert_eq!(loaded, artifact("rust-wasm", workload, root));
+    assert_ne!(loaded, component(workload, root));
 }
 
 #[test]

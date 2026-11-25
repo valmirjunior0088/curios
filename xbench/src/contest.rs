@@ -10,7 +10,7 @@ mod tests;
 use {
     crate::{Pin, Size, Timed, Timing, capture, edition, held, table},
     std::{
-        env, fs, io,
+        fs, io,
         path::{Path, PathBuf},
         process::{Command, Stdio},
         time::Instant,
@@ -126,13 +126,16 @@ const ARTIFACTS: &str = "target/xbench";
 /// The WebAssembly target the Rust contestant is built for. The workspace's own toolchain already carries it, so the bench installs nothing.
 const TARGET: &str = "wasm32-wasip2";
 
+/// The runner `rust-wasm` runs under, the bench's own binary over the engine `Cargo.lock` resolves for the compiler's own, built where the compiler is.
+const TWIN: &str = "target/release/twin";
+
 /// How many independent batches a contestant is measured in. Between their medians is the span; two would make that span a single difference rather than an estimate of one.
 const GROUPS: usize = 5;
 
 /// How many timed rounds a group runs.
 const EXECUTIONS: usize = 5;
 
-/// How many untimed rounds open a group, enough to page the binary in and warm the file cache. Both contestants are compiled ahead of time, so there is no engine to settle.
+/// How many untimed rounds open a group, enough to page the binary in and warm the file cache. Every contestant is compiled ahead of time, so there is no engine to settle.
 const WARMUP: usize = 1;
 
 /// The workspace root, which is the crate's parent.
@@ -161,8 +164,14 @@ fn artifact(contestant: &str, workload: &Workload, root: &Path) -> PathBuf {
     PathBuf::from(match contestant {
         "curios" => format!("{built}_curios"),
         "rust" => format!("{built}_rust"),
-        _ => format!("{built}_rust.wasm"),
+        // The twin's precompile, which its runner loads; the component it was compiled from is beside it ([`component`]).
+        _ => format!("{built}_rust.cwasm"),
     })
+}
+
+/// The component `rust-wasm`'s twin is built as, beside the precompile its runner loads.
+fn component(workload: &Workload, root: &Path) -> PathBuf {
+    artifact("rust-wasm", workload, root).with_extension("wasm")
 }
 
 /// How `contestant` runs `workload` at `size`.
@@ -176,9 +185,9 @@ fn invocation(contestant: &str, workload: &Workload, size: u64, root: &Path) -> 
             program: artifact,
             arguments: vec![size.to_string()],
         },
-        // The module is not the program: the engine on the path runs it, and the pin holds it to the one Curios embeds.
+        // The twin is no program: the bench's runner loads its precompile, on the engine the compiler embeds.
         _ => Invocation {
-            program: PathBuf::from("wasmtime"),
+            program: root.join(TWIN),
             arguments: vec![
                 "run".to_string(),
                 artifact.display().to_string(),
@@ -190,16 +199,14 @@ fn invocation(contestant: &str, workload: &Workload, size: u64, root: &Path) -> 
 
 /// Run one contestant once: what it printed, and how long the whole process took, in whole microseconds.
 ///
-/// `PATH` is the one variable that survives the clearing, because the engine is found on it; everything else is dropped so that the environment a contestant starts under is the same small thing in every execution of every timing.
+/// Every contestant is started by its path, so none needs a variable of the environment, and the environment is cleared whole: a contestant starts under the same empty one in every execution of every timing.
 fn once(invocation: &Invocation) -> Result<(String, u64), String> {
-    let path = env::var("PATH").unwrap_or_default();
     let named = invocation.program.display().to_string();
 
     let started = Instant::now();
     let child = Command::new(&invocation.program)
         .args(&invocation.arguments)
         .env_clear()
-        .env("PATH", path)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
@@ -261,6 +268,7 @@ fn build(workload: &Workload, root: &Path) -> Result<(), String> {
 
     let rust = root.join(format!("{source}.rs")).display().to_string();
     let edition = edition(root)?;
+    let twin = component(workload, root).display().to_string();
     run(
         "rustc",
         &["-O", "--edition", &edition, &rust, "-o", &output("rust")],
@@ -276,10 +284,12 @@ fn build(workload: &Workload, root: &Path) -> Result<(), String> {
             TARGET,
             &rust,
             "-o",
-            &output("rust-wasm"),
+            &twin,
         ],
         root,
     )?;
+    // Compiled here, once, by the runner that loads it at every execution: what an execution spends is a load and a run.
+    run(TWIN, &["precompile", &twin, &output("rust-wasm")], root)?;
 
     run(
         "target/release/curios",
@@ -380,6 +390,11 @@ pub fn collect(filed: usize) -> Result<(), String> {
 
     fs::create_dir_all(root.join(ARTIFACTS)).map_err(|error| error.to_string())?;
     run("cargo", &["xtask", "compiler", "build"], &root)?;
+    run(
+        "cargo",
+        &["build", "--release", "--package", "xbench", "--bin", "twin"],
+        &root,
+    )?;
 
     let subject = format!(
         "{} ({commit})",

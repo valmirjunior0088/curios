@@ -2,7 +2,7 @@
 //!
 //! Neither version is written here. `rust-toolchain.toml` pins the compiler the workspace builds under and `Cargo.lock` resolves the engine the compiler embeds, so this module reads the file that owns each rather than keeping a second copy for the bench to fall behind.
 //!
-//! The engine pin is the load-bearing one: `rust-wasm` runs under the `wasmtime` on the path while `curios` runs under the one it embeds, so unless the two agree the wasm comparison is between two engines rather than between two compilers.
+//! No engine is found on the path: `rust-wasm` runs under the bench's own runner, which links the `wasmtime` `Cargo.lock` resolves for the compiler's own, so the WebAssembly comparison is between two compilers on one engine by construction, and the timing names that engine for each.
 //!
 //! What a pin buys is that Rust cannot drift for a reason the record does not show: a comparison reads Curios against it, and a new toolchain moves Rust alone. The ratio still cancels what moves both, and a pin moved deliberately is a visible commit; a toolchain that floats is the drift that left run 04's result unattributable in the bench this one replaces.
 
@@ -103,13 +103,12 @@ pub fn held(root: &Path) -> Result<Vec<(&'static str, String)>, String> {
         .map_err(|error| format!("Cargo.lock cannot be read: {error}"))?;
     let wasmtime = locked(&lock, "wasmtime").ok_or("Cargo.lock resolves no wasmtime")?;
 
-    // The engine is recorded twice over: `wasmtime` is the CLI that runs `rust-wasm`, and `wasmtime in Curios` the one the compiler embeds and runs its own module on. The check holds them equal, and the timing says so rather than leaving a reader to assume it.
+    // The engine is recorded for each WebAssembly contestant, `wasmtime` the one `rust-wasm`'s runner links and `wasmtime in Curios` the one the compiler embeds: both the lock's, by construction, and named apart, as every timing before the runner names them, so a sitting compares with those.
     let rustc = hold("rustc", &rustc)?;
-    let engine = hold("wasmtime", &wasmtime)?;
 
     Ok(vec![
         ("rustc", rustc),
-        ("wasmtime", engine),
+        ("wasmtime", wasmtime.clone()),
         ("wasmtime in Curios", wasmtime),
     ])
 }
