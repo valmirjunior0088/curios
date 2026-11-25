@@ -48,7 +48,7 @@ The runtime-only Curios engine: deserialize a precompiled `.cwasm` module and ru
 
 **Rationale.** The host owns every wait, so nothing of the program runs while it waits and nothing in the program waits on its thread ([A wait is a suspension, and only the host waits](../documentation/design/prelude/a-wait-is-a-suspension-and-only-the-host-waits.md)). Roots scoped to a turn keep a run of any length holding what its present suspension needs and nothing it has finished with, under the copying collector that moves what it holds between turns.
 
-**Rejected.** A row the program sleeps in, which holds every branch of a program for as long as one waits and which the browser cannot answer at all; the host reading the cells a suspension waits on, which only the program fills and the entry resumes over in-guest.
+**Rejected.** A row the program sleeps in, which holds every branch of a program for as long as one waits and which the browser cannot answer at all; the host reading the latches a suspension waits on, which only the program trips and the entry resumes over in-guest.
 
 ### A reply that comes later is a handle the host files
 

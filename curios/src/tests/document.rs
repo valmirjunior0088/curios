@@ -301,7 +301,7 @@ fn every_intrinsic_carrier_reaches_a_page_through_its_std_module() {
         ("/std/Flt", "Flt"),
         ("/std/Bool", "Bool"),
         ("/std/List", "List"),
-        ("/std/Cell", "Cell"),
+        ("/std/Io/Latch", "Latch"),
         ("/std/Io", "Io"),
     ];
 
@@ -378,8 +378,8 @@ fn shown(
 fn an_adopted_signature_marks_its_carriers_and_operations() {
     let documentation = standard_library();
 
-    let (_, poll) = shown(&documentation, "/std/Cell", "poll");
-    assert_eq!(poll, ["/std/Cell", "/std/Io", "/std/Bool"]);
+    let (_, tripped) = shown(&documentation, "/std/Io/Latch", "tripped");
+    assert_eq!(tripped, ["/std/Io/Latch", "/std/Io", "/std/Bool"]);
 
     // A precondition reads as a report reads it: an operator where the surface writes one, a call of the declaration where it does not.
     let (text, get) = shown(&documentation, "/std/Bytes", "get");
@@ -527,10 +527,10 @@ fn shades() -> curios_document::Documentation {
 fn an_adopted_signature_spells_its_names_below_their_root() {
     let documentation = standard_library();
 
-    let (fill, _) = shown(&documentation, "/std/Cell", "fill");
-    assert_eq!(fill, "pub let fill(c: Cell) -> Io({})");
-    let (poll, _) = shown(&documentation, "/std/Cell", "poll");
-    assert_eq!(poll, "pub let poll(c: Cell) -> Io(Bool)");
+    let (trip, _) = shown(&documentation, "/std/Io/Latch", "trip");
+    assert_eq!(trip, "pub let trip(l: Io/Latch) -> Io({})");
+    let (tripped, _) = shown(&documentation, "/std/Io/Latch", "tripped");
+    assert_eq!(tripped, "pub let tripped(l: Io/Latch) -> Io(Bool)");
     let (get, _) = shown(&documentation, "/std/Bytes", "get");
     assert_eq!(
         get,

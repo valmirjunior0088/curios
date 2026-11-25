@@ -526,10 +526,10 @@ pub fn intrinsic_written<D: Rendered>(intrinsic: Intrinsic, frame: Frame<'_, D>)
             ],
         ),
         Intrinsic::HandleType => called("HandleType", Vec::new()),
-        Intrinsic::CellType => called("CellType", Vec::new()),
-        Intrinsic::Cell => called("Cell", Vec::new()),
-        Intrinsic::CellFill { cell } => called("CellFill", vec![value(sub(cell, frame))]),
-        Intrinsic::CellPoll { cell } => called("CellPoll", vec![value(sub(cell, frame))]),
+        Intrinsic::LatchType => called("LatchType", Vec::new()),
+        Intrinsic::Latch => called("Latch", Vec::new()),
+        Intrinsic::LatchTrip { latch } => called("LatchTrip", vec![value(sub(latch, frame))]),
+        Intrinsic::LatchTripped { latch } => called("LatchTripped", vec![value(sub(latch, frame))]),
         Intrinsic::BoxType(operand0) => called("BoxType", vec![value(sub(operand0, frame))]),
         Intrinsic::Box {
             element,
@@ -579,7 +579,7 @@ pub fn intrinsic_written<D: Rendered>(intrinsic: Intrinsic, frame: Frame<'_, D>)
         Intrinsic::IoSuspend {
             result,
             on,
-            filled,
+            tripped,
             cancel,
             rest,
         } => called(
@@ -587,7 +587,7 @@ pub fn intrinsic_written<D: Rendered>(intrinsic: Intrinsic, frame: Frame<'_, D>)
             vec![
                 value(sub(result, frame)),
                 value(sub(on, frame)),
-                value(sub(filled, frame)),
+                value(sub(tripped, frame)),
                 value(sub(cancel, frame)),
                 value(sub(rest, frame)),
             ],
@@ -1231,24 +1231,24 @@ pub fn intrinsic_read(
             operands::<0>(intrinsic, span)?;
             Intrinsic::HandleType
         }
-        "CellType" => {
+        "LatchType" => {
             operands::<0>(intrinsic, span)?;
-            Intrinsic::CellType
+            Intrinsic::LatchType
         }
-        "Cell" => {
+        "Latch" => {
             operands::<0>(intrinsic, span)?;
-            Intrinsic::Cell
+            Intrinsic::Latch
         }
-        "CellFill" => {
-            let [cell] = operands(intrinsic, span)?;
-            Intrinsic::CellFill {
-                cell: term(cell, reader)?,
+        "LatchTrip" => {
+            let [latch] = operands(intrinsic, span)?;
+            Intrinsic::LatchTrip {
+                latch: term(latch, reader)?,
             }
         }
-        "CellPoll" => {
-            let [cell] = operands(intrinsic, span)?;
-            Intrinsic::CellPoll {
-                cell: term(cell, reader)?,
+        "LatchTripped" => {
+            let [latch] = operands(intrinsic, span)?;
+            Intrinsic::LatchTripped {
+                latch: term(latch, reader)?,
             }
         }
         "BoxType" => {
@@ -1298,11 +1298,11 @@ pub fn intrinsic_read(
             }
         }
         "IoSuspend" => {
-            let [result, on, filled, cancel, rest] = operands(intrinsic, span)?;
+            let [result, on, tripped, cancel, rest] = operands(intrinsic, span)?;
             Intrinsic::IoSuspend {
                 result: term(result, reader)?,
                 on: term(on, reader)?,
-                filled: term(filled, reader)?,
+                tripped: term(tripped, reader)?,
                 cancel: term(cancel, reader)?,
                 rest: term(rest, reader)?,
             }

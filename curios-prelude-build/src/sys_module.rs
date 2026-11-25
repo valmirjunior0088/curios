@@ -840,29 +840,29 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
     ]
 }
 
-// A public cell is allocated empty, filled once and asked whether it is: it holds no value. The cell that holds one, a knot's memo, is introduced only below erasure.
-fn cell_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
+// A latch is made untripped, tripped once and asked whether it is: it holds no value. The cell that holds one, a knot's memo, is introduced only below erasure.
+fn latch_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
     vec![
         documented(
-            &["A new empty cell."],
-            operation("new", &[], syntax, Intrinsic::Cell),
+            &["A new latch, not yet tripped."],
+            operation("new", &[], syntax, Intrinsic::Latch),
         ),
         documented(
-            &["Fill `c`: it is filled from then on, and filling it again changes nothing."],
+            &["Trip `l`: it is tripped from then on, and tripping it again changes nothing."],
             operation(
-                "fill",
-                &["c"],
+                "trip",
+                &["l"],
                 syntax,
-                Intrinsic::CellFill { cell: name("c") },
+                Intrinsic::LatchTrip { latch: name("l") },
             ),
         ),
         documented(
-            &["Whether `c` is filled."],
+            &["Whether `l` is tripped."],
             operation(
-                "poll",
-                &["c"],
+                "tripped",
+                &["l"],
                 syntax,
-                Intrinsic::CellPoll { cell: name("c") },
+                Intrinsic::LatchTripped { latch: name("l") },
             ),
         ),
     ]
@@ -944,18 +944,18 @@ fn io_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
         ),
         documented(
             &[
-                "The description that suspends until a handle of `on` may be ready or a cell of `filled` is filled, then goes on as `rest`; whoever drops it instead performs `cancel`.",
+                "The description that suspends until a handle of `on` may be ready or a latch of `tripped` is tripped, then goes on as `rest`; whoever drops it instead performs `cancel`.",
                 "",
-                "It waits on nothing itself: whoever advances it decides what a suspension means. The host waits on `on` and advances `rest`; a combinator runs something else first, or drops it after performing `cancel`. A cell is filled by the program alone, so the host, which waits while nothing of the program runs, never reads one: a suspension on no handle that reaches it is a deadlock.",
+                "It waits on nothing itself: whoever advances it decides what a suspension means. The host waits on `on` and advances `rest`; a combinator runs something else first, or drops it after performing `cancel`. A latch is tripped by the program alone, so the host, which waits while nothing of the program runs, never reads one: a suspension on no handle that reaches it is a deadlock.",
             ],
             operation(
                 "suspend",
-                &["T", "on", "filled", "cancel", "rest"],
+                &["T", "on", "tripped", "cancel", "rest"],
                 syntax,
                 Intrinsic::IoSuspend {
                     result: name("T"),
                     on: name("on"),
-                    filled: name("filled"),
+                    tripped: name("tripped"),
                     cancel: name("cancel"),
                     rest: name("rest"),
                 },
@@ -963,7 +963,7 @@ fn io_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
         ),
         documented(
             &[
-                "The description that performs `m` and hands its value to `done`, or, where `m` suspends, its `on`, `filled`, `cancel` and `rest` to `suspended`: the one place a suspension is caught rather than passed out.",
+                "The description that performs `m` and hands its value to `done`, or, where `m` suspends, its `on`, `tripped`, `cancel` and `rest` to `suspended`: the one place a suspension is caught rather than passed out.",
             ],
             operation(
                 "advance",
@@ -1138,12 +1138,6 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
             items(list_ops(syntax)),
         ),
         SysModule::carrier(
-            "Cell",
-            &["An initially empty mark that stays filled once it is."],
-            constant("Cell", syntax, Intrinsic::CellType),
-            items(cell_ops(syntax)),
-        ),
-        SysModule::carrier(
             "Box",
             &[
                 "One value kept for whoever holds the box, changed only by a pure function of it: nothing waits inside a change, so no branch sees a change half made, and no cancellation leaves one.",
@@ -1161,7 +1155,19 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
                 "Holding one performs nothing: a description runs by being the program's tail, so forcing the same one twice does the work twice, and there is no operation taking an `Io(T)` back to a `T`.",
             ],
             operation("Io", &["T"], syntax, Intrinsic::IoType(name("T"))),
-            items(io_ops(syntax)),
+            // The latch is declared here in place, its type beside the module of its operations, as `True` and `False` are in `Bool`: what a wait waits on that the program itself moves is `Io`'s.
+            [
+                items(io_ops(syntax)),
+                vec![
+                    documented(
+                        &["A mark tripped once that stays tripped: what a wait waits on that the program itself moves."],
+                        constant("Latch", syntax, Intrinsic::LatchType),
+                    )
+                    .into_item(),
+                    pub_mod("Latch", items(latch_ops(syntax))),
+                ],
+            ]
+            .concat(),
         ),
     ]
 }

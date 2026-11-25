@@ -141,7 +141,7 @@ fn a_bang_in_a_region_that_is_no_monad_names_the_region_type() {
 fn a_function_names_its_invalid_sequencing_type_and_a_value_the_rule_it_breaks() {
     for (binding, refusal) in [
         ("let n: Nat = Io/pure(3)!;", "region: `Nat`"),
-        ("let cell: Cell = Cell/new()!;", "region: `Cell`"),
+        ("let latch: Latch = Latch/new()!;", "region: `Latch`"),
         (
             "let xs: List(Nat) = Io/pure([1])!;",
             "wanted: `/std/Monad/Lift(Io, List)`",
@@ -150,7 +150,7 @@ fn a_function_names_its_invalid_sequencing_type_and_a_value_the_rule_it_breaks()
         let function = binding.replacen(':', "() ->", 1);
         for (declaration, refusal) in [(binding, "`!` outside a function"), (&function, refusal)] {
             let source = fill!(
-                "use /std/{Nat, List, Cell, Io};\n${declaration}\n()\n",
+                "use /std/{Nat, List, Io};\nuse /std/Io/{Latch};\n${declaration}\n()\n",
                 declaration
             );
             let error = typecheck(&source)

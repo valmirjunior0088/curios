@@ -103,10 +103,10 @@ impl<D: Driver> Reading<'_, '_, D> {
                 Some(position) => Need::Given(BTreeSet::from([position])),
                 None => Need::Never,
             },
-            // A carrier whose values hold no type is data whatever is asked of it ([`Intrinsic::values_carrier`]); a list holds its elements, and a handle, a cell, a box and a description of an effect, which no operation of the algebra is over, are read here.
+            // A carrier whose values hold no type is data whatever is asked of it ([`Intrinsic::values_carrier`]); a list holds its elements, and a handle, a latch, a box and a description of an effect, which no operation of the algebra is over, are read here.
             Subterm::Intrinsic(intrinsic) => match (intrinsic.values_carrier(), intrinsic) {
                 (Some(carrier), _) if !carrier.holds_types() => Need::Given(BTreeSet::new()),
-                (_, Intrinsic::HandleType | Intrinsic::CellType) => Need::Given(BTreeSet::new()),
+                (_, Intrinsic::HandleType | Intrinsic::LatchType) => Need::Given(BTreeSet::new()),
                 (
                     _,
                     Intrinsic::ListType(element)

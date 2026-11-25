@@ -10,7 +10,7 @@ use {
     curios_cert::Reader,
 };
 
-/// What a cell's poll answers: `/std/Option`'s family, with `some` where the cell is filled and `none` where it is not.
+/// What a latch's poll answers: `/std/Option`'s family, with `some` where the latch is tripped and `none` where it is not.
 #[derive(Debug, Clone, Copy)]
 pub struct Polled {
     pub family: curios_anf::FamilyId,
@@ -78,7 +78,7 @@ impl Eraser<'_> {
         })
     }
 
-    /// The handles, the cells and the cancel of `suspension`, read in that order.
+    /// The handles, the latches and the cancel of `suspension`, read in that order.
     fn waiting(&mut self, suspension: curios_anf::Atom) -> [curios_anf::Atom; 3] {
         [
             curios_anf::SuspensionOperation::On,
@@ -88,17 +88,17 @@ impl Eraser<'_> {
         .map(|operation| self.suspension(operation, vec![suspension]))
     }
 
-    /// The performance of `Io/suspend(on, filled, cancel, rest)`: the suspension itself.
+    /// The performance of `Io/suspend(on, tripped, cancel, rest)`: the suspension itself.
     pub fn perform_suspend(
         &mut self,
         on: curios_anf::Atom,
-        filled: curios_anf::Atom,
+        tripped: curios_anf::Atom,
         cancel: curios_anf::Atom,
         rest: curios_anf::Atom,
     ) -> curios_anf::Atom {
         self.suspension(
             curios_anf::SuspensionOperation::New,
-            vec![on, filled, cancel, rest],
+            vec![on, tripped, cancel, rest],
         )
     }
 
@@ -124,7 +124,7 @@ impl Eraser<'_> {
         )
     }
 
-    /// The performance of `Io/advance(action, done, suspended)`: force the action and hand its value to `done`, or the handles, the cells, the cancel and a description resuming it to `suspended`, forcing the description either makes in tail position.
+    /// The performance of `Io/advance(action, done, suspended)`: force the action and hand its value to `done`, or the handles, the latches, the cancel and a description resuming it to `suspended`, forcing the description either makes in tail position.
     pub fn perform_advance(
         &mut self,
         action: curios_anf::Atom,
@@ -136,11 +136,11 @@ impl Eraser<'_> {
             answer,
             |lowering| {
                 let resume = lowering.resumption();
-                let [on, filled, cancel] = lowering.waiting(answer);
+                let [on, tripped, cancel] = lowering.waiting(answer);
                 let rest = lowering.description("io/rest", |lowering| {
                     lowering.applied(curios_anf::Atom::Function(resume), vec![answer])
                 });
-                let next = lowering.applied(suspended, vec![on, filled, cancel, rest]);
+                let next = lowering.applied(suspended, vec![on, tripped, cancel, rest]);
                 lowering.forced(next)
             },
             |lowering| {
@@ -150,7 +150,7 @@ impl Eraser<'_> {
         )
     }
 
-    /// What the entry hands the host for `answer`, the forced program: its value, or a suspension the host advances without knowing its frames or reading its cells. `polled` is how a cell's poll answers.
+    /// What the entry hands the host for `answer`, the forced program: its value, or a suspension the host advances without knowing its frames or reading its latches. `polled` is how a latch's poll answers.
     pub fn yield_to_host(&mut self, answer: curios_anf::Atom, polled: Polled) -> curios_anf::Atom {
         self.on_suspension(
             answer,
@@ -163,7 +163,7 @@ impl Eraser<'_> {
         )
     }
 
-    /// The family `option`, a type of `/sys/Option`, is at the sorts its instance states, and its two constructors: what a cell's poll answers, and what a host call's option crosses as.
+    /// The family `option`, a type of `/sys/Option`, is at the sorts its instance states, and its two constructors: what a latch's poll answers, and what a host call's option crosses as.
     pub fn polled(
         &mut self,
         context: &mut Reader,
@@ -184,7 +184,7 @@ impl Eraser<'_> {
         })
     }
 
-    /// What a poll of a cell the entry's suspension waits on answers: the option of `{}`, whose cells `Io/suspend` takes, at the sort the certifier reads `{}` in.
+    /// What a poll of a latch the entry's suspension waits on answers: the option of `{}`, whose latches `Io/suspend` takes, at the sort the certifier reads `{}` in.
     pub fn suspended_poll(&mut self, context: &mut Reader) -> Result<Polled, Error> {
         let unit = curios_core::Term::tuple_type_unit();
         let sort = inferred(context, &unit)?;
@@ -219,17 +219,17 @@ impl Eraser<'_> {
         )
     }
 
-    /// Whether `cell` is filled: its poll, read as the option `polled` names and answered as a boolean.
-    pub fn filled(&mut self, cell: curios_anf::Atom, polled: Polled) -> curios_anf::Atom {
+    /// Whether `latch` is tripped: its poll, read as the option `polled` names and answered as a boolean.
+    pub fn tripped(&mut self, latch: curios_anf::Atom, polled: Polled) -> curios_anf::Atom {
         let poll = self.let_atom(curios_anf::Rhs::Cell {
             operation: curios_anf::CellOperation::Poll {
                 some: polled.some,
                 none: polled.none,
             },
-            operands: vec![cell],
+            operands: vec![latch],
         });
-        let unfilled = self.block(|lowering| lowering.boolean(false));
-        let filled = self.block(|lowering| lowering.boolean(true));
+        let untripped = self.block(|lowering| lowering.boolean(false));
+        let tripped = self.block(|lowering| lowering.boolean(true));
 
         self.let_atom(curios_anf::Rhs::MatchVariant {
             family: polled.family,
@@ -237,14 +237,14 @@ impl Eraser<'_> {
             arms: vec![curios_anf::VariantArm {
                 constructor: polled.none,
                 bindings: Vec::new(),
-                block: unfilled,
+                block: untripped,
             }],
-            default: Some(filled),
+            default: Some(tripped),
         })
     }
 
-    /// Whether a cell of `cells` is filled: a scan over them, polling each in turn and stopping at the first filled one.
-    fn any_filled(&mut self, cells: curios_anf::Atom, polled: Polled) -> curios_anf::Atom {
+    /// Whether a latch of `latches` is tripped: a scan over them, polling each in turn and stopping at the first tripped one.
+    fn any_tripped(&mut self, latches: curios_anf::Atom, polled: Polled) -> curios_anf::Atom {
         let scan = self.builder.reserve_function();
         let held = self.builder.value(None);
         let element = self.builder.value(None);
@@ -259,22 +259,22 @@ impl Eraser<'_> {
                     },
                     operands: vec![curios_anf::Atom::Value(element)],
                 });
-                let unfilled = lowering.block(|lowering| {
+                let untripped = lowering.block(|lowering| {
                     lowering.applied(
                         curios_anf::Atom::Function(scan),
                         vec![curios_anf::Atom::Value(suffix)],
                     )
                 });
-                let filled = lowering.block(|lowering| lowering.boolean(true));
+                let tripped = lowering.block(|lowering| lowering.boolean(true));
                 lowering.let_atom(curios_anf::Rhs::MatchVariant {
                     family: polled.family,
                     scrutinee: poll,
                     arms: vec![curios_anf::VariantArm {
                         constructor: polled.none,
                         bindings: Vec::new(),
-                        block: unfilled,
+                        block: untripped,
                     }],
-                    default: Some(filled),
+                    default: Some(tripped),
                 })
             });
             lowering.let_atom(curios_anf::Rhs::UnconsSequence {
@@ -289,11 +289,11 @@ impl Eraser<'_> {
             })
         });
         self.builder
-            .define_function(scan, Some("io/any_filled".to_string()), vec![held], body);
+            .define_function(scan, Some("io/any_tripped".to_string()), vec![held], body);
         // Part of surfacing a suspension, which runs a performance: no definition's evaluation.
         self.builder.assign_role(scan, curios_anf::Role::Machinery);
         self.builder.let_functions(vec![scan]);
-        self.applied(curios_anf::Atom::Function(scan), vec![cells])
+        self.applied(curios_anf::Atom::Function(scan), vec![latches])
     }
 
     fn boolean(&mut self, value: bool) -> curios_anf::Atom {
@@ -355,12 +355,12 @@ impl Eraser<'_> {
                 lowering.on_suspension(
                     answered,
                     |lowering| {
-                        let [on, filled, cancel] = lowering.waiting(answered);
+                        let [on, tripped, cancel] = lowering.waiting(answered);
                         lowering.suspension(
                             curios_anf::SuspensionOperation::Build,
                             vec![
                                 on,
-                                filled,
+                                tripped,
                                 cancel,
                                 answered,
                                 curios_anf::Atom::Value(pending),
@@ -406,7 +406,7 @@ impl Eraser<'_> {
 
     /// Define `surface(suspension)` in the innermost open block: the suspension around no frames, with a rest that resumes it through `resume` and a cancel that performs its own, each surfacing in turn whatever suspension it answers.
     ///
-    /// A suspension whose cell is already filled is resumed here instead, and what it answers surfaced in turn: the host reads no cell, and the rest can go on at once, so a yield costs no turn of the host. Nothing of the program runs while the host waits, so a cell still empty stays so.
+    /// A suspension whose latch is already tripped is resumed here instead, and what it answers surfaced in turn: the host reads no latch, and the rest can go on at once, so a yield costs no turn of the host. Nothing of the program runs while the host waits, so a latch still empty stays so.
     fn surfacing(
         &mut self,
         resume: curios_anf::FunctionId,
@@ -416,8 +416,8 @@ impl Eraser<'_> {
         let suspension = self.builder.value(None);
         let held = curios_anf::Atom::Value(suspension);
         let body = self.block(|lowering| {
-            let [on, filled, cancel] = lowering.waiting(held);
-            let woken = lowering.any_filled(filled, polled);
+            let [on, tripped, cancel] = lowering.waiting(held);
+            let woken = lowering.any_tripped(tripped, polled);
             let waiting = lowering.block(|lowering| {
                 let rest = lowering.description("io/rest", |lowering| {
                     let answer = lowering.applied(curios_anf::Atom::Function(resume), vec![held]);
@@ -433,7 +433,7 @@ impl Eraser<'_> {
                 });
                 lowering.suspension(
                     curios_anf::SuspensionOperation::Build,
-                    vec![on, filled, cancel, rest, none],
+                    vec![on, tripped, cancel, rest, none],
                 )
             });
             let ready = lowering.block(|lowering| {

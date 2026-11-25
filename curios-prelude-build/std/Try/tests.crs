@@ -1,5 +1,6 @@
 -- `/std/Try`: actions that may fail run side by side, the first failure answering for all of them.
-use /std/{Bool, Cell, Io, List, Nat, Option, Result, Str, Test, Try};
+use /std/{Bool, Io, List, Nat, Option, Result, Str, Test, Try};
+use /std/Io/{Latch};
 use /std/time/{Duration};
 
 -- The failure of `outcome`, where it failed.
@@ -23,15 +24,15 @@ test both_answers_both_successes_in_their_order =
 
 -- A failure answers for both, and the action still waiting is cancelled where it waits rather than run to its end.
 test a_failure_answers_both_and_cancels_the_other_where_it_waits =
-    let ran = Cell/new()!;
+    let ran = Latch/new()!;
     let fails: Try(Io, Str, {}) = Try/raise("refused");
     -- A function, so its body sequences on its own: a `let`'s value would run its actions here, before `both`.
     let slow() -> Try(Io, Str, {}) =
         let () = Io/sleep(Duration/of_secs(3600))!;
-        let () = Cell/fill(ran)!;
+        let () = Latch/trip(ran)!;
         Try/pure(());
     let outcome = Try/run(Try/both(slow(), fails))!;
-    let finished = Cell/poll(ran)!;
+    let finished = Latch/tripped(ran)!;
     Test/all([
         Test/equal(failed_with(outcome), Option/some("refused")),
         Test/assert("the waiting action never ran on", Bool/not(finished))]);

@@ -78,7 +78,7 @@ let /gone : #NatType = 0;
 #IoSuspend(
     /std/Bool/False,
     #List(#HandleType, [#Handle(2)]),
-    #List(#CellType, []),
+    #List(#LatchType, []),
     #IoPure({}, ()),
     #{node = Foreign}
     /gone(@/std/Bool/False)

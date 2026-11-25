@@ -140,7 +140,6 @@ const SYS_READERS: &[(&str, &[&str])] = &[
     ("List", &["List"]),
     ("Option", &["Option"]),
     ("Result", &["Result"]),
-    ("Cell", &["Cell"]),
     ("Box", &["Box"]),
     ("Io", &["Io", "internal"]),
     ("Handle", &["internal"]),

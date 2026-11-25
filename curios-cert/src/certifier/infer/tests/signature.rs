@@ -389,7 +389,7 @@ fn the_operands_an_operation_is_declared_over_are_the_first_its_traversal_meets(
     }
 }
 
-/// The rows no fold answers are the effect carrier's: its two constructors, and the cell and box operations. Nothing computes against them, and the one thing a wrong row among them could do to admit is hand out what a description yields — `Io` has no eliminator only while no row is one, and a host call that diverges inhabits `Io` at any type. So each is typed at an `Io`, and reduction leaves each the node it was: `bind(pure(x), f)` is not `f(x)`.
+/// The rows no fold answers are the effect carrier's: its two constructors, and the latch and box operations. Nothing computes against them, and the one thing a wrong row among them could do to admit is hand out what a description yields — `Io` has no eliminator only while no row is one, and a host call that diverges inhabits `Io` at any type. So each is typed at an `Io`, and reduction leaves each the node it was: `bind(pure(x), f)` is not `f(x)`.
 ///
 /// Mutation-checked as the grid above is: `IoBind` producing its bare result type, and a box's read its bare element, each fail the first assertion.
 #[test]
@@ -397,11 +397,11 @@ fn every_row_no_fold_answers_produces_an_inert_description() {
     let mut certifier = certifier_with_bounds();
     let rows: [Term; 8] = under(
         &mut certifier,
-        "cell: #CellType, held: #BoxType(#NatType)",
+        "latch: #LatchType, held: #BoxType(#NatType)",
         &[
-            "#Cell".to_string(),
-            "#CellFill(cell)".to_string(),
-            "#CellPoll(cell)".to_string(),
+            "#Latch".to_string(),
+            "#LatchTrip(latch)".to_string(),
+            "#LatchTripped(latch)".to_string(),
             "#Box(#NatType, 1)".to_string(),
             "#BoxHeld(#NatType, held)".to_string(),
             "#BoxSet(#NatType, held, 1)".to_string(),

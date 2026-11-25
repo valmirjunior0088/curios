@@ -1240,7 +1240,7 @@ pub fn carrier_former(head: &HeadKey) -> Option<Global> {
         HeadKey::Bytes => Intrinsic::BytesType,
         HeadKey::Handle => Intrinsic::HandleType,
         HeadKey::List => Intrinsic::ListType(Term::type_ground()),
-        HeadKey::Cell => Intrinsic::CellType,
+        HeadKey::Latch => Intrinsic::LatchType,
         HeadKey::Box => Intrinsic::BoxType(Term::type_ground()),
         HeadKey::Io => Intrinsic::IoType(Term::type_ground()),
         HeadKey::Nominal(_) | HeadKey::TupleType(_) => return None,
@@ -1267,7 +1267,7 @@ pub fn intrinsic_former(global: &Global, operands: &[Term]) -> Option<Intrinsic>
                 || Intrinsic::FltType,
                 || Intrinsic::BytesType,
                 || Intrinsic::HandleType,
-                || Intrinsic::CellType,
+                || Intrinsic::LatchType,
             ];
             let over_one: [fn(Term) -> Intrinsic; 3] =
                 [Intrinsic::ListType, Intrinsic::BoxType, Intrinsic::IoType];
@@ -1768,26 +1768,26 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
         Intrinsic::Handle(StdioCodes::STDOUT) => IntrinsicForm::Named("Handle/stdout"),
         Intrinsic::Handle(StdioCodes::STDERR) => IntrinsicForm::Named("Handle/stderr"),
         Intrinsic::Handle(token) => IntrinsicForm::Handle(token),
-        Intrinsic::CellType => IntrinsicForm::Named("Cell"),
+        Intrinsic::LatchType => IntrinsicForm::Named("Io/Latch"),
         Intrinsic::BoxType(elem) => IntrinsicForm::Call {
             path: "Box".into(),
             implicits: vec![],
             explicits: vec![elem],
         },
-        Intrinsic::Cell => IntrinsicForm::Call {
-            path: "Cell/new".into(),
+        Intrinsic::Latch => IntrinsicForm::Call {
+            path: "Io/Latch/new".into(),
             implicits: vec![],
             explicits: vec![],
         },
-        Intrinsic::CellFill { cell } => IntrinsicForm::Call {
-            path: "Cell/fill".into(),
+        Intrinsic::LatchTrip { latch } => IntrinsicForm::Call {
+            path: "Io/Latch/trip".into(),
             implicits: vec![],
-            explicits: vec![cell],
+            explicits: vec![latch],
         },
-        Intrinsic::CellPoll { cell } => IntrinsicForm::Call {
-            path: "Cell/poll".into(),
+        Intrinsic::LatchTripped { latch } => IntrinsicForm::Call {
+            path: "Io/Latch/tripped".into(),
             implicits: vec![],
-            explicits: vec![cell],
+            explicits: vec![latch],
         },
         Intrinsic::Box { element, value } => IntrinsicForm::Call {
             path: "Box/new".into(),
@@ -1834,13 +1834,13 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
         Intrinsic::IoSuspend {
             result,
             on,
-            filled,
+            tripped,
             cancel,
             rest,
         } => IntrinsicForm::Call {
             path: "Io/suspend".into(),
             implicits: vec![result],
-            explicits: vec![on, filled, cancel, rest],
+            explicits: vec![on, tripped, cancel, rest],
         },
         Intrinsic::IoAdvance {
             from,

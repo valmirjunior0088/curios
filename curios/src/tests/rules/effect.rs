@@ -12,7 +12,7 @@ fn a_catch_all_is_checked_at_its_scrutinee() {
     assert_eq!(run(A_CATCH_ALL_IS_CHECKED_AT_ITS_SCRUTINEE), b"1");
 }
 
-// The purity premise every refinement rests on: an arm is reached only when its scrutinee *equals* the case's value, which a term of non-`Io` type does because it denotes one value. An effectful read does not — two occurrences of `Cell/fill(c, true)` around a `Cell/fill(c, false)` would denote two values, refining both would re-read `p : Eq()(Cell/fill(c, true), true)` at `Eq()(false, true)` in the inner arm, and `/std/Bool/false_neq_true` would turn that into `/std/Bool/False` in an arm the run reaches. Its type is `Io(Bool)`, opaque and with no cases, so nothing lets the program treat it as a `Bool`, and the refusal names `Io`. The control forces the read once and matches the `Bool` it yields, which the refusal leaves a description.
+// The purity premise every refinement rests on: an arm is reached only when its scrutinee *equals* the case's value, which a term of non-`Io` type does because it denotes one value. An effectful read does not — two occurrences of `Box/held(c)` around a change of the box would denote two values, refining both would re-read `p : Eq()(Box/held(c), true)` at `Eq()(false, true)` in the inner arm, and `/std/Bool/false_neq_true` would turn that into `/std/Bool/False` in an arm the run reaches. Its type is `Io(Bool)`, opaque and with no cases, so nothing lets the program treat it as a `Bool`, and the refusal names `Io`. The control forces the read once and matches the `Bool` it yields, which the refusal leaves a description.
 #[test]
 fn an_effectful_scrutinee_is_not_a_value() {
     control(

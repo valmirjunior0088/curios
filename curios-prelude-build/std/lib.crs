@@ -135,10 +135,6 @@ mod internal;
 pub mod Io;
 pub use Io/{let Io};
 
---- A write-once cell in `Io`: initially empty, with the first fill kept.
-pub mod Cell;
-pub use Cell/{let Cell};
-
 --- A bounded queue: a push waits while it is full, and a take while it is empty.
 pub mod Channel;
 pub use Channel/{let Channel};

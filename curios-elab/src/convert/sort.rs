@@ -134,7 +134,7 @@ fn classify_under(
             | Intrinsic::FltType
             | Intrinsic::BytesType
             | Intrinsic::HandleType
-            | Intrinsic::CellType => Sort::type_at(Level::zero()),
+            | Intrinsic::LatchType => Sort::type_at(Level::zero()),
             Intrinsic::ListType(element)
             | Intrinsic::BoxType(element)
             | Intrinsic::IoType(element) => {
@@ -164,9 +164,9 @@ fn classify_under(
             | Intrinsic::BoolXor(..)
             | Intrinsic::Byte(..)
             | Intrinsic::ByteToNat(..)
-            | Intrinsic::Cell
-            | Intrinsic::CellPoll { .. }
-            | Intrinsic::CellFill { .. }
+            | Intrinsic::Latch
+            | Intrinsic::LatchTripped { .. }
+            | Intrinsic::LatchTrip { .. }
             | Intrinsic::Box { .. }
             | Intrinsic::BoxHeld { .. }
             | Intrinsic::BoxSet { .. }

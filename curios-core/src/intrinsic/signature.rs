@@ -94,7 +94,7 @@ impl Intrinsic {
         // A bound is stated over the *intrinsic* measure, not `/sys`'s wrapper: this table sits below `/sys`, and it is the shape a reduced occurrence carries anyway.
         let bytes_len = |bytes| Term::intrinsic(Intrinsic::BytesLen(bytes));
         let list_len = |element, list| Term::intrinsic(Intrinsic::ListLen { element, list });
-        let cell_type = || Term::intrinsic(Intrinsic::CellType);
+        let latch_type = || Term::intrinsic(Intrinsic::LatchType);
         let box_type = |element: Term| Term::intrinsic(Intrinsic::BoxType(element));
         let io_type = |result: Term| Term::intrinsic(Intrinsic::IoType(result));
         let unit = Term::tuple_type_unit;
@@ -137,7 +137,7 @@ impl Intrinsic {
             | Self::FltType
             | Self::BytesType
             | Self::HandleType
-            | Self::CellType => nullary(Term::type_ground()),
+            | Self::LatchType => nullary(Term::type_ground()),
             Self::ListType(_) | Self::BoxType(_) | Self::IoType(_) => former(),
 
             // Literals. A `Nat` successor is the one literal carrying a term: `Succ(3, x)` is `x + 3`, and its base is a `Nat` like any other.
@@ -466,9 +466,9 @@ impl Intrinsic {
             ),
 
             // Guest coordination operations describe effects; their outcomes are ordinary declared inductives.
-            Self::Cell => sig(vec![], io_type(cell_type())),
-            Self::CellPoll { .. } => sig(vec![Operand::At(cell_type())], io_type(bool_type())),
-            Self::CellFill { .. } => sig(vec![Operand::At(cell_type())], io_type(unit())),
+            Self::Latch => sig(vec![], io_type(latch_type())),
+            Self::LatchTripped { .. } => sig(vec![Operand::At(latch_type())], io_type(bool_type())),
+            Self::LatchTrip { .. } => sig(vec![Operand::At(latch_type())], io_type(unit())),
             Self::Box { element, .. } => sig(
                 vec![Operand::IsType, Operand::At(element.clone())],
                 io_type(box_type(element.clone())),
@@ -486,7 +486,7 @@ impl Intrinsic {
                 io_type(unit()),
             ),
 
-            // The constructors of the opaque effect carrier — `IoPure`, `IoBind` and `IoSuspend` below, beside the cell and box operations — and its one handler, `IoAdvance`, which answers an `Io` too. Nothing anywhere lowers an `Io(T)` to its `T`, which is what makes every term of non-`Io` type pure by typing.
+            // The constructors of the opaque effect carrier — `IoPure`, `IoBind` and `IoSuspend` below, beside the latch and box operations — and its one handler, `IoAdvance`, which answers an `Io` too. Nothing anywhere lowers an `Io(T)` to its `T`, which is what makes every term of non-`Io` type pure by typing.
             Self::IoPure { result, .. } => sig(
                 vec![Operand::IsType, Operand::At(result.clone())],
                 io_type(result.clone()),
@@ -518,18 +518,18 @@ impl Intrinsic {
                 ],
                 io_type(to.clone()),
             ),
-            // A suspension: the handles and the cells it waits on, what cancelling it performs, and the rest of it.
+            // A suspension: the handles and the latches it waits on, what cancelling it performs, and the rest of it.
             Self::IoSuspend { result, .. } => sig(
                 vec![
                     Operand::IsType,
                     Operand::At(list_type(handle_type())),
-                    Operand::At(list_type(cell_type())),
+                    Operand::At(list_type(latch_type())),
                     Operand::At(io_type(unit())),
                     Operand::At(io_type(result.clone())),
                 ],
                 io_type(result.clone()),
             ),
-            // The one handler of a suspension: `done` takes the action's value, `suspended` its `on`, `filled`, `cancel` and `rest`.
+            // The one handler of a suspension: `done` takes the action's value, `suspended` its `on`, `tripped`, `cancel` and `rest`.
             Self::IoAdvance { from, to, .. } => sig(
                 vec![
                     Operand::IsType,
@@ -542,7 +542,7 @@ impl Intrinsic {
                     Operand::Function {
                         domains: vec![
                             list_type(handle_type()),
-                            list_type(cell_type()),
+                            list_type(latch_type()),
                             io_type(unit()),
                             io_type(from.clone()),
                         ],

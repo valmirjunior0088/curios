@@ -80,7 +80,7 @@ foreign handle_finish(Handle) -> Nat;
 --- A wait on a watch of `h` for `interest`: the watch is closed whether the wait ends or is cancelled.
 let watching(h: Handle, interest: Interest) -> Io(Waiting) =
     let watch = handle_watch(h, interest.readable, interest.writable)!;
-    Io/pure(Waiting { on = [watch], filled = [], release = Io/close(watch) });
+    Io/pure(Waiting { on = [watch], tripped = [], release = Io/close(watch) });
 
 --- Until `h` is ready for `interest`, or has failed or hung up: a suspension on a watch of it, closed whether the wait ends or is cancelled. Readiness is advisory, so what waits retries the operation it waited for, and waits again where it would still block.
 pub let wait(h: Handle, interest: Interest) -> Io({}) =

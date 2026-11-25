@@ -128,7 +128,6 @@ const PURITY: &[(&str, Purity)] = &[
     ("Parse", Purity::Pure),
     ("internal", Purity::Performs),
     ("Io", Purity::Performs),
-    ("Cell", Purity::Performs),
     ("Channel", Purity::Performs),
     ("Box", Purity::Performs),
     ("Try", Purity::Performs),

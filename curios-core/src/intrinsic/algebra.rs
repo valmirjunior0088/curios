@@ -399,10 +399,10 @@ impl Intrinsic {
             | Intrinsic::ListFold { .. }
             | Intrinsic::HandleType
             | Intrinsic::Handle { .. }
-            | Intrinsic::CellType
-            | Intrinsic::Cell
-            | Intrinsic::CellFill { .. }
-            | Intrinsic::CellPoll { .. }
+            | Intrinsic::LatchType
+            | Intrinsic::Latch
+            | Intrinsic::LatchTrip { .. }
+            | Intrinsic::LatchTripped { .. }
             | Intrinsic::BoxType { .. }
             | Intrinsic::Box { .. }
             | Intrinsic::BoxHeld { .. }
@@ -415,7 +415,7 @@ impl Intrinsic {
         }
     }
 
-    /// The carrier a type former's values are of, where the algebra has one: `Nat`'s the naturals, `Bytes`'s packed bytes, `List`'s sequences whatever its element. `None` for a former no operation of the algebra is over — a handle, a cell, a box, a description of an effect — and for a value or an operation, which no value is of. Which carriers' values may hold a type is [`Carrier::holds_types`]'s.
+    /// The carrier a type former's values are of, where the algebra has one: `Nat`'s the naturals, `Bytes`'s packed bytes, `List`'s sequences whatever its element. `None` for a former no operation of the algebra is over — a handle, a latch, a box, a description of an effect — and for a value or an operation, which no value is of. Which carriers' values may hold a type is [`Carrier::holds_types`]'s.
     pub fn values_carrier(&self) -> Option<Carrier> {
         Some(match self {
             Intrinsic::NatType => Carrier::Natural,

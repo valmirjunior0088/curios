@@ -1,6 +1,6 @@
 -- Waiting in `Io`: what a wait holds of the branch beside it, what a scope tells its releases, and what a fulfilment, a push, a selection, a notification and a cancellation wake.
-use /std/{Bool, Cell, Io, Nat, Option, Test, Channel};
-use /std/Io/{Future};
+use /std/{Bool, Io, Nat, Option, Test, Channel};
+use /std/Io/{Future, Latch};
 use /std/time/{Duration};
 
 -- A finalizer that leaves how its body ended where a take finds it.
@@ -112,7 +112,7 @@ test two_woken_takers_retry_after_only_one_can_take =
 test a_losing_take_neither_takes_a_later_message_nor_acknowledges_it =
     let (acknowledged, n) =
         Io/scope((s) =>
-            let messages = Channel/new(@{Nat, Cell}, 1)!;
+            let messages = Channel/new(@{Nat, Latch}, 1)!;
             let other = Channel/new(@Nat, 1)!;
             let select_one() -> Io({}) =
                 Io/select([
@@ -122,12 +122,12 @@ test a_losing_take_neither_takes_a_later_message_nor_acknowledges_it =
             let () = Io/yield()!;
             let _ = Channel/push(other, 1)!;
             let () = Io/Scope/Task/join(selecting)!;
-            let ack = Cell/new()!;
+            let ack = Latch/new()!;
             let _ = Channel/push(messages, (7, ack))!;
             let () = Io/yield()!;
-            let acknowledged = Cell/poll(ack)!;
+            let acknowledged = Latch/tripped(ack)!;
             let got = Channel/take(messages)!;
-            Io/pure((acknowledged, Option/map(got, (message: {Nat, Cell}) => message.0))))!;
+            Io/pure((acknowledged, Option/map(got, (message: {Nat, Latch}) => message.0))))!;
     Test/all([
         Test/assert("the message the losing take left is not acknowledged", Bool/not(acknowledged)),
         Test/equal(n, Option/some(7))]);

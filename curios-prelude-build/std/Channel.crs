@@ -3,8 +3,9 @@ mod tests;
 mod internal;
 use internal/{Queue};
 
-use /std/{Nat, Bool, Option, Cell, Box, Io};
-use /std/internal/{Waiting, on_filled, until};
+use /std/{Nat, Bool, Option, Box, Io};
+use /std/Io/{Latch};
+use /std/internal/{Waiting, on_tripped, until};
 
 --- The outcome of one push that does not wait: `full` passes once a take makes room, and `closed` never does.
 pub induct Push: pub Type
@@ -20,12 +21,12 @@ pub induct Take(A: Sort): pub Type
 | ended()
 end
 
--- What a channel holds: its queue, whether it was finished, and the cell each side's waiters wait on, kept until a change of that side fills it and the next waiter makes another. Readers wait for a value or the finish, writers for room or the finish.
+-- What a channel holds: its queue, whether it was finished, and the latch each side's waiters wait on, kept until a change of that side trips it and the next waiter makes another. Readers wait for a value or the finish, writers for room or the finish.
 struct Held(A: Type): Type {
     queue: Queue(A),
     finished: Bool,
-    readers: Option(Cell),
-    writers: Option(Cell),
+    readers: Option(Latch),
+    writers: Option(Latch),
 }
 
 -- Every change is one change of the box, made by `try_push`, `try_take` or `finish`, which then wakes the side it concerns: the queue and its waiters move together.
@@ -41,20 +42,20 @@ induct Side: Type
 | writers()
 end
 
--- The cell the waiters of `side` wait on, where one is there.
-let waiting(@A: Type, h: Held(A), side: Side) -> Option(Cell) =
+-- The latch the waiters of `side` wait on, where one is there.
+let waiting(@A: Type, h: Held(A), side: Side) -> Option(Latch) =
     match side | readers() => h.readers | writers() => h.writers end;
 
--- The cell a waiter of `side` waits on: the one there, or a fresh one left there. The cell is made before the change that leaves it, since a change cannot make one, and only where none is there.
-let waited(@A: Type, c: Channel(A), side: Side) -> Io(Cell) =
+-- The latch a waiter of `side` waits on: the one there, or a fresh one left there. The latch is made before the change that leaves it, since a change cannot make one, and only where none is there.
+let waited(@A: Type, c: Channel(A), side: Side) -> Io(Latch) =
     let there = Box/held(c.held)!;
     match waiting(there, side)
-    | some(cell) => Io/pure(cell)
+    | some(latch) => Io/pure(latch)
     | none() =>
-        let fresh = Cell/new()!;
+        let fresh = Latch/new()!;
         Box/change(c.held, (h: Held(A)) =>
             match (waiting(h, side), side)
-            | (some(cell), _) => (h, cell)
+            | (some(latch), _) => (h, latch)
             | (none(), readers()) => (Held { ..h, readers = Option/some(fresh) }, fresh)
             | (none(), writers()) => (Held { ..h, writers = Option/some(fresh) }, fresh)
             end)
@@ -62,12 +63,12 @@ let waited(@A: Type, c: Channel(A), side: Side) -> Io(Cell) =
 
 -- What a waiter of `side` suspends on.
 let wait_on(@A: Type, c: Channel(A), side: Side) -> Io(Waiting) =
-    let cell = waited(c, side)!;
-    Io/pure(on_filled([cell]));
+    let latch = waited(c, side)!;
+    Io/pure(on_tripped([latch]));
 
--- Fill the cell a side's waiters wait on, where one was there: every one of them is woken, and checks again.
-let woken(cell: Option(Cell)) -> Io({}) =
-    match cell | some(c) => Cell/fill(c) | none() => Io/pure(()) end;
+-- Trip the latch a side's waiters wait on, where one was there: every one of them is woken, and checks again.
+let woken(latch: Option(Latch)) -> Io({}) =
+    match latch | some(c) => Latch/trip(c) | none() => Io/pure(()) end;
 
 --- A channel holding at most `capacity` values. A sender needing acknowledgement can include a reply `Future` in its message, which the receiver fills.
 pub let new(@A: Type, capacity: Nat, @_: Bool/Holds(0 < capacity)) -> Io(Channel(A)) =

@@ -74,7 +74,8 @@ fn io_read_short_reads_and_eof() {
 #[test]
 fn a_rest_surfaces_a_read_failure_instead_of_a_partial_prefix() {
     let source = r#"
-        use /std/{Nat, Bytes, Bool, Result, Cell, Str, Try, Io, print};
+        use /std/{Nat, Bytes, Bool, Result, Str, Try, Io, print};
+        use /std/Io/{Latch};
         let show(r : Result(Io/Error, Bytes)) -> Str =
             match r
             | success(bytes) => Str/concat("ok:", Nat/to_str(Bytes/length(bytes)))
@@ -84,11 +85,11 @@ fn a_rest_surfaces_a_read_failure_instead_of_a_partial_prefix() {
         satisfy Io/Read(Failing) {
             read(s, _) = Try/raise(Io/Error/other(s.code)),
         }
-        struct Twice: Type { calls: Cell, fails: Bool }
+        struct Twice: Type { calls: Latch, fails: Bool }
         satisfy Io/Read(Twice) {
             read(s, _) =
-                let again = Cell/poll(s.calls)!;
-                let () = Cell/fill(s.calls)!;
+                let again = Latch/tripped(s.calls)!;
+                let () = Latch/trip(s.calls)!;
                 match again
                 | false => Try/pure(Io/Chunk/bytes(0x[0x41, 0x42, 0x43]))
                 | true =>
@@ -99,7 +100,7 @@ fn a_rest_surfaces_a_read_failure_instead_of_a_partial_prefix() {
                 end,
         }
         let twice(fails: Bool) -> Io(Twice) =
-            let calls = Cell/new()!;
+            let calls = Latch/new()!;
             Io/pure(Twice { calls = calls, fails = fails });
         let rest(@S: Type, use Io/Read(S), s: S) -> Io(Result(Io/Error, Bytes)) =
             let r = Io/Reader/new(s)!;
@@ -124,14 +125,15 @@ fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
     let stream = |answer: &str| {
         fill!(
             r#"
-            use /std/{Bytes, Bool, Str, List, Result, Cell, Try, Io, print};
-            struct Pieces: Type { List({Cell, Bytes}) }
-            let next(ps: List({Cell, Bytes})) -> Try(Io, Io/Error, Io/Chunk) =
+            use /std/{Bytes, Bool, Str, List, Result, Try, Io, print};
+            use /std/Io/{Latch};
+            struct Pieces: Type { List({Latch, Bytes}) }
+            let next(ps: List({Latch, Bytes})) -> Try(Io, Io/Error, Io/Chunk) =
                 match ps
                 | [] => Try/pure(Io/Chunk/ended())
                 | [p, ..more] =>
-                    let spent = Cell/poll(p.0)!;
-                    let () = Cell/fill(p.0)!;
+                    let spent = Latch/tripped(p.0)!;
+                    let () = Latch/trip(p.0)!;
                     match spent
                     | true => next(more)
                     | false => ${answer}
@@ -140,8 +142,8 @@ fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
             satisfy Io/Read(Pieces) {
                 read(s, n) = next(s.0),
             }
-            let piece(b: Bytes) -> Io({Cell, Bytes}) =
-                let c = Cell/new()!;
+            let piece(b: Bytes) -> Io({Latch, Bytes}) =
+                let c = Latch/new()!;
                 Io/pure((c, b));
             let entry() -> /std/Io({}) =
                 let a = piece(0x[])!;

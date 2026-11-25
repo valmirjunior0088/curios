@@ -6,7 +6,8 @@ pub use Handle/{let Handle};
 pub mod Status;
 pub use Status/{let Status};
 
-use /std/{Bytes, Str, List, Option, Cell, Io, Try, Path, Proc, Show, rand};
+use /std/{Bytes, Str, List, Option, Io, Try, Path, Proc, Show, rand};
+use /std/Io/{Latch};
 
 --- An argument refused before any host call, by the errno `/sys/errno` names for it.
 pub let invalid: Io/Error =
@@ -32,24 +33,24 @@ pub let temporary_path(prefix: Str) -> Io(Path) =
     let drawn = rand/bytes(8)!;
     Io/pure(Path/join(directory, Path/of_str(Str/concat(prefix, Show/show(drawn)))));
 
---- What a wait waits on: handles a host makes ready and cells the program fills, and what releases what the wait made for itself, whether the wait ends or is cancelled.
+--- What a wait waits on: handles a host makes ready and latches the program trips, and what releases what the wait made for itself, whether the wait ends or is cancelled.
 pub struct Waiting: pub Type {
     on: List(Handle),
-    filled: List(Cell),
+    tripped: List(Latch),
     release: Io({}),
 }
 
---- A wait on cells alone, which made nothing to release.
-pub let on_filled(cells: List(Cell)) -> Waiting =
-    Waiting { on = [], filled = cells, release = Io/pure(()) };
+--- A wait on latches alone, which made nothing to release.
+pub let on_tripped(latches: List(Latch)) -> Waiting =
+    Waiting { on = [], tripped = latches, release = Io/pure(()) };
 
 --- Until something `w` waits on has moved: a suspension that releases what `w` made, whether it ends or is cancelled.
 pub let suspend_on(w: Waiting) -> Io({}) =
-    /sys/Io/suspend(w.on, w.filled, w.release, w.release);
+    /sys/Io/suspend(w.on, w.tripped, w.release, w.release);
 
---- Until a cell of `cells` is filled: a suspension that cancels nothing and goes on with nothing. Only the program fills a cell, so what waits on cells alone at the top of a program is a deadlock the host reports, and so is a wait on none.
-pub let wait_filled(cells: List(Cell)) -> Io({}) =
-    suspend_on(on_filled(cells));
+--- Until a latch of `latches` is tripped: a suspension that cancels nothing and goes on with nothing. Only the program trips a latch, so what waits on latches alone at the top of a program is a deadlock the host reports, and so is a wait on none.
+pub let wait_tripped(latches: List(Latch)) -> Io({}) =
+    suspend_on(on_tripped(latches));
 
 --- What `attempt` answers, asked again each time something `wait` names has moved while it declines: the one loop every wait goes through, on the program's own state and on a handle's readiness alike. Nothing runs between an attempt that declines and the suspension but `wait`, which never suspends, so no change made between them is missed; an attempt takes nothing unless it answers.
 pub let until(@A: Type, attempt: Io(Option(A)), wait: Io(Waiting)) -> Io(A) =

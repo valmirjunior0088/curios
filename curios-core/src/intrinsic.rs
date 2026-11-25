@@ -127,9 +127,9 @@ pub fn foreign_signature(
     }
 }
 
-/// The closed set of intrinsics of the core calculus: the built-in types (`BoolType`, `NatType`, `IntType`, `FltType`, `BytesType`, `ListType`, `HandleType`, `CellType`, `BoxType`, `IoType`), their literals, and the operator families over them. A host call is *not* here, exiting included: [`Subterm::Foreign`] is a term former of its own, because what it means is read off an ABI row rather than fixed by this enum. Operand positions hold full terms, so an intrinsic participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.
+/// The closed set of intrinsics of the core calculus: the built-in types (`BoolType`, `NatType`, `IntType`, `FltType`, `BytesType`, `ListType`, `HandleType`, `LatchType`, `BoxType`, `IoType`), their literals, and the operator families over them. A host call is *not* here, exiting included: [`Subterm::Foreign`] is a term former of its own, because what it means is read off an ABI row rather than fixed by this enum. Operand positions hold full terms, so an intrinsic participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.
 ///
-/// An intrinsic that performs an effect returns an `Io`, including guest cell and box operations. Its result is stated by `Intrinsic::signature` and checked by both drivers; a new effectful variant must be given an `IoType` result when it is added.
+/// An intrinsic that performs an effect returns an `Io`, including guest latch and box operations. Its result is stated by `Intrinsic::signature` and checked by both drivers; a new effectful variant must be given an `IoType` result when it is added.
 ///
 /// **Generic over what an operand is**, which is [`Term`] in this crate and every stage below it. `curios-module` holds the same enum over the surface term, for the `/sys` roster to plant in a declaration's body, so the surface tree restates no variant and lowering one is [`try_map`](Self::try_map) over its operands. Everything that gives an intrinsic meaning — its signature, its reduction, its algebra — is stated at `Term` alone.
 ///
@@ -380,14 +380,14 @@ pub enum Intrinsic<T = Term> {
     },
     HandleType,
     Handle(u32),
-    // A cell is empty until it is filled, and stays filled: it holds no value, so a fill says only that it happened and a poll whether it has.
-    CellType,
-    Cell,
-    CellFill {
-        cell: T,
+    // A latch is tripped once and stays tripped: it holds no value, so tripping one says only that it happened, and asking one whether it has.
+    LatchType,
+    Latch,
+    LatchTrip {
+        latch: T,
     },
-    CellPoll {
-        cell: T,
+    LatchTripped {
+        latch: T,
     },
     // A box always holds one value: it is made holding it, read whole and set whole. `target` names the box, `box` being a reserved word of Rust's.
     BoxType(T),
@@ -422,17 +422,17 @@ pub enum Intrinsic<T = Term> {
         action: T,
         continuation: T,
     },
-    // (@A, on : List(Handle), filled : List(Cell), cancel : Io({}), rest : Io(A)) -> Io(A): the description that suspends until a handle of `on` may be ready or a cell of `filled` is filled and then goes on as `rest`, and that whoever drops it instead cleans up by performing `cancel`.
+    // (@A, on : List(Handle), tripped : List(Latch), cancel : Io({}), rest : Io(A)) -> Io(A): the description that suspends until a handle of `on` may be ready or a latch of `tripped` is tripped and then goes on as `rest`, and that whoever drops it instead cleans up by performing `cancel`.
     //
-    // A suspension waits on nothing itself: whoever advances the description decides what it means — the host waits on `on`, a combinator runs something else first. Only the program fills a cell, so the host, which waits while nothing of the program runs, never reads one. Inert like the rest: it reduces its operands and rebuilds.
+    // A suspension waits on nothing itself: whoever advances the description decides what it means — the host waits on `on`, a combinator runs something else first. Only the program trips a latch, so the host, which waits while nothing of the program runs, never reads one. Inert like the rest: it reduces its operands and rebuilds.
     IoSuspend {
         result: T,
         on: T,
-        filled: T,
+        tripped: T,
         cancel: T,
         rest: T,
     },
-    // (@A, @R, action : Io(A), done : (A) -> Io(R), suspended : (List(Handle), List(Cell), Io({}), Io(A)) -> Io(R)) -> Io(R): the description that performs `action` and hands its value to `done`, or, where `action` suspends, its `on`, `filled`, `cancel` and `rest` to `suspended`.
+    // (@A, @R, action : Io(A), done : (A) -> Io(R), suspended : (List(Handle), List(Latch), Io({}), Io(A)) -> Io(R)) -> Io(R): the description that performs `action` and hands its value to `done`, or, where `action` suspends, its `on`, `tripped`, `cancel` and `rest` to `suspended`.
     //
     // The one place a suspension is caught rather than passed out. It eliminates nothing: what it answers is an `Io`.
     IoAdvance {
@@ -801,8 +801,8 @@ impl Intrinsic {
         }
     }
 
-    /// An `IoSuspend` node from a term-shaped result type, the handles and the cells it waits on, its cancel, and its rest.
-    pub fn io_suspend<A, O, W, B, R>(a: A, on: O, filled: W, cancel: B, rest: R) -> Self
+    /// An `IoSuspend` node from a term-shaped result type, the handles and the latches it waits on, its cancel, and its rest.
+    pub fn io_suspend<A, O, W, B, R>(a: A, on: O, tripped: W, cancel: B, rest: R) -> Self
     where
         A: Into<Term>,
         O: Into<Term>,
@@ -813,7 +813,7 @@ impl Intrinsic {
         Self::IoSuspend {
             result: a.into(),
             on: on.into(),
-            filled: filled.into(),
+            tripped: tripped.into(),
             cancel: cancel.into(),
             rest: rest.into(),
         }
@@ -906,8 +906,8 @@ impl Intrinsic {
             | Intrinsic::Bytes(_)
             | Intrinsic::HandleType
             | Intrinsic::Handle(_)
-            | Intrinsic::CellType
-            | Intrinsic::Cell => {}
+            | Intrinsic::LatchType
+            | Intrinsic::Latch => {}
 
             Intrinsic::Nat(Nat::Succ(_, inner)) => visit(inner),
 
@@ -1036,7 +1036,7 @@ impl Intrinsic {
             Intrinsic::IoSuspend {
                 result: a,
                 on: b,
-                filled: c,
+                tripped: c,
                 cancel: d,
                 rest: e,
             }
@@ -1181,8 +1181,8 @@ impl Intrinsic {
             }
 
             Intrinsic::BoxType(a)
-            | Intrinsic::CellFill { cell: a }
-            | Intrinsic::CellPoll { cell: a } => visit(a),
+            | Intrinsic::LatchTrip { latch: a }
+            | Intrinsic::LatchTripped { latch: a } => visit(a),
             Intrinsic::Box {
                 element: a,
                 value: b,
@@ -1554,14 +1554,14 @@ impl Intrinsic {
             },
             Intrinsic::HandleType => Intrinsic::HandleType,
             Intrinsic::Handle(token) => Intrinsic::Handle(*token),
-            Intrinsic::CellType => Intrinsic::CellType,
+            Intrinsic::LatchType => Intrinsic::LatchType,
             Intrinsic::BoxType(a) => Intrinsic::BoxType(visit.visit_subterm(a)),
-            Intrinsic::Cell => Intrinsic::Cell,
-            Intrinsic::CellFill { cell } => Intrinsic::CellFill {
-                cell: visit.visit_subterm(cell),
+            Intrinsic::Latch => Intrinsic::Latch,
+            Intrinsic::LatchTrip { latch } => Intrinsic::LatchTrip {
+                latch: visit.visit_subterm(latch),
             },
-            Intrinsic::CellPoll { cell } => Intrinsic::CellPoll {
-                cell: visit.visit_subterm(cell),
+            Intrinsic::LatchTripped { latch } => Intrinsic::LatchTripped {
+                latch: visit.visit_subterm(latch),
             },
             Intrinsic::Box { element, value } => Intrinsic::Box {
                 element: visit.visit_subterm(element),
@@ -1602,13 +1602,13 @@ impl Intrinsic {
             Intrinsic::IoSuspend {
                 result,
                 on,
-                filled,
+                tripped,
                 cancel,
                 rest,
             } => Intrinsic::IoSuspend {
                 result: visit.visit_subterm(result),
                 on: visit.visit_subterm(on),
-                filled: visit.visit_subterm(filled),
+                tripped: visit.visit_subterm(tripped),
                 cancel: visit.visit_subterm(cancel),
                 rest: visit.visit_subterm(rest),
             },
@@ -1950,14 +1950,14 @@ impl<T> Intrinsic<T> {
             },
             Intrinsic::HandleType => Intrinsic::HandleType,
             Intrinsic::Handle(token) => Intrinsic::Handle(*token),
-            Intrinsic::CellType => Intrinsic::CellType,
+            Intrinsic::LatchType => Intrinsic::LatchType,
             Intrinsic::BoxType(a) => Intrinsic::BoxType(operand(a)?),
-            Intrinsic::Cell => Intrinsic::Cell,
-            Intrinsic::CellFill { cell } => Intrinsic::CellFill {
-                cell: operand(cell)?,
+            Intrinsic::Latch => Intrinsic::Latch,
+            Intrinsic::LatchTrip { latch } => Intrinsic::LatchTrip {
+                latch: operand(latch)?,
             },
-            Intrinsic::CellPoll { cell } => Intrinsic::CellPoll {
-                cell: operand(cell)?,
+            Intrinsic::LatchTripped { latch } => Intrinsic::LatchTripped {
+                latch: operand(latch)?,
             },
             Intrinsic::Box { element, value } => Intrinsic::Box {
                 element: operand(element)?,
@@ -1998,13 +1998,13 @@ impl<T> Intrinsic<T> {
             Intrinsic::IoSuspend {
                 result,
                 on,
-                filled,
+                tripped,
                 cancel,
                 rest,
             } => Intrinsic::IoSuspend {
                 result: operand(result)?,
                 on: operand(on)?,
-                filled: operand(filled)?,
+                tripped: operand(tripped)?,
                 cancel: operand(cancel)?,
                 rest: operand(rest)?,
             },

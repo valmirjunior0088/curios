@@ -1,16 +1,17 @@
-use /std/{Option, Cell, Box, Io};
-use /std/internal/{on_filled, until};
+use /std/{Option, Box, Io};
+use /std/Io/{Latch};
+use /std/internal/{on_tripped, until};
 
---- A value filled once and read as often as asked: the value in a box, empty until the filling, beside the cell the filling fills for whatever waits on it.
+--- A value filled once and read as often as asked: the value in a box, empty until the filling, beside the latch the filling trips for whatever waits on it.
 pub struct Future(A: Type): Type {
     value: Box(Option(A)),
-    filled: Cell,
+    filled: Latch,
 }
 
 --- A future nothing has filled yet.
 pub let new(@A: Type) -> Io(Future(A)) =
     let value = Box/new(@Option(A), Option/none())!;
-    let filled = Cell/new()!;
+    let filled = Latch/new()!;
     Io/pure(Future { value = value, filled = filled });
 
 --- The value, once there is one.
@@ -25,8 +26,8 @@ pub let fill(@A: Type, f: Future(A), a: A) -> Io({}) =
             | some(_) => (held, false)
             | none() => (Option/some(a), true)
             end)!;
-    match first | true => Cell/fill(f.filled) | false => Io/pure(()) end;
+    match first | true => Latch/trip(f.filled) | false => Io/pure(()) end;
 
 --- The value, waiting until there is one.
 pub let wait(@A: Type, f: Future(A)) -> Io(A) =
-    until(poll(f), Io/pure(on_filled([f.filled])));
+    until(poll(f), Io/pure(on_tripped([f.filled])));

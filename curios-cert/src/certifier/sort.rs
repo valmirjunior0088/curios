@@ -395,7 +395,7 @@ impl ByValue<'_, '_> {
             | Intrinsic::FltType
             | Intrinsic::BytesType
             | Intrinsic::HandleType
-            | Intrinsic::CellType => Ok(Sort::Type(Level::zero())),
+            | Intrinsic::LatchType => Ok(Sort::Type(Level::zero())),
 
             // A list, box, or description *of* proofs is not itself a proposition: it has a length, an identity, or an effect, so its inhabitants are distinguishable and irrelevance does not apply. It lands in `Type`, and `Prop : Type 0`.
             //

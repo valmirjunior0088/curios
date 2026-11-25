@@ -48,7 +48,7 @@ A word the project renamed is not written again for what it named, in a document
 | --- | --- | --- |
 | kernel, for `curios-cert`'s checker | the certifier | the operating system, and another system's checker — Lean's kernel, Rocq's kernel |
 | soundness perimeter, the perimeter | the soundness board | nothing |
-| cell, for what one stage makes of one declaration | facet | the language's write-once cell, `Intrinsic::Cell` |
+| cell, for what one stage makes of one declaration | facet | a write-once cell below erasure, `curios_anf::CellOperation` |
 | full gate, hand-off gate, `cargo xtask gate` | the handoff, `cargo xtask handoff` | nothing |
 | the store, for `.curios/` or what it keeps for reuse | the cabinet, or `.curios/` | the verb, and a unit's `store` node; the elaborator's, the universe solver's and the certifier's own stores; Wasmtime's `Store`, the ABI's `ForeignStore` and a store into memory |
 | object, for a content-addressed piece of a stored unit | blob (`curios_common::Blob`) | a unit, or an executable's payloads, as the cabinet keeps it; a heap object, a trait object, a JavaScript or JSON object, and git's |

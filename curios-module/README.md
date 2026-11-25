@@ -30,7 +30,7 @@ The Curios module system, over the tree [`curios-surface`](../curios-surface/REA
 
 **Decision.** `/sys/Option` and `/sys/Result` are ordinary universe-polymorphic inductives, `some` before `none` and `success` before `failure`, the failure's type first; `/std/Option` and `/std/Result` re-export each family and its constructors, and their functions, witnesses and derivations stay in `/std`. The registry names each declaration and its constructors directly. The generated declaration keeps source identities for its `Type` occurrences, so its type former and constructor signatures share their universe seeds.
 
-**Rationale.** `/sys` constructs them without reaching into `/std`, as a cell's poll answers an `Option`. Anonymous generated occurrences would assign unrelated levels and specialize consumers such as `Cli` wrongly.
+**Rationale.** The compiler constructs them without reaching into `/std`, as erasure reads a latch's poll and a host call's optional answer as an `Option`. Anonymous generated occurrences would assign unrelated levels and specialize consumers such as `Cli` wrongly.
 
 ### A unit read from Core text is a root source over its file
 

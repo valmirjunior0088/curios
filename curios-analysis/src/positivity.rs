@@ -1340,7 +1340,7 @@ impl<'a, 'd, D: Driver> Walk<'a, 'd, D> {
             | Intrinsic::FltType
             | Intrinsic::BytesType
             | Intrinsic::HandleType
-            | Intrinsic::CellType => {}
+            | Intrinsic::LatchType => {}
 
             // `List` is covariant: a list of `T`s is a finite product of `T`s, so a strict occurrence in the element stays strict. This is the rule that admits `Json/arr(List(Json))` and `Toml/arr(List(Toml))`.
             Intrinsic::ListType(element) => self.walk(element, polarity),
@@ -1348,7 +1348,7 @@ impl<'a, 'd, D: Driver> Walk<'a, 'd, D> {
             // A box is read *and* written, so it is invariant in its element.
             Intrinsic::BoxType(element) => self.walk(element, Polarity::Mixed),
 
-            // `Io` is covariant, and by the same reading as `List` rather than by analogy to `Cell`.
+            // `Io` is covariant, and by the same reading as `List` rather than by analogy to `Box`.
             //
             // A description of a `T` is operationally the delayed `T` its thunk erasure makes it — `{} -> T`, whose codomain is a strictly positive position. What decides the polarity is what the eliminations can extract, and `Io`'s are *weaker* than `List`'s: `List/at` hands back a `T` outright, while `bind` never exposes the `A` except inside another `Io`, and there is no `Io(T) -> T` for any other rule to lean on. A carrier whose only reader is stricter than a covariant carrier's cannot be less positive than it.
             //
@@ -1451,9 +1451,9 @@ impl<'a, 'd, D: Driver> Walk<'a, 'd, D> {
             | Intrinsic::ListMap { .. }
             | Intrinsic::ListFold { .. }
             | Intrinsic::Handle(_)
-            | Intrinsic::Cell
-            | Intrinsic::CellFill { .. }
-            | Intrinsic::CellPoll { .. }
+            | Intrinsic::Latch
+            | Intrinsic::LatchTrip { .. }
+            | Intrinsic::LatchTripped { .. }
             | Intrinsic::Box { .. }
             | Intrinsic::BoxHeld { .. }
             | Intrinsic::BoxSet { .. }

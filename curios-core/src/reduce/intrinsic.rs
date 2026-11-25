@@ -2205,16 +2205,16 @@ pub fn reduce_intrinsic(
         // Every operation the host performs is an `Io`, which is to say a *description*: it denotes one inert value here and becomes a host call only at erasure, where the entrypoint boundary forces the program's description exactly once.
         //
         // These arms do not refuse: a spelling that does not fix a value must not reach a type, and it is the typing that keeps them out — a term of non-`Io` type cannot perform an effect, and an `Io` supports no elimination through which one could reach a type position. So the operands reduce, the node rebuilds, and nothing else follows.
-        Intrinsic::CellType => Ok(Subterm::Intrinsic(Intrinsic::CellType)),
+        Intrinsic::LatchType => Ok(Subterm::Intrinsic(Intrinsic::LatchType)),
         Intrinsic::BoxType(element) => Ok(Subterm::Intrinsic(Intrinsic::BoxType(
             reducer.reduce(element.clone())?,
         ))),
-        Intrinsic::Cell => Ok(Subterm::Intrinsic(Intrinsic::Cell)),
-        Intrinsic::CellFill { cell } => Ok(Subterm::Intrinsic(Intrinsic::CellFill {
-            cell: reducer.reduce(cell.clone())?,
+        Intrinsic::Latch => Ok(Subterm::Intrinsic(Intrinsic::Latch)),
+        Intrinsic::LatchTrip { latch } => Ok(Subterm::Intrinsic(Intrinsic::LatchTrip {
+            latch: reducer.reduce(latch.clone())?,
         })),
-        Intrinsic::CellPoll { cell } => Ok(Subterm::Intrinsic(Intrinsic::CellPoll {
-            cell: reducer.reduce(cell.clone())?,
+        Intrinsic::LatchTripped { latch } => Ok(Subterm::Intrinsic(Intrinsic::LatchTripped {
+            latch: reducer.reduce(latch.clone())?,
         })),
         Intrinsic::Box { element, value } => Ok(Subterm::Intrinsic(Intrinsic::Box {
             element: reducer.reduce(element.clone())?,
@@ -2262,17 +2262,17 @@ pub fn reduce_intrinsic(
         Intrinsic::IoSuspend {
             result,
             on,
-            filled,
+            tripped,
             cancel,
             rest,
         } => {
             let result = reducer.reduce(result.clone())?;
             let on = reducer.reduce(on.clone())?;
-            let filled = reducer.reduce(filled.clone())?;
+            let tripped = reducer.reduce(tripped.clone())?;
             let cancel = reducer.reduce(cancel.clone())?;
             let rest = reducer.reduce(rest.clone())?;
             Ok(Subterm::Intrinsic(Intrinsic::io_suspend(
-                result, on, filled, cancel, rest,
+                result, on, tripped, cancel, rest,
             )))
         }
         Intrinsic::IoAdvance {

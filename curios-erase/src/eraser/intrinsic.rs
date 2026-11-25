@@ -87,7 +87,7 @@ impl Eraser<'_> {
         self.walk(context, term, &type_, None)
     }
 
-    /// Erase a value put into a cell or a box as the slot it fills: against what the roster demands of it, a proof or a type held as its stand-in ([`kept_operand`](Self::kept_operand)).
+    /// Erase a value put into a box as the slot it fills: against what the roster demands of it, a proof or a type held as its stand-in ([`kept_operand`](Self::kept_operand)).
     fn kept(
         &mut self,
         context: &mut Reader,
@@ -201,7 +201,7 @@ impl Eraser<'_> {
             | curios_core::Intrinsic::BytesType
             | curios_core::Intrinsic::ListType(_)
             | curios_core::Intrinsic::HandleType
-            | curios_core::Intrinsic::CellType
+            | curios_core::Intrinsic::LatchType
             | curios_core::Intrinsic::BoxType(_)
             | curios_core::Intrinsic::IoType(_) => Ok(Outcome::Emitted(self.unit())),
 
@@ -392,8 +392,8 @@ impl Eraser<'_> {
                 Ok(self.constant_outcome(curios_anf::Constant::Handle(token)))
             }
             // Every operation the host performs is typed `Io`, so every one erases to a thunk: the operands are computed where the description is *built*, and the operation itself happens only when the description is forced. Nothing below changes what the host call is — only where it sits relative to the closure boundary.
-            curios_core::Intrinsic::Cell => {
-                self.thunk(hint.or(Some("io/cell_new")), move |lowering| {
+            curios_core::Intrinsic::Latch => {
+                self.thunk(hint.or(Some("io/latch_new")), move |lowering| {
                     Ok(lowering.bind(
                         None,
                         curios_anf::Rhs::Cell {
@@ -403,26 +403,26 @@ impl Eraser<'_> {
                     ))
                 })
             }
-            curios_core::Intrinsic::CellFill { .. } => {
-                let [cell] = places(computed(context, intrinsic));
-                let cell = emitted!(self.demanded(context, &cell)?);
-                self.thunk(hint.or(Some("io/cell_fill")), move |lowering| {
-                    // The cell holds no value of the program's, so a fill proposes the unit, and whether it was the first is read by nothing: a cell filled twice is filled.
+            curios_core::Intrinsic::LatchTrip { .. } => {
+                let [latch] = places(computed(context, intrinsic));
+                let latch = emitted!(self.demanded(context, &latch)?);
+                self.thunk(hint.or(Some("io/latch_trip")), move |lowering| {
+                    // The latch holds no value of the program's, so tripping it fills its cell with the unit, and whether that was the first is read by nothing: a latch tripped twice is tripped.
                     let proposed = lowering.unit();
                     lowering.let_atom(curios_anf::Rhs::Cell {
                         operation: curios_anf::CellOperation::Fill,
-                        operands: vec![cell, proposed],
+                        operands: vec![latch, proposed],
                     });
 
                     Ok(Outcome::Emitted(lowering.unit()))
                 })
             }
-            curios_core::Intrinsic::CellPoll { .. } => {
-                let [cell] = places(computed(context, intrinsic));
-                let cell = emitted!(self.demanded(context, &cell)?);
+            curios_core::Intrinsic::LatchTripped { .. } => {
+                let [latch] = places(computed(context, intrinsic));
+                let latch = emitted!(self.demanded(context, &latch)?);
                 let polled = self.suspended_poll(context)?;
-                self.thunk(hint.or(Some("io/cell_poll")), move |lowering| {
-                    Ok(Outcome::Emitted(lowering.filled(cell, polled)))
+                self.thunk(hint.or(Some("io/latch_tripped")), move |lowering| {
+                    Ok(Outcome::Emitted(lowering.tripped(latch, polled)))
                 })
             }
             curios_core::Intrinsic::Box { .. } => {
@@ -488,17 +488,17 @@ impl Eraser<'_> {
                     ))
                 })
             }
-            // The description that suspends on `on` and `filled`: its performance is the suspension, and whatever forced it decides what happens next.
+            // The description that suspends on `on` and `tripped`: its performance is the suspension, and whatever forced it decides what happens next.
             curios_core::Intrinsic::IoSuspend { .. } => {
-                let [on, filled, cancel, rest] = places(computed(context, intrinsic));
+                let [on, tripped, cancel, rest] = places(computed(context, intrinsic));
                 let on = emitted!(self.demanded(context, &on)?);
-                let filled = emitted!(self.demanded(context, &filled)?);
+                let tripped = emitted!(self.demanded(context, &tripped)?);
                 let cancel = emitted!(self.demanded(context, &cancel)?);
                 let rest = emitted!(self.demanded(context, &rest)?);
 
                 self.thunk(hint.or(Some("io/suspend")), move |lowering| {
                     Ok(Outcome::Emitted(
-                        lowering.perform_suspend(on, filled, cancel, rest),
+                        lowering.perform_suspend(on, tripped, cancel, rest),
                     ))
                 })
             }

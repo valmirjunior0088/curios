@@ -11,6 +11,10 @@ pub use Error/{let Error};
 pub mod Future;
 pub use Future/{let Future};
 
+--- A mark tripped once that stays tripped, which a branch waits on until another trips it.
+pub mod Latch;
+pub use Latch/{let Latch};
+
 --- A stream with the bytes read ahead of what was asked of it, and the reads that cut a piece from them.
 pub mod Reader;
 pub use Reader/{let Reader};
@@ -18,9 +22,9 @@ pub use Reader/{let Reader};
 --- What a body does with the scope `scope` runs it in: spawning children into it and joining them, deferring releases to it, and how it ended as each release is told.
 pub mod Scope;
 
-use /std/{Monad, Bytes, Nat, Int, Bool, List, Option, Cell, Box, Program, Try, Vec};
+use /std/{Monad, Bytes, Nat, Int, Bool, List, Option, Box, Program, Try, Vec};
 use /std/Io/Scope/{Ended};
-use /std/internal/{Handle, Waiting, suspend_on, wait_filled};
+use /std/internal/{Handle, Waiting, suspend_on, wait_tripped};
 use /std/time/{Duration, Instant};
 
 satisfy Monad(Io) {
@@ -38,10 +42,10 @@ satisfy Program(Io({})) {
     execute(program) = program,
 }
 
--- How many children of a scope have not ended, and the cell those waiting for none to be left wait on, kept until the last child's end fills it and the next waiter makes another: what `join_all` waits on, a count rather than the tasks, so a scope that spawns without end holds nothing of the children that have ended.
+-- How many children of a scope have not ended, and the latch those waiting for none to be left wait on, kept until the last child's end trips it and the next waiter makes another: what `join_all` waits on, a count rather than the tasks, so a scope that spawns without end holds nothing of the children that have ended.
 struct Live: Type {
     count: Nat,
-    idle: Option(Cell),
+    idle: Option(Latch),
 }
 
 -- Declared here and not in its module, so that `scope` builds it and nothing outside `Io` does: its children spawned since the driver last took them, the latest first, and none once the scope has answered, so a child spawned after it never runs; and its releases, the latest first.
@@ -105,33 +109,33 @@ let deadline(i: Instant) -> Io(Handle) =
 --- Until the monotonic clock has reached `i`, on a deadline of its own, closed whether the wait ends or is cancelled. An instant already past ends the wait at once.
 pub let sleep_until(i: Instant) -> Io({}) =
     let h = deadline(i)!;
-    suspend_on(Waiting { on = [h], filled = [], release = Close/close(h) });
+    suspend_on(Waiting { on = [h], tripped = [], release = Close/close(h) });
 
 --- Until `d` has passed from now: the clock read once, and a wait until then. A length of no time, or of less, ends at once.
 pub let sleep(d: Duration) -> Io({}) =
     let now = Instant/now()!;
     sleep_until(Instant/add(now, d));
 
--- A cell filled already: what a suspension that may go on at once waits on. Private to the subtree, which is where every such suspension is made.
-let ready() -> Io(Cell) =
-    let cell = Cell/new()!;
-    let () = Cell/fill(cell)!;
-    pure(cell);
+-- A latch tripped already: what a suspension that may go on at once waits on. Private to the subtree, which is where every such suspension is made.
+let ready() -> Io(Latch) =
+    let latch = Latch/new()!;
+    let () = Latch/trip(latch)!;
+    pure(latch);
 
---- Let what waits beside this run, and go on: a suspension on a cell filled already, which whatever advances it may go on from at once, and which the top of a program goes on from without waiting.
+--- Let what waits beside this run, and go on: a suspension on a latch tripped already, which whatever advances it may go on from at once, and which the top of a program goes on from without waiting.
 pub let yield() -> Io({}) =
-    let cell = ready()!;
-    wait_filled([cell]);
+    let latch = ready()!;
+    wait_tripped([latch]);
 
 -- `body`, and then `release` told how it ended: `finished` where it ran to its end, and `cancelled` where whatever advances it drops it while it waits, which `release` hears as the cancel of every suspension the body passes out. The scope's machinery: a program defers a release to a scope instead.
 let using(@A: Type, release: (Ended) -> Io({}), body: Io(A)) -> Io(A) =
     /sys/Io/advance(
         body,
         (a) => bind(release(Ended/finished()), (()) => pure(a)),
-        (on, filled, cancel, rest) =>
+        (on, tripped, cancel, rest) =>
             /sys/Io/suspend(
                 on,
-                filled,
+                tripped,
                 bind(cancel, (()) => release(Ended/cancelled())),
                 using(release, rest)));
 
@@ -194,7 +198,7 @@ pub let copy(@S: Type, @T: Type, use Read(S), use Write(T), from: S, to: T) -> T
 -- A branch the driver holds: one still to start, or one suspended on what its suspension named, with what cancels it and the rest of it. A branch that ran to its end is dropped, its answer in whatever it wrote to.
 induct Branch: Type
 | fresh(Io({}))
-| waiting(on: List(Handle), filled: List(Cell), cancel: Io({}), rest: Io({}))
+| waiting(on: List(Handle), tripped: List(Latch), cancel: Io({}), rest: Io({}))
 end
 
 -- `b` advanced until it ends or suspends: nothing where it ended, or the branch it suspended as.
@@ -202,15 +206,16 @@ let step(b: Io({})) -> Io(Option(Branch)) =
     /sys/Io/advance(
         b,
         (()) => pure(Option/none()),
-        (on, filled, cancel, rest) => pure(Option/some(Branch/waiting(on, filled, cancel, rest))));
+        (on, tripped, cancel, rest) =>
+            pure(Option/some(Branch/waiting(on, tripped, cancel, rest))));
 
--- Whether a cell of `cells` is filled.
-let any_filled(cells: List(Cell)) -> Io(Bool) =
-    match cells
+-- Whether a latch of `latches` is tripped.
+let any_tripped(latches: List(Latch)) -> Io(Bool) =
+    match latches
     | [] => pure(false)
-    | [cell, ..more] =>
-        let filled = Cell/poll(cell)!;
-        match filled | true => pure(true) | false => any_filled(more) end
+    | [latch, ..more] =>
+        let tripped = Latch/tripped(latch)!;
+        match tripped | true => pure(true) | false => any_tripped(more) end
     end;
 
 -- Whether any of the first `n` of `flags` holds, and the flags after them.
@@ -231,10 +236,10 @@ let handles(branches: List(Branch)) -> List(Handle) =
     List/concat_map(branches, (b: Branch) =>
         match b | waiting(on, _, _, _) => on | fresh(_) => [] end);
 
--- The cells the waiting branches of `branches` wait on, in their order.
-let cells(branches: List(Branch)) -> List(Cell) =
+-- The latches the waiting branches of `branches` wait on, in their order.
+let latches(branches: List(Branch)) -> List(Latch) =
     List/concat_map(branches, (b: Branch) =>
-        match b | waiting(_, filled, _, _) => filled | fresh(_) => [] end);
+        match b | waiting(_, tripped, _, _) => tripped | fresh(_) => [] end);
 
 -- Every waiting branch's cancel, in their order. A branch that never started has nothing to cancel.
 let cancel_all(branches: List(Branch)) -> Io({}) =
@@ -252,7 +257,7 @@ let cancel_all(branches: List(Branch)) -> Io({}) =
 let kept(stepped: Option(Branch), after: List(Branch)) -> List(Branch) =
     match stepped | some(b) => [b, ..after] | none() => after end;
 
--- One pass over `branches`, `flags` saying which of their handles are ready, in their order: a fresh branch is started, a waiting one whose handle is ready or whose cell is filled advanced, and any other kept as it waits. A pass advances nothing more once `settled` holds. Answers the branches after the pass, and whether any moved.
+-- One pass over `branches`, `flags` saying which of their handles are ready, in their order: a fresh branch is started, a waiting one whose handle is ready or whose latch is tripped advanced, and any other kept as it waits. A pass advances nothing more once `settled` holds. Answers the branches after the pass, and whether any moved.
 let pass(branches: List(Branch), flags: List(Bool), settled: Io(Bool)) -> Io({List(Branch), Bool}) =
     match branches
     | [] => pure(([], false))
@@ -266,9 +271,9 @@ let pass(branches: List(Branch), flags: List(Bool), settled: Io(Bool)) -> Io({Li
                 let stepped = step(start)!;
                 let (after, _) = pass(more, flags, settled)!;
                 pure((kept(stepped, after), true))
-            | waiting(on, filled, _, rest) =>
+            | waiting(on, tripped, _, rest) =>
                 let (ready, later) = split(flags, List/length(on));
-                let woken = any_filled(filled)!;
+                let woken = any_tripped(tripped)!;
                 match ready || woken
                 | true =>
                     let stepped = step(rest)!;
@@ -282,7 +287,7 @@ let pass(branches: List(Branch), flags: List(Bool), settled: Io(Bool)) -> Io({Li
         end
     end;
 
--- `branches`, with whatever `intake` hands over before each pass, advanced pass after pass until `settled` holds or none is left: the one place `/std` holds a branch's rest and performs a dropped branch's cancel, under every combinator. A pass that moved something yields outward on a cell filled already, so whatever advances this description runs its own branches between passes; a pass that moved nothing suspends outward on every handle and cell its branches wait on, and on nothing where they wait on nothing. The branches still waiting when it ends are cancelled, each once, and so is every one of them where whatever advances it cancels it.
+-- `branches`, with whatever `intake` hands over before each pass, advanced pass after pass until `settled` holds or none is left: the one place `/std` holds a branch's rest and performs a dropped branch's cancel, under every combinator. A pass that moved something yields outward on a latch tripped already, so whatever advances this description runs its own branches between passes; a pass that moved nothing suspends outward on every handle and latch its branches wait on, and on nothing where they wait on nothing. The branches still waiting when it ends are cancelled, each once, and so is every one of them where whatever advances it cancels it.
 let drive(held: List(Branch), intake: Io(List(Branch)), settled: Io(Bool)) -> Io({}) =
     let incoming = intake!;
     let branches = [..held, ..incoming];
@@ -306,9 +311,9 @@ let drive(held: List(Branch), intake: Io(List(Branch)), settled: Io(Bool)) -> Io
                     let rest = drive(next, intake, settled);
                     match moved
                     | true =>
-                        let cell = ready()!;
-                        /sys/Io/suspend([], [cell], cancel_all(next), rest)
-                    | false => /sys/Io/suspend(handles(next), cells(next), cancel_all(next), rest)
+                        let latch = ready()!;
+                        /sys/Io/suspend([], [latch], cancel_all(next), rest)
+                    | false => /sys/Io/suspend(handles(next), latches(next), cancel_all(next), rest)
                     end
                 end
             end
