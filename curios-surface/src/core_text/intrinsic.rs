@@ -5,15 +5,15 @@
 use {
     super::{
         ReadError, Reader, Refusal, bracketed, core_form, core_read, hexadecimal, malformed,
-        numeral, term_word, tree, universes_read, universes_written, value, value_list, value_term,
-        value_word, verbatim, word, written_numeral,
+        numeral, term_word, tree, value, value_list, value_term, value_word, verbatim, word,
+        written_numeral,
     },
     crate::{
         BytesSegment, CoreForm, CoreIntrinsic, CoreText, CoreValue, Frame, IntrinsicForm, Literal,
         NumLit, Rendered, Writer, intrinsic_form, states, sub, written_intrinsic,
     },
     curios_common::Span,
-    curios_core::{Intrinsic, Nat, Subterm, Term, Universes},
+    curios_core::{Intrinsic, Nat, Subterm, Term},
     curios_num::{Binary, Floating, Rounding},
 };
 
@@ -526,32 +526,10 @@ pub fn intrinsic_written<D: Rendered>(intrinsic: Intrinsic, frame: Frame<'_, D>)
             ],
         ),
         Intrinsic::HandleType => called("HandleType", Vec::new()),
-        Intrinsic::CellType(operand0) => called("CellType", vec![value(sub(operand0, frame))]),
-        Intrinsic::Cell { element } => called("Cell", vec![value(sub(element, frame))]),
-        Intrinsic::CellFill {
-            element,
-            cell,
-            value: filled,
-        } => called(
-            "CellFill",
-            vec![
-                value(sub(element, frame)),
-                value(sub(cell, frame)),
-                value(sub(filled, frame)),
-            ],
-        ),
-        Intrinsic::CellPoll {
-            element,
-            cell,
-            universes,
-        } => called(
-            "CellPoll",
-            vec![
-                value(sub(element, frame)),
-                value(sub(cell, frame)),
-                universes_value(&universes, frame),
-            ],
-        ),
+        Intrinsic::CellType => called("CellType", Vec::new()),
+        Intrinsic::Cell => called("Cell", Vec::new()),
+        Intrinsic::CellFill { cell } => called("CellFill", vec![value(sub(cell, frame))]),
+        Intrinsic::CellPoll { cell } => called("CellPoll", vec![value(sub(cell, frame))]),
         Intrinsic::BoxType(operand0) => called("BoxType", vec![value(sub(operand0, frame))]),
         Intrinsic::Box {
             element,
@@ -676,11 +654,6 @@ fn listed_terms<D: Rendered>(terms: Vec<Term>, frame: Frame<'_, D>) -> CoreValue
             .map(|term| value(sub(term, frame)))
             .collect(),
     )
-}
-
-/// An instance an operation states, as a decorator's universes are written, `{}` where it states none.
-fn universes_value<D: Rendered>(universes: &Universes, frame: Frame<'_, D>) -> CoreValue<D> {
-    universes_written(universes, frame).unwrap_or_else(|| CoreValue::Fields(Vec::new()))
 }
 
 /// A rounding as its variant's name.
@@ -1259,29 +1232,23 @@ pub fn intrinsic_read(
             Intrinsic::HandleType
         }
         "CellType" => {
-            let [operand0] = operands(intrinsic, span)?;
-            Intrinsic::CellType(term(operand0, reader)?)
+            operands::<0>(intrinsic, span)?;
+            Intrinsic::CellType
         }
         "Cell" => {
-            let [element] = operands(intrinsic, span)?;
-            Intrinsic::Cell {
-                element: term(element, reader)?,
-            }
+            operands::<0>(intrinsic, span)?;
+            Intrinsic::Cell
         }
         "CellFill" => {
-            let [element, cell, value] = operands(intrinsic, span)?;
+            let [cell] = operands(intrinsic, span)?;
             Intrinsic::CellFill {
-                element: term(element, reader)?,
                 cell: term(cell, reader)?,
-                value: term(value, reader)?,
             }
         }
         "CellPoll" => {
-            let [element, cell, universes] = operands(intrinsic, span)?;
+            let [cell] = operands(intrinsic, span)?;
             Intrinsic::CellPoll {
-                element: term(element, reader)?,
                 cell: term(cell, reader)?,
-                universes: universes_read(universes)?,
             }
         }
         "BoxType" => {

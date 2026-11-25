@@ -380,19 +380,14 @@ pub enum Intrinsic<T = Term> {
     },
     HandleType,
     Handle(u32),
-    CellType(T),
-    Cell {
-        element: T,
-    },
+    // A cell is empty until it is filled, and stays filled: it holds no value, so a fill says only that it happened and a poll whether it has.
+    CellType,
+    Cell,
     CellFill {
-        element: T,
         cell: T,
-        value: T,
     },
     CellPoll {
-        element: T,
         cell: T,
-        universes: Universes,
     },
     // A box always holds one value: it is made holding it, read whole and set whole. `target` names the box, `box` being a reserved word of Rust's.
     BoxType(T),
@@ -427,7 +422,7 @@ pub enum Intrinsic<T = Term> {
         action: T,
         continuation: T,
     },
-    // (@A, on : List(Handle), filled : List(Cell({})), cancel : Io({}), rest : Io(A)) -> Io(A): the description that suspends until a handle of `on` may be ready or a cell of `filled` is filled and then goes on as `rest`, and that whoever drops it instead cleans up by performing `cancel`.
+    // (@A, on : List(Handle), filled : List(Cell), cancel : Io({}), rest : Io(A)) -> Io(A): the description that suspends until a handle of `on` may be ready or a cell of `filled` is filled and then goes on as `rest`, and that whoever drops it instead cleans up by performing `cancel`.
     //
     // A suspension waits on nothing itself: whoever advances the description decides what it means — the host waits on `on`, a combinator runs something else first. Only the program fills a cell, so the host, which waits while nothing of the program runs, never reads one. Inert like the rest: it reduces its operands and rebuilds.
     IoSuspend {
@@ -437,7 +432,7 @@ pub enum Intrinsic<T = Term> {
         cancel: T,
         rest: T,
     },
-    // (@A, @R, action : Io(A), done : (A) -> Io(R), suspended : (List(Handle), List(Cell({})), Io({}), Io(A)) -> Io(R)) -> Io(R): the description that performs `action` and hands its value to `done`, or, where `action` suspends, its `on`, `filled`, `cancel` and `rest` to `suspended`.
+    // (@A, @R, action : Io(A), done : (A) -> Io(R), suspended : (List(Handle), List(Cell), Io({}), Io(A)) -> Io(R)) -> Io(R): the description that performs `action` and hands its value to `done`, or, where `action` suspends, its `on`, `filled`, `cancel` and `rest` to `suspended`.
     //
     // The one place a suspension is caught rather than passed out. It eliminates nothing: what it answers is an `Io`.
     IoAdvance {
@@ -910,7 +905,9 @@ impl Intrinsic {
             | Intrinsic::BytesType
             | Intrinsic::Bytes(_)
             | Intrinsic::HandleType
-            | Intrinsic::Handle(_) => {}
+            | Intrinsic::Handle(_)
+            | Intrinsic::CellType
+            | Intrinsic::Cell => {}
 
             Intrinsic::Nat(Nat::Succ(_, inner)) => visit(inner),
 
@@ -1183,15 +1180,10 @@ impl Intrinsic {
                 terms.iter().for_each(&mut *visit);
             }
 
-            Intrinsic::CellType(a) | Intrinsic::BoxType(a) | Intrinsic::Cell { element: a } => {
-                visit(a)
-            }
-            Intrinsic::CellPoll {
-                element: a,
-                cell: b,
-                ..
-            }
-            | Intrinsic::Box {
+            Intrinsic::BoxType(a)
+            | Intrinsic::CellFill { cell: a }
+            | Intrinsic::CellPoll { cell: a } => visit(a),
+            Intrinsic::Box {
                 element: a,
                 value: b,
             }
@@ -1202,12 +1194,7 @@ impl Intrinsic {
                 visit(a);
                 visit(b);
             }
-            Intrinsic::CellFill {
-                element: a,
-                cell: b,
-                value: c,
-            }
-            | Intrinsic::BoxSet {
+            Intrinsic::BoxSet {
                 element: a,
                 target: b,
                 value: c,
@@ -1225,20 +1212,14 @@ impl Intrinsic {
         reach
     }
 
-    /// The universe instance carried by an operation whose result names an ordinary polymorphic family; none for every other operation.
+    /// The universe instance carried by an operation whose result names an ordinary polymorphic family; none for every other operation, and no operation's result names one today.
     pub fn result_universes(&self) -> Option<&Universes> {
-        match self {
-            Self::CellPoll { universes, .. } => Some(universes),
-            _ => None,
-        }
+        None
     }
 
     /// The instance elaboration fills from the checked result type; later traversals preserve and substitute it like a nominal occurrence's own vector.
     pub fn result_universes_mut(&mut self) -> Option<&mut Universes> {
-        match self {
-            Self::CellPoll { universes, .. } => Some(universes),
-            _ => None,
-        }
+        None
     }
 
     /// Whether any operand `Term` satisfies `pred` — the `Intrinsic` leg of `Subterm::any_child_term`, layered on the private operand walker.
@@ -1573,28 +1554,14 @@ impl Intrinsic {
             },
             Intrinsic::HandleType => Intrinsic::HandleType,
             Intrinsic::Handle(token) => Intrinsic::Handle(*token),
-            Intrinsic::CellType(a) => Intrinsic::CellType(visit.visit_subterm(a)),
+            Intrinsic::CellType => Intrinsic::CellType,
             Intrinsic::BoxType(a) => Intrinsic::BoxType(visit.visit_subterm(a)),
-            Intrinsic::Cell { element } => Intrinsic::Cell {
-                element: visit.visit_subterm(element),
-            },
-            Intrinsic::CellFill {
-                element,
-                cell,
-                value,
-            } => Intrinsic::CellFill {
-                element: visit.visit_subterm(element),
+            Intrinsic::Cell => Intrinsic::Cell,
+            Intrinsic::CellFill { cell } => Intrinsic::CellFill {
                 cell: visit.visit_subterm(cell),
-                value: visit.visit_subterm(value),
             },
-            Intrinsic::CellPoll {
-                element,
-                cell,
-                universes,
-            } => Intrinsic::CellPoll {
-                element: visit.visit_subterm(element),
+            Intrinsic::CellPoll { cell } => Intrinsic::CellPoll {
                 cell: visit.visit_subterm(cell),
-                universes: visit.visit_universes(universes),
             },
             Intrinsic::Box { element, value } => Intrinsic::Box {
                 element: visit.visit_subterm(element),
@@ -1983,28 +1950,14 @@ impl<T> Intrinsic<T> {
             },
             Intrinsic::HandleType => Intrinsic::HandleType,
             Intrinsic::Handle(token) => Intrinsic::Handle(*token),
-            Intrinsic::CellType(a) => Intrinsic::CellType(operand(a)?),
+            Intrinsic::CellType => Intrinsic::CellType,
             Intrinsic::BoxType(a) => Intrinsic::BoxType(operand(a)?),
-            Intrinsic::Cell { element } => Intrinsic::Cell {
-                element: operand(element)?,
-            },
-            Intrinsic::CellFill {
-                element,
-                cell,
-                value,
-            } => Intrinsic::CellFill {
-                element: operand(element)?,
+            Intrinsic::Cell => Intrinsic::Cell,
+            Intrinsic::CellFill { cell } => Intrinsic::CellFill {
                 cell: operand(cell)?,
-                value: operand(value)?,
             },
-            Intrinsic::CellPoll {
-                element,
-                cell,
-                universes,
-            } => Intrinsic::CellPoll {
-                element: operand(element)?,
+            Intrinsic::CellPoll { cell } => Intrinsic::CellPoll {
                 cell: operand(cell)?,
-                universes: universes.clone(),
             },
             Intrinsic::Box { element, value } => Intrinsic::Box {
                 element: operand(element)?,

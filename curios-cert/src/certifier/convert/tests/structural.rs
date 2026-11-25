@@ -298,25 +298,6 @@ fn one_operation_at_two_universe_instances_is_one_number() {
     );
 }
 
-/// The levels a result carries are compared before its operands: two polls of one cell whose results are the cell's family at two ground levels are two terms, though every operand agrees. The control is the same poll at one level. The elaborator's twin of this proposition shares the name.
-#[test]
-fn two_polls_of_one_cell_at_two_ground_levels_do_not_convert() {
-    let mut certifier = certifier();
-    let untyped = term("Type");
-    let [at_zero, at_one, again_at_zero] = terms(
-        "(#CellPoll(#NatType, cell, {levels = [0]}), #CellPoll(#NatType, cell, {levels = [1]}), #CellPoll(#NatType, cell, {levels = [0]}))",
-    );
-
-    assert_eq!(
-        convert(&mut certifier, &untyped, &at_zero, &at_one),
-        Ok(false)
-    );
-    assert_eq!(
-        convert(&mut certifier, &untyped, &at_zero, &again_at_zero),
-        Ok(true)
-    );
-}
-
 /// Two spines of one head converge by their arguments alone. A written mark is held to its parameter's where the application is typed, so two well-typed spines of one head cannot differ in one, and conversion reads none. Put to both checkers under this name.
 #[test]
 fn applications_differing_in_a_mark_alone_convert() {

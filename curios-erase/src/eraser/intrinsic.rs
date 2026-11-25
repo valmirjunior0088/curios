@@ -30,13 +30,6 @@ fn computed<'a>(context: &Reader, intrinsic: &'a curios_core::Intrinsic) -> Vec<
         .collect()
 }
 
-/// The sorts the family an operation's result names is read at: those of the instance elaboration retained on the operation ([`Intrinsic::result_universes`](curios_core::Intrinsic::result_universes)), and none for an operation whose result family leaves no sort open.
-fn result_sorts(intrinsic: &curios_core::Intrinsic) -> Sorts {
-    intrinsic
-        .result_universes()
-        .map_or(Sorts::NONE, |universes| Sorts::of(&universes.qualities))
-}
-
 /// The operands of an arm that reads each by its place.
 fn places<'a, const N: usize>(operands: Vec<Demanded<'a>>) -> [Demanded<'a>; N] {
     operands
@@ -208,7 +201,7 @@ impl Eraser<'_> {
             | curios_core::Intrinsic::BytesType
             | curios_core::Intrinsic::ListType(_)
             | curios_core::Intrinsic::HandleType
-            | curios_core::Intrinsic::CellType(_)
+            | curios_core::Intrinsic::CellType
             | curios_core::Intrinsic::BoxType(_)
             | curios_core::Intrinsic::IoType(_) => Ok(Outcome::Emitted(self.unit())),
 
@@ -399,7 +392,7 @@ impl Eraser<'_> {
                 Ok(self.constant_outcome(curios_anf::Constant::Handle(token)))
             }
             // Every operation the host performs is typed `Io`, so every one erases to a thunk: the operands are computed where the description is *built*, and the operation itself happens only when the description is forced. Nothing below changes what the host call is — only where it sits relative to the closure boundary.
-            curios_core::Intrinsic::Cell { .. } => {
+            curios_core::Intrinsic::Cell => {
                 self.thunk(hint.or(Some("io/cell_new")), move |lowering| {
                     Ok(lowering.bind(
                         None,
@@ -411,34 +404,25 @@ impl Eraser<'_> {
                 })
             }
             curios_core::Intrinsic::CellFill { .. } => {
-                let [cell, value] = places(computed(context, intrinsic));
+                let [cell] = places(computed(context, intrinsic));
                 let cell = emitted!(self.demanded(context, &cell)?);
-                let value = emitted!(self.kept(context, &value)?);
                 self.thunk(hint.or(Some("io/cell_fill")), move |lowering| {
-                    Ok(lowering.bind(
-                        None,
-                        curios_anf::Rhs::Cell {
-                            operation: curios_anf::CellOperation::Fill,
-                            operands: vec![cell, value],
-                        },
-                    ))
+                    // The cell holds no value of the program's, so a fill proposes the unit, and whether it was the first is read by nothing: a cell filled twice is filled.
+                    let proposed = lowering.unit();
+                    lowering.let_atom(curios_anf::Rhs::Cell {
+                        operation: curios_anf::CellOperation::Fill,
+                        operands: vec![cell, proposed],
+                    });
+
+                    Ok(Outcome::Emitted(lowering.unit()))
                 })
             }
             curios_core::Intrinsic::CellPoll { .. } => {
                 let [cell] = places(computed(context, intrinsic));
                 let cell = emitted!(self.demanded(context, &cell)?);
-                let syntax = context.syntax().option;
-                let family = (syntax.family, result_sorts(intrinsic));
-                let some = self.outcome_constructor(context, family, syntax.some)?;
-                let none = self.outcome_constructor(context, family, syntax.none)?;
+                let polled = self.suspended_poll(context)?;
                 self.thunk(hint.or(Some("io/cell_poll")), move |lowering| {
-                    Ok(lowering.bind(
-                        None,
-                        curios_anf::Rhs::Cell {
-                            operation: curios_anf::CellOperation::Poll { some, none },
-                            operands: vec![cell],
-                        },
-                    ))
+                    Ok(Outcome::Emitted(lowering.filled(cell, polled)))
                 })
             }
             curios_core::Intrinsic::Box { .. } => {

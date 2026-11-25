@@ -1,29 +1,31 @@
-use /std/{Option, Cell, Io};
+use /std/{Option, Cell, Box, Io};
 use /std/internal/{on_filled, until};
 
---- A value filled once and read as often as asked, beside the cell its filling fills for whatever waits on it.
+--- A value filled once and read as often as asked: the value in a box, empty until the filling, beside the cell the filling fills for whatever waits on it.
 pub struct Future(A: Type): Type {
-    value: Cell(A),
-    filled: Cell({}),
+    value: Box(Option(A)),
+    filled: Cell,
 }
 
 --- A future nothing has filled yet.
 pub let new(@A: Type) -> Io(Future(A)) =
-    let value = Cell/new()!;
+    let value = Box/new(@Option(A), Option/none())!;
     let filled = Cell/new()!;
     Io/pure(Future { value = value, filled = filled });
 
 --- The value, once there is one.
 pub let poll(@A: Type, f: Future(A)) -> Io(Option(A)) =
-    Cell/poll(f.value);
+    Box/held(f.value);
 
 --- Fill `f` with `a`, and wake whatever waits on it. A second filling is dropped, so the first value stands.
 pub let fill(@A: Type, f: Future(A), a: A) -> Io({}) =
-    let taken = Cell/fill(f.value, a)!;
-    match taken
-    | true => Io/bind(Cell/fill(f.filled, ()), (_) => Io/pure(()))
-    | false => Io/pure(())
-    end;
+    let first =
+        Box/change(f.value, (held: Option(A)) =>
+            match held
+            | some(_) => (held, false)
+            | none() => (Option/some(a), true)
+            end)!;
+    match first | true => Cell/fill(f.filled) | false => Io/pure(()) end;
 
 --- The value, waiting until there is one.
 pub let wait(@A: Type, f: Future(A)) -> Io(A) =

@@ -171,15 +171,15 @@ fn a_dispatch_requires_a_natural_scrutinee() {
     );
 }
 
-/// The values the forms of [`a_description_a_cell_and_a_box_are_taken_apart_by_nothing`] take apart, each held at `${wrap}` over what it carries.
+/// The values the forms of [`a_description_and_a_box_are_taken_apart_by_nothing`] take apart, each held at `${wrap}` over what it carries.
 const HELD: &str = "pair: ${pair}, record: ${record}, refuted: ${refuted}, truth: ${truth}, count: ${count}, list: ${list}";
 
 /// Each form that takes a value apart, over the values [`HELD`] holds: a tuple's and a record's projection, a match on an empty family, a boolean elimination, a dispatch, a natural-number fold and a list fold.
 const FORMS: &str = "pair.0, #{field = Struct(/Boxed, 0)} record.0, #{goal = #NatType} match refuted end, #{goal = #NatType} match truth | false => 0 | true => 1 end, #{goal = #NatType} match count | 0 => 1 | _ => 2 end, #{goal = #NatType} match count | 0 => 0 | head + 1 => 1 end, #{goal = #NatType, cases = {carrier = {elem = #NatType}}} match list | [] => 0 | [head, ..tail] => 1 end";
 
-/// A description, a cell and a box are eliminated by nothing, so no term reads the value one holds or describes: each form that takes a value apart — a tuple's or a record's projection, a match on a family, and each carrier's own case forms — is refused over one, however well its arms would type at what it carries. Read, a description of `{False, Nat}` that exits would hand back the `False` it never returns.
+/// A description and a box are eliminated by nothing, so no term reads the value one holds or describes: each form that takes a value apart — a tuple's or a record's projection, a match on a family, and each carrier's own case forms — is refused over one, however well its arms would type at what it carries. Read, a description of `{False, Nat}` that exits would hand back the `False` it never returns.
 #[test]
-fn a_description_a_cell_and_a_box_are_taken_apart_by_nothing() {
+fn a_description_and_a_box_are_taken_apart_by_nothing() {
     let no_components: fn(&Error) -> bool = |error| matches!(error, Error::NotATuple(_));
     let no_family: fn(&Error) -> bool = |error| matches!(error, Error::Unclassified(_));
     let names = [
@@ -224,7 +224,7 @@ fn a_description_a_cell_and_a_box_are_taken_apart_by_nothing() {
         );
     }
 
-    for carrier in ["#IoType", "#CellType", "#BoxType"] {
+    for carrier in ["#IoType", "#BoxType"] {
         let mut certifier = self::certifier();
         let wrap = fill!("${carrier}(${carried})", carrier, carried = "${carried}");
         for ((form, refused), term) in forms(&mut certifier, &wrap) {

@@ -2,7 +2,7 @@
 //!
 //! One rule per operation: what its operands must be, and what it produces. Nothing here is inferred or negotiated — an intrinsic's signature is fixed by the language, and the table stating it is `Intrinsic::signature` in `curios-core`; this module is the walk that *applies* it. A table written as a checking procedure can be executed by one caller and read by none, so the certifier and the elaborator check against one statement, and disagreeing about an operand's type is not something either can express.
 //!
-//! What the walk still owns is the two judgments a table cannot state: a type operand is established by *typing* it (`check_is_type`, never a structural read), and a parameterized former's sort is `sort_of_intrinsic`'s to compute, because the element's own sort is not the answer — a list or a cell of proofs has a length or an identity, and a description of proofs has an effect, so none of them is itself a proposition.
+//! What the walk still owns is the two judgments a table cannot state: a type operand is established by *typing* it (`check_is_type`, never a structural read), and a parameterized former's sort is `sort_of_intrinsic`'s to compute, because the element's own sort is not the answer — a list or a box of proofs has a length or an identity, and a description of proofs has an effect, so none of them is itself a proposition.
 
 use {
     super::{check, infer},

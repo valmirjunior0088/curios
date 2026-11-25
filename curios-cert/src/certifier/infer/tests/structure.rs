@@ -7,9 +7,9 @@ use {
     curios_core::Global,
 };
 
-/// A list or a cell *of* proofs is not a proposition, and the typing rule has to say so — `Sort::of` already does.
+/// A list or a box *of* proofs is not a proposition, and the typing rule has to say so — `Sort::of` already does.
 ///
-/// `Sort::of` routes a parameterized former through `sort_of_intrinsic`, which lands a `Prop`-sorted element at `Type 0` on the reasoning `sort/classification_tests.rs` states: a list has a length and a cell has an identity, so their inhabitants are distinguishable however indistinguishable the elements are. The typing rule must agree: reporting the *element's* sort as the former's would infer `List(P)` at `Prop` while `Sort::of(List(P))` says `Type 0`.
+/// `Sort::of` routes a parameterized former through `sort_of_intrinsic`, which lands a `Prop`-sorted element at `Type 0` on the reasoning `sort/classification_tests.rs` states: a list has a length and a box has an identity, so their inhabitants are distinguishable however indistinguishable the elements are. The typing rule must agree: reporting the *element's* sort as the former's would infer `List(P)` at `Prop` while `Sort::of(List(P))` says `Type 0`.
 ///
 /// Only one of those can be right, and the disagreement is a closed inhabitant of `False`. `Prop` is the type of propositions, so a former admitted there stands wherever one is wanted: at `(X : Prop, x : X, y : X) -> Same(@X)(x, y)`, an equation between two proofs of `X` — its one constructor discharges it, since irrelevance identifies any two inhabitants of `X` — instantiating `X` at `List(P)` yields `Same(@List(P))([p], [])` for a one-element list against the empty one. Congruence through `List/length` carries that to `1` and `0`, and transport turns `()` into a proof of `False`.
 ///
@@ -17,24 +17,24 @@ use {
 ///
 /// The controls are the other half. A list at a relevant element still reports that element's level, `List(Type 0)` included, so the rule does not pin every former at zero; and a genuine proposition still stands where a `Prop` is wanted, so it does not refuse the position outright.
 #[test]
-fn a_list_or_cell_of_proofs_is_not_a_proposition() {
+fn a_list_or_box_of_proofs_is_not_a_proposition() {
     let mut certifier = certifier();
     // `induct P : Prop end` — an empty proposition, so `Sort::of` reads `Prop` off its declaration.
     declared(&mut certifier, "induct /P: pub Prop\nend");
-    let [list, cell, proposition] = terms(
-        "(#ListType(#{node = InductType} /P()), #CellType(#{node = InductType} /P()), #{node = InductType} /P())",
+    let [list, held, proposition] = terms(
+        "(#ListType(#{node = InductType} /P()), #BoxType(#{node = InductType} /P()), #{node = InductType} /P())",
     );
     let (ground, prop) = (term("Type"), term("Prop"));
 
     assert_eq!(infer(&mut certifier, &list), Ok(ground.clone()));
-    assert_eq!(infer(&mut certifier, &cell), Ok(ground.clone()));
+    assert_eq!(infer(&mut certifier, &held), Ok(ground.clone()));
 
     assert!(matches!(
         check(&mut certifier, &list, &prop),
         Err(Error::Mismatch { .. }),
     ));
     assert!(matches!(
-        check(&mut certifier, &cell, &prop),
+        check(&mut certifier, &held, &prop),
         Err(Error::Mismatch { .. }),
     ));
 

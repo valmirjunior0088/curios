@@ -156,13 +156,13 @@ let /coerce: (x: #{universes = {levels = [1]}} /held) -> #{universes = {levels =
     );
 }
 
-// `Box` holds its level only as the element of an intrinsic carrier: a list, a cell, a `#BoxType` or a description of `Type u`. A carrier is compared by its element, so two instances apart in the level hold carriers of different universes, and granted irrelevant, `box([Type 0]) : Box.{1}` read back at `Box.{0}` would list `Type 0` among the types of `Type 0`. Carried honestly the coercion is refused, and nothing else is; carried as irrelevant the declaration is denied.
+// `Box` holds its level only as the element of an intrinsic carrier: a list, a `#BoxType` or a description of `Type u`. A carrier is compared by its element, so two instances apart in the level hold carriers of different universes, and granted irrelevant, `box([Type 0]) : Box.{1}` read back at `Box.{0}` would list `Type 0` among the types of `Type 0`. Carried honestly the coercion is refused, and nothing else is; carried as irrelevant the declaration is denied.
 //
 // Mutation-checked at `curios-analysis`'s variance walk: reading no carrier's element admits the honest coercion.
 #[test]
 fn a_level_only_a_carriers_element_holds_is_invariant() {
     let family = global("Box");
-    for former in ["#ListType", "#CellType", "#BoxType", "#IoType"] {
+    for former in ["#ListType", "#BoxType", "#IoType"] {
         let payload = fill!("${former}(#{level = u} Type)", former);
         let coerced = coercion("InductType", "Box", "()", "1", "0");
 

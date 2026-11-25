@@ -315,22 +315,21 @@ fn a_map_something_else_still_holds_answers_as_if_copied() {
     }
 }
 
-/// A map a cell holds: taken out of it, inserted into and taken out again, the cell still hands back the map it was filled with, as it does when the insert copies.
+/// A map a box holds: taken out of it, inserted into and taken out again, the box still hands back the map it was made with, as it does when the insert copies.
 #[test]
-fn a_map_a_cell_holds_answers_as_if_copied() {
+fn a_map_a_box_holds_answers_as_if_copied() {
     let source = r#"
-        use /std/{Str, Nat, Map, List, Option, Result, Try, Io, Proc, Fmt, Cell};
+        use /std/{Str, Nat, Map, List, Option, Result, Try, Io, Proc, Fmt, Box};
         let execute() -> Try(Io, Str, {}) =
             let arguments = Proc/args()!;
             let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
             let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
             let n = Option/to_result(Nat/of_str(Str/trim(s)), "bad input")!;
-            let cell = Cell/new()!;
-            let _ = Cell/fill(cell, Map/insert(Map/insert(Map/empty(), n, 1), n + 1, 2))!;
-            let first = Cell/poll(cell)!;
-            let grown = match first | some(m) => Map/length(Map/insert(m, n + 2, 3)) | none() => 0 end;
-            let again = Cell/poll(cell)!;
-            let kept = match again | some(m) => Map/length(m) | none() => 0 end;
+            let held = Box/new(Map/insert(Map/insert(Map/empty(), n, 1), n + 1, 2))!;
+            let first = Box/held(held)!;
+            let grown = Map/length(Map/insert(first, n + 2, 3));
+            let again = Box/held(held)!;
+            let kept = Map/length(again);
             let _ = Fmt/print("%\n")(grown * 10 + kept)!;
             Try/pure(());
         execute()

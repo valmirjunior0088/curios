@@ -58,9 +58,6 @@ pub fn former_eta(telescope: &Telescope<Term>) -> Option<FormerEta> {
         Subterm::Intrinsic(Intrinsic::BoxType(payload)) => {
             (FormerEta::Intrinsic("Box"), vec![payload], vec![0])
         }
-        Subterm::Intrinsic(Intrinsic::CellType(payload)) => {
-            (FormerEta::Intrinsic("Cell"), vec![payload], vec![0])
-        }
         _ => return None,
     };
     // Whether the former takes one call and it takes parameters, a suffix of which the outermost lambda may take.

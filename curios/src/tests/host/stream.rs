@@ -84,13 +84,14 @@ fn a_rest_surfaces_a_read_failure_instead_of_a_partial_prefix() {
         satisfy Io/Read(Failing) {
             read(s, _) = Try/raise(Io/Error/other(s.code)),
         }
-        struct Twice: Type { calls: Cell({}), fails: Bool }
+        struct Twice: Type { calls: Cell, fails: Bool }
         satisfy Io/Read(Twice) {
             read(s, _) =
-                let first = Cell/fill(s.calls, ())!;
-                match first
-                | true => Try/pure(Io/Chunk/bytes(0x[0x41, 0x42, 0x43]))
-                | false =>
+                let again = Cell/poll(s.calls)!;
+                let () = Cell/fill(s.calls)!;
+                match again
+                | false => Try/pure(Io/Chunk/bytes(0x[0x41, 0x42, 0x43]))
+                | true =>
                     match s.fails
                     | true => Try/raise(Io/Error/other(247))
                     | false => Try/pure(Io/Chunk/ended())
@@ -98,7 +99,7 @@ fn a_rest_surfaces_a_read_failure_instead_of_a_partial_prefix() {
                 end,
         }
         let twice(fails: Bool) -> Io(Twice) =
-            let calls = Cell/new(@{})!;
+            let calls = Cell/new()!;
             Io/pure(Twice { calls = calls, fails = fails });
         let rest(@S: Type, use Io/Read(S), s: S) -> Io(Result(Io/Error, Bytes)) =
             let r = Io/Reader/new(s)!;
@@ -124,22 +125,23 @@ fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
         fill!(
             r#"
             use /std/{Bytes, Bool, Str, List, Result, Cell, Try, Io, print};
-            struct Pieces: Type { List({Cell({}), Bytes}) }
-            let next(ps: List({Cell({}), Bytes})) -> Try(Io, Io/Error, Io/Chunk) =
+            struct Pieces: Type { List({Cell, Bytes}) }
+            let next(ps: List({Cell, Bytes})) -> Try(Io, Io/Error, Io/Chunk) =
                 match ps
                 | [] => Try/pure(Io/Chunk/ended())
                 | [p, ..more] =>
-                    let fresh = Cell/fill(p.0, ())!;
-                    match fresh
-                    | false => next(more)
-                    | true => ${answer}
+                    let spent = Cell/poll(p.0)!;
+                    let () = Cell/fill(p.0)!;
+                    match spent
+                    | true => next(more)
+                    | false => ${answer}
                     end
                 end;
             satisfy Io/Read(Pieces) {
                 read(s, n) = next(s.0),
             }
-            let piece(b: Bytes) -> Io({Cell({}), Bytes}) =
-                let c = Cell/new(@{})!;
+            let piece(b: Bytes) -> Io({Cell, Bytes}) =
+                let c = Cell/new()!;
                 Io/pure((c, b));
             let entry() -> /std/Io({}) =
                 let a = piece(0x[])!;

@@ -133,13 +133,13 @@ fn classify_under(
             | Intrinsic::IntType
             | Intrinsic::FltType
             | Intrinsic::BytesType
-            | Intrinsic::HandleType => Sort::type_at(Level::zero()),
+            | Intrinsic::HandleType
+            | Intrinsic::CellType => Sort::type_at(Level::zero()),
             Intrinsic::ListType(element)
-            | Intrinsic::CellType(element)
             | Intrinsic::BoxType(element)
             | Intrinsic::IoType(element) => {
                 let element = element.clone();
-                // A list, cell, or description of proofs is not itself a proposition — it has length, identity, or an effect, so its inhabitants are distinguishable and proof irrelevance does not apply. It lands at `Type` whatever its element's quality, at the element's level. For `Io` that is what keeps sort-driven erasure from dropping a description of a proof and its host effect with it.
+                // A list, box, or description of proofs is not itself a proposition — it has length, identity, or an effect, so its inhabitants are distinguishable and proof irrelevance does not apply. It lands at `Type` whatever its element's quality, at the element's level. For `Io` that is what keeps sort-driven erasure from dropping a description of a proof and its host effect with it.
                 Sort::type_at(sort_of_under(context, binders, opened, &element)?.level)
             }
             // An intrinsic *value* in type position is not a shape this can classify, and unlike the formers above it is not expected.
@@ -164,7 +164,7 @@ fn classify_under(
             | Intrinsic::BoolXor(..)
             | Intrinsic::Byte(..)
             | Intrinsic::ByteToNat(..)
-            | Intrinsic::Cell { .. }
+            | Intrinsic::Cell
             | Intrinsic::CellPoll { .. }
             | Intrinsic::CellFill { .. }
             | Intrinsic::Box { .. }

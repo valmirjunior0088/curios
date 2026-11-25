@@ -112,7 +112,7 @@ test two_woken_takers_retry_after_only_one_can_take =
 test a_losing_take_neither_takes_a_later_message_nor_acknowledges_it =
     let (acknowledged, n) =
         Io/scope((s) =>
-            let messages = Channel/new(@{Nat, Cell({})}, 1)!;
+            let messages = Channel/new(@{Nat, Cell}, 1)!;
             let other = Channel/new(@Nat, 1)!;
             let select_one() -> Io({}) =
                 Io/select([
@@ -122,13 +122,12 @@ test a_losing_take_neither_takes_a_later_message_nor_acknowledges_it =
             let () = Io/yield()!;
             let _ = Channel/push(other, 1)!;
             let () = Io/Scope/Task/join(selecting)!;
-            let ack = Cell/new(@{})!;
+            let ack = Cell/new()!;
             let _ = Channel/push(messages, (7, ack))!;
             let () = Io/yield()!;
-            let polled = Cell/poll(ack)!;
+            let acknowledged = Cell/poll(ack)!;
             let got = Channel/take(messages)!;
-            let acknowledged = match polled | none() => false | some(()) => true end;
-            Io/pure((acknowledged, Option/map(got, (message: {Nat, Cell({})}) => message.0))))!;
+            Io/pure((acknowledged, Option/map(got, (message: {Nat, Cell}) => message.0))))!;
     Test/all([
         Test/assert("the message the losing take left is not acknowledged", Bool/not(acknowledged)),
         Test/equal(n, Option/some(7))]);

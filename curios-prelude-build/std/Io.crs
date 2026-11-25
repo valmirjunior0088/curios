@@ -41,7 +41,7 @@ satisfy Program(Io({})) {
 -- How many children of a scope have not ended, and the cell those waiting for none to be left wait on, kept until the last child's end fills it and the next waiter makes another: what `join_all` waits on, a count rather than the tasks, so a scope that spawns without end holds nothing of the children that have ended.
 struct Live: Type {
     count: Nat,
-    idle: Option(Cell({})),
+    idle: Option(Cell),
 }
 
 -- Declared here and not in its module, so that `scope` builds it and nothing outside `Io` does: its children spawned since the driver last took them, the latest first, and none once the scope has answered, so a child spawned after it never runs; and its releases, the latest first.
@@ -113,9 +113,9 @@ pub let sleep(d: Duration) -> Io({}) =
     sleep_until(Instant/add(now, d));
 
 -- A cell filled already: what a suspension that may go on at once waits on. Private to the subtree, which is where every such suspension is made.
-let ready() -> Io(Cell({})) =
+let ready() -> Io(Cell) =
     let cell = Cell/new()!;
-    let _ = Cell/fill(cell, ())!;
+    let () = Cell/fill(cell)!;
     pure(cell);
 
 --- Let what waits beside this run, and go on: a suspension on a cell filled already, which whatever advances it may go on from at once, and which the top of a program goes on from without waiting.
@@ -194,7 +194,7 @@ pub let copy(@S: Type, @T: Type, use Read(S), use Write(T), from: S, to: T) -> T
 -- A branch the driver holds: one still to start, or one suspended on what its suspension named, with what cancels it and the rest of it. A branch that ran to its end is dropped, its answer in whatever it wrote to.
 induct Branch: Type
 | fresh(Io({}))
-| waiting(on: List(Handle), filled: List(Cell({})), cancel: Io({}), rest: Io({}))
+| waiting(on: List(Handle), filled: List(Cell), cancel: Io({}), rest: Io({}))
 end
 
 -- `b` advanced until it ends or suspends: nothing where it ended, or the branch it suspended as.
@@ -205,12 +205,12 @@ let step(b: Io({})) -> Io(Option(Branch)) =
         (on, filled, cancel, rest) => pure(Option/some(Branch/waiting(on, filled, cancel, rest))));
 
 -- Whether a cell of `cells` is filled.
-let any_filled(cells: List(Cell({}))) -> Io(Bool) =
+let any_filled(cells: List(Cell)) -> Io(Bool) =
     match cells
     | [] => pure(false)
     | [cell, ..more] =>
-        let held = Cell/poll(cell)!;
-        match held | some(()) => pure(true) | none() => any_filled(more) end
+        let filled = Cell/poll(cell)!;
+        match filled | true => pure(true) | false => any_filled(more) end
     end;
 
 -- Whether any of the first `n` of `flags` holds, and the flags after them.
@@ -232,7 +232,7 @@ let handles(branches: List(Branch)) -> List(Handle) =
         match b | waiting(on, _, _, _) => on | fresh(_) => [] end);
 
 -- The cells the waiting branches of `branches` wait on, in their order.
-let cells(branches: List(Branch)) -> List(Cell({})) =
+let cells(branches: List(Branch)) -> List(Cell) =
     List/concat_map(branches, (b: Branch) =>
         match b | waiting(_, filled, _, _) => filled | fresh(_) => [] end);
 

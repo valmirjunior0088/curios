@@ -3,10 +3,7 @@
 use {
     crate::convert::test_support::*,
     crate::*,
-    curios_core::{
-        Free, Global, Intrinsic, Level, MetavarId, MetavarOrigin, Nat, ReduceError, Subterm, Term,
-        Universes,
-    },
+    curios_core::{Free, Global, Intrinsic, Level, MetavarId, MetavarOrigin, Nat, Subterm, Term},
     curios_num::Binary,
 };
 
@@ -396,26 +393,6 @@ fn one_operation_at_two_universe_instances_is_one_number() {
 
     assert_eq!(conv(&mut context, &length(n, 0), &length(n, 1)), Ok(true));
     assert_eq!(conv(&mut context, &length(n, 0), &length(m, 0)), Ok(false));
-}
-
-/// The levels a result carries are compared before its operands: two polls of one cell whose results are the cell's family at two ground levels are two terms, though every operand agrees — which the elaborator reports as an inconsistency of its universe context, since its level comparison is a constraint. The control is the same poll at one level. The certifier's twin of this proposition shares the name.
-#[test]
-fn two_polls_of_one_cell_at_two_ground_levels_do_not_convert() {
-    let mut context = context();
-    let cell = Term::free_var(&context.fresh(Some("cell")));
-    let poll = |level: u32| {
-        Term::intrinsic(Intrinsic::CellPoll {
-            element: Term::intrinsic(Intrinsic::NatType),
-            cell: cell.clone(),
-            universes: Universes::levels(vec![Level::constant(level)]),
-        })
-    };
-
-    assert!(matches!(
-        conv(&mut context, &poll(0), &poll(1)),
-        Err(ReduceError::Universe(_))
-    ));
-    assert_eq!(conv(&mut context, &poll(0), &poll(0)), Ok(true));
 }
 
 /// The list view: `[?0, ..?1]` against a longer literal pairs the one written element and leaves the tail what the literal has left, where the congruence would compare a run of one element with a run of three and stop at their lengths.

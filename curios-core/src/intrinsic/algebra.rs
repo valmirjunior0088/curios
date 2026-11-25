@@ -399,8 +399,8 @@ impl Intrinsic {
             | Intrinsic::ListFold { .. }
             | Intrinsic::HandleType
             | Intrinsic::Handle { .. }
-            | Intrinsic::CellType { .. }
-            | Intrinsic::Cell { .. }
+            | Intrinsic::CellType
+            | Intrinsic::Cell
             | Intrinsic::CellFill { .. }
             | Intrinsic::CellPoll { .. }
             | Intrinsic::BoxType { .. }

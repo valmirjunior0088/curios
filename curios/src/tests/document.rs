@@ -378,8 +378,8 @@ fn shown(
 fn an_adopted_signature_marks_its_carriers_and_operations() {
     let documentation = standard_library();
 
-    let (_, fill) = shown(&documentation, "/std/Cell", "fill");
-    assert_eq!(fill, ["/std/Cell", "/std/Io", "/std/Bool"]);
+    let (_, poll) = shown(&documentation, "/std/Cell", "poll");
+    assert_eq!(poll, ["/std/Cell", "/std/Io", "/std/Bool"]);
 
     // A precondition reads as a report reads it: an operator where the surface writes one, a call of the declaration where it does not.
     let (text, get) = shown(&documentation, "/std/Bytes", "get");
@@ -528,9 +528,9 @@ fn an_adopted_signature_spells_its_names_below_their_root() {
     let documentation = standard_library();
 
     let (fill, _) = shown(&documentation, "/std/Cell", "fill");
-    assert_eq!(fill, "pub let fill(@T: Sort, c: Cell(T), v: T) -> Io(Bool)");
+    assert_eq!(fill, "pub let fill(c: Cell) -> Io({})");
     let (poll, _) = shown(&documentation, "/std/Cell", "poll");
-    assert_eq!(poll, "pub let poll(@T: Sort, c: Cell(T)) -> Io(Option(T))");
+    assert_eq!(poll, "pub let poll(c: Cell) -> Io(Bool)");
     let (get, _) = shown(&documentation, "/std/Bytes", "get");
     assert_eq!(
         get,

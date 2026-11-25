@@ -17,17 +17,17 @@ fn a_catch_all_is_checked_at_its_scrutinee() {
 fn an_effectful_scrutinee_is_not_a_value() {
     control(
         r#"
-        use /std/{Cell, Eq, Bool, Str};
+        use /std/{Box, Eq, Bool, Str};
 
         let entry() -> /std/Io({}) =
-            let c = Cell/new(@Bool)!;
-            let read = Cell/fill(c, true)!;
+            let c = Box/new(true)!;
+            let read = Box/held(c)!;
 
             let forged : Str =
                 match read
                 | true =>
                     let p : Eq()(read, true) = Eq/refl();
-                    let done = Cell/fill(c, false);
+                    let done = Box/change(c, (_: Bool) => (false, ()));
                     match read
                     | true => "second read true"
                     | false => match Bool/false_neq_true(p) end
@@ -41,7 +41,7 @@ fn an_effectful_scrutinee_is_not_a_value() {
         b"second read true",
     )
     .refused(&[
-        ("let read = Cell/fill(c, true)!;", "let read = Cell/fill(c, true);"),
+        ("let read = Box/held(c)!;", "let read = Box/held(c);"),
     ])
     .by_elaborator_in(
         "/entry",
@@ -49,24 +49,24 @@ fn an_effectful_scrutinee_is_not_a_value() {
     );
 }
 
-/// Asserted on the *argument*: the fixture uses `Cell/fill(c, true) : Io(Bool)`, which `f : (Bool) -> Bool` does not take, so the derivation is refused at the first occurrence and never reaches a refinement at all. The control's read is the value `true`.
+/// Asserted on the *argument*: the fixture uses `Box/held(c) : Io(Bool)`, which `f : (Bool) -> Bool` does not take, so the derivation is refused at the first occurrence and never reaches a refinement at all. The control's read is the value `true`.
 #[test]
 fn an_effect_behind_a_stuck_head_is_not_an_argument() {
     control(
         r#"
-        use /std/{Cell, Eq, Bool, Str};
+        use /std/{Box, Eq, Bool, Str};
 
         let entry() -> /std/Io({}) =
             /std/print(
                 ((f : (Bool) -> Bool,
                   g : (Bool) -> Bool,
                   h : (x : Bool) -> Eq()(g(x), f(x)),
-                  c : Cell(Bool)) =>
+                  c : Box(Bool)) =>
                     let read = true;
                     match f(read)
                     | true =>
                         let step(p : Eq()(g(read), true)) -> Str =
-                            let done = Cell/fill(c, false);
+                            let done = Box/change(c, (_: Bool) => (false, ()));
                             match g(read)
                             | true => "second read true"
                             | false => match Bool/false_neq_true(p) end
@@ -74,30 +74,30 @@ fn an_effect_behind_a_stuck_head_is_not_an_argument() {
                         step(h(read))
                     | false => "first read false"
                     end
-                )((b) => b, (b) => b, (x) => Eq/refl(), Cell/new(@Bool)!)
+                )((b) => b, (b) => b, (x) => Eq/refl(), Box/new(true)!)
             );
         entry()
         "#,
         b"second read true",
     )
     .refused(&[
-        ("let read = true;", "let read = Cell/fill(@Bool, c, true);"),
+        ("let read = true;", "let read = Box/held(@Bool, c);"),
     ])
     .by_elaborator_in("/entry", |error| {
         matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "Io(Bool)" && pinned(expected) == "Bool")
     });
 }
 
-/// Asserted on the offending *argument*: the refusal is that `(b) => Cell/fill(c, true)` cannot be passed where a `(Bool) -> Bool` is wanted, so the description type has to appear in the diagnostic. A fixture refused anywhere else — at the cell, at `Eq/refl`, at an arm — would not produce that, and this file's rule is that a rule test asserts its own diagnostic. The control's function answers `true`.
+/// Asserted on the offending *argument*: the refusal is that `(b) => Box/held(c)` cannot be passed where a `(Bool) -> Bool` is wanted, so the description type has to appear in the diagnostic. A fixture refused anywhere else — at the cell, at `Eq/refl`, at an arm — would not produce that, and this file's rule is that a rule test asserts its own diagnostic. The control's function answers `true`.
 #[test]
 fn an_effect_cannot_inhabit_a_pure_arrow() {
     control(
         r#"
-        use /std/{Cell, Eq, Bool, Str};
+        use /std/{Box, Eq, Bool, Str};
         use /std/Bool/{False};
 
-        let forge(f : (Bool) -> Bool, c : Cell(Bool), p : Eq()(f(true), true)) -> Str =
-            let done = Cell/fill(c, false);
+        let forge(f : (Bool) -> Bool, c : Box(Bool), p : Eq()(f(true), true)) -> Str =
+            let done = Box/change(c, (_: Bool) => (false, ()));
             match f(true)
             | false =>
                 let contradiction : False = Bool/false_neq_true(p);
@@ -107,21 +107,21 @@ fn an_effect_cannot_inhabit_a_pure_arrow() {
 
         let entry() -> /std/Io({}) =
             /std/print(
-                ((c : Cell(Bool)) =>
+                ((c : Box(Bool)) =>
                     ((f : (Bool) -> Bool) =>
                         match f(true)
                         | true => forge(f, c, Eq/refl())
                         | false => "first read false"
                         end
                     )((b) => true)
-                )(Cell/new(@Bool)!)
+                )(Box/new(true)!)
             );
         entry()
         "#,
         b"no contradiction",
     )
     .refused(&[
-        ("((b) => true)", "((b) => Cell/fill(c, true))"),
+        ("((b) => true)", "((b) => Box/held(c))"),
     ])
     .by_elaborator_in("/entry", |error| {
         matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "Io(Bool)" && pinned(expected) == "Bool")

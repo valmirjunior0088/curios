@@ -1,32 +1,28 @@
--- `/std/Cell`: a cell is empty until its first fill, which it keeps.
-use /std/{Bool, Cell, Nat, Option, Test};
+-- `/std/Cell`: a cell is empty until it is filled, and stays filled.
+use /std/{Bool, Cell, Test};
 
--- A cell polls empty until its first fill, and the fill is taken.
-test a_cell_polls_empty_until_its_first_fill =
-    let cell = Cell/new(@Nat)!;
+-- A cell polls empty until it is filled.
+test a_cell_polls_empty_until_it_is_filled =
+    let cell = Cell/new()!;
     let before = Cell/poll(cell)!;
-    let accepted = Cell/fill(cell, 42)!;
+    let () = Cell/fill(cell)!;
     let after = Cell/poll(cell)!;
     Test/all([
-        Test/equal(before, Option/none()),
-        Test/assert("the fill is accepted", accepted),
-        Test/equal(after, Option/some(42))]);
+        Test/assert("a new cell is empty", Bool/not(before)),
+        Test/assert("a filled cell is filled", after)]);
 
--- A later fill is refused, and the cell keeps its first value.
-test a_later_fill_preserves_the_first_value =
-    let cell = Cell/new(@Nat)!;
-    let first = Cell/fill(cell, 7)!;
-    let later = Cell/fill(cell, 99)!;
-    let held = Cell/poll(cell)!;
-    Test/all([
-        Test/assert("the first fill is accepted", first),
-        Test/assert("a later fill is refused", Bool/not(later)),
-        Test/equal(held, Option/some(7))]);
+-- A cell filled again stays filled.
+test a_cell_filled_again_stays_filled =
+    let cell = Cell/new()!;
+    let () = Cell/fill(cell)!;
+    let () = Cell/fill(cell)!;
+    let filled = Cell/poll(cell)!;
+    Test/assert("a second fill changes nothing", filled);
 
 -- Filling one cell leaves another empty.
 test filling_one_cell_leaves_another_empty =
-    let a = Cell/new(@Nat)!;
-    let b = Cell/new(@Nat)!;
-    let _ = Cell/fill(a, 1)!;
+    let a = Cell/new()!;
+    let b = Cell/new()!;
+    let () = Cell/fill(a)!;
     let polled = Cell/poll(b)!;
-    Test/equal(polled, Option/none());
+    Test/assert("the other cell is empty", Bool/not(polled));

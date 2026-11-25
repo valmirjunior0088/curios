@@ -81,7 +81,7 @@ fn bare_generic_reference_resolves_toward_a_rigid_expectation() {
     assert_eq!(run(source), b"5");
 }
 
-// `Intrinsic`-headed type constructors (`List`, `Cell`) carry their argument inside the `Intrinsic` node; the imitation rule rebuilds the node over the binder (`?M := λT. List(T)`), so `Monad/bind` over a `List` pins the witness from the action's type like any nominal constructor would.
+// `Intrinsic`-headed type constructors (`List`, `Box`) carry their argument inside the `Intrinsic` node; the imitation rule rebuilds the node over the binder (`?M := λT. List(T)`), so `Monad/bind` over a `List` pins the witness from the action's type like any nominal constructor would.
 #[test]
 fn monad_over_intrinsic_constructor_resolves_by_imitation() {
     let source = r#"

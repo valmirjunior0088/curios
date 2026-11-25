@@ -264,13 +264,13 @@ fn opaque_inductive_is_eliminable_in_a_descendant() {
     assert_eq!(run(source), b"42");
 }
 
-// `/std/Io/Future` publishes its operations while keeping its result cell private.
+// `/std/Io/Future` publishes its operations while keeping the box its value is held in private.
 #[test]
 fn async_future_plumbing_is_not_reachable_from_user_code() {
     let source = r#"
-        use /std/{Nat, Cell};
+        use /std/{Nat, Box, Option};
         use /std/Io/{Future};
-        let _cell(f: Future(Nat)) -> Cell(Nat) = f.0;
+        let _held(f: Future(Nat)) -> Box(Option(Nat)) = f.0;
         /std/print("no")
         "#;
 

@@ -13,7 +13,7 @@ use {
     std::collections::BTreeSet,
 };
 
-const HEADER: &str = "use /std/{Nat, Io, Cell, Option, List, Proc, proved}; use /std/Bool/{Holds};";
+const HEADER: &str = "use /std/{Nat, Io, Box, Option, List, Proc, proved}; use /std/Bool/{Holds};";
 const EXACT: &str = r#"
 let walk(n: Nat, seed: Nat) -> {Nat, Nat} =
     match n
@@ -231,9 +231,8 @@ fn an_escaping_walk_with_multiple_callers_keeps_a_tail_recursive_function() {
     let fixture = compile(&fill!(
         r#"${HEADER}${PROOF}
         let main() -> Io({}) =
-        let holder = Cell/new()!;
-        let _ = Cell/fill(holder, walk)!;
-        let indirect = Option/unwrap_or(Cell/poll(holder)!, walk);
+        let holder = Box/new(walk)!;
+        let indirect = Box/held(holder)!;
         let n = List/length(/std/Proc/args()!);
         let a = walk(n, 7);
         let b = walk(n + 1, 11);

@@ -2341,11 +2341,6 @@ impl Convert {
                 Box::new(|_, vars| Term::intrinsic(Intrinsic::ListType(vars[0].clone()))),
                 None,
             ),
-            Subterm::Intrinsic(Intrinsic::CellType(elem)) => (
-                vec![elem.clone()],
-                Box::new(|_, vars| Term::intrinsic(Intrinsic::CellType(vars[0].clone()))),
-                None,
-            ),
             Subterm::Intrinsic(Intrinsic::BoxType(elem)) => (
                 vec![elem.clone()],
                 Box::new(|_, vars| Term::intrinsic(Intrinsic::BoxType(vars[0].clone()))),
@@ -3440,7 +3435,6 @@ impl Convert {
                     Subterm::Apply(apply),
                     Subterm::Intrinsic(
                         rigid @ (Intrinsic::ListType(_)
-                        | Intrinsic::CellType(_)
                         | Intrinsic::BoxType(_)
                         | Intrinsic::IoType(_)),
                     ),
@@ -3457,7 +3451,6 @@ impl Convert {
                 (
                     Subterm::Intrinsic(
                         rigid @ (Intrinsic::ListType(_)
-                        | Intrinsic::CellType(_)
                         | Intrinsic::BoxType(_)
                         | Intrinsic::IoType(_)),
                     ),

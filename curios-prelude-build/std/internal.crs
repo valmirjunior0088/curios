@@ -35,12 +35,12 @@ pub let temporary_path(prefix: Str) -> Io(Path) =
 --- What a wait waits on: handles a host makes ready and cells the program fills, and what releases what the wait made for itself, whether the wait ends or is cancelled.
 pub struct Waiting: pub Type {
     on: List(Handle),
-    filled: List(Cell({})),
+    filled: List(Cell),
     release: Io({}),
 }
 
 --- A wait on cells alone, which made nothing to release.
-pub let on_filled(cells: List(Cell({}))) -> Waiting =
+pub let on_filled(cells: List(Cell)) -> Waiting =
     Waiting { on = [], filled = cells, release = Io/pure(()) };
 
 --- Until something `w` waits on has moved: a suspension that releases what `w` made, whether it ends or is cancelled.
@@ -48,7 +48,7 @@ pub let suspend_on(w: Waiting) -> Io({}) =
     /sys/Io/suspend(w.on, w.filled, w.release, w.release);
 
 --- Until a cell of `cells` is filled: a suspension that cancels nothing and goes on with nothing. Only the program fills a cell, so what waits on cells alone at the top of a program is a deadlock the host reports, and so is a wait on none.
-pub let wait_filled(cells: List(Cell({}))) -> Io({}) =
+pub let wait_filled(cells: List(Cell)) -> Io({}) =
     suspend_on(on_filled(cells));
 
 --- What `attempt` answers, asked again each time something `wait` names has moved while it declines: the one loop every wait goes through, on the program's own state and on a handle's readiness alike. Nothing runs between an attempt that declines and the suspension but `wait`, which never suspends, so no change made between them is missed; an attempt takes nothing unless it answers.

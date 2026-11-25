@@ -840,42 +840,29 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
     ]
 }
 
-// Public cells describe allocation and first-write-wins observation; private knot memoization is introduced only below erasure.
+// A public cell is allocated empty, filled once and asked whether it is: it holds no value. The cell that holds one, a knot's memo, is introduced only below erasure.
 fn cell_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
     vec![
         documented(
             &["A new empty cell."],
-            operation(
-                "new",
-                &["T"],
-                syntax,
-                Intrinsic::Cell { element: name("T") },
-            ),
+            operation("new", &[], syntax, Intrinsic::Cell),
         ),
         documented(
-            &["Store `v` only if empty, returning whether this fill won."],
+            &["Fill `c`: it is filled from then on, and filling it again changes nothing."],
             operation(
                 "fill",
-                &["T", "c", "v"],
+                &["c"],
                 syntax,
-                Intrinsic::CellFill {
-                    element: name("T"),
-                    cell: name("c"),
-                    value: name("v"),
-                },
+                Intrinsic::CellFill { cell: name("c") },
             ),
         ),
         documented(
-            &["The first value filled, or none while empty."],
+            &["Whether `c` is filled."],
             operation(
                 "poll",
-                &["T", "c"],
+                &["c"],
                 syntax,
-                Intrinsic::CellPoll {
-                    element: name("T"),
-                    cell: name("c"),
-                    universes: curios_core::Universes::default(),
-                },
+                Intrinsic::CellPoll { cell: name("c") },
             ),
         ),
     ]
@@ -1152,8 +1139,8 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
         ),
         SysModule::carrier(
             "Cell",
-            &["An initially empty holder whose first fill wins."],
-            operation("Cell", &["T"], syntax, Intrinsic::CellType(name("T"))),
+            &["An initially empty mark that stays filled once it is."],
+            constant("Cell", syntax, Intrinsic::CellType),
             items(cell_ops(syntax)),
         ),
         SysModule::carrier(

@@ -168,14 +168,15 @@ fn a_packed_literal_decomposes_against_its_folded_spine() {
 
 #[test]
 fn a_dependent_result_action_auto_lifts_through_bang() {
-    // `Cell/new : (@T: Type) -> Io(Cell(T))` names its binder in the result, so the auto-lift oracle can key it only by opening the declared telescope before reading the head. The `!` must insert the `Lift(Io, Try(Io, Io/Error))` embedding without an explicit `lift(...)`.
+    // `Future/new : (@A: Type) -> Io(Future(A))` names its binder in the result, so the auto-lift oracle can key it only by opening the declared telescope before reading the head. The `!` must insert the `Lift(Io, Try(Io, Io/Error))` embedding without an explicit `lift(...)`.
     let source = r#"
-        use /std/{Cell, Nat, Option, Io, Try};
+        use /std/{Nat, Option, Io, Try};
+        use /std/Io/{Future};
 
         let program() -> Try(Io, Io/Error, Nat) =
-            let c = Cell/new()!;
-            let _ = Cell/fill(c, 7)!;
-            let n = Option/unwrap_or(Cell/poll(c)!, 0);
+            let f = Future/new()!;
+            let () = Future/fill(f, 7)!;
+            let n = Option/unwrap_or(Future/poll(f)!, 0);
             Try/pure(n);
 
         Io/pure(())
@@ -199,12 +200,13 @@ fn a_list_element_lambda_body_solves_against_the_element_metavariable() {
 
 #[test]
 fn a_solved_metavariable_in_a_candidate_does_not_strand_the_wake_cascade() {
-    // `c`'s element type is pinned only by the later `Cell/fill`, and the chain back to the `Cell/new` type argument runs through solved metavariables whose spines carry the continuation binder. `solve` must materialize committed solutions before its scope analysis, or the ground candidate is refused for a name that only rides a solved spine.
+    // `f`'s value type is pinned only by the later `Future/fill`, and the chain back to the `Future/new` type argument runs through solved metavariables whose spines carry the continuation binder. `solve` must materialize committed solutions before its scope analysis, or the ground candidate is refused for a name that only rides a solved spine.
     let source = r#"
-        use /std/{Cell, Option, Io, Nat};
+        use /std/{Option, Io, Nat};
+        use /std/Io/{Future};
         let probe() -> Io({}) =
-            let c = Cell/new()!;
-            let _ = Cell/fill(c, Option/some(1))!;
+            let f = Future/new()!;
+            let () = Future/fill(f, Option/some(1))!;
             Io/pure(());
         probe()
     "#;

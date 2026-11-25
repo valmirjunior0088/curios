@@ -35,11 +35,10 @@ fn a_channel_preserves_fifo_across_takes_and_a_finish() {
 fn evidence_payloads_still_occupy_storage() {
     assert_eq!(
         run(r#"
-        use /std/{Nat, Eq, Option, Cell, Io, print, Channel};
+        use /std/{Nat, Eq, Option, Box, Io, print, Channel};
         let entry() -> /std/Io({}) =
-            let proof = Cell/new(@Option(Eq()(1, 1)))!;
-            let _ = Cell/fill(proof, Option/some(Eq/refl()))!;
-            let _ = print(match Cell/poll(proof)! | some(_) => "proof " | none() => "missing " end)!;
+            let proof = Box/new(@Option(Eq()(1, 1)), Option/some(Eq/refl()))!;
+            let _ = print(match Box/held(proof)! | some(_) => "proof " | none() => "missing " end)!;
             let p = Channel/new(@Option(Eq()(1, 1)), 1)!;
             let _ = Channel/try_push(p, Option/some(Eq/refl()))!;
             print(match Channel/try_take(p)! | item(_) => "proof" | empty() => "empty" | ended() => "ended" end);
@@ -49,22 +48,21 @@ fn evidence_payloads_still_occupy_storage() {
     );
 }
 
-/// Explicit binds let each intermediate result choose its own universe, including `Cell(Type)` and `Take(Type)`, before the final ground-level print.
+/// Explicit binds let each intermediate result choose its own universe, including `Box(Type)` and `Take(Type)`, before the final ground-level print.
 #[test]
 fn type_payloads_still_occupy_storage() {
     assert_eq!(
         run(r#"
-        use /std/{Cell, Nat, Io, print, Channel};
-        Io/bind(Cell/new(@Type), (c) =>
-        Io/bind(Cell/fill(c, Nat), (_) =>
-        Io/bind(Cell/poll(c), (held) =>
-        Io/bind(print(match held | some(_) => "type " | none() => "missing " end), (_) =>
+        use /std/{Box, Nat, Io, print, Channel};
+        Io/bind(Box/new(@Type, Nat), (b) =>
+        Io/bind(Box/held(b), (_) =>
+        Io/bind(print("type "), (_) =>
         Io/bind(Channel/new(@Type, 1), (q) =>
         Io/bind(Channel/try_push(q, Nat), (_) =>
         Io/bind(Channel/try_take(q), (first) =>
         Io/bind(print(match first | item(_) => "item " | empty() => "empty " | ended() => "ended " end), (_) =>
         Io/bind(Channel/try_take(q), (second) =>
-        print(match second | item(_) => "item" | empty() => "empty" | ended() => "ended" end))))))))))
+        print(match second | item(_) => "item" | empty() => "empty" | ended() => "ended" end)))))))))
     "#),
         b"type item empty"
     );

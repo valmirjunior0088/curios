@@ -219,7 +219,7 @@ impl HeadKey {
             Intrinsic::BytesType => Some(HeadKey::Bytes),
             Intrinsic::HandleType => Some(HeadKey::Handle),
             Intrinsic::ListType(_) => Some(HeadKey::List),
-            Intrinsic::CellType(_) => Some(HeadKey::Cell),
+            Intrinsic::CellType => Some(HeadKey::Cell),
             Intrinsic::BoxType(_) => Some(HeadKey::Box),
             Intrinsic::IoType(_) => Some(HeadKey::Io),
             _ => None,

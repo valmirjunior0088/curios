@@ -389,27 +389,19 @@ fn the_operands_an_operation_is_declared_over_are_the_first_its_traversal_meets(
     }
 }
 
-/// The families coordination outcomes are read through, at the names the registry gives them. Typing an outcome reads its family's arity and sort and never its cases, so each is declared with none.
-const OUTCOMES: &str = r#"
-#{polarities = [Strict]}
-induct /sys/Option(A: Type): pub Type
-end
-"#;
-
 /// The rows no fold answers are the effect carrier's: its two constructors, and the cell and box operations. Nothing computes against them, and the one thing a wrong row among them could do to admit is hand out what a description yields — `Io` has no eliminator only while no row is one, and a host call that diverges inhabits `Io` at any type. So each is typed at an `Io`, and reduction leaves each the node it was: `bind(pure(x), f)` is not `f(x)`.
 ///
 /// Mutation-checked as the grid above is: `IoBind` producing its bare result type, and a box's read its bare element, each fail the first assertion.
 #[test]
 fn every_row_no_fold_answers_produces_an_inert_description() {
     let mut certifier = certifier_with_bounds();
-    declared(&mut certifier, OUTCOMES);
     let rows: [Term; 8] = under(
         &mut certifier,
-        "cell: #CellType(#NatType), held: #BoxType(#NatType)",
+        "cell: #CellType, held: #BoxType(#NatType)",
         &[
-            "#Cell(#NatType)".to_string(),
-            "#CellFill(#NatType, cell, 1)".to_string(),
-            "#CellPoll(#NatType, cell, {})".to_string(),
+            "#Cell".to_string(),
+            "#CellFill(cell)".to_string(),
+            "#CellPoll(cell)".to_string(),
             "#Box(#NatType, 1)".to_string(),
             "#BoxHeld(#NatType, held)".to_string(),
             "#BoxSet(#NatType, held, 1)".to_string(),
@@ -460,12 +452,12 @@ fn a_literal_is_typed_at_the_carrier_its_payload_is_a_value_of() {
     }
 }
 
-/// A parameterized former's sort is its element's level and never its element's sort: a list, a cell, a box or a description of proofs is data at level zero, and one of types sits where those types do, a level above the types themselves. Reading the element's sort instead would type a list of proofs at `Prop`, and pinning the level at zero would make a list of types as small as the types it lists.
+/// A parameterized former's sort is its element's level and never its element's sort: a list, a box or a description of proofs is data at level zero, and one of types sits where those types do, a level above the types themselves. Reading the element's sort instead would type a list of proofs at `Prop`, and pinning the level at zero would make a list of types as small as the types it lists.
 ///
 /// Mutation-checked at `sort_of_intrinsic`: answering `Prop` for an element that is one fails the first case, and answering level zero whatever the element's level fails the third.
 #[test]
 fn a_parameterized_former_sits_at_its_elements_level_and_never_in_prop() {
-    for former in ["#ListType", "#CellType", "#BoxType", "#IoType"] {
+    for former in ["#ListType", "#BoxType", "#IoType"] {
         let mut certifier = certifier();
         let formed: [Term; 3] = under(
             &mut certifier,

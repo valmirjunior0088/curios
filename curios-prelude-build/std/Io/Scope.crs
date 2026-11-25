@@ -25,10 +25,7 @@ let ended(live: Box(Live)) -> Io({}) =
             | m + 2 => (Live { ..l, count = m + 1 }, Option/none())
             | _ => (Live { count = 0, idle = Option/none() }, l.idle)
             end)!;
-    match idle
-    | some(cell) => Io/bind(Cell/fill(cell, ()), (_) => Io/pure(()))
-    | none() => Io/pure(())
-    end;
+    match idle | some(cell) => Cell/fill(cell) | none() => Io/pure(()) end;
 
 -- A join's attempt: done where no child of `live` is left.
 let none_left(live: Box(Live)) -> Io(Option({})) =
@@ -36,7 +33,7 @@ let none_left(live: Box(Live)) -> Io(Option({})) =
     Io/pure(match l.count | 0 => Option/some(()) | _ => Option/none() end);
 
 -- The cell a join waits on while children are left: the one there, or a fresh one left there. The cell is made before the change that leaves it, since a change cannot make one, and only where none is there.
-let idle_cell(live: Box(Live)) -> Io(Cell({})) =
+let idle_cell(live: Box(Live)) -> Io(Cell) =
     let there = Box/held(live)!;
     match there.idle
     | some(cell) => Io/pure(cell)

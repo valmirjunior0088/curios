@@ -45,7 +45,7 @@ fn peel_loops_are_linear_by_construction() {
     // The window (`view`) shape's whole promise, the consumption-side mirror of `accumulation_loops_are_linear_by_construction`: a naive head/tail peel over 100k bytes is O(n) with no optimizer recognition anywhere — the first read forces once, then every tail is an O(1) collapsed window and every head an O(1) read-through. The tail escapes through a fresh write-once `Cell` each step, so no compile-time pass can rescue it: a copying slice would be Θ(n²) and fail on the timeout.
     assert_eq!(
         run(r#"
-        use /std/{Byte, Bytes, Nat, Str, Cell, Option, Io};
+        use /std/{Byte, Bytes, Nat, Str, Box, Io};
         let build(i : Nat, acc : Bytes) -> Bytes =
             match i
             | 0 => acc
@@ -53,17 +53,15 @@ fn peel_loops_are_linear_by_construction() {
             end;
         let entry() -> /std/Io({}) =
             let built = build(10000, 0x[]);
-            let c = Cell/new()!;
-            let _ = Cell/fill(c, built)!;
-            let drain(c: Cell(Bytes), fuel : Nat, acc : Nat) -> Io(Nat) =
+            let c = Box/new(built)!;
+            let drain(c: Box(Bytes), fuel : Nat, acc : Nat) -> Io(Nat) =
                 match fuel
                 | 0 => Io/pure(acc)
                 | f + 1 =>
-                    match Option/unwrap_or(Cell/poll(c)!, 0x[])
+                    match Box/held(c)!
                     | 0x[] => Io/pure(acc)
                     | 0x[h, ..t] =>
-                        let next = Cell/new()!;
-                        let _ = Cell/fill(next, t)!;
+                        let next = Box/new(t)!;
                         drain(next, f, acc + (Byte/to_nat(h) - 48))
                     end
                 end;

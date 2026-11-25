@@ -137,13 +137,12 @@ fn a_mounted_familys_vector_is_the_certifiers_and_not_its_entrys() {
     );
 }
 
-/// The same lie told of a carrier: `Wrapper(A)` holds its parameter in a cell or a box, which are read and written and so invariant, or a function out of it in a list or a description, which are covariant and keep the arrow's left where it stands, and its entry is stamped `Strict` in `A` all the same. The walk reads an intrinsic carrier's parameter by its own rule and files that vector, so `Outer`, storing a `Wrapper(Outer)`, is refused.
+/// The same lie told of a carrier: `Wrapper(A)` holds its parameter in a box, which is read and written and so invariant, or a function out of it in a list or a description, which are covariant and keep the arrow's left where it stands, and its entry is stamped `Strict` in `A` all the same. The walk reads an intrinsic carrier's parameter by its own rule and files that vector, so `Outer`, storing a `Wrapper(Outer)`, is refused.
 ///
-/// Mutation-checked at `curios-analysis`'s positivity walk: reading a cell's element at the polarity it stands at accepts `Outer`.
+/// Mutation-checked at `curios-analysis`'s positivity walk: reading a box's element at the polarity it stands at accepts `Outer`.
 #[test]
 fn a_mounted_familys_carrier_is_read_by_the_certifier_and_not_by_its_entry() {
     let carriers = [
-        ("a cell", "#CellType(A)"),
         ("a box", "#BoxType(A)"),
         (
             "a list of functions out of it",

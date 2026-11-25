@@ -2205,32 +2205,16 @@ pub fn reduce_intrinsic(
         // Every operation the host performs is an `Io`, which is to say a *description*: it denotes one inert value here and becomes a host call only at erasure, where the entrypoint boundary forces the program's description exactly once.
         //
         // These arms do not refuse: a spelling that does not fix a value must not reach a type, and it is the typing that keeps them out — a term of non-`Io` type cannot perform an effect, and an `Io` supports no elimination through which one could reach a type position. So the operands reduce, the node rebuilds, and nothing else follows.
-        Intrinsic::CellType(element) => Ok(Subterm::Intrinsic(Intrinsic::CellType(
-            reducer.reduce(element.clone())?,
-        ))),
+        Intrinsic::CellType => Ok(Subterm::Intrinsic(Intrinsic::CellType)),
         Intrinsic::BoxType(element) => Ok(Subterm::Intrinsic(Intrinsic::BoxType(
             reducer.reduce(element.clone())?,
         ))),
-        Intrinsic::Cell { element } => Ok(Subterm::Intrinsic(Intrinsic::Cell {
-            element: reducer.reduce(element.clone())?,
-        })),
-        Intrinsic::CellFill {
-            element,
-            cell,
-            value,
-        } => Ok(Subterm::Intrinsic(Intrinsic::CellFill {
-            element: reducer.reduce(element.clone())?,
+        Intrinsic::Cell => Ok(Subterm::Intrinsic(Intrinsic::Cell)),
+        Intrinsic::CellFill { cell } => Ok(Subterm::Intrinsic(Intrinsic::CellFill {
             cell: reducer.reduce(cell.clone())?,
-            value: reducer.reduce(value.clone())?,
         })),
-        Intrinsic::CellPoll {
-            element,
-            cell,
-            universes,
-        } => Ok(Subterm::Intrinsic(Intrinsic::CellPoll {
-            element: reducer.reduce(element.clone())?,
+        Intrinsic::CellPoll { cell } => Ok(Subterm::Intrinsic(Intrinsic::CellPoll {
             cell: reducer.reduce(cell.clone())?,
-            universes: universes.clone(),
         })),
         Intrinsic::Box { element, value } => Ok(Subterm::Intrinsic(Intrinsic::Box {
             element: reducer.reduce(element.clone())?,

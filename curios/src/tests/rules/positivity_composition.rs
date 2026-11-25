@@ -74,12 +74,12 @@ fn recursion_through_an_anonymous_tuple_is_admitted() {
     assert_eq!(run(source), b"tupled");
 }
 
-// `Cell` is invariant — it is read *and* written — so nothing recursive may travel through one, even though the occurrence looks like a plain payload. The control holds the same payload under the covariant `List`.
+// `Box` is invariant — it is read *and* written — so nothing recursive may travel through one, even though the occurrence looks like a plain payload. The control holds the same payload under the covariant `List`.
 #[test]
 fn recursion_through_an_invariant_intrinsic_is_rejected() {
     control(
         r#"
-        use /std/{Cell, List};
+        use /std/{Box, List};
 
         induct Knot : pub Type
         | tie(List(Knot))
@@ -89,7 +89,7 @@ fn recursion_through_an_invariant_intrinsic_is_rejected() {
         "#,
         b"ok",
     )
-    .refused(&[("| tie(List(Knot))", "| tie(Cell(Knot))")])
+    .refused(&[("| tie(List(Knot))", "| tie(Box(Knot))")])
     .by_elaborator_in("/Knot", |error| {
         matches!(error, Error::NotStrictlyPositive { .. })
     });

@@ -24,8 +24,8 @@ end
 struct Held(A: Type): Type {
     queue: Queue(A),
     finished: Bool,
-    readers: Option(Cell({})),
-    writers: Option(Cell({})),
+    readers: Option(Cell),
+    writers: Option(Cell),
 }
 
 -- Every change is one change of the box, made by `try_push`, `try_take` or `finish`, which then wakes the side it concerns: the queue and its waiters move together.
@@ -42,11 +42,11 @@ induct Side: Type
 end
 
 -- The cell the waiters of `side` wait on, where one is there.
-let waiting(@A: Type, h: Held(A), side: Side) -> Option(Cell({})) =
+let waiting(@A: Type, h: Held(A), side: Side) -> Option(Cell) =
     match side | readers() => h.readers | writers() => h.writers end;
 
 -- The cell a waiter of `side` waits on: the one there, or a fresh one left there. The cell is made before the change that leaves it, since a change cannot make one, and only where none is there.
-let waited(@A: Type, c: Channel(A), side: Side) -> Io(Cell({})) =
+let waited(@A: Type, c: Channel(A), side: Side) -> Io(Cell) =
     let there = Box/held(c.held)!;
     match waiting(there, side)
     | some(cell) => Io/pure(cell)
@@ -66,11 +66,8 @@ let wait_on(@A: Type, c: Channel(A), side: Side) -> Io(Waiting) =
     Io/pure(on_filled([cell]));
 
 -- Fill the cell a side's waiters wait on, where one was there: every one of them is woken, and checks again.
-let woken(cell: Option(Cell({}))) -> Io({}) =
-    match cell
-    | some(c) => Io/bind(Cell/fill(c, ()), (_) => Io/pure(()))
-    | none() => Io/pure(())
-    end;
+let woken(cell: Option(Cell)) -> Io({}) =
+    match cell | some(c) => Cell/fill(c) | none() => Io/pure(()) end;
 
 --- A channel holding at most `capacity` values. A sender needing acknowledgement can include a reply `Future` in its message, which the receiver fills.
 pub let new(@A: Type, capacity: Nat, @_: Bool/Holds(0 < capacity)) -> Io(Channel(A)) =

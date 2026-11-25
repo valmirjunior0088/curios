@@ -1240,7 +1240,7 @@ pub fn carrier_former(head: &HeadKey) -> Option<Global> {
         HeadKey::Bytes => Intrinsic::BytesType,
         HeadKey::Handle => Intrinsic::HandleType,
         HeadKey::List => Intrinsic::ListType(Term::type_ground()),
-        HeadKey::Cell => Intrinsic::CellType(Term::type_ground()),
+        HeadKey::Cell => Intrinsic::CellType,
         HeadKey::Box => Intrinsic::BoxType(Term::type_ground()),
         HeadKey::Io => Intrinsic::IoType(Term::type_ground()),
         HeadKey::Nominal(_) | HeadKey::TupleType(_) => return None,
@@ -1259,7 +1259,7 @@ pub fn intrinsic_former(global: &Global, operands: &[Term]) -> Option<Intrinsic>
 
     FORMERS
         .get_or_init(|| {
-            let closed: [fn() -> Intrinsic; 7] = [
+            let closed: [fn() -> Intrinsic; 8] = [
                 || Intrinsic::BoolType,
                 || Intrinsic::NatType,
                 || Intrinsic::ByteType,
@@ -1267,13 +1267,10 @@ pub fn intrinsic_former(global: &Global, operands: &[Term]) -> Option<Intrinsic>
                 || Intrinsic::FltType,
                 || Intrinsic::BytesType,
                 || Intrinsic::HandleType,
+                || Intrinsic::CellType,
             ];
-            let over_one: [fn(Term) -> Intrinsic; 4] = [
-                Intrinsic::ListType,
-                Intrinsic::CellType,
-                Intrinsic::BoxType,
-                Intrinsic::IoType,
-            ];
+            let over_one: [fn(Term) -> Intrinsic; 3] =
+                [Intrinsic::ListType, Intrinsic::BoxType, Intrinsic::IoType];
 
             closed
                 .map(IntrinsicFormer::Closed)
@@ -1771,33 +1768,25 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
         Intrinsic::Handle(StdioCodes::STDOUT) => IntrinsicForm::Named("Handle/stdout"),
         Intrinsic::Handle(StdioCodes::STDERR) => IntrinsicForm::Named("Handle/stderr"),
         Intrinsic::Handle(token) => IntrinsicForm::Handle(token),
-        Intrinsic::CellType(elem) => IntrinsicForm::Call {
-            path: "Cell".into(),
-            implicits: vec![],
-            explicits: vec![elem],
-        },
+        Intrinsic::CellType => IntrinsicForm::Named("Cell"),
         Intrinsic::BoxType(elem) => IntrinsicForm::Call {
             path: "Box".into(),
             implicits: vec![],
             explicits: vec![elem],
         },
-        Intrinsic::Cell { element } => IntrinsicForm::Call {
+        Intrinsic::Cell => IntrinsicForm::Call {
             path: "Cell/new".into(),
-            implicits: vec![element],
+            implicits: vec![],
             explicits: vec![],
         },
-        Intrinsic::CellFill {
-            element,
-            cell,
-            value,
-        } => IntrinsicForm::Call {
+        Intrinsic::CellFill { cell } => IntrinsicForm::Call {
             path: "Cell/fill".into(),
-            implicits: vec![element],
-            explicits: vec![cell, value],
+            implicits: vec![],
+            explicits: vec![cell],
         },
-        Intrinsic::CellPoll { element, cell, .. } => IntrinsicForm::Call {
+        Intrinsic::CellPoll { cell } => IntrinsicForm::Call {
             path: "Cell/poll".into(),
-            implicits: vec![element],
+            implicits: vec![],
             explicits: vec![cell],
         },
         Intrinsic::Box { element, value } => IntrinsicForm::Call {

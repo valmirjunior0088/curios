@@ -394,13 +394,13 @@ impl ByValue<'_, '_> {
             | Intrinsic::IntType
             | Intrinsic::FltType
             | Intrinsic::BytesType
-            | Intrinsic::HandleType => Ok(Sort::Type(Level::zero())),
+            | Intrinsic::HandleType
+            | Intrinsic::CellType => Ok(Sort::Type(Level::zero())),
 
-            // A list, cell, or description *of* proofs is not itself a proposition: it has a length, an identity, or an effect, so its inhabitants are distinguishable and irrelevance does not apply. It lands in `Type`, and `Prop : Type 0`.
+            // A list, box, or description *of* proofs is not itself a proposition: it has a length, an identity, or an effect, so its inhabitants are distinguishable and irrelevance does not apply. It lands in `Type`, and `Prop : Type 0`.
             //
             // For `Io` that is load-bearing rather than tidy. Erasure is sort-driven, so a `Prop`-sorted `Io(P)` would be dropped as proof content and its host effect would vanish with it.
             Intrinsic::ListType(element)
-            | Intrinsic::CellType(element)
             | Intrinsic::BoxType(element)
             | Intrinsic::IoType(element) => {
                 let element = element.clone();

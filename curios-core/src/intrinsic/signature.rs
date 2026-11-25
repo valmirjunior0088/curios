@@ -12,7 +12,7 @@
 //!
 //! A narrowing carries its bound as an operand for the same reason, as [`Intrinsic::NatToByte`] and [`Intrinsic::IntToNat`] state: a bound stated only on `/sys`'s wrapper stops constraining anything the moment that wrapper unfolds, leaving a bare narrowing this table would type from its operand alone, and one that masked instead would change a value, which `documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md` forbids. The stated domain buys the inverse besides: `ByteToNat` reduces back through `NatToByte`, which is what lets a bound established in `Nat` survive a trip through `Byte`.
 //!
-//! A coordination outcome is an ordinary registered inductive: every `Produced::Fixed` result goes through the ordinary type-formation judgment in both checkers, and elaboration retains the resulting universe instance on `CellPoll`. The registry supplies identities, not a separate declaration validator.
+//! Every `Produced::Fixed` result goes through the ordinary type-formation judgment in both checkers: the registry supplies identities, not a separate declaration validator.
 //!
 //! **These rows cover what a program writes, and nothing below erasure.** The lowerings emit sequence reads of their own, where a proposition cannot be stated at all — so what holds those is that they name no extent to get wrong rather than a bound anything re-checks; see [A lowering names the elimination it performs](../../../documentation/design/compilation/a-lowering-names-the-elimination-it-performs.md).
 //!
@@ -43,7 +43,7 @@ pub enum Operand {
 pub enum Produced {
     /// Exactly this type, established by each checker through its ordinary type-formation judgment.
     Fixed(Term),
-    /// The sort the parameterized former lands in, which only the sort judgment answers. The element's own sort is *not* it: a list or a cell of proofs has a length or an identity, and a description of proofs has an effect, so none of them is itself a proposition.
+    /// The sort the parameterized former lands in, which only the sort judgment answers. The element's own sort is *not* it: a list or a box of proofs has a length or an identity, and a description of proofs has an effect, so none of them is itself a proposition.
     Sort,
 }
 
@@ -94,16 +94,8 @@ impl Intrinsic {
         // A bound is stated over the *intrinsic* measure, not `/sys`'s wrapper: this table sits below `/sys`, and it is the shape a reduced occurrence carries anyway.
         let bytes_len = |bytes| Term::intrinsic(Intrinsic::BytesLen(bytes));
         let list_len = |element, list| Term::intrinsic(Intrinsic::ListLen { element, list });
-        let cell_type = |element: Term| Term::intrinsic(Intrinsic::CellType(element));
+        let cell_type = || Term::intrinsic(Intrinsic::CellType);
         let box_type = |element: Term| Term::intrinsic(Intrinsic::BoxType(element));
-        let nominal = |family: SyntaxName, universes: Universes, params: Vec<Term>| {
-            Term::induct_type_at(
-                Global::Authored(family.qualifier()),
-                universes,
-                params,
-                Vec::<Term>::new(),
-            )
-        };
         let io_type = |result: Term| Term::intrinsic(Intrinsic::IoType(result));
         let unit = Term::tuple_type_unit;
 
@@ -144,8 +136,9 @@ impl Intrinsic {
             | Self::IntType
             | Self::FltType
             | Self::BytesType
-            | Self::HandleType => nullary(Term::type_ground()),
-            Self::ListType(_) | Self::CellType(_) | Self::BoxType(_) | Self::IoType(_) => former(),
+            | Self::HandleType
+            | Self::CellType => nullary(Term::type_ground()),
+            Self::ListType(_) | Self::BoxType(_) | Self::IoType(_) => former(),
 
             // Literals. A `Nat` successor is the one literal carrying a term: `Succ(3, x)` is `x + 3`, and its base is a `Nat` like any other.
             Self::Bool(_) => nullary(bool_type()),
@@ -473,27 +466,9 @@ impl Intrinsic {
             ),
 
             // Guest coordination operations describe effects; their outcomes are ordinary declared inductives.
-            Self::Cell { element } => {
-                sig(vec![Operand::IsType], io_type(cell_type(element.clone())))
-            }
-            Self::CellPoll {
-                element, universes, ..
-            } => sig(
-                vec![Operand::IsType, Operand::At(cell_type(element.clone()))],
-                io_type(nominal(
-                    syntax.option.family,
-                    universes.clone(),
-                    vec![element.clone()],
-                )),
-            ),
-            Self::CellFill { element, .. } => sig(
-                vec![
-                    Operand::IsType,
-                    Operand::At(cell_type(element.clone())),
-                    Operand::At(element.clone()),
-                ],
-                io_type(bool_type()),
-            ),
+            Self::Cell => sig(vec![], io_type(cell_type())),
+            Self::CellPoll { .. } => sig(vec![Operand::At(cell_type())], io_type(bool_type())),
+            Self::CellFill { .. } => sig(vec![Operand::At(cell_type())], io_type(unit())),
             Self::Box { element, .. } => sig(
                 vec![Operand::IsType, Operand::At(element.clone())],
                 io_type(box_type(element.clone())),
@@ -548,7 +523,7 @@ impl Intrinsic {
                 vec![
                     Operand::IsType,
                     Operand::At(list_type(handle_type())),
-                    Operand::At(list_type(cell_type(unit()))),
+                    Operand::At(list_type(cell_type())),
                     Operand::At(io_type(unit())),
                     Operand::At(io_type(result.clone())),
                 ],
@@ -567,7 +542,7 @@ impl Intrinsic {
                     Operand::Function {
                         domains: vec![
                             list_type(handle_type()),
-                            list_type(cell_type(unit())),
+                            list_type(cell_type()),
                             io_type(unit()),
                             io_type(from.clone()),
                         ],

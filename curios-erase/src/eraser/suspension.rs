@@ -219,6 +219,30 @@ impl Eraser<'_> {
         )
     }
 
+    /// Whether `cell` is filled: its poll, read as the option `polled` names and answered as a boolean.
+    pub fn filled(&mut self, cell: curios_anf::Atom, polled: Polled) -> curios_anf::Atom {
+        let poll = self.let_atom(curios_anf::Rhs::Cell {
+            operation: curios_anf::CellOperation::Poll {
+                some: polled.some,
+                none: polled.none,
+            },
+            operands: vec![cell],
+        });
+        let unfilled = self.block(|lowering| lowering.boolean(false));
+        let filled = self.block(|lowering| lowering.boolean(true));
+
+        self.let_atom(curios_anf::Rhs::MatchVariant {
+            family: polled.family,
+            scrutinee: poll,
+            arms: vec![curios_anf::VariantArm {
+                constructor: polled.none,
+                bindings: Vec::new(),
+                block: unfilled,
+            }],
+            default: Some(filled),
+        })
+    }
+
     /// Whether a cell of `cells` is filled: a scan over them, polling each in turn and stopping at the first filled one.
     fn any_filled(&mut self, cells: curios_anf::Atom, polled: Polled) -> curios_anf::Atom {
         let scan = self.builder.reserve_function();
