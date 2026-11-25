@@ -23,6 +23,7 @@
 
 **Rejected.**
 
+- **A decided equality taken straight to a bound**, an order lemma for each carrier such as `le/of_eql`: the carrier's own crossing under `le/of_eq` again, a rename, and with `le/antisym` the bridge per carrier [Equality is decided where a decider exists and is `Eq` everywhere, joined by one law](../theory/equality-is-decided-where-a-decider-exists-and-is-eq-everywhere-joined-by-one-law.md) rejects; a decided equality among the facts is its equation by `Eql`'s law, read as its two bounds.
 - **Hypotheses in conversion**, for the reason [A bound is stated in a decided proposition and discharged by reduction](a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md) gives. The Calculus of Congruent Inductive Constructions' metatheory holds for the weak recursor only, and `Holds` is a large elimination. A mistake there is a false definitional equation; a mistake here is a term that does not check.
 - **A search over the facts for a bound that is no comparison** — congruence, symmetry, or a fact's consequence such as a conjunct of a conjunction only a reduct holds, a match's arm under a refinement. A fact that states the bound is found by conversion alone, its conjuncts among its statements, and anything further is a search with no fragment to be complete for.
 - **A conjunct a fact for a decided equality alone.** A type test the rule does not need, and a conjunct the view reads nothing in, as `/std/time/Date/is_leap(y)`, would still be refused where a fact states it.

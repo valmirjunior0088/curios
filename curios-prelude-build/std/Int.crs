@@ -81,9 +81,9 @@ pub let view(i: Int) -> Sign(i) =
 let absurd_succ(@P: Sort, x: Nat, h: Bool/Holds(eql(+0, Nat/to_int(x) + 1))) -> P =
     match h end;
 
--- Stated over `eql`, and decided through `lt` and `le`, each by name: an operator here would read the witness that names this. Public for the elaborator's own proofs alone, which name it where a bound follows from an `==` guard, before any witness is elaborated: a program crosses by `Eql/eq`.
+-- Stated over `eql`, and decided through `lt` and `le`, each by name: an operator here would read the witness that names this.
 --- `Eql`'s law at `Int`: a decided equality is an equation.
-pub let eq_of_eql(a: Int, b: Int, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
+let eq_of_eql(a: Int, b: Int, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
     match lt(a, b)
     | true =>
         let below: Bool/Holds(lt(a, b)) = Bool/True/qed();

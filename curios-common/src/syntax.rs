@@ -596,10 +596,8 @@ pub struct OrderSyntax {
     pub scale: SyntaxName,
     /// Two bounds multiplied, `a * d + b * c <= a * c + b * d` from `a <= b` and `c <= d`: a product of two facts, for a multiplier that is no literal.
     pub mul: SyntaxName,
-    /// An equation's bound: `a = b` gives `a <= b`.
+    /// An equation's bound: `a = b` gives `a <= b`, the equation a decided equality is by `Eql`'s law ([`SyntaxRegistry::eql`]) among them.
     pub of_eq: SyntaxName,
-    /// A decided equality as an equation: an `==` guard's true arm.
-    pub eq_of_eql: SyntaxName,
     /// `a < b` gives `a <= b`: a failed `<=` guard's bound loosened to what a lemma over `<=` takes.
     pub of_lt: SyntaxName,
     /// `a <= b` and `a == b` failing give `a < b`: the case of a disequality its loose bound holds in.
@@ -621,7 +619,6 @@ impl OrderSyntax {
             scale,
             mul,
             of_eq,
-            eq_of_eql,
             of_lt,
             of_le_ne,
             min_of_le,
@@ -631,8 +628,7 @@ impl OrderSyntax {
         } = self;
 
         [
-            add, scale, mul, of_eq, eq_of_eql, of_lt, of_le_ne, min_of_le, min_of_ge, max_of_le,
-            max_of_ge,
+            add, scale, mul, of_eq, of_lt, of_le_ne, min_of_le, min_of_ge, max_of_le, max_of_ge,
         ]
         .into_iter()
     }

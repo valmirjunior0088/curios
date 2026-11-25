@@ -25,7 +25,7 @@
 //! **What is not read is recorded.** A proposition stating a decision the view does not read — a disjunction, an opaque `Bool` function — is kept for the report.
 
 use {
-    super::{decision_of, global, in_scope, is_empty, stated},
+    super::{crossed, crossing_in_scope, decision_of, global, in_scope, is_empty, stated},
     crate::{
         Binders, Context, Error, answered_guard, classing_among, distributed, open_layer,
         reduce_with, same_uncommitted, synth_neutral, zonk_solved_term_metas,
@@ -518,11 +518,8 @@ impl<'a> Reader<'a> {
             Some((_, Operation::Less | Operation::AtMost, ..)) => {
                 self.admit(context, comparison.clone(), proof, origin)
             }
-            Some((carrier, Operation::Equal, left, right))
-                if in_scope(context, &[order(context, carrier).eq_of_eql]) =>
-            {
-                let eq_of_eql = order(context, carrier).eq_of_eql;
-                let equation = Term::apply(global(eq_of_eql), [left.clone(), right.clone(), proof]);
+            Some((carrier, Operation::Equal, left, right)) if crossing_in_scope(context) => {
+                let equation = crossed(context, &carrier_type(carrier), &left, &right, proof);
                 self.equation(context, carrier, &left, &right, equation, origin)
             }
             Some((carrier, Operation::Unequal, left, right)) => {
@@ -707,7 +704,6 @@ impl<'a> Reader<'a> {
             self.read.unread.push((origin, written.clone()));
             return Ok(());
         };
-        let order = order(context, carrier);
         let qed = qed(context);
         match (relation, case) {
             (Operation::Less | Operation::AtMost, true) => {
@@ -722,9 +718,8 @@ impl<'a> Reader<'a> {
                 let dual = comparison_of(carrier, Operation::Less, &right, &left);
                 self.admit(context, dual, qed, origin)
             }
-            (Operation::Equal, true) if in_scope(context, &[order.eq_of_eql]) => {
-                let equation =
-                    Term::apply(global(order.eq_of_eql), [left.clone(), right.clone(), qed]);
+            (Operation::Equal, true) if crossing_in_scope(context) => {
+                let equation = crossed(context, &carrier_type(carrier), &left, &right, qed);
                 self.equation(context, carrier, &left, &right, equation, origin)
             }
             // An equality's false arm, and an inequality's true one, is a disequality, and an inequality's false arm is the equation: each kept for the last reading.
@@ -752,13 +747,18 @@ impl<'a> Reader<'a> {
         if kept.apart {
             return self.distinct(context, kept);
         }
-        let eq_of_eql = order(context, kept.carrier).eq_of_eql;
-        if !in_scope(context, &[eq_of_eql]) {
+        if !crossing_in_scope(context) {
             self.read.unread.push((kept.origin, kept.stated));
             return Ok(());
         }
         let (left, right) = (kept.left, kept.right);
-        let equation = Term::apply(global(eq_of_eql), [left.clone(), right.clone(), kept.proof]);
+        let equation = crossed(
+            context,
+            &carrier_type(kept.carrier),
+            &left,
+            &right,
+            kept.proof,
+        );
         self.equation(context, kept.carrier, &left, &right, equation, kept.origin)
     }
 
@@ -2020,7 +2020,7 @@ pub fn disequalities(
 /// The goal negated, as the facts a refutation sums: each proved where a split on the goal's own decision came back `false`, which is where `qed` shows what the negation states.
 ///
 /// - `left < right` and `left <= right`: the other order, by `qed`, since conversion holds a comparison's negation one with its dual.
-/// - `left != right`, where conversion holds it to be no order: the equation, as its two bounds, by `eq_of_eql` — what `omega` introduces for a `≠` goal.
+/// - `left != right`, where conversion holds it to be no order: the equation, as its two bounds, by `Eql`'s law ([`crossed`]) — what `omega` introduces for a `≠` goal.
 /// - `left == right`, where conversion holds it to be no order: the disequality, read as every disequality is ([`Reader::distinct`]): the strict bound reduction orders it to, or no fact at all and the split on `left <= right`, put before every other in `facts`.
 ///
 /// Nothing where the lemma a negation is proved by is not in scope.
@@ -2031,7 +2031,6 @@ pub fn negated(
     target: &Target,
     facts: &mut Facts,
 ) -> Result<Vec<Fact>, Error> {
-    let order = order(context, target.carrier);
     let (carrier, left, right) = (target.carrier, &target.left, &target.right);
     let qed = qed(context);
     let mut reader = Reader::new(views, classes);
@@ -2048,8 +2047,8 @@ pub fn negated(
             let dual = comparison_of(carrier, Operation::Less, right, left);
             reader.admit(context, dual, qed, Origin::Negated)?;
         }
-        Operation::Unequal if in_scope(context, &[order.eq_of_eql]) => {
-            let equation = Term::apply(global(order.eq_of_eql), [left.clone(), right.clone(), qed]);
+        Operation::Unequal if crossing_in_scope(context) => {
+            let equation = crossed(context, &carrier_type(carrier), left, right, qed);
             reader.equation(context, carrier, left, right, equation, Origin::Negated)?;
         }
         Operation::Equal => {

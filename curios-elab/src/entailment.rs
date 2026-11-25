@@ -276,8 +276,7 @@ fn equated(context: &mut Context, bound: &Term, reduced: &Term) -> Result<Option
     ) else {
         return Ok(None);
     };
-    let law = context.syntax().eql.eq;
-    if !in_scope(context, &[law.concept]) {
+    if !crossing_in_scope(context) {
         return Ok(None);
     }
     if let Some(proof) = context.with_entailing(|context| stated_by_a_fact(context, bound))? {
@@ -298,16 +297,7 @@ fn equated(context: &mut Context, bound: &Term, reduced: &Term) -> Result<Option
             Entailed::Refused(refusal) => return Ok(Some(Entailed::Refused(refusal))),
         },
     };
-    // The law's call names the type, so its witness slot is resolved where it is born: a candidate is checked where nothing waits, and a slot left to the first argument would.
-    let crossed = Term::apply_marked(
-        Term::registered_method(law),
-        [
-            (Plicity::Implicit, carrier.clone()),
-            (Plicity::Explicit, left.clone()),
-            (Plicity::Explicit, right.clone()),
-            (Plicity::Explicit, proof),
-        ],
-    );
+    let crossed = crossed(context, carrier, left, right, proof);
     Ok(Some(match check(context, &crossed, bound)? {
         Some(proof) => {
             context.credit(&proof);
@@ -315,6 +305,24 @@ fn equated(context: &mut Context, bound: &Term, reduced: &Term) -> Result<Option
         }
         None => Entailed::Refused(Refusal::rejected()),
     }))
+}
+
+/// The equation `left = right` at `carrier`, from `proof` that `left == right` holds: `Eql`'s law applied as a program applies it, the one crossing the procedure writes, for an equation it proves ([`equated`]) and for a decided equality a fact states ([`Reader`]). The call names the type, so the law's witness slot is resolved where it is born: a candidate is checked where nothing waits, and a slot left to the first argument would. Where it may be written is [`crossing_in_scope`]'s.
+fn crossed(context: &Context, carrier: &Term, left: &Term, right: &Term, proof: Term) -> Term {
+    Term::apply_marked(
+        Term::registered_method(context.syntax().eql.eq),
+        [
+            (Plicity::Implicit, carrier.clone()),
+            (Plicity::Explicit, left.clone()),
+            (Plicity::Explicit, right.clone()),
+            (Plicity::Explicit, proof),
+        ],
+    )
+}
+
+/// Whether [`crossed`] may be written: `Eql` is a declaration the proof may name.
+fn crossing_in_scope(context: &Context) -> bool {
+    in_scope(context, &[context.syntax().eql.eq.concept])
 }
 
 /// `written`, a proposition as a program writes it, elaborated as one under the refinements live now: `None` where it does not elaborate, an `==` at a type with no witness among them. What it solved is kept where it elaborates and undone where it does not, as [`check`] keeps a candidate's.
