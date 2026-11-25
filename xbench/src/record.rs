@@ -51,14 +51,35 @@ pub struct Figure {
 pub enum Unit {
     /// Wall clock in whole microseconds: compared between two records of one machine, in one state, under one pin.
     Microseconds,
+    /// User-space instructions a process and the threads and processes it starts retire: compared between two records of one machine, in any state, under one pin, since the machine's arrangement moves no count and its processor's features, and the pins' builds, choose the code that retires them.
+    Instructions,
+}
+
+impl Unit {
+    /// What a reading is divided by to be stated in [`Unit::stated`].
+    fn scale(self) -> f64 {
+        match self {
+            Self::Microseconds => 1e3,
+            Self::Instructions => 1e6,
+        }
+    }
+
+    /// The unit a figure counted in this one is stated in: milliseconds for a time, millions for instructions.
+    pub fn stated(self) -> &'static str {
+        match self {
+            Self::Microseconds => "ms",
+            Self::Instructions => "M",
+        }
+    }
 }
 
 impl Figure {
-    /// The groups in milliseconds, the unit a figure counted in microseconds is stated in.
-    pub fn milliseconds(&self) -> Vec<Vec<f64>> {
+    /// The groups in the unit its unit is stated in ([`Unit::stated`]).
+    pub fn stated(&self) -> Vec<Vec<f64>> {
+        let scale = self.unit.scale();
         self.readings
             .iter()
-            .map(|group| group.iter().map(|&took| took as f64 / 1000.0).collect())
+            .map(|group| group.iter().map(|&read| read as f64 / scale).collect())
             .collect()
     }
 }
@@ -74,9 +95,11 @@ impl Record {
         toml::from_str(text).map_err(|error| error.to_string())
     }
 
-    /// The figure named `name`, where this record holds it.
-    pub fn figure(&self, name: &str) -> Option<&Figure> {
-        self.figures.iter().find(|figure| figure.name == name)
+    /// The figure named `name` counted in `unit`, where this record holds it: one name may be counted in several units, a contestant's time and its instructions.
+    pub fn figure(&self, name: &str, unit: Unit) -> Option<&Figure> {
+        self.figures
+            .iter()
+            .find(|figure| figure.name == name && figure.unit == unit)
     }
 }
 

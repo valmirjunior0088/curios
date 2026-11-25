@@ -3322,6 +3322,7 @@ name = "xbench"
 version = "0.16.25"
 dependencies = [
  "clap",
+ "curios-profile",
  "serde",
  "toml",
  "wasmtime",

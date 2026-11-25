@@ -11,6 +11,7 @@ mod tests;
 
 use {
     crate::{CONTEST, Figure, Pin, Record, Unit, capture, edition, held, table},
+    curios_profile::Instructions,
     std::{
         fs::{self, OpenOptions},
         io::{self, Write},
@@ -205,12 +206,23 @@ fn invocation(contestant: &str, workload: &Workload, size: u64, root: &Path) -> 
     }
 }
 
-/// Run one contestant once: what it printed, and how long the whole process took, in whole microseconds.
+/// What one execution of a contestant gave: what it printed, how long the whole process took, and the instructions it retired.
+#[derive(Debug)]
+struct Execution {
+    answer: String,
+    /// Whole microseconds of wall clock, from before the process started to after it was waited for.
+    microseconds: u64,
+    /// The user-space instructions the process and everything it started retired, with the few the bench's own thread retires starting and waiting for it; `None` where the kernel opens no count, which is absent evidence, never nought.
+    instructions: Option<u64>,
+}
+
+/// Run one contestant once: what it printed, how long the whole process took, and what it retired.
 ///
-/// Every contestant is started by its path, so none needs a variable of the environment, and the environment is cleared whole: a contestant starts under the same empty one in every execution of every sitting.
-fn once(invocation: &Invocation) -> Result<(String, u64), String> {
+/// Every contestant is started by its path, so none needs a variable of the environment, and the environment is cleared whole: a contestant starts under the same empty one in every execution of every sitting. The instruction count is opened before the process starts, so the process inherits it, and read once it has been waited for, when the kernel has added what the process retired.
+fn once(invocation: &Invocation) -> Result<Execution, String> {
     let named = invocation.program.display().to_string();
 
+    let counted = Instructions::open();
     let started = Instant::now();
     let child = Command::new(&invocation.program)
         .args(&invocation.arguments)
@@ -224,13 +236,15 @@ fn once(invocation: &Invocation) -> Result<(String, u64), String> {
     let produced = child
         .wait_with_output()
         .map_err(|error| format!("{named} could not be waited for: {error}"))?;
-    let took = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
+    let microseconds = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
+    let instructions = counted.as_ref().map(Instructions::read);
 
     match produced.status.success() {
-        true => Ok((
-            String::from_utf8_lossy(&produced.stdout).trim().to_string(),
-            took,
-        )),
+        true => Ok(Execution {
+            answer: String::from_utf8_lossy(&produced.stdout).trim().to_string(),
+            microseconds,
+            instructions,
+        }),
         false => Err(format!("{named} failed: {}", produced.status)),
     }
 }
@@ -336,8 +350,8 @@ fn agree(workload: &Workload, size: u64, root: &Path) -> Result<(), String> {
 
     let mut answers = Vec::new();
     for contestant in CONTESTANTS {
-        let (answer, _) = once(&invocation(contestant.name, workload, size, root))?;
-        answers.push((contestant.name, answer));
+        let execution = once(&invocation(contestant.name, workload, size, root))?;
+        answers.push((contestant.name, execution.answer));
     }
 
     agreement(&answers, expected).map_err(|answers| {
@@ -351,18 +365,18 @@ fn agree(workload: &Workload, size: u64, root: &Path) -> Result<(), String> {
     })
 }
 
-/// Time every contestant on `workload`, a group at a time and the contestants interleaved inside each, and hand back each one's samples by group.
-fn time(workload: &Workload, size: u64, root: &Path) -> Result<Vec<Vec<Vec<u64>>>, String> {
+/// Time every contestant on `workload`, a group at a time and the contestants interleaved inside each, and hand back each one's executions by group.
+fn time(workload: &Workload, size: u64, root: &Path) -> Result<Vec<Vec<Vec<Execution>>>, String> {
     eprintln!(">> timing {} ({}={size})", workload.name, workload.letter);
 
     let invocations = CONTESTANTS
         .iter()
         .map(|contestant| invocation(contestant.name, workload, size, root))
         .collect::<Vec<_>>();
-    let mut samples = vec![Vec::new(); CONTESTANTS.len()];
+    let mut samples = CONTESTANTS.iter().map(|_| Vec::new()).collect::<Vec<_>>();
 
     for _ in 0..GROUPS {
-        let mut batch = vec![Vec::new(); CONTESTANTS.len()];
+        let mut batch = CONTESTANTS.iter().map(|_| Vec::new()).collect::<Vec<_>>();
 
         for _ in 0..WARMUP {
             for invocation in &invocations {
@@ -372,8 +386,7 @@ fn time(workload: &Workload, size: u64, root: &Path) -> Result<Vec<Vec<Vec<u64>>
         for _ in 0..EXECUTIONS {
             // One round over the contestants, so the three sit adjacent in time and a disturbance reaches them alike.
             for (taken, invocation) in batch.iter_mut().zip(&invocations) {
-                let (_, took) = once(invocation)?;
-                taken.push(took);
+                taken.push(once(invocation)?);
             }
         }
 
@@ -383,6 +396,45 @@ fn time(workload: &Workload, size: u64, root: &Path) -> Result<Vec<Vec<Vec<u64>>
     }
 
     Ok(samples)
+}
+
+/// A contestant's figures on one workload: its time, and its instructions where the kernel counted every execution of it.
+struct Contested {
+    time: Figure,
+    instructions: Option<Figure>,
+}
+
+/// `contestant`'s figures on `workload`, read off its executions by group.
+fn contested(workload: &Workload, contestant: &str, groups: &[Vec<Execution>]) -> Contested {
+    let figure = |unit, readings| Figure {
+        name: named(workload.name, contestant),
+        unit,
+        size: Some(workload.size),
+        readings,
+    };
+    let times = groups
+        .iter()
+        .map(|group| {
+            group
+                .iter()
+                .map(|execution| execution.microseconds)
+                .collect()
+        })
+        .collect();
+    let counts = groups
+        .iter()
+        .map(|group| {
+            group
+                .iter()
+                .map(|execution| execution.instructions)
+                .collect::<Option<Vec<_>>>()
+        })
+        .collect::<Option<Vec<_>>>();
+
+    Contested {
+        time: figure(Unit::Microseconds, times),
+        instructions: counts.map(|counts| figure(Unit::Instructions, counts)),
+    }
 }
 
 /// Build the contestants, hold them to the answers their workloads are known to have, time them, and file the sitting as the contest's next record.
@@ -422,25 +474,36 @@ pub fn measure(filed: usize) -> Result<(), String> {
         let measured = CONTESTANTS
             .iter()
             .zip(time(workload, workload.size, &root)?)
-            .map(|(contestant, readings)| Figure {
-                name: named(workload.name, contestant.name),
-                unit: Unit::Microseconds,
-                size: Some(workload.size),
-                readings,
-            })
+            .map(|(contestant, groups)| contested(workload, contestant.name, &groups))
             .collect::<Vec<_>>();
 
-        let rows = CONTESTANTS
+        let times = CONTESTANTS
             .iter()
             .zip(&measured)
-            .map(|(contestant, figure)| (contestant.title, figure.milliseconds()))
+            .map(|(contestant, figures)| (contestant.title, figures.time.stated()))
             .collect::<Vec<_>>();
-        eprint!(
-            "\n{}",
-            table(workload.title, workload.letter, workload.size, &rows)
-        );
+        let counts = CONTESTANTS
+            .iter()
+            .zip(&measured)
+            .filter_map(|(contestant, figures)| {
+                Some((contestant.title, figures.instructions.as_ref()?.stated()))
+            })
+            .collect::<Vec<_>>();
+        for (unit, rows) in [(Unit::Microseconds, times), (Unit::Instructions, counts)] {
+            if !rows.is_empty() {
+                eprint!(
+                    "\n{}",
+                    table(workload.title, workload.letter, workload.size, unit, &rows)
+                );
+            }
+        }
 
-        figures.extend(measured);
+        figures.extend(
+            measured
+                .into_iter()
+                .flat_map(|figures| [Some(figures.time), figures.instructions])
+                .flatten(),
+        );
     }
 
     let record = Record {

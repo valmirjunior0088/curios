@@ -11,8 +11,10 @@ default-run = "xbench"
 [lints]
 workspace = true
 
-# The bench drives other languages' compilers and a timer, and names nothing of the workspace's.
+# The bench drives other languages' compilers, a timer and an instruction count, and names of the workspace's only the instruments it reads.
 [dependencies]
+# The instructions each contestant retires, `Instructions`, opened before it starts and inherited into it.
+curios-profile = { workspace = true }
 # The command line, in `xtask`'s own convention.
 clap = { workspace = true }
 # A record is a TOML file beside the code, read where the bench runs and printed where a sitting files one.

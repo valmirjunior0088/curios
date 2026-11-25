@@ -47,11 +47,11 @@ What belongs here is the guarantee: before anything is timed, all three contesta
 
 ## How a figure is read
 
-A contestant is measured in **five groups of five executions**, one untimed round opening each group, with the contestants **interleaved round-robin inside a group** rather than run one at a time.
+A contestant is measured in **five groups of five executions**, one untimed round opening each group, with the contestants **interleaved round-robin inside a group** rather than run one at a time. Each execution is timed and its **instructions counted**: the count is opened before the process starts, so the process and everything it starts inherit it, and read once it has been waited for. Where the kernel opens no count, a sitting records its times alone.
 
 - Within a group is iteration noise. Between the group medians is the **span**.
 - A contestant's figure is the median of its group medians; its span is the least and greatest of them.
-- Across two records, what is compared is **Curios over Rust (Native), group by group**: each group's Curios median over its native Rust median, read as a figure is.
+- Across two records, what is compared of times is **Curios over Rust (Native), group by group**: each group's Curios median over its native Rust median, read as a figure is. What is compared of instructions is Curios's own count, which no disturbance of the machine moves and so needs no control.
 - A difference is **proven only where two spans are disjoint**. Overlapping spans could have produced each other, so the report says `no difference proven`.
 - Every figure is stated to the place of the first significant digit of its half-span, so no number claims a precision its span does not support.
 
@@ -59,15 +59,15 @@ Interleaving is what makes the ratio survive a disturbance: a compile elsewhere 
 
 ## When a comparison is refused
 
-| Differs between two records | What the report does |
-| --- | --- |
-| `machine` | refuses, naming it |
-| `state` — governor, boost, SMT | refuses, naming it |
-| `pinned` — the tool versions | refuses, naming it |
-| a workload's size | compares that workload no further, naming both sizes on its row |
-| `software` — kernel, microcode | compares |
+| Differs between two records | Times | Instructions |
+| --- | --- | --- |
+| `machine` | refused, naming it | refused, naming it |
+| `state` — governor, boost, SMT | refused, naming it | compared |
+| `pinned` — the tool versions | refused, naming it | refused, naming it |
+| a workload's size | that workload compared no further, naming both sizes on its row | the same |
+| `software` — kernel, microcode | compared | compared |
 
-Software is not gated because a patch that moves a figure moves Rust with Curios, and the ratio a comparison reads cancels it; gating on it would strand the record at every update for nothing.
+A refusal reaches only the unit it crosses, as [A measured figure is counted where it can be, and gated only where it repeats](../documentation/design/a-measured-figure-is-counted-where-it-can-be-and-gated-only-where-it-repeats.md) carries each: a machine's arrangement moves a time and no count, and another machine runs other code for one build, Cranelift compiling for the host's processor. Software is not gated because a patch that moves a figure moves Rust with Curios, and the ratio a comparison reads cancels it; gating on it would strand the record at every update for nothing.
 
 ## Design
 

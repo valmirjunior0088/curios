@@ -112,3 +112,24 @@ fn the_day_date_answers_is_the_day_a_record_holds() {
     assert!(today("2026-02-30").is_err());
     assert!(today("yesterday").is_err());
 }
+
+/// What an execution retires is its process's, the count opened before it starts inheriting into it: a process that loops ten thousand times reads far more than one that does nothing, where the bench's own thread, starting and waiting for each alike, would read them alike. Where the kernel opens no count, there is nothing to hold.
+#[test]
+fn an_execution_counts_what_its_process_retires() {
+    let shell = |script: &str| {
+        once(&Invocation {
+            program: PathBuf::from("/bin/sh"),
+            arguments: vec!["-c".to_string(), script.to_string()],
+        })
+        .unwrap_or_else(|why| panic!("{why}"))
+        .instructions
+    };
+    let (Some(idle), Some(looped)) = (
+        shell("true"),
+        shell("i=0; while [ $i -lt 10000 ]; do i=$((i + 1)); done"),
+    ) else {
+        return;
+    };
+
+    assert!(looped > idle * 2, "{looped} retired looping, {idle} idle");
+}

@@ -10,7 +10,7 @@
 mod tests;
 
 use {
-    crate::{CONTESTANTS, Pin, Record, WORKLOADS, named},
+    crate::{CONTESTANTS, Pin, Record, Unit, WORKLOADS, named},
     std::fmt::Write,
 };
 
@@ -119,9 +119,19 @@ fn titled(contestant: &str) -> &str {
 
 /// The size `record` timed `workload` at, as its contestants' figures record it, where it timed the workload at all.
 fn sized(record: &Record, workload: &str) -> Option<u64> {
-    CONTESTANTS
+    CONTESTANTS.iter().find_map(|contestant| {
+        record
+            .figure(&named(workload, contestant.name), Unit::Microseconds)?
+            .size
+    })
+}
+
+/// Whether `record` counted any contestant's instructions.
+fn counted(record: &Record) -> bool {
+    record
+        .figures
         .iter()
-        .find_map(|contestant| record.figure(&named(workload, contestant.name))?.size)
+        .any(|figure| figure.unit == Unit::Instructions)
 }
 
 /// A Markdown table with every cell left-aligned and its columns padded for a terminal. Each row has one cell per header.
@@ -162,8 +172,14 @@ fn tabulated(headers: &[&str], rows: &[Vec<String>]) -> String {
     out
 }
 
-/// One workload's table, over however its samples are held: the contestants fastest first, each with its span and how many times Rust it is.
-pub fn table(title: &str, letter: &str, size: u64, rows: &[(&str, Vec<Vec<f64>>)]) -> String {
+/// One workload's table in `unit`, over however its samples are held: the contestants least first, each with its span and how many times Rust it is.
+pub fn table(
+    title: &str,
+    letter: &str,
+    size: u64,
+    unit: Unit,
+    rows: &[(&str, Vec<Vec<f64>>)],
+) -> String {
     let mut figures = rows
         .iter()
         .filter_map(|(contestant, groups)| Some((*contestant, figure(groups)?)))
@@ -190,7 +206,11 @@ pub fn table(title: &str, letter: &str, size: u64, rows: &[(&str, Vec<Vec<f64>>)
 
         rows.push(vec![
             format!("{mark}{contestant}{mark}"),
-            format!("{mark}{} ms{mark}", stated(figure.middle, half)),
+            format!(
+                "{mark}{} {}{mark}",
+                stated(figure.middle, half),
+                unit.stated()
+            ),
             format!(
                 "{}–{}",
                 stated(figure.least, half),
@@ -200,8 +220,13 @@ pub fn table(title: &str, letter: &str, size: u64, rows: &[(&str, Vec<Vec<f64>>)
         ]);
     }
 
+    let counted = match unit {
+        Unit::Microseconds => "",
+        Unit::Instructions => ", instructions",
+    };
+
     format!(
-        "### `{title}` ({letter} = {size})\n\n{}",
+        "### `{title}` ({letter} = {size}){counted}\n\n{}",
         tabulated(&["Contestant", "Median", "Span", "× Rust (Native)"], &rows)
     )
 }
@@ -225,7 +250,7 @@ fn header(number: usize, record: &Record) -> String {
     )
 }
 
-/// The record numbered `number`, in full: what it says of itself, then a table per workload it measured.
+/// The record numbered `number`, in full: what it says of itself, then a table per workload it measured and unit it counted it in.
 pub fn one(number: usize, record: &Record) -> String {
     let mut out = header(number, record);
 
@@ -233,31 +258,33 @@ pub fn one(number: usize, record: &Record) -> String {
         let Some(size) = sized(record, workload.name) else {
             continue;
         };
-        let rows = CONTESTANTS
-            .iter()
-            .filter_map(|contestant| {
-                let figure = record.figure(&named(workload.name, contestant.name))?;
-                Some((contestant.title, figure.milliseconds()))
-            })
-            .collect::<Vec<_>>();
-        if rows.is_empty() {
-            continue;
-        }
+        for unit in [Unit::Microseconds, Unit::Instructions] {
+            let rows = CONTESTANTS
+                .iter()
+                .filter_map(|contestant| {
+                    let figure = record.figure(&named(workload.name, contestant.name), unit)?;
+                    Some((contestant.title, figure.stated()))
+                })
+                .collect::<Vec<_>>();
+            if rows.is_empty() {
+                continue;
+            }
 
-        let _ = write!(
-            out,
-            "\n{}",
-            table(workload.title, workload.letter, size, &rows)
-        );
+            let _ = write!(
+                out,
+                "\n{}",
+                table(workload.title, workload.letter, size, unit, &rows)
+            );
+        }
     }
 
     out
 }
 
-/// Why `before` and `after` cannot be compared, where they cannot.
+/// Why `before` and `after` cannot be compared in `unit`, where they cannot: a time across a machine, a state or a pin that differs, and instructions across a machine or a pin, since a machine's arrangement moves no count.
 ///
 /// The software line is not among these. A kernel or microcode update that moves a figure moves Rust with Curios, and the ratio a comparison reads cancels it, so gating on it would strand the record at every patch for nothing.
-fn incomparable(before: &Record, after: &Record) -> Option<String> {
+fn incomparable(before: &Record, after: &Record, unit: Unit) -> Option<String> {
     let differs = |what: &str, before: &str, after: &str| {
         (before != after).then(|| format!("  {what}  {before:?}\n       -> {after:?}"))
     };
@@ -271,7 +298,10 @@ fn incomparable(before: &Record, after: &Record) -> Option<String> {
     };
 
     differs("machine", &before.platform.machine, &after.platform.machine)
-        .or_else(|| differs("state", &before.platform.state, &after.platform.state))
+        .or_else(|| match unit {
+            Unit::Microseconds => differs("state", &before.platform.state, &after.platform.state),
+            Unit::Instructions => None,
+        })
         .or_else(|| {
             (before.pinned != after.pinned).then(|| {
                 format!(
@@ -283,23 +313,38 @@ fn incomparable(before: &Record, after: &Record) -> Option<String> {
         })
 }
 
-/// What changed between two records, where anything can be said of it at all.
-pub fn compare(number: usize, before: &Record, after: &Record) -> String {
-    let heading = format!("## Record {:02} → {number:02}\n\n", number - 1);
+/// What a workload's figure did between two records: not compared where its size changed, and otherwise moved or not as its two spans say.
+fn verdict(workload: &str, before: &Record, after: &Record, was: &Spanned, is: &Spanned) -> String {
+    // The size is held by each figure rather than over the record: a workload resized, or one entering the record later, says so on its own row and leaves every other row comparable.
+    match (sized(before, workload), sized(after, workload)) {
+        (Some(then), Some(now)) if then != now => format!("sized {then}, then {now}; not compared"),
+        _ => match moved(was, is) {
+            false => "no difference proven".to_string(),
+            true => format!(
+                "moved, {}%",
+                stated(
+                    (is.middle - was.middle) / was.middle * 100.0,
+                    was.half().max(is.half()) / was.middle * 100.0
+                )
+            ),
+        },
+    }
+}
 
-    if let Some(why) = incomparable(before, after) {
-        return format!("{heading}Not comparable.\n\n```\n{why}\n```\n");
+/// The two records' times, read as Curios over Rust (Native) group by group, where they compare at all.
+fn times_compared(before: &Record, after: &Record) -> String {
+    if let Some(why) = incomparable(before, after, Unit::Microseconds) {
+        return format!("Not comparable.\n\n```\n{why}\n```\n");
     }
 
-    let mut out = heading;
     let mut rows = Vec::new();
     for workload in WORKLOADS {
         let read = |record: &Record| {
             let groups = |contestant| {
                 Some(
                     record
-                        .figure(&named(workload.name, contestant))?
-                        .milliseconds(),
+                        .figure(&named(workload.name, contestant), Unit::Microseconds)?
+                        .stated(),
                 )
             };
             relative(&groups(SUBJECT)?, &groups(CONTROL)?)
@@ -309,32 +354,15 @@ pub fn compare(number: usize, before: &Record, after: &Record) -> String {
         };
 
         let half = was.half().max(is.half());
-        // The size is held by each figure rather than over the record: a workload resized, or one entering the record later, says so on its own row and leaves every other row comparable.
-        let said = match (sized(before, workload.name), sized(after, workload.name)) {
-            (Some(then), Some(now)) if then != now => {
-                format!("sized {then}, then {now}; not compared")
-            }
-            _ => match moved(&was, &is) {
-                false => "no difference proven".to_string(),
-                true => format!(
-                    "moved, {}%",
-                    stated(
-                        (is.middle - was.middle) / was.middle * 100.0,
-                        half / was.middle * 100.0
-                    )
-                ),
-            },
-        };
-
         rows.push(vec![
             format!("`{}`", workload.name),
             format!("{}×", stated(was.middle, half)),
             format!("{}×", stated(is.middle, half)),
-            said,
+            verdict(workload.name, before, after, &was, &is),
         ]);
     }
 
-    out.push_str(&tabulated(
+    tabulated(
         &[
             "Workload",
             "Was, × Rust (Native)",
@@ -342,7 +370,51 @@ pub fn compare(number: usize, before: &Record, after: &Record) -> String {
             "",
         ],
         &rows,
-    ));
+    )
+}
+
+/// The two records' counts of Curios's instructions, where they compare at all: a count needs no control to cancel what moved the machine.
+fn counts_compared(before: &Record, after: &Record) -> String {
+    if let Some(why) = incomparable(before, after, Unit::Instructions) {
+        return format!("Not comparable.\n\n```\n{why}\n```\n");
+    }
+
+    let mut rows = Vec::new();
+    for workload in WORKLOADS {
+        let read = |record: &Record| {
+            figure(
+                &record
+                    .figure(&named(workload.name, SUBJECT), Unit::Instructions)?
+                    .stated(),
+            )
+        };
+        let (Some(was), Some(is)) = (read(before), read(after)) else {
+            continue;
+        };
+
+        let half = was.half().max(is.half());
+        rows.push(vec![
+            format!("`{}`", workload.name),
+            format!("{} M", stated(was.middle, half)),
+            format!("{} M", stated(is.middle, half)),
+            verdict(workload.name, before, after, &was, &is),
+        ]);
+    }
+
+    tabulated(&["Workload", "Was, Curios", "Is, Curios", ""], &rows)
+}
+
+/// What changed between two records, where anything can be said of it at all: their times, and their instructions where both counted them.
+pub fn compare(number: usize, before: &Record, after: &Record) -> String {
+    let mut out = format!("## Record {:02} → {number:02}\n\n", number - 1);
+    out.push_str(&times_compared(before, after));
+    if counted(before) && counted(after) {
+        let _ = write!(
+            out,
+            "\n### Instructions\n\n{}",
+            counts_compared(before, after)
+        );
+    }
 
     out
 }
