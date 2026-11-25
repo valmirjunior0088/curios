@@ -114,7 +114,7 @@ fn feed_declared(fingerprint: &mut Fingerprint, declared: Option<&[Qualifier]>) 
     }
 }
 
-/// The address the precompiled payload of `package`'s `executable` is filed under, in the directory of the target it is built for.
+/// The address the precompiled payloads of `package`'s `executable` are filed under: an object's, which holds a file for each target they are built for.
 ///
 /// **The same address-and-record split [`unit_address`] states, one level up.** This names a place — "the payload for this executable" — and carries no file contents, no unit, and no compiler or engine, so an edit changes what the payload is verified against rather than where it is looked for: one payload per executable and target, overwritten in place, bounded exactly as the unit family is. What every unit of the compilation was filed as is in the payload's record, and the compiler that built it and the engine that runs it are in the header ahead of that record.
 ///

@@ -23,11 +23,28 @@ impl Cabinet {
             .collect()
     }
 
-    /// The address of every object kept in the cabinet, whichever compiler filed it.
+    /// The address of every unit's object kept in the cabinet, whichever compiler filed it.
     pub fn addresses(&self) -> BTreeSet<String> {
-        self.object_directories()
+        self.unit_files()
             .iter()
-            .filter_map(|object| Some(object.file_name()?.to_string_lossy().into_owned()))
+            .filter_map(|file| address(file))
+            .collect()
+    }
+
+    /// The payload for `target` of every executable's object kept in the cabinet, each by its file, whichever compiler filed it, in no order.
+    pub fn payload_files(&self, target: Target) -> Vec<PathBuf> {
+        self.object_directories()
+            .into_iter()
+            .map(|object| object.join(target.spelled()))
+            .filter(|payload| payload.is_file())
+            .collect()
+    }
+
+    /// The address of every object kept in the cabinet that holds a payload for `target`.
+    pub fn payload_addresses(&self, target: Target) -> BTreeSet<String> {
+        self.payload_files(target)
+            .iter()
+            .filter_map(|file| address(file))
             .collect()
     }
 
@@ -36,6 +53,12 @@ impl Cabinet {
         self.object_directories()
             .into_iter()
             .map(|object| object.join(UNIT))
+            .filter(|unit| unit.is_file())
             .collect()
     }
+}
+
+/// The address of the object the file at `path` stands in: its directory's name.
+fn address(path: &Path) -> Option<String> {
+    Some(path.parent()?.file_name()?.to_string_lossy().into_owned())
 }

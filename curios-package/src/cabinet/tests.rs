@@ -59,8 +59,8 @@ fn the_families_do_not_share_a_namespace() {
     );
     assert_ne!(
         cabinet.unit("compiler", "key"),
-        cabinet.payload(Runs::Native { engine: "e" }, "key"),
-        "one address, two families, two places"
+        cabinet.payload("compiler", Runs::Native { engine: "e" }, "key"),
+        "one address, a unit's file and a payload's"
     );
 }
 
@@ -75,8 +75,8 @@ fn kept(cabinet: &Cabinet) -> [PathBuf; 9] {
         cabinet.unit("compiler", "key"),
         cabinet.replaced("compiler", "key"),
         cabinet.object("compiler", "key"),
-        cabinet.payload(Runs::Native { engine: "e" }, "key"),
-        cabinet.payload(Runs::Browser, "key"),
+        cabinet.payload("compiler", Runs::Native { engine: "e" }, "key"),
+        cabinet.payload("compiler", Runs::Browser, "key"),
         cabinet.compiler(),
         cabinet.staging("1"),
     ]
@@ -103,23 +103,23 @@ fn a_named_cabinet_holds_whole_what_is_kept() {
     }
 }
 
-/// A browser's payload is a module any browser runs, so it needs no engine in its address, and the two targets file under two directories, neither read for the other.
+/// A browser's payload is a module any browser runs, so it needs no engine in its address, and the two targets file two files in the executable's object, neither read for the other.
 #[test]
 fn each_target_files_its_payloads_apart() {
     let cabinet = Cabinet::of(Path::new("/w/u"), None);
 
     assert_ne!(
-        cabinet.payload(Runs::Native { engine: "e" }, "key"),
-        cabinet.payload(Runs::Browser, "key")
+        cabinet.payload("compiler", Runs::Native { engine: "e" }, "key"),
+        cabinet.payload("compiler", Runs::Browser, "key")
     );
     assert!(
         cabinet
-            .payload(Runs::Browser, "key")
-            .ends_with("payloads/browser/key")
+            .payload("compiler", Runs::Browser, "key")
+            .ends_with("objects/compiler/key/browser")
     );
     assert!(
         cabinet
-            .payload(Runs::Native { engine: "e" }, "key")
-            .ends_with("payloads/native/key")
+            .payload("compiler", Runs::Native { engine: "e" }, "key")
+            .ends_with("objects/compiler/key/native")
     );
 }

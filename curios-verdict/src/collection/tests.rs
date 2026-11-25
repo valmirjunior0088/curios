@@ -172,8 +172,9 @@ fn a_payload_stays_where_an_executable_or_its_tests_are_filed() {
         ],
     );
     let cabinet = Cabinet::of(&root, None);
+    let running = super::compiler(&cabinet).expect("a compiler that names itself");
     let filed = |name: &str, target: Target| {
-        let path = cabinet.payloads(target).join(payload_address("app", name));
+        let path = cabinet.payload_for(&running, target, &payload_address("app", name));
         put(&path, name);
 
         path
@@ -183,7 +184,9 @@ fn a_payload_stays_where_an_executable_or_its_tests_are_filed() {
         .flat_map(|name| Target::ALL.map(|target| filed(name, target)))
         .collect::<Vec<_>>();
     let gone = filed("gone", Target::Native);
-    let elsewhere = cabinet.families().payloads.join("wasi/payload");
+    let elsewhere = cabinet
+        .object(&running, &payload_address("app", "app"))
+        .join("wasi");
     put(&elsewhere, "for a target no compiler builds for");
 
     collect_project(&root, SystemTime::now());

@@ -12,10 +12,9 @@
 //!   cabinet/
 //!     sources/        c1/<digest>/      materialized source trees, keyed by their manifest hash
 //!     foreign/        f1/<digest>       fetched foreign modules, keyed by the hash they were accepted against
-//!     objects/        <address>/        judged units, an object per unit: its `unit` file and the one it
-//!                                       replaced, and the packs of the blobs they name
-//!     payloads/       native/<address>  precompiled payloads, one file per executable and target
-//!                     browser/<address>
+//!     objects/        <compiler>/       what one compiler filed, an object an address: a judged unit's
+//!                       <address>/      `unit` file and the one it replaced, with the packs of the blobs
+//!                                       they name; or an executable's precompiled payloads, a file a target
 //!     compiler                          this machine's memo of the digest of the compiler running now
 //! ```
 //!
@@ -25,7 +24,7 @@
 //!
 //! That tree is what a project gets when nothing points elsewhere. A cabinet named for every project a run sees (`CURIOS_CABINET`, which the command line reads) stands in for `cabinet/` whole — never for `native/`, `browser/` or `documentation/`, which belong to the package that declared them — so two projects pinning one revision materialize and compile it once, and a project shares, moves or clears what it keeps for reuse as one directory.
 //!
-//! A product's family is named for the target it is built for, as the manifest's `[foreign.<handle>.<target>]` tables name it, and every family of the cabinet is the plural of what it holds: sources, foreign modules, objects and payloads. A rename orphans entries under an old name rather than misreading them, since an address holds its family's schema tag and nothing looks in the old directory, so an existing tree rebuilds once; and a filing in the project's own cabinet takes away what no family of the running compiler holds, the orphans with it (`curios-verdict`'s `collect_project`).
+//! A product's family is named for the target it is built for, as the manifest's `[foreign.<handle>.<target>]` tables name it, and every family of the cabinet is the plural of what it holds: sources, foreign modules and objects. A rename orphans entries under an old name rather than misreading them, since an address holds its family's schema tag and nothing looks in the old directory, so an existing tree rebuilds once; and a filing in the project's own cabinet takes away what no family of the running compiler holds, the orphans with it (`curios-verdict`'s `collect_project`).
 
 #[cfg(test)]
 mod tests;

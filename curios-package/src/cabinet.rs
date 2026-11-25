@@ -1,4 +1,4 @@
-//! The cabinet: what `.curios/` keeps for reuse — materialized sources, fetched foreign modules, judged units, each an object holding the blobs it names, precompiled payloads and the compiler's memo — and where each family stands in it. Its families and their place in `.curios/` are [`crate::PRODUCTS`]'s map; the addresses a unit and a payload are filed under are `curios-verdict`'s, beside the record each is verified against.
+//! The cabinet: what `.curios/` keeps for reuse — materialized sources, fetched foreign modules, objects, a judged unit's with the blobs it names and an executable's with its precompiled payloads, and the compiler's memo — and where each family stands in it. Its families and their place in `.curios/` are [`crate::PRODUCTS`]'s map; the addresses a unit and a payload are filed under are `curios-verdict`'s, beside the record each is verified against.
 
 #[cfg(test)]
 mod tests;
@@ -20,7 +20,7 @@ const SOURCES: &str = "sources";
 /// The family of fetched foreign modules, a directory for each hash scheme.
 const FOREIGN: &str = "foreign";
 
-/// The family of judged units as the cabinet keeps them: a directory for the compiler that filed them, an object a directory in it.
+/// The family of what a compiler filed, as the cabinet keeps it: a directory for the compiler, and in it an object a directory, a judged unit's or an executable's payloads'.
 const OBJECTS: &str = "objects";
 
 /// The file of an object holding its record and its index.
@@ -29,15 +29,12 @@ const UNIT: &str = "unit";
 /// The file of an object holding the record its `unit` replaced, and that record's index.
 const REPLACED: &str = "replaced";
 
-/// The family of precompiled payloads, a directory for each target.
-const PAYLOADS: &str = "payloads";
-
 /// The file of this machine's memo of its compiler's digest.
 const COMPILER: &str = "compiler";
 
-/// What a project keeps for reuse: five families in a directory it shares with every project that names the same one.
+/// What a project keeps for reuse: three families and its compiler's memo, in a directory it shares with every project that names the same one.
 ///
-/// **The cabinet is not arbitrary, and it follows from the keys.** A materialized tree is named by its `c1:` hash, a fetched foreign module by its `f1:` hash, a judged unit's object by an address over its mounts, what it declared and its kind, the blobs it names by that address and their own digests, and a precompiled payload by an address over the executable's identity — none of them says anything about *which* project asked, so each names the same thing wherever it is computed and all five are shareable. A unit's address says nothing about *which source*, either, which is why opening its object verifies the files it was compiled from and refuses any that the asking compilation could not itself have read; a payload is opened the same way. A built executable and a package's documentation are named by the package that declared them and belong to the project that built them, so they are [`Products`](crate::Products) and stay local. Content-derived keys are what make a shared cabinet possible at all; a path-keyed one could only ever have been local.
+/// **The cabinet is not arbitrary, and it follows from the keys.** A materialized tree is named by its `c1:` hash, a fetched foreign module by its `f1:` hash, a judged unit's object by an address over its mounts, what it declared and its kind, the blobs it names by that address and their own digests, and a precompiled payload by an address over the executable's identity — none of them says anything about *which* project asked, so each names the same thing wherever it is computed and all of them are shareable. A unit's address says nothing about *which source*, either, which is why opening its object verifies the files it was compiled from and refuses any that the asking compilation could not itself have read; a payload is opened the same way. A built executable and a package's documentation are named by the package that declared them and belong to the project that built them, so they are [`Products`](crate::Products) and stay local. Content-derived keys are what make a shared cabinet possible at all; a path-keyed one could only ever have been local.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Cabinet {
     /// The directory the families stand in.
@@ -114,16 +111,16 @@ impl Cabinet {
         self.object(compiler, address).join(REPLACED)
     }
 
-    /// Where an executable's precompiled payload is filed, at the `address` its own identity decides: one file, laid out as a unit's is, with what it was compiled *from* verified when the payload is opened.
+    /// Where `compiler` files an executable's precompiled payload, at the `address` its own identity decides: an [`object`](Self::object) as a unit's is, holding one file for each target, named for it and laid out as a unit's file is, with what it was compiled *from* verified when the payload is opened.
     ///
     /// In the cabinet rather than the products, for the reason the type states: the address says nothing about which project asked. A build stays local because its identity *is* project-relative; the payload inside it is not.
-    pub fn payload(&self, runs: Runs<'_>, address: &str) -> PathBuf {
-        self.payloads(runs.target()).join(address)
+    pub fn payload(&self, compiler: &str, runs: Runs<'_>, address: &str) -> PathBuf {
+        self.payload_for(compiler, runs.target(), address)
     }
 
-    /// The directory `target`'s payloads are filed in.
-    pub fn payloads(&self, target: Target) -> PathBuf {
-        self.directory.join(PAYLOADS).join(target.spelled())
+    /// [`payload`](Self::payload) by the target alone: where the payload for `target` stands in its object, whatever engine runs it.
+    pub fn payload_for(&self, compiler: &str, target: Target, address: &str) -> PathBuf {
+        self.object(compiler, address).join(target.spelled())
     }
 
     /// Where this machine's memo of its compiler's digest lives — a fact about the machine, so it belongs beside the things every project shares.
@@ -137,7 +134,6 @@ impl Cabinet {
             sources: self.directory.join(SOURCES),
             foreign: self.directory.join(FOREIGN),
             objects: self.directory.join(OBJECTS),
-            payloads: self.directory.join(PAYLOADS),
             compiler: self.compiler(),
         }
     }
@@ -149,28 +145,20 @@ pub struct Families {
     pub sources: PathBuf,
     /// Fetched foreign modules, a directory for each hash scheme ([`Cabinet::foreign`]).
     pub foreign: PathBuf,
-    /// Judged units, a directory for the compiler that filed them ([`Cabinet::objects_of`]).
+    /// Judged units and precompiled payloads, a directory for the compiler that filed them ([`Cabinet::objects_of`]).
     pub objects: PathBuf,
-    /// Precompiled payloads, a directory for each target ([`Cabinet::payloads`]).
-    pub payloads: PathBuf,
     /// This machine's memo of its compiler's digest ([`Cabinet::compiler`]).
     pub compiler: PathBuf,
 }
 
 impl Families {
     /// Each of them.
-    pub fn all(self) -> [PathBuf; 5] {
-        [
-            self.sources,
-            self.foreign,
-            self.objects,
-            self.payloads,
-            self.compiler,
-        ]
+    pub fn all(self) -> [PathBuf; 4] {
+        [self.sources, self.foreign, self.objects, self.compiler]
     }
 }
 
-/// What runs a precompiled payload, which is half its address: machine code one engine runs, named by that engine's fingerprint, or a module any browser runs, which needs no fingerprint. Each target's payloads are a directory of their own, so neither half of the family is read for the other.
+/// What runs a precompiled payload, which is half its address: machine code one engine runs, named by that engine's fingerprint, or a module any browser runs, which needs no fingerprint. Each target's payload is a file of its own in the executable's object, so neither is read for the other.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Runs<'a> {
     Native { engine: &'a str },

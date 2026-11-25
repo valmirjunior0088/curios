@@ -792,8 +792,7 @@ Everything generated lands under one `.curios/`, beside the governing manifest â
 | `documentation/<package>/` | what `document` emits |
 | `cabinet/sources/<scheme>/<digest>` | materialized dependency sources, keyed by the hash they were accepted against |
 | `cabinet/foreign/<scheme>/<digest>` | fetched foreign modules, keyed the same way |
-| `cabinet/objects/<compiler>/<address>/` | judged units, under the compiler that filed them, one compiler's at a time: an object per unit, a library or an executable's own declarations, holding its `unit` file and the one it replaced, and the packs of the blobs they name, each named by what it holds |
-| `cabinet/payloads/<target>/<address>` | precompiled payloads, one file per executable and target, each target's in a directory of its own |
+| `cabinet/objects/<compiler>/<address>/` | what a compiler filed, under its name, one compiler's at a time, an object an address: a judged unit's, a library's or an executable's own declarations, holding its `unit` file and the one it replaced, and the packs of the blobs they name, each named by what it holds; or an executable's precompiled payloads, one file per target, named for it |
 | `cabinet/compiler` | this machine's memo of the digest of the compiler running now, against a stamp of its binary |
 
 One transient entry passes through the cabinet beside its families: [`pin`](#pin) stages a delivery at `cabinet/pinning.<pid>` while the digest that will name it is still being computed, then renames it into `sources/` or `foreign/`. It is removed however the command ends, so seeing one means a `pin` was interrupted, and nothing ever reads it; a command that files takes one away once it is a day old.

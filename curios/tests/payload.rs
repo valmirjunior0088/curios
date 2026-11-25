@@ -9,7 +9,6 @@ use {
     curios_common::{fill, test_support::*},
     curios_package::{Cabinet, Target},
     std::{
-        collections::BTreeSet,
         fs,
         path::Path,
         process::{Command, Output},
@@ -67,7 +66,7 @@ fn reused(output: &Output) -> bool {
 
 /// The native payloads the project at `root` holds.
 fn payloads(root: &Path) -> usize {
-    fs::read_dir(Cabinet::of(root, None).payloads(Target::Native)).map_or(0, Iterator::count)
+    Cabinet::of(root, None).payload_files(Target::Native).len()
 }
 
 /// The point of the thing, end to end: what the program does must not depend on whether it was compiled just now.
@@ -467,7 +466,10 @@ fn a_named_cabinet_takes_what_is_kept_and_leaves_what_is_emitted() {
         cabinet.objects().is_dir(),
         "the units are filed in the cabinet named"
     );
-    assert!(cabinet.payloads(Target::Native).is_dir(), "and the payload");
+    assert!(
+        !cabinet.payload_files(Target::Native).is_empty(),
+        "and the payload"
+    );
     assert!(cabinet.compiler().is_file(), "and the compiler's memo");
 }
 
@@ -506,18 +508,6 @@ fn tested(name: &str, executables: &[&str]) -> Temporary {
     root
 }
 
-/// The entries of `directory`, by name: none where there is no such directory.
-fn listed(directory: &Path) -> BTreeSet<String> {
-    fs::read_dir(directory).map_or_else(
-        |_| BTreeSet::new(),
-        |entries| {
-            entries
-                .map(|entry| entry.unwrap().file_name().into_string().unwrap())
-                .collect()
-        },
-    )
-}
-
 /// A filing command keeps what its project reaches and takes the rest: after a test run and a run of each executable, a run takes nothing they filed but what no family of the cabinet holds, and once the manifest drops an executable the next run takes its entry and its payloads.
 #[test]
 fn a_filing_command_keeps_what_its_project_reaches_and_takes_the_rest() {
@@ -532,7 +522,7 @@ fn a_filing_command_keeps_what_its_project_reaches_and_takes_the_rest() {
     }
     let cabinet = Cabinet::of(&root, None);
     let objects = cabinet.addresses();
-    let payloads = listed(&cabinet.payloads(Target::Native));
+    let payloads = cabinet.payload_addresses(Target::Native);
     assert_eq!(
         objects.len(),
         6,
@@ -549,7 +539,7 @@ fn a_filing_command_keeps_what_its_project_reaches_and_takes_the_rest() {
     fs::write(&left, "left behind").unwrap();
     assert!(curios(&root, &["run", "app"]).status.success());
     assert_eq!(cabinet.addresses(), objects, "nothing it reaches");
-    assert_eq!(listed(&cabinet.payloads(Target::Native)), payloads);
+    assert_eq!(cabinet.payload_addresses(Target::Native), payloads);
     assert!(
         !cabinet.directory().join("verdicts").exists(),
         "but what no family holds"
@@ -559,7 +549,7 @@ fn a_filing_command_keeps_what_its_project_reaches_and_takes_the_rest() {
     assert!(curios(&root, &["run", "app"]).status.success());
     let kept = cabinet.addresses();
     assert!(kept.is_subset(&objects) && kept.len() == 4, "{kept:?}");
-    let kept = listed(&cabinet.payloads(Target::Native));
+    let kept = cabinet.payload_addresses(Target::Native);
     assert!(kept.is_subset(&payloads) && kept.len() == 3, "{kept:?}");
 }
 

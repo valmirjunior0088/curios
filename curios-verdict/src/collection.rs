@@ -41,24 +41,26 @@ pub fn collect_project(root: &Path, now: SystemTime) {
     keep(cabinet.directory(), cabinet.families().all(), now);
     // A compiler that cannot name itself filed no object, and has none of its own to tell from the rest.
     if let Some(compiler) = compiler(&cabinet) {
+        let payloads = reach.packages.iter().flat_map(payloads).collect::<Vec<_>>();
         keep_nested(
             &families.objects,
             reach
                 .packages
                 .iter()
                 .flat_map(addresses)
+                .chain(payloads.iter().cloned())
                 .map(|address| cabinet.object(&compiler, &address)),
             now,
         );
+        // An executable's object holds a payload for each target, and nothing a target does not name.
+        for address in &payloads {
+            keep(
+                &cabinet.object(&compiler, address),
+                Target::ALL.map(|target| cabinet.payload_for(&compiler, target, address)),
+                now,
+            );
+        }
     }
-    keep_nested(
-        &families.payloads,
-        reach
-            .packages
-            .iter()
-            .flat_map(|package| payloads(&cabinet, package)),
-        now,
-    );
     keep_nested(
         &families.sources,
         reach.trees.iter().map(|tree| cabinet.source(tree)),
@@ -93,20 +95,16 @@ fn addresses(package: &Reached) -> Vec<String> {
     units.chain(entries).collect()
 }
 
-/// Where each payload of `package` is filed, on every target.
-fn payloads(cabinet: &Cabinet, package: &Reached) -> Vec<PathBuf> {
+/// The address each payload of `package` is filed at, whatever its target.
+fn payloads(package: &Reached) -> Vec<String> {
     package
         .payloads()
         .iter()
-        .flat_map(|name| {
-            let address = payload_address(&package.name, name);
-
-            Target::ALL.map(|target| cabinet.payloads(target).join(&address))
-        })
+        .map(|name| payload_address(&package.name, name))
         .collect()
 }
 
-/// Take away every entry of the family at `family` but `kept`, each two levels down, under its hash scheme's directory, its target's or its compiler's, and every such directory holding none of them, a staging only once it is [`STALE`](crate::STALE) at `now`.
+/// Take away every entry of the family at `family` but `kept`, each two levels down, under its hash scheme's directory or its compiler's, and every such directory holding none of them, a staging only once it is [`STALE`](crate::STALE) at `now`.
 fn keep_nested(family: &Path, kept: impl IntoIterator<Item = PathBuf>, now: SystemTime) {
     let kept = kept.into_iter().collect::<BTreeSet<_>>();
     let holding = kept

@@ -192,29 +192,19 @@ fn greeting(word: &str) -> String {
     format!("pub let word : /std/Str =\n    \"{word}\";\n")
 }
 
-/// The directory the payload family files the native payloads of the project at `root` in.
-fn payloads(root: &Path) -> PathBuf {
-    Cabinet::of(root, None).payloads(Runs::Native { engine: ENGINE }.target())
+/// The native payloads the cabinet holds for the project at `root`, each by its file: none for a cabinet that was never created, which is what a refusal to file leaves behind.
+fn payloads(root: &Path) -> Vec<PathBuf> {
+    Cabinet::of(root, None).payload_files(Runs::Native { engine: ENGINE }.target())
 }
 
-/// The payloads at `root`, counting a cabinet that was never created as the none it holds — which is what a refusal to file leaves behind.
+/// How many payloads the cabinet holds for the project at `root`.
 fn filed(root: &Path) -> usize {
-    fs::read_dir(payloads(root)).map_or(0, Iterator::count)
-}
-
-/// The payloads the payload family holds for the project at `root`.
-fn held(root: &Path) -> usize {
-    fs::read_dir(payloads(root))
-        .expect("a cabinet with payloads in it")
-        .count()
+    payloads(root).len()
 }
 
 /// The one payload's file, for a test that has to damage what is in it.
 fn payload_of(root: &Path) -> PathBuf {
-    let mut filed = fs::read_dir(payloads(root))
-        .expect("a cabinet with payloads in it")
-        .map(|payload| payload.unwrap().path())
-        .collect::<Vec<_>>();
+    let mut filed = payloads(root);
 
     assert_eq!(filed.len(), 1, "these fixtures build one executable");
 
@@ -274,8 +264,8 @@ fn a_filing_sweeps_a_staging_older_than_any_filing() {
     let root = project("swept");
     run(&root);
 
-    let aged = payloads(&root).join("aged.1.part");
-    let fresh = payloads(&root).join("fresh.2.part");
+    let aged = payload_of(&root).with_file_name("aged.1.part");
+    let fresh = payload_of(&root).with_file_name("fresh.2.part");
     fs::write(&aged, "half a payload").unwrap();
     fs::write(&fresh, "half a payload").unwrap();
     fs::File::options()
@@ -345,7 +335,7 @@ fn a_changed_dependency_set_is_a_miss_at_the_same_address() {
 
     run(&root);
     assert!(run(&root).reused, "one address, filed and found");
-    assert_eq!(held(&root), 1);
+    assert_eq!(filed(&root), 1);
 
     // The dependency set is what the manifest declares, so changing it is a manifest edit — which is also what makes this test about a configuration rather than about a flag.
     let plain = fs::read_to_string(root.join("curios.toml")).expect("a manifest");
@@ -356,7 +346,7 @@ fn a_changed_dependency_set_is_a_miss_at_the_same_address() {
         !run(&root).reused,
         "declaring another unit is a different compilation, which the record of the first does not vouch for"
     );
-    assert_eq!(held(&root), 1, "filed over the first, at the one address");
+    assert_eq!(filed(&root), 1, "filed over the first, at the one address");
     assert!(run(&root).reused, "and found there");
 
     write(&root, "curios.toml", &plain);
@@ -364,7 +354,7 @@ fn a_changed_dependency_set_is_a_miss_at_the_same_address() {
         !run(&root).reused,
         "dropping the dependency again is a compilation the payload no longer holds"
     );
-    assert_eq!(held(&root), 1, "two configurations, one address");
+    assert_eq!(filed(&root), 1, "two configurations, one address");
 }
 
 /// Two executables of one package are two programs, so they are two payloads and neither answers for the other.
@@ -390,7 +380,7 @@ fn two_executables_are_two_payloads() {
     assert!(!one.reused && !two.reused, "neither is stored yet");
     assert_ne!(one.payload, two.payload, "and they are different programs");
 
-    assert_eq!(held(&root), 2, "one address each");
+    assert_eq!(filed(&root), 2, "one address each");
     assert!(invoke(&root, Some("one")).reused);
     assert!(invoke(&root, Some("two")).reused);
 }

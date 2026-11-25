@@ -1,6 +1,6 @@
 //! What an invocation consults before compiling a program it has already compiled.
 //!
-//! **The same address-and-record split the unit family states for itself, one level up.** An address names a place — this executable, for this target — and carries no file contents, no unit and no compiler, so a source edit changes what the payload is verified against rather than where it is looked for. Who built it is named in the header of its file ([`Filer`]), and what it was made from rides in a [`Record`] behind that header: the entry file, every file the entry's loader read, the prefixes the entry declared, what each predecessor contained, and the payload's own digest.
+//! **The same address-and-record split the unit family states for itself, one level up.** An address names a place — this executable's object, where each target's payload is a file — and carries no file contents, no unit and no compiler, so a source edit changes what the payload is verified against rather than where it is looked for. Who built it is named in the header of its file ([`Filer`]), and what it was made from rides in a [`Record`] behind that header: the entry file, every file the entry's loader read, the prefixes the entry declared, what each predecessor contained, and the payload's own digest.
 //!
 //! **Taking a payload from here is believing a whole compilation, judgment included.** The entry's certifier recheck is skipped on the strength of the record exactly as a reused unit's is, and the argument for that is [Reused payloads](../../../documentation/design/soundness/reused-payloads.md), which extends [Cached verdicts](../../../documentation/design/soundness/cached-verdicts.md) rather than restating it.
 //!
@@ -70,7 +70,7 @@ impl Verdicts {
     ///
     /// Consulting this does not enter the fold's chain: a hit means no fold runs at all, and a miss leaves the fold to place its own units.
     ///
-    /// `runs` is what runs the payload: its target, which the directory it is filed in names, and natively the engine, which the header names beside the compiler and which decides whether a payload compiled on this machine runs on another, since a payload, unlike a unit, is machine-dependent; in a browser, nothing of the machine. A unit is a judgment and travels wherever the compiler binary does; this is machine code emitted for the host's ISA — the one input neither the compiler digest nor any recorded source file covers. The crate that owns the runtime describes its engine, `curios-common`'s `Fingerprint` turns the description into a digest, and this crate files under it, so nothing here names wasmtime and nothing there names `sha2`.
+    /// `runs` is what runs the payload: its target, which the file it is filed as names, and natively the engine, which the header names beside the compiler and which decides whether a payload compiled on this machine runs on another, since a payload, unlike a unit, is machine-dependent; in a browser, nothing of the machine. A unit is a judgment and travels wherever the compiler binary does; this is machine code emitted for the host's ISA — the one input neither the compiler digest nor any recorded source file covers. The crate that owns the runtime describes its engine, `curios-common`'s `Fingerprint` turns the description into a digest, and this crate files under it, so nothing here names wasmtime and nothing there names `sha2`.
     pub fn payload_get(
         &self,
         program: &Program<'_>,
@@ -80,10 +80,11 @@ impl Verdicts {
         let units = self.chain(units)?;
 
         // A file another compiler or engine filed, one that is not framed, or a stored record that will not read back, is ignored, never a compile to fail.
-        let path = self
-            .cabinet
-            .as_ref()?
-            .payload(runs, &payload_address(program.package, program.executable));
+        let path = self.cabinet.as_ref()?.payload(
+            self.compiler()?,
+            runs,
+            &payload_address(program.package, program.executable),
+        );
         let opened = opened(&path, &filer(self, runs)?)?;
         let record = curios_archive::from_bytes::<Record>(opened.record()).ok()?;
         let bytes = opened.artifact()?;
@@ -112,7 +113,9 @@ impl Verdicts {
             return;
         };
 
-        let (Some(cabinet), Some(filer)) = (&self.cabinet, filer(self, runs)) else {
+        let (Some(cabinet), Some(compiler), Some(filer)) =
+            (&self.cabinet, self.compiler(), filer(self, runs))
+        else {
             return;
         };
 
@@ -130,7 +133,11 @@ impl Verdicts {
             foreigns: foreigns.clone(),
         };
 
-        let path = cabinet.payload(runs, &payload_address(program.package, program.executable));
+        let path = cabinet.payload(
+            compiler,
+            runs,
+            &payload_address(program.package, program.executable),
+        );
         let filed = curios_archive::to_bytes(&record)
             .map_err(io::Error::other)
             .and_then(|record| replace(&path, &filer, &record, bytes));
@@ -138,9 +145,9 @@ impl Verdicts {
         if let Err(error) = filed {
             self.refused.borrow_mut().get_or_insert(error.to_string());
         }
-        // What an interrupted filing left staged beside the target's payloads, swept by the filing that lands one there: each is a whole executable, and no other process renames it. Best effort, as the filing is.
-        if let Some(payloads) = path.parent() {
-            let _ = sweep(payloads, SystemTime::now());
+        // What an interrupted filing left staged in the executable's object, swept by the filing that lands a payload there: each is a whole executable, and no other process renames it. Best effort, as the filing is.
+        if let Some(object) = path.parent() {
+            let _ = sweep(object, SystemTime::now());
         }
     }
 }
