@@ -4,14 +4,7 @@ use {
     super::*,
     curios::{TALLIES, test_support::*},
     curios_native::{ForeignBindings, test_support::*},
-    curios_profile::{Destination, fold, trace},
-    std::{
-        fs::{File, create_dir_all},
-        io::{BufReader, BufWriter},
-        path::Path,
-        time::{SystemTime, UNIX_EPOCH},
-    },
-    xbench::{Measure, read, read_elapsed, turn},
+    xbench::{Measure, phase, read, turn},
 };
 
 /// Measure the compilation and execution of guest coordination.
@@ -25,7 +18,7 @@ use {
 /// - **`monad_suspend`:** the existing `programs/monad_suspend.crs` corpus program, with the argument `10000`, requiring stdout `30000\n` and no stderr. This measures a suspension's path through the driver every combinator is written over, one a step, not contention among branches.
 /// - **`tui`:** the bordered listing `curios`'s test support holds (`curios/src/test_support/listing.rs`), which the terminal suites drive too, driven by 100 down/up pairs followed by `q`, the keys pausing twice between two whole keys so the session's size ticker runs once at each pause. The first down escape sequence arrives in two chunks; each remaining key has its own chunk. Terminal-size queries answer 12×5, 16×6, then 12×5 forever. Monotonic-clock queries advance by 1 ms, starting at zero, with 100,000 scripted readings. The mock host releases the next input chunk when polled and does not sleep in real time. Assertions require terminal entry and restoration, raw mode on then off, selection `one`, a titled border, exactly three screen clears (initial frame and two resizes), no stderr, and a successful exit.
 ///
-/// `curios_profile::trace` listens during compilation and execution, writing one stream per sample into a timestamped directory under `xbench/.artifacts/coordination/`. Each stream is read with `curios profile`. The `coordination_compile` span includes parsing, all compiler stages, Binaryen and Cranelift precompilation. The `coordination_run` span includes deserialization, instantiation and execution. Host setup, output assertions and folding are outside those spans. All span boundaries must close. The allocator counts while the trace listens, so each boundary of a stream carries what its thread had taken there and what the whole test process held, since counting began: a span is charged its own thread's allocations, and none of Wasmtime's, Binaryen's or Cranelift's threads'.
+/// A sample's compile and its run are two phases under the recorder: the compile includes parsing, all compiler stages, Binaryen and Cranelift precompilation, and the run deserialization, instantiation and execution. Host setup and output assertions are outside them. A phase is charged its own thread's allocations, and none of Wasmtime's, Binaryen's or Cranelift's threads'.
 ///
 /// These are wall-clock timings under built-in tracing, with its overhead included. The Tui workload has synthetic time and no physical terminal latency.
 ///
@@ -57,50 +50,33 @@ use {
 ///
 /// All 12 captures pass the behavior and closed-span assertions; each workload produces the same output length in every sample. The Tui assertions include terminal restoration and all three screen clears.
 pub fn coordination_measurements() {
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let directory = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join(".artifacts/coordination")
-        .join(stamp.to_string());
-    create_dir_all(&directory).expect("capture directory");
-    println!("captures: {}", directory.display());
-
-    let (mut monads, mut tuis) = (0, 0);
     let mut monad = || {
         sampled(
-            &directory,
             "monad_suspend",
             include_str!("../../../programs/monad_suspend.crs"),
-            monads,
-        );
-        monads += 1;
+        )
     };
-    let mut tui = || {
-        sampled(&directory, "tui", LISTING_PROGRAM, tuis);
-        tuis += 1;
-    };
+    let mut tui = || sampled("tui", LISTING_PROGRAM);
     turn(5, &mut [&mut monad, &mut tui]);
 }
 
-/// One sample of `workload`, the `sample`th: compiled and run under the recorder, its stream filed in `directory`, and its compile, its run and its output read as its figures.
-fn sampled(directory: &Path, workload: &str, source: &str, sample: usize) {
+/// One sample of `workload`: compiled and run, each a phase, and its compile, its run and its output read as its figures.
+fn sampled(workload: &str, source: &str) {
     let (host, io) = if workload == "tui" {
         listing_host()
     } else {
         MockHost::builder().args(["monad_suspend", "10000"]).build()
     };
-    let path = directory.join(format!("{workload}-{sample}.pftrace"));
-    let sink = BufWriter::new(File::create(&path).expect("capture file"));
-    trace(Destination::Stream(Box::new(sink)), TALLIES, || {
-        let compiled = curios_common::profile!("coordination_compile" => compile(source))
-            .expect("workload compiles");
-        let status = curios_common::profile!("coordination_run" => compiled.run(host, ForeignBindings::empty()))
-            .expect("workload runs");
-        assert_eq!(status, 0);
-    })
-    .expect("capture opens");
+    let compiled = phase(TALLIES, || compile(source).expect("workload compiles"));
+    compiled.read(&format!("{workload}/compile"), None);
+    let ran = phase(TALLIES, || {
+        compiled
+            .answer
+            .run(host, ForeignBindings::empty())
+            .expect("workload runs")
+    });
+    assert_eq!(ran.answer, 0);
+    ran.read(&format!("{workload}/run"), None);
     if workload == "tui" {
         assert_listing(&io);
     } else {
@@ -108,20 +84,6 @@ fn sampled(directory: &Path, workload: &str, source: &str, sample: usize) {
         assert!(io.errors().is_empty());
     }
 
-    let report = fold(BufReader::new(File::open(&path).unwrap())).expect("capture folds");
-    assert!(report.open.is_empty(), "every span closed");
-    for (span, figure) in [
-        ("coordination_compile", "compile"),
-        ("coordination_run", "run"),
-    ] {
-        let summary = report
-            .summaries
-            .iter()
-            .find(|row| row.name == span)
-            .unwrap();
-        assert_eq!(summary.calls, 1);
-        read_elapsed(&format!("{workload}/{figure}"), None, summary.total);
-    }
     read(
         &format!("{workload}/output"),
         Measure::Count,
