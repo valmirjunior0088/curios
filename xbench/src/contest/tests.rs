@@ -102,17 +102,6 @@ fn a_workload_is_checked_at_a_smaller_size_than_it_is_timed_at() {
     }
 }
 
-/// `date -I` answers a zero-padded day, and a record holds it as TOML's local date, which refuses a day its month does not have.
-#[test]
-fn the_day_date_answers_is_the_day_a_record_holds() {
-    assert_eq!(
-        today("2026-10-07").map(|day| day.to_string()),
-        Ok("2026-10-07".to_string())
-    );
-    assert!(today("2026-02-30").is_err());
-    assert!(today("yesterday").is_err());
-}
-
 /// What an execution retires is its process's, the count opened before it starts inheriting into it: a process that loops ten thousand times reads far more than one that does nothing, where the bench's own thread, starting and waiting for each alike, would read them alike. Where the kernel opens no count, there is nothing to hold.
 #[test]
 fn an_execution_counts_what_its_process_retires() {

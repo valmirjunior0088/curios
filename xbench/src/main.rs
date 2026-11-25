@@ -1,13 +1,13 @@
 //! The benchmark bench, as a cargo subcommand, and the records it has filed, each a TOML file under `xbench/records/<measurement>/` that the build embeds.
 //!
-//! `cargo xbench measure contest` builds Curios and Rust on every workload of the corpus, holds all three contestants to the answers those workloads are known to have, times them interleaved, and files the sitting as the next record of the contest. `cargo xbench report contest` computes what the contest's records say; it runs anywhere.
+//! `cargo xbench measure contest` builds Curios and Rust on every workload of the corpus, holds all three contestants to the answers those workloads are known to have, times them interleaved, and files the sitting as the next record of the contest; `cargo xbench measure <NAME>` takes any other measurement, a test beside the code it measures, by its name. `cargo xbench report <MEASUREMENT>` computes what a measurement's records say; it runs anywhere.
 //!
 //! It reads in the order a sitting uses it:
 //!
 //! - [`held`] holds every tool to the pin the file that owns it states, before anything is built.
 //! - [`capture`] asks the host where the record is being taken.
-//! - [`measure`] builds the contestants, holds them to the answers their workloads are known to have, times them interleaved, and files a [`Record`].
-//! - [`report()`] computes every median, span, ratio and refusal from the records, since none of them is stored.
+//! - [`contest_sitting`] builds the contestants, holds them to the answers their workloads are known to have, times them interleaved, and files a [`Record`]; [`test_sitting`] builds the workspace's tests and takes a measurement among them, an invocation a group.
+//! - [`report()`] and [`figures_report`] compute every median, span, ratio and refusal from the records, since none of them is stored.
 
 #[cfg(test)]
 mod tests;
@@ -15,8 +15,14 @@ mod tests;
 mod pins;
 use pins::*;
 
+mod sitting;
+use sitting::*;
+
 mod contest;
 use contest::*;
+
+mod runner;
+use runner::*;
 
 mod report;
 use report::*;
@@ -24,7 +30,7 @@ use report::*;
 use {
     clap::{Parser, Subcommand},
     std::process::ExitCode,
-    xbench::{Figure, Pin, Record, Unit, capture},
+    xbench::{Figure, Line, Pin, Record, Unit, capture},
 };
 
 include!(concat!(env!("OUT_DIR"), "/filed.rs"));
@@ -72,7 +78,7 @@ enum Bench {
     Measure {
         #[arg(
             value_name = "MEASUREMENT",
-            help = "The measurement to take: `contest`, Curios and Rust on the corpus"
+            help = "The measurement to take: `contest`, Curios and Rust on the corpus, or an ignored test of the workspace by its name"
         )]
         measurement: String,
     },
@@ -89,40 +95,38 @@ enum Bench {
     },
 }
 
-/// Refuse a measurement the bench takes no sitting of.
-fn known(measurement: &str) -> Result<(), String> {
-    match measurement == CONTEST {
-        true => Ok(()),
-        false => Err(format!(
-            "there is no measurement {measurement}; the one the bench takes is {CONTEST}"
-        )),
-    }
-}
-
 fn main() -> ExitCode {
     let outcome = match Cli::parse().command {
         // The next record is numbered after the ones already filed, which is something only the binary knows.
-        Bench::Measure { measurement } => known(&measurement)
-            .and_then(|()| records(&measurement))
-            .and_then(|filed| measure(filed.len())),
+        Bench::Measure { measurement } => {
+            records(&measurement).and_then(|filed| match measurement.as_str() {
+                CONTEST => contest_sitting(filed.len()),
+                _ => test_sitting(&measurement, filed.len()),
+            })
+        }
         Bench::Report {
             measurement,
             record: None,
-        } => known(&measurement)
-            .and_then(|()| records(&measurement))
-            .map(|filed| print!("{}", report(&filed))),
+        } => records(&measurement).map(|filed| match measurement.as_str() {
+            CONTEST => print!("{}", report(&filed)),
+            _ => print!("{}", figures_report(&measurement, &filed)),
+        }),
         Bench::Report {
             measurement,
             record: Some(number),
-        } => known(&measurement)
-            .and_then(|()| records(&measurement))
-            .and_then(|filed| match filed.get(number) {
-                Some(record) => {
+        } => records(&measurement).and_then(|filed| {
+            match (filed.get(number), measurement.as_str()) {
+                (Some(record), CONTEST) => {
                     print!("{}", one(number, record));
                     Ok(())
                 }
-                None => Err(format!("there is no record {number:02} of {measurement}")),
-            }),
+                (Some(record), _) => {
+                    print!("{}", figures_one(number, record));
+                    Ok(())
+                }
+                (None, _) => Err(format!("there is no record {number:02} of {measurement}")),
+            }
+        }),
     };
 
     match outcome {

@@ -1,4 +1,4 @@
-//! What every filed record must be: of a measurement the bench takes, filed as its sitting prints it, its figures named for what the contest measures, sized, and holding enough batches to have a span.
+//! What every filed record must be: filed as its sitting files it, and holding enough batches to have a span; and a record of the contest, its figures named for what the contest measures and sized.
 //!
 //! The bench fails on none of this when a figure moves — a record is a historical fact and cannot be re-run, so there is nothing for it to disagree with. What these hold is that the record is well formed.
 
@@ -12,30 +12,18 @@ fn filed() -> Vec<Record> {
     records(CONTEST).unwrap_or_else(|why| panic!("{why}"))
 }
 
-/// The records directory holds the measurements the bench takes, and nothing else: a directory named otherwise would be embedded and read by no report.
-#[test]
-fn every_measurement_filed_is_one_the_bench_takes() {
-    for (measurement, _) in FILED {
-        assert!(
-            known(measurement).is_ok(),
-            "records are filed for {measurement}, which the bench takes no sitting of"
-        );
-    }
-}
-
 /// A record is filed by the sitting that took it, never written by hand: each file is what `measure` files of the record it holds.
 #[test]
 fn every_record_is_filed_as_its_sitting_files_it() {
-    let texts = FILED
-        .iter()
-        .filter(|(measurement, _)| *measurement == CONTEST)
-        .flat_map(|(_, texts)| texts.iter());
-    for (number, (text, record)) in texts.zip(filed()).enumerate() {
-        assert_eq!(
-            record.filed().as_deref(),
-            Ok(*text),
-            "record {number:02} is not as `measure` files it"
-        );
+    for (measurement, texts) in FILED {
+        let filed = records(measurement).unwrap_or_else(|why| panic!("{why}"));
+        for (number, (text, record)) in texts.iter().zip(filed).enumerate() {
+            assert_eq!(
+                record.filed().as_deref(),
+                Ok(*text),
+                "record {number:02} of {measurement} is not as `measure` files it"
+            );
+        }
     }
 }
 
@@ -70,19 +58,25 @@ fn every_figure_of_the_contest_states_its_size() {
 
 #[test]
 fn every_figure_holds_enough_batches_to_have_a_span() {
-    for (number, record) in filed().iter().enumerate() {
-        for figure in &record.figures {
-            assert!(
-                figure.readings.len() >= LEAST_GROUPS,
-                "record {number:02} reads {} in {} batches",
-                figure.name,
-                figure.readings.len()
-            );
-            assert!(
-                figure.readings.iter().all(|group| !group.is_empty()),
-                "record {number:02} reads {} with an empty batch",
-                figure.name
-            );
+    for (measurement, _) in FILED {
+        for (number, record) in records(measurement)
+            .unwrap_or_else(|why| panic!("{why}"))
+            .iter()
+            .enumerate()
+        {
+            for figure in &record.figures {
+                assert!(
+                    figure.readings.len() >= LEAST_GROUPS,
+                    "record {number:02} of {measurement} reads {} in {} batches",
+                    figure.name,
+                    figure.readings.len()
+                );
+                assert!(
+                    figure.readings.iter().all(|group| !group.is_empty()),
+                    "record {number:02} of {measurement} reads {} with an empty batch",
+                    figure.name
+                );
+            }
         }
     }
 }

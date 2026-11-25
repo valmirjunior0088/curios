@@ -9,7 +9,10 @@
 #[cfg(test)]
 mod tests;
 
-use std::{fs, path::Path, process::Command};
+use {
+    crate::Pin,
+    std::{fs, path::Path, process::Command},
+};
 
 /// The channel `rust-toolchain.toml` pins.
 fn channel(told: &str) -> Option<String> {
@@ -19,23 +22,32 @@ fn channel(told: &str) -> Option<String> {
         .map(|value| value.trim().trim_matches('"').to_string())
 }
 
-/// The edition the root `Cargo.toml` states for the workspace's packages, `workspace.package.edition`.
-fn edition_of(manifest: &str) -> Option<String> {
+/// What the root `Cargo.toml` states of the workspace's packages under `key`, `workspace.package.<key>`.
+fn packaged(manifest: &str, key: &str) -> Option<String> {
     let table: toml::Table = manifest.parse().ok()?;
     table
         .get("workspace")?
         .get("package")?
-        .get("edition")?
+        .get(key)?
         .as_str()
         .map(str::to_string)
 }
 
-/// The edition a twin is compiled under: the one the root `Cargo.toml` states, which the formatter holds every Rust file of the tree to, read from the file that owns it as the toolchain's channel is.
-pub fn edition(root: &Path) -> Result<String, String> {
+/// What the root `Cargo.toml` states of the workspace's packages under `key`, read from the file that owns it.
+fn stated(root: &Path, key: &str) -> Result<String, String> {
     let manifest = fs::read_to_string(root.join("Cargo.toml"))
         .map_err(|error| format!("Cargo.toml cannot be read: {error}"))?;
-    edition_of(&manifest)
-        .ok_or_else(|| "Cargo.toml states no workspace.package.edition".to_string())
+    packaged(&manifest, key).ok_or_else(|| format!("Cargo.toml states no workspace.package.{key}"))
+}
+
+/// The edition a twin is compiled under: the one the root `Cargo.toml` states, which the formatter holds every Rust file of the tree to, read from the file that owns it as the toolchain's channel is.
+pub fn edition(root: &Path) -> Result<String, String> {
+    stated(root, "edition")
+}
+
+/// The version every package of the workspace is at, which a record of a measurement beside the code names its subject by, with the commit it was taken at.
+pub fn workspace_version(root: &Path) -> Result<String, String> {
+    stated(root, "version")
 }
 
 /// What `Cargo.lock` resolves `package` to.
@@ -94,7 +106,7 @@ fn hold(program: &str, pinned: &str) -> Result<String, String> {
 /// Hold every tool a record is taken with to its pin, and hand back the pins for the record to record.
 ///
 /// This runs before anything is built, since building with the wrong compiler and timing it afterwards spends the run to produce the wrong artefact.
-pub fn held(root: &Path) -> Result<Vec<(&'static str, String)>, String> {
+pub fn held(root: &Path) -> Result<Vec<Pin>, String> {
     let toolchain = fs::read_to_string(root.join("rust-toolchain.toml"))
         .map_err(|error| format!("rust-toolchain.toml cannot be read: {error}"))?;
     let rustc = channel(&toolchain).ok_or("rust-toolchain.toml pins no channel")?;
@@ -106,9 +118,15 @@ pub fn held(root: &Path) -> Result<Vec<(&'static str, String)>, String> {
     // The engine is recorded for each WebAssembly contestant, `wasmtime` the one `rust-wasm`'s runner links and `wasmtime in Curios` the one the compiler embeds: both the lock's, by construction, and named apart, as every record before the runner names them, so a sitting compares with those.
     let rustc = hold("rustc", &rustc)?;
 
-    Ok(vec![
+    Ok([
         ("rustc", rustc),
         ("wasmtime", wasmtime.clone()),
         ("wasmtime in Curios", wasmtime),
-    ])
+    ]
+    .into_iter()
+    .map(|(tool, version)| Pin {
+        tool: tool.to_string(),
+        version,
+    })
+    .collect())
 }

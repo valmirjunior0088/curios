@@ -361,3 +361,67 @@ fn another_machine_refuses_the_times_and_the_instructions() {
     assert!(counts.contains("Not comparable"), "{rendered}");
     assert!(counts.contains("Another Processor"), "{rendered}");
 }
+
+/// A figure of one unit, readings given as they are held.
+fn counted(name: &str, unit: Unit, groups: &[&[u64]]) -> Figure {
+    Figure {
+        name: name.to_string(),
+        unit,
+        size: None,
+        readings: groups.iter().map(|group| group.to_vec()).collect(),
+    }
+}
+
+/// A measurement's figures are compared one by one: a figure whose unit is gated by a line two records differ in is refused on its own row, naming the line, and every other figure is compared, its movement proven or not.
+#[test]
+fn a_measurement_s_figure_is_refused_only_across_what_its_unit_is_gated_by() {
+    let figures = |time: &[&[u64]], looks: &[&[u64]]| {
+        vec![
+            ("", counted("cps_optimize", Unit::Microseconds, time)),
+            ("", counted("cps_optimize/calls", Unit::Count, looks)),
+        ]
+    };
+    let elsewhere = platform("governor schedutil, boost on, smt on", SOFTWARE);
+    let rendered = figures_compare(
+        1,
+        &record(1, here(), figures(&[&[100], &[101]], &[&[11], &[11]])),
+        &record(2, elsewhere, figures(&[&[90], &[91]], &[&[12], &[12]])),
+    );
+    let row = |name: &str| {
+        rendered
+            .lines()
+            .find(|line| line.contains(&format!("`{name}`")))
+            .unwrap_or_else(|| panic!("{name} has a row: {rendered}"))
+            .to_string()
+    };
+
+    assert!(
+        row("cps_optimize").contains("not compared: the state differs"),
+        "{rendered}"
+    );
+    assert!(row("cps_optimize/calls").contains("moved,"), "{rendered}");
+}
+
+/// A count of whole things — calls, bytes, allocations — is stated as a whole number even where it repeats exactly, which leaves no span to set a resolution by.
+#[test]
+fn a_whole_count_is_stated_without_a_fraction() {
+    let rendered = figures_one(
+        0,
+        &record(
+            1,
+            here(),
+            vec![(
+                "",
+                counted("cps_optimize/calls", Unit::Count, &[&[11], &[11]]),
+            )],
+        ),
+    );
+    let row = rendered
+        .lines()
+        .find(|line| line.contains("`cps_optimize/calls`"))
+        .unwrap_or_else(|| panic!("the figure has a row: {rendered}"));
+
+    assert!(row.contains("| 11 "), "{row}");
+    assert!(row.contains("11–11"), "{row}");
+    assert!(!row.contains('.'), "{row}");
+}

@@ -10,7 +10,7 @@
 mod tests;
 
 use {
-    crate::{CONTESTANTS, Pin, Record, Unit, WORKLOADS, named},
+    crate::{CONTESTANTS, Record, Unit, WORKLOADS, named},
     std::fmt::Write,
 };
 
@@ -281,42 +281,84 @@ pub fn one(number: usize, record: &Record) -> String {
     out
 }
 
-/// Why `before` and `after` cannot be compared in `unit`, where they cannot: across the platform lines its unit is gated by ([`Unit::gated`]) where the two differ in them.
+/// A platform line two records differ in, across which a comparison in some unit is refused: its name, and what each record says of it, as a reader compares them.
+struct Crossed {
+    line: &'static str,
+    before: String,
+    after: String,
+}
+
+/// The platform line `before` and `after` differ in that a comparison in `unit` is refused across ([`Unit::gated`]), where there is one.
 ///
-/// The software line is not among these. A kernel or microcode update that moves a figure moves Rust with Curios, and the ratio a comparison reads cancels it, so gating on it would strand the record at every patch for nothing.
-fn incomparable(before: &Record, after: &Record, unit: Unit) -> Option<String> {
-    let differs = |what: &str, before: &str, after: &str| {
-        (before != after).then(|| format!("  {what}  {before:?}\n       -> {after:?}"))
-    };
-
-    // A pin is spelled as the tool and the version it holds, the pair a reader compares.
-    let pairs = |pinned: &[Pin]| {
-        pinned
-            .iter()
-            .map(|pin| (pin.tool.clone(), pin.version.clone()))
-            .collect::<Vec<_>>()
-    };
-
+/// The software line is never among these. A kernel or microcode update that moves a figure moves Rust with Curios, and the ratio a comparison reads cancels it, so gating on it would strand the record at every patch for nothing.
+fn crossed(before: &Record, after: &Record, unit: Unit) -> Option<Crossed> {
     let gated = unit.gated();
+    let differs = |line, before: String, after: String| {
+        (before != after).then_some(Crossed {
+            line,
+            before,
+            after,
+        })
+    };
+    // A pin is spelled as the tool and the version it holds, the pair a reader compares.
+    let pairs = |record: &Record| {
+        format!(
+            "{:?}",
+            record
+                .pinned
+                .iter()
+                .map(|pin| (pin.tool.clone(), pin.version.clone()))
+                .collect::<Vec<_>>()
+        )
+    };
+
+    let quoted = |text: &str| format!("{text:?}");
+    let machine = || {
+        differs(
+            "machine",
+            quoted(&before.platform.machine),
+            quoted(&after.platform.machine),
+        )
+    };
+    let state = || {
+        differs(
+            "state",
+            quoted(&before.platform.state),
+            quoted(&after.platform.state),
+        )
+    };
+    let pinned = || differs("pinned", pairs(before), pairs(after));
+
     gated
         .machine
-        .then(|| differs("machine", &before.platform.machine, &after.platform.machine))
+        .then(machine)
         .flatten()
-        .or_else(|| {
-            gated
-                .state
-                .then(|| differs("state", &before.platform.state, &after.platform.state))
-                .flatten()
-        })
-        .or_else(|| {
-            (gated.pins && before.pinned != after.pinned).then(|| {
-                format!(
-                    "  pinned   {:?}\n       -> {:?}",
-                    pairs(&before.pinned),
-                    pairs(&after.pinned)
-                )
-            })
-        })
+        .or_else(|| gated.state.then(state).flatten())
+        .or_else(|| gated.pins.then(pinned).flatten())
+}
+
+/// Why `before` and `after` cannot be compared in `unit`, where they cannot, as the contest's report states it.
+fn incomparable(before: &Record, after: &Record, unit: Unit) -> Option<String> {
+    crossed(before, after, unit).map(|crossed| {
+        format!(
+            "  {}  {}\n       -> {}",
+            crossed.line, crossed.before, crossed.after
+        )
+    })
+}
+
+/// Whether `is` moved from `was`, as two spans prove it or do not.
+fn movement(was: &Spanned, is: &Spanned) -> String {
+    match moved(was, is) {
+        false => "no difference proven".to_string(),
+        true => format!(
+            "moved, {}%",
+            stated(
+                (is.middle - was.middle) / was.middle * 100.0,
+                was.half().max(is.half()) / was.middle * 100.0
+            )
+        ),
+    }
 }
 
 /// What a workload's figure did between two records: not compared where its size changed, and otherwise moved or not as its two spans say.
@@ -324,16 +366,7 @@ fn verdict(workload: &str, before: &Record, after: &Record, was: &Spanned, is: &
     // The size is held by each figure rather than over the record: a workload resized, or one entering the record later, says so on its own row and leaves every other row comparable.
     match (sized(before, workload), sized(after, workload)) {
         (Some(then), Some(now)) if then != now => format!("sized {then}, then {now}; not compared"),
-        _ => match moved(was, is) {
-            false => "no difference proven".to_string(),
-            true => format!(
-                "moved, {}%",
-                stated(
-                    (is.middle - was.middle) / was.middle * 100.0,
-                    was.half().max(is.half()) / was.middle * 100.0
-                )
-            ),
-        },
+        _ => movement(was, is),
     }
 }
 
@@ -438,6 +471,112 @@ pub fn report(records: &[Record]) -> String {
             "\n{}\n{}",
             one(number + 1, record),
             compare(number + 1, &records[number], record)
+        );
+    }
+
+    out
+}
+
+/// How a figure's size reads in a table: the size, or a dash where it is taken at none.
+fn sized_as(size: Option<u64>) -> String {
+    size.map_or("—".to_string(), |size| size.to_string())
+}
+
+/// A figure's median in the unit it is stated in, at the resolution `half` supports.
+fn median_of(spanned: &Spanned, half: f64, unit: Unit) -> String {
+    format!("{} {}", in_unit(spanned.middle, half, unit), unit.stated())
+        .trim_end()
+        .to_string()
+}
+
+/// `value` stated to the place `half` supports, and never past the unit where `unit` counts whole things.
+fn in_unit(value: f64, half: f64, unit: Unit) -> String {
+    match unit.whole() {
+        true => stated(value, half.max(1.0)),
+        false => stated(value, half),
+    }
+}
+
+/// A record of a measurement beside the code, in full: what it says of itself, then each figure's median and span in the unit it is stated in.
+pub fn figures_one(number: usize, record: &Record) -> String {
+    let rows = record
+        .figures
+        .iter()
+        .filter_map(|read| {
+            let spanned = figure(&read.stated())?;
+            let half = spanned.half();
+            Some(vec![
+                format!("`{}`", read.name),
+                sized_as(read.size),
+                median_of(&spanned, half, read.unit),
+                format!(
+                    "{}–{}",
+                    in_unit(spanned.least, half, read.unit),
+                    in_unit(spanned.most, half, read.unit)
+                ),
+            ])
+        })
+        .collect::<Vec<_>>();
+
+    format!(
+        "{}\n{}",
+        header(number, record),
+        tabulated(&["Figure", "Size", "Median", "Span"], &rows)
+    )
+}
+
+/// What changed between two records of a measurement, figure by figure: each compared as far as its unit carries it, and refused, naming the line, where the records differ in one its unit is gated by.
+pub fn figures_compare(number: usize, before: &Record, after: &Record) -> String {
+    let mut rows = Vec::new();
+    for read in &after.figures {
+        let Some(earlier) = before.figure(&read.name, read.unit) else {
+            continue;
+        };
+        let (Some(was), Some(is)) = (figure(&earlier.stated()), figure(&read.stated())) else {
+            continue;
+        };
+
+        let half = was.half().max(is.half());
+        let said = match crossed(before, after, read.unit) {
+            Some(crossed) => format!("not compared: the {} differs", crossed.line),
+            None if earlier.size != read.size => format!(
+                "sized {}, then {}; not compared",
+                sized_as(earlier.size),
+                sized_as(read.size)
+            ),
+            None => movement(&was, &is),
+        };
+        rows.push(vec![
+            format!("`{}`", read.name),
+            sized_as(read.size),
+            median_of(&was, half, read.unit),
+            median_of(&is, half, read.unit),
+            said,
+        ]);
+    }
+
+    format!(
+        "## Record {:02} → {number:02}\n\n{}",
+        number - 1,
+        tabulated(&["Figure", "Size", "Was", "Is", ""], &rows)
+    )
+}
+
+/// Every record of `measurement` so far, a measurement beside the code: each in full, with what changed between consecutive ones.
+pub fn figures_report(measurement: &str, records: &[Record]) -> String {
+    let Some((first, rest)) = records.split_first() else {
+        return format!(
+            "No record of {measurement} filed. `cargo xbench measure {measurement}` takes the first.\n"
+        );
+    };
+
+    let mut out = figures_one(0, first);
+    for (number, record) in rest.iter().enumerate() {
+        let _ = write!(
+            out,
+            "\n{}\n{}",
+            figures_one(number + 1, record),
+            figures_compare(number + 1, &records[number], record)
         );
     }
 

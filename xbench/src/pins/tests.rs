@@ -54,6 +54,6 @@ fn a_report_stating_no_version_answers_nothing() {
 #[test]
 fn the_edition_is_the_workspace_package_s() {
     let manifest = "[package]\nedition = \"2015\"\n\n[workspace.package]\nversion = \"0.1.0\"\nedition = \"2024\"\n";
-    assert_eq!(edition_of(manifest).as_deref(), Some("2024"));
-    assert_eq!(edition_of("[workspace]\nmembers = []\n"), None);
+    assert_eq!(packaged(manifest, "edition").as_deref(), Some("2024"));
+    assert_eq!(packaged("[workspace]\nmembers = []\n", "edition"), None);
 }

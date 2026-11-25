@@ -10,16 +10,16 @@
 mod tests;
 
 use {
-    crate::{CONTEST, Figure, Pin, Record, Unit, capture, edition, held, table},
+    crate::{
+        CONTEST, Figure, Record, Unit, asked, capture, edition, file, held, root, table, today,
+    },
     curios_profile::Instructions,
     std::{
-        fs::{self, OpenOptions},
-        io::{self, Write},
+        fs, io,
         path::{Path, PathBuf},
         process::{Command, Stdio},
         time::Instant,
     },
-    toml::value::Datetime,
 };
 
 /// The name of `contestant`'s figure on `workload` in a record of the contest: the one spelling of it, which the contest files and the report reads.
@@ -147,14 +147,6 @@ const EXECUTIONS: usize = 5;
 /// How many untimed rounds open a group, enough to page the binary in and warm the file cache. Every contestant is compiled ahead of time, so there is no engine to settle.
 const WARMUP: usize = 1;
 
-/// The workspace root, which is the crate's parent.
-fn root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("the crate sits in the workspace's root")
-        .to_path_buf()
-}
-
 /// How a contestant is run: a program and its arguments, the size among them.
 #[derive(Debug)]
 struct Invocation {
@@ -264,20 +256,6 @@ fn run(program: &str, arguments: &[&str], directory: &Path) -> Result<(), String
             "{program} {} failed: {status}",
             arguments.join(" ")
         )),
-    }
-}
-
-/// What a program says of itself, read rather than shown.
-fn asked(program: &str, arguments: &[&str], directory: &Path) -> Result<String, String> {
-    let produced = Command::new(program)
-        .args(arguments)
-        .current_dir(directory)
-        .output()
-        .map_err(|error| format!("{program} did not start: {error}"))?;
-
-    match produced.status.success() {
-        true => Ok(String::from_utf8_lossy(&produced.stdout).trim().to_string()),
-        false => Err(format!("{program} {} failed", arguments.join(" "))),
     }
 }
 
@@ -440,7 +418,7 @@ fn contested(workload: &Workload, contestant: &str, groups: &[Vec<Execution>]) -
 /// Build the contestants, hold them to the answers their workloads are known to have, time them, and file the sitting as the contest's next record.
 ///
 /// The record is numbered after `filed`, the contest's records already filed, which the binary keeps, and written only once the sitting has ended, and never over a file that stands: a sitting that fails files nothing. Everything a person watches goes to standard error.
-pub fn measure(filed: usize) -> Result<(), String> {
+pub fn contest_sitting(filed: usize) -> Result<(), String> {
     let root = root();
 
     // Before anything is built: building with the wrong compiler and timing it afterwards spends the run to produce the wrong artefact.
@@ -510,37 +488,9 @@ pub fn measure(filed: usize) -> Result<(), String> {
         taken: today(&asked("date", &["-I"], &root)?)?,
         subject,
         platform,
-        pinned: pinned
-            .into_iter()
-            .map(|(tool, version)| Pin {
-                tool: tool.to_string(),
-                version,
-            })
-            .collect(),
+        pinned,
         figures,
     };
 
-    let text = record.filed()?;
-    let path = root.join(format!("xbench/records/{CONTEST}/{filed:02}.toml"));
-    OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&path)
-        .and_then(|mut file| file.write_all(text.as_bytes()))
-        .map_err(|error| format!("{} cannot be filed: {error}", path.display()))?;
-    eprintln!(">> filed as {}", path.display());
-
-    Ok(())
-}
-
-/// The day `date -I` answers, as a record holds it.
-fn today(said: &str) -> Result<toml::value::Date, String> {
-    match said.parse::<Datetime>() {
-        Ok(Datetime {
-            date: Some(date),
-            time: None,
-            offset: None,
-        }) => Ok(date),
-        _ => Err(format!("`date -I` answered {said:?}, which is no day")),
-    }
+    file(&root, CONTEST, filed, &record)
 }

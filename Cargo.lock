@@ -3324,6 +3324,7 @@ dependencies = [
  "clap",
  "curios-profile",
  "serde",
+ "serde_json",
  "toml",
  "wasmtime",
  "wasmtime-wasi",

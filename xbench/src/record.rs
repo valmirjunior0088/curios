@@ -121,6 +121,11 @@ impl Unit {
         }
     }
 
+    /// Whether a figure in this unit counts whole things, and is stated without a fraction: bytes, allocations and the compiler's counts.
+    pub fn whole(self) -> bool {
+        matches!(self, Self::Bytes | Self::Allocations | Self::Count)
+    }
+
     /// What a reading is divided by to be stated in [`Unit::stated`].
     fn scale(self) -> f64 {
         match self {
