@@ -15,6 +15,8 @@ workspace = true
 [dependencies]
 # The compiler its measurements drive, its test support with it: the launcher image a bundled executable is built from, and a program compiled and run in this process as the compiler's suites compile and run one.
 curios = { workspace = true, features = ["test-support"] }
+# The foreign rows a compile hands back beside its module, which a corpus run hands Cranelift's code with it.
+curios-abi = { workspace = true }
 # The field shapes an ANF module settles on, which the census of shapes reads.
 curios-anf = { workspace = true }
 # The bytes a stored unit is archived as, which the standard library's image division weighs.

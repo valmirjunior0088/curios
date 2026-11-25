@@ -50,6 +50,9 @@ use allowance::*;
 mod coordination;
 use coordination::*;
 
+mod corpus;
+use corpus::*;
+
 mod host_boundary;
 use host_boundary::*;
 
@@ -307,6 +310,11 @@ const MEASUREMENTS: &[Measurement] = &[
         name: "spend_probe",
         spread: Spread::Repeats,
         take: spend_probe,
+    },
+    Measurement {
+        name: "corpus_measurements",
+        spread: Spread::Moves,
+        take: corpus_measurements,
     },
 ];
 

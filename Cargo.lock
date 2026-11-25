@@ -3323,6 +3323,7 @@ version = "0.16.25"
 dependencies = [
  "clap",
  "curios",
+ "curios-abi",
  "curios-anf",
  "curios-archive",
  "curios-cert",
