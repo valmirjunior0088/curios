@@ -1,4 +1,4 @@
-//! The native back end: [`optimize`] and [`to_cwasm`] from `compile`, and the [`engine`] a stored payload is addressed under. This is the only crate that brings both native backends together — Cranelift via `curios-cranelift`, Binaryen via `curios-binaryen` — so the CLI binary and the cross-stage suite build on it, while runtime-only embedders (the bundled-executable launcher) stay on `curios-native`, which links neither, and the questions `wonder` answers and the pages `document` writes stay in `curios-wonder` and `curios-document`, under both.
+//! The native back end: [`optimize`] and [`to_cwasm`] from `compile`, the [`engine`] a stored payload is addressed under, and the [`LAUNCHER`] every bundled executable is built from. This is the only crate that brings both native backends together — Cranelift via `curios-cranelift`, Binaryen via `curios-binaryen` — so the CLI binary and the cross-stage suite build on it, while runtime-only embedders (the bundled-executable launcher) stay on `curios-native`, which links neither, and the questions `wonder` answers and the pages `document` writes stay in `curios-wonder` and `curios-document`, under both.
 //!
 //! Compiling is not here. `curios_pipeline::compile_with_prelude` and its siblings put the fixed prelude in front of the fold, next to the fold they configure; this crate takes the `curios_wasm::Module` that comes out and is indifferent to where it came from.
 //!
@@ -29,6 +29,9 @@ pub const TALLIES: &[Tally] = &[Tally {
     name: "looks",
     read: curios_core::looks,
 }];
+
+/// The slim `curios-native` launcher stub every bundled executable is built from, embedded at build time. Produced by `cargo xtask compiler launcher` (an isolated `--package curios-native` build, kept Cranelift/Binaryen-free) into `curios/.artifacts/<triple>`, which is outside Cargo's target tree so `cargo clean` cannot remove it. Absence is caught before this line: `build.rs` emits a `cargo::error` naming the command to run. So `compile` needs no launcher lookup at runtime.
+pub const LAUNCHER: &[u8] = include_bytes!(env!("CURIOS_NATIVE_BIN"));
 
 // A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios::test_support` says at its use site that the caller reached for scaffolding rather than product API.
 #[cfg(any(test, feature = "test-support"))]

@@ -1,15 +1,12 @@
-//! Emitting a self-contained native executable: the embedded slim launcher with the program's payload, the modules answering its `foreign` declarations, and the record naming them appended. The trailing tail layout lives in `curios_native::bundle` (shared with the launcher that recovers it); this module only embeds the launcher image and writes the result to disk.
+//! Emitting a self-contained native executable: the embedded slim launcher with the program's payload, the modules answering its `foreign` declarations, and the record naming them appended. The trailing tail layout lives in `curios_native::bundle` (shared with the launcher that recovers it); this module only appends it to the launcher image the library embeds and writes the result to disk.
 
 use {
-    curios::fault,
+    curios::{LAUNCHER, fault},
     curios_common::{OsError, Report, write_whole_prepared},
     curios_native::{Bundle, append_bundle},
     curios_package::Refused,
     std::{fs, io, os::unix::fs::PermissionsExt, path::Path},
 };
-
-/// The slim `curios-native` launcher stub, embedded at build time. Produced by `cargo xtask compiler launcher` (an isolated `--package curios-native` build, kept Cranelift/Binaryen-free) into `curios/.artifacts/<triple>`, which is outside Cargo's target tree so `cargo clean` cannot remove it. Absence is caught before this line: `build.rs` emits a `cargo::error` naming the command to run. So `compile` needs no launcher lookup at runtime.
-const LAUNCHER: &[u8] = include_bytes!(env!("CURIOS_NATIVE_BIN"));
 
 /// Build a self-contained executable: the embedded launcher stub with `bundle` and its footer appended to the tail (see [`curios_native::append_bundle`]).
 pub fn emit_exe(bundle: &Bundle, output: &Path) -> Result<(), Box<Report>> {
