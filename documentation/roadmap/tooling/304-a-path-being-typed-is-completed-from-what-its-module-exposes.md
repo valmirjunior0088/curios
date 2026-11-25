@@ -4,7 +4,7 @@
 
 ## What is known
 
-- **What a module exposes is read off the documentation record and the lowering**, the names in the order its record lists them and what each is declared as (`exported`, `curios-wonder/src/named.rs`), so a page, the listing and a completion would offer one set.
+- **What a module exposes is read off the documentation record and the lowering**, the names in the order its record lists them and what each is declared as (`exported_among`, `curios-wonder/src/named.rs`), so a page, the listing and a completion would offer one set.
 - **An item the parser cannot read costs that item** (`Module::parse`, `curios-surface/src/module.rs`), so the declarations around one being typed stay checked, and the one being typed answers nothing from its check.
 - **A path's segments answer what they reach**, the walk the lowering takes through a path kept with its declaration (`curios_module::Reached`, [A place in a file is answered from the declaration that writes it](../../design/tooling/a-place-in-a-file-is-answered-from-the-declaration-that-writes-it.md)): a completion asks the module the segments before the one being typed reached.
 

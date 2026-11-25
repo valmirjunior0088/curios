@@ -489,7 +489,7 @@ An infix operand is an atom — a literal, a name, a sort (`Type`, `Prop` or `So
 ```text
 1 + match flag | true => 1 | false => 0 end
 match chosen | left() => f | right() => g end(x)
-1 + ((x) => x * x)(2)
+1 + ((x: Nat) => x * x)(2)
 ```
 
 A position that takes a whole term needs no parentheses: a call's argument, a list element, a field's value, a scrutinee and an arm's body, a `let` chain standing only in the last.
