@@ -1,6 +1,6 @@
 //! The tools a record is taken with, pinned, and the check that refuses to measure under anything else.
 //!
-//! Neither version is written here. `rust-toolchain.toml` pins the compiler the workspace builds under and `Cargo.lock` resolves the engine the compiler embeds, so this module reads the file that owns each rather than keeping a second copy for the bench to fall behind.
+//! No version is written here. `rust-toolchain.toml` pins the compiler the workspace builds under, `Cargo.lock` resolves the engine the compiler embeds, and `xtask/tasks.toml` fetches the Binaryen release the compiler optimizes every module with, so this module reads the file that owns each rather than keeping a second copy for the bench to fall behind.
 //!
 //! No engine is found on the path: `rust-wasm` runs under the bench's own runner, which links the `wasmtime` `Cargo.lock` resolves for the compiler's own, so the WebAssembly comparison is between two compilers on one engine by construction, and the record names that engine for each.
 //!
@@ -59,6 +59,17 @@ fn locked(told: &str, package: &str) -> Option<String> {
         .map(|quoted| quoted.trim().trim_matches('"').to_string())
 }
 
+/// The release `xtask/tasks.toml` fetches of `tool`, `data.<tool>.version`.
+fn fetched(tasks: &str, tool: &str) -> Option<String> {
+    let table: toml::Table = tasks.parse().ok()?;
+    table
+        .get("data")?
+        .get(tool)?
+        .get("version")?
+        .as_str()
+        .map(str::to_string)
+}
+
 /// The version in what a tool reports of itself: the first word that reads like one, since each spells the rest of the line its own way.
 pub fn version(reported: &str) -> String {
     reported
@@ -115,6 +126,10 @@ pub fn held(root: &Path) -> Result<Vec<Pin>, String> {
         .map_err(|error| format!("Cargo.lock cannot be read: {error}"))?;
     let wasmtime = locked(&lock, "wasmtime").ok_or("Cargo.lock resolves no wasmtime")?;
 
+    let tasks = fs::read_to_string(root.join("xtask/tasks.toml"))
+        .map_err(|error| format!("xtask/tasks.toml cannot be read: {error}"))?;
+    let binaryen = fetched(&tasks, "binaryen").ok_or("xtask/tasks.toml fetches no binaryen")?;
+
     // The engine is recorded for each WebAssembly contestant, `wasmtime` the one `rust-wasm`'s runner links and `wasmtime in Curios` the one the compiler embeds: both the lock's, by construction, and named apart, as every record before the runner names them, so a sitting compares with those.
     let rustc = hold("rustc", &rustc)?;
 
@@ -122,6 +137,7 @@ pub fn held(root: &Path) -> Result<Vec<Pin>, String> {
         ("rustc", rustc),
         ("wasmtime", wasmtime.clone()),
         ("wasmtime in Curios", wasmtime),
+        ("binaryen", binaryen),
     ]
     .into_iter()
     .map(|(tool, version)| Pin {

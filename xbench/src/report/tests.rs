@@ -402,6 +402,42 @@ fn a_measurement_s_figure_is_refused_only_across_what_its_unit_is_gated_by() {
     assert!(row("cps_optimize/calls").contains("moved,"), "{rendered}");
 }
 
+/// An engine's collections are its pin's: a figure of them is refused across two records whose pins differ, where the compiler's own count beside it is compared.
+#[test]
+fn an_engine_s_collections_are_refused_across_a_pin_the_compiler_s_counts_are_not() {
+    let figures = |collections: &[&[u64]]| {
+        vec![
+            (
+                "",
+                counted("stock at 400/collections", Unit::Collections, collections),
+            ),
+            (
+                "",
+                counted("stock at 400/looks", Unit::Count, &[&[11], &[11]]),
+            ),
+        ]
+    };
+    let mut bumped = record(2, here(), figures(&[&[9], &[9]]));
+    bumped.pinned[1].version = "48.0.0".to_string();
+    let rendered = figures_compare(1, &record(1, here(), figures(&[&[7], &[7]])), &bumped);
+    let row = |name: &str| {
+        rendered
+            .lines()
+            .find(|line| line.contains(&format!("`{name}`")))
+            .unwrap_or_else(|| panic!("{name} has a row: {rendered}"))
+            .to_string()
+    };
+
+    assert!(
+        row("stock at 400/collections").contains("not compared: the pinned differs"),
+        "{rendered}"
+    );
+    assert!(
+        !row("stock at 400/looks").contains("not compared"),
+        "{rendered}"
+    );
+}
+
 /// A count of whole things — calls, bytes, allocations — is stated as a whole number even where it repeats exactly, which leaves no span to set a resolution by.
 #[test]
 fn a_whole_count_is_stated_without_a_fraction() {

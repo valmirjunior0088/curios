@@ -53,11 +53,13 @@ pub enum Unit {
     Microseconds,
     /// User-space instructions a process and the threads and processes it starts retire: compared between two records of one machine, in any state, under one pin, since the machine's arrangement moves no count and its processor's features, and the pins' builds, choose the code that retires them.
     Instructions,
-    /// Bytes a thread took from the allocator: compared between two records under one pin, on any machine, since the standard library a pin builds decides what a collection takes.
+    /// Bytes a pinned build decides — what a thread took from the allocator, what Binaryen made of a module, what an engine's heap grew by: compared between two records under one pin, on any machine, since the standard library, the optimizer and the engine a pin builds each decide theirs.
     Bytes,
     /// Trips a thread made through the allocator: compared as [`Unit::Bytes`] are.
     Allocations,
-    /// A count the compiler keeps of its own work — calls, looks, budget units, a magnitude it samples: compared between any two records.
+    /// Collections an engine's collector began: compared as [`Unit::Bytes`] are, since the engine a pin builds decides when it collects.
+    Collections,
+    /// A count the compiler keeps of its own work — calls, looks, budget units, the bytes it alone emits, a magnitude it samples: compared between any two records.
     Count,
 }
 
@@ -71,11 +73,12 @@ pub struct Gated {
 
 impl Unit {
     /// Every unit, in the order its name is matched.
-    const ALL: [Self; 5] = [
+    const ALL: [Self; 6] = [
         Self::Microseconds,
         Self::Instructions,
         Self::Bytes,
         Self::Allocations,
+        Self::Collections,
         Self::Count,
     ];
 
@@ -86,6 +89,7 @@ impl Unit {
             Self::Instructions => "instructions",
             Self::Bytes => "bytes",
             Self::Allocations => "allocations",
+            Self::Collections => "collections",
             Self::Count => "count",
         }
     }
@@ -108,7 +112,7 @@ impl Unit {
                 state: false,
                 pins: true,
             },
-            Self::Bytes | Self::Allocations => Gated {
+            Self::Bytes | Self::Allocations | Self::Collections => Gated {
                 machine: false,
                 state: false,
                 pins: true,
@@ -121,9 +125,12 @@ impl Unit {
         }
     }
 
-    /// Whether a figure in this unit counts whole things, and is stated without a fraction: bytes, allocations and the compiler's counts.
+    /// Whether a figure in this unit counts whole things, and is stated without a fraction: bytes, allocations, collections and the compiler's counts.
     pub fn whole(self) -> bool {
-        matches!(self, Self::Bytes | Self::Allocations | Self::Count)
+        matches!(
+            self,
+            Self::Bytes | Self::Allocations | Self::Collections | Self::Count
+        )
     }
 
     /// What a reading is divided by to be stated in [`Unit::stated`].
@@ -131,7 +138,7 @@ impl Unit {
         match self {
             Self::Microseconds => 1e3,
             Self::Instructions => 1e6,
-            Self::Bytes | Self::Allocations | Self::Count => 1.0,
+            Self::Bytes | Self::Allocations | Self::Collections | Self::Count => 1.0,
         }
     }
 
@@ -142,6 +149,7 @@ impl Unit {
             Self::Instructions => "M",
             Self::Bytes => "bytes",
             Self::Allocations => "allocations",
+            Self::Collections => "collections",
             Self::Count => "",
         }
     }

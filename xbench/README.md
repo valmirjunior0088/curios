@@ -68,11 +68,11 @@ Interleaving is what makes the ratio survive a disturbance: a compile elsewhere 
 | --- | --- | --- |
 | `machine` | refused, naming it | refused, naming it |
 | `state` — governor, boost, SMT | refused, naming it | compared |
-| `pinned` — the tool versions | refused, naming it | refused, naming it |
+| `pinned` — rustc's, Wasmtime's and Binaryen's versions | refused, naming it | refused, naming it |
 | a workload's size | that workload compared no further, naming both sizes on its row | the same |
 | `software` — kernel, microcode | compared | compared |
 
-A measurement beside its code has figures in other units, each refused the same way, as its unit is gated (`Unit::gated`): bytes and allocations across a pin alone, the standard library a pin builds deciding what a collection takes, and a count the compiler keeps of its own work — calls, looks, budget units, a sampled magnitude — across nothing. A refusal reaches only the unit it crosses, as [A measured figure is counted where it can be, and gated only where it repeats](../documentation/design/a-measured-figure-is-counted-where-it-can-be-and-gated-only-where-it-repeats.md) carries each: a machine's arrangement moves a time and no count, and another machine runs other code for one build, Cranelift compiling for the host's processor. Software is not gated because a patch that moves a figure moves Rust with Curios, and the ratio a comparison reads cancels it; gating on it would strand the record at every update for nothing.
+A measurement beside its code has figures in other units, each refused the same way, as its unit is gated (`Unit::gated`): bytes, allocations and an engine's collections across a pin alone, the standard library, the optimizer and the engine a pin builds each deciding theirs, and a count the compiler keeps of its own work — calls, looks, budget units, the bytes it alone emits, a sampled magnitude — across nothing. A refusal reaches only the unit it crosses, as [A measured figure is counted where it can be, and gated only where it repeats](../documentation/design/a-measured-figure-is-counted-where-it-can-be-and-gated-only-where-it-repeats.md) carries each: a machine's arrangement moves a time and no count, and another machine runs other code for one build, Cranelift compiling for the host's processor. Software is not gated because a patch that moves a figure moves Rust with Curios, and the ratio a comparison reads cancels it; gating on it would strand the record at every update for nothing.
 
 ## Design
 

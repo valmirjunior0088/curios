@@ -37,6 +37,17 @@ fn a_locked_package_is_found_by_its_whole_name() {
     assert_eq!(locked(LOCK, "wasmtime-environ").as_deref(), Some("46.0.0"));
 }
 
+/// Binaryen's release is the one its data table names, whatever another tool's table beside it says.
+#[test]
+fn a_fetched_release_is_read_from_its_tool_s_table() {
+    let tasks = "[data.tree-sitter]\nversion = \"0.25.10\"\n\n[data.binaryen]\nversion = \"version_133\"\nbeside = \"curios-binaryen\"\n";
+    assert_eq!(fetched(tasks, "binaryen").as_deref(), Some("version_133"));
+    assert_eq!(
+        fetched("[data.tree-sitter]\nversion = \"0.25.10\"\n", "binaryen"),
+        None
+    );
+}
+
 #[test]
 fn a_version_is_the_first_word_of_a_report_that_reads_like_one() {
     assert_eq!(version("rustc 1.95.0 (abc123 2026-01-01)"), "1.95.0");
