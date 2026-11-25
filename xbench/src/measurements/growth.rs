@@ -1,142 +1,72 @@
 //! What each stage does as a program grows, counted.
 
 use {
-    curios::{optimize, test_support::*},
-    curios_core::looks,
+    curios::{TALLIES, optimize, test_support::*},
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_native::test_support::*,
-    curios_pipeline::{Stage, compile_with_prelude},
-    curios_profile::{Instructions, allocated_bytes, allocation_count, count_allocations},
+    curios_pipeline::compile_with_prelude,
+    curios_profile::Summary,
     curios_surface::Entrypoint,
-    xbench::{Measure, read},
+    xbench::{Phase, phase, read_span},
 };
 
-/// What one stage did: the instructions retired where the certifier counts them, the nodes its walks looked at, and its trips through the allocator with the bytes they took.
-#[derive(Clone, Copy, Debug, Default)]
-struct Count {
-    instructions: Option<u64>,
-    looks: u64,
-    allocations: u64,
-    bytes: u64,
-}
-
-/// The two instruction counts a compile is read on, each opened before any pool starts: the measuring thread's alone, which a stage that starts no thread is read on, so a pool's thread waiting for work retires nothing inside it, and the thread's with every thread it starts, which Binaryen and Cranelift are read on, since their passes run on pools ([`THREADED`]).
-#[derive(Default)]
-struct Counters {
-    alone: Option<Instructions>,
-    pooled: Option<Instructions>,
-}
-
-impl Counters {
-    /// The instruction counts opened, and the allocator asked to count, since no recorder listens here.
-    fn open() -> Self {
-        count_allocations();
-
-        Self {
-            alone: Instructions::open_alone(),
-            pooled: Instructions::open(),
-        }
-    }
-}
-
-/// The counters as they stand, read at a stage's boundary: each column a difference of two of these.
-struct Mark {
-    alone: Option<u64>,
-    pooled: Option<u64>,
-    looks: u64,
-    allocations: u64,
-    bytes: u64,
-}
-
-impl Mark {
-    fn now(counters: &Counters) -> Self {
-        Self {
-            alone: counters.alone.as_ref().map(Instructions::read),
-            pooled: counters.pooled.as_ref().map(Instructions::read),
-            looks: looks(),
-            allocations: allocation_count() as u64,
-            bytes: allocated_bytes() as u64,
-        }
-    }
-
-    /// What the stage at `stage` of [`STAGES`] did since `self`, and the mark it ends at.
-    fn since(self, counters: &Counters, stage: usize) -> (Count, Mark) {
-        let now = Mark::now(counters);
-        let (before, after) = match THREADED.contains(&STAGES[stage]) {
-            true => (self.pooled, now.pooled),
-            false => (self.alone, now.alone),
-        };
-        let count = Count {
-            instructions: before.zip(after).map(|(before, after)| after - before),
-            looks: now.looks - self.looks,
-            allocations: now.allocations - self.allocations,
-            bytes: now.bytes - self.bytes,
-        };
-        (count, now)
-    }
-}
-
-/// The stages a compile passes, in order: the parse, each rung the pipeline hands its observer, then Binaryen and Cranelift. `setup` is what the pipeline does before it hands over the text.
-const STAGES: [&str; 11] = [
-    "parse",
-    "setup",
-    "lower",
-    "elaborate",
-    "erase",
-    "anf-optm",
-    "cps",
-    "cps-optm",
-    "emit",
-    "binaryen",
-    "cranelift",
+/// The stages a compile passes, in order, each named as the measurement reads it and found by the span its owner opens over it, with the group that span declares: the entrypoint's parse, its lowering, elaboration, the certifier's judgment, erasure, the ANF optimizer, the CPS lowering and its optimizer, emission, Binaryen and Cranelift. What a compile does before its text stage, the fold's preamble, is no stage: no pass runs there.
+const STAGES: [(&str, &str, Option<&str>); 11] = [
+    ("parse", "parse", Some("entrypoint")),
+    ("lower", "into_core_unit", None),
+    ("elaborate", "elaborate_and_zonk", None),
+    ("certify", "recheck", None),
+    ("erase", "erase_unit", None),
+    ("anf-optm", "anf_optimize", None),
+    ("cps", "lower_to_cps", None),
+    ("cps-optm", "cps_optimize", None),
+    ("emit", "into_wasm", None),
+    ("binaryen", "binaryen_optimize", None),
+    ("cranelift", "cranelift_compile", None),
 ];
 
-/// The stages whose work runs on pools as well as on the thread that asks for it: Binaryen's passes, and Wasmtime's parallel compilation under Cranelift.
-const THREADED: [&str; 2] = ["binaryen", "cranelift"];
+/// One compile of `source`, from its parse to Cranelift's machine code, as a phase.
+fn compiled(source: &str) -> Phase<()> {
+    phase(TALLIES, || {
+        let entrypoint = source.parse::<Entrypoint>().expect("a growth parses");
+        let (module, _) =
+            compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
+                .expect("a growth compiles");
+        start_test_engine();
+        curios_cranelift::compile(&optimize(&module))
+            .expect("an optimized growth compiles to machine code");
+    })
+}
 
-/// What each stage of one compile of `source` did, in [`STAGES`]' order.
-fn counted(source: &str, counters: &Counters) -> [Count; 11] {
-    let mut counts = [Count::default(); 11];
-    let mark = Mark::now(counters);
+/// The span `compiled` folded for `stage`, where the compile reached it.
+fn span<'a>(
+    compiled: &'a Phase<()>,
+    (_, name, group): (&str, &str, Option<&str>),
+) -> Option<&'a Summary> {
+    compiled
+        .profile
+        .summaries
+        .iter()
+        .find(|summary| summary.name == name && summary.group.as_deref() == group)
+}
 
-    let entrypoint = source.parse::<Entrypoint>().expect("a growth parses");
-    let (count, mark) = mark.since(counters, 0);
-    counts[0] = count;
+/// What `compiled`'s walks looked at in each stage, in [`STAGES`]' order: what the stage's span added to the look count, nought where the compile never reached it.
+fn looks_by_stage(compiled: &Phase<()>) -> [u64; 11] {
+    let [look] = TALLIES else {
+        panic!("the program hands the recorder one tally, its look count")
+    };
 
-    let mut mark = Some(mark);
-    let (module, _) =
-        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
-            let index = match stage {
-                Stage::Text(_) => 1,
-                Stage::Core(..) => 2,
-                Stage::CoreElab(..) => 3,
-                Stage::Anf(_) => 4,
-                Stage::AnfOptm(_) => 5,
-                Stage::Cps(_) => 6,
-                Stage::CpsOptm(_) => 7,
-                Stage::Wasm(_) => 8,
-            };
-            let (count, next) = mark
-                .take()
-                .expect("a stage boundary follows the last")
-                .since(counters, index);
-            counts[index] = count;
-            mark = Some(next);
-        })
-        .expect("a growth compiles");
-    let mark = mark.expect("the last stage left a mark");
-
-    start_test_engine();
-    let bytes = optimize(&module);
-    let (count, mark) = mark.since(counters, 9);
-    counts[9] = count;
-
-    curios_cranelift::compile(&bytes).expect("an optimized growth compiles to machine code");
-    let (count, _) = mark.since(counters, 10);
-    counts[10] = count;
-
-    counts
+    STAGES.map(|stage| {
+        span(compiled, stage)
+            .and_then(|summary| {
+                summary
+                    .tallies
+                    .iter()
+                    .find(|tallied| tallied.name == look.name)
+            })
+            .map_or(0, |tallied| tallied.added)
+    })
 }
 
 /// How a column grows across three sizes each double the last: the second difference over the first, so what every compile pays whatever its size cancels. Two is linear, four quadratic. `None` where the column does not grow, a stage the growth never reaches.
@@ -147,16 +77,12 @@ fn slope(small: u64, middle: u64, large: u64) -> Option<f64> {
     (first > 0 && first * 50 >= small.max(1)).then(|| second as f64 / first as f64)
 }
 
-/// The steepest slope over the first `stages` of [`STAGES`] in one column, with the stage it is at.
-fn steepest(
-    counts: &[[Count; 11]; 3],
-    stages: usize,
-    column: impl Fn(&Count) -> Option<u64>,
-) -> Option<(f64, &'static str)> {
-    (0..stages)
+/// The steepest slope of the looks over [`STAGES`] across three sizes, with the stage it is at.
+fn steepest(looks: &[[u64; 11]; 3]) -> Option<(f64, &'static str)> {
+    (0..STAGES.len())
         .filter_map(|stage| {
-            let [small, middle, large] = counts.each_ref().map(|count| column(&count[stage]));
-            slope(small?, middle?, large?).map(|slope| (slope, STAGES[stage]))
+            let [small, middle, large] = looks.map(|looks| looks[stage]);
+            slope(small, middle, large).map(|slope| (slope, STAGES[stage].0))
         })
         .max_by(|left, right| left.0.total_cmp(&right.0))
 }
@@ -206,11 +132,11 @@ const UNHELD: &[Growth] = &[
 /// The steepest slope a growth's looks may show in a stage: two is linear and four quadratic, so three tells them apart with room on both sides, for a logarithm's factor.
 const HELD_SLOPE: f64 = 3.0;
 
-/// How each stage's work grows as a program grows along each axis an author grows one: every growth compiled at three sizes, each double the last, each stage's counts read as the harness reads a span's, its instructions `<growth>/<stage>/x<k>` at the `k`-fold size, its allocations `…/allocations`, the bytes they took `…/allocated` and its looks `…/looks`, each sized by its `n`.
+/// How each stage's work grows as a program grows along each axis an author grows one: every growth compiled at three sizes, each double the last, each compile a phase from its parse to Cranelift's machine code, `<growth>/x<k>` at the `k`-fold size, and each stage read off the span its owner opens over it ([`STAGES`]), `<growth>/<stage>/x<k>`: its time, its calls, what it allocated and the bytes it took, and its looks, each sized by the growth's `n`.
 ///
-/// `cargo xbench measure growth_slopes` takes it, alone in its invocation as the runner invokes it: the instruction counts open before Binaryen's and Wasmtime's pools start, so a stage before Binaryen is read on this thread alone and Binaryen and Cranelift with the pools' threads. Counted, so the figures hold on any machine as far as their units carry them; a growth reads no instructions where the certifier opens no count.
+/// `cargo xbench measure growth_slopes` takes it. A compile's instructions are its phase's, its thread's and every thread it starts; a stage's are not read, since a span carries none.
 ///
-/// A slope is read off the figures, never filed: the second difference over the first across the three sizes, so what every compile pays whatever its size cancels, two linear and four quadratic. Of the four counts, looks alone repeat from run to run, so the measurement's own assert holds them alone to [`HELD_SLOPE`], in every stage of every growth but the [`UNHELD`] ones, a test of the suite holding them taking most of a minute; instructions, allocations and bytes move with the keys a run draws, and are read with their spans in the record, never bounded.
+/// A slope is read off the figures, never filed: the second difference over the first across the three sizes, so what every compile pays whatever its size cancels, two linear and four quadratic. Looks alone repeat from run to run, so the measurement's own assert holds them alone to [`HELD_SLOPE`], in every stage of every growth but the [`UNHELD`] ones, a test of the suite holding them taking most of a minute; allocations and bytes move with the keys a run draws and times with the machine, and are read with their spans in the record, never bounded.
 ///
 /// # What it last printed
 ///
@@ -259,43 +185,33 @@ const HELD_SLOPE: f64 = 3.0;
 ///
 /// **Five growths' looks grow past [`HELD_SLOPE`] today**, the [`UNHELD`] ones: a family's values, a product of two spines commuted, `let`s and nested lambdas at erasure, and matches each on the `let` before it at elaboration; every other growth's looks are held in every stage. One reading below [`HELD_SLOPE`] at the grid's sizes may still hold a square too small there to show.
 pub fn growth_slopes() {
-    let counters = Counters::open();
     let mut grew = Vec::new();
 
     for growth in Growth::ALL {
         let base = base(growth);
-        // Compiled once uncounted first: the prelude's modules are restored where a compile first reads them, once a process, so the smallest size would otherwise carry its growth's first restores and steepen its slope.
-        counted(&grown(growth, base), &Counters::default());
+        // Compiled once unread first: the prelude's modules are restored where a compile first reads them, so the smallest size would otherwise carry its growth's first restores and steepen its slope.
+        compiled(&grown(growth, base));
         let sizes = [base, base * 2, base * 4];
-        let counts = sizes.map(|size| counted(&grown(growth, size), &counters));
+        let compiles = sizes.map(|size| compiled(&grown(growth, size)));
 
-        for ((multiple, size), stages) in [1, 2, 4].into_iter().zip(sizes).zip(&counts) {
-            for (stage, count) in STAGES.iter().zip(stages) {
-                let name = format!("{growth:?}/{stage}/x{multiple}");
-                let size = Some(size as u64);
-                if let Some(instructions) = count.instructions {
-                    read(&name, Measure::Instructions, size, instructions);
+        for ((multiple, size), compile) in [1, 2, 4].into_iter().zip(sizes).zip(&compiles) {
+            let size = Some(size as u64);
+            compile.read(&format!("{growth:?}/x{multiple}"), size);
+            for stage in STAGES {
+                if let Some(summary) = span(compile, stage) {
+                    read_span(
+                        &format!("{growth:?}/{}/x{multiple}", stage.0),
+                        summary,
+                        size,
+                    );
                 }
-                read(
-                    &format!("{name}/allocations"),
-                    Measure::Allocations,
-                    size,
-                    count.allocations,
-                );
-                read(
-                    &format!("{name}/allocated"),
-                    Measure::Bytes,
-                    size,
-                    count.bytes,
-                );
-                read(&format!("{name}/looks"), Measure::Count, size, count.looks);
             }
         }
 
         if UNHELD.contains(&growth) {
             continue;
         }
-        if let Some((slope, stage)) = steepest(&counts, STAGES.len(), |count| Some(count.looks))
+        if let Some((slope, stage)) = steepest(&compiles.each_ref().map(looks_by_stage))
             && slope > HELD_SLOPE
         {
             grew.push(format!("{growth:?}: looks at {stage} grow {slope:.2}"));
