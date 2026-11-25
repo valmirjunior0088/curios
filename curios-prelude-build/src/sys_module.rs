@@ -999,15 +999,15 @@ fn handle_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
     vec![
         documented(
             &["The stream the host feeds the program."],
-            operation("stdin", &[], syntax, Intrinsic::Handle(StdioCodes::STDIN)),
+            constant("stdin", syntax, Intrinsic::Handle(StdioCodes::STDIN)),
         ),
         documented(
             &["The stream the program writes its output to."],
-            operation("stdout", &[], syntax, Intrinsic::Handle(StdioCodes::STDOUT)),
+            constant("stdout", syntax, Intrinsic::Handle(StdioCodes::STDOUT)),
         ),
         documented(
             &["The stream the program writes its diagnostics to."],
-            operation("stderr", &[], syntax, Intrinsic::Handle(StdioCodes::STDERR)),
+            constant("stderr", syntax, Intrinsic::Handle(StdioCodes::STDERR)),
         ),
     ]
 }
@@ -1098,38 +1098,38 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
         SysModule::carrier(
             "Nat",
             &["The whole numbers from zero up, with no highest."],
-            operation("Nat", &[], syntax, Intrinsic::NatType),
+            constant("Nat", syntax, Intrinsic::NatType),
             items(nat_ops(syntax)),
         ),
         SysModule::carrier(
             "Byte",
             &["A single byte, from zero through 255."],
-            operation("Byte", &[], syntax, Intrinsic::ByteType),
+            constant("Byte", syntax, Intrinsic::ByteType),
             items(byte_ops(syntax)),
         ),
         SysModule::carrier(
             "Int",
             &["The whole numbers, negative and not, with no least and no greatest."],
-            operation("Int", &[], syntax, Intrinsic::IntType),
+            constant("Int", syntax, Intrinsic::IntType),
             items(int_ops(syntax)),
         ),
         SysModule::carrier(
             "Flt",
             &["A binary64 floating-point number."],
-            operation("Flt", &[], syntax, Intrinsic::FltType),
+            constant("Flt", syntax, Intrinsic::FltType),
             flt_ops(syntax),
         ),
         SysModule::carrier(
             "Bytes",
             &["A packed run of bytes, written `0x[…]`."],
-            operation("Bytes", &[], syntax, Intrinsic::BytesType),
+            constant("Bytes", syntax, Intrinsic::BytesType),
             items(bytes_ops(syntax)),
         ),
         // The propositions `/sys`'s own operations state their preconditions in sit beside the decision they reflect: `Holds` is written beside every bound in the roster, and `True` and `False` are what it reduces to.
         SysModule::carrier(
             "Bool",
             &["The two truth values, `true` and `false`."],
-            operation("Bool", &[], syntax, Intrinsic::BoolType),
+            constant("Bool", syntax, Intrinsic::BoolType),
             [
                 items(bool_ops(syntax)),
                 vec![true_prop(), false_prop(), holds().into_item()],
@@ -1141,7 +1141,7 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
             &[
                 "An open stream the host holds — a file, a socket, or one of the three standard streams.",
             ],
-            operation("Handle", &[], syntax, Intrinsic::HandleType),
+            constant("Handle", syntax, Intrinsic::HandleType),
             items(handle_ops(syntax)),
         ),
         SysModule::carrier(

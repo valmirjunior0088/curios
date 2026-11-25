@@ -9,14 +9,49 @@ use {
     curios_surface::{FuncSugarParam, LetSignature, Name, Pattern, Subterm},
 };
 
-// A description with nothing to bind is a value, and `LetSignature::Func` with an empty telescope would lower to a binderless lambda instead.
+/// The parameters `declaration` states, a function's.
+fn parameters(declaration: &Decl) -> &[Parameter] {
+    match &declaration.kind {
+        Kind::Function(parameters) => parameters,
+        Kind::Constant => panic!("the declaration is a function"),
+    }
+}
+
+// What a declaration is, a constant or a function, is what its constructor states and never how many parameters it names: a function of no parameters is a function still, called `f()`, and a constant is written with no parameter list.
 #[test]
-fn an_empty_telescope_lowers_to_a_constant_rather_than_a_nullary_function() {
-    let signature = pub_let("stdin", nat(), nat_lit(0)).into_let().signature;
+fn a_declaration_is_a_constant_or_a_function_by_what_states_it() {
+    let constant = pub_let("stdin", nat(), nat_lit(0)).into_let().signature;
+    let function = pub_fn("now", vec![], nat(), nat_lit(0))
+        .into_let()
+        .signature;
 
     assert!(
-        matches!(signature, LetSignature::Name { .. }),
-        "an empty telescope lowered to {signature:?}"
+        matches!(constant, LetSignature::Name { .. }),
+        "a constant lowered to {constant:?}"
+    );
+    assert!(
+        matches!(&function, LetSignature::Func { params, .. } if params.is_empty()),
+        "a function of no parameters lowered to {function:?}"
+    );
+}
+
+// The same of a row that is one intrinsic node: an operation is a function whatever it is handed, and a row that is a value says so, the kind of neither following from how many operands the node takes.
+#[test]
+fn an_operation_of_no_parameters_is_a_function_and_a_value_row_a_constant() {
+    let performed = operation("handle", &[], &SYNTAX, Intrinsic::HandleType)
+        .into_let()
+        .signature;
+    let named = constant("Handle", &SYNTAX, Intrinsic::HandleType)
+        .into_let()
+        .signature;
+
+    assert!(
+        matches!(&performed, LetSignature::Func { params, .. } if params.is_empty()),
+        "an operation of no parameters lowered to {performed:?}"
+    );
+    assert!(
+        matches!(named, LetSignature::Name { .. }),
+        "a value row lowered to {named:?}"
     );
 }
 
@@ -70,10 +105,9 @@ fn a_parameter_takes_the_type_of_the_operand_it_stands_as() {
         Intrinsic::IntShl(name("value"), name("count")),
     );
 
-    let types = declaration
-        .params
+    let types = parameters(&declaration)
         .iter()
-        .map(|(_, label, type_)| (label.as_str(), type_.clone()))
+        .map(|parameter| (parameter.label.as_str(), parameter.type_.clone()))
         .collect::<Vec<_>>();
     let int = intrinsic(Intrinsic::IntType);
 
@@ -95,10 +129,9 @@ fn a_type_and_a_proof_are_implicit_and_every_other_operand_is_written() {
         },
     );
 
-    let marks = declaration
-        .params
+    let marks = parameters(&declaration)
         .iter()
-        .map(|(plicity, _, _)| *plicity)
+        .map(|parameter| parameter.plicity)
         .collect::<Vec<_>>();
     assert_eq!(
         marks,
@@ -116,7 +149,7 @@ fn a_type_and_a_proof_are_implicit_and_every_other_operand_is_written() {
 fn a_formers_type_operand_is_written() {
     let declaration = operation("List", &["T"], &SYNTAX, Intrinsic::ListType(name("T")));
 
-    assert_eq!(declaration.params[0].0, Plicity::Explicit);
+    assert_eq!(parameters(&declaration)[0].plicity, Plicity::Explicit);
     assert_eq!(declaration.output, type_());
 }
 
@@ -135,7 +168,7 @@ fn a_bound_is_the_tables_proposition_over_the_parameters_it_names() {
     );
 
     assert_eq!(
-        declaration.params[2].2,
+        parameters(&declaration)[2].type_,
         applied(
             Subterm::Name(Name::new(true, SYNTAX.proof.holds.qualifier())).into(),
             vec![intrinsic(Intrinsic::NatLt(nat_lit(0), name("b")))]

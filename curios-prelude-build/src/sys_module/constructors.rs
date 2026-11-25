@@ -11,43 +11,56 @@ use {
     },
 };
 
+/// Whether a `/sys` declaration is a constant or a function: stated where the declaration is written, and never read off how many parameters it has.
+pub enum Kind {
+    /// Written with no parameter list: a type the calculus builds in, or a value it names.
+    Constant,
+    /// Written with its parameters, in their order. One of no parameters is a function still, called `f()`, as `() -> T` is in the language.
+    Function(Vec<Parameter>),
+}
+
+/// One parameter of a function `/sys` declares: how it is passed, the name it binds and its type.
+pub struct Parameter {
+    pub plicity: Plicity,
+    pub label: String,
+    pub type_: Term,
+}
+
 /// One `/sys` binding, before it is a [`TopItem`].
 ///
-/// **Every field a declaration has is a field here**, so nothing is patched after the build: a gloss, a plicity mark and a telescope are stated where the declaration is written rather than written into a finished node afterwards, and a builder that does not take one cannot silently leave it out. The lowering happens once, in [`Decl::into_item`] — the only place a `/sys` `TopItem::Let` is spelled.
+/// **Every field a declaration has is a field here**, so nothing is patched after the build: a gloss, whether it is a constant or a function, a plicity mark and a telescope are stated where the declaration is written rather than written into a finished node afterwards, and a builder that does not take one cannot silently leave it out. The lowering happens once, in [`Decl::into_item`] — the only place a `/sys` `TopItem::Let` is spelled.
 pub struct Decl {
     pub doc: Option<Doc>,
     pub vis_pub: bool,
     pub label: String,
-    /// The telescope, in written order. **Empty is a constant, not a nullary function**: `LetSignature::Func` with no parameters lowers through `func_sugar_lambda` to a binderless lambda, which is a different declaration. The two forms are one rule, stated in [`Decl::signature`].
-    pub params: Vec<(Plicity, String, Term)>,
+    pub kind: Kind,
     pub output: Term,
     pub body: Term,
 }
 
 impl Decl {
-    /// The signature a telescope, output and body make. A row with no parameters becomes a *constant* rather than a nullary function: a description needs no thunk, being one already.
-    fn signature(params: Vec<(Plicity, String, Term)>, output: Term, body: Term) -> LetSignature {
-        if params.is_empty() {
-            return LetSignature::Name {
+    /// The signature an output and a body make of a declaration of `kind`: a constant's, or a function's over its parameters, whatever their number.
+    fn signature(kind: Kind, output: Term, body: Term) -> LetSignature {
+        match kind {
+            Kind::Constant => LetSignature::Name {
                 type_: Some(output),
                 body,
-            };
-        }
-
-        LetSignature::Func {
-            params: params
-                .into_iter()
-                .map(|(plicity, label, type_)| match plicity {
-                    Plicity::Witness => FuncSugarParam::Premise(type_),
-                    Plicity::Explicit | Plicity::Implicit => FuncSugarParam::Bound {
-                        implicit: plicity == Plicity::Implicit,
-                        binder: Pattern::Binder(label.into()),
-                        type_,
-                    },
-                })
-                .collect(),
-            output,
-            body,
+            },
+            Kind::Function(parameters) => LetSignature::Func {
+                params: parameters
+                    .into_iter()
+                    .map(|parameter| match parameter.plicity {
+                        Plicity::Witness => FuncSugarParam::Premise(parameter.type_),
+                        Plicity::Explicit | Plicity::Implicit => FuncSugarParam::Bound {
+                            implicit: parameter.plicity == Plicity::Implicit,
+                            binder: Pattern::Binder(parameter.label.into()),
+                            type_: parameter.type_,
+                        },
+                    })
+                    .collect(),
+                output,
+                body,
+            },
         }
     }
 
@@ -56,7 +69,7 @@ impl Decl {
             doc,
             vis_pub,
             label,
-            params,
+            kind,
             output,
             body,
         } = self;
@@ -67,7 +80,7 @@ impl Decl {
             doc,
             vis_pub,
             label: label.into(),
-            signature: Self::signature(params, output, body),
+            signature: Self::signature(kind, output, body),
         }
     }
 
@@ -86,7 +99,7 @@ pub fn pub_let(label: &str, type_: Term, body: Term) -> Decl {
         doc: None,
         vis_pub: true,
         label: label.to_string(),
-        params: Vec::new(),
+        kind: Kind::Constant,
         output: type_,
         body,
     }
@@ -147,16 +160,22 @@ pub fn pub_fn_marked(
         doc: None,
         vis_pub: true,
         label: label.to_string(),
-        params: params
-            .into_iter()
-            .map(|(plicity, label, type_)| (plicity, label.to_string(), type_))
-            .collect(),
+        kind: Kind::Function(
+            params
+                .into_iter()
+                .map(|(plicity, label, type_)| Parameter {
+                    plicity,
+                    label: label.to_string(),
+                    type_,
+                })
+                .collect(),
+        ),
         output,
         body,
     }
 }
 
-/// A declaration that is one intrinsic node over its own parameters, typed by what core's table says of that node.
+/// A function that is one intrinsic node over its own parameters, typed by what core's table says of that node. One of no parameters is a function still, called `f()`: an operation that performs something is called to be performed, however little it is handed.
 ///
 /// **An entry states what is its own, and nothing the table gives.** Its label, the names its parameters take and the node are the roster's, and which node a name builds is a decision: `gt` is `lt` mirrored, and `Nat/to_flt` rounds ties to even. Each parameter's type and plicity, every bound and the result are `Intrinsic::signature`'s, read by [`projection`], so an entry cannot state a type the table does not.
 ///
@@ -176,14 +195,31 @@ pub fn operation(label: &str, params: &[&str], syntax: &SyntaxRegistry, node: In
         doc: None,
         vis_pub: true,
         label: label.to_string(),
-        params: params
-            .iter()
-            .zip(telescope)
-            .map(|(label, (plicity, type_))| (plicity, (*label).to_string(), type_))
-            .collect(),
+        kind: Kind::Function(
+            params
+                .iter()
+                .zip(telescope)
+                .map(|(label, (plicity, type_))| Parameter {
+                    plicity,
+                    label: (*label).to_string(),
+                    type_,
+                })
+                .collect(),
+        ),
         output,
         body: intrinsic(node),
     }
+}
+
+/// A constant that is one intrinsic node of no operands, typed by what core's table says of that node: a type the calculus builds in, or a value it names.
+pub fn constant(label: &str, syntax: &SyntaxRegistry, node: Intrinsic) -> Decl {
+    let Some(Projection { output, .. }) = projection(&[], &node, syntax) else {
+        panic!(
+            "core's table types no declaration for `{label}`: a type it states has no surface reading"
+        );
+    };
+
+    pub_let(label, output, intrinsic(node))
 }
 
 pub fn unary(label: &str, syntax: &SyntaxRegistry, ctor: impl FnOnce(Term) -> Intrinsic) -> Decl {
