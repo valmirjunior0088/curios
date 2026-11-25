@@ -95,16 +95,19 @@ impl<T> Phase<T> {
         self.lines(name, size).into_iter().for_each(print);
     }
 
-    /// The lines [`Phase::read`] prints.
-    fn lines(&self, name: &str, size: Option<u64>) -> Vec<Line> {
-        let span = self
-            .profile
+    /// The span the phase opened around its work: what [`Phase::read`] reads beside the instructions, and all of a phase whose work another process does.
+    pub fn span(&self) -> &Summary {
+        self.profile
             .summaries
             .iter()
             // The one span this module opens.
             .find(|summary| summary.target == module_path!())
-            .expect("a phase's span closes inside its own fold");
-        let mut lines = span_lines(name, span, size);
+            .expect("a phase's span closes inside its own fold")
+    }
+
+    /// The lines [`Phase::read`] prints.
+    fn lines(&self, name: &str, size: Option<u64>) -> Vec<Line> {
+        let mut lines = span_lines(name, self.span(), size);
         if let Some(instructions) = self.instructions {
             lines.push(Line {
                 name: name.to_string(),

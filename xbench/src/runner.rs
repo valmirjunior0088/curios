@@ -34,7 +34,7 @@ struct Target {
     name: String,
 }
 
-/// Build the bench in release, and name the executable a group sits in.
+/// Build the bench in release, and the shipped `curios` beside it, which a measurement of the language server runs as its server, and name the executable a group sits in.
 fn built(root: &Path) -> Result<PathBuf, String> {
     let built = Command::new("cargo")
         .args([
@@ -44,6 +44,10 @@ fn built(root: &Path) -> Result<PathBuf, String> {
             "xbench",
             "--bin",
             "xbench",
+            "--package",
+            "curios",
+            "--bin",
+            "curios",
             "--message-format=json-render-diagnostics",
         ])
         .current_dir(root)

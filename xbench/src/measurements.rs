@@ -41,6 +41,9 @@ use listing::*;
 mod towers;
 use towers::*;
 
+mod reopen;
+use reopen::*;
+
 mod runaways;
 use runaways::*;
 
@@ -315,6 +318,11 @@ const MEASUREMENTS: &[Measurement] = &[
         name: "corpus_measurements",
         spread: Spread::Moves,
         take: corpus_measurements,
+    },
+    Measurement {
+        name: "reopen_measurements",
+        spread: Spread::Moves,
+        take: reopen_measurements,
     },
 ];
 
