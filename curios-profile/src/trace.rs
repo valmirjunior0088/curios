@@ -6,6 +6,8 @@
 //!
 //! **The allocator's readings ride each slice.** Where the counting allocator counts (`CountingAllocator`), each slice's beginning and end carries four readings as extra counter values. Two are its thread's allocated bytes and allocations, counters of the thread written as steps on its sequence, as Perfetto writes a thread's time. The other two are the process's live bytes and peak, gauges every sequence reads, so each is written whole. Where it does not count, no counter track is described and no reading carried.
 //!
+//! **No slice is charged the recorder's own work.** Every callback the recorder answers allocates — a span's fields kept, a name interned, a packet built — on the thread of the span it records, inside whatever span that thread has entered. So each callback counts apart what it took, and a slice reads its thread's two counts less what was counted apart: a span is charged what the work inside it took, however many spans and samples the recorder wrote there.
+//!
 //! **A stream is a whole prefix of its run.** Each packet is flushed as it is written, so a run that is killed has filed all it did up to its last whole packet; and the first write that fails ends the stream, the run going on, so a disk that filled leaves a file read the same way, never one with packets missing from its middle.
 
 use {
@@ -22,6 +24,7 @@ use {
     },
     prost::Message,
     std::{
+        cell::Cell,
         collections::{HashMap, hash_map::Entry},
         fmt,
         fs::{self, File},
@@ -192,64 +195,96 @@ impl Subscriber for Recorder {
     }
 
     fn new_span(&self, attributes: &span::Attributes<'_>) -> span::Id {
-        let id = self.sequence.fetch_add(1, Ordering::Relaxed);
-        let mut fields = Fields::default();
-        attributes.record(&mut fields);
-        self.sink().created(id, attributes.metadata(), fields.0);
+        unheard(|| {
+            let id = self.sequence.fetch_add(1, Ordering::Relaxed);
+            let mut fields = Fields::default();
+            attributes.record(&mut fields);
+            self.sink().created(id, attributes.metadata(), fields.0);
 
-        span::Id::from_u64(id)
+            span::Id::from_u64(id)
+        })
     }
 
     fn record(&self, span: &span::Id, values: &span::Record<'_>) {
-        let mut fields = Fields::default();
-        values.record(&mut fields);
-        self.sink().recorded(span.into_u64(), fields.0);
+        unheard(|| {
+            let mut fields = Fields::default();
+            values.record(&mut fields);
+            self.sink().recorded(span.into_u64(), fields.0);
+        });
     }
 
     // A causal edge between spans is not a cost, and nothing downstream reads one.
     fn record_follows_from(&self, _: &span::Id, _: &span::Id) {}
 
     fn event(&self, event: &Event<'_>) {
-        let mut fields = Fields::default();
-        event.record(&mut fields);
-        self.sink().event(event.metadata(), fields.0);
+        unheard(|| {
+            let mut fields = Fields::default();
+            event.record(&mut fields);
+            self.sink().event(event.metadata(), fields.0);
+        });
     }
 
     fn enter(&self, span: &span::Id) {
-        self.sink()
-            .boundary(span.into_u64(), track_event::Type::SliceBegin);
+        unheard(|| {
+            self.sink()
+                .boundary(span.into_u64(), track_event::Type::SliceBegin);
+        });
     }
 
     fn exit(&self, span: &span::Id) {
-        self.sink()
-            .boundary(span.into_u64(), track_event::Type::SliceEnd);
+        unheard(|| {
+            self.sink()
+                .boundary(span.into_u64(), track_event::Type::SliceEnd);
+        });
     }
 
     fn clone_span(&self, span: &span::Id) -> span::Id {
-        *self
-            .shared
-            .lock()
-            .expect("profiling sharing lock")
-            .entry(span.into_u64())
-            .or_insert(1) += 1;
+        unheard(|| {
+            *self
+                .shared
+                .lock()
+                .expect("profiling sharing lock")
+                .entry(span.into_u64())
+                .or_insert(1) += 1;
 
-        span.clone()
+            span.clone()
+        })
     }
 
     fn try_close(&self, span: span::Id) -> bool {
-        let mut shared = self.shared.lock().expect("profiling sharing lock");
-        if let Some(holders) = shared.get_mut(&span.into_u64()) {
-            *holders -= 1;
-            if *holders > 0 {
-                return false;
+        unheard(|| {
+            let mut shared = self.shared.lock().expect("profiling sharing lock");
+            if let Some(holders) = shared.get_mut(&span.into_u64()) {
+                *holders -= 1;
+                if *holders > 0 {
+                    return false;
+                }
+                shared.remove(&span.into_u64());
             }
-            shared.remove(&span.into_u64());
-        }
-        drop(shared);
-        self.sink().closed(span.into_u64());
+            drop(shared);
+            self.sink().closed(span.into_u64());
 
-        true
+            true
+        })
     }
+}
+
+thread_local! {
+    /// Bytes the recorder took for itself on this thread, as its allocator count reads them: what its callbacks allocated. Initialized as a constant with no destructor, as the allocator's own counts are, so reading it never allocates.
+    static UNHEARD_ALLOCATED: Cell<u64> = const { Cell::new(0) };
+    /// Trips the recorder made through the allocator for itself on this thread.
+    static UNHEARD_ALLOCATIONS: Cell<u64> = const { Cell::new(0) };
+}
+
+/// Run one of the recorder's callbacks, counting apart what it takes from the allocator as the recorder's own, which [`Counts::now`] leaves out of every slice's readings.
+fn unheard<T>(callback: impl FnOnce() -> T) -> T {
+    let bytes = thread_allocated_bytes();
+    let trips = thread_allocation_count();
+    let answer = callback();
+    UNHEARD_ALLOCATED.with(|own| own.set(own.get() + (thread_allocated_bytes() - bytes)));
+    UNHEARD_ALLOCATIONS.with(|own| own.set(own.get() + (thread_allocation_count() - trips)));
+
+    answer
 }
 
 /// What a span was created with, kept until it closes and written on each slice it is entered as: its callsite, whose name and target are interned on the sequence of the thread that enters it, and its fields.
@@ -365,7 +400,7 @@ impl Sink {
 
     /// A span entered or exited: a slice begun or ended on the thread's track, the allocator's readings beside it where it counts.
     fn boundary(&mut self, id: u64, kind: track_event::Type) {
-        // Read before anything of the packet is built, which allocates.
+        // Read before anything of the packet is built: what building it takes is counted apart as the recorder's once this callback returns, so a reading taken after would charge it to the slice.
         let counts = self.counted.then(Counts::now);
         let Some(span) = self.spans.get(&id) else {
             return;
@@ -417,10 +452,11 @@ struct Counts {
 }
 
 impl Counts {
+    /// The counts as they stand, the thread's two less what the recorder took for itself on it ([`unheard`]).
     fn now() -> Self {
         Self {
-            allocated: thread_allocated_bytes(),
-            allocations: thread_allocation_count(),
+            allocated: thread_allocated_bytes() - UNHEARD_ALLOCATED.with(Cell::get),
+            allocations: thread_allocation_count() - UNHEARD_ALLOCATIONS.with(Cell::get),
             live: live_bytes(),
             peak: peak_bytes(),
         }

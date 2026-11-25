@@ -247,7 +247,7 @@ fn a_string_value_many_spans_carry_is_written_once() {
     assert_eq!(strings[0].str(), b"the same term");
 }
 
-// A slice's beginning and end carry the allocator's four readings, one for each counter track its sequence's defaults name, the thread's two written as steps: the end's step of allocated bytes is what the thread took while the span was entered, at least its own allocation.
+// A slice's beginning and end carry the allocator's four readings, one for each counter track its sequence's defaults name, the thread's two written as steps: the end's step of allocated bytes is what the thread took while the span was entered, its own allocation and none of the recorder's.
 #[test]
 fn a_slice_carries_the_allocator_readings() {
     const HELD: usize = 4 * 1024 * 1024;
@@ -284,11 +284,36 @@ fn a_slice_carries_the_allocator_readings() {
         .find(|event| event.r#type() == track_event::Type::SliceEnd)
         .expect("the slice ends");
     assert_eq!(ended.extra_counter_values.len(), Counter::ALL.len());
-    assert!(
-        ended.extra_counter_values[0] as usize >= HELD,
+    assert_eq!(
+        ended.extra_counter_values[0] as usize, HELD,
         "the end's step reads what the span allocated: {:?}",
         ended.extra_counter_values
     );
+}
+
+// No span is charged the recorder's own work: one whose work allocates nothing, entered around spans and samples whose work allocates nothing either, keeps no byte and no trip through the allocator, whatever the recorder took to write them down.
+#[test]
+fn a_span_is_charged_nothing_the_recorder_takes() {
+    let buffer = Buffer::default();
+    trace(buffer.destination(), || {
+        let _span = tracing::trace_span!("around").entered();
+        for round in 0..64_u64 {
+            let _inside = tracing::trace_span!("inside", round).entered();
+            curios_common::sample!("inside::round", round);
+        }
+    })
+    .expect("a stream destination opens");
+
+    let report = buffer.folded();
+    for name in ["around", "inside"] {
+        let memory = report
+            .summaries
+            .iter()
+            .find(|summary| summary.name == name)
+            .and_then(|summary| summary.memory)
+            .unwrap_or_else(|| panic!("the span {name} folds with its memory"));
+        assert_eq!((memory.allocated, memory.allocations), (0, 0), "{name}");
+    }
 }
 
 // A span is charged what its own thread took, read back through the stream: another thread's allocation made while it is entered is that thread's span's, and what its thread took before it entered is no part of it.
