@@ -18,7 +18,7 @@ use {
     },
 };
 
-/// The engine invocations here file for: the one part of a payload's header this crate is handed rather than computes, and one test alone is about two.
+/// The engine invocations here file for: the one part of a payload's record this crate is handed rather than computes, and one test alone is about two.
 const ENGINE: &str = "test-engine";
 
 /// What one invocation did.
@@ -243,7 +243,7 @@ fn an_edited_entry_is_not_reused() {
     );
 }
 
-/// A payload is machine code one engine runs, so a payload filed for another engine is a miss: the header names the engine beside the compiler, and the address names neither, so the other engine's filing replaced it.
+/// A payload is machine code one engine runs, so a payload filed for another engine is a miss: its record names the engine, and the address names none, so the other engine's filing replaced it.
 #[test]
 fn another_engines_payload_is_a_miss() {
     let root = project("engines");

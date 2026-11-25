@@ -1,4 +1,4 @@
-//! The addresses the cabinet files a unit and a payload under: what each is, and nothing of what it was compiled from, which the record filed beside it is verified against, nor of who compiled it, which the header ahead of that record names (`file`).
+//! The addresses the cabinet files a unit and a payload under: what each is, and nothing of what it was compiled from, which the record filed beside it is verified against, nor of who compiled it, which the directory its object lies in names (`curios_package::Cabinet::objects_of`).
 
 #[cfg(test)]
 mod tests;
@@ -11,10 +11,10 @@ use {
 /// What version of the unit family's layout an address names.
 ///
 /// In the address rather than in a file beside it, so an entry written by an older layout is not found rather than found and misread. Bump it whenever what an object holds, or what a hit is verified against, changes.
-const OBJECT_SCHEMA: &str = "u119";
+const OBJECT_SCHEMA: &str = "u120";
 
 /// The same, for the payload family — its own tag, because the two families version independently and neither should invalidate the other by moving.
-const PAYLOAD_SCHEMA: &str = "p14";
+const PAYLOAD_SCHEMA: &str = "p15";
 
 /// The address a unit claiming `mounts`, declaring `declared`, `compiled` built or tested, and in a fold whose first unit stands in for the archived root claiming `stand_in` where one does, is filed under.
 ///
@@ -116,7 +116,7 @@ fn feed_declared(fingerprint: &mut Fingerprint, declared: Option<&[Qualifier]>) 
 
 /// The address the precompiled payloads of `package`'s `executable` are filed under: an object's, which holds a file for each target they are built for.
 ///
-/// **The same address-and-record split [`unit_address`] states, one level up.** This names a place — "the payload for this executable" — and carries no file contents, no unit, and no compiler or engine, so an edit changes what the payload is verified against rather than where it is looked for: one payload per executable and target, overwritten in place, bounded exactly as the unit family is. What every unit of the compilation was filed as is in the payload's record, and the compiler that built it and the engine that runs it are in the header ahead of that record.
+/// **The same address-and-record split [`unit_address`] states, one level up.** This names a place — "the payload for this executable" — and carries no file contents, no unit, and no compiler or engine, so an edit changes what the payload is verified against rather than where it is looked for: one payload per executable and target, overwritten in place, bounded exactly as the unit family is. What every unit of the compilation was filed as is in the payload's record, the engine that runs it among it, and the compiler that built it is the directory its object lies in.
 ///
 /// **The executable's identity is its package's name and its own**, never a path. That pair is the one identity in a compilation that cannot collide (law 2), which is why two executables of one package have two addresses and why nothing has to refuse an umbrella whose members both declare `serve`. A path here would key the payload on where a project sits rather than on what it builds.
 pub fn payload_address(package: &str, executable: &str) -> String {

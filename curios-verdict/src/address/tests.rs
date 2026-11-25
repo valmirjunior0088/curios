@@ -3,7 +3,7 @@ use {
     curios_common::{Qualifier, RootKind, digest},
 };
 
-/// A unit's address is a function of each of its parts, and of nothing else: no unit before its own is in it, so what those hold is verified where the object is opened, and no compiler, which the header of its file names.
+/// A unit's address is a function of each of its parts, and of nothing else: no unit before its own is in it, so what those hold is verified where the object is opened, and no compiler, which the directory its object lies in names.
 #[test]
 fn a_unit_moves_with_each_of_its_parts() {
     let mounts = [Mount::new(Qualifier::from(["json"]), RootKind::Ordinary)];

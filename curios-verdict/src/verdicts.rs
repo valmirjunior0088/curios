@@ -1,6 +1,6 @@
 //! The unit family: what the fold consults before compiling a unit again, and what it files when it did.
 //!
-//! **An object is addressed, and a hit is verified.** The address (`unit_address`) names a place — these mounts, declaring these dependencies — and holds no compiler, no file contents and no unit before it, so a project has as many objects as it has units rather than one per compile or per scope. Who compiled the unit is the directory its object lies in, the compiler's own (`curios_package::Cabinet::objects_of`), and the header of the file the object keeps it in ([`Filer`]); what it was compiled *from* rides in a [`Record`] behind that header, checked when the object is opened: every file the compilation read, by the text it read, what each unit it could have read contained, and what the object itself holds — so a record vouches for the bytes it was written with and for no others.
+//! **An object is addressed, and a hit is verified.** The address (`unit_address`) names a place — these mounts, declaring these dependencies — and holds no compiler, no file contents and no unit before it, so a project has as many objects as it has units rather than one per compile or per scope. Who compiled the unit is the directory its object lies in, the compiler's own (`curios_package::Cabinet::objects_of`), and no file names it; what it was compiled *from* rides in a [`Record`] ahead of the unit's index, checked when the object is opened: every file the compilation read, by the text it read, what each unit it could have read contained, and what the object itself holds — so a record vouches for the bytes it was written with and for no others.
 //!
 //! That split is deliberate. Hashing the unit's source directory into the address would hash a directory that, for a package's own library, *contains this cabinet*: filing a unit would change the address it is next looked for under, so a package's own code would never hit and `objects/` would grow a directory per compile. Excluding the cabinet from the walk is no answer: a key derived from a belief about what the inputs are goes wrong silently the day the belief does, and it goes wrong in the direction that hands back a stale unit. Here the inputs are not believed but recorded, at the one seam every module read passes through (`RootSource::reads`), so a compilation that reads something new records it without anything here being taught to expect it.
 //!
@@ -19,9 +19,7 @@ mod payload;
 pub use payload::*;
 
 use {
-    crate::{
-        Filer, Opened, Packs, entry_address, keep, mounted_address, opened, replace, set_aside,
-    },
+    crate::{Opened, Packs, entry_address, keep, mounted_address, opened, replace, set_aside},
     curios_common::{
         Blob, Candidates, Digest, Facet, Qualifier, Source, SourceName, candidate_prefix, digest,
     },
@@ -437,16 +435,9 @@ impl Verdicts {
         Some(mounted_address(source))
     }
 
-    /// Who this handle files as: the compiler running now. `None` where it cannot identify itself.
-    pub(crate) fn filer(&self) -> Option<Filer> {
-        Some(Filer::compiler(self.compiler()?))
-    }
-
     /// The records of the object at `address` this compiler filed, the newer first, each opened as far as its record and read back: the object keeps the record of its last filing and of the one before, and what another compiler filed lies under another name and is read for nothing. None for a handle with no cabinet.
     fn records(&self, address: &str) -> Vec<(Opened, Record)> {
-        let (Some(cabinet), Some(compiler), Some(filer)) =
-            (self.cabinet.as_ref(), self.compiler(), self.filer())
-        else {
+        let (Some(cabinet), Some(compiler)) = (self.cabinet.as_ref(), self.compiler()) else {
             return Vec::new();
         };
 
@@ -456,7 +447,7 @@ impl Verdicts {
         ]
         .iter()
         .filter_map(|file| {
-            let opened = opened(file, &filer)?;
+            let opened = opened(file)?;
             // A record that will not read back is ignored, never a compile to fail: the source it was made from is still there, and recompiling costs time rather than correctness.
             let record = curios_archive::from_bytes::<Record>(opened.record()).ok()?;
 
@@ -724,7 +715,6 @@ impl Verdicts {
         Some(Placement {
             path: cabinet.unit(compiler, &address),
             replaced: cabinet.replaced(compiler, &address),
-            filer: self.filer()?,
             address,
             reads,
             after,
@@ -739,7 +729,6 @@ struct Placement {
     path: PathBuf,
     /// Where the record the filing replaces is kept beside it.
     replaced: PathBuf,
-    filer: Filer,
     address: String,
     reads: Vec<(SourceName, String)>,
     after: Vec<(String, String)>,
@@ -830,18 +819,13 @@ impl Cache for Verdicts {
             placement.contained.clone(),
         );
         // The blobs first, so an object never names one not yet written; then the record this filing replaces, kept beside it, so an edit undone hits it still; then what neither record names is collected, and what another compiler filed in the cabinet.
-        let kept = kept(&placement.path, &placement.filer, &placement.stored);
+        let kept = kept(&placement.path, &placement.stored);
         let filed = self
             .file_blobs(&placement.address, &placement.stored)
             .and_then(|()| curios_archive::to_bytes(&record).map_err(io::Error::other))
             .and_then(|record| {
                 set_aside(&placement.path, &placement.replaced)?;
-                replace(
-                    &placement.path,
-                    &placement.filer,
-                    &record,
-                    placement.stored.index(),
-                )
+                replace(&placement.path, &record, placement.stored.index())
             })
             .and_then(|()| self.collect(&placement.address, &kept));
         // What this compiler's records name has moved, for whatever asks again in this handle's life.
@@ -886,9 +870,9 @@ fn agreeing(
     agrees.then_some(reads)
 }
 
-/// What a filing by `filer` of the unit stored as `stored` keeps at the object whose `unit` file is at `path`: the blobs its own record names, and those the record it replaces names, so an edit undone finds them. A record whose index is not the bytes it was written with names nothing.
-fn kept(path: &Path, filer: &Filer, stored: &Indexed) -> BTreeSet<Digest> {
-    let replaced = opened(path, filer)
+/// What a filing of the unit stored as `stored` keeps at the object whose `unit` file is at `path`: the blobs its own record names, and those the record it replaces names, so an edit undone finds them. A record whose index is not the bytes it was written with names nothing.
+fn kept(path: &Path, stored: &Indexed) -> BTreeSet<Digest> {
+    let replaced = opened(path)
         .and_then(|opened| {
             let record = curios_archive::from_bytes::<Record>(opened.record()).ok()?;
             let index = opened.artifact()?;
