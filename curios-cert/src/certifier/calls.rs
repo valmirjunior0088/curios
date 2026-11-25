@@ -58,6 +58,8 @@ pub struct Calls {
     record: bool,
     /// How many judgments under way type a term no body states, whose calls are none a group makes ([`Certifier::unrecorded`]).
     unrecorded: usize,
+    /// The definition applied at a field of the record a part answers that the next typing of that term types, which answers it held ([`held_application`](curios_analysis::held_application)). Keyed by the term, so no other application's typing takes it.
+    held: Option<Term>,
 }
 
 /// What a call hands one argument where its callee applies it ([`handed`]), once for each frame whose body is being checked: the frame, and the callee's applications of the argument and of its fields graded against that frame's caller. A lambda handed inside an inner group's body runs within the enclosing member's invocation too, so its binders stand to every caller whose body holds it, as a call of an enclosing member is graded against that member's parameters ([`Certifier::record_call`]).
@@ -261,6 +263,20 @@ impl Calls {
         self.handed = None;
         self.within = None;
         self.literal = None;
+        self.held = None;
+    }
+
+    /// Mark `term`, a definition applied at a field of the record a part answers, as answered held by the typing about to run.
+    pub fn hold(&mut self, term: &Term) {
+        self.held = Some(term.clone());
+    }
+
+    /// Whether the typing of the application `term` about to run answers it held, clearing the mark: `false` for any other term.
+    pub fn take_held(&mut self, term: &Term) -> bool {
+        match &self.held {
+            Some(held) if held == term => self.held.take().is_some(),
+            _ => false,
+        }
     }
 
     /// Hand the record literal the next judgment types what `handed` says its callee applies it with.

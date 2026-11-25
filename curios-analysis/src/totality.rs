@@ -28,7 +28,8 @@ use matrix::*;
 mod part;
 use part::*;
 pub use part::{
-    PartShape, Segment, base_part, call_path, group_parts, handed_member, part_calls, peel,
+    Holding, PartShape, Segment, base_part, call_path, group_parts, handed_member,
+    held_application, part_calls, peel,
 };
 
 mod shape;
@@ -49,9 +50,9 @@ use {
     curios_common::recurse,
     curios_core::{
         Advance, Applications, Arity, Bound, CallMatrix, Carrier, Cases, FieldApplications,
-        Foreign, Free, Func, FuncType, InductType, Intrinsic, Many, Match, One, PartApplications,
-        Probe, Proj, RecGroup, Scope, Size, Struct, StructType, Subterm, Telescope, Term, Totality,
-        Tuple, TupleType, Two, Variant,
+        Foreign, Free, Func, FuncType, Global, InductType, Intrinsic, Many, Match, One,
+        PartApplications, Probe, Proj, RecGroup, Scope, Size, Struct, StructType, Subterm,
+        Telescope, Term, Totality, Tuple, TupleType, Two, Variant,
     },
     curios_num::Natural,
     std::{
@@ -87,7 +88,7 @@ pub fn group_totality<D: Driver>(driver: &mut D, group: &RecGroup) -> Result<Tot
             calls: Vec::new(),
             tracked: None,
         };
-        walk.walk(&part.runs)?;
+        walk.walk(part)?;
         calls.extend(walk.calls);
     }
 
@@ -154,7 +155,7 @@ fn summaries<D: Driver>(
             calls: Vec::new(),
             tracked: Some(Tracked::new(arities[index])),
         };
-        walk.walk(&part.runs)?;
+        walk.walk(part)?;
         calls.extend(walk.calls);
         uses.push(walk.tracked.expect("a tracking walk keeps its record"));
     }
@@ -612,6 +613,60 @@ impl<D: Driver> Walk<'_, D> {
         Ok(())
     }
 
+    /// Walk `callee` applied to `given`, held at a field of the record this part answers: the leading lambdas answer it held, each argument handed what they apply of it, and its parts are this member's ([`Held`]). A parameter, or a field of one, their summary states and applies nothing of is applied by those parts alone; any other argument is walked as it stands, a member among them, which every call reaching one of those parts reaches here too.
+    fn walk_answering(&mut self, callee: &Global, given: &[Term]) -> Result<(), D::Error> {
+        let steps = [Segment::Arguments(given.to_vec())];
+        let handed = handed(
+            self.driver,
+            &self.context,
+            self.params,
+            callee,
+            &steps,
+            Answer::Held,
+        )?;
+        let leading = self
+            .driver
+            .applications(callee)
+            .and_then(|applications| applications.part(&[]).cloned());
+        for (position, (argument, applied)) in given.iter().zip(handed).enumerate() {
+            let stated = leading
+                .as_ref()
+                .is_some_and(|leading| leading.of(position).is_some());
+            if applied.is_none() && stated && self.tracked_path(argument).is_some() {
+                continue;
+            }
+            recurse(|| self.walk_argument(argument, applied.as_ref()))?;
+        }
+        Ok(())
+    }
+
+    /// Walk a part a field holds by reference, the call of its definition's part: each argument that is a parameter, a field of one or the part's own is handed what that part applies of it. Any other argument is walked where the record is answered ([`Walk::walk_answering`]), whose leading lambdas every call reaching this part reaches too, so this part makes no call of the group.
+    fn walk_held(&mut self, held: &Held) -> Result<(), D::Error> {
+        let own = self.params[self.params.len() - held.own..]
+            .iter()
+            .map(Term::free_var)
+            .collect::<Vec<_>>();
+        let mut steps = vec![Segment::Arguments(held.given.clone())];
+        steps.extend(held.path.iter().map(|slot| Segment::Field(*slot)));
+        if !own.is_empty() {
+            steps.push(Segment::Arguments(own.clone()));
+        }
+        let handed = handed(
+            self.driver,
+            &self.context,
+            self.params,
+            &held.callee,
+            &steps,
+            Answer::Escapes,
+        )?;
+        for (argument, applied) in held.given.iter().chain(&own).zip(handed) {
+            if self.tracked_path(argument).is_some() {
+                recurse(|| self.walk_argument(argument, applied.as_ref()))?;
+            }
+        }
+        Ok(())
+    }
+
     /// Walk a record literal's fields where a callee applies the record as `applied` grades, each handed what its own path is applied with.
     fn walk_fields(&mut self, fields: &[Term], applied: &Applied) -> Result<(), D::Error> {
         for (slot, field) in fields.iter().enumerate() {
@@ -659,11 +714,17 @@ impl<D: Driver> Walk<'_, D> {
         (binders, body)
     }
 
-    /// Find the recursive calls in `body`, tracking the refinements that make their arguments comparable.
+    /// Find the recursive calls in what `part`'s call runs, tracking the refinements that make their arguments comparable: its terms, each definition its record holds answered held ([`Walk::walk_answering`]), and, for a part a field holds, its call of that definition's part ([`Walk::walk_held`]).
     ///
     /// Scope discipline holds by construction: an arm's refinement is taken on by [`Walk::scoped`], which walks the body and puts it back, so no path can drop a refinement or carry one out.
-    fn walk(&mut self, runs: &[Term]) -> Result<(), D::Error> {
-        self.walks(runs)?;
+    fn walk(&mut self, part: &Part) -> Result<(), D::Error> {
+        self.walks(&part.runs)?;
+        for (callee, given) in &part.answers {
+            self.walk_answering(callee, given)?;
+        }
+        if let Some(held) = &part.held {
+            self.walk_held(held)?;
+        }
 
         assert!(
             self.context.is_balanced() && self.entered.is_empty(),

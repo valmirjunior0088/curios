@@ -643,3 +643,89 @@ fn a_definition_held_at_a_field_is_called_through_its_parts() {
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
+
+// A record recursing through a slot that holds an applied definition descends where that definition's part applies what it is handed below: `lift`'s record holds `each(o.inner)` at `inner`, whose `step` applies the handler it is handed to each element of its list, so `lift(w).inner.step(s)` applies `w`'s own `step` to the elements of `s`, below `d`. The leading lambdas answer the slot owing what `each`'s own apply as they answer, nothing, and the slot's parts are `lift`'s. The refusal hands it a list built around the argument itself.
+#[test]
+fn a_record_recursing_through_a_slot_that_holds_an_applied_definition_descends() {
+    control(
+        r#"
+        use /std/{Nat, List};
+        use /std/Bool/{True};
+
+        struct Inner(A: Type): Type { step: (A) -> True }
+        struct Outer(A: Type): Type { inner: Inner(A), go: ({}) -> True }
+
+        induct Doc: Type | leaf() | arr(List(Doc)) end
+
+        let all(@T: Type, e: Inner(T), s: List(T)) -> True =
+            match s
+            | [] => True/qed()
+            | [x, ..xs] => match e.step(x) | qed() => all(e, xs) end
+            end;
+
+        let each(@T: Type, e: Inner(T)) -> Inner(List(T)) = Inner { step(s) = all(e, s) };
+
+        let lift(@T: Type, o: Outer(T)) -> Outer(List(T)) =
+            Outer { inner = each(o.inner), go(_) = True/qed() };
+
+        let w: Outer(Doc) =
+            Outer {
+                inner = Inner { step(d) = match d | leaf() => True/qed() | arr(s) => lift(w).inner.step(s) end },
+                go(_) = True/qed(),
+            };
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("lift(w).inner.step(s)", "lift(w).inner.step([d])")])
+    .by_elaborator_in("/w", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/w", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A definition held at a slot and called in the field lambda beside it is graded by each call: `lift` holds `same(o.inner)` at `inner` and applies it again in `go`, each applying the handler at what it is handed, so `w`'s recursion through `lift(w).go(x)` on a child descends. The refusal hands `go` the argument itself.
+#[test]
+fn a_definition_held_at_a_slot_and_called_beside_it_is_graded_by_each_call() {
+    control(
+        r#"
+        use /std/{Nat, List};
+        use /std/Bool/{True};
+
+        struct Inner(A: Type): Type { step: (A) -> True }
+        struct Outer(A: Type): Type { inner: Inner(A), go: (A) -> True }
+
+        induct Doc: Type | leaf() | arr(List(Doc)) end
+
+        let same(@T: Type, e: Inner(T)) -> Inner(T) = Inner { step(a) = e.step(a) };
+
+        let lift(@T: Type, o: Outer(T)) -> Outer(T) =
+            Outer { inner = same(o.inner), go(a) = same(o.inner).step(a) };
+
+        let w: Outer(Doc) =
+            Outer {
+                inner = Inner {
+                    step(d) =
+                        match d
+                        | leaf() => True/qed()
+                        | arr(s) => match s | [] => True/qed() | [x, .._] => lift(w).go(x) end
+                        end,
+                },
+                go(_) = True/qed(),
+            };
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("lift(w).go(x)", "lift(w).go(d)")])
+    .by_elaborator_in("/w", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/w", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}

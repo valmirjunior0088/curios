@@ -5,7 +5,6 @@ use {
     crate::totality::*,
     curios_core::{Atom, CallMatrix, Free, Intrinsic, Size, Subterm, Term},
     curios_num::Binary,
-    std::slice,
 };
 
 /// A member `f : Nat` whose body is itself, for the probes below to call: the group, and a call of its one member at `argument`.
@@ -72,7 +71,13 @@ fn graded_in(group: &RecGroup, n: Free, body: &Term) -> Vec<Call> {
         calls: Vec::new(),
         tracked: None,
     };
-    walk.walk(slice::from_ref(body));
+    walk.walk(&Part {
+        shape: parts[0].clone(),
+        params: params.to_vec(),
+        runs: vec![body.clone()],
+        answers: Vec::new(),
+        held: None,
+    });
 
     walk.calls
 }
@@ -264,7 +269,13 @@ fn a_body_nested_deeper_than_an_unguarded_recursion_survives_is_walked() {
         calls: Vec::new(),
         tracked: None,
     };
-    walk.walk(slice::from_ref(&body));
+    walk.walk(&Part {
+        shape: parts[0].clone(),
+        params: params.to_vec(),
+        runs: vec![body.clone()],
+        answers: Vec::new(),
+        held: None,
+    });
 
     // The call passes the parameter itself, so it grades `Same` — a grade only a walk that reached the bottom of the nest can record.
     assert_eq!(walk.calls.len(), 1);

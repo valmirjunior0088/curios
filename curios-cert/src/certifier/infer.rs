@@ -29,7 +29,7 @@ use {
         Certifier, Counted, Error, Handed, Sort, as_sort, check_group, convert, field_handed,
         infer_sort, synth_neutral,
     },
-    curios_analysis::{Answer, Segment, call_path, catch_all_tests},
+    curios_analysis::{Answer, Segment, call_path, catch_all_tests, held_application},
     curios_common::recurse,
     curios_core::{
         Bound, Carrier, Cases, Cost, Field, Foreign, Free, Func, FuncType, InductType, Intrinsic,
@@ -252,10 +252,11 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
                 Subterm::Instance(instance) => {
                     let mut steps = vec![Segment::Arguments(apply.params().cloned().collect())];
                     steps.extend(later.iter().cloned());
-                    // What the call answers is held where it is handed to a definition that states its uses, and escapes elsewhere.
-                    let answer = match within {
-                        Some(_) => Answer::Held,
-                        None => Answer::Escapes,
+                    // What the call answers is held where it is handed to a definition that states its uses, or held at a field of the record a part answers, and escapes elsewhere.
+                    let held = certifier.calls.take_held(term);
+                    let answer = match (&within, held) {
+                        (Some(_), _) | (None, true) => Answer::Held,
+                        (None, false) => Answer::Escapes,
                     };
                     let mut handed = certifier.handed_to(&instance.name, &steps, answer)?;
                     let rest = handed.split_off(apply.arguments.len().min(handed.len()));
@@ -1114,6 +1115,11 @@ fn check_field(
     }
     let checked = match record {
         false => check(certifier, field, type_),
+        // A definition a field holds applied to every argument its leading lambdas take is answered by the part whose record holds it, held, its own parts claiming the rest ([`held_application`]): checked where it stands, as no part of its own.
+        true if held_application(certifier, field).is_some() => {
+            certifier.calls.hold(field);
+            check(certifier, field, type_)
+        }
         true => {
             let saved = certifier.enter_field(slot);
             let checked = check(certifier, field, type_);

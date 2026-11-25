@@ -1,6 +1,6 @@
 //! A recursive group's callable parts, and the path a call reaches one by.
 //!
-//! A member is called where its leading lambdas are applied, and where the body under them is a record literal — a structure's or a tuple's — each field that is a lambda is called where the member's value is projected to it and applied: `(W.0)(l)` runs the field's lambda, and nothing of the member's but its own parameters. So a group's call graph has a node for each such part, its parameters the member's followed by the field lambda's, and a call is read off a path — the member, its own arguments, a field, the field's arguments — rather than off a bare variable. A part is read off a member's body as it stands: whether the record came from a `satisfy` is never asked, so a structure of handlers is graded as a witness is.
+//! A member is called where its leading lambdas are applied, and where the body under them is a record literal — a structure's or a tuple's — each field that is a lambda is called where the member's value is projected to it and applied: `(W.0)(l)` runs the field's lambda, and nothing of the member's but its own parameters. So a group's call graph has a node for each such part, its parameters the member's followed by the field lambda's, and for each part of a definition a field holds applied to every argument its leading lambdas take, its parameters the member's followed by the part's own ([`Held`]); and a call is read off a path — the member, its own arguments, a field, the field's arguments — rather than off a bare variable. A part is read off a member's body as it stands: whether the record came from a `satisfy` is never asked, so a structure of handlers is graded as a witness is.
 
 #[cfg(test)]
 mod tests;
@@ -9,7 +9,8 @@ use {
     super::Applied,
     crate::Driver,
     curios_core::{
-        Advance, CallMatrix, Free, Func, Inward, RecGroup, Struct, Subterm, Term, Tuple,
+        Advance, Applications, CallMatrix, Free, Func, Global, Inward, PartApplications, RecGroup,
+        Struct, Subterm, Term, Tuple,
     },
 };
 
@@ -198,11 +199,51 @@ pub(super) fn member_parts(parts: &[PartShape], member: usize) -> impl Iterator<
         .map(|(part, _)| part)
 }
 
-/// A part opened for analysis: its shape, its parameters as binders, and the terms its call runs — a field lambda's body, or what a member's leading lambdas run besides the fields that are parts of their own, which run only where they are called.
+/// A part opened for analysis: its shape, its parameters as binders, and what its call runs — a field lambda's body, or what a member's leading lambdas run besides the fields that are parts of their own, which run only where they are called.
 pub(super) struct Part {
     pub shape: PartShape,
     pub params: Vec<Free>,
     pub runs: Vec<Term>,
+    /// The definitions a field of the record the leading lambdas answer holds, each applied to every argument its leading lambdas take, which they answer held, their parts this member's ([`Held`]).
+    pub answers: Vec<(Global, Vec<Term>)>,
+    /// Where a field holds the part by reference, what it is a part of.
+    pub held: Option<Held>,
+}
+
+/// A part a field holds by reference: the field holds `callee` applied to `given`, every argument its leading lambdas take, and the part is `callee`'s at `path`, called with the member's arguments to those and its own `own` after them.
+pub(super) struct Held {
+    pub callee: Global,
+    pub given: Vec<Term>,
+    pub path: Vec<usize>,
+    pub own: usize,
+}
+
+/// A definition `term` applies to every argument its leading lambdas take, where it files a field lambda's summary, so a field holding it holds that definition's parts ([`group_parts`]) and the leading lambdas whose record holds it answer it held.
+pub struct Holding {
+    pub callee: Global,
+    pub given: Vec<Term>,
+    pub applications: Applications,
+}
+
+/// `term` as a [`Holding`], where it is one.
+pub fn held_application<D: Driver>(driver: &D, term: &Term) -> Option<Holding> {
+    let (root, steps) = call_path(term);
+    let (Subterm::Instance(instance), [Segment::Arguments(given)]) = (&*root, steps.as_slice())
+    else {
+        return None;
+    };
+    let applications = driver.applications(&instance.name)?;
+    let leading = applications.part(&[])?;
+    let holds = leading.arity() == given.len()
+        && applications
+            .parts()
+            .iter()
+            .any(|part| !part.path().is_empty());
+    holds.then(|| Holding {
+        callee: instance.name,
+        given: given.clone(),
+        applications,
+    })
 }
 
 /// The parts of `group`, in the order both checkers number them: each member's leading lambdas, then the fields of the record under them, depth first.
@@ -256,8 +297,10 @@ fn open_member<D: Driver>(
         },
         params: params.clone(),
         runs: Vec::new(),
+        answers: Vec::new(),
+        held: None,
     });
-    parts[base].runs = record(driver, member, &[], &params, body, parts);
+    record(driver, member, base, &[], &params, body, parts);
 }
 
 /// Each part's shape: what a call is graded over and where a path leads.
@@ -286,21 +329,25 @@ pub fn peel<D: Driver>(driver: &mut D, mut body: Term) -> (Vec<Free>, Vec<Term>,
     (params, types, body)
 }
 
-/// What `body`, at `path` under member `member`'s parameters `params`, runs where the part holding it is called: itself, unless it is a record literal, whose parameters and fields that are no part it runs, each field that is a lambda pushed as a part and each that is a record literal followed in turn.
+/// Hand `parts[owner]` what `body`, at `path` under member `member`'s parameters `params`, runs where that part is called: itself, unless it is a record literal, whose parameters and fields that are no part it runs, each field that is a lambda pushed as a part, each that is a record literal followed in turn, and each that holds a definition applied to every argument its leading lambdas take answered held, that definition's parts pushed as parts under the field ([`held_application`]).
 fn record<D: Driver>(
     driver: &mut D,
     member: usize,
+    owner: usize,
     path: &[usize],
     params: &[Free],
     body: &Term,
     parts: &mut Vec<Part>,
-) -> Vec<Term> {
+) {
     let (held, fields): (&[Term], &[Term]) = match &**body {
         Subterm::Struct(Struct { params, fields, .. }) => (params, fields),
         Subterm::Tuple(Tuple { fields, .. }) => (&[], fields),
-        _ => return vec![body.clone()],
+        _ => {
+            parts[owner].runs.push(body.clone());
+            return;
+        }
     };
-    let mut runs = held.to_vec();
+    parts[owner].runs.extend(held.iter().cloned());
     for (slot, field) in fields.iter().enumerate() {
         let mut at = path.to_vec();
         at.push(slot);
@@ -317,13 +364,51 @@ fn record<D: Driver>(
                     },
                     params: all,
                     runs: vec![inner],
+                    answers: Vec::new(),
+                    held: None,
                 });
             }
             Subterm::Struct(_) | Subterm::Tuple(_) => {
-                runs.extend(record(driver, member, &at, params, field, parts));
+                record(driver, member, owner, &at, params, field, parts);
             }
-            _ => runs.push(field.clone()),
+            _ => match held_application(driver, field) {
+                Some(Holding {
+                    callee,
+                    given,
+                    applications,
+                }) => {
+                    let leading = applications.part(&[]).map_or(0, PartApplications::arity);
+                    for part in applications
+                        .parts()
+                        .iter()
+                        .filter(|part| !part.path().is_empty())
+                    {
+                        let own = part.arity().saturating_sub(leading);
+                        let mut all = params.to_vec();
+                        all.extend((0..own).map(|_| driver.fresh(None)));
+                        let mut under = at.clone();
+                        under.extend_from_slice(part.path());
+                        parts.push(Part {
+                            shape: PartShape {
+                                member,
+                                path: under,
+                                arity: all.len(),
+                            },
+                            params: all,
+                            runs: Vec::new(),
+                            answers: Vec::new(),
+                            held: Some(Held {
+                                callee,
+                                given: given.clone(),
+                                path: part.path().to_vec(),
+                                own,
+                            }),
+                        });
+                    }
+                    parts[owner].answers.push((callee, given));
+                }
+                None => parts[owner].runs.push(field.clone()),
+            },
         }
     }
-    runs
 }
