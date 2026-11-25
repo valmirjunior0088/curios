@@ -6,6 +6,7 @@ use {
     crate::tests::test_support::*,
     curios_common::fill,
     std::{fmt::Write, time::Instant},
+    xbench::{Unit, read, read_elapsed, turn},
 };
 
 /// `L(0) = x0` and `L(k) = Nat/and(L(k - 1), Nat/or(xk, yk))`, against its mirror with the operands of every operation commuted, closed by `Eq/refl()`.
@@ -154,11 +155,7 @@ const SHAPES: [Shape; 4] = [
 ///
 /// # How to take it
 ///
-/// ```sh
-/// cargo test --package curios --lib -- --ignored --nocapture nested_operation_measurements
-/// ```
-///
-/// Timed, in the test profile: five rounds, each over every shape and size so no row is read on a warmer machine than another, each reading one compilation through both checkers. Median of the five, with their span.
+/// `cargo xbench measure nested_operation_measurements` takes it: `<shape> at <size>`, one compilation through both checkers, every shape at every size turned round-robin five times after an untimed round so no row is read on a warmer machine than another, and `<shape> at <size>/accepted`, one where both checkers accepted it and nought where one refused.
 ///
 /// # What it last printed
 ///
@@ -180,9 +177,8 @@ const SHAPES: [Shape; 4] = [
 ///
 /// **A nested term costs its depth and no doubling of it.** **A long sum grows by 7.7 times from 64 summands to 256**, each stuck fold extending the classification the fold beneath it filed (`curios_analysis::Classification`). **Two towers of remainders grow as two of conjunctions do**, by five times from twelve to twenty-four against five and a third: no remainder is put to a checker beside another.
 #[test]
-#[ignore = "measurement, timed: reports what a size costs rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn nested_operation_measurements() {
-    const ROUNDS: usize = 5;
     let rows = SHAPES
         .iter()
         .flat_map(|shape| {
@@ -192,26 +188,27 @@ fn nested_operation_measurements() {
                 .map(move |size| (shape.name, *size, (shape.program)(*size)))
         })
         .collect::<Vec<_>>();
-    let mut readings = vec![Vec::with_capacity(ROUNDS); rows.len()];
-    let mut accepted = vec![true; rows.len()];
-    for _ in 0..ROUNDS {
-        for (at, (_, _, source)) in rows.iter().enumerate() {
-            let start = Instant::now();
-            accepted[at] &= typecheck(source).is_ok();
-            readings[at].push(start.elapsed().as_secs_f64());
-        }
-    }
-    println!("shape    size  accepted  compile, median [span]");
-    for (at, (shape, size, _)) in rows.iter().enumerate() {
-        readings[at].sort_by(f64::total_cmp);
-        let (least, median, most) = (
-            readings[at][0],
-            readings[at][ROUNDS / 2],
-            readings[at][ROUNDS - 1],
-        );
-        println!(
-            "{shape:<8} {size:<5} {:<9} {median:.2} s [{least:.2}–{most:.2}]",
-            accepted[at]
-        );
-    }
+
+    let mut compiles = rows
+        .iter()
+        .map(|(shape, size, source)| {
+            move || {
+                let name = format!("{shape} at {size}");
+                let start = Instant::now();
+                let accepted = typecheck(source).is_ok();
+                read_elapsed(&name, Some(*size as u64), start.elapsed());
+                read(
+                    &format!("{name}/accepted"),
+                    Unit::Count,
+                    Some(*size as u64),
+                    u64::from(accepted),
+                );
+            }
+        })
+        .collect::<Vec<_>>();
+    let mut turned = compiles
+        .iter_mut()
+        .map(|compile| compile as &mut dyn FnMut())
+        .collect::<Vec<_>>();
+    turn(5, &mut turned);
 }
