@@ -1,6 +1,6 @@
 # curios-erase
 
-Curios erasure: a finished Core unit lowered through `curios-anf`'s checked builder into the erased IR, with types, proofs and erasable binders gone. It is directed by types, which it reads off the terms through the certifier that certified them (`curios_cert::Reader`), erases each item into a fragment of its own, at each assignment of the sorts it leaves to its caller, keeps a record of what erasing each item read, and refuses a program for what only the erased program shows — an evaluation cycle among recursive values and an initializer that performs an effect, which `curios-anf`'s verifier finds — in an error of its own.
+Curios erasure: a finished Core unit lowered through `curios-anf`'s checked builder into Curios/ANF, with types, proofs and erasable binders gone. It is directed by types, which it reads off the terms through the certifier that certified them (`curios_cert::Reader`), erases each item into a fragment of its own, at each assignment of the sorts it leaves to its caller, keeps a record of what erasing each item read, and refuses a program for what only the erased program shows — an evaluation cycle among recursive values and an initializer that performs an effect, which `curios-anf`'s verifier finds — in an error of its own.
 
 ## Design
 

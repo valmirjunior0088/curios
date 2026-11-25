@@ -719,7 +719,7 @@ pub struct NumLit {
     pub radix: Radix,
 }
 
-/// The term grammar proper, one variant per surface form. Spanless by design — a location rides on the wrapping [`Term`] — so `PartialEq` compares structure alone; bare terms are built via `From<Subterm> for Term`. Most variants lower one-to-one onto a core counterpart in `into_core`; the ones that exist only in the surface language are documented on their variants below.
+/// The term grammar proper, one variant per surface form. Spanless by design — a location rides on the wrapping [`Term`] — so `PartialEq` compares structure alone; bare terms are built via `From<Subterm> for Term`. Most variants lower one-to-one onto a core counterpart in `into_core`; the ones that exist only in Curios are documented on their variants below.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Subterm<D: Dialect = Program> {
     Type,

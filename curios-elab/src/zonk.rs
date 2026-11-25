@@ -1010,7 +1010,7 @@ pub fn report_goals(
         ));
     }
 
-    // Materialize committed substitutions tolerantly, then write each term as a program writes it where the goal stands, standing on the frames it was born under — a `use` argument resolution puts back there left out, a method called as a program calls it — and erase universe instances (the surface language cannot even spell `.{…}`, so a report never shows one — solved or unsolved). A lambda applied where it stands is contracted, since a solution is a reduct and may hold one no reader could write back (`contract_redexes`).
+    // Materialize committed substitutions tolerantly, then write each term as a program writes it where the goal stands, standing on the frames it was born under — a `use` argument resolution puts back there left out, a method called as a program calls it — and erase universe instances (Curios cannot even spell `.{…}`, so a report never shows one — solved or unsolved). A lambda applied where it stands is contracted, since a solution is a reduct and may hold one no reader could write back (`contract_redexes`).
     let solved = |context: &Context, term: &Term| {
         settle_qualities(context, &zonk_solved_term_metas(context, term))
     };

@@ -1,4 +1,4 @@
-//! The erased, first-order IR — the pipeline stage between `curios-erase`'s type-directed erasure and the continuation IR of `curios-cps`. Types, proofs, and erasable binders are gone by construction.
+//! Curios/ANF, the erased, first-order representation — the pipeline stage between `curios-erase`'s type-directed erasure and Curios/CPS, `curios-cps`'s. Types, proofs, and erasable binders are gone by construction.
 //!
 //! The program is flat, explicit, first-order data: a [`Module`] of arena-allocated blocks of single-operation statements over atomic operands, addressed by typed `u32` identities, with ordered top-level items plus an entry block at its top level. The alphabet is erased Core's vocabulary with its semantic identities intact, as `README.md`'s "Shapes stay distinct" decides. Functions store no capture lists; free values, uses, the call graph, and recursive components are derived on demand ([`Analysis`]).
 //!

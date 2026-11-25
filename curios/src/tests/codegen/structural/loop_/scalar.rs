@@ -50,7 +50,7 @@ fn float_global<'a>(wat: &'a str, literal: &str) -> &'a str {
 
 // -- LCG --------------------------------------------------------------------
 
-/// The LCG loop reaches closure conversion as a single-entry recursive continuation. Proxy: the user `loop` is contified — the optimized high-CPS module keeps only `main`, prelude helpers, the `io/…` description thunks every effect boundary erases to, and the lambdas those lift, so the recursive hot_loop survives as a local continuation (a recursive `cont` with a single external entry and its own backedge), not a function. The contification mechanism is owned by `curios-cps`'s `contify_calls` tests; this pins the end-to-end result.
+/// The LCG loop reaches closure conversion as a single-entry recursive continuation. Proxy: the user `loop` is contified — the optimized Curios/CPS module keeps only `main`, prelude helpers, the `io/…` description thunks every effect boundary erases to, and the lambdas those lift, so the recursive hot_loop survives as a local continuation (a recursive `cont` with a single external entry and its own backedge), not a function. The contification mechanism is owned by `curios-cps`'s `contify_calls` tests; this pins the end-to-end result.
 #[test]
 fn lcg_loop_is_single_entry_recursive_continuation() {
     let module = cps_optm_module(LCG);

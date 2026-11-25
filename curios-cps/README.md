@@ -1,6 +1,6 @@
 # curios-cps
 
-The Curios continuation-passing IR and its optimizer: `curios_anf::lower_to_cps` constructs the CPS graph, and the optimizer rewrites it before `curios-emit` lowers it to WebAssembly. How the module prints is [A printer states each fact once, where it is bound](../documentation/design/tooling/a-printer-states-each-fact-once-where-it-is-bound.md), entry capability is [An entry exports only the turns it can return](../documentation/design/compilation/an-entry-exports-only-the-turns-it-can-return.md), and how deep a recursion reaches, `bound_frames` and its twins, is [A recursion is as deep as the heap allows](../documentation/design/compilation/a-recursion-is-as-deep-as-the-heap-allows.md); the representation invariants belong to the crate rustdoc.
+Curios/CPS and its optimizer: `curios_anf::lower_to_cps` constructs the CPS graph, and the optimizer rewrites it before `curios-emit` lowers it to WebAssembly. How the module prints is [A printer states each fact once, where it is bound](../documentation/design/tooling/a-printer-states-each-fact-once-where-it-is-bound.md), entry capability is [An entry exports only the turns it can return](../documentation/design/compilation/an-entry-exports-only-the-turns-it-can-return.md), and how deep a recursion reaches, `bound_frames` and its twins, is [A recursion is as deep as the heap allows](../documentation/design/compilation/a-recursion-is-as-deep-as-the-heap-allows.md); the representation invariants belong to the crate rustdoc.
 
 ## Design
 

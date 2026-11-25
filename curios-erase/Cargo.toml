@@ -3,7 +3,7 @@ name = "curios-erase"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Curios erasure: a certified Core unit lowered into the erased IR, curios-anf"
+description = "Curios erasure: a certified Curios/Core unit lowered into Curios/ANF"
 
 [lints]
 workspace = true

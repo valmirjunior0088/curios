@@ -3,7 +3,7 @@ name = "curios-cps"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The Curios continuation-passing IR: the arena-backed CPS graph and its optimization"
+description = "Curios/CPS: the arena-backed continuation-passing graph and its optimization"
 
 [lints]
 workspace = true

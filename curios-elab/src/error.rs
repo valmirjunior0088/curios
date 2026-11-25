@@ -809,7 +809,7 @@ pub enum Error {
         tag: String,
         constructors: Vec<String>,
     },
-    /// A `match` on `type_name` with no arm for `tag` and nothing that proves the constructor impossible. Named by type and constructor alone: the match itself sits under the report's span, and the elaborator's spelling of it would repeat that snippet in a vocabulary the surface language does not have.
+    /// A `match` on `type_name` with no arm for `tag` and nothing that proves the constructor impossible. Named by type and constructor alone: the match itself sits under the report's span, and the elaborator's spelling of it would repeat that snippet in a vocabulary Curios does not have.
     MatchCaseMissing {
         type_name: Global,
         tag: String,

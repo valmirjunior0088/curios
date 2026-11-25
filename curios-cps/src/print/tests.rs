@@ -1,4 +1,4 @@
-//! What the printed continuation IR states: the nesting, the elision rule's two clauses, and the spellings that make a transfer legible.
+//! What printed Curios/CPS states: the nesting, the elision rule's two clauses, and the spellings that make a transfer legible.
 
 use {
     crate::{test_support::*, *},

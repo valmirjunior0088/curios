@@ -142,7 +142,7 @@ The resulting CLI is `target/release/curios`. The build has two stages — a sli
 
 ## Go deeper
 
-- [Language reference](documentation/language.md) — the complete surface language, when you want to know what something means or how to spell it
+- [Language reference](documentation/language.md) — the whole of Curios, when you want to know what something means or how to spell it
 - [Usage reference](documentation/usage.md) — every subcommand, flag, and package concept the command line offers
 - [Design decisions](documentation/design) — one file per decision, in a directory per subject, when you want to know _why_ Curios is the way it is; a decision scoped to one crate lives in that crate's `README.md`
 - [Soundness board](xboard) — a ticket for every proof of `False` found in the checkers, filed by part of the judgment and run by `cargo xboard report`; [the claim it stands for](documentation/design/soundness/the-soundness-board.md), with the argument for each rule in a directory beside it

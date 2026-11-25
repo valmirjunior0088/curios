@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Curios is a dependently typed functional language implemented in Rust 2024, compiled from `.crs` through Core, an erased IR and a continuation IR to WebAssembly-GC and run under Wasmtime. What a crate owns is its `Cargo.toml` description and `README.md`; why the language and toolchain are the way they are is `documentation/design/`; pending work lives under `documentation/roadmap/`, filed as [Pending work is owned by its specification](documentation/design/pending-work-is-owned-by-its-specification.md) states. Read the owner, never a copy.
+Curios is a dependently typed functional language implemented in Rust 2024, compiled from Curios (`.crs`) through Curios/Core, Curios/ANF and Curios/CPS to WebAssembly-GC and run under Wasmtime. What a crate owns is its `Cargo.toml` description and `README.md`; why the language and toolchain are the way they are is `documentation/design/`; pending work lives under `documentation/roadmap/`, filed as [Pending work is owned by its specification](documentation/design/pending-work-is-owned-by-its-specification.md) states. Read the owner, never a copy.
 
 ## Working here
 
@@ -30,7 +30,7 @@ A claim about what a Curios program means is a hypothesis until this tree's comp
 - `wonder --stage <rung> -` reprints the program at one pipeline rung, `text` through `wasm`.
 - A file is analysed in the unit whose `mod` lines reach it. A file under `curios-prelude-build/std/` compiles as the package `std` over the archived prelude, so a question costs the closure of the edit; its tests are each subject's private `tests` module, run by `curios test` in `curios-prelude-build/std`, and `--filter /std/<Subject>/tests` narrows a run to one.
 
-Every other fact is on disk: `documentation/language.md` for the surface language, `curios-prelude-build/std/` for idiom and signatures, `.curios/cabinet/sources/` for dependencies.
+Every other fact is on disk: `documentation/language.md` for Curios itself, `curios-prelude-build/std/` for idiom and signatures, `.curios/cabinet/sources/` for dependencies.
 
 ## Build and check
 

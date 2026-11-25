@@ -1,6 +1,6 @@
 # Language
 
-This is the surface language a `.crs` file is written in: each form, what it means, and what is refused. Where the compiler and this document disagree, one of them is wrong, and the disagreement is a bug.
+This is Curios, the language a `.crs` file is written in: each form, what it means, and what is refused. Where the compiler and this document disagree, one of them is wrong, and the disagreement is a bug.
 
 A `.crs` file is a sequence of top-level items. A program closes with one final term, the description it performs; a module is items alone. Everything below is an item, a term, or a part of one.
 

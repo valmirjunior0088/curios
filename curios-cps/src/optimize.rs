@@ -1,4 +1,4 @@
-//! Deterministic high-CPS canonicalization and propagation.
+//! Deterministic canonicalization and propagation over Curios/CPS.
 //!
 //! The pipeline never keys on input names: every rewrite depends only on graph structure and the enforced budget constants below, so the same module always optimizes identically. Every pass carries a permanent span and a sample of whether it fired, as `curios-profile` prescribes for optimizer passes: the span's `calls` is the round count and its total the pass's share, and the sample's total is the number of rounds that pass kept the fixpoint alive. Anything finer is investigated with revision worktrees and temporary instrumentation, never a permanent metrics API.
 
@@ -92,7 +92,7 @@ pub const ENTRY_CLONE_LIMIT: usize = 64;
 /// A limit in the tens would truncate real programs for pure loss rather than a tradeoff anything depends on, so the value is set far above any round count the corpus reaches: a backstop that a real program can reach is indistinguishable from a budget nobody documented.
 pub const ROUND_LIMIT: usize = 1024;
 
-/// Run the verifier-delimited, FIFO high-CPS simplifier. What a pass reads off the module whole is the module's, filed with the generation it was read at (`Module::calls` and its siblings), so a fact asked again over a module no pass has written since is not built again, and nothing outlives a write.
+/// Run the verifier-delimited, FIFO simplifier of Curios/CPS. What a pass reads off the module whole is the module's, filed with the generation it was read at (`Module::calls` and its siblings), so a fact asked again over a module no pass has written since is not built again, and nothing outlives a write.
 pub fn optimize(module: &mut Module) {
     curios_common::profile!("cps_optimize");
     module

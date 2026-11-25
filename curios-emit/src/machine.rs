@@ -1,4 +1,4 @@
-//! Private closed control-flow graph produced after high-CPS optimization.
+//! Private closed control-flow graph produced after Curios/CPS is optimized.
 //!
 //! Functions have explicit blocks and block parameters. The CPS return continuation never becomes a block: a jump to the current function's bodyless sentinel is translated directly to [`MachineTerminator::Return`], and a switch's edge to it lands in a block of its own that returns what the edge hands it.
 

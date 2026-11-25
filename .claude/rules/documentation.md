@@ -12,7 +12,7 @@ Each fact lives at the narrowest authoritative place and is linked from everywhe
 | --- | --- |
 | `README.md` | What Curios is, the happy path to running one, and where to go next |
 | `documentation/usage.md` | The command line and packages: every subcommand, flag, manifest key, exit code and file |
-| `documentation/language.md` | The surface language, complete as far as its syntax conveys it: each form's spelling and what the grammar refuses; typing, inference, coverage, totality, positivity and resolution are the design decisions', linked from it |
+| `documentation/language.md` | Curios, the language, complete as far as its syntax conveys it: each form's spelling and what the grammar refuses; typing, inference, coverage, totality, positivity and resolution are the design decisions', linked from it |
 | `documentation/roadmap/**` | Pending work: an area's findings and specifications, each owning its status |
 | `documentation/design/**` | One cross-cutting decision per file, in a directory per subject, or at the root for the workspace as a whole; a decision scoped to one crate is its `README.md`'s |
 | `xboard/tickets/<part>/` | The soundness board: one part of the judgment per directory, its question in its `metadata.toml`, with a directory for every proof of `False` found in it, and `xboard/archive/<part>/` for the tickets whose construct left the language; the claim and its boundaries are `documentation/design/soundness/the-soundness-board.md`'s |
@@ -46,6 +46,10 @@ A word the project renamed is not written again for what it named, in a document
 
 | Retired | Written | Kept for |
 | --- | --- | --- |
+| the surface language, for the language a `.crs` file is written in | Curios | `curios-surface`, the crate that holds its tree |
+| the core language, for the representation both checkers judge | Curios/Core, written in prose and never in backticks, and Core where Curios/Core is already the subject; Core text for its text | `curios-core`, and `--stage core` |
+| the erased IR, the erased first-order IR | Curios/ANF | `curios-anf`, `--stage anf`, and A-normal form as a form |
+| the continuation IR, the continuation-passing IR, high-CPS | Curios/CPS | `curios-cps`, `--stage cps`, and continuation-passing style as a style |
 | kernel, for `curios-cert`'s checker | the certifier | the operating system, and another system's checker — Lean's kernel, Rocq's kernel |
 | soundness perimeter, the perimeter | the soundness board | nothing |
 | cell, for what one stage makes of one declaration | facet | a write-once cell below erasure, `curios_anf::CellOperation` |

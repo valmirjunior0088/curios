@@ -1,6 +1,6 @@
 //! The independent certifier: the judgments that decide whether a term is well-typed, written against the representation and nothing else.
 //!
-//! The elaborator in `curios-elab` is a large, stateful program. It inserts implicit arguments, invents and solves metavariables, parks and wakes conversion goals, resolves witnesses, refines scrutinees inside match arms, and memoizes almost all of it. Every one of those mechanisms exists to make the *surface language* ergonomic, and every one of them is a way for a bad program to be admitted. What this module provides is the other half of the bargain: a second opinion that shares none of that machinery.
+//! The elaborator in `curios-elab` is a large, stateful program. It inserts implicit arguments, invents and solves metavariables, parks and wakes conversion goals, resolves witnesses, refines scrutinees inside match arms, and memoizes almost all of it. Every one of those mechanisms exists to make *Curios* ergonomic, and every one of them is a way for a bad program to be admitted. What this module provides is the other half of the bargain: a second opinion that shares none of that machinery.
 //!
 //! The independence is structural, not a matter of discipline. This crate does not depend on `curios-elab`, so nothing here can consult a metavariable store, a refinement, or a cached elaboration — not because the code declines to, but because those types are not in scope. A judgment the elaborator gets wrong is re-decided here from the term alone.
 //!

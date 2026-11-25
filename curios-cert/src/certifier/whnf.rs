@@ -624,7 +624,7 @@ fn step_func(certifier: &mut ByValue, func: Func) -> Result<Step, ReduceError> {
 ///
 /// The elaborator's reducer substitutes by the same rule. Binding each value as a fresh definition and opening the tail over *those* would avoid copying a value into every use, but spell reducts with names the other checker's reduction does not have. A substitution is visibly the rule, and an environment is a second place a variable's meaning can come from. Bindings are non-recursive and bind left to right, so binding `i` sees exactly the values before it.
 fn step_let(certifier: &mut ByValue, let_: Let) -> Result<Term, ReduceError> {
-    // One values vector, and a fresh ref vector at every binding — so the ref vectors together are triangular in the run's length, which the surface language makes as long as a program likes.
+    // One values vector, and a fresh ref vector at every binding — so the ref vectors together are triangular in the run's length, which Curios makes as long as a program likes.
     let bindings = let_.bindings().len() as u64;
     certifier.spend(
         Cost::collection(bindings)

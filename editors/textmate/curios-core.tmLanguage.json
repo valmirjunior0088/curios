@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-  "name": "Curios Core",
+  "name": "Curios/Core",
   "scopeName": "source.curios.core",
   "patterns": [
     {
