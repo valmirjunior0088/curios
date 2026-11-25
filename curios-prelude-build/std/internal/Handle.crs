@@ -140,7 +140,6 @@ let finish_waiting(h: Handle) -> Io(Result(Error, {})) =
         (s) => s,
         (_, settled) => Try/run(Status/answer(settled)));
 
--- The loops above are plain `Io` over a `Result`, each wrapped once where it is public, so the description a constant `print` copies stays under the evaluator's cap.
 satisfy Io/Read(Handle) {
     read(h, n, @positive) = Try/attempt(read_waiting(h, n, @positive)),
 }

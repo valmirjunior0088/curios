@@ -258,7 +258,7 @@ pub use Tui/{let Tui};
 pub let proved(@P: Prop, @p: P) -> P =
     p;
 
--- What a write to `name` answered, taken as the printers take it: nothing where it succeeded, and otherwise the program ended, with 141 where the reader has gone and with 1 once standard error is told why, a failure there discarded so that it cannot recurse. A declaration of its own, so a constant `print`'s description stays under the evaluator's copy cap.
+-- What a write to `name` answered, taken as the printers take it: nothing where it succeeded, and otherwise the program ended, with 141 where the reader has gone and with 1 once standard error is told why, a failure there discarded so that it cannot recurse.
 let answered(name: Str, r: Result(Io/Error, {})) -> Io({}) =
     match r
     | success(()) => Io/pure(())

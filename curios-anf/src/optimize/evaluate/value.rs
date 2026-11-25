@@ -74,7 +74,7 @@ impl Deref for ListWindow {
 }
 
 impl Value {
-    /// Whether this value holds an erased description anywhere — a closure stamped at its birth by erasure's `thunk`, directly or through captures and containers. A candidate holding one gets the tight description budget: the host runs a description once per force, so a big replacement is a sequencing chain's suffix riding along, while the small staged residuals the collapse pins protect pass untouched.
+    /// Whether this value holds an erased description anywhere — a closure stamped at its birth by erasure's `thunk`, directly or through captures and containers. A replacement holding one reifies a closure over nothing its candidate names as that function (`ReifyScope::in_scope`), and declines a copy that leads back to its candidate's function (`ReifyScope::reaches_candidate`): what a description runs after its performance is the program's own code, which a copy would carry into the next round.
     pub fn contains_description(&self, module: &Module) -> bool {
         match self {
             Value::Unit

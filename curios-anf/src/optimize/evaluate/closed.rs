@@ -2,16 +2,13 @@
 //!
 //! A two-phase plan/apply split: interpretation borrows the module immutably (a closure names a module function) while installing a replacement mutates it. The plan phase finds every closed candidate call and records its freestanding result; the apply phase materializes each result, splices the construction statements ahead of the candidate, rewrites the candidate to an alias or a residual, and re-verifies.
 
-#[cfg(any(test, feature = "test-support"))]
-mod test_support;
-
 #[cfg(test)]
 mod tests;
 
 use {
     super::{
-        Bail, DESCRIPTION_COPY_NODE_LIMIT, Evaluator, Outcome, PASS_REIFY_BUDGET, ReifyBudget,
-        ReifyScope, Residual, Value, reify, reify_all, reify_check, reify_check_all,
+        Bail, Evaluator, Outcome, PASS_REIFY_BUDGET, ReifyBudget, ReifyScope, Residual, Value,
+        reify, reify_all, reify_check, reify_check_all,
     },
     crate::{
         Atom, BlockId, ForeignId, FunctionId, Module, Rhs, Statement, StatementId, ValueId,
@@ -267,21 +264,12 @@ fn apply(module: &mut Module, plans: Vec<Result<Planned, Bail>>) -> (usize, usiz
             plan.looping(module),
             plan.named(module),
         );
-        // A candidate holding a description gets the tight cap: a big description-bearing replacement is a sequencing chain's suffix, and copying it per link per round is the compounding the cap stops; the small staged residuals pass untouched. Probe and real run share the cap, or a plan the probe admits would strand at the tighter gate.
-        let contains_description = plan.contains_description(module);
-        let capped = |pool: usize| {
-            if contains_description {
-                ReifyBudget::within_capped(pool, DESCRIPTION_COPY_NODE_LIMIT)
-            } else {
-                ReifyBudget::within(pool)
-            }
-        };
         // Dry-run first: a plan that cannot fully materialize is skipped before anything is emitted, so nothing is ever stranded.
-        if !plan.materializes(module, &mut capped(reify_pool), &mut scope) {
+        if !plan.materializes(module, &mut ReifyBudget::within(reify_pool), &mut scope) {
             continue;
         }
         let mut spliced = Vec::new();
-        let mut budget = capped(reify_pool);
+        let mut budget = ReifyBudget::within(reify_pool);
         // The probe above shares nothing, so it charges at least what this run will; the memos only ever remove copies from under a gate that already fit without them.
         let rhs = match plan.kind {
             Kind::Value(value) => {

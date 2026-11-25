@@ -133,7 +133,7 @@ fn print_err_formats_to_stderr() {
 
 #[test]
 fn print_constant_args_collapses_at_anf() {
-    // The fully-constant case: every input to `Fmt/print` is a literal, so the ANF `evaluate` pass runs the *entire* program at compile time and residualizes the one effect boundary — the anf-optm module's body is a single `#/std/print(<final bytes>)` call, the `Parse` combinator web and `Fmt`'s parser are pruned, and only the `/std/print` → `Handle/write` plumbing reaches codegen.
+    // The fully-constant case: every input to `Fmt/print` is a literal, so the ANF `evaluate` pass runs the *entire* program at compile time and residualizes the one effect boundary — the formatted bytes reach the host write as one constant, the `Parse` combinator web and `Fmt`'s parser are pruned, and only the `/std/print` → `Handle/write` plumbing reaches codegen.
     let source = r#"
         use /std/{Fmt};
 
@@ -152,7 +152,7 @@ fn print_constant_args_collapses_at_anf() {
         &entrypoint,
         &RootSource::none(),
         |stage| match stage {
-            Stage::AnfOptm(module) => anf_optm = Some(format!("{module}")),
+            Stage::AnfOptm(module) => anf_optm = Some(module.clone()),
             Stage::CpsOptm(module) => cps_optm = Some(format!("{module}")),
             _ => {}
         },
@@ -160,13 +160,16 @@ fn print_constant_args_collapses_at_anf() {
     .expect("compile succeeded");
 
     let anf = anf_optm.expect("Stage::AnfOptm observed");
-    // "x = 42, s = hello\n", already formatted, as the operand of the host write itself, ahead of a first call's lane. `print` is an `Io`-returning wrapper and inlines away with the rest, so what survives is the write inside the description thunk it erases to. Dead spine leftovers linger in the entry block (pruning drops items, not block statements) — the CPS sweep below is where they must be gone.
+    // "x = 42, s = hello\n", already formatted, as the message of the host write itself: `print` is an `Io`-returning wrapper and inlines away with the rest, so what survives is the write inside the description thunk it erases to, and no write takes a piece of the message. The library's own writes stay beside it, over messages they are handed, and dead spine leftovers linger in the entry block (pruning drops items, not block statements) — the CPS sweep below is where they must be gone.
+    let messages = host_writes(&anf).into_iter().flatten().collect::<Vec<_>>();
     assert!(
-        anf.contains(
-            "ffi//std/internal/Handle/handle_write(io:1, x\"78203d2034322c2073203d2068656c6c6f0a\", "
-        ),
-        "expected the folded write residual, got:\n{anf}",
+        !messages.is_empty()
+            && messages
+                .iter()
+                .all(|message| message == b"x = 42, s = hello\n"),
+        "expected the formatted bytes as the one constant a host write takes, got {messages:?}:\n{anf}",
     );
+    let anf = anf.to_string();
     assert!(
         !names_parse_code(&anf),
         "expected the parser web pruned, got:\n{anf}",
@@ -174,8 +177,8 @@ fn print_constant_args_collapses_at_anf() {
 
     let cps = cps_optm.expect("Stage::CpsOptm observed");
     assert!(
-        !cps.contains("/std/Fmt/") && !cps.contains("/std/Parse/") && !cps.contains("[lambda]"),
-        "expected the constant program to collapse to the write loop, got:\n{cps}",
+        !cps.contains("/std/Fmt/") && !cps.contains("/std/Parse/"),
+        "expected no formatter in the optimized CPS, got:\n{cps}",
     );
 
     let (system, io) = MockHost::builder().build();
@@ -198,39 +201,17 @@ fn constant_args_leave_no_formatter_in_cps() {
     );
 }
 
-/// The library's write is a row that takes its message and a loop that waits through `/std/internal/Handle/retried` while the host still holds any of it, and the description a constant `print` holds of it is copied under the tight cap the closed evaluator keeps for descriptions. Past that cap the copy is declined, the `print` stays a call, and the collapses this module pins fail with it; this states the margin, so an edit to `/std/internal/Handle`'s write or to `retried` that crosses the cap fails here by the cap's name.
-#[test]
-fn a_constant_prints_descriptions_are_copied_within_the_evaluators_cap() {
-    let entrypoint = r#"/std/print("hello world")"#.parse::<Entrypoint>().expect("fixture parses");
-
-    let mut linked = None;
-    compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
-        if let Stage::Anf(module) = stage {
-            linked = Some(module.clone());
-        }
-    })
-    .expect("fixture compiles");
-    let copy =
-        curios_anf::test_support::heaviest_description_copy(&linked.expect("Stage::ANF observed"))
-            .expect("a `print` holds a description");
-
-    assert!(
-        copy.charged <= copy.cap,
-        "the heaviest description a constant `print` copies weighs {} nodes, past the {} of `curios-anf`'s `DESCRIPTION_COPY_NODE_LIMIT`: the evaluator declines the copy, and no constant `print` folds",
-        copy.charged,
-        copy.cap,
-    );
-}
-
-/// A format the evaluator declines, one past its step budget, is left to the CPS optimizer, which specializes the formatter itself: the program compiles, and prints the format.
+/// A format the evaluator declines, one past its step budget, is left to the CPS optimizer, which specializes the formatter itself: no host write of the optimized ANF takes the format as a constant, and the program compiles and prints it.
 #[test]
 fn a_format_past_the_evaluators_budget_still_prints() {
     let text = "a".repeat(2000);
+    let source = format!(r#"/std/Fmt/print("{text}")"#);
 
-    assert_eq!(
-        run(&format!(r#"/std/Fmt/print("{text}")"#)),
-        text.into_bytes()
+    assert!(
+        !host_writes(&anf_optm(&source)).contains(&Some(text.clone().into_bytes())),
+        "the evaluator folded a format past its step budget",
     );
+    assert_eq!(run(&source), text.into_bytes());
 }
 
 /// Runtime arguments: the parse of the literal directive spine still runs at compile time — the residual is the specialized first-order chain.

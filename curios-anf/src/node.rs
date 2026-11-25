@@ -353,7 +353,7 @@ pub struct Function {
 pub enum Role {
     /// Part of computing the value of the definition it was erased from: its lambdas and local groups, the loops erasure builds for its intrinsics, and the closures computing it produced.
     Evaluation,
-    /// An erased effect description's performance — stamped where descriptions are born, the erasure's `thunk`, and read where copying one would buy nothing: the host runs a description once per force, so the reifier declines to specialize it.
+    /// An erased effect description's performance — stamped where descriptions are born, the erasure's `thunk`, and read by the closed evaluator, which names rather than copies the continuation a replacement holding one names, and declines a copy that leads back to the candidate's function: what a description runs after its performance is the program's own code.
     Performance,
     /// What erasure builds to run performances: the loop that resumes a suspension through its frames, the surfacing of one to the host, a crossing's step and its retry. It belongs to no definition's evaluation.
     Machinery,

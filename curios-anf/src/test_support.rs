@@ -2,30 +2,7 @@
 //!
 //! A namespace rather than a root export, for `curios-native`'s `test_support` reason: nothing here collides with anything, but `curios_anf::test_support::shape` says at its use site that the caller reached for scaffolding rather than product API. The census's admission is spelling-sensitive by necessity — a spread of a field's value is structurally indistinguishable from the builder-accumulator cliff — so a respelling can silently unmark a field, and the cost surfaces only in a profile. This surface is the loud guard: a test states the verdict it relies on, by name, and a breaking respelling fails it instead of quietly regressing.
 
-use {
-    super::*,
-    crate::{into_cps::sequence_census, optimize::DESCRIPTION_COPY_NODE_LIMIT},
-    curios_common::ArenaId,
-};
-
-/// A description's copy, weighed as the closed evaluator charges for it, beside the cap a replacement holding one is copied within: past `cap`, the copy is declined and the call it would have replaced stays.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct DescriptionCopy {
-    pub charged: usize,
-    pub cap: usize,
-}
-
-/// The heaviest description the closed evaluator would copy among `module`'s closed calls, or `None` where no replacement holds one. The module is read as one round of the evaluator finds it, so what a test hands over is a program's module as linked.
-pub fn heaviest_description_copy(module: &Module) -> Option<DescriptionCopy> {
-    module
-        .description_copy_charges()
-        .into_iter()
-        .max()
-        .map(|charged| DescriptionCopy {
-            charged,
-            cap: DESCRIPTION_COPY_NODE_LIMIT,
-        })
-}
+use {super::*, crate::into_cps::sequence_census, curios_common::ArenaId};
 
 /// Whether the census marks `constructor`'s field indexed-only — the verdict under which the door settles every store into it. Names are the schema's debug names — the family's is its qualified spelling (`/std/Map/internal/Node/Node`, `/Box` for an entrypoint's own) — and an unknown name panics with the known ones listed, since a silent `false` here would defeat the loudness this surface exists for.
 pub fn census_settles_constructor_field(
