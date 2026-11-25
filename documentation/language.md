@@ -1371,7 +1371,7 @@ satisfy (@A: Type, use Eql(A)) => Eql(Tree(A)) {
     ..
 }
 
-satisfy (@A: Type, use Eql(A), use Ord(A)) => Ord(Tree(A)) {
+satisfy (@A: Type, use Ord(A)) => Ord(Tree(A)) {
     ..
 }
 ```

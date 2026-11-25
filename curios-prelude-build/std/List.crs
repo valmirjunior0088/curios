@@ -277,8 +277,7 @@ satisfy Monad(List) {
     bind(m, f) = fold(m, [], (x, acc) => [..acc, ..f(x)]),
 }
 
--- `Eql` of an element type is a premise beside `Ord` of it, which holds one: the witness's own superclass is then built from a premise handed whole, where one built from the superclass inside `Ord` is a use of that premise the totality check does not follow, and a family nested through this witness would have no lawful `Ord`.
-satisfy (@T: Type, use Eql(T), use Ord(T)) => Ord(List(T)) {
+satisfy (@T: Type, use Ord(T)) => Ord(List(T)) {
     ord = ord,
     lt(a, b) = Ordering/is_lt(ord(a, b)),
     le(a, b) = Ordering/is_le(ord(a, b)),

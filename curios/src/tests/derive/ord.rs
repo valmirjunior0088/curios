@@ -62,7 +62,7 @@ fn a_struct_and_a_parameterized_family_order_fieldwise() {
         satisfy Eql(Point) { .. }
         satisfy Ord(Point) { .. }
         satisfy (@A: Type, use Eql(A)) => Eql(Box(A)) { .. }
-        satisfy (@A: Type, use Eql(A), use Ord(A)) => Ord(Box(A)) { .. }
+        satisfy (@A: Type, use Ord(A)) => Ord(Box(A)) { .. }
         let show(@A: Type, use Ord(A), a: A, b: A) -> Str = Str/concat(Show/show(Ord/ord(a, b)), " ");
         let entry() -> /std/Io({}) =
             let _ = print(show(Point { x = 1, y = 2 }, Point { x = 1, y = 3 }))!;
@@ -73,6 +73,28 @@ fn a_struct_and_a_parameterized_family_order_fieldwise() {
         "#;
 
     assert_eq!(run(source), b"lt gt eq lt ");
+}
+
+// A family nested through a witness over `use Ord(A)` alone derives its order: `Box`'s witness builds its superclass from the `Eql` inside its premise and publishes how it applies that premise, so `Forest`'s, comparing its children through `Box`'s, descends.
+#[test]
+fn a_family_nested_through_a_witness_over_its_order_alone_derives_its_order() {
+    let source = r#"
+        use /std/{Str, Ord, Show, print};
+        use /std/ops/{Eql};
+        induct Box(A: Type): pub Type | boxed(A) end
+        induct Forest: pub Type | none() | some(Box(Forest)) end
+        satisfy (@A: Type, use Eql(A)) => Eql(Box(A)) { .. }
+        satisfy (@A: Type, use Ord(A)) => Ord(Box(A)) { .. }
+        satisfy Eql(Forest) { .. }
+        satisfy Ord(Forest) { .. }
+        let show(a: Forest, b: Forest) -> Str = Str/concat(Show/show(Ord/ord(a, b)), " ");
+        let entry() -> /std/Io({}) =
+            let _ = print(show(Forest/none(), Forest/some(Box/boxed(Forest/none()))))!;
+            print(show(Forest/some(Box/boxed(Forest/none())), Forest/some(Box/boxed(Forest/none()))));
+        entry()
+        "#;
+
+    assert_eq!(run(source), b"lt eq ");
 }
 
 #[test]
@@ -159,7 +181,7 @@ fn a_derived_witness_proves_the_orders_laws() {
 
         satisfy Ord(Tree) { .. }
         satisfy Ord(Doc) { .. }
-        satisfy (@A: Type, use Eql(A), use Ord(A)) => Ord(Rose(A)) { .. }
+        satisfy (@A: Type, use Ord(A)) => Ord(Rose(A)) { .. }
         satisfy Ord(Certified) { .. }
         satisfy Ord(Day) { .. }
         satisfy Ord(Small) { .. }
