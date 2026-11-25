@@ -10,13 +10,12 @@
 mod tests;
 
 use {
-    crate::{aged, entry_address, mounted_address, payload_address},
+    crate::{entry_address, keep, mounted_address, payload_address},
     curios_module::{Compiled, UnitSource},
-    curios_package::{Cabinet, Products, Reach, Reached, Target},
+    curios_package::{Cabinet, Products, Reach, Reached, Target, compiler},
     curios_pipeline::fold_sources,
     std::{
         collections::BTreeSet,
-        fs,
         path::{Path, PathBuf},
         time::SystemTime,
     },
@@ -40,15 +39,18 @@ pub fn collect_project(root: &Path, now: SystemTime) {
         now,
     );
     keep(cabinet.directory(), cabinet.families().all(), now);
-    keep(
-        &families.objects,
-        reach
-            .packages
-            .iter()
-            .flat_map(addresses)
-            .map(|address| cabinet.object(&address)),
-        now,
-    );
+    // A compiler that cannot name itself filed no object, and has none of its own to tell from the rest.
+    if let Some(compiler) = compiler(&cabinet) {
+        keep_nested(
+            &families.objects,
+            reach
+                .packages
+                .iter()
+                .flat_map(addresses)
+                .map(|address| cabinet.object(&compiler, &address)),
+            now,
+        );
+    }
     keep_nested(
         &families.payloads,
         reach
@@ -104,26 +106,7 @@ fn payloads(cabinet: &Cabinet, package: &Reached) -> Vec<PathBuf> {
         .collect()
 }
 
-/// Take away every entry of `directory` but `kept`, a staging only once it is [`STALE`](crate::STALE) at `now`.
-fn keep(directory: &Path, kept: impl IntoIterator<Item = PathBuf>, now: SystemTime) {
-    let kept = kept.into_iter().collect::<BTreeSet<_>>();
-    let Ok(entries) = fs::read_dir(directory) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let staging = entry.file_name().to_string_lossy().contains('.');
-        if kept.contains(&path) || (staging && !aged(&path, now)) {
-            continue;
-        }
-        let _ = match entry.file_type() {
-            Ok(kind) if kind.is_dir() => fs::remove_dir_all(&path),
-            _ => fs::remove_file(&path),
-        };
-    }
-}
-
-/// Take away every entry of the family at `family` but `kept`, each two levels down, under its hash scheme's directory or its target's, and every such directory holding none of them, a staging only once it is [`STALE`](crate::STALE) at `now`.
+/// Take away every entry of the family at `family` but `kept`, each two levels down, under its hash scheme's directory, its target's or its compiler's, and every such directory holding none of them, a staging only once it is [`STALE`](crate::STALE) at `now`.
 fn keep_nested(family: &Path, kept: impl IntoIterator<Item = PathBuf>, now: SystemTime) {
     let kept = kept.into_iter().collect::<BTreeSet<_>>();
     let holding = kept

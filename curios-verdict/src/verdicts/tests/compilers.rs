@@ -1,11 +1,12 @@
-//! An object's records: its address names no compiler, the header of each names the compiler that filed it, each compiler believes its own records alone, and the object holds what its last two filings name.
+//! A cabinet's objects are one compiler's: an address names no compiler, each compiler files under its own name and reads nothing another filed, a filing takes another's away, and an object holds what its last two filings name.
 
 use {
     super::test_support::*,
     crate::verdicts::*,
+    curios_archive::Bytes,
     curios_common::{candidate_name, test_support::*},
-    curios_unit::pack_names,
-    std::path::Path,
+    curios_unit::{Pack, pack_name, pack_names, packed},
+    std::{collections::BTreeMap, path::Path},
 };
 
 /// A handle on the own cabinet of the project at `root`, filing as the compiler identifying itself as `compiler`, in place of the binary running the suite.
@@ -29,23 +30,14 @@ fn folded_by(root: &Path, compiler: &str) -> Vec<String> {
     )
 }
 
-/// The addresses of the objects the project at `root` holds.
+/// The addresses of the objects the project at `root` holds, whichever compiler filed each.
 fn addresses(root: &Path) -> Vec<String> {
-    fs::read_dir(own(root).objects())
-        .expect("a cabinet with objects in it")
-        .map(|object| {
-            object
-                .expect("a listed object")
-                .file_name()
-                .to_string_lossy()
-                .into_owned()
-        })
-        .collect()
+    own(root).addresses().into_iter().collect()
 }
 
-/// The packs the object at `address` of the project at `root` holds, by name.
-fn packs(root: &Path, address: &str) -> BTreeSet<String> {
-    fs::read_dir(own(root).object(address))
+/// The packs the object `compiler` filed at `address` of the project at `root` holds, by name.
+fn packs(root: &Path, compiler: &str, address: &str) -> BTreeSet<String> {
+    fs::read_dir(own(root).object(compiler, address))
         .expect("an object's directory")
         .filter_map(|entry| {
             let name = entry.ok()?.file_name().to_string_lossy().into_owned();
@@ -55,27 +47,26 @@ fn packs(root: &Path, address: &str) -> BTreeSet<String> {
         .collect()
 }
 
-/// The blobs the packs of the object at `address` of the project at `root` hold, as their tables say.
-fn held(root: &Path, address: &str) -> Vec<Digest> {
-    packs(root, address)
+/// The blobs the packs of the object `compiler` filed at `address` of the project at `root` hold, as their tables say.
+fn held(root: &Path, compiler: &str, address: &str) -> Vec<Digest> {
+    packs(root, compiler, address)
         .into_iter()
         .flat_map(|pack| {
-            let mut file =
-                fs::File::open(own(root).object(address).join(pack)).expect("a pack opens");
+            let mut file = fs::File::open(own(root).object(compiler, address).join(pack))
+                .expect("a pack opens");
 
             pack_names(&mut file).expect("a pack ends with its table")
         })
         .collect()
 }
 
-/// A compiler change files its unit at the address the last compiler filed it at, beside the blobs that one wrote: the address names no compiler, and a blob two compilers make alike is written once.
+/// A compiler change files its unit at the address the last compiler filed it at, under its own name, every blob its record names among its own packs, and takes away what the other filed: the address names no compiler, and a cabinet keeps one compiler's objects.
 #[test]
-fn two_compilers_file_one_object_and_each_blob_once() {
+fn a_compiler_change_files_the_address_again_and_takes_the_other_compilers_objects_away() {
     let root = project("two-compilers");
 
     folded_by(&root, "one");
     let [address] = addresses(&root).try_into().expect("one object");
-    let written = packs(&root, &address);
     folded_by(&root, "two");
 
     assert_eq!(
@@ -83,10 +74,15 @@ fn two_compilers_file_one_object_and_each_blob_once() {
         std::slice::from_ref(&address),
         "one object a unit"
     );
-    assert_eq!(
-        packs(&root, &address),
-        written,
-        "the second filing writes no blob the first wrote"
+    assert!(
+        !own(&root).objects_of("one").exists(),
+        "what the first compiler filed is taken away"
+    );
+    let named = filing_as(&root, "two").named(&address);
+    let holds = held(&root, "two", &address);
+    assert!(
+        !named.is_empty() && named.iter().all(|digest| holds.contains(digest)),
+        "every blob the second compiler's record names is among its own packs"
     );
 }
 
@@ -120,9 +116,9 @@ fn another_compilers_object_is_no_hit_and_no_baseline() {
     );
 }
 
-/// An object keeps the record its last filing replaced, so two compilers alternating on one project each hit their own: a switch compiles nothing.
+/// A cabinet keeps one compiler's objects, so two compilers used in turn on one project each compile it whole at every switch.
 #[test]
-fn alternating_compilers_each_hit_their_own_record() {
+fn compilers_used_in_turn_each_compile_whole() {
     let root = project("alternating-compilers");
 
     folded_by(&root, "one");
@@ -130,13 +126,13 @@ fn alternating_compilers_each_hit_their_own_record() {
 
     assert_eq!(
         folded_by(&root, "one"),
-        ["reused /shape"],
-        "the record the second filing replaced"
+        ["compiling /shape"],
+        "what it filed went as the other filed"
     );
     assert_eq!(
         folded_by(&root, "two"),
-        ["reused /shape"],
-        "and the newer record"
+        ["compiling /shape"],
+        "and the other's as it filed again"
     );
 }
 
@@ -153,19 +149,6 @@ fn an_edit_undone_hits_the_record_it_replaced() {
     assert_eq!(folded_by(&root, "one"), ["reused /shape"]);
 }
 
-/// A filing keeps what the record it replaces names whichever compiler filed that one: a compiler that filed one text reads it still after another filed another text over it.
-#[test]
-fn a_filing_keeps_what_the_record_it_replaces_names_whoever_filed_it() {
-    let root = project("replaced-across");
-
-    folded_by(&root, "one");
-    write(&root, "shape/lib.crs", &library("second"));
-    folded_by(&root, "two");
-    write(&root, "shape/lib.crs", &library("first"));
-
-    assert_eq!(folded_by(&root, "one"), ["reused /shape"]);
-}
-
 /// An object holds every blob its two records name, and fewer than twice as many: a filing keeps the blobs of the record it replaces, so an edit undone finds them, and takes away what no record names wherever that is half of a pack, so what only older records named does not pile up.
 #[test]
 fn an_object_holds_what_its_records_name_and_under_twice_as_much() {
@@ -176,7 +159,7 @@ fn an_object_holds_what_its_records_name_and_under_twice_as_much() {
         folded_by(&root, "one");
         let [address] = addresses(&root).try_into().expect("one object");
         let named = filing_as(&root, "one").named(&address);
-        let holds = held(&root, &address);
+        let holds = held(&root, "one", &address);
 
         assert!(
             named.iter().all(|digest| holds.contains(digest)),
@@ -191,7 +174,7 @@ fn an_object_holds_what_its_records_name_and_under_twice_as_much() {
     }
 }
 
-/// A candidate is held to the compiler that made it by a record of that compiler's naming its blob: the packs at an address hold what every compiler filing there wrote, and none of what another compiler's records name is offered.
+/// A candidate is offered where a record of the running compiler names its blob, and an object another compiler filed names none for it.
 #[test]
 fn a_candidate_only_another_compilers_record_names_is_not_offered() {
     let root = project("candidates-held");
@@ -238,5 +221,58 @@ fn an_offered_candidate_is_one_a_record_names() {
     assert!(
         offered.blob(&unnamed.digest).is_some(),
         "a blob is still found by its name, which is the digest of what it holds"
+    );
+}
+
+/// Every pack the project at `root` holds, written again with its runs unreadable: its table names what it named, and each run members lie in is bytes no layout reads, as a run one compiler archived is to a compiler of another layout.
+fn with_unreadable_runs(root: &Path) {
+    for pack in super::test_support::packs(root) {
+        let read = Pack::read(Bytes::from(fs::read(&pack).expect("a pack reads")))
+            .expect("a pack's bytes");
+        // Each run by where it lies, so the members of one run stay the members of one.
+        let mut runs = BTreeMap::<(usize, usize), Bytes>::new();
+        let blobs = read
+            .blobs()
+            .map(|blob| match blob.member {
+                Some(_) => {
+                    let run = blob.bytes.as_slice();
+                    let unreadable = runs
+                        .entry((run.as_ptr() as usize, run.len()))
+                        .or_insert_with(|| Bytes::from(vec![0xff; run.len()]))
+                        .clone();
+
+                    Blob {
+                        bytes: unreadable,
+                        ..blob
+                    }
+                }
+                None => blob,
+            })
+            .collect::<Vec<_>>();
+        let bytes = packed(&blobs);
+
+        fs::remove_file(&pack).expect("a pack is taken away");
+        fs::write(
+            pack.with_file_name(format!("{}.pack", pack_name(&bytes))),
+            bytes,
+        )
+        .expect("a pack is written");
+    }
+}
+
+/// A compiler reads the runs it archived and no other's: a member another compiler holds in a run this one cannot read is filed again by this one, and a recompile over what it filed reads its own.
+#[test]
+fn a_run_another_compiler_archived_is_never_read() {
+    let root = project("anothers-run");
+
+    folded_by(&root, "one");
+    with_unreadable_runs(&root);
+
+    assert_eq!(folded_by(&root, "two"), ["compiling /shape"]);
+    write(&root, "shape/lib.crs", &library("second"));
+    assert_eq!(
+        folded_by(&root, "two"),
+        ["recompiling /shape"],
+        "over the unit it filed, read out of runs it archived"
     );
 }

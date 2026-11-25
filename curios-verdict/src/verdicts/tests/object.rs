@@ -135,9 +135,7 @@ fn compiling_repeatedly_files_one_object() {
         reused(&root);
     }
 
-    let objects = fs::read_dir(own(&root).objects())
-        .expect("a cabinet with units in it")
-        .count();
+    let objects = own(&root).object_directories().len();
 
     assert_eq!(objects, 1, "four compiles of one unit, one object");
 }

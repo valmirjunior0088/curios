@@ -5,6 +5,7 @@ use {
     curios_module::open_entrypoint,
     curios_package::{FileHash, Governing, TreeHash, order},
     curios_pipeline::Fold,
+    std::fs,
 };
 
 /// Write `contents` at `path`, the directories above it made.
@@ -68,10 +69,7 @@ fn file(root: &Path, member: &str, compiled: Compiled) {
 
 /// The objects the own cabinet of the project at `root` holds, by address.
 fn objects(root: &Path) -> BTreeSet<String> {
-    fs::read_dir(Cabinet::of(root, None).families().objects)
-        .expect("a cabinet with objects in it")
-        .map(|object| object.unwrap().file_name().into_string().unwrap())
-        .collect()
+    Cabinet::of(root, None).addresses()
 }
 
 /// A collection keeps every object a compilation of its project files: each member's graph, built and tested.

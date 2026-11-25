@@ -58,7 +58,7 @@ fn the_families_do_not_share_a_namespace() {
         "and documentation sits beside the executables, under its package"
     );
     assert_ne!(
-        cabinet.unit("key"),
+        cabinet.unit("compiler", "key"),
         cabinet.payload(Runs::Native { engine: "e" }, "key"),
         "one address, two families, two places"
     );
@@ -72,9 +72,9 @@ fn kept(cabinet: &Cabinet) -> [PathBuf; 9] {
     [
         cabinet.source(&hash),
         cabinet.foreign(&module),
-        cabinet.unit("key"),
-        cabinet.replaced("key"),
-        cabinet.object("key"),
+        cabinet.unit("compiler", "key"),
+        cabinet.replaced("compiler", "key"),
+        cabinet.object("compiler", "key"),
         cabinet.payload(Runs::Native { engine: "e" }, "key"),
         cabinet.payload(Runs::Browser, "key"),
         cabinet.compiler(),

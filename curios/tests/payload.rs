@@ -531,7 +531,7 @@ fn a_filing_command_keeps_what_its_project_reaches_and_takes_the_rest() {
         );
     }
     let cabinet = Cabinet::of(&root, None);
-    let objects = listed(&cabinet.objects());
+    let objects = cabinet.addresses();
     let payloads = listed(&cabinet.payloads(Target::Native));
     assert_eq!(
         objects.len(),
@@ -548,7 +548,7 @@ fn a_filing_command_keeps_what_its_project_reaches_and_takes_the_rest() {
     fs::create_dir_all(left.parent().unwrap()).unwrap();
     fs::write(&left, "left behind").unwrap();
     assert!(curios(&root, &["run", "app"]).status.success());
-    assert_eq!(listed(&cabinet.objects()), objects, "nothing it reaches");
+    assert_eq!(cabinet.addresses(), objects, "nothing it reaches");
     assert_eq!(listed(&cabinet.payloads(Target::Native)), payloads);
     assert!(
         !cabinet.directory().join("verdicts").exists(),
@@ -557,7 +557,7 @@ fn a_filing_command_keeps_what_its_project_reaches_and_takes_the_rest() {
 
     write(&root, "curios.toml", &declaring(&["app"]));
     assert!(curios(&root, &["run", "app"]).status.success());
-    let kept = listed(&cabinet.objects());
+    let kept = cabinet.addresses();
     assert!(kept.is_subset(&objects) && kept.len() == 4, "{kept:?}");
     let kept = listed(&cabinet.payloads(Target::Native));
     assert!(kept.is_subset(&payloads) && kept.len() == 3, "{kept:?}");
@@ -587,11 +587,11 @@ fn a_run_filing_into_a_named_cabinet_collects_nothing() {
     run("app");
     run("other");
     let cabinet = Cabinet::of(&root, Some(&named));
-    let objects = listed(&cabinet.objects());
+    let objects = cabinet.addresses();
     write(&root, "curios.toml", &declaring(&["app"]));
     run("app");
 
     assert_eq!(objects.len(), 3, "the library, and each entry");
-    assert_eq!(listed(&cabinet.objects()), objects);
+    assert_eq!(cabinet.addresses(), objects);
     assert!(left.exists(), "and the project's own cabinet stands");
 }

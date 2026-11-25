@@ -792,7 +792,7 @@ Everything generated lands under one `.curios/`, beside the governing manifest â
 | `documentation/<package>/` | what `document` emits |
 | `cabinet/sources/<scheme>/<digest>` | materialized dependency sources, keyed by the hash they were accepted against |
 | `cabinet/foreign/<scheme>/<digest>` | fetched foreign modules, keyed the same way |
-| `cabinet/objects/<address>/` | judged units, an object per unit, a library or an executable's own declarations: its `unit` file and the one it replaced, and the packs of the blobs they name, each named by what it holds |
+| `cabinet/objects/<compiler>/<address>/` | judged units, under the compiler that filed them, one compiler's at a time: an object per unit, a library or an executable's own declarations, holding its `unit` file and the one it replaced, and the packs of the blobs they name, each named by what it holds |
 | `cabinet/payloads/<target>/<address>` | precompiled payloads, one file per executable and target, each target's in a directory of its own |
 | `cabinet/compiler` | this machine's memo of the digest of the compiler running now, against a stamp of its binary |
 

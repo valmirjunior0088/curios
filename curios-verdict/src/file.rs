@@ -12,9 +12,10 @@ use {
     curios_common::Digest,
     curios_unit::{PREAMBLE, framed, record_length},
     std::{
+        collections::BTreeSet,
         fs::{self, File},
         io::{self, Read},
-        path::Path,
+        path::{Path, PathBuf},
         time::{Duration, SystemTime},
     },
 };
@@ -112,21 +113,11 @@ impl Opened {
 
 /// The file at `path`, read as far as its record where `filer` filed it: `None` where there is no file there, another filer's is, the file is not framed, or its record runs past its end. Another filer's file is told by its header alone, and nothing behind it is read.
 pub fn opened(path: &Path, filer: &Filer) -> Option<Opened> {
-    read(path, |by| by == filer).map(|(_, opened)| opened)
-}
-
-/// The file at `path`, read as far as its record whoever filed it, with who did: what a filing keeps the blobs of when it replaces it, for the compiler that filed it to read still. `None` where there is no file there, the file is not framed, or its record runs past its end.
-pub fn opened_by(path: &Path) -> Option<(Filer, Opened)> {
-    read(path, |_| true)
-}
-
-/// The file at `path`, read as far as its record where `accepted` takes who filed it.
-fn read(path: &Path, accepted: impl Fn(&Filer) -> bool) -> Option<(Filer, Opened)> {
     let mut file = File::open(path).ok()?;
     let size = file.metadata().ok()?.len();
     let mut header = [0; HEADER];
     file.read_exact(&mut header).ok()?;
-    let filer = Filer::read(&header).filter(|filer| accepted(filer))?;
+    Filer::read(&header).filter(|by| by == filer)?;
     let mut preamble = [0; PREAMBLE];
     file.read_exact(&mut preamble).ok()?;
     let length = record_length(&preamble)?;
@@ -137,7 +128,7 @@ fn read(path: &Path, accepted: impl Fn(&Filer) -> bool) -> Option<(Filer, Opened
     let mut record = vec![0; length];
     file.read_exact(&mut record).ok()?;
 
-    Some((filer, Opened { file, record }))
+    Some(Opened { file, record })
 }
 
 /// File `record` and `artifact` as the file at `path`, filed by `filer`, replacing whatever it held.
@@ -194,6 +185,25 @@ pub fn sweep(directory: &Path, now: SystemTime) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+/// Take away every entry of `directory` but `kept`, a staging only once it is [`STALE`] at `now`: a name holding a dot, the extension or the prefix of what a filer, a fetch or a pin has yet to rename into place.
+pub fn keep(directory: &Path, kept: impl IntoIterator<Item = PathBuf>, now: SystemTime) {
+    let kept = kept.into_iter().collect::<BTreeSet<_>>();
+    let Ok(entries) = fs::read_dir(directory) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let staging = entry.file_name().to_string_lossy().contains('.');
+        if kept.contains(&path) || (staging && !aged(&path, now)) {
+            continue;
+        }
+        let _ = match entry.file_type() {
+            Ok(kind) if kind.is_dir() => fs::remove_dir_all(&path),
+            _ => fs::remove_file(&path),
+        };
+    }
 }
 
 /// Whether what is at `path` was last written [`STALE`] or more before `now`.

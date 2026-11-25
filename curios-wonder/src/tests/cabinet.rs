@@ -665,30 +665,29 @@ fn checked(root: &Path, overlay: &Overlay, session: &Session) -> Vec<crate::Diag
 
 /// Every object the cabinet at `root` holds, by its address, with its unit file's bytes.
 fn objects(root: &Path) -> BTreeMap<String, Vec<u8>> {
-    let Ok(entries) = fs::read_dir(Cabinet::of(root, None).objects()) else {
-        return BTreeMap::new();
-    };
-
-    entries
-        .map(|object| {
-            let name = object
-                .expect("a readable object")
-                .file_name()
+    Cabinet::of(root, None)
+        .unit_files()
+        .into_iter()
+        .map(|unit| {
+            let address = unit
+                .parent()
+                .and_then(Path::file_name)
+                .expect("an object's address")
                 .to_string_lossy()
                 .into_owned();
-            let bytes =
-                fs::read(Cabinet::of(root, None).unit(&name)).expect("a readable unit file");
-            (name, bytes)
+            let bytes = fs::read(&unit).expect("a readable unit file");
+            (address, bytes)
         })
         .collect()
 }
 
 /// Damage the last byte of every object's unit file the cabinet at `root` holds: the artifact's, behind a record that still reads.
 fn damaged(root: &Path) {
-    for (name, mut bytes) in objects(root) {
+    for unit in Cabinet::of(root, None).unit_files() {
+        let mut bytes = fs::read(&unit).expect("a readable unit file");
         let last = bytes.last_mut().expect("a unit file holds an artifact");
         *last ^= 0xff;
-        fs::write(Cabinet::of(root, None).unit(&name), bytes).expect("a writable unit file");
+        fs::write(&unit, bytes).expect("a writable unit file");
     }
 }
 

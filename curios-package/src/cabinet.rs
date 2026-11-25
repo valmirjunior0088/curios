@@ -20,7 +20,7 @@ const SOURCES: &str = "sources";
 /// The family of fetched foreign modules, a directory for each hash scheme.
 const FOREIGN: &str = "foreign";
 
-/// The family of judged units as the cabinet keeps them, an object a directory.
+/// The family of judged units as the cabinet keeps them: a directory for the compiler that filed them, an object a directory in it.
 const OBJECTS: &str = "objects";
 
 /// The file of an object holding its record and its index.
@@ -90,21 +90,28 @@ impl Cabinet {
         self.directory.join(FOREIGN).join(scheme).join(digest)
     }
 
-    /// The object a judged unit is kept as at `address`, which its mounts, what it declared and its kind decide: one directory, holding its [`unit`](Self::unit) file and the one that file [`replaced`](Self::replaced), beside the packs of the blobs they name, which `curios-verdict` names.
+    /// The directory the objects `compiler` filed are kept in: the family's own for that compiler, named by the identity [`compiler`](fn@crate::compiler) gives it.
+    ///
+    /// A directory for each compiler rather than a mark on what it filed, because what a compiler files is laid out as that compiler lays it out: one that reads under its own name alone reads nothing another archived, with no lock and whichever of two files first. A cabinet keeps one compiler's objects, and what takes another's away is `curios-verdict`'s.
+    pub fn objects_of(&self, compiler: &str) -> PathBuf {
+        self.directory.join(OBJECTS).join(compiler)
+    }
+
+    /// The object `compiler` keeps a judged unit as at `address`, which its mounts, what it declared and its kind decide: one directory, holding its [`unit`](Self::unit) file and the one that file [`replaced`](Self::replaced), beside the packs of the blobs they name, which `curios-verdict` names.
     ///
     /// A directory for each address rather than a family for each kind of file, because an address is a unit's through every edit and a unit's baseline is its own object: what an object names is in its own directory, so finding it lists one directory, collecting it lists the same one, and two units never write one.
-    pub fn object(&self, address: &str) -> PathBuf {
-        self.directory.join(OBJECTS).join(address)
+    pub fn object(&self, compiler: &str, address: &str) -> PathBuf {
+        self.objects_of(compiler).join(address)
     }
 
-    /// Where the [`object`](Self::object) at `address` keeps its unit: one file, holding the record of what it was compiled *from* ahead of the unit's index, verified when the object is opened rather than spelled here.
-    pub fn unit(&self, address: &str) -> PathBuf {
-        self.object(address).join(UNIT)
+    /// Where the [`object`](Self::object) `compiler` keeps at `address` keeps its unit: one file, holding the record of what it was compiled *from* ahead of the unit's index, verified when the object is opened rather than spelled here.
+    pub fn unit(&self, compiler: &str, address: &str) -> PathBuf {
+        self.object(compiler, address).join(UNIT)
     }
 
-    /// Where the [`object`](Self::object) at `address` keeps the unit file its [`unit`](Self::unit) replaced: the filing before the last, laid out as the last is, which `curios-verdict` reads for the compiler that filed it.
-    pub fn replaced(&self, address: &str) -> PathBuf {
-        self.object(address).join(REPLACED)
+    /// Where the [`object`](Self::object) `compiler` keeps at `address` keeps the unit file its [`unit`](Self::unit) replaced: the filing before the last, laid out as the last is.
+    pub fn replaced(&self, compiler: &str, address: &str) -> PathBuf {
+        self.object(compiler, address).join(REPLACED)
     }
 
     /// Where an executable's precompiled payload is filed, at the `address` its own identity decides: one file, laid out as a unit's is, with what it was compiled *from* verified when the payload is opened.
@@ -142,7 +149,7 @@ pub struct Families {
     pub sources: PathBuf,
     /// Fetched foreign modules, a directory for each hash scheme ([`Cabinet::foreign`]).
     pub foreign: PathBuf,
-    /// Judged units, an object a directory ([`Cabinet::object`]).
+    /// Judged units, a directory for the compiler that filed them ([`Cabinet::objects_of`]).
     pub objects: PathBuf,
     /// Precompiled payloads, a directory for each target ([`Cabinet::payloads`]).
     pub payloads: PathBuf,

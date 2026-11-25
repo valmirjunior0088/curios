@@ -220,17 +220,25 @@ pub fn entered(root: &Path, entry: &str, executable: Option<&str>) -> &'static s
         .expect("the entry's unit is asked for")
 }
 
-/// The packs of the cabinet at `root`, each by where it is kept.
+/// The packs of the cabinet at `root`, each by where it is kept: every one under its objects, whichever compiler's and at whatever depth.
 pub fn packs(root: &Path) -> Vec<PathBuf> {
-    fs::read_dir(own(root).objects())
-        .expect("a cabinet with objects in it")
-        .flat_map(|object| fs::read_dir(object.unwrap().path()).unwrap())
-        .map(|pack| pack.unwrap().path())
-        .filter(|path| {
-            path.extension()
+    let mut packs = Vec::new();
+    let mut unread = vec![own(root).objects()];
+    while let Some(directory) = unread.pop() {
+        for entry in fs::read_dir(&directory).into_iter().flatten() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                unread.push(path);
+            } else if path
+                .extension()
                 .is_some_and(|extension| extension == "pack")
-        })
-        .collect()
+            {
+                packs.push(path);
+            }
+        }
+    }
+
+    packs
 }
 
 /// `base`'s `x` as `body` computes it.
