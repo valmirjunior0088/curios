@@ -5,10 +5,10 @@ pub use /sys/Handle/{stdin, stdout, stderr};
 pub mod Interest;
 pub use Interest/{let Interest};
 
-use /std/{Bool, Byte, Bytes, Nat, List, Result, Io, Try};
+use /std/{Bool, Byte, Bytes, Nat, List, Option, Result, Io, Try};
 use /std/Io/{Error};
 use /std/File/{Mode};
-use /std/internal/{Status};
+use /std/internal/{Status, Waiting, suspend_on, until};
 
 --- Open the file at this path in the mode this `/sys/open_mode` code names: `ok` beside its handle, or the status of the failure.
 foreign file_open(Bytes, Nat) -> {status: Nat, handle: Handle};
@@ -77,10 +77,23 @@ foreign handle_flush(Handle) -> Nat;
 --- End this handle's sending half: `ok`, or the status of the failure.
 foreign handle_finish(Handle) -> Nat;
 
+--- A wait on a watch of `h` for `interest`: the watch is closed whether the wait ends or is cancelled.
+let watching(h: Handle, interest: Interest) -> Io(Waiting) =
+    let watch = handle_watch(h, interest.readable, interest.writable)!;
+    Io/pure(Waiting { on = [watch], filled = [], release = Io/close(watch) });
+
 --- Until `h` is ready for `interest`, or has failed or hung up: a suspension on a watch of it, closed whether the wait ends or is cancelled. Readiness is advisory, so what waits retries the operation it waited for, and waits again where it would still block.
 pub let wait(h: Handle, interest: Interest) -> Io({}) =
-    let watch = handle_watch(h, interest.readable, interest.writable)!;
-    /sys/Io/suspend([watch], [], Io/close(watch), Io/close(watch));
+    let w = watching(h, interest)!;
+    suspend_on(w);
+
+--- What `attempt` replied with how it settled, or nothing where the host would block, `status` reading the reply's code.
+let settled_reply(@R: Type, attempt: Io(R), status: (R) -> Nat) -> Io(Option({R, Status/Settled})) =
+    let reply = attempt!;
+    match Status/of_code(status(reply))
+    | blocked() => Io/pure(Option/none())
+    | settled(settled) => Io/pure(Option/some((reply, settled)))
+    end;
 
 --- What `settle` makes of the reply `attempt` settles on and of how it settled, `status` reading the reply's code: `attempt` runs until the host answers it without blocking, waiting until `h` is ready for `interest` before each retry, since readiness is advisory. What settles has no wait left in it, so a reading never meets a reply that would block.
 pub let retried(
@@ -92,13 +105,8 @@ pub let retried(
     status: (R) -> Nat,
     settle: (R, Status/Settled) -> Io(A),
 ) -> Io(A) =
-    let reply = attempt!;
-    match Status/of_code(status(reply))
-    | blocked() =>
-        let () = wait(h, interest)!;
-        retried(h, interest, attempt, status, settle)
-    | settled(settled) => settle(reply, settled)
-    end;
+    let (reply, settled) = until(settled_reply(attempt, status), watching(h, interest))!;
+    settle(reply, settled);
 
 --- Up to `n` bytes, waiting while the host would block.
 let read_waiting(h: Handle, n: Nat, @_: Bool/Holds(0 < n)) -> Io(Result(Error, Io/Chunk)) =

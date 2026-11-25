@@ -51,7 +51,7 @@ pub let suspend_on(w: Waiting) -> Io({}) =
 pub let wait_filled(cells: List(Cell({}))) -> Io({}) =
     suspend_on(on_filled(cells));
 
---- What `attempt` answers, asked again each time something `wait` names has moved while it declines: the one loop every wait on the program's own state goes through. Nothing runs between an attempt that declines and the suspension but `wait`, which never suspends, so no change made between them is missed; an attempt takes nothing unless it answers.
+--- What `attempt` answers, asked again each time something `wait` names has moved while it declines: the one loop every wait goes through, on the program's own state and on a handle's readiness alike. Nothing runs between an attempt that declines and the suspension but `wait`, which never suspends, so no change made between them is missed; an attempt takes nothing unless it answers.
 pub let until(@A: Type, attempt: Io(Option(A)), wait: Io(Waiting)) -> Io(A) =
     let got = attempt!;
     match got
