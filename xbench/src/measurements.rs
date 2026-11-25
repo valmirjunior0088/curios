@@ -200,7 +200,7 @@ const MEASUREMENTS: &[Measurement] = &[
     },
     Measurement {
         name: "tower_measurements",
-        spread: Spread::Repeats,
+        spread: Spread::Moves,
         take: tower_measurements,
     },
     Measurement {

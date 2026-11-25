@@ -1,83 +1,69 @@
 //! What each tower costs each checker, counted.
 
 use {
-    curios::test_support::*,
-    curios_core::looks,
+    curios::{TALLIES, test_support::*},
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_pipeline::test_support::*,
     curios_surface::Entrypoint,
-    xbench::{Measure, read},
+    xbench::{Measure, phase, read},
 };
 
-/// What one checker made of a tower: its verdict, what its heaviest declaration spent where it reached one, and the nodes its walks looked at.
-struct Cost {
-    verdict: &'static str,
-    units: Option<u64>,
-    looks: u64,
-}
-
-impl Cost {
-    /// Read what `checker` made of `tower` at `lines` as its figures: whether it accepted, what its heaviest declaration spent where it reached one, and its looks — each named `<tower> at <lines>/<checker>/<figure>`, sized by the tower's lines.
-    fn read(&self, tower: &str, checker: &str, lines: u64) {
-        let figure = |what: &str| format!("{tower} at {lines}/{checker}/{what}");
-        read(
-            &figure("accepted"),
-            Measure::Count,
-            Some(lines),
-            u64::from(self.verdict == "accepted"),
-        );
-        if let Some(units) = self.units {
-            read(&figure("units"), Measure::Count, Some(lines), units);
-        }
-        read(&figure("looks"), Measure::Count, Some(lines), self.looks);
-    }
-}
-
-/// What each checker makes of `source`: the elaborator's side is the lowering, elaboration and erasure, the certifier's its walk over what the elaborator built — absent where the elaborator built nothing.
-fn costs(source: &str) -> (Cost, Option<Cost>) {
+/// Put `source` to each checker, a phase each, and read what each made of it as the figures of `name`, sized by `lines`: `<name>/<checker>`, its phase, the looks its walks made among what is read off it; `<name>/<checker>/accepted`; and `<name>/<checker>/units`, what its heaviest declaration spent. The elaborator's side is the lowering, elaboration and erasure, the certifier's its walk over what the elaborator built, which it judges only where the elaborator built something.
+fn read_costs(name: &str, lines: u64, source: &str) {
     let entrypoint = source.parse::<Entrypoint>().expect("a tower parses");
+    let size = Some(lines);
 
-    let before = looks();
-    let checked = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none());
-    let looked = looks() - before;
-    let Ok(checked) = checked else {
-        let refused = Cost {
-            verdict: "refused",
-            units: None,
-            looks: looked,
-        };
-        return (refused, None);
-    };
-    let elaborator = Cost {
-        verdict: match checked.obligations.is_empty() {
-            true => "accepted",
-            false => "refused",
-        },
-        units: Some(checked.consumption.units()),
-        looks: looked,
-    };
-
-    let module = &checked.program;
-    let before = looks();
-    let (verdicts, heaviest) = recheck_with_prelude_measured(module, DEFAULT_BUDGET, |certifier| {
-        certifier.heaviest_declaration()
+    let elaborating = phase(TALLIES, || {
+        typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
     });
-    let certifier = Cost {
-        verdict: match verdicts.is_empty() {
-            true => "accepted",
-            false => "refused",
-        },
-        units: Some(heaviest.units()),
-        looks: looks() - before,
+    elaborating.read(&format!("{name}/elaborator"), size);
+    let Ok(checked) = elaborating.answer else {
+        read(
+            &format!("{name}/elaborator/accepted"),
+            Measure::Count,
+            size,
+            0,
+        );
+        return;
     };
+    read(
+        &format!("{name}/elaborator/accepted"),
+        Measure::Count,
+        size,
+        u64::from(checked.obligations.is_empty()),
+    );
+    read(
+        &format!("{name}/elaborator/units"),
+        Measure::Count,
+        size,
+        checked.consumption.units(),
+    );
 
-    (elaborator, Some(certifier))
+    let certifying = phase(TALLIES, || {
+        recheck_with_prelude_measured(&checked.program, DEFAULT_BUDGET, |certifier| {
+            certifier.heaviest_declaration()
+        })
+    });
+    certifying.read(&format!("{name}/certifier"), size);
+    let (verdicts, heaviest) = certifying.answer;
+    read(
+        &format!("{name}/certifier/accepted"),
+        Measure::Count,
+        size,
+        u64::from(verdicts.is_empty()),
+    );
+    read(
+        &format!("{name}/certifier/units"),
+        Measure::Count,
+        size,
+        heaviest.units(),
+    );
 }
 
 /// What every tower costs each checker at two heights.
 ///
-/// `cargo xbench measure tower_measurements` takes it. Counted, so the figures hold on any machine. Units are what the heaviest declaration spent of its budget; looks are how many times a term handed out its node while the checker ran (`curios_core::looks`) — the lowering, elaboration and erasure on one side, the certifier's walk on the other. A checker that walks a tower's graph adds four lines' worth across four lines, as the chain's rows do; one that walks it once per path multiplies by sixteen.
+/// `cargo xbench measure tower_measurements` takes it, each tower at each height read by [`read_costs`]. Its counts hold on any machine, and each phase's time on this one. Units are what the heaviest declaration spent of its budget; looks are how many times a term handed out its node during the checker's phase, the look count the program hands the recorder — the lowering, elaboration and erasure on one side, the certifier's walk on the other. A checker that walks a tower's graph adds four lines' worth across four lines, as the chain's rows do; one that walks it once per path multiplies by sixteen.
 ///
 /// Looks are the column a walk cannot hide from. A hit on a remembered reduct is free, so a walk that only reads — the sort of a type — spends no unit however many paths it takes, and shows in looks alone.
 ///
@@ -154,15 +140,18 @@ pub fn tower_measurements() {
     ];
 
     // The prelude is restored once per thread, and its restore is not a tower's cost.
-    costs(&tower(Shape::Chain(Stands::Function), 1));
+    let warming = tower(Shape::Chain(Stands::Function), 1)
+        .parse::<Entrypoint>()
+        .expect("a tower parses");
+    let _ = typecheck_with_prelude(DEFAULT_BUDGET, &warming, &RootSource::none());
 
     for (label, shape) in shapes {
         for lines in [12usize, 16] {
-            let (elaborator, certifier) = costs(&tower(shape, lines));
-            elaborator.read(label, "elaborator", lines as u64);
-            if let Some(certifier) = certifier {
-                certifier.read(label, "certifier", lines as u64);
-            }
+            read_costs(
+                &format!("{label} at {lines}"),
+                lines as u64,
+                &tower(shape, lines),
+            );
         }
     }
 }
