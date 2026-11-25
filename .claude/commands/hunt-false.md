@@ -158,7 +158,7 @@ A hunter's final report comes whole when it finishes; keep its let-go lines and 
 
 ## 6. After the last report
 
-Once every unit a hunter sent has been shown again, run once, over every commit the run made, what their checks name — `cargo xtask format`, `cargo xtask compiler lint`, each test by name, and `cargo xtask compiler test` where a fix landed — and fix what fails in a commit of its own. Then remove the snapshot, `rm -rf .claude/snapshots/<commit>`: a hunter's directory is scratch the gatherer owns, so what no unit carried goes with it.
+Once every unit a hunter sent has been shown again, run once, over every commit the run made, the checks CLAUDE.md names between steps for what they touched, each test by name among them, and fix what fails in a commit of its own. Then remove the snapshot, `rm -rf .claude/snapshots/<commit>`: a hunter's directory is scratch the gatherer owns, so what no unit carried goes with it.
 
 ## 7. Commits and the report
 

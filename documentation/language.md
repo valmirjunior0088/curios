@@ -85,7 +85,7 @@ A path is whitespace-free: each `/` touches both of its neighbours. An infix ope
 
 A unit reaches the prefixes it declares a dependency on, and `/std`, and no others. A package declares its dependencies in [its manifest](usage.md#the-manifest), and a dependency's own dependencies are compiled but not reachable. A name under an undeclared prefix is refused where it is written, saying the prefix was not declared.
 
-`/sys` is the compiler's own root, which only the standard library may name. It holds the intrinsic types, the host's operations, the propositions a bound is stated in, and the Unicode tables `/std/Char` reads. A program naming it is refused as for any name that does not resolve, with the path that carries what it reached for: `Nat` is `/std/Nat`.
+`/sys` is the compiler's own root, which only the standard library may name. It holds the intrinsic types and their operations, the propositions a bound is stated in, `Option` and `Result`, the codes a host's replies are read by, and the Unicode tables `/std/Char` reads; the host's own operations are `foreign` declarations of `/std`. A program naming it is refused as for any name that does not resolve, with the path that carries what it reached for: `Nat` is `/std/Nat`.
 
 The forms the language spells with symbols dispatch through ordinary `/std` declarations: `+` through `/std/ops/Add`, `!` through `/std/Monad`, and `test` through `/std/Test`.
 

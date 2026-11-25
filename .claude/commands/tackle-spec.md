@@ -1,5 +1,5 @@
 ---
-description: Take the next most urgent specification that can run beside the other sessions into a worktree of its own — investigate it in depth, rewrite it from its headline where that serves, plan it, implement it to its retirement — and hold just before the handoff, landing it on the user's word
+description: Take the next most urgent specification that can run beside the other sessions into a worktree of its own — investigate it in depth, rewrite it from its headline where that serves, plan it, implement it to its retirement — and hold after the retirement, just before the final run of the checks, landing it on the user's word
 argument-hint: "[optional — a specification to take, as `area/nnn`, or directions in prose]"
 allowed-tools: Read, Edit, Write, Grep, Glob, Monitor, Bash(rg:*), Bash(git:*), Bash(cargo:*), Bash(cp:*), Bash(mkdir:*), Bash(python3:*), Bash(systemd-run:*), Bash(df:*), Bash(du:*), WebSearch, WebFetch, AskUserQuestion, EnterWorktree, ExitWorktree, EnterPlanMode, ExitPlanMode, ListAgents
 disable-model-invocation: true
@@ -15,7 +15,7 @@ Keep these steps in view, and say at each which one the work is at; none is skip
 4. The plan, in plan mode.
 5. The effort, stage by stage.
 6. The retirement, the specification's checks shown first.
-7. A stop just before the handoff.
+7. A stop after the retirement, just before the final run of the checks.
 8. The landing, on the user's word.
 
 ## Read first
@@ -50,7 +50,7 @@ On the user's agreement, bring the specification up to speed — rewritten or re
 
 Run the stages back to back, committing each as it lands, and stop only where something turns out ambiguous or unpredictable — a fork nobody settled, a behaviour outside what was agreed, two oracles disagreeing. A decision that arises is asked then.
 
-- **Each stage's checks** are what CLAUDE.md names for what it touched, with its own tests, each test's claim mutation-checked. While a check runs, draft the next stage in a scratchpad mirror, never in the tree.
+- **Each stage's checks**, the last's included, are what CLAUDE.md names between steps for what it touched, with its own tests, each test's claim mutation-checked. While a check runs, draft the next stage in a scratchpad mirror, never in the tree.
 - **Land what is consumed.** What the branch's code uses, and the members of the rule set the change already states, land; the unconsumed rest is written into the roadmap as a finding or a specification of its own.
 - **A retired mechanism may be the only thing accepting a program no test holds.** Before retiring a lookup, a fallback or a rule, run the programs the documents and comments name through `run -`, and keep the one that breaks as a test.
 - **A landed stage is dropped from the specification**, the stages left keeping their numbers and restated only where the landing moved them, as the pending-work decision keeps one up to date.
@@ -59,14 +59,14 @@ Run the stages back to back, committing each as it lands, and stop only where so
 
 ## 6. The retirement
 
-When the effort is in place, show each check the specification states holding — its tests passing, its figures retaken where it names them as its own — and only then retire it, as the pending-work decision retires one: delete it and leave its number as a gap, renaming nothing else; fix what linked to it; restate the documents whose rules the effort changed; and file what stays pending as findings or specifications of their own. A retirement touching documents and doc comments alone takes the checks CLAUDE.md names for those.
+When the effort is in place, show each check the specification states holding — its tests passing, its figures retaken where it names them as its own — and only then retire it, as the pending-work decision retires one: delete it and leave its number as a gap, renaming nothing else; fix what linked to it; restate the documents whose rules the effort changed; and file what stays pending as findings or specifications of their own. Its checks wait for the landing: the branch rebases onto `main` first, and they run once, after the rebase.
 
-## 7. Before the handoff
+## 7. Before the landing
 
-Stop just before the handoff and report: the commits, by subject; what the specification became; what was filed; and what the handoff has yet to run. Nothing past this point happens without the user's word.
+Stop after the retirement, just before the final run of the checks, which the landing makes after its rebase, and report: the commits, by subject; what the specification became; what was filed; and what the landing has yet to run. Nothing past this point happens without the user's word.
 
 ## 8. Landing, on the user's word
 
-Branches land one at a time: where several wait, the user orders them, and each lands on the tip the one before left. The user says how the branch lands: through the handoff, as `/run-handoff` runs it, or past it, on the workspace's format, lint, tests and docs build. Then, from the worktree: rebase onto local `main`; run the checks the user named once, after the rebase and never before it, chained as one tracked run, fixing what they surface in the commits it belongs to; `ExitWorktree`; fast-forward `main` from the main checkout with `git merge --ff-only <branch>` — no merge commit, nothing pushed — leaving `main`'s uncommitted changes as they are, and stopping to ask where one touches a file the branch moves; then remove the worktree and delete the branch. A check failing because another session's latent bug surfaced is fixed on the branch, in a commit of its own ordered before the one that exposed it.
+Branches land one at a time: where several wait, the user orders them, and each lands on the tip the one before left. The user says how the branch lands: through the handoff, as `/run-handoff` runs it, or past it, on the checks CLAUDE.md names between steps, the full suite being the handoff's alone. Then, from the worktree: rebase onto local `main`; run the checks the user named once, after the rebase and never before it, chained as one tracked run, fixing what they surface in the commits it belongs to; `ExitWorktree`; fast-forward `main` from the main checkout with `git merge --ff-only <branch>` — no merge commit, nothing pushed — leaving `main`'s uncommitted changes as they are, and stopping to ask where one touches a file the branch moves; then remove the worktree and delete the branch. A check failing because another session's latent bug surfaced is fixed on the branch, in a commit of its own ordered before the one that exposed it.
 
 The tree is the record of the work: the commits, the specification's retirement and the roadmap say what was done, and nothing else is kept.
