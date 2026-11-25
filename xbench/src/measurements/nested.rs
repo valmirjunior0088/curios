@@ -1,10 +1,10 @@
 //! What a term costs to class by its layers: an operation whose operands hold operations in turn, each commuted against its mirror, a sum of many operations of one kind, and a sum of many calls of one head.
 
 use {
-    curios::test_support::*,
+    curios::{TALLIES, test_support::*},
     curios_common::fill,
-    std::{fmt::Write, time::Instant},
-    xbench::{Measure, read, read_elapsed, turn},
+    std::fmt::Write,
+    xbench::{Measure, phase, read, turn},
 };
 
 /// `L(0) = x0` and `L(k)` built from `L(k - 1)` by `step` at `yk`, beside its twin `R` over `u0` and `vk`, under a `match` on `L(depth) <= R(depth)` whose arms are both `0`, claimed `0` by `Eq/refl()`, which the stuck `match` refuses: every operation of the two towers is stuck beside every other of its kind.
@@ -105,9 +105,9 @@ pub fn nested_operation_measurements() {
         .map(|(shape, size, source)| {
             move || {
                 let name = format!("{shape} at {size}");
-                let start = Instant::now();
-                let accepted = typecheck(source).is_ok();
-                read_elapsed(&name, Some(*size as u64), start.elapsed());
+                let checked = phase(TALLIES, || typecheck(source).is_ok());
+                checked.read(&name, Some(*size as u64));
+                let accepted = checked.answer;
                 read(
                     &format!("{name}/accepted"),
                     Measure::Count,

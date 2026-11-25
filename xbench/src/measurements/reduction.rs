@@ -7,14 +7,13 @@
 //! A second probe reads the same programs the other way round. [`type_level_sequence_cost_measurements`] divides one checker's cost into machinery and construction; [`certifier_memo_charge_measurements`] holds the program fixed and divides the *checkers*, because the compile path puts one budget to both and a user meets whichever demands more.
 
 use {
-    curios::test_support::*,
+    curios::{TALLIES, test_support::*},
     curios_common::fill,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_pipeline::test_support::*,
     curios_surface::Entrypoint,
-    std::time::{Duration, Instant},
-    xbench::{Measure, read, read_elapsed, turn},
+    xbench::{Measure, phase, read, turn},
 };
 
 /// The bound read off an opaque parameter: reduction stops at `b`, the guard refines it once and generically, and nothing is evaluated. The control the other two arms are read against, and the workaround `tests::runtime`'s accumulation measurement relies on.
@@ -135,14 +134,9 @@ fn read_floor(name: &str, size: u64, floor: Result<u64, u64>) {
     }
 }
 
-/// Elaborate `source` at the default budget, returning how long it took.
-fn elaboration_time(source: &str) -> Duration {
-    let start = Instant::now();
-    let outcome = typecheck_within(DEFAULT_BUDGET, source);
-    let elapsed = start.elapsed();
-
-    outcome.expect("the arm elaborates within the default budget");
-    elapsed
+/// Elaborate `source` at the default budget, which every arm elaborates within.
+fn elaborated(source: &str) {
+    typecheck_within(DEFAULT_BUDGET, source).expect("the arm elaborates within the default budget");
 }
 
 /// What a type-level accumulation costs, divided three ways per carrier.
@@ -216,7 +210,7 @@ pub fn type_level_sequence_cost_measurements() {
 
     let mut elaborations = arms
         .iter()
-        .map(|(name, n, source)| move || read_elapsed(name, Some(*n), elaboration_time(source)))
+        .map(|(name, n, source)| move || phase(TALLIES, || elaborated(source)).read(name, Some(*n)))
         .collect::<Vec<_>>();
     let mut turned = elaborations
         .iter_mut()

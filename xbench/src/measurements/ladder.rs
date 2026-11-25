@@ -15,11 +15,11 @@
 //! A change that moves this ladder owes a reading of the two harness workloads beside it, because "moved the column it aimed at" is only a claim if the other columns were looked at.
 
 use {
-    curios::test_support::*,
+    curios::{TALLIES, test_support::*},
     curios_native::{Compiled, ForeignBindings, test_support::*},
     curios_wasm::{Names, to_bytes},
-    std::{cell::RefCell, collections::BTreeMap, time::Instant},
-    xbench::{Measure, read, read_elapsed, turn},
+    std::{cell::RefCell, collections::BTreeMap},
+    xbench::{Measure, phase, read, turn},
 };
 
 const PARSE_DIGITS: &str = include_str!(concat!(
@@ -234,11 +234,12 @@ pub fn walk_mirror_attribution_measurements() {
             let agreed = &agreed;
             move || {
                 let (system, io) = MockHost::builder().args(["program", input]).build();
-                let start = Instant::now();
-                compiled
-                    .run(system, ForeignBindings::empty())
-                    .expect("mirror executes");
-                read_elapsed(&format!("{label}/{path}"), None, start.elapsed());
+                phase(TALLIES, || {
+                    compiled
+                        .run(system, ForeignBindings::empty())
+                        .expect("mirror executes")
+                })
+                .read(&format!("{label}/{path}"), None);
 
                 let printed = String::from_utf8_lossy(&io.output()).trim().to_string();
                 let mut agreed = agreed.borrow_mut();
@@ -322,11 +323,12 @@ pub fn decoder_doubling_slope() {
                 let (system, io) = MockHost::builder()
                     .args(["program".to_string(), mode.to_string(), size.to_string()])
                     .build();
-                let start = Instant::now();
-                compiled
-                    .run(system, ForeignBindings::empty())
-                    .expect("the decoder executes");
-                read_elapsed(&format!("{mode} at {size}"), Some(size), start.elapsed());
+                phase(TALLIES, || {
+                    compiled
+                        .run(system, ForeignBindings::empty())
+                        .expect("the decoder executes")
+                })
+                .read(&format!("{mode} at {size}"), Some(size));
 
                 let printed = String::from_utf8_lossy(&io.output()).trim().to_string();
                 assert_ne!(printed, "0", "{mode} refused its input at {size}");
