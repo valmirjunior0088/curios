@@ -2,7 +2,7 @@
 
 use {
     crate::tests::{Shape, Stands, tower},
-    curios_core::take_looks,
+    curios_core::looks,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_pipeline::test_support::*,
@@ -31,14 +31,14 @@ impl Cost {
 fn costs(source: &str) -> (Cost, Option<Cost>) {
     let entrypoint = source.parse::<Entrypoint>().expect("a tower parses");
 
-    take_looks();
+    let before = looks();
     let checked = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none());
-    let looks = take_looks();
+    let looked = looks() - before;
     let Ok(checked) = checked else {
         let refused = Cost {
             verdict: "refused",
             units: None,
-            looks,
+            looks: looked,
         };
         return (refused, None);
     };
@@ -48,10 +48,11 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
             false => "refused",
         },
         units: Some(checked.consumption.units()),
-        looks,
+        looks: looked,
     };
 
     let module = &checked.program;
+    let before = looks();
     let (verdicts, heaviest) = recheck_with_prelude_measured(module, DEFAULT_BUDGET, |certifier| {
         certifier.heaviest_declaration()
     });
@@ -61,7 +62,7 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
             false => "refused",
         },
         units: Some(heaviest.units()),
-        looks: take_looks(),
+        looks: looks() - before,
     };
 
     (elaborator, Some(certifier))
@@ -75,7 +76,7 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
 /// cargo test --package curios --lib -- --ignored --nocapture tower_measurements
 /// ```
 ///
-/// Counted, so the figures hold on any machine and in either profile. Units are what the heaviest declaration spent of its budget; looks are how many times a term handed out its node while the checker ran (`curios_core::take_looks`) — the lowering, elaboration and erasure on one side, the certifier's walk on the other. A checker that walks a tower's graph adds four lines' worth across four lines, as the chain's rows do; one that walks it once per path multiplies by sixteen.
+/// Counted, so the figures hold on any machine and in either profile. Units are what the heaviest declaration spent of its budget; looks are how many times a term handed out its node while the checker ran (`curios_core::looks`) — the lowering, elaboration and erasure on one side, the certifier's walk on the other. A checker that walks a tower's graph adds four lines' worth across four lines, as the chain's rows do; one that walks it once per path multiplies by sixteen.
 ///
 /// Looks are the column a walk cannot hide from. A hit on a remembered reduct is free, so a walk that only reads — the sort of a type — spends no unit however many paths it takes, and shows in looks alone.
 ///

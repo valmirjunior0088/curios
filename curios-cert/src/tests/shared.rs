@@ -6,7 +6,7 @@
 //!
 //! **Functions, and not the representation.** The types of `curios-core` are what a term *is*, imported wherever one is built or read, and their methods come with them: a term's substitution, a telescope's opening, a level's arithmetic. No judgment fails to reach them, so they are not listed.
 //!
-//! **One instrument.** `take_looks` is the profile's count of what walks cost, read by a recorder's samples and by no verdict. It is listed so the rule has no exception.
+//! **One instrument.** `looks` is the profile's count of what walks cost, read by a recorder's samples and by no verdict. It is listed so the rule has no exception.
 
 use {
     curios_common::fill,
@@ -78,6 +78,7 @@ const ROSTER: [&str; 69] = [
     "curios_core::instantiate_qualities",
     "curios_core::instantiate_universes",
     "curios_core::keys_paired",
+    "curios_core::looks",
     "curios_core::open_positions_of",
     "curios_core::open_quality",
     "curios_core::paired",
@@ -85,7 +86,6 @@ const ROSTER: [&str; 69] = [
     "curios_core::reduce_closed",
     "curios_core::reduce_intrinsic",
     "curios_core::rewrite_universe_levels",
-    "curios_core::take_looks",
     "curios_core::universe_metas",
     "curios_core::weak_head_value",
 ];
@@ -211,7 +211,7 @@ fn imported(source: &str) -> Vec<String> {
 
 #[test]
 fn a_use_names_its_functions_and_not_its_types() {
-    let source = "use {\n    super::Error,\n    curios_analysis::{Driver, answers, inner::{Deep, deeper}},\n    curios_core::{Term, refold as again},\n};\n// curios_core::reduce_closed, cited\nuse curios_num::Natural;\nuse curios_core::take_looks;\nlet zero = curios_core::Level::zero();\nlet folded = curios_core::reduce_intrinsic(&zero);\n";
+    let source = "use {\n    super::Error,\n    curios_analysis::{Driver, answers, inner::{Deep, deeper}},\n    curios_core::{Term, refold as again},\n};\n// curios_core::reduce_closed, cited\nuse curios_num::Natural;\nuse curios_core::looks;\nlet zero = curios_core::Level::zero();\nlet folded = curios_core::reduce_intrinsic(&zero);\n";
 
     assert_eq!(
         imported(source),
@@ -219,7 +219,7 @@ fn a_use_names_its_functions_and_not_its_types() {
             "curios_analysis::answers",
             "curios_analysis::deeper",
             "curios_core::refold",
-            "curios_core::take_looks",
+            "curios_core::looks",
             "curios_core::reduce_intrinsic"
         ],
     );

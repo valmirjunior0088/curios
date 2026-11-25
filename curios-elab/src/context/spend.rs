@@ -19,6 +19,8 @@ pub struct Spend {
     peak_depth: Cell<usize>,
     /// The heaviest declaration elaborated so far, for a measurement to read. See [`Consumption`]; nothing in elaboration consults it.
     heaviest: Cell<Consumption>,
+    /// The look count where the declaration being elaborated began, which its `term::looks` sample is read from ([`Spend::restore`]).
+    looked: Cell<u64>,
 }
 
 impl Spend {
@@ -30,6 +32,7 @@ impl Spend {
             depth: Cell::new(0),
             peak_depth: Cell::new(0),
             heaviest: Cell::new(Consumption::default()),
+            looked: Cell::new(curios_core::looks()),
         }
     }
 
@@ -85,7 +88,8 @@ impl Spend {
     /// **What the declaration it closes consumed is sampled while a recorder listens**, as `budget::consumed` — the profile-side reading of [`Spend::heaviest`], whose `max` in a fold is that figure for whatever the profiled run elaborated, and whose distribution says whether it is one declaration or many near it — with `term::looks` beside it, the nodes its walks looked at, as `curios-cert`'s `Spend::restore_budget` samples the pair.
     pub fn restore(&self) {
         curios_common::sample!("budget::consumed", self.consumed().units());
-        curios_common::sample!("term::looks", curios_core::take_looks());
+        curios_common::sample!("term::looks", curios_core::looks() - self.looked.get());
+        self.looked.set(curios_core::looks());
         self.heaviest
             .set(self.heaviest.get().heavier_of(self.consumed()));
 

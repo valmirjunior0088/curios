@@ -5,7 +5,7 @@ use {
         tests::{Growth, grown},
         *,
     },
-    curios_core::take_looks,
+    curios_core::looks,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_native::test_support::*,
@@ -46,6 +46,7 @@ impl Counters {
 struct Mark {
     alone: Option<u64>,
     pooled: Option<u64>,
+    looks: u64,
     allocations: u64,
     bytes: u64,
 }
@@ -55,12 +56,13 @@ impl Mark {
         Self {
             alone: counters.alone.as_ref().map(Instructions::read),
             pooled: counters.pooled.as_ref().map(Instructions::read),
+            looks: looks(),
             allocations: allocation_count() as u64,
             bytes: allocated_bytes() as u64,
         }
     }
 
-    /// What the stage at `stage` of [`STAGES`] did since `self`, and the mark it ends at. Looks are taken, so each read hands back what the stage before it left.
+    /// What the stage at `stage` of [`STAGES`] did since `self`, and the mark it ends at.
     fn since(self, counters: &Counters, stage: usize) -> (Count, Mark) {
         let now = Mark::now(counters);
         let (before, after) = match THREADED.contains(&STAGES[stage]) {
@@ -69,7 +71,7 @@ impl Mark {
         };
         let count = Count {
             instructions: before.zip(after).map(|(before, after)| after - before),
-            looks: take_looks(),
+            looks: now.looks - self.looks,
             allocations: now.allocations - self.allocations,
             bytes: now.bytes - self.bytes,
         };
@@ -98,7 +100,6 @@ const THREADED: [&str; 2] = ["binaryen", "cranelift"];
 /// What each stage of one compile of `source` did, in [`STAGES`]' order.
 fn counted(source: &str, counters: &Counters) -> [Count; 11] {
     let mut counts = [Count::default(); 11];
-    take_looks();
     let mark = Mark::now(counters);
 
     let entrypoint = source.parse::<Entrypoint>().expect("a growth parses");

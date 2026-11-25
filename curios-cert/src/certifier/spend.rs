@@ -12,7 +12,7 @@
 
 use {
     curios_common::Entropy,
-    curios_core::{Consumption, Cost, Free, ReduceError, take_looks},
+    curios_core::{Consumption, Cost, Free, ReduceError, looks},
 };
 
 pub struct Spend {
@@ -24,6 +24,8 @@ pub struct Spend {
     peak_depth: usize,
     /// The heaviest declaration walked so far, for a measurement to read. See [`Consumption`]; nothing in the certifier consults it.
     heaviest: Consumption,
+    /// The look count where the judgment under way began, which its `term::looks` sample is read from ([`Spend::restore_budget`]).
+    looked: u64,
     /// Identities for the binders the certifier opens itself, under a telescope as it types or compares and to eta-contract. Raised past every local the certifier is handed ([`Spend::reserve`]), so a binder it mints can never alias one in a term, and started over at each declaration boundary by [`Spend::restore_budget`].
     minted: Entropy,
 }
@@ -36,6 +38,7 @@ impl Spend {
             depth: 0,
             peak_depth: 0,
             heaviest: Consumption::default(),
+            looked: looks(),
             minted: Entropy::new(),
         }
     }
@@ -95,7 +98,8 @@ impl Spend {
     /// **What the judgment it closes consumed is sampled while a recorder listens**, as `budget::consumed` — the profile-side reading of [`Spend::heaviest`], which a fold reports as that sample's `max` beside the elaborator's under the same name — with the nodes its walks looked at beside it, as `term::looks`: the two are sampled at one point, so a declaration whose looks outgrow its units is one a walk paid per path for.
     pub fn restore_budget(&mut self) {
         curios_common::sample!("budget::consumed", self.consumed().units());
-        curios_common::sample!("term::looks", take_looks());
+        curios_common::sample!("term::looks", looks() - self.looked);
+        self.looked = looks();
         self.heaviest = self.heaviest.heavier_of(self.consumed());
 
         self.remaining = self.budget;
