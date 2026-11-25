@@ -268,9 +268,9 @@ pub fn boxed_field_read_measurements() {
     let payload = compiled_of(FOLD_PAYLOAD);
 
     // Outputs are pinned before any figure is read, so a fixture drift fails loudly.
-    assert_eq!(run_at(&bare, HIGH).1, b"491113\n", "bare at {HIGH} rounds");
+    assert_eq!(run_at(&bare, HIGH), b"491113\n", "bare at {HIGH} rounds");
     assert_eq!(
-        run_at(&payload, HIGH).1,
+        run_at(&payload, HIGH),
         b"161671\n",
         "payload at {HIGH} rounds"
     );

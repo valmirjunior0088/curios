@@ -18,7 +18,7 @@ const CHURN: &str = include_str!(concat!(
 fn threaded_record_allocates_nothing() {
     let compiled = compiled_of(CHURN);
 
-    let ((_, output), collected) = collected(|| run_at(&compiled, 1_000_000));
+    let (output, collected) = collected(|| run_at(&compiled, 1_000_000));
 
     assert_eq!(output, b"863718\n", "churn(1000000) anchor");
     assert_eq!(

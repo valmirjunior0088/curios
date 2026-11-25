@@ -1,14 +1,14 @@
 //! What the runtime measurements share: the readings a run gives, the runs a measurement compares turned round-robin.
 
 use {
-    curios::test_support::*,
+    curios::{TALLIES, test_support::*},
     curios_native::{Compiled, test_support::*},
-    xbench::{Measure, read, read_elapsed, turn},
+    xbench::{Measure, phase, read, turn},
 };
 
-/// Read a run of `compiled` at `n` as the figure `<label> at <n>`, its time.
+/// Read a run of `compiled` at `n` as a phase, the figures `<label> at <n>`: its time — its host built, the program instantiated, and the whole call — what it allocated, and the instructions it retired.
 pub fn read_run(label: &str, compiled: &Compiled, n: u64) {
-    read_elapsed(&format!("{label} at {n}"), Some(n), run_at(compiled, n).0);
+    phase(TALLIES, || run_at(compiled, n)).read(&format!("{label} at {n}"), Some(n));
 }
 
 /// Read what the engine's collector did over a run of `compiled` at `n`, a run of its own and untimed, since a count raises the log level and so prices every record the engine writes: `<label> at <n>/collections`, the collections it began, and `<label> at <n>/grown`, the bytes its heap grew by.

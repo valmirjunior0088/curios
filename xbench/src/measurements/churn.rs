@@ -96,7 +96,7 @@ pub fn chain_collection_decomposition() {
     let stock = compiled_of(CHAIN);
 
     // The documented cross-language anchor, so a mistranslation fails before any figure is read.
-    let (_, output) = run_at(&stock, 8);
+    let output = run_at(&stock, 8);
     assert_eq!(output, b"819185\n", "chain(8) anchor");
 
     let ballasted =
@@ -190,7 +190,7 @@ pub fn spines_collection_decomposition() {
     let stock = compiled_of(SPINES);
 
     // The documented cross-language anchor, so a mistranslation fails before any figure is read.
-    let (_, output) = run_at(&stock, 8);
+    let output = run_at(&stock, 8);
     assert_eq!(output, b"28\n", "spines(8) anchor");
 
     let ballasted =
@@ -291,7 +291,7 @@ pub fn spines_key_width_measurements() {
 
     let compiled = programs.map(|(label, source)| {
         let compiled = compiled_of(&source);
-        let (_, anchor) = run_at(&compiled, 8);
+        let anchor = run_at(&compiled, 8);
         assert_eq!(anchor, b"28\n", "{label}(8) anchor");
 
         (label, compiled)

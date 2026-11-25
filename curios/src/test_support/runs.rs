@@ -7,7 +7,6 @@ use {
     curios_native::{Compiled, ForeignBindings, test_support::*},
     curios_pipeline::compile_with_prelude,
     curios_surface::Entrypoint,
-    std::time::{Duration, Instant},
 };
 
 /// `source` compiled against the prelude and through Binaryen, as the product compiles a program.
@@ -23,17 +22,15 @@ pub fn compiled_of(source: &str) -> Compiled {
     to_compiled(&module, foreigns).expect("the workload compiles")
 }
 
-/// One run, its size handed as the program's one argument: how long it took — instantiate, and the whole call — and what the program printed.
-pub fn run_at(compiled: &Compiled, n: u64) -> (Duration, Vec<u8>) {
+/// One run, its size handed as the program's one argument: what the program printed.
+pub fn run_at(compiled: &Compiled, n: u64) -> Vec<u8> {
     let (host, io) = MockHost::builder()
         .args(["program".to_string(), n.to_string()])
         .build();
-    let start = Instant::now();
     let code = compiled
         .run(host, ForeignBindings::empty())
         .expect("the workload runs");
-    let elapsed = start.elapsed();
     assert_eq!(code, 0, "the workload exits cleanly");
 
-    (elapsed, io.output())
+    io.output()
 }

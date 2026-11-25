@@ -28,7 +28,7 @@ pub fn alternation_programs() -> [(&'static str, Compiled); 3] {
         ("push, then peek (control)", compiled_of(PUSH_PEEK)),
     ];
     for ((label, compiled), anchor) in programs.iter().zip([&b"600\n"[..], b"28\n", b"138773\n"]) {
-        assert_eq!(run_at(compiled, 8).1, anchor, "{label} at N = 8");
+        assert_eq!(run_at(compiled, 8), anchor, "{label} at N = 8");
     }
     programs
 }

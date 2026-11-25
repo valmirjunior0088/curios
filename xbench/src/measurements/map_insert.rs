@@ -28,7 +28,7 @@ pub fn spines_insert_slope() {
     let compiled = compiled_of(SPINES);
 
     // The documented cross-language anchor, so a mistranslation fails before any figure is read.
-    let (_, output) = run_at(&compiled, 8);
+    let output = run_at(&compiled, 8);
     assert_eq!(output, b"28\n", "spines(8) anchor");
 
     turn_runs(
@@ -119,8 +119,8 @@ pub fn map_insert_key_share() {
     let control = compiled_of(KEY_CONTROL);
 
     // Each arm pins its own output, since the two legitimately differ: the lengths against the constant.
-    assert_eq!(run_at(&encoded, 1000).1, b"927554\n", "encoded at N = 1000");
-    assert_eq!(run_at(&control, 1000).1, b"925689\n", "control at N = 1000");
+    assert_eq!(run_at(&encoded, 1000), b"927554\n", "encoded at N = 1000");
+    assert_eq!(run_at(&control, 1000), b"925689\n", "control at N = 1000");
 
     turn_runs(
         7,
