@@ -53,6 +53,7 @@ Run the stages back to back, committing each as it lands, and stop only where so
 - **Each stage's checks** are what CLAUDE.md names for what it touched, with its own tests, each test's claim mutation-checked. While a check runs, draft the next stage in a scratchpad mirror, never in the tree.
 - **Land what is consumed.** What the branch's code uses, and the members of the rule set the change already states, land; the unconsumed rest is written into the roadmap as a finding or a specification of its own.
 - **A retired mechanism may be the only thing accepting a program no test holds.** Before retiring a lookup, a fallback or a rule, run the programs the documents and comments name through `run -`, and keep the one that breaks as a test.
+- **A landed stage is dropped from the specification**, the stages left keeping their numbers and restated only where the landing moved them, as the pending-work decision keeps one up to date.
 - **A fixup folds into the commit it belongs to**, `GIT_SEQUENCE_EDITOR=true git rebase -i --autosquash <base>`, the base being the hash the branch sits on, `git merge-base HEAD main`, and never `main` itself, which rebases onto wherever another session has moved it.
 - **Rebase onto `main`** on the user's word or a peer session's request, at the next convenient checkpoint — between stages, never mid-stage — and restate any commit a document cites by its hash where the rebase moved it.
 
