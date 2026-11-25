@@ -14,4 +14,4 @@ mod lines;
 pub use lines::{Line, PREFIX};
 
 mod harness;
-pub use harness::{Phase, phase, read, read_elapsed, read_sample, read_span, turn};
+pub use harness::{Phase, phase, read, read_sample, read_span, turn};

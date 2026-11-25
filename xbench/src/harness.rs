@@ -33,11 +33,6 @@ pub fn read(name: &str, measure: Measure, size: Option<u64>, value: u64) {
     });
 }
 
-/// Print a reading of the figure `name`, the time `elapsed` in whole microseconds, at `size` where it is taken at one.
-pub fn read_elapsed(name: &str, size: Option<u64>, elapsed: Duration) {
-    read(name, Measure::Microseconds, size, microseconds(elapsed));
-}
-
 /// `elapsed` in whole microseconds, the unit a time is read in: what a microsecond holds past its last whole one is dropped, and a time past what `u64` holds reads as its largest.
 fn microseconds(elapsed: Duration) -> u64 {
     u64::try_from(elapsed.as_micros()).unwrap_or(u64::MAX)
