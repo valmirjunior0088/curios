@@ -2,7 +2,7 @@
 
 use super::test_support::*;
 
-// A callback a field lambda hands on to a member at its own place is applied wherever the field is called, so the summary of the leading lambdas states nothing of it: `def` applies `f` below `n` in its leading lambdas, and in the control its field hands `app` a lambda of its own, so `spin`, which hands `def` its lambda and lets the record escape to `h`, descends. The refusal has the field hand `f` itself on to `app`, which applies it at `n`; read by the leading lambdas' `f(k)` alone, `spin(0)`, which is `h(def(0, …), 0)`, which is `app(0, …)`, would be a total `spin(0)` again.
+// A callback a field lambda hands on to a member at its own place is applied wherever the field is called, as the field's own: `def` applies `f` below `n` in its leading lambdas, and in the control its field hands `app` a lambda of its own, so `spin`, which hands `def` its lambda and lets the record escape to `h`, descends. The refusal has the field hand `f` itself on to `app`, which applies it at `n`; read by the leading lambdas' `f(k)` alone, `spin(0)`, which is `h(def(0, …), 0)`, which is `app(0, …)`, would be a total `spin(0)` again.
 #[test]
 fn a_callback_a_field_lambda_hands_on_to_a_member_is_applied_where_the_field_is_called() {
     control(
@@ -82,9 +82,9 @@ fn a_member_answering_another_members_record_states_what_its_fields_apply() {
     });
 }
 
-// A field lambda that applies a field of a definition's parameter withholds the leading lambdas' summary of the parameter, its field rows with it: `sizes` applies `e.0` below `t` in the record's first field, and its field lambda is called wherever `call` applies it, at arguments no row of the leading lambdas states. The control's field lambda applies nothing, so the record literal `size` hands `sizes` binds its field below `t`. The refusal has the field lambda apply `e.0` at `t`: stated by the leading lambdas' rows, `size(c)` would be graded below `t` while `call` reaches `e.0(t)`, `size(t)` again.
+// A field lambda that applies a field of a definition's parameter states it as its own, which a call of the field reads beside what the leading lambdas apply as they answer: `sizes` applies `e.0` below `t` in the record's first field, and its field lambda is called wherever `call` applies it, at arguments no row of the leading lambdas states. The control's field lambda applies nothing, so the record literal `size` hands `sizes` binds its field below `t`. The refusal has the field lambda apply `e.0` at `t`: read by the leading lambdas' rows alone, `size(c)` would be graded below `t` while `call` reaches `e.0(t)`, `size(t)` again.
 #[test]
-fn a_field_lambda_applying_a_parameters_field_withholds_the_leading_lambdas_summary_of_it() {
+fn a_field_lambda_applying_a_parameters_field_states_it_as_its_own() {
     control(
         r#"
         use /std/{Nat, Bool};
@@ -117,9 +117,9 @@ fn a_field_lambda_applying_a_parameters_field_withholds_the_leading_lambdas_summ
     });
 }
 
-// What counts as a field lambda for a summary is what counts as a part for the call graph, a record literal held at a field followed: `sizes`'s lambda at `.1.0` is a part of its own, called wherever `call` applies it, so a parameter it applies is one the leading lambdas' summary states nothing of. The control's lambda applies nothing, so `sizes` applies `f` below `t` alone and `size` descends. The refusal has the lambda apply `f` at `t`: read as no part, it would leave `f(l)` and `f(r)` the leading lambdas' rows, and `size(c)` graded below `t` while `call` reaches `f(t)`, `size(t)` again.
+// What counts as a field lambda for a summary is what counts as a part for the call graph, a record literal held at a field followed: `sizes`'s lambda at `.1.0` is a part of its own, called wherever `call` applies it, so what it applies of a parameter is its own row, which a call of it reads beside the leading lambdas'. The control's lambda applies nothing, so `sizes` applies `f` below `t` alone and `size` descends. The refusal has the lambda apply `f` at `t`: read as no part, it would leave `f(l)` and `f(r)` the leading lambdas' rows, and `size(c)` graded below `t` while `call` reaches `f(t)`, `size(t)` again.
 #[test]
-fn a_field_lambda_in_a_nested_record_withholds_the_leading_lambdas_summary_of_what_it_applies() {
+fn a_field_lambda_in_a_nested_record_states_what_it_applies_as_its_own() {
     control(
         r#"
         use /std/{Nat, Bool};

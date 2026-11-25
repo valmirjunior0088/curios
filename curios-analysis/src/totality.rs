@@ -37,8 +37,8 @@ use shape::*;
 mod grade;
 use grade::*;
 pub use grade::{
-    Applied, SizeContext, Standing, binder_bounds, grade, handed, handed_within, nonzero_by,
-    refined_by_arm,
+    Answer, Applied, SizeContext, Standing, binder_bounds, grade, handed, handed_within,
+    nonzero_by, refined_by_arm,
 };
 
 #[cfg(test)]
@@ -97,9 +97,9 @@ pub fn group_totality<D: Driver>(driver: &mut D, group: &RecGroup) -> Result<Tot
 /// How many matrices a parameter's applications may close to before the parameter is summarized as used otherwise: the conservative direction, as a closure past its bound is `Unfounded`.
 const APPLICATIONS_LIMIT: usize = 64;
 
-/// How each part of each member of `group` applies its parameters ([`Applications`]): for a parameter at a position no part uses otherwise than as the head of an application, a field of it applied, or handed on unchanged, itself or a field of it — at that position to a member taking a parameter there, called or itself handed where its callee applies it, or to a definition whose summary applies what it is handed — every application of it the part makes, graded against the part's parameters, and every one reached through a path of the group's calls, graded through the path. A member's leading lambdas are one part, and each field lambda of the record under them another ([`PartShape`]), over the member's parameters and then its own; a member's parameter a field lambda applies is applied wherever the field is called, so the leading lambdas' summary states nothing of it and the field's does, beside what the leading lambdas apply of it themselves: a field is called on a record they answered.
+/// How each part of each member of `group` applies its parameters ([`Applications`]): for a parameter at a position no part uses otherwise than as the head of an application, a field of it applied, or handed on unchanged, itself or a field of it — at that position to a member taking a parameter there, called or itself handed where its callee applies it, or to a definition whose summary applies what it is handed — every application of it the part makes, graded against the part's parameters, and every one reached through a path of the group's calls, graded through the path. A member's leading lambdas are one part, and each field lambda of the record under them another ([`PartShape`]), over the member's parameters and then its own; each states what its own call applies, the leading lambdas' what they apply as they answer the record whatever a field lambda applies, which a reader of a path into a field adds to the field's ([`handed`]).
 ///
-/// **Only where every use is seen.** A use the walk cannot follow — the parameter stored, returned, handed to a definition that states nothing of it, handed to a member at another position or past its parameters, or named in a type — leaves the position unsummarized in every part, and a call through it is graded as it is without a summary. A member call handing a position something other than the caller's own parameter there hands the callee another function, whose applications the summary then counts as well: more matrices claim less, never more.
+/// **Only where every use is seen.** A use the walk cannot follow — the parameter stored, returned, handed to a definition that states nothing of it, handed to a member at another position or past its parameters, or named in a type — leaves the position unsummarized in every part, and a call through it is graded as it is without a summary. A callee's applications at a place are counted in a part's summary only where the part hands its parameter on there; a member call handing that place something other than the parameter, from a part that hands the parameter on there in another call, hands the callee another function, whose applications the summary then counts as well: more matrices claim less, never more.
 pub fn group_applications<D: Driver>(
     driver: &mut D,
     group: &RecGroup,
@@ -166,12 +166,6 @@ fn summaries<D: Driver>(
                 .all(|used| !used.escaped.get(position).copied().unwrap_or(false))
         })
         .collect::<Vec<_>>();
-    // A member's parameter a field lambda applies, itself or through a member it hands the parameter on to, is applied wherever the field is called, at arguments no row of the leading lambdas states, so their summary states nothing of it: the field's own does.
-    let applied_in_a_field = |member: usize, position: usize| {
-        shapes.iter().zip(&uses).any(|(shape, used)| {
-            shape.member == member && !shape.path.is_empty() && used.records(position)
-        })
-    };
     let closed = close(calls);
 
     Ok((0..members)
@@ -182,23 +176,21 @@ fn summaries<D: Driver>(
                     let mut fields = Vec::new();
                     let applied = (0..arities[part])
                         .map(|position| {
-                            let unseen = leading && applied_in_a_field(member, position);
-                            let closed = closed.as_ref().filter(|_| seen[position] && !unseen)?;
-                            // The applications of the parameter, or of its field at `path`: this part's, and each reached through a path of the group's calls. A field is applied through a call that hands the parameter on at its own place as the parameter is.
-                            //
-                            // A field lambda is called on a record its member's leading lambdas answered, so what they apply of the parameter where they answer it is applied wherever the field is called too: stated beside the field's own, over the field's parameters, of which the leading lambdas' rows claim nothing past their own.
+                            let closed = closed.as_ref().filter(|_| seen[position])?;
+                            // The applications of the parameter, or of its field at `path`, the part's own call makes: its own, and each reached through a path of the group's calls, a field read out of a member's record calling the leading lambdas that answered it too ([`part_calls`]). A callee's applications at the parameter's place are composed only into a part that hands the parameter on there, being of what it handed, and a field is applied through such a call as the parameter is. What the leading lambdas apply as they answer the record a field lambda is called on is theirs, which a reader of the path adds ([`handed`]).
                             let reached = |path: Option<&[usize]>| {
-                                let answering = (!leading).then(|| base_part(&shapes, member));
                                 let mut matrices = BTreeSet::new();
-                                for caller in [Some(part), answering].into_iter().flatten() {
-                                    for applied in uses[caller].at(position, path) {
-                                        matrices.insert(applied.over(arities[part]));
-                                    }
-                                    for call in closed.iter().filter(|call| call.caller == caller) {
-                                        for applied in uses[call.callee].at(position, path) {
-                                            if let Some(through) = call.matrix.compose(&applied) {
-                                                matrices.insert(through.over(arities[part]));
-                                            }
+                                for applied in uses[part].at(position, path) {
+                                    matrices.insert(applied.over(arities[part]));
+                                }
+                                let handed =
+                                    uses[part].handed.get(position).copied().unwrap_or(false);
+                                for call in
+                                    closed.iter().filter(|call| handed && call.caller == part)
+                                {
+                                    for applied in uses[call.callee].at(position, path) {
+                                        if let Some(through) = call.matrix.compose(&applied) {
+                                            matrices.insert(through.over(arities[part]));
                                         }
                                     }
                                 }
@@ -237,7 +229,7 @@ struct Tracked {
     applied: Vec<Vec<CallMatrix>>,
     /// Each field path of a parameter applied, with the matrix grading that application.
     fields: Vec<Vec<(Vec<usize>, CallMatrix)>>,
-    /// Whether a parameter is handed on at its own place to a member taking one there, whose applications through the call are this part's own.
+    /// Whether a parameter is handed on at its own place to a member taking one there: the place the summary composes the group's calls through, a callee's applications there being of what this part handed it.
     handed: Vec<bool>,
     escaped: Vec<bool>,
 }
@@ -275,20 +267,6 @@ impl Tracked {
             .flatten()
             .map(|(path, _)| path.clone())
             .collect()
-    }
-
-    /// Whether the parameter at `position` is applied, a field of it is, it is handed on, or it is used otherwise.
-    fn records(&self, position: usize) -> bool {
-        self.escaped.get(position).copied().unwrap_or(false)
-            || self.handed.get(position).copied().unwrap_or(false)
-            || self
-                .applied
-                .get(position)
-                .is_some_and(|applied| !applied.is_empty())
-            || self
-                .fields
-                .get(position)
-                .is_some_and(|fields| !fields.is_empty())
     }
 }
 
@@ -463,6 +441,17 @@ impl<D: Driver> Walk<'_, D> {
         }
     }
 
+    /// Record that each parameter `handed` lists is handed on at its own place, where a summarizing walk keeps a record of its parameters.
+    fn record_handed_on(&mut self, handed: &[(usize, &Term)]) {
+        if let Some(tracked) = &mut self.tracked {
+            for (position, _) in handed {
+                if let Some(slot) = tracked.handed.get_mut(*position) {
+                    *slot = true;
+                }
+            }
+        }
+    }
+
     /// Record a use of `name` the walk does not follow, where it is a parameter a summarizing walk keeps a record of.
     fn escaped(&mut self, name: Option<&Free>) {
         if let Some(position) = self.tracked_position(name)
@@ -576,13 +565,7 @@ impl<D: Driver> Walk<'_, D> {
                     && self.tracked.is_some()
                     && matches!(&***argument, Subterm::Var(var) if var.as_free() == self.params.get(*position))
             });
-        if let Some(tracked) = &mut self.tracked {
-            for (position, _) in &handed {
-                if let Some(slot) = tracked.handed.get_mut(*position) {
-                    *slot = true;
-                }
-            }
-        }
+        self.record_handed_on(&handed);
         let rest = rest
             .into_iter()
             .map(|(_, argument)| argument.clone())
@@ -619,6 +602,7 @@ impl<D: Driver> Walk<'_, D> {
             self.params,
             &instance.name,
             steps,
+            Answer::Held,
         )?;
         for ((argument, own), within) in given.iter().zip(own).zip(within) {
             let handed = within.map(|within| within.beside(own.unwrap_or_default()));
@@ -966,13 +950,7 @@ impl<D: Driver> Walk<'_, D> {
                     };
                     let (handed, rest): (Vec<_>, Vec<_>) =
                         arguments.iter().enumerate().partition(handed_on);
-                    if let Some(tracked) = &mut self.tracked {
-                        for (position, _) in &handed {
-                            if let Some(slot) = tracked.handed.get_mut(*position) {
-                                *slot = true;
-                            }
-                        }
-                    }
+                    self.record_handed_on(&handed);
                     let rest = rest
                         .into_iter()
                         .map(|(_, argument)| argument.clone())
@@ -987,6 +965,7 @@ impl<D: Driver> Walk<'_, D> {
                         self.params,
                         &instance.name,
                         &steps,
+                        Answer::Escapes,
                     )?;
                     if handed.iter().any(Option::is_some) {
                         for (argument, applied) in arguments.iter().zip(handed) {

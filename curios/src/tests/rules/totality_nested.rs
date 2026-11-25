@@ -497,3 +497,149 @@ fn a_field_of_a_parameter_handed_on_is_applied_where_its_callee_applies_it() {
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
+
+// A container's witness of a concept with a superclass publishes how it applies its premise: `List`'s witness of `Order` fills its superclass with `List`'s `Eql` witness applied to the `Eql` inside its premise, a record no field of `List`'s witness reads, which escapes, so the premise's superclass is applied as each part of `List`'s `Eql` witness applies what it is handed, and every other use of the premise is a method's. `Doc`'s law, recursing through `List`'s, then descends. The refusal also hands `List`'s law lists built around the arguments themselves.
+#[test]
+fn a_witness_whose_superclass_is_built_from_its_premise_publishes_how_it_applies_it() {
+    control(
+        r#"
+        use /std/{Nat, Bool, Eq, List};
+        use /std/ops/{Eql};
+
+        concept Order(A: Type): pub Type {
+            use Eql(A),
+            ord(A, A) -> Bool,
+            law(a: A, b: A) -> Eq()(ord(a, b), ord(a, b)),
+        }
+
+        let seq_ord(@T: Type, use Order(T), a: List(T), b: List(T)) -> Bool =
+            match a
+            | [] => match b | [] => true | [_, .._] => false end
+            | [x, ..xs] => match b | [] => false | [y, ..ys] => Bool/and(Order/ord(x, y), seq_ord(xs, ys)) end
+            end;
+
+        let seq_law(@T: Type, use Order(T), a: List(T), b: List(T)) -> Eq()(seq_ord(a, b), seq_ord(a, b)) =
+            match a
+            | [] => Eq/refl()
+            | [x, ..xs] =>
+                match b
+                | [] => Eq/refl()
+                | [y, ..ys] => match Order/law(x, y) | refl() => match seq_law(xs, ys) | refl() => Eq/refl() end end
+                end
+            end;
+
+        satisfy (@T: Type, use Order(T)) => Order(List(T)) {
+            ord = seq_ord,
+            law = seq_law,
+        }
+
+        induct Doc: Type | num(Nat) | arr(List(Doc)) end
+
+        satisfy Eql(Doc) { .. }
+
+        satisfy Order(Doc) {
+            ord(a, b) =
+                match a
+                | num(n) => match b | num(m) => n == m | arr(_) => false end
+                | arr(xs) => match b | num(_) => false | arr(ys) => Order/ord(xs, ys) end
+                end,
+            law(a, b) =
+                match a
+                | num(_) => Eq/refl()
+                | arr(xs) => match b | num(_) => Eq/refl() | arr(ys) => Order/law(xs, ys) end
+                end,
+        }
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[(
+        "| arr(ys) => Order/law(xs, ys) end",
+        "| arr(ys) => let _ = Order/law([a], [b]); Order/law(xs, ys) end",
+    )])
+    .by_elaborator_in("/witness~/Order(/Doc)", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/witness~/Order(/Doc)", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A call through a field that holds an applied definition is a call of that definition's part: a pair's witness of `Order` fills its superclass with the pair's `Eql` witness applied to the `Eql` inside each premise, a record its own `ord` and `law` never read, so the superclass's parts are the pair's witness's own, and `List`'s witness, applying its premise's superclass through the slot that holds it, reaches them. A document whose children are a list of labelled documents then has a lawful witness with no `Eql` premise written beside an `Order` one. The refusal also hands `List`'s law lists built around the arguments themselves.
+#[test]
+fn a_definition_held_at_a_field_is_called_through_its_parts() {
+    control(
+        r#"
+        use /std/{Nat, Bool, Eq, List, Str};
+        use /std/ops/{Eql};
+
+        concept Order(A: Type): pub Type {
+            use Eql(A),
+            ord(A, A) -> Bool,
+            law(a: A, b: A) -> Eq()(ord(a, b), ord(a, b)),
+        }
+
+        let seq_ord(@T: Type, use Order(T), a: List(T), b: List(T)) -> Bool =
+            match a
+            | [] => match b | [] => true | [_, .._] => false end
+            | [x, ..xs] => match b | [] => false | [y, ..ys] => Bool/and(Order/ord(x, y), seq_ord(xs, ys)) end
+            end;
+
+        let seq_law(@T: Type, use Order(T), a: List(T), b: List(T)) -> Eq()(seq_ord(a, b), seq_ord(a, b)) =
+            match a
+            | [] => Eq/refl()
+            | [x, ..xs] =>
+                match b
+                | [] => Eq/refl()
+                | [y, ..ys] => match Order/law(x, y) | refl() => match seq_law(xs, ys) | refl() => Eq/refl() end end
+                end
+            end;
+
+        satisfy (@T: Type, use Order(T)) => Order(List(T)) {
+            ord = seq_ord,
+            law = seq_law,
+        }
+
+        satisfy Order(Str) {
+            ord(a, b) = a == b,
+            law(_, _) = Eq/refl(),
+        }
+
+        satisfy (@A: Type, @B: Type, use Order(A), use Order(B)) => Order({A, B}) {
+            ord(a, b) = Bool/and(Order/ord(a.0, b.0), Order/ord(a.1, b.1)),
+            law(a, b) = match Order/law(a.0, b.0) | refl() => match Order/law(a.1, b.1) | refl() => Eq/refl() end end,
+        }
+
+        induct D: Type | num(Nat) | obj(List({Str, D})) end
+
+        satisfy Eql(D) { .. }
+
+        satisfy Order(D) {
+            ord(a, b) =
+                match a
+                | num(n) => match b | num(m) => n == m | obj(_) => false end
+                | obj(xs) => match b | num(_) => false | obj(ys) => Order/ord(xs, ys) end
+                end,
+            law(a, b) =
+                match a
+                | num(_) => Eq/refl()
+                | obj(xs) => match b | num(_) => Eq/refl() | obj(ys) => Order/law(xs, ys) end
+                end,
+        }
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[(
+        "| obj(ys) => Order/law(xs, ys) end",
+        "| obj(ys) => let _ = Order/law([(\"\", a)], [(\"\", b)]); Order/law(xs, ys) end",
+    )])
+    .by_elaborator_in("/witness~/Order(/D)", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/witness~/Order(/D)", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}

@@ -140,6 +140,26 @@ impl CallMatrix {
         self
     }
 
+    /// `self`'s first `columns` columns: what a call grades of the arguments a part it runs is handed, where it hands more.
+    pub fn first(&self, columns: usize) -> CallMatrix {
+        let columns = columns.min(self.columns);
+        CallMatrix {
+            rows: self.rows,
+            columns,
+            entries: self
+                .entries
+                .iter()
+                .map(|claimed| {
+                    claimed
+                        .iter()
+                        .copied()
+                        .filter(|(column, _)| *column < columns)
+                        .collect()
+                })
+                .collect(),
+        }
+    }
+
     /// `self`'s columns followed by `other`'s, over the same rows: a call whose first arguments `self` grades and whose later ones `other` does — a member's own arguments, then a field lambda's. `None` where the rows differ.
     pub fn beside(&self, other: &CallMatrix) -> Option<CallMatrix> {
         if self.rows != other.rows {
@@ -208,6 +228,11 @@ impl Applications {
         self.parts.iter().find(|part| part.path == path)
     }
 
+    /// Each part's summary filed: the leading lambdas', and each field lambda's that applies something.
+    pub fn parts(&self) -> &[PartApplications] {
+        &self.parts
+    }
+
     /// Whether no part applies anything where every use of it is seen: what a record files nothing for.
     pub fn is_empty(&self) -> bool {
         self.parts.iter().all(PartApplications::is_empty)
@@ -226,6 +251,11 @@ impl PartApplications {
             parameters,
             fields,
         }
+    }
+
+    /// Where the part lies in the record the leading lambdas answer: empty for the leading lambdas themselves.
+    pub fn path(&self) -> &[usize] {
+        &self.path
     }
 
     /// How many parameters the part has.

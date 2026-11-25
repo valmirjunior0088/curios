@@ -62,8 +62,8 @@ pub use variance::{
 mod totality;
 use totality::*;
 pub use totality::{
-    Applied, Call, PartShape, Segment, SizeContext, Standing, base_part, binder_bounds, blocker,
-    call_path, decide, definition_applications, grade, group_applications, group_parts,
+    Answer, Applied, Call, PartShape, Segment, SizeContext, Standing, base_part, binder_bounds,
+    blocker, call_path, decide, definition_applications, grade, group_applications, group_parts,
     group_totality, handed, handed_member, handed_within, known_to_terminate, nonzero_by,
     part_calls, refined_by_arm, yields_a_sort_where,
 };

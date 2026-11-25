@@ -12,7 +12,7 @@ mod tests;
 use {
     super::{Certifier, Error},
     curios_analysis::{
-        Applied, Call, PartShape, Segment, SizeContext, Standing, base_part, binder_bounds,
+        Answer, Applied, Call, PartShape, Segment, SizeContext, Standing, base_part, binder_bounds,
         call_path, decide, grade, group_parts, handed, handed_member, handed_within, nonzero_by,
         part_calls, refined_by_arm,
     },
@@ -466,6 +466,7 @@ impl Certifier<'_> {
         &mut self,
         callee: &Global,
         steps: &[Segment],
+        answer: Answer,
     ) -> Result<Vec<Option<Handed>>, Error> {
         let count = steps.iter().flat_map(Segment::arguments).count();
         let callers = self
@@ -503,7 +504,7 @@ impl Certifier<'_> {
         let mut by_position = vec![None; count];
         let mut graded = Ok(());
         for (frame, params) in &callers {
-            match handed(self, &context, params, callee, &steps) {
+            match handed(self, &context, params, callee, &steps, answer) {
                 Ok(positions) => {
                     for (position, applied) in positions.into_iter().enumerate() {
                         if let Some(applied) = applied {

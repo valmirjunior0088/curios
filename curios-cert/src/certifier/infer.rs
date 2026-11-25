@@ -29,7 +29,7 @@ use {
         Certifier, Counted, Error, Handed, Sort, as_sort, check_group, convert, field_handed,
         infer_sort, synth_neutral,
     },
-    curios_analysis::{Segment, call_path, catch_all_tests},
+    curios_analysis::{Answer, Segment, call_path, catch_all_tests},
     curios_common::recurse,
     curios_core::{
         Bound, Carrier, Cases, Cost, Field, Foreign, Free, Func, FuncType, InductType, Intrinsic,
@@ -252,7 +252,12 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
                 Subterm::Instance(instance) => {
                     let mut steps = vec![Segment::Arguments(apply.params().cloned().collect())];
                     steps.extend(later.iter().cloned());
-                    let mut handed = certifier.handed_to(&instance.name, &steps)?;
+                    // What the call answers is held where it is handed to a definition that states its uses, and escapes elsewhere.
+                    let answer = match within {
+                        Some(_) => Answer::Held,
+                        None => Answer::Escapes,
+                    };
+                    let mut handed = certifier.handed_to(&instance.name, &steps, answer)?;
                     let rest = handed.split_off(apply.arguments.len().min(handed.len()));
                     if let Some(within) = &within {
                         let given = apply.params().cloned().collect::<Vec<_>>();

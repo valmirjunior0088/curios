@@ -3,7 +3,10 @@
 //! Shared by every walk that finds calls — the elaborator's discovery [`Walk`](super::Walk), and the certifier's own typing walk — so a call is graded by one function whichever walk met it. What a walk contributes is its [`SizeContext`], built as it enters and leaves arms, and the arguments it saw at the call.
 
 use {
-    super::{APPLICATIONS_LIMIT, Call, Carriers, Guard, Segment, Shape, Tag, spine},
+    super::{
+        APPLICATIONS_LIMIT, Call, Carriers, Guard, PartShape, Segment, Shape, Tag, part_calls,
+        spine,
+    },
     crate::{Driver, forceable},
     curios_core::{
         CallMatrix, Free, FreeMonoid, Global, Intrinsic, Layer, Nat, Probe, Proj, Size, Struct,
@@ -339,76 +342,101 @@ impl Applied {
     }
 }
 
-/// What a call of `callee`'s part at `path` with `arguments` — its leading lambdas at the empty path, a field lambda of the record they answer otherwise, its arguments the leading lambdas' and then the field's — from a member whose parameters are `params`, hands each argument at a parameter the part applies as its summary states ([`Applications`](curios_core::Applications)): every matrix grading an application of that parameter, or of a field of it, against `params`, through what the call hands the part under `context`. `None` at a position the part summarizes nothing at or applies nowhere, and at every position where nothing is filed of the part or the call does not hand it every parameter.
+/// What becomes of the record a call of a definition's leading lambdas answers, for [`handed`]: where nothing reads it as a callee's summary states, it escapes, and any field lambda of it may be called at anything.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Answer {
+    /// Nothing states what becomes of it.
+    Escapes,
+    /// It is handed to a definition whose summary states how it applies what it is handed ([`handed_within`]), which says which of its parts are called.
+    Held,
+}
+
+/// What a call of `callee` along `steps`, from a member whose parameters are `params`, hands each argument the steps apply at a parameter the parts the call runs apply as their summaries state ([`Applications`](curios_core::Applications)): every matrix grading an application of that parameter, or of a field of it, against `params`, through what the call hands each part under `context`.
+///
+/// The parts are read off the path as a member's are ([`part_calls`]): the part the path reaches, with the leading lambdas where the path follows a field, since they answer the record the field is read from; and where the path reaches no field lambda and the record it stands at escapes, every field lambda under where it stands, at arguments nothing is known of past the ones the path hands it. A path that stops at a field no part lies at is a call of the leading lambdas alone, whose summary states what they put there.
+///
+/// `None` at a position a part the call runs summarizes nothing at or no part applies, and at every position where nothing is filed of `callee`.
 pub fn handed<D: Driver>(
     driver: &mut D,
     context: &SizeContext,
     params: &[Free],
     callee: &Global,
     steps: &[Segment],
+    answer: Answer,
 ) -> Result<Vec<Option<Applied>>, D::Error> {
     let arguments = steps
         .iter()
         .flat_map(Segment::arguments)
         .cloned()
         .collect::<Vec<_>>();
-    let arguments = arguments.as_slice();
     let mut handed = vec![None; arguments.len()];
     let Some(applications) = driver.applications(callee) else {
         return Ok(handed);
     };
-    // The part the steps reach: the leading lambdas where they apply arguments alone, and the field lambda at the slots they project where the arguments before those fill the leading lambdas and arguments alone follow.
-    let is_arguments = |step: &&Segment| matches!(step, Segment::Arguments(_));
-    let leading = steps
+    let shapes = applications
+        .parts()
         .iter()
-        .take_while(is_arguments)
-        .flat_map(Segment::arguments)
-        .count();
-    let path = steps
-        .iter()
-        .skip_while(is_arguments)
-        .map_while(|step| match step {
-            Segment::Field(slot) => Some(*slot),
-            Segment::Arguments(_) => None,
+        .map(|part| PartShape {
+            member: 0,
+            path: part.path().to_vec(),
+            arity: part.arity(),
         })
         .collect::<Vec<_>>();
-    let after = steps.iter().skip_while(is_arguments).skip(path.len());
-    let reaches = path.is_empty()
-        || (after.clone().all(|step| is_arguments(&step))
-            && applications
-                .part(&[])
-                .is_some_and(|part| part.arity() == leading));
-    let Some(part) = applications.part(&path).filter(|_| reaches) else {
+    let Some(base) = shapes.iter().position(|shape| shape.path.is_empty()) else {
         return Ok(handed);
     };
+    let mut runs = part_calls(&shapes, 0, steps);
+    if answer == Answer::Held {
+        runs.retain(|(part, _)| *part == base);
+    }
+    // Each part the call runs, with how many of the call's arguments it is handed: the leading lambdas' where they answer the record, all of them where the path reaches a part, and those before where the record escapes.
+    let runs = runs
+        .into_iter()
+        .map(|(part, given)| (&applications.parts()[part], given.len()))
+        .collect::<Vec<_>>();
     let applies = |position: usize| {
-        part.of(position).is_some_and(|applied| !applied.is_empty())
-            || part
-                .fields_of(position)
-                .any(|(_, applied)| !applied.is_empty())
+        runs.iter().any(|(part, count)| {
+            position < *count
+                && (part.of(position).is_some_and(|applied| !applied.is_empty())
+                    || part
+                        .fields_of(position)
+                        .any(|(_, applied)| !applied.is_empty()))
+        })
     };
     if !(0..arguments.len()).any(applies) {
         return Ok(handed);
     }
-    let call = grade(driver, context, 0, params, 0, arguments.len(), arguments)?.matrix;
-    let through = |applied: &[CallMatrix]| {
-        applied
-            .iter()
-            .map(|application| call.compose(application))
-            .collect::<Option<Vec<_>>>()
-    };
+    let call = grade(driver, context, 0, params, 0, arguments.len(), &arguments)?.matrix;
     for (position, handed) in handed.iter_mut().enumerate() {
         if !applies(position) {
             continue;
         }
-        let Some(itself) = part.of(position).and_then(through) else {
-            continue;
-        };
-        let fields = part
-            .fields_of(position)
-            .map(|(path, applied)| Some((path.to_vec(), through(applied)?)))
-            .collect::<Option<Vec<_>>>();
-        *handed = fields.map(|fields| Applied { itself, fields });
+        let mut gathered = Some(Applied::default());
+        for (part, count) in runs.iter().filter(|(_, count)| position < *count) {
+            // What the call hands the part: the arguments it is handed up to its parameters, and nothing past them; an argument past them goes to what the part answers, which no summary states.
+            let count = (*count).min(part.arity());
+            let into = call
+                .first(count)
+                .beside(&CallMatrix::unknown(params.len(), part.arity() - count))
+                .expect("the same rows");
+            let through = |applied: &[CallMatrix]| {
+                applied
+                    .iter()
+                    .map(|application| into.compose(application))
+                    .collect::<Option<Vec<_>>>()
+            };
+            let reached = part.of(position).and_then(through).and_then(|itself| {
+                let fields = part
+                    .fields_of(position)
+                    .map(|(path, applied)| Some((path.to_vec(), through(applied)?)))
+                    .collect::<Option<Vec<_>>>()?;
+                Some(Applied { itself, fields })
+            });
+            gathered = gathered
+                .zip(reached)
+                .map(|(held, reached)| held.beside(reached));
+        }
+        *handed = gathered;
     }
 
     Ok(handed)
@@ -416,9 +444,9 @@ pub fn handed<D: Driver>(
 
 /// What an application of `callee` to `given`, every argument its leading lambdas take, hands each of them where the application is itself handed to a definition that applies it as `applied` grades against `params`, under `context`: `List`'s witness applied to a member, handed to `List`'s witness in turn.
 ///
-/// Each application of a field of what the application answers is a call of `callee`'s part at that path: the leading lambdas' parameters handed `given`, graded as a call's are, and the field lambda's after them as the application grades them. What that part's summary states it applies of a parameter is what the argument there is handed in turn, through that call ([`Applications`](curios_core::Applications)). A parameter the leading lambdas' own summary states is one no field lambda applies or hands on, so a field's application hands the argument there nothing, whatever the field's summary counts at that place.
+/// Each application of a field of what the application answers is a call of `callee`'s part at that path: the leading lambdas' parameters handed `given`, graded as a call's are, and the field lambda's after them as the application grades them. What that part's summary states it applies of a parameter is what the argument there is handed in turn, through that call ([`Applications`](curios_core::Applications)). A field no part lies at holds what the leading lambdas put there as they answered, every use of an argument in making it stated in their own summary, which the application's own call hands ([`handed`]), so applying it hands the argument nothing more.
 ///
-/// `None` where this says nothing of the application, which is then walked as it was: where what it answers is itself applied, a call of no part, where nothing is filed of `callee`, and where `given` does not fill its leading lambdas. `None` at a position where it claims nothing, the argument there walked as any term is: where a field applied is no part with a summary, or a part its application does not fill or whose summary does not see every use of the parameter, and where the applications outgrow their bound.
+/// `None` where this says nothing of the application, which is then walked as it was: where what it answers is itself applied, a call of no part, where nothing is filed of `callee`, and where `given` does not fill its leading lambdas. `None` at a position where it claims nothing, the argument there walked as any term is: where a part its application reaches does not fill it or does not see every use of the parameter, and where the applications outgrow their bound.
 pub fn handed_within<D: Driver>(
     driver: &mut D,
     context: &SizeContext,
@@ -459,11 +487,11 @@ pub fn handed_within<D: Driver>(
                 .collect::<Option<Vec<_>>>()
         });
         for (position, slot) in handed.iter_mut().enumerate() {
-            let through = match (leading.of(position), part, &calls) {
-                // No field lambda applies a parameter the leading lambdas' summary states, or hands it on, so an application of a field hands the argument there nothing; what the field's own summary states at that place is of what a member it calls is handed there, another value.
-                (Some(_), _, _) => Some(Applied::default()),
-                (None, None, _) | (None, Some(_), None) => None,
-                (None, Some(part), Some(calls)) => {
+            let through = match (part, &calls) {
+                // A field no part lies at holds what the leading lambdas put there, whose own summary states every use of the argument in making it.
+                (None, _) => leading.of(position).map(|_| Applied::default()),
+                (Some(_), None) => None,
+                (Some(part), Some(calls)) => {
                     let through = |applied: &[CallMatrix]| {
                         calls
                             .iter()
