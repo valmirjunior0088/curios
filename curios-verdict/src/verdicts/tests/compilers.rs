@@ -86,6 +86,22 @@ fn a_compiler_change_files_the_address_again_and_takes_the_other_compilers_objec
     );
 }
 
+/// What an earlier layout left among the objects, a unit's directory at the family's own level, is neither read nor kept: a compiler reads under its own name alone, and its filing takes away every other entry of the family.
+#[test]
+fn an_object_an_earlier_layout_filed_is_neither_read_nor_kept() {
+    let root = project("earlier-layout");
+    let stray = own(&root).objects().join("0f".repeat(32));
+    fs::create_dir_all(&stray).expect("a directory among the objects");
+    fs::write(stray.join("unit"), "no unit this compiler filed").expect("a file in it");
+
+    assert_eq!(folded_by(&root, "one"), ["compiling /shape"]);
+    assert!(
+        !stray.exists(),
+        "what no compiler's name holds is taken away"
+    );
+    assert_eq!(folded_by(&root, "one"), ["reused /shape"]);
+}
+
 /// Another compiler's record is read for nothing: not a hit, since its verdicts are that compiler's, and not a baseline, since a baseline's are believed too. The compiler's own record is both.
 #[test]
 fn another_compilers_object_is_no_hit_and_no_baseline() {

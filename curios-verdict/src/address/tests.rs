@@ -106,8 +106,12 @@ fn an_executables_identity_is_its_package_and_its_name() {
     );
 }
 
-/// The two families version independently, so an entry written by one layout is never found by the other — which is the whole reason each carries its own schema tag.
+/// An executable's own declarations and its payloads are two objects, though one package and one name address both: each address opens on its kind.
 #[test]
-fn the_two_families_are_tagged_apart() {
-    assert_ne!(OBJECT_SCHEMA, PAYLOAD_SCHEMA);
+fn a_units_address_is_never_a_payloads() {
+    assert_ne!(UNIT, PAYLOAD);
+    assert_ne!(
+        entry_address("app", "serve", None, Compiled::Built, None),
+        payload_address("app", "serve")
+    );
 }

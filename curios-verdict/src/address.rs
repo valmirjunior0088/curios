@@ -8,13 +8,13 @@ use {
     curios_module::{Compiled, UnitSource},
 };
 
-/// What version of the unit family's layout an address names.
+/// What a unit's address opens on: the kind of object it names, so that a unit's address and a payload's are never one, both lying in one compiler's directory.
 ///
-/// In the address rather than in a file beside it, so an entry written by an older layout is not found rather than found and misread. Bump it whenever what an object holds, or what a hit is verified against, changes.
-const OBJECT_SCHEMA: &str = "u120";
+/// A word and no version: what an object holds is its compiler's to lay out, and a compiler that lays it out otherwise is another binary, which files under another name and never meets this one's objects.
+const UNIT: &str = "unit";
 
-/// The same, for the payload family — its own tag, because the two families version independently and neither should invalidate the other by moving.
-const PAYLOAD_SCHEMA: &str = "p15";
+/// The same, for an executable's payloads.
+const PAYLOAD: &str = "payload";
 
 /// The address a unit claiming `mounts`, declaring `declared`, `compiled` built or tested, and in a fold whose first unit stands in for the archived root claiming `stand_in` where one does, is filed under.
 ///
@@ -33,7 +33,7 @@ pub fn unit_address(
 ) -> String {
     let mut fingerprint = Fingerprint::new();
 
-    fingerprint.feed(OBJECT_SCHEMA);
+    fingerprint.feed(UNIT);
     fingerprint.feed(mounts.len().to_string());
     for mount in mounts {
         fingerprint.feed(mount.prefix.join());
@@ -69,7 +69,7 @@ pub fn entry_address(
 ) -> String {
     let mut fingerprint = Fingerprint::new();
 
-    fingerprint.feed(OBJECT_SCHEMA);
+    fingerprint.feed(UNIT);
     // Where a unit's address states how many prefixes it claims, which no word spells.
     fingerprint.feed("executable");
     fingerprint.feed(package);
@@ -122,7 +122,7 @@ fn feed_declared(fingerprint: &mut Fingerprint, declared: Option<&[Qualifier]>) 
 pub fn payload_address(package: &str, executable: &str) -> String {
     let mut fingerprint = Fingerprint::new();
 
-    fingerprint.feed(PAYLOAD_SCHEMA);
+    fingerprint.feed(PAYLOAD);
     fingerprint.feed(package);
     fingerprint.feed(executable);
 
