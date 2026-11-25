@@ -366,6 +366,6 @@ satisfy (@s: Str) => Ord(At(s)) {
     flips(a, b) = Ord/flips(a.offset, b.offset),
     trans(a, b, c, p, q) = Ord/trans(a.offset, b.offset, c.offset, p, q),
     eq(a, b, h) = eq_of_offset(a, b, Ord/eq(a.offset, b.offset, h)),
-    lt_of_ord(a, b) = Ord/lt_of_ord(a.offset, b.offset),
-    le_of_ord(a, b) = Ord/le_of_ord(a.offset, b.offset),
+    is_lt(a, b) = Ord/is_lt(a.offset, b.offset),
+    is_le(a, b) = Ord/is_le(a.offset, b.offset),
 }

@@ -1401,11 +1401,11 @@ fn ord_body(
     let flips = flipped_with_operands(context, site, subject, row)?;
     let trans = carried_across(context, site, subject, row)?;
     let eq = equal_where_tied(context, site, subject, row)?;
-    let lt_of_ord = agreed(context);
-    let le_of_ord = agreed(context);
+    let is_lt = agreed(context);
+    let is_le = agreed(context);
     Ok(site.at(dictionary(
         site,
-        [ord, lt, le, flips, trans, eq, lt_of_ord, le_of_ord],
+        [ord, lt, le, flips, trans, eq, is_lt, is_le],
     )))
 }
 

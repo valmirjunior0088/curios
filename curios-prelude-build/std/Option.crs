@@ -70,7 +70,7 @@ pub let get(@A: Sort, m: Option(A), @ok: IsSome(m)) -> A =
 --- `some` is injective: two equal options that each hold a value hold one value.
 ---
 --- What lets a decoder take an encoding apart without inventing a value: a reader that answers an option is a function, so `Eq/cong` turns an equation between two encodings into one between the options read, and this turns that into one between the values.
-pub let some_injective(@A: Sort, @x: A, @y: A, same: Eq()(some(x), some(y))) -> Eq()(x, y) =
+pub let some_inj(@A: Sort, @x: A, @y: A, same: Eq()(some(x), some(y))) -> Eq()(x, y) =
     match same | refl() => Eq/refl() end;
 
 satisfy (@A: Type, use Eql(A)) => Eql(Option(A)) {
@@ -135,8 +135,8 @@ satisfy (@A: Type, use Ord(A)) => Ord(Option(A)) {
                 Eq/refl()
             end
         end,
-    lt_of_ord(_, _) = Eq/refl(),
-    le_of_ord(_, _) = Eq/refl(),
+    is_lt(_, _) = Eq/refl(),
+    is_le(_, _) = Eq/refl(),
 }
 
 satisfy (@A: Type, use Hash(A)) => Hash(Option(A)) {

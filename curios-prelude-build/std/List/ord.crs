@@ -116,6 +116,6 @@ satisfy (@T: Type, use Ord(T)) => Ord(List(T)) {
     flips = flips,
     trans = trans,
     eq = eq,
-    lt_of_ord(_, _) = Eq/refl(),
-    le_of_ord(_, _) = Eq/refl(),
+    is_lt(_, _) = Eq/refl(),
+    is_le(_, _) = Eq/refl(),
 }

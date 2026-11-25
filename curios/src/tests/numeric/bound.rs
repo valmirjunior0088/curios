@@ -391,8 +391,8 @@ fn a_member_bound_discharges_through_a_row_the_module_declares() {
             flips(a, b) = Ord/flips(a.n, b.n),
             trans(a, b, c, p, q) = Ord/trans(a.n, b.n, c.n, p, q),
             eq(a, b, h) = one(a.n, b.n, Ord/eq(a.n, b.n, h)),
-            lt_of_ord(a, b) = Ord/lt_of_ord(a.n, b.n),
-            le_of_ord(a, b) = Ord/le_of_ord(a.n, b.n),
+            is_lt(a, b) = Ord/is_lt(a.n, b.n),
+            is_le(a, b) = Ord/is_le(a.n, b.n),
         }
         satisfy Rem(Num) { Ok(b) = Holds(0 < b.n), rem(a, b, @ok) = a }
         let probe() -> Num = Rem/rem(Num { n = 10 }, Num { n = 3 });

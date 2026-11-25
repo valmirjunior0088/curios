@@ -101,4 +101,4 @@ let _two_runs_of_one_length_and_one_number_are_one(
     same: Eq()(Bytes/length(a), Bytes/length(b)),
     e: Eq()(Bytes/to_nat(a), Bytes/to_nat(b)),
 ) -> Eq()(a, b) =
-    Bytes/to_nat_injective(a, b, same, e);
+    Bytes/to_nat_inj(a, b, same, e);

@@ -145,15 +145,7 @@ fn the_standard_library_documents_from_the_archive() {
             .map(|member| member.name.as_str())
             .collect::<Vec<_>>(),
         [
-            "",
-            "ord",
-            "lt",
-            "le",
-            "flips",
-            "trans",
-            "eq",
-            "lt_of_ord",
-            "le_of_ord"
+            "", "ord", "lt", "le", "flips", "trans", "eq", "is_lt", "is_le"
         ],
         "{:?}",
         ordered.members

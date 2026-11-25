@@ -216,6 +216,6 @@ satisfy Hash(Nat) {
 
 --- The encoding in the order of the numbers, whose injectivity is that order's.
 satisfy Map/Key(Nat) {
-    injective = hash/injective,
+    inj = hash/inj,
     monotone = hash/monotone,
 }

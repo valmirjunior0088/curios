@@ -189,7 +189,7 @@ pub let difference(
 pub let rekey(@K: Type, @from: Key(K), use Key(K), @V: Type, m: Map(K, use from, V)) -> Map(K, V) =
     fold(@K, use from, m, empty(), (k, v, acc) => insert(acc, k, v));
 
---- Entry by entry: a trie is a function of its entries, so two maps hold the same keys at equal values exactly where their tries are alike ([`try_get/injective`]).
+--- Entry by entry: a trie is a function of its entries, so two maps hold the same keys at equal values exactly where their tries are alike ([`try_get/inj`]).
 satisfy (@K: Type, use Key(K), @V: Type, use Eql(V)) => Eql(Map(K, V)) {
     eql(a, b) = Node/same(a.root, b.root),
     -- A congruence written over the fields and applied at the projections, where an equation between two projections solves nothing: once the roots are one, the two proofs that they are sound are.

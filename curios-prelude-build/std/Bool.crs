@@ -128,8 +128,8 @@ satisfy Ord(Bool) {
             | true => Eq/refl()
             end
         end,
-    lt_of_ord(_, _) = Eq/refl(),
-    le_of_ord(_, _) = Eq/refl(),
+    is_lt(_, _) = Eq/refl(),
+    is_le(_, _) = Eq/refl(),
 }
 
 satisfy Hash(Bool) {
@@ -146,7 +146,7 @@ let bool_round(b: Bool) -> Eq()(bool_of(Hash/hash(b)), b) =
 
 --- One byte per value, `false`'s below `true`'s.
 satisfy Map/Key(Bool) {
-    injective(a, b, same) =
+    inj(a, b, same) =
         Eq/trans(Eq/sym(bool_round(a)), Eq/trans(Eq/cong(bool_of, same), bool_round(b))),
     monotone(a, b) =
         match a

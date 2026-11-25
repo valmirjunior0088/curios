@@ -791,8 +791,8 @@ satisfy Ord({}) {
     trans((), (), (), _, _) = Bool/True/qed(),
     -- The unit has one value, so any two are one.
     eq((), (), _) = Eq/refl(),
-    lt_of_ord((), ()) = Eq/refl(),
-    le_of_ord((), ()) = Eq/refl(),
+    is_lt((), ()) = Eq/refl(),
+    is_le((), ()) = Eq/refl(),
 }
 
 satisfy (@A: Type, use Ord(A)) => Ord({A}) {
@@ -802,8 +802,8 @@ satisfy (@A: Type, use Ord(A)) => Ord({A}) {
     flips(a, b) = Ord/flips(a.0, b.0),
     trans(a, b, c, p, q) = Ord/trans(a.0, b.0, c.0, p, q),
     eq(a, b, h) = same1(a.0, b.0, Ord/eq(a.0, b.0, h)),
-    lt_of_ord(_, _) = Eq/refl(),
-    le_of_ord(_, _) = Eq/refl(),
+    is_lt(_, _) = Eq/refl(),
+    is_le(_, _) = Eq/refl(),
 }
 
 -- The order of two tuples of each number of fields past one: by the first field, and by the rest where it ties. Each is a function of its own, so its witness states `lt` and `le` over it and the laws read all three by reduction. The laws are the step's ([`Ordering/then`]), a field at a time: `flips` and the chaining `trans` closes on through each field's own, each step's answers written at its call, and the two tuples one where each step's two answers are `eq`.
@@ -847,8 +847,8 @@ satisfy (@A: Type, @B: Type, use Ord(A), use Ord(B)) => Ord({A, B}) {
             b.1,
             Ord/eq(a.0, b.0, Ordering/then/first(Ord/ord(a.0, b.0), Ord/ord(a.1, b.1), h)),
             Ord/eq(a.1, b.1, h1)),
-    lt_of_ord(_, _) = Eq/refl(),
-    le_of_ord(_, _) = Eq/refl(),
+    is_lt(_, _) = Eq/refl(),
+    is_le(_, _) = Eq/refl(),
 }
 
 let ord3(
@@ -930,8 +930,8 @@ satisfy (@A: Type, @B: Type, @C: Type, use Ord(A), use Ord(B), use Ord(C)) => Or
                     h)),
             Ord/eq(a.1, b.1, Ordering/then/first(Ord/ord(a.1, b.1), Ord/ord(a.2, b.2), h1)),
             Ord/eq(a.2, b.2, h2)),
-    lt_of_ord(_, _) = Eq/refl(),
-    le_of_ord(_, _) = Eq/refl(),
+    is_lt(_, _) = Eq/refl(),
+    is_le(_, _) = Eq/refl(),
 }
 
 let ord4(
@@ -1067,8 +1067,8 @@ satisfy (
                     h1)),
             Ord/eq(a.2, b.2, Ordering/then/first(Ord/ord(a.2, b.2), Ord/ord(a.3, b.3), h2)),
             Ord/eq(a.3, b.3, h3)),
-    lt_of_ord(_, _) = Eq/refl(),
-    le_of_ord(_, _) = Eq/refl(),
+    is_lt(_, _) = Eq/refl(),
+    is_le(_, _) = Eq/refl(),
 }
 
 let ord5(
@@ -1275,8 +1275,8 @@ satisfy (
                     h2)),
             Ord/eq(a.3, b.3, Ordering/then/first(Ord/ord(a.3, b.3), Ord/ord(a.4, b.4), h3)),
             Ord/eq(a.4, b.4, h4)),
-    lt_of_ord(_, _) = Eq/refl(),
-    le_of_ord(_, _) = Eq/refl(),
+    is_lt(_, _) = Eq/refl(),
+    is_le(_, _) = Eq/refl(),
 }
 
 let ord6(
@@ -1562,8 +1562,8 @@ satisfy (
                     h3)),
             Ord/eq(a.4, b.4, Ordering/then/first(Ord/ord(a.4, b.4), Ord/ord(a.5, b.5), h4)),
             Ord/eq(a.5, b.5, h5)),
-    lt_of_ord(_, _) = Eq/refl(),
-    le_of_ord(_, _) = Eq/refl(),
+    is_lt(_, _) = Eq/refl(),
+    is_le(_, _) = Eq/refl(),
 }
 
 let ord7(
@@ -1943,8 +1943,8 @@ satisfy (
                     h4)),
             Ord/eq(a.5, b.5, Ordering/then/first(Ord/ord(a.5, b.5), Ord/ord(a.6, b.6), h5)),
             Ord/eq(a.6, b.6, h6)),
-    lt_of_ord(_, _) = Eq/refl(),
-    le_of_ord(_, _) = Eq/refl(),
+    is_lt(_, _) = Eq/refl(),
+    is_le(_, _) = Eq/refl(),
 }
 
 let ord8(
@@ -2463,6 +2463,6 @@ satisfy (
                     h5)),
             Ord/eq(a.6, b.6, Ordering/then/first(Ord/ord(a.6, b.6), Ord/ord(a.7, b.7), h6)),
             Ord/eq(a.7, b.7, h7)),
-    lt_of_ord(_, _) = Eq/refl(),
-    le_of_ord(_, _) = Eq/refl(),
+    is_lt(_, _) = Eq/refl(),
+    is_le(_, _) = Eq/refl(),
 }

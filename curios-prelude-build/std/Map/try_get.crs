@@ -19,7 +19,7 @@ let apart_codes(
 ) -> Eq()(Hash/hash(key) == Hash/hash(other), false) =
     match Hash/hash(key) == Hash/hash(other)
     | false => Eq/refl()
-    | true => match apart(Eq/sym(Key/injective(key, other, proved()))) end
+    | true => match apart(Eq/sym(Key/inj(key, other, proved()))) end
     end;
 
 -- What a node answering `x` at `key`'s encoding in place of `n` answers at another key's: what `n` does.
@@ -235,7 +235,7 @@ let of_root(
 
 -- A map's trie is a function of its entries: the position a sound branch forks at is the first its keys differ at, and which twig holds a key is that key's digit there. So a proof about a map binds to what it holds, and two maps built in different orders, or by different operations, are equal where they agree at every key.
 --- Two maps with the same value at every key are one map.
-pub let injective(
+pub let inj(
     @K: Type,
     use Key(K),
     @V: Type,

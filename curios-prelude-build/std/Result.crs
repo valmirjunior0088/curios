@@ -156,6 +156,6 @@ satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Ord(Result(E, A)) {
                 Eq/refl()
             end
         end,
-    lt_of_ord(_, _) = Eq/refl(),
-    le_of_ord(_, _) = Eq/refl(),
+    is_lt(_, _) = Eq/refl(),
+    is_le(_, _) = Eq/refl(),
 }

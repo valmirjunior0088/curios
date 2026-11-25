@@ -107,8 +107,8 @@ satisfy Ord(Byte) {
     flips(a, b) = Ord/flips(to_nat(a), to_nat(b)),
     trans(a, b, c, p, q) = Ord/trans(to_nat(a), to_nat(b), to_nat(c), p, q),
     eq(a, b, h) = Eq/cong((n) => Nat/to_byte(n % 256), Ord/eq(to_nat(a), to_nat(b), h)),
-    lt_of_ord(a, b) = Ord/lt_of_ord(to_nat(a), to_nat(b)),
-    le_of_ord(a, b) = Ord/le_of_ord(to_nat(a), to_nat(b)),
+    is_lt(a, b) = Ord/is_lt(to_nat(a), to_nat(b)),
+    is_le(a, b) = Ord/is_le(to_nat(a), to_nat(b)),
 }
 
 -- Spelled as the byte rather than routed through `Bytes/of_nat` and padded back to one byte, which is the same encoding for all 256 values and says it the long way round: `of_nat` answers the empty run at zero, so the padding existed only to undo that. Written directly, `/std/Map`'s `Key(Byte)` reads the byte back with the index that put it there instead of proving its way through a minimal encoding.
@@ -119,7 +119,7 @@ satisfy Hash(Byte) {
 
 --- The one byte itself, a cons onto no bytes: injective in its head, and ordered as its head is.
 satisfy Map/Key(Byte) {
-    injective(a, b, same) = Bytes/cons_injective_head(@a, @0x[], @b, @0x[], same),
+    inj(a, b, same) = Bytes/cons_inj_head(@a, @0x[], @b, @0x[], same),
     monotone(a, b) =
         match a < b
         | true => Eq/refl()

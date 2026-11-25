@@ -37,7 +37,7 @@ let no_cons(k: Byte, p: Bytes, e: Eq()(0, length(0x[k, ..p]))) -> Bool/False =
 --- Two runs of one length that denote one number are one run: [`to_nat`] is injective at a fixed width.
 ---
 --- Across lengths it is not, a trailing zero byte adding nothing, which is why [`of_nat`] is the minimal encoding.
-pub let to_nat_injective(
+pub let to_nat_inj(
     a: Bytes,
     b: Bytes,
     same: Eq()(length(a), length(b)),
@@ -56,7 +56,7 @@ pub let to_nat_injective(
             let tails: Eq()(to_nat(t), to_nat(p)) = Eq/cong((n: Nat) => n / 256, e);
             let heads: Eq()(h, k) = Eq/cong((n: Nat) => Nat/to_byte(n % 256), e);
             let lens: Eq()(length(t), length(p)) = Eq/cong((n: Nat) => n - 1, same);
-            let rest: Eq()(t, p) = to_nat_injective(t, p, lens, tails);
+            let rest: Eq()(t, p) = to_nat_inj(t, p, lens, tails);
             Eq/trans(
                 Eq/cong((y: Byte) => 0x[y, ..t], heads),
                 Eq/cong((q: Bytes) => 0x[k, ..q], rest))
@@ -76,24 +76,24 @@ let uncons(z: Bytes) -> Option({Byte, Bytes}) =
 
 -- Read through the cons taken apart above — what lets an encoding built by consing be taken apart again. `/std/Map`'s `Key` witnesses are where that is needed, which is outside this module's subtree.
 --- A cons is injective in its head.
-pub let cons_injective_head(
+pub let cons_inj_head(
     @k1: Byte,
     @p1: Bytes,
     @k2: Byte,
     @p2: Bytes,
     e: Eq()(0x[k1, ..p1], 0x[k2, ..p2]),
 ) -> Eq()(k1, k2) =
-    Eq/cong((halves: {Byte, Bytes}) => halves.0, Option/some_injective(Eq/cong(uncons, e)));
+    Eq/cong((halves: {Byte, Bytes}) => halves.0, Option/some_inj(Eq/cong(uncons, e)));
 
 --- A cons is injective in its tail.
-pub let cons_injective_tail(
+pub let cons_inj_tail(
     @k1: Byte,
     @p1: Bytes,
     @k2: Byte,
     @p2: Bytes,
     e: Eq()(0x[k1, ..p1], 0x[k2, ..p2]),
 ) -> Eq()(p1, p2) =
-    Eq/cong((halves: {Byte, Bytes}) => halves.1, Option/some_injective(Eq/cong(uncons, e)));
+    Eq/cong((halves: {Byte, Bytes}) => halves.1, Option/some_inj(Eq/cong(uncons, e)));
 
 -- `Eql`'s law at `Bytes`, by recursion on both runs, since the comparison of two conses is their heads' and their tails', and of a cons and no bytes is `false`.
 let eq_of_eql(a: Bytes, b: Bytes, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
@@ -123,7 +123,7 @@ let no_empty(k: Byte, p: Bytes, e: Eq()(0x[], 0x[k, ..p])) -> Bool/False =
 
 -- Course-of-values induction, because the recursion divides rather than decrements. Each step takes the encoding apart at its first byte, the digit and the rest by the cons's two injections, recovers the two numbers' high parts from the induction hypothesis and their low digits from the byte round trip, and rejoins both by Euclid's recombination.
 --- Distinct numbers encode distinctly.
-pub let of_nat_injective(a: Nat, b: Nat, same: Eq()(of_nat(a), of_nat(b))) -> Eq()(a, b) =
+pub let of_nat_inj(a: Nat, b: Nat, same: Eq()(of_nat(a), of_nat(b))) -> Eq()(a, b) =
     Nat/descend(
         (m: Nat) => m,
         (m) => (d: Nat, e: Eq()(of_nat(m), of_nat(d))) -> Eq()(m, d),
@@ -147,9 +147,9 @@ pub let of_nat_injective(a: Nat, b: Nat, same: Eq()(of_nat(a), of_nat(b))) -> Eq
                         end
                     | dq + 1 =>
                         let heads: Eq()(of_nat((np + 1) / 256), of_nat((dq + 1) / 256)) =
-                            cons_injective_tail(e);
+                            cons_inj_tail(e);
                         let digits: Eq()((np + 1) % 256, (dq + 1) % 256) =
-                            Eq/cong(Byte/to_nat, cons_injective_head(e));
+                            Eq/cong(Byte/to_nat, cons_inj_head(e));
                         let highs: Eq()((np + 1) / 256, (dq + 1) / 256) =
                             ih((np + 1) / 256, high_below(np + 1, Bool/True/qed()))(
                                 (dq + 1) / 256,
@@ -328,6 +328,6 @@ satisfy Hash(Bytes) {
 
 --- The identity encoding, in the order of bytes.
 satisfy Map/Key(Bytes) {
-    injective(_, _, same) = same,
+    inj(_, _, same) = same,
     monotone(_, _) = Eq/refl(),
 }

@@ -72,6 +72,6 @@ satisfy Ord(Nat) {
     flips = flips,
     trans = trans,
     eq = eq,
-    lt_of_ord = is_lt,
-    le_of_ord = is_le,
+    is_lt = is_lt,
+    is_le = is_le,
 }

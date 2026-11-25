@@ -123,8 +123,8 @@ satisfy Ord(OffsetDateTime) {
                         Ord/ord(a.date_time, b.date_time)),
                     Ord/ord(a.offset, b.offset),
                     h))),
-    lt_of_ord(_, _) = Eq/refl(),
-    le_of_ord(_, _) = Eq/refl(),
+    is_lt(_, _) = Eq/refl(),
+    is_le(_, _) = Eq/refl(),
 }
 
 --- The moment the date-time names at its offset: its seconds counted as POSIX counts a date and a time, less how far ahead of UTC the offset is, so a second of `60` counts as the next minute's first.

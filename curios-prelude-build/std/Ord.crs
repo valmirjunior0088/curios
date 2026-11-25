@@ -31,9 +31,9 @@ pub concept Ord(A: Type): pub Type {
     --- Two values `ord` answers `eq` at are one.
     eq(a: A, b: A, h: Eq()(ord(a, b), Ordering/eq())) -> Eq()(a, b),
     --- `lt` is `ord` answering `lt`.
-    lt_of_ord(a: A, b: A) -> Eq()(lt(a, b), Ordering/is_lt(ord(a, b))),
+    is_lt(a: A, b: A) -> Eq()(lt(a, b), Ordering/is_lt(ord(a, b))),
     --- `le` is `ord` answering `lt` or `eq`.
-    le_of_ord(a: A, b: A) -> Eq()(le(a, b), Ordering/is_le(ord(a, b))),
+    is_le(a: A, b: A) -> Eq()(le(a, b), Ordering/is_le(ord(a, b))),
 }
 
 pub use Ord/*;
@@ -125,8 +125,8 @@ pub let of_lt(
 ) -> Eq()(ord(a, b), Ordering/lt()) =
     match ord(a, b)
     | lt() => Eq/refl()
-    | eq() => match Eq/subst((x: Bool) => Bool/Holds(x), lt_of_ord(a, b), p) end
-    | gt() => match Eq/subst((x: Bool) => Bool/Holds(x), lt_of_ord(a, b), p) end
+    | eq() => match Eq/subst((x: Bool) => Bool/Holds(x), is_lt(a, b), p) end
+    | gt() => match Eq/subst((x: Bool) => Bool/Holds(x), is_lt(a, b), p) end
     end;
 
 --- `ord` answers `gt` where the second is below the first.
@@ -149,7 +149,7 @@ pub let below(
 ) -> Bool/Holds(a < b) =
     Eq/subst(
         (x: Bool) => Bool/Holds(x),
-        Eq/sym(Eq/trans(lt_of_ord(a, b), Eq/cong(Ordering/is_lt, h))),
+        Eq/sym(Eq/trans(is_lt(a, b), Eq/cong(Ordering/is_lt, h))),
         Bool/True/qed());
 
 --- The second is below the first where `ord` answers `gt`.

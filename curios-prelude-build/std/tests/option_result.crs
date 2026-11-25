@@ -44,4 +44,4 @@ let _two_equal_options_hold_one_value(
     b: Nat,
     same: Eq()(Option/some(a), Option/some(b)),
 ) -> Eq()(a, b) =
-    Option/some_injective(same);
+    Option/some_inj(same);

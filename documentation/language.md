@@ -510,7 +510,7 @@ An operator is a call of its concept's method, resolved as any witness is, intri
 
 `==` is `Eql`'s method `eql`, and `a != b` is `Bool/not(a == b)`: a witness states equality once, so the two never disagree. Beside `eql` a witness proves the concept's two laws, `eq`, that two values it holds equal are one, and `refl`, that a value is equal to itself, so `==` decides equality wherever a type has it; a [derived witness](#derived-witnesses) has both written for it.
 
-`<` and `<=` are `Ord`'s methods `lt` and `le`, and `a > b` and `a >= b` are `b < a` and `b <= a`. Beside `ord`, `lt` and `le` a witness proves the order's five laws: `flips`, that `ord` answers the flipped answer with its operands swapped; `trans`, that it carries across a middle value; `eq`, that two values it answers `eq` at are one; and `lt_of_ord` and `le_of_ord`, that `lt` and `le` are what `ord` answers. So `<` is a total order wherever a type has it; a [derived witness](#derived-witnesses) has the five written for it.
+`<` and `<=` are `Ord`'s methods `lt` and `le`, and `a > b` and `a >= b` are `b < a` and `b <= a`. Beside `ord`, `lt` and `le` a witness proves the order's five laws: `flips`, that `ord` answers the flipped answer with its operands swapped; `trans`, that it carries across a middle value; `eq`, that two values it answers `eq` at are one; and `is_lt` and `is_le`, that `lt` and `le` are what `ord` answers. So `<` is a total order wherever a type has it; a [derived witness](#derived-witnesses) has the five written for it.
 
 `Flt` answers none of `==`, `!=`, `<`, `<=`, `>` and `>=`: IEEE's comparisons are no equality and no total order, false between a NaN and itself and true both ways between `+0.0` and `-0.0`, so a float is compared by name, `Flt/eql`, `Flt/lt`, `Flt/le`, `Flt/gt` and `Flt/ge`, or by its bit pattern, `Flt/identical`.
 
@@ -1334,8 +1334,8 @@ pub let descending(values: List(Nat)) -> List(Nat) =
             flips(a, b) = Ord/flips(b, a),
             trans(a, b, c, p, q) = Ord/trans(c, b, a, q, p),
             eq(a, b, h) = Eq/sym(Ord/eq(b, a, h)),
-            lt_of_ord(a, b) = Ord/lt_of_ord(b, a),
-            le_of_ord(a, b) = Ord/le_of_ord(b, a) };
+            is_lt(a, b) = Ord/is_lt(b, a),
+            is_le(a, b) = Ord/is_le(b, a) };
     List/sort(@_, use reverse, values);
 ```
 
@@ -1383,7 +1383,7 @@ The key is a declared `induct` or `struct` whose representation is open where th
 A concept's superclasses are hidden members of a concept value. They take no position when it is read — a projection `.N` and a pattern's positional fields count the methods alone — and a literal's entries follow the declaration as a call's arguments follow a function's parameters: the fields in order, and before each, `use value` entries filling the superclass slots before it, from the first. A slot left out is resolved, and `use _` holds a slot's place to the same effect, so `Both { use _, use second, both = … }` supplies the second of two superclasses alone.
 
 ```text
-Ord { use custom_eql, ord = reversed, lt = below, le = at_most, flips = flips, trans = trans, eq = tied, lt_of_ord = is_below, le_of_ord = is_at_most }
+Ord { use custom_eql, ord = reversed, lt = below, le = at_most, flips = flips, trans = trans, eq = tied, is_lt = is_below, is_le = is_at_most }
 ```
 
 A witness's body writes none: a `use` entry in a `satisfy` is refused by name, and resolution fills every superclass of a registered witness.

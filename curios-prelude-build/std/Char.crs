@@ -340,6 +340,6 @@ satisfy Ord(Char) {
     flips(a, b) = Ord/flips(a.code, b.code),
     trans(a, b, c, p, q) = Ord/trans(a.code, b.code, c.code, p, q),
     eq(a, b, h) = eq_of_code(a, b, Ord/eq(a.code, b.code, h)),
-    lt_of_ord(a, b) = Ord/lt_of_ord(a.code, b.code),
-    le_of_ord(a, b) = Ord/le_of_ord(a.code, b.code),
+    is_lt(a, b) = Ord/is_lt(a.code, b.code),
+    is_le(a, b) = Ord/is_le(a.code, b.code),
 }

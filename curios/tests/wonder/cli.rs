@@ -655,10 +655,10 @@ fn a_block_says_where_a_declaration_is_declared_once() {
     let proof = stdout(&curios(
         &root,
         &["wonder", "--at", "<stdin>:1:28"],
-        "let q = /std/Option/some_injective;\n/std/print(\"\")\n",
+        "let q = /std/Option/some_inj;\n/std/print(\"\")\n",
     ));
     assert!(
-        proof.starts_with("/std/Option/some_injective\n│  proof, total\n├─ --- "),
+        proof.starts_with("/std/Option/some_inj\n│  proof, total\n├─ --- "),
         "{proof}"
     );
 }

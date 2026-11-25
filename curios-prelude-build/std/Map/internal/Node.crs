@@ -3155,7 +3155,7 @@ pub let found_entry(
         match Hash/hash(k0) == Hash/hash(x)
         | true =>
             let key = Key/same(k0, x, Bool/True/qed());
-            let value: Eq()(v0, v) = Option/some_injective(h);
+            let value: Eq()(v0, v) = Option/some_inj(h);
             Eq/subst(
                 (p: {K, V}) => Member()(p, [(k0, v0)]),
                 Eq/trans(Eq/cong((y: K) => (y, v0), key), Eq/cong((w: V) => (x, w), value)),
@@ -3435,7 +3435,7 @@ pub let canonical(
             match Hash/hash(k2) == Hash/hash(k1)
             | true =>
                 let key: Eq()(k2, k1) = Key/same(k2, k1, Bool/True/qed());
-                let value: Eq()(v1, v2) = Option/some_injective(same(k1));
+                let value: Eq()(v1, v2) = Option/some_inj(same(k1));
                 Eq/trans(
                     Eq/cong((w: V) => Node/leaf(k1, w), value),
                     Eq/cong((y: K) => Node/leaf(y, v2), Eq/sym(key)))

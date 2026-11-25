@@ -215,7 +215,7 @@ let _two_floats_of_one_key_are_one(
     b: Flt,
     e: Eq()(Flt/total_key(a), Flt/total_key(b)),
 ) -> Eq()(a, b) =
-    Flt/total_key_injective(a, b, e);
+    Flt/total_key_inj(a, b, e);
 
 let _two_floats_of_one_encoding_are_one(
     a: Flt,

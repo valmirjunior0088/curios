@@ -127,7 +127,7 @@ pub let monotone(a: Int, b: Int) -> Eq()(Int/ord(a, b), Bytes/ord(hash(a), hash(
     end;
 
 --- Distinct integers have distinct encodings: two with one encoding are `eq` in their order, which is equality.
-pub let injective(a: Int, b: Int, same: Eq()(hash(a), hash(b))) -> Eq()(a, b) =
+pub let inj(a: Int, b: Int, same: Eq()(hash(a), hash(b))) -> Eq()(a, b) =
     Ord/eq(
         a,
         b,

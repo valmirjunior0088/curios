@@ -410,7 +410,7 @@ pub let monotone(a: Nat, b: Nat) -> Eq()(Nat/ord(a, b), Bytes/ord(hash(a), hash(
     end;
 
 --- Distinct numbers have distinct encodings: two with one encoding are `eq` in their order, which is equality.
-pub let injective(a: Nat, b: Nat, same: Eq()(hash(a), hash(b))) -> Eq()(a, b) =
+pub let inj(a: Nat, b: Nat, same: Eq()(hash(a), hash(b))) -> Eq()(a, b) =
     Ord/eq(
         a,
         b,

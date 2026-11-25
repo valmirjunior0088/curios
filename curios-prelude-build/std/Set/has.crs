@@ -128,5 +128,5 @@ pub let extensional(
 ) -> Eq()(a, b) =
     Eq/cong(
         (m: Map(K, {})) => Set { map = m },
-        Map/try_get/injective(a.map, b.map, (k: K) =>
+        Map/try_get/inj(a.map, b.map, (k: K) =>
             held_once(Map/try_get(a.map, k), Map/try_get(b.map, k), same(k))));
