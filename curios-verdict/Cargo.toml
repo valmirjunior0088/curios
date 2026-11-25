@@ -52,4 +52,3 @@ curios-elab = { workspace = true }
 curios-module = { workspace = true, features = ["test-support"] }
 curios-package = { workspace = true, features = ["test-support"] }
 curios-pipeline = { workspace = true, features = ["test-support"] }
-curios-unit = { workspace = true, features = ["test-support"] }

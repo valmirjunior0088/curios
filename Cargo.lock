@@ -991,7 +991,6 @@ name = "curios-unit"
 version = "0.16.25"
 dependencies = [
  "curios-abi",
- "curios-anf",
  "curios-archive",
  "curios-cert",
  "curios-common",

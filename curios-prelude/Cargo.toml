@@ -32,7 +32,7 @@ curios-package = { workspace = true }
 curios = { workspace = true, features = ["test-support"] }
 curios-abi = { workspace = true }
 curios-cert = { workspace = true, features = ["test-support"] }
-curios-core = { workspace = true, features = ["test-support"] }
+curios-core = { workspace = true }
 curios-elab = { workspace = true }
 curios-module = { workspace = true }
 curios-native = { workspace = true, features = ["test-support"] }

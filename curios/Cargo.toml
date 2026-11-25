@@ -66,12 +66,10 @@ curios-wonder = { workspace = true, features = ["test-support"] }
 curios-algebra = { workspace = true }
 # Where a totality refusal stands, erased as a proof or as a type, which the rules' suites hold a refusal to.
 curios-analysis = { workspace = true }
-# Its test support too: a certifier error by name, which the rules' suites print a refusal by.
-curios-cert = { workspace = true, features = ["test-support"] }
+# The certifier's refusals, which the rules' suites hold a refusal to.
+curios-cert = { workspace = true }
 curios-core = { workspace = true }
 curios-cps = { workspace = true }
-# Its test support too: an error read beneath where it was raised, and by name, which the rules' suites hold a refusal to.
-curios-elab = { workspace = true, features = ["test-support"] }
 curios-emit = { workspace = true }
 # Its test support too: a module's digest, the census's verdict and the weight of a description's copy, which the codegen and format suites pin.
 curios-anf = { workspace = true, features = ["test-support"] }
