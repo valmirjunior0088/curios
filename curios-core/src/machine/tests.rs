@@ -1,4 +1,10 @@
-use {super::*, crate::*, curios_num::Binary, std::collections::BTreeMap};
+use {
+    super::*,
+    crate::*,
+    curios_num::Binary,
+    std::collections::BTreeMap,
+    xbench::{Measure, read},
+};
 
 /// The minimal host: a definition store and a budget. Its own reduction *is* the machine, which is exactly the position the real hosts put it in for closed terms — anything the intrinsic folds hand back through the [`Reducer`] seam lands here and re-enters the machine.
 struct Host {
@@ -652,9 +658,9 @@ fn an_arm_that_names_its_payload_is_bound_to_what_the_host_states() {
     );
 }
 
-/// What the three recursion shapes spend per element, printed rather than asserted — the assertions live in the budget bounds of the ordinary tests above. Set `CURIOS_MACHINE_TRACE` to shrink the ladder and print every dispatch.
+/// What the three recursion shapes spend per element, read rather than asserted — the assertions live in the budget bounds of the ordinary tests above. `cargo xbench measure spend_probe` takes it: `non-tail at <n>`, `tail at <n>` and `neutral at <n>`, the units each shape spends over `n` elements, and `neutral at <n>/<category>`, what the neutral fold spent in each category of the price list. Set `CURIOS_MACHINE_TRACE` to shrink the ladder and print every dispatch.
 #[test]
-#[ignore = "measurement, counted: reports what the machine spends per element rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn spend_probe() {
     let sizes: Vec<usize> = match std::env::var_os("CURIOS_MACHINE_TRACE") {
         Some(_) => vec![3],
@@ -684,13 +690,27 @@ fn spend_probe() {
             Term::intrinsic(Intrinsic::nat_add(acc, h))
         });
         reduce_closed(&mut host, term, Demand::Forced).unwrap();
-        println!(
-            "n={n}: non_tail={non_tail_spent} ({}/elem), tail={tail_spent} ({}/elem), neutral={} ({}/elem), neutral categories {:?}",
-            non_tail_spent / n as u64,
-            tail_spent / n as u64,
-            budget - host.budget,
-            (budget - host.budget) / n as u64,
-            host.by_category,
+        let size = Some(n as u64);
+        read(
+            &format!("non-tail at {n}"),
+            Measure::Count,
+            size,
+            non_tail_spent,
         );
+        read(&format!("tail at {n}"), Measure::Count, size, tail_spent);
+        read(
+            &format!("neutral at {n}"),
+            Measure::Count,
+            size,
+            budget - host.budget,
+        );
+        for (category, spent) in &host.by_category {
+            read(
+                &format!("neutral at {n}/{category:?}"),
+                Measure::Count,
+                size,
+                *spent,
+            );
+        }
     }
 }

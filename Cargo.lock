@@ -732,6 +732,7 @@ dependencies = [
  "curios-archive",
  "curios-common",
  "curios-num",
+ "xbench",
 ]
 
 [[package]]
@@ -929,6 +930,7 @@ dependencies = [
  "curios-unit",
  "curios-verdict",
  "curios-wonder",
+ "xbench",
 ]
 
 [[package]]

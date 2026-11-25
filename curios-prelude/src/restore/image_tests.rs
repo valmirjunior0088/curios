@@ -11,6 +11,7 @@ use {
     curios_prelude_build::std_directory,
     curios_unit::{Record, segments},
     std::{collections::BTreeSet, thread, time::Instant},
+    xbench::{Measure, read, read_elapsed},
 };
 
 #[test]
@@ -180,19 +181,11 @@ fn the_std_record_files_that_any_applies_its_predicate_below_its_list() {
 
 /// The costs of the stored prelude, taken over the image: the figures `curios-package`'s README and `curios-elab`'s budget floors cite.
 ///
-/// Kept in-tree so a figure is retaken by running it rather than by writing a probe again: a figure nobody can cheaply reproduce decays into a claim about history.
-///
 /// # How to read it
 ///
-/// Numbers are only comparable to the recorded ones in `--release`, because these are the figures taken over the *stored* image and a debug build measures a different program:
+/// `cargo xbench measure stored_prelude_measurements` takes it: `cold restore`, both roots restored on a thread that had restored neither, and for each root `<root>/re-erasing` and `<root>/certifying`, each step's time, `<root>/refusals`, `<root>/heaviest declaration/units`, `/depth` and `/frame units`, and `<root>/items`, `/definitions`, `/witnesses`, `/inductives`, `/structures` and `/concepts`.
 ///
-/// ```sh
-/// cargo test --release --package curios-prelude -- --ignored --nocapture stored_prelude_measurements
-/// ```
-///
-/// It asserts nothing and cannot fail — a measurement that fails is a measurement with an opinion. What it does not cover is stated where it prints: the elaboration figures come from the stream `cargo xtask profile prelude` files and need no probe, and the witness inventory is a term walk this does not do.
-///
-/// A range is two runs, and the spread between them is part of the figure.
+/// It asserts nothing and cannot fail — a measurement that fails is a measurement with an opinion. What it does not cover: the elaboration figures come from the stream `cargo xtask profile prelude` files and need no probe, and the witness inventory is a term walk this does not do.
 ///
 /// # What it last printed
 ///
@@ -207,7 +200,7 @@ fn the_std_record_files_that_any_applies_its_predicate_below_its_list() {
 ///
 /// The heaviest declaration's figure counts the closed machine re-deriving within a run — the trade that buys a closed fold's check back a thousandfold — and at thirty times under the default budget it decides nothing.
 #[test]
-#[ignore = "measurement, mixed: reports timings and counts over the stored image rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn stored_prelude_measurements() {
     // A restore happens once per thread, so a *cold* one needs a thread that has not had one — measuring it on this thread would measure a thread-local read.
     let cold = thread::spawn(|| {
@@ -220,11 +213,7 @@ fn stored_prelude_measurements() {
     .expect("the restoring thread");
 
     with_prelude(|prelude| {
-        println!("\n=== timings, over the stored images ===");
-        println!(
-            "  cold restore                 {:>10.1?}   (both roots)",
-            cold
-        );
+        read_elapsed("cold restore", None, cold);
 
         // Per root, against the roots before it: the figures are per *unit*, and the prelude is two of them, so summing them would report a cost no single operation has.
         let mut cores = Vec::new();
@@ -269,46 +258,27 @@ fn stored_prelude_measurements() {
                 })
                 .sum();
 
-            println!("\n=== /{name} ===");
-            println!("  re-erasing the unit          {:>10.1?}", erasure);
-            println!(
-                "  certifying the unit          {:>10.1?}  ({} refusals)",
-                certification,
-                rechecked.refusals().len()
-            );
-            println!(
-                "  ...heaviest declaration      {:>10} units   (depth {}, costing {} of them)",
-                heaviest.units(),
-                heaviest.peak_depth(),
-                heaviest.frame_units()
-            );
-            println!("  items                        {:>10}", core.items.len());
-            println!("  definitions                  {definitions:>10}");
-            println!(
-                "  witnesses                    {:>10}",
-                core.witnesses().len()
-            );
-            println!(
-                "  inductives                   {:>10}",
-                core.induct_decls().len()
-            );
-            println!(
-                "  structures                   {:>10}",
-                core.struct_decls().len()
-            );
-            println!(
-                "  concepts                     {:>10}",
-                core.concepts().len()
-            );
+            read_elapsed(&format!("{name}/re-erasing"), None, erasure);
+            read_elapsed(&format!("{name}/certifying"), None, certification);
+            for (figure, count) in [
+                ("refusals", rechecked.refusals().len() as u64),
+                ("heaviest declaration/units", heaviest.units()),
+                ("heaviest declaration/depth", heaviest.peak_depth() as u64),
+                ("heaviest declaration/frame units", heaviest.frame_units()),
+                ("items", core.items.len() as u64),
+                ("definitions", definitions as u64),
+                ("witnesses", core.witnesses().len() as u64),
+                ("inductives", core.induct_decls().len() as u64),
+                ("structures", core.struct_decls().len() as u64),
+                ("concepts", core.concepts().len() as u64),
+            ] {
+                read(&format!("{name}/{figure}"), Measure::Count, None, count);
+            }
 
             cores.push(core);
             places.push(root.places());
             records.push(root.certification());
             units.push(root.erased());
         }
-
-        println!(
-            "\nNot measured here: the elaboration figures, which `cargo xtask profile prelude` files, and the witness inventory, which is a term walk.\n"
-        );
     });
 }

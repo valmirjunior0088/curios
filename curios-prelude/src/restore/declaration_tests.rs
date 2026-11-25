@@ -15,6 +15,7 @@ use {
         ops::ControlFlow,
         rc::Rc,
     },
+    xbench::{Measure, read},
 };
 
 /// A prelude test would ride into every compilation and surface in every downstream `curios test` run, so the standard library shipping none is a contract, not an accident of today's sources.
@@ -481,11 +482,7 @@ fn tree_and_graph(term: &Term) -> (u128, usize) {
 ///
 /// # How to take it
 ///
-/// ```sh
-/// cargo nextest run -p curios-prelude --all-targets --run-ignored only --no-capture printed_tree_measurements
-/// ```
-///
-/// Counted. For each definition's type and body: the nodes of its tree, the distinct nodes of its graph, and the first over the second. A print builds about one document per node of its term's tree, so an allowance of that many documents per distinct node, set well above the largest ratio here, elides none of them.
+/// `cargo xbench measure printed_tree_measurements` takes it: `terms` and `terms past the floor`, and for each of the eight terms whose tree outgrows its graph the most, over all terms and over those past the floor, `largest/<term>/tree` and `/graph`, or `largest past the floor/…`, the nodes of its tree and the distinct nodes of its graph, the first over the second its ratio. A print builds about one document per node of its term's tree, so an allowance of that many documents per distinct node, set well above the largest ratio here, elides none of them.
 ///
 /// # What it last printed
 ///
@@ -499,7 +496,7 @@ fn tree_and_graph(term: &Term) -> (u128, usize) {
 /// | 8.7 | 2 449 | 281 | `/std/Str/advanced`, body |
 /// | 8.4 | 652 | 78 | `/std/Str/At/next`, body |
 #[test]
-#[ignore = "measurement, counted: reports how far each prelude term's tree outgrows its graph rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn printed_tree_measurements() {
     const FLOOR: u128 = 5_000;
 
@@ -516,26 +513,30 @@ fn printed_tree_measurements() {
         }
 
         let past = rows.iter().filter(|(tree, ..)| *tree > FLOOR).count();
-        println!(
-            "{} terms, {past} with a tree past {FLOOR} nodes",
-            rows.len()
-        );
+        read("terms", Measure::Count, None, rows.len() as u64);
+        read("terms past the floor", Measure::Count, None, past as u64);
 
         // Tree over graph, descending, compared without dividing.
         rows.sort_by(|left, right| (right.0 * left.1 as u128).cmp(&(left.0 * right.1 as u128)));
-        println!("the largest ratios, any tree:");
-        for (tree, graph, described, part) in rows.iter().take(8) {
-            println!(
-                "{:>12.1}  {tree:>14} / {graph:<8}  {described} ({part})",
-                *tree as f64 / *graph as f64
+        let largest = rows.iter().take(8).map(|row| ("largest", row));
+        let largest_past = rows
+            .iter()
+            .filter(|(tree, ..)| *tree > FLOOR)
+            .take(8)
+            .map(|row| ("largest past the floor", row));
+        for (set, (tree, graph, described, part)) in largest.chain(largest_past) {
+            let term = format!("{set}/{described} ({part})");
+            read(
+                &format!("{term}/tree"),
+                Measure::Count,
+                None,
+                u64::try_from(*tree).unwrap_or(u64::MAX),
             );
-        }
-        println!("the largest ratios, trees past the floor:");
-        for (tree, graph, described, part) in rows.iter().filter(|(tree, ..)| *tree > FLOOR).take(8)
-        {
-            println!(
-                "{:>12.1}  {tree:>14} / {graph:<8}  {described} ({part})",
-                *tree as f64 / *graph as f64
+            read(
+                &format!("{term}/graph"),
+                Measure::Count,
+                None,
+                *graph as u64,
             );
         }
     });
