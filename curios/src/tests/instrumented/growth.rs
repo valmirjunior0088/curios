@@ -1,10 +1,7 @@
 //! What each stage does as a program grows, counted.
 
 use {
-    crate::{
-        tests::{Growth, grown},
-        *,
-    },
+    crate::{test_support::*, *},
     curios_core::looks,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,

@@ -18,11 +18,7 @@ mod document;
 mod effects;
 mod erasure;
 mod fmt;
-
 mod growth;
-// Only the growth measurement writes the programs at the sizes it counts.
-use growth::*;
-
 mod harness;
 mod host;
 mod inference;
@@ -42,23 +38,13 @@ mod reports;
 mod respelling;
 mod rules;
 mod runaways;
-// Only the runaway measurement builds the programs the fixtures answer.
-use runaways::*;
 
 mod concurrent;
 mod runtime;
 mod strings;
 mod structs;
 mod towers;
-// Only the tower measurement builds the shapes the fixtures compile.
-use towers::*;
-
 mod tui;
-// Only the two profile suites replay the listing.
-use tui::*;
-
 mod unfolding;
-use unfolding::*;
-
 mod universes;
 mod wasm_conformance;

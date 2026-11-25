@@ -1,6 +1,6 @@
 //! What a `/std/Map` insert costs: the `spines` insert slope, the end-to-end instrument behind `documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md`, and the share of it an insert's key encodings take.
 
-use super::test_support::*;
+use {super::test_support::*, crate::test_support::*};
 
 /// The cross-language workload, read from the corpus so the probe measures the program the results files time.
 const SPINES: &str = include_str!(concat!(
@@ -30,7 +30,7 @@ fn spines_insert_slope() {
     let compiled = compiled_of(SPINES);
 
     // The documented cross-language anchor, so a mistranslation fails before any figure is read.
-    let (_, output) = run(&compiled, 8);
+    let (_, output) = run_at(&compiled, 8);
     assert_eq!(output, b"28\n", "spines(8) anchor");
 
     turn_runs(
@@ -123,8 +123,8 @@ fn map_insert_key_share() {
     let control = compiled_of(KEY_CONTROL);
 
     // Each arm pins its own output, since the two legitimately differ: the lengths against the constant.
-    assert_eq!(run(&encoded, 1000).1, b"927554\n", "encoded at N = 1000");
-    assert_eq!(run(&control, 1000).1, b"925689\n", "control at N = 1000");
+    assert_eq!(run_at(&encoded, 1000).1, b"927554\n", "encoded at N = 1000");
+    assert_eq!(run_at(&control, 1000).1, b"925689\n", "control at N = 1000");
 
     turn_runs(
         7,

@@ -1,10 +1,7 @@
 //! The look count under a recorder: what the checkers sample of it, declaration by declaration, is part of what a reading around their check reads.
 
 use {
-    crate::{
-        tests::{Shape, Stands, tower},
-        *,
-    },
+    crate::{test_support::*, *},
     curios_common::test_support::*,
     curios_core::looks,
     curios_elab::DEFAULT_BUDGET,

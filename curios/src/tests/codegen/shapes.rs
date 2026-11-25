@@ -1,7 +1,7 @@
 //! The typed-fields census: what the recorded field shapes say about the corpus, and what the uniform representation's box/unbox and cast classes cost statically and dynamically. `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` is the decision these instrument, each taken by `cargo xbench measure <name>`.
 
 use {
-    super::test_support::{run, *},
+    super::test_support::*,
     crate::test_support::*,
     curios_anf::{FieldShape, Module},
     curios_elab::DEFAULT_BUDGET,
@@ -327,9 +327,9 @@ fn boxed_field_read_measurements() {
     let payload = compiled_of(FOLD_PAYLOAD);
 
     // Outputs are pinned before any figure is read, so a fixture drift fails loudly.
-    assert_eq!(run(&bare, HIGH).1, b"491113\n", "bare at {HIGH} rounds");
+    assert_eq!(run_at(&bare, HIGH).1, b"491113\n", "bare at {HIGH} rounds");
     assert_eq!(
-        run(&payload, HIGH).1,
+        run_at(&payload, HIGH).1,
         b"161671\n",
         "payload at {HIGH} rounds"
     );

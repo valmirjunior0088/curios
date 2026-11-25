@@ -2,43 +2,13 @@
 
 use {
     super::test_support::*,
+    crate::test_support::*,
     curios_native::{Compiled, test_support::*},
 };
 
-const PUSH_FIRST: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../programs/rope_push_first.crs"
-));
-
-const PUSH_DROP: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../programs/rope_push_drop.crs"
-));
-
-const PUSH_PEEK: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../programs/rope_push_peek.crs"
-));
-
-/// The sizes the slope is read across, each twice the one before; collections are counted at the last.
-const SIZES: [u64; 3] = [16_000, 32_000, 64_000];
-
 /// Collections during one run at `n`, from the engine's own records.
 fn collections(compiled: &Compiled, n: u64) -> usize {
-    collected(|| run(compiled, n)).1.collections
-}
-
-/// The three programs, each anchored at `N = 8` so a mistranslation fails before any figure is read.
-fn programs() -> [(&'static str, Compiled); 3] {
-    let programs = [
-        ("push, then read the first", compiled_of(PUSH_FIRST)),
-        ("push, then drop the first", compiled_of(PUSH_DROP)),
-        ("push, then peek (control)", compiled_of(PUSH_PEEK)),
-    ];
-    for ((label, compiled), anchor) in programs.iter().zip([&b"600\n"[..], b"28\n", b"138773\n"]) {
-        assert_eq!(run(compiled, 8).1, anchor, "{label} at N = 8");
-    }
-    programs
+    collected(|| run_at(compiled, n)).1.collections
 }
 
 /// # What this measures
@@ -71,7 +41,7 @@ fn programs() -> [(&'static str, Compiled); 3] {
 #[test]
 #[ignore = "measurement: taken by cargo xbench measure"]
 fn rope_alternation_collections() {
-    let programs = programs();
+    let programs = alternation_programs();
     let largest = SIZES[SIZES.len() - 1];
 
     for (label, compiled) in &programs {
@@ -87,7 +57,7 @@ fn rope_alternation_collections() {
 /// An alternation of appends with reads of what a flattening reaches copies each element a bounded number of times, so at the largest size it collects about as rarely as its control, which flattens nothing — where one whose flattenings copied the whole run collected hundreds of times. Collection counts are deterministic, which is what makes the bound assertable.
 #[test]
 fn an_alternation_collects_about_as_rarely_as_its_control() {
-    let [first, past, control] = programs();
+    let [first, past, control] = alternation_programs();
     let largest = SIZES[SIZES.len() - 1];
     let floor = collections(&control.1, largest);
 

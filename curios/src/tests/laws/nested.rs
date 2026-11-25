@@ -9,46 +9,6 @@ use {
     xbench::{Measure, read, read_elapsed, turn},
 };
 
-/// `L(0) = x0` and `L(k) = Nat/and(L(k - 1), Nat/or(xk, yk))`, against its mirror with the operands of every operation commuted, closed by `Eq/refl()`.
-fn nested(depth: usize) -> String {
-    let mut binders = String::from("x0: Nat");
-    let (mut left, mut right) = (String::from("x0"), String::from("x0"));
-    for level in 1..=depth {
-        write!(binders, ", x{level}: Nat, y{level}: Nat").expect("a string takes every write");
-        left = format!("Nat/and({left}, Nat/or(x{level}, y{level}))");
-        right = format!("Nat/and(Nat/or(y{level}, x{level}), {right})");
-    }
-    fill!(
-        "use /std/{Nat, Eq, Io};\nlet nested(${binders}) -> Eq()(${left}, ${right}) = Eq/refl();\nIo/pure(())",
-        binders,
-        left,
-        right
-    )
-}
-
-/// A sum of `summands` operations `Nat/and(xk, yk)`, against the sum written in the other order with each operation commuted, closed by `Eq/refl()`: every summand is an atom of the sum and a node of its own reader's.
-fn summed(summands: usize) -> String {
-    let binders = (1..=summands)
-        .map(|at| format!("x{at}: Nat, y{at}: Nat"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let left = (1..=summands)
-        .map(|at| format!("Nat/and(x{at}, y{at})"))
-        .collect::<Vec<_>>()
-        .join(" + ");
-    let right = (1..=summands)
-        .rev()
-        .map(|at| format!("Nat/and(y{at}, x{at})"))
-        .collect::<Vec<_>>()
-        .join(" + ");
-    fill!(
-        "use /std/{Nat, Eq, Io};\nlet summed(${binders}) -> Eq()(${left}, ${right}) = Eq/refl();\nIo/pure(())",
-        binders,
-        left,
-        right
-    )
-}
-
 /// A sum of `summands` calls `g(xk)` of one head, against the sum written in the other order, closed by `Eq/refl()`: any two calls may be one, so every call is put to its checker against the classes opened before it.
 fn called(summands: usize) -> String {
     let binders = (1..=summands)

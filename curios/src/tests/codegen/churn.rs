@@ -4,6 +4,7 @@
 
 use {
     super::test_support::*,
+    crate::test_support::*,
     curios_native::{Compiled, test_support::*},
 };
 
@@ -74,9 +75,6 @@ let entry() -> /std/Io({}) =
 entry()
 "#;
 
-/// The churn phase is read at this K and at none, and costs the difference, which subtracts startup, the initial build, and — in the ballast arms — the whole ballast phase.
-const ROUNDS: u64 = 400;
-
 /// Read each of `runs`, a label, its program and the size it runs at, as a decomposition reads one: what the collector did over a run of it, once ([`read_collected`]), and its time, the runs turned round-robin `rounds` times ([`turn_runs`]).
 fn decomposed(rounds: usize, runs: &[(&str, &Compiled, u64)]) {
     for &(label, compiled, n) in runs {
@@ -109,7 +107,7 @@ fn chain_collection_decomposition() {
     let stock = compiled_of(CHAIN);
 
     // The documented cross-language anchor, so a mistranslation fails before any figure is read.
-    let (_, output) = run(&stock, 8);
+    let (_, output) = run_at(&stock, 8);
     assert_eq!(output, b"819185\n", "chain(8) anchor");
 
     let ballasted =
@@ -133,7 +131,7 @@ fn chain_collection_decomposition() {
 fn threaded_record_allocates_nothing() {
     let compiled = compiled_of(CHURN);
 
-    let ((_, output), collected) = collected(|| run(&compiled, 1_000_000));
+    let ((_, output), collected) = collected(|| run_at(&compiled, 1_000_000));
 
     assert_eq!(output, b"863718\n", "churn(1000000) anchor");
     assert_eq!(
@@ -147,7 +145,7 @@ fn threaded_record_allocates_nothing() {
 fn a_churning_chain_is_heard_to_collect() {
     let compiled = compiled_of(CHAIN);
 
-    let (_, collected) = collected(|| run(&compiled, ROUNDS));
+    let (_, collected) = collected(|| run_at(&compiled, ROUNDS));
 
     assert!(
         collected.collections > 0,
@@ -232,7 +230,7 @@ fn spines_collection_decomposition() {
     let stock = compiled_of(SPINES);
 
     // The documented cross-language anchor, so a mistranslation fails before any figure is read.
-    let (_, output) = run(&stock, 8);
+    let (_, output) = run_at(&stock, 8);
     assert_eq!(output, b"28\n", "spines(8) anchor");
 
     let ballasted =
@@ -335,7 +333,7 @@ fn spines_key_width_measurements() {
 
     let compiled = programs.map(|(label, source)| {
         let compiled = compiled_of(&source);
-        let (_, anchor) = run(&compiled, 8);
+        let (_, anchor) = run_at(&compiled, 8);
         assert_eq!(anchor, b"28\n", "{label}(8) anchor");
 
         (label, compiled)

@@ -1,4 +1,40 @@
-//! What this crate's suites, `curios-prelude`'s and the bench's measurements share, a module by subject: here, a module compiled and run in this process, where a shipped build runs one from its `.cwasm` alone; in `programs`, a program compiled and run as a fixture states it; in `structural`, the structural fixtures, compiled to raw pre-Binaryen wasm and read as text.
+//! What this crate's suites, `curios-prelude`'s and the bench's measurements share, a module by subject: here, a module compiled and run in this process, where a shipped build runs one from its `.cwasm` alone; in `programs`, a program compiled and run as a fixture states it; in `structural`, the structural fixtures, compiled to raw pre-Binaryen wasm and read as text; and in a module each, the programs a suite and a measurement both build.
+
+mod growth;
+pub use growth::{Growth, grown, joined, program, repeated};
+
+mod towers;
+pub use towers::{Shape, Stands, chain, tower};
+
+mod runaways;
+pub use runaways::{Runaway, runaway};
+
+mod listing;
+pub use listing::LISTING_PROGRAM;
+
+mod runs;
+pub use runs::{compiled_of, run_at};
+
+mod churn;
+pub use churn::ROUNDS;
+
+mod alternation;
+pub use alternation::{SIZES, alternation_programs};
+
+mod reduction;
+pub use reduction::{bytes_growing, declaration_cost, list_growing, str_literal};
+
+mod unfolding;
+pub use unfolding::{
+    Consumed, ENTRY, Inner, SEQUENCED, TAIL, compile_only, consumer, copies, emitted, grammar,
+    numeric_web, numerics, predicates,
+};
+
+mod laws;
+pub use laws::{nested, summed};
+
+mod ladder;
+pub use ladder::mirror_counts;
 
 mod programs;
 pub use programs::{

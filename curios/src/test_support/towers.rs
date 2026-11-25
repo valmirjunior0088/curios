@@ -1,0 +1,300 @@
+//! A tower: a chain of `let`s each naming the line before it twice, a graph of `n` nodes whose tree has `2ⁿ`, which the tower suites compile and the bench's measurement of towers puts to each checker.
+
+use {curios_common::fill, std::fmt::Write};
+
+/// Where a tower of values stands.
+#[derive(Clone, Copy)]
+pub enum Stands {
+    /// In the body of a function that does not recurse.
+    Function,
+    /// In the successor arm of a function that calls itself, where each call is recorded where it is typed.
+    Member,
+}
+
+/// What each line of a tower is, in the line before it, `x`. A tower of values says where it stands; an alias and a claim stand at the top level.
+#[derive(Clone, Copy)]
+pub enum Shape {
+    /// `g(x)`, naming the line before it once: no tower, and what every tower is read against.
+    Chain(Stands),
+    /// `g(x, x)` over a function the tower is handed, so every line's type is `Nat` and the term alone is a graph.
+    Calls(Stands),
+    /// `(x, x)`, whose type doubles with it.
+    Pairs(Stands),
+    /// `[x, x]`, whose type nests and shares nothing.
+    Lists(Stands),
+    /// `match b | true => x | false => x end`, each arm the line before.
+    Arms(Stands),
+    /// `match g(b) | true => x | false => x end`, each arm the line before under a scrutinee that is no variable: an arm records its case equation, and what is typed under one answers under no other.
+    Guards(Stands),
+    /// `g(x, x) + tower(g, p)`, in a recursive member's body: every line calls the member, so no line's type is remembered and each is typed where it stands.
+    Recursions,
+    /// `(x, x)`, in a recursive member's body, the last line handed to the member as its argument: a call's argument is read as a size, so the tower is what the totality grading reads.
+    Handed,
+    /// `{T, T}`, a top-level alias of the alias before it.
+    Aliases,
+    /// `(T) -> T`, a top-level alias of the alias before it.
+    Arrows,
+    /// `{t, t}`, a `let` of the one before it in a structure's field type, which the variance and positivity walks read by value: a field type whose tree doubles a line.
+    Fields,
+    /// `(x, x)` twice, as two top-level chains built apart and claimed equal.
+    TwoTowers,
+    /// `g(x, x)` twice in one function's body, the second chain from a spelling that only reduces to the first's, and the two claimed equal: one spelling is not the other, so equality cannot answer and conversion compares them.
+    Apart,
+    /// `x - c * 7 - d * 5`, `c` being `Nat/min(x / 7, 3)` and `d` being `Nat/min(x / 5, 2)`, so each line names the one before three times, under a bound on the last line proved below the function's `Nat`: checking the proof folds comparisons over the whole tower and remembers each line's reduct.
+    Bounded,
+}
+
+/// What a tower of values is written from, as the body of `tower`.
+struct Body {
+    /// What the program imports from `/std`.
+    imports: &'static str,
+    /// The function's parameters, its `Nat` last.
+    parameters: &'static str,
+    /// The arguments a member hands on before its predecessor.
+    forwarded: &'static str,
+    /// The first line, in the `Nat` the tower stands on.
+    first: fn(&str) -> String,
+    /// A line, in the line before it.
+    line: fn(&str) -> String,
+    /// The body's result, in the last line and — in a member — the call it makes to itself.
+    result: fn(&str, Option<&str>) -> String,
+}
+
+/// A tower of `lines` lines over its first, as a whole program.
+pub fn tower(shape: Shape, lines: usize) -> String {
+    let mut source = String::new();
+
+    match shape {
+        Shape::Chain(stands) => function(
+            &mut source,
+            stands,
+            lines,
+            &Body {
+                imports: "Nat",
+                parameters: "g: (Nat) -> Nat, n: Nat",
+                forwarded: "g, ",
+                first: |n| format!("g({n})"),
+                line: |x| format!("g({x})"),
+                result: |last, again| match again {
+                    Some(again) => format!("g({last}) + {again}"),
+                    None => last.to_string(),
+                },
+            },
+        ),
+        Shape::Calls(stands) => function(
+            &mut source,
+            stands,
+            lines,
+            &Body {
+                imports: "Nat",
+                parameters: "g: (Nat, Nat) -> Nat, n: Nat",
+                forwarded: "g, ",
+                first: |n| format!("g({n}, {n})"),
+                line: |x| format!("g({x}, {x})"),
+                result: |last, again| match again {
+                    Some(again) => format!("g({last}, {again})"),
+                    None => last.to_string(),
+                },
+            },
+        ),
+        Shape::Pairs(stands) => function(
+            &mut source,
+            stands,
+            lines,
+            &Body {
+                imports: "Nat",
+                parameters: "n: Nat",
+                forwarded: "",
+                first: |n| format!("({n}, {n})"),
+                line: |x| format!("({x}, {x})"),
+                result: |last, again| format!("match {last} | _ => {} end", again.unwrap_or("n")),
+            },
+        ),
+        Shape::Lists(stands) => function(
+            &mut source,
+            stands,
+            lines,
+            &Body {
+                imports: "Nat, List",
+                parameters: "n: Nat",
+                forwarded: "",
+                first: |n| format!("[{n}, {n}]"),
+                line: |x| format!("[{x}, {x}]"),
+                result: |last, again| format!("match {last} | _ => {} end", again.unwrap_or("n")),
+            },
+        ),
+        Shape::Arms(stands) => function(
+            &mut source,
+            stands,
+            lines,
+            &Body {
+                imports: "Nat, Bool",
+                parameters: "b: Bool, n: Nat",
+                forwarded: "b, ",
+                first: |n| n.to_string(),
+                line: |x| format!("match b | true => {x} | false => {x} end"),
+                result: |last, again| match again {
+                    Some(again) => format!("{last} + {again}"),
+                    None => last.to_string(),
+                },
+            },
+        ),
+        Shape::Guards(stands) => function(
+            &mut source,
+            stands,
+            lines,
+            &Body {
+                imports: "Nat, Bool",
+                parameters: "g: (Bool) -> Bool, b: Bool, n: Nat",
+                forwarded: "g, b, ",
+                first: |n| n.to_string(),
+                line: |x| format!("match g(b) | true => {x} | false => {x} end"),
+                result: |last, again| match again {
+                    Some(again) => format!("{last} + {again}"),
+                    None => last.to_string(),
+                },
+            },
+        ),
+        Shape::Recursions => function(
+            &mut source,
+            Stands::Member,
+            lines,
+            &Body {
+                imports: "Nat",
+                parameters: "g: (Nat, Nat) -> Nat, n: Nat",
+                forwarded: "g, ",
+                first: |n| format!("g({n}, {n})"),
+                line: |x| format!("g({x}, {x}) + tower(g, p)"),
+                result: |last, again| match again {
+                    Some(again) => format!("g({last}, {again})"),
+                    None => last.to_string(),
+                },
+            },
+        ),
+        Shape::Handed => {
+            source.push_str("use /std/{Nat};\n\n");
+            source.push_str("let tower(@A: Type, _: A, n: Nat) -> Nat =\n");
+            source.push_str("    match n\n    | 0 => 0\n    | p + 1 =>\n");
+            chain(&mut source, "        ", "x", lines, "(p, p)", |x| {
+                format!("({x}, {x})")
+            });
+            let _ = writeln!(source, "        tower(x{lines}, p)\n    end;");
+        }
+        Shape::Aliases => {
+            source.push_str("use /std/{Nat};\n\n");
+            chain(&mut source, "", "T", lines, "Nat", |t| {
+                fill!("{${t}, ${t}}", t)
+            });
+            let _ = writeln!(source, "\nlet keep(x: T{lines}) -> T{lines} = x;");
+        }
+        Shape::Arrows => {
+            source.push_str("use /std/{Nat};\n\n");
+            chain(&mut source, "", "T", lines, "Nat", |t| {
+                format!("({t}) -> {t}")
+            });
+            let _ = writeln!(source, "\nlet keep(x: T{lines}) -> T{lines} = x;");
+        }
+        Shape::Fields => {
+            source.push_str("use /std/{Nat};\n\nstruct S: Type {\n    f: (() =>\n");
+            chain(&mut source, "        ", "t", lines, "Nat", |t| {
+                fill!("{${t}, ${t}}", t)
+            });
+            let _ = writeln!(
+                source,
+                "        t{lines}\n    )()\n}}\n\nlet keep(s: S) -> S = s;"
+            );
+        }
+        Shape::TwoTowers => {
+            source.push_str("use /std/{Nat, Eq};\n\n");
+            chain(&mut source, "", "x", lines, "(1, 2)", |x| {
+                format!("({x}, {x})")
+            });
+            chain(&mut source, "", "y", lines, "(1, 2)", |y| {
+                format!("({y}, {y})")
+            });
+            let _ = writeln!(
+                source,
+                "\nlet _same: Eq()(x{lines}, y{lines}) =\n    Eq/refl();"
+            );
+        }
+        Shape::Apart => {
+            source.push_str("use /std/{Nat, Eq};\n\n");
+            source.push_str("let tower(g: (Nat, Nat) -> Nat, n: Nat) -> Nat =\n");
+            chain(&mut source, "    ", "x", lines, "g(n, n)", |x| {
+                format!("g({x}, {x})")
+            });
+            chain(&mut source, "    ", "y", lines, "g(n, n + 0)", |y| {
+                format!("g({y}, {y})")
+            });
+            let _ = writeln!(
+                source,
+                "    let _same: Eq()(x{lines}, y{lines}) = Eq/refl();\n    n;"
+            );
+        }
+        Shape::Bounded => {
+            source.push_str("use /std/{Nat, proved};\nuse /std/Bool/{Holds};\n\n");
+            source.push_str("let tower(n: Nat) -> Nat =\n    let x0 = n;\n");
+            for index in 1..=lines {
+                let before = format!("x{}", index - 1);
+                let _ = writeln!(
+                    source,
+                    "    let c{index} = Nat/min({before} / 7, 3);\n    let d{index} = Nat/min({before} / 5, 2);\n    let x{index} = {before} - c{index} * 7 - d{index} * 5;"
+                );
+            }
+            let _ = writeln!(
+                source,
+                "    let _within: Holds(x{lines} <= n) = proved();\n    x{lines};"
+            );
+        }
+    }
+
+    source.push_str("\n/std/print(\"ok\\n\")\n");
+    source
+}
+
+/// The `let`s of one chain: `{name}0` at `first`, and each of the `lines` after it at `line` of the one before.
+pub fn chain(
+    source: &mut String,
+    indent: &str,
+    name: &str,
+    lines: usize,
+    first: &str,
+    line: fn(&str) -> String,
+) {
+    let _ = writeln!(source, "{indent}let {name}0 = {first};");
+    for index in 1..=lines {
+        let before = format!("{name}{}", index - 1);
+        let _ = writeln!(source, "{indent}let {name}{index} = {};", line(&before));
+    }
+}
+
+/// A tower of values as the body of `tower`: its lines from the function's `Nat`, and in a member's body from the predecessor the successor arm binds, where the member calls itself.
+fn function(source: &mut String, stands: Stands, lines: usize, body: &Body) {
+    let last = format!("x{lines}");
+    source.push_str(&fill!("use /std/{${imports}};\n\n", imports = body.imports));
+    let _ = writeln!(source, "let tower({}) -> Nat =", body.parameters);
+
+    match stands {
+        Stands::Function => {
+            chain(source, "    ", "x", lines, &(body.first)("n"), body.line);
+            let _ = writeln!(source, "    {};", (body.result)(&last, None));
+        }
+        Stands::Member => {
+            let again = format!("tower({}p)", body.forwarded);
+            let _ = writeln!(source, "    match n\n    | 0 => 0\n    | p + 1 =>");
+            chain(
+                source,
+                "        ",
+                "x",
+                lines,
+                &(body.first)("p"),
+                body.line,
+            );
+            let _ = writeln!(
+                source,
+                "        {}\n    end;",
+                (body.result)(&last, Some(&again))
+            );
+        }
+    }
+}

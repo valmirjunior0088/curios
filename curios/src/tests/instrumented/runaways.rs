@@ -1,10 +1,7 @@
 //! What each runaway costs at a budget and at twice it, counted.
 
 use {
-    crate::{
-        tests::{Runaway, runaway},
-        *,
-    },
+    crate::{test_support::*, *},
     curios_module::RootSource,
     curios_pipeline::compile_with_prelude,
     curios_profile::{Destination, Profile, fold_at, trace},

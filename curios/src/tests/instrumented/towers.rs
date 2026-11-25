@@ -1,7 +1,7 @@
 //! What each tower costs each checker, counted.
 
 use {
-    crate::tests::{Shape, Stands, tower},
+    crate::test_support::*,
     curios_core::looks,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,

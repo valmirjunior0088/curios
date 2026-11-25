@@ -155,25 +155,6 @@ fn string_walk_ladder_measurements() {
 //
 // `programs/walk_mirror_*.crs` are five user-level walks over the same multi-byte text that read one byte a turn and carry a scan state between bytes: a baseline, and one program per removed obligation — the accumulator tuple (`flat_acc`), the scan argument reconstruction (`held_scan`), the returned scan state (`inline_step`), and the suffix view (`indexed`). They exist because an obligation is attributed by removing it at the source, a program each, and they are bounds rather than equivalents: each removal necessarily reshapes the arms around it, and the mirrors carry no validity witness.
 
-/// The module-wide counts the family's claims are stated over: arity-4 tuple constructions (the scan shape), arity-2 tuple constructions (the accumulator shape), rope-slice calls, and calls to the mirror's own `mstep`.
-fn mirror_counts(wat: &str) -> (usize, usize, usize, usize) {
-    let lines = |needle: &str| {
-        wat.lines()
-            .map(str::trim)
-            .filter(|line| line.starts_with(needle))
-            .count()
-    };
-    (
-        lines("struct.new $tuple/4"),
-        lines("struct.new $tuple/2"),
-        lines("call $bytes/slice"),
-        wat.lines()
-            .map(str::trim)
-            .filter(|line| line.starts_with("call $func/") && line.contains("mstep"))
-            .count(),
-    )
-}
-
 /// The calls to `needle` lexically inside a `loop`, anywhere in the module: the per-character cost, which a module-wide count cannot tell from the one-time plumbing around the walk. Nesting is read off the printer's indentation, which the emitter keeps exact.
 fn calls_inside_loops(wat: &str, needle: &str) -> usize {
     let mut open = Vec::<usize>::new();
