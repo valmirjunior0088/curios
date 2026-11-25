@@ -12,12 +12,6 @@
 #[cfg(test)]
 mod tests;
 
-mod platform;
-use platform::*;
-
-mod record;
-use record::*;
-
 mod pins;
 use pins::*;
 
@@ -30,6 +24,7 @@ use report::*;
 use {
     clap::{Parser, Subcommand},
     std::process::ExitCode,
+    xbench::{Figure, Pin, Record, Unit, capture},
 };
 
 include!(concat!(env!("OUT_DIR"), "/filed.rs"));

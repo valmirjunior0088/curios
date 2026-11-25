@@ -45,31 +45,114 @@ pub struct Figure {
     pub readings: Vec<Vec<u64>>,
 }
 
-/// What a figure is counted in, which decides how far two records of it compare.
+/// What a figure is counted in, which decides how far two records of it compare: the platform lines a comparison of it is refused across ([`Unit::gated`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(into = "&'static str", try_from = "String")]
 pub enum Unit {
     /// Wall clock in whole microseconds: compared between two records of one machine, in one state, under one pin.
     Microseconds,
     /// User-space instructions a process and the threads and processes it starts retire: compared between two records of one machine, in any state, under one pin, since the machine's arrangement moves no count and its processor's features, and the pins' builds, choose the code that retires them.
     Instructions,
+    /// Bytes a thread took from the allocator: compared between two records under one pin, on any machine, since the standard library a pin builds decides what a collection takes.
+    Bytes,
+    /// Trips a thread made through the allocator: compared as [`Unit::Bytes`] are.
+    Allocations,
+    /// A count the compiler keeps of its own work — calls, looks, budget units, a magnitude it samples: compared between any two records.
+    Count,
+}
+
+/// Which platform lines a comparison of a unit is refused across, where two records differ in them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Gated {
+    pub machine: bool,
+    pub state: bool,
+    pub pins: bool,
 }
 
 impl Unit {
+    /// Every unit, in the order its name is matched.
+    const ALL: [Self; 5] = [
+        Self::Microseconds,
+        Self::Instructions,
+        Self::Bytes,
+        Self::Allocations,
+        Self::Count,
+    ];
+
+    /// The one spelling of the unit's name, which a record's file and a measurement's line both write.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Microseconds => "microseconds",
+            Self::Instructions => "instructions",
+            Self::Bytes => "bytes",
+            Self::Allocations => "allocations",
+            Self::Count => "count",
+        }
+    }
+
+    /// The unit named `name`, where one is.
+    pub fn named(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|unit| unit.name() == name)
+    }
+
+    /// The platform lines a comparison of a figure counted in this unit is refused across.
+    pub fn gated(self) -> Gated {
+        match self {
+            Self::Microseconds => Gated {
+                machine: true,
+                state: true,
+                pins: true,
+            },
+            Self::Instructions => Gated {
+                machine: true,
+                state: false,
+                pins: true,
+            },
+            Self::Bytes | Self::Allocations => Gated {
+                machine: false,
+                state: false,
+                pins: true,
+            },
+            Self::Count => Gated {
+                machine: false,
+                state: false,
+                pins: false,
+            },
+        }
+    }
+
     /// What a reading is divided by to be stated in [`Unit::stated`].
     fn scale(self) -> f64 {
         match self {
             Self::Microseconds => 1e3,
             Self::Instructions => 1e6,
+            Self::Bytes | Self::Allocations | Self::Count => 1.0,
         }
     }
 
-    /// The unit a figure counted in this one is stated in: milliseconds for a time, millions for instructions.
+    /// The unit a figure counted in this one is stated in: milliseconds for a time, millions for instructions, and every other count as it is.
     pub fn stated(self) -> &'static str {
         match self {
             Self::Microseconds => "ms",
             Self::Instructions => "M",
+            Self::Bytes => "bytes",
+            Self::Allocations => "allocations",
+            Self::Count => "",
         }
+    }
+}
+
+impl From<Unit> for &'static str {
+    fn from(unit: Unit) -> Self {
+        unit.name()
+    }
+}
+
+impl TryFrom<String> for Unit {
+    type Error = String;
+
+    fn try_from(name: String) -> Result<Self, String> {
+        Unit::named(&name).ok_or_else(|| format!("no unit is named `{name}`"))
     }
 }
 

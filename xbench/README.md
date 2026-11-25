@@ -8,8 +8,9 @@ A record is a historical fact and cannot be re-run. That is what separates this 
 
 ```
 xbench/
+  src/lib.rs                      what a record is, the lines a measurement prints for one, and the harness that prints them
   src/main.rs                     the command line, and the records the build embeds
-  src/                            what a record is, what it is taken under, the contest, the report
+  src/                            what a record is taken under, the contest, the report
   src/bin/twin.rs                 the runner `rust-wasm` runs under, on the engine the compiler embeds
   records/<measurement>/NN.toml   one record each, the file its sitting filed
 

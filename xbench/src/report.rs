@@ -221,8 +221,8 @@ pub fn table(
     }
 
     let counted = match unit {
-        Unit::Microseconds => "",
-        Unit::Instructions => ", instructions",
+        Unit::Microseconds => String::new(),
+        other => format!(", {}", other.name()),
     };
 
     format!(
@@ -281,7 +281,7 @@ pub fn one(number: usize, record: &Record) -> String {
     out
 }
 
-/// Why `before` and `after` cannot be compared in `unit`, where they cannot: a time across a machine, a state or a pin that differs, and instructions across a machine or a pin, since a machine's arrangement moves no count.
+/// Why `before` and `after` cannot be compared in `unit`, where they cannot: across the platform lines its unit is gated by ([`Unit::gated`]) where the two differ in them.
 ///
 /// The software line is not among these. A kernel or microcode update that moves a figure moves Rust with Curios, and the ratio a comparison reads cancels it, so gating on it would strand the record at every patch for nothing.
 fn incomparable(before: &Record, after: &Record, unit: Unit) -> Option<String> {
@@ -297,13 +297,19 @@ fn incomparable(before: &Record, after: &Record, unit: Unit) -> Option<String> {
             .collect::<Vec<_>>()
     };
 
-    differs("machine", &before.platform.machine, &after.platform.machine)
-        .or_else(|| match unit {
-            Unit::Microseconds => differs("state", &before.platform.state, &after.platform.state),
-            Unit::Instructions => None,
+    let gated = unit.gated();
+    gated
+        .machine
+        .then(|| differs("machine", &before.platform.machine, &after.platform.machine))
+        .flatten()
+        .or_else(|| {
+            gated
+                .state
+                .then(|| differs("state", &before.platform.state, &after.platform.state))
+                .flatten()
         })
         .or_else(|| {
-            (before.pinned != after.pinned).then(|| {
+            (gated.pins && before.pinned != after.pinned).then(|| {
                 format!(
                     "  pinned   {:?}\n       -> {:?}",
                     pairs(&before.pinned),
