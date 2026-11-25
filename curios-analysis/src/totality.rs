@@ -520,20 +520,29 @@ impl<D: Driver> Walk<'_, D> {
         }
         let (root, steps) = call_path(argument);
         let member = self.member(&root);
-        let given = steps
+        // The member's own arguments, then the fields projected after them: a member's field handed on is the member at the longer path, what the callee applies of it applied of that path.
+        let called = steps
+            .iter()
+            .take_while(|step| matches!(step, Segment::Arguments(_)))
+            .count();
+        let path = steps[called..]
             .iter()
             .map(|step| match step {
-                Segment::Arguments(arguments) => Some(arguments.iter().cloned()),
-                Segment::Field(_) => None,
+                Segment::Field(slot) => Some(*slot),
+                Segment::Arguments(_) => None,
             })
-            .collect::<Option<Vec<_>>>()
-            .map(|lists| lists.into_iter().flatten().collect::<Vec<_>>());
-        let Some(given) = given else {
-            return self.walk_term(argument);
+            .collect::<Option<Vec<_>>>();
+        let given = steps[..called]
+            .iter()
+            .flat_map(|step| step.arguments().iter().cloned())
+            .collect::<Vec<_>>();
+        let (Some(path), Some(member)) = (path, member) else {
+            return match called == steps.len() {
+                true => self.walk_within(argument, &root, &steps, &given, applied),
+                false => self.walk_term(argument),
+            };
         };
-        let Some(member) = member else {
-            return self.walk_within(argument, &root, &steps, &given, applied);
-        };
+        let applied = &applied.under(&path);
         let base = base_part(self.parts, member);
         let graded = match given.len() {
             0 => None,

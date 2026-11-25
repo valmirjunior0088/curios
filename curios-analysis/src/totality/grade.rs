@@ -426,6 +426,24 @@ impl Applied {
         field
     }
 
+    /// What a record is handed where the field at `path` of it is handed this: each application of that field, and of each path under it, at `path` followed by its own. The inverse of [`Applied::field`].
+    pub fn under(&self, path: &[usize]) -> Applied {
+        if path.is_empty() {
+            return self.clone();
+        }
+        let mut fields = Vec::with_capacity(self.fields.len() + 1);
+        if !self.itself.is_empty() {
+            fields.push((path.to_vec(), self.itself.clone()));
+        }
+        for (rest, applied) in &self.fields {
+            fields.push(([path, rest.as_slice()].concat(), applied.clone()));
+        }
+        Applied {
+            itself: Vec::new(),
+            fields,
+        }
+    }
+
     /// Whether nothing applies the argument or any field of it.
     pub fn is_empty(&self) -> bool {
         self.itself.is_empty() && self.fields.iter().all(|(_, applied)| applied.is_empty())

@@ -361,7 +361,20 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
                 if let Subterm::Var(var) = &*root
                     && let Some(free) = var.as_free()
                 {
-                    certifier.record_call(free, &steps)?;
+                    // A field of a member handed where its callee applies it is the member at that path, handed what the callee applies of it ([`Calls::hand`](super::Calls::hand)).
+                    match certifier.calls.take_handed(free) {
+                        Some(handed) => {
+                            let given = steps
+                                .iter()
+                                .take_while(|step| matches!(step, Segment::Arguments(_)))
+                                .flat_map(Segment::arguments)
+                                .cloned()
+                                .collect::<Vec<_>>();
+                            let given = (!given.is_empty()).then_some(given.as_slice());
+                            certifier.record_handed(free, given, &handed)?;
+                        }
+                        None => certifier.record_call(free, &steps)?,
+                    }
                 }
             }
             let reduced = certifier.reduce_forced(head_type.clone())?;

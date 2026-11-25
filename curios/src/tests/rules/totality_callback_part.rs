@@ -219,3 +219,35 @@ fn a_field_called_by_its_path_states_what_its_record_applied_where_it_was_answer
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
+
+// A member's field handed to a definition that applies what it is handed is the member at that path: `all` applies its `e`'s `step` to each element of `s`, so `w.inner` handed it is `w`'s part at `inner.step`, applied below `d` where `s` is `d`'s payload, and `w` descends as it does handed whole through a definition that projects the field itself. The refusal hands `all` a list built around `d`, at which the part is applied at `d` itself.
+#[test]
+fn a_members_field_handed_where_its_callee_applies_it_is_the_member_at_that_path() {
+    control(
+        r#"
+        use /std/{List};
+        use /std/Bool/{True};
+
+        induct Doc: Type | leaf() | arr(List(Doc)) end
+
+        struct Inner(A: Type): Type { step: (A) -> True }
+
+        struct Outer(A: Type): Type { inner: Inner(A) }
+
+        let all(@T: Type, e: Inner(T), s: List(T)) -> True =
+            match s | [] => True/qed() | [x, ..rest] => match e.step(x) | qed() => all(e, rest) end end;
+
+        let w: Outer(Doc) = Outer {
+            inner = Inner { step(d) = match d | leaf() => True/qed() | arr(s) => all(w.inner, s) end },
+        };
+
+        let _ = w.inner.step(Doc/arr([Doc/leaf()]));
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("all(w.inner, s)", "all(w.inner, [d])")])
+    .by_elaborator_in("/w", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    });
+}

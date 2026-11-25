@@ -240,15 +240,27 @@ impl Calls {
             }
             _ => {
                 let (root, steps) = call_path(argument);
-                match (&*root, steps.as_slice()) {
-                    (Subterm::Var(var), steps)
-                        if steps
-                            .iter()
-                            .all(|step| matches!(step, Segment::Arguments(_))) =>
-                    {
+                // A local's own arguments, then the fields projected after them: a member's field handed on is the member at the longer path, what the callee applies of it applied of that path.
+                let called = steps
+                    .iter()
+                    .take_while(|step| matches!(step, Segment::Arguments(_)))
+                    .count();
+                let path = steps[called..]
+                    .iter()
+                    .map(|step| match step {
+                        Segment::Field(slot) => Some(*slot),
+                        Segment::Arguments(_) => None,
+                    })
+                    .collect::<Option<Vec<_>>>();
+                match (&*root, steps.as_slice(), path) {
+                    (Subterm::Var(var), _, Some(path)) => {
+                        let handed = handed
+                            .into_iter()
+                            .map(|(frame, applied)| (frame, applied.under(&path)))
+                            .collect();
                         self.handed = var.as_free().map(|member| (*member, handed));
                     }
-                    (Subterm::Instance(_), [Segment::Arguments(_)]) => {
+                    (Subterm::Instance(_), [Segment::Arguments(_)], _) => {
                         self.within = Some((argument.clone(), handed));
                     }
                     _ => {}
