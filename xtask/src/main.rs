@@ -18,6 +18,9 @@ use launch::*;
 mod refusal;
 use refusal::*;
 
+mod download;
+use download::*;
+
 mod tree;
 use tree::*;
 

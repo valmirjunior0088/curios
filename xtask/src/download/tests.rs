@@ -17,7 +17,7 @@ const CONTENT: &[u8] = b"a pinned file\n";
 
 /// A directory of this test's own under the system's temporary one, empty: nextest runs each test in a process of its own, so the process's id and the test's name keep two apart.
 fn directory(name: &str) -> PathBuf {
-    let directory = env::temp_dir().join(format!("curios-download-{}-{name}", process::id()));
+    let directory = env::temp_dir().join(format!("xtask-{}-{name}", process::id()));
     let _ = fs::remove_dir_all(&directory);
     fs::create_dir_all(&directory).unwrap();
     directory
@@ -116,41 +116,33 @@ fn a_copy_whose_digest_differs_refuses_with_where_to_place_one() {
     let _ = fs::remove_dir_all(&directory);
 }
 
-// A download that checks is kept at the place, and the next run reads it there with nothing to answer it.
+// A download that checks is handed back and stored nowhere: what keeps it is its caller's, unpacked or as an executable.
 #[test]
-fn a_download_that_checks_is_kept_for_the_next_build() {
-    let directory = directory("kept");
-    let place = directory.join("nested").join("pinned.txt");
-    let pinned = sha256_hex(CONTENT);
-
+fn a_download_that_checks_is_handed_back_and_stored_nowhere() {
+    let directory = directory("handed");
+    let place = directory.join("pinned.txt");
     let url = served(CONTENT);
+
     let downloaded = Download {
         what: "a test's file",
         url: &url,
-        sha256: &pinned,
+        sha256: &sha256_hex(CONTENT),
         place: &place,
     }
-    .kept()
+    .bytes()
     .unwrap();
-    assert_eq!(downloaded, CONTENT);
-    assert_eq!(fs::read(&place).unwrap(), CONTENT);
 
-    let url = unanswered();
-    let read = Download {
-        what: "a test's file",
-        url: &url,
-        sha256: &pinned,
-        place: &place,
-    }
-    .kept()
-    .unwrap();
-    assert_eq!(read, CONTENT);
+    assert_eq!(downloaded, CONTENT);
+    assert!(
+        !place.exists(),
+        "a download was stored where a hand places one"
+    );
     let _ = fs::remove_dir_all(&directory);
 }
 
-// A download whose digest is not the pin's is refused and kept nowhere, so the next run downloads again rather than trusting it.
+// A download whose digest is not the pin's is refused, naming the mismatch.
 #[test]
-fn a_download_whose_digest_differs_is_refused_and_not_kept() {
+fn a_download_whose_digest_differs_is_refused() {
     let directory = directory("refused");
     let place = directory.join("pinned.txt");
     let url = served(b"another file\n");
@@ -161,12 +153,11 @@ fn a_download_whose_digest_differs_is_refused_and_not_kept() {
         sha256: &sha256_hex(CONTENT),
         place: &place,
     }
-    .kept()
+    .bytes()
     .expect_err("a differing download is refused")
     .to_string();
 
     assert!(refused.contains("sha256 mismatch"), "{refused}");
-    assert!(!place.exists(), "a refused download was kept");
     let _ = fs::remove_dir_all(&directory);
 }
 

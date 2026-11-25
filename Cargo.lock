@@ -754,16 +754,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "curios-download"
-version = "0.16.25"
-dependencies = [
- "flate2",
- "sha2 0.11.1",
- "tar",
- "ureq",
-]
-
-[[package]]
 name = "curios-elab"
 version = "0.16.25"
 dependencies = [
@@ -2965,8 +2955,11 @@ dependencies = [
  "askama",
  "clap",
  "curios-common",
- "curios-download",
+ "flate2",
+ "sha2 0.11.1",
+ "tar",
  "toml_edit",
+ "ureq",
 ]
 
 [[package]]

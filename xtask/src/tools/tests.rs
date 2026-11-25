@@ -4,7 +4,6 @@ use {
     super::*,
     crate::*,
     curios_common::fill,
-    curios_download::{sha256_hex, tree_sha256_hex},
     std::{
         net::TcpListener,
         os::unix,

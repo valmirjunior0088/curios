@@ -4,7 +4,6 @@ members = [
     "curios-abi",
     "curios-archive",
     "curios-archive-derive",
-    "curios-download",
     "curios-unicode",
     "curios-common",
     "curios-num",
@@ -72,7 +71,6 @@ curios-abi = { path = "curios-abi" }
 curios-archive = { path = "curios-archive" }
 curios-archive-derive = { path = "curios-archive-derive" }
 curios-profile = { path = "curios-profile" }
-curios-download = { path = "curios-download" }
 curios-unicode = { path = "curios-unicode" }
 curios-common = { path = "curios-common" }
 curios-num = { path = "curios-num" }

@@ -1,17 +1,16 @@
 //! Where a tool or data a step names is kept, and how a run gets it before its first step.
 //!
-//! **A tool is kept by its name and version**, `xtask/.artifacts/tools/biome-2.6.2`: a gzipped tarball unpacked into a directory, and any other download kept as the executable itself, a gzipped one decoded first, as [`Shape`] reads it off the URL. A kept copy is trusted by its presence, since [`curios_download`] renames one into place only once its digest has checked, so a run never reads part of one as the whole; and a bumped version is kept beside the old copy and never reads it. A download placed by hand under the name its URL ends in, beside the kept copies, is read before the network, as a build script reads its own.
+//! **A tool is kept by its name and version**, `xtask/.artifacts/tools/biome-2.6.2`: a gzipped tarball unpacked into a directory, and any other download kept as the executable itself, a gzipped one decoded first, as [`Shape`] reads it off the URL. A kept copy is trusted by its presence, since [`download`](mod@crate::download) renames one into place only once its digest has checked, so a run never reads part of one as the whole; and a bumped version is kept beside the old copy and never reads it. A download placed by hand under the name its URL ends in, beside the kept copies, is read before the network, as a build script reads its own.
 //!
-//! **Data is kept as one directory, beside what reads it.** What a step's command reads is kept with the runner's own, `xtask/.artifacts/data/json-<commit>`, beside the tools and apart from them, so a tool and data of one name are two places; what a crate's build reads is kept beside the crate its table names, `curios-unicode/.artifacts/unicode-<version>`, where the build finds it through its own manifest as it finds everything it keeps, and no crate learns where the runner keeps its own. Either is one directory of the archive a forge generates at a commit, placed by hand or downloaded and unpacked, or the files a site publishes one by one, each placed by hand or downloaded; the directory's files checked against the digest the data states, and the directory kept, as [`curios_download::Unpacked`] and [`curios_download::Gathered`] keep one, an archive and the rest of it not. Kept data is trusted by its presence, as a kept tool is.
+//! **Data is kept as one directory, beside what reads it.** What a step's command reads is kept with the runner's own, `xtask/.artifacts/data/json-<commit>`, beside the tools and apart from them, so a tool and data of one name are two places; what a crate's build reads is kept beside the crate its table names, `curios-unicode/.artifacts/unicode-<version>`, where the build finds it through its own manifest as it finds everything it keeps, and no crate learns where the runner keeps its own. Either is one directory of the archive a forge generates at a commit, placed by hand or downloaded and unpacked, or the files a site publishes one by one, each placed by hand or downloaded; the directory's files checked against the digest the data states, and the directory kept, as [`Unpacked`] and [`Gathered`] keep one, an archive and the rest of it not. Kept data is trusted by its presence, as a kept tool is.
 //!
 //! **Naming a tool is the edge.** Every tool and all the data the scheduled steps name, `{.tools.npm}` or `{.data.json}`, is fetched before the first step; data a crate's build reads is fetched before any run's, since no step names it and which steps build the crate is Cargo's to know, once for each download, and a run any of them cannot be had for runs nothing. A step runs with the directory holding each named tool's executable first on its `PATH`, where the tool is kept as a directory, so a launch nested inside it finds what ships beside it: npm's `#!/usr/bin/env node` finds the Node it came with.
 
 use {
     crate::{
-        Fetched, Fill, Form, HOST_TRIPLE, Name, Shape, Tool, Tree, Values, artifacts, from_top,
-        root,
+        Download, Fetched, Fill, Form, Gathered, HOST_TRIPLE, Name, Shape, Tool, Tree, Unpacked,
+        Values, artifacts, from_top, gunzipped, keep_executable, root, unpack,
     },
-    curios_download::{Download, Gathered, Unpacked, gunzipped, keep_executable, unpack},
     std::{
         fs,
         path::{Path, PathBuf},

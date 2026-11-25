@@ -10,8 +10,13 @@ publish = false
 workspace = true
 
 [dependencies]
-# Every tool a step runs, fetched at its digest and kept unpacked or as an executable, by the protocol the build scripts fetch by.
-curios-download = { workspace = true }
+# The digest a pinned download is held to.
+sha2 = { workspace = true }
+# This crate alone takes anything from the network, so it is the one crate that names the HTTP client, and states its version here (`documentation/design/one-crate-is-the-authority-for-one-external-concern.md`).
+ureq = { version = "3.3.0", default-features = false, features = ["rustls"] }
+# A pinned archive unpacked, gzipped tarballs and gzipped files alike, the one place either is named.
+tar = "0.4.46"
+flate2 = { version = "1.1.9", default-features = false, features = ["rust_backend"] }
 # `string` for a command line whose subcommands and flags are the task files' names, read when the program runs.
 clap = { workspace = true, features = ["string"] }
 askama = { workspace = true }

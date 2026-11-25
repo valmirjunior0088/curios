@@ -1,6 +1,6 @@
-//! A file a build pins by its SHA-256: read where a hand placed it or an earlier run kept it, else downloaded, and checked against its digest either way, a failure saying how to place it by hand where it cannot be had; a directory pinned by the digest of its files, one of an archive a forge generates or one of files a site publishes one by one; and the pieces that keep what it holds, unpacked or as an executable.
+//! A file a run pins by its SHA-256: read where a hand placed it, else downloaded, and checked against its digest either way, a failure saying how to place it by hand where it cannot be had; a directory pinned by the digest of its files, one of an archive a forge generates or one of files a site publishes one by one; and the pieces that keep what a download holds, unpacked or as an executable.
 //!
-//! What takes something from the network takes it through this crate — `curios-binaryen`'s build script, for its source archive, and `xtask`, each tool a step runs and the data its steps and the builds read, `curios-unicode`'s database and `curios-profile`'s trace schema among it — so how a pinned file is obtained, checked and kept, and what an offline build is told, is written once. Why this is a crate of its own is `README.md`'s decision.
+//! Whatever the repository takes from the network it takes through here, each tool a step runs and the data its steps and the builds read, so how a pinned file is obtained, checked and kept, and what a run with no network is told, is written once, in the one crate that reaches the network ([`README.md`](../README.md)).
 //!
 //! **Whole or not at all.** Whatever is kept is written beside its place under a name of this process's own and renamed onto it, so a run that stops midway leaves nothing another reads as the whole, and two runs keeping one thing at once each finish with it whole.
 
@@ -18,19 +18,19 @@ use {
     tar::Archive,
 };
 
-/// A file a build pins: what it is, where it is published, the digest it must have, and where a build looks for a copy before it downloads one.
+/// A file a run pins: what it is, where it is published, the digest it must have, and where a run looks for a copy before it downloads one.
 pub struct Download<'a> {
     /// What the file is, as the instructions a failure prints name it: "the Binaryen source needed to build curios-binaryen".
     pub what: &'a str,
-    /// Where the file is published, at the version the build pins.
+    /// Where the file is published, at the version the task files pin.
     pub url: &'a str,
     /// The file's SHA-256, in lowercase hexadecimal.
     pub sha256: &'a str,
-    /// Where a copy placed by hand, or kept by an earlier build, stands.
+    /// Where a copy placed by hand stands.
     pub place: &'a Path,
 }
 
-/// Why a pinned file could not be had, and how to fetch and place it by hand: what a build script panics with and `xtask` refuses a run with.
+/// Why a pinned file could not be had, and how to fetch and place it by hand: what a run is refused with.
 #[derive(Debug)]
 pub struct Unobtained {
     what: String,
@@ -43,7 +43,7 @@ impl fmt::Display for Unobtained {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
-            "could not obtain {}:\n  {}\n\nTo build offline, {}\nthen run again.",
+            "could not obtain {}:\n  {}\n\nTo run without the network, {}\nthen run again.",
             self.what, self.cause, self.by_hand,
         )
     }
@@ -52,29 +52,11 @@ impl fmt::Display for Unobtained {
 impl Download<'_> {
     /// The file's bytes, checked against its digest: the copy at [`place`](Self::place), or else a download, which is not stored.
     pub fn bytes(&self) -> Result<Vec<u8>, Unobtained> {
-        self.obtained().map(|(bytes, _)| bytes)
-    }
-
-    /// The file's bytes as [`bytes`](Self::bytes) has them, and a download kept at [`place`](Self::place) once it checks, so the next build reads it there.
-    pub fn kept(&self) -> Result<Vec<u8>, Unobtained> {
-        let (bytes, downloaded) = self.obtained()?;
-        if downloaded {
-            keep(&bytes, self.place).map_err(|error| {
-                self.unobtained(format!("keep {}: {error}", self.place.display()))
-            })?;
-        }
-
-        Ok(bytes)
-    }
-
-    /// The file's bytes, checked, and whether they were downloaded rather than read at the place.
-    fn obtained(&self) -> Result<(Vec<u8>, bool), Unobtained> {
-        let (bytes, downloaded) = match fs::read(self.place) {
-            Ok(bytes) => (bytes, false),
-            Err(error) if error.kind() == ErrorKind::NotFound => (
-                download(self.url).map_err(|cause| self.unobtained(cause))?,
-                true,
-            ),
+        let bytes = match fs::read(self.place) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == ErrorKind::NotFound => {
+                download(self.url).map_err(|cause| self.unobtained(cause))?
+            }
             Err(error) => {
                 return Err(self.unobtained(format!("read {}: {error}", self.place.display())));
             }
@@ -88,7 +70,7 @@ impl Download<'_> {
             )));
         }
 
-        Ok((bytes, downloaded))
+        Ok(bytes)
     }
 
     /// `cause`, with how to build offline: the file to fetch by hand, the digest it must have and where to place it.
@@ -380,17 +362,6 @@ pub fn unpack(archive: &[u8], into: &Path) -> io::Result<()> {
     }
 
     kept
-}
-
-/// Write `bytes` at `place`, whole or not at all.
-fn keep(bytes: &[u8], place: &Path) -> io::Result<()> {
-    if let Some(directory) = place.parent() {
-        fs::create_dir_all(directory)?;
-    }
-    let partial = partial(place);
-    fs::write(&partial, bytes)?;
-
-    fs::rename(&partial, place)
 }
 
 /// Where this process writes what it keeps at `place` before renaming it there: beside it, under a name no other process writes.

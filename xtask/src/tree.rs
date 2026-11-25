@@ -181,7 +181,7 @@ pub struct Data {
     pub url: Word,
     /// How it is published and what of it is kept.
     pub form: Form,
-    /// The digest of the files the kept directory holds, as `curios_download::tree_sha256_hex` writes it.
+    /// The digest of the files the kept directory holds, as [`tree_sha256_hex`](crate::tree_sha256_hex) writes it.
     pub sha256: String,
     /// The crate whose build reads it, by its directory at the repository's root: the data is kept beside it, `<crate>/.artifacts/<name>-<version>`, where its build finds it through its own manifest. `None` where a step's command reads it, and it is kept with the runner's own, `xtask/.artifacts/data`.
     pub beside: Option<String>,
