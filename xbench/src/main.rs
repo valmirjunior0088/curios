@@ -1,12 +1,12 @@
 //! The benchmark bench, as a cargo subcommand, and the records it has filed, each a TOML file under `xbench/records/<measurement>/` that the build embeds.
 //!
-//! `cargo xbench measure contest` builds Curios and Rust on every workload of the corpus, holds all three contestants to the answers those workloads are known to have, times them interleaved, and files the sitting as the next record of the contest; `cargo xbench measure <NAME>` takes any other measurement, a test beside the code it measures, by its name. `cargo xbench report <MEASUREMENT>` computes what a measurement's records say; it runs anywhere.
+//! `cargo xbench measure contest` builds Curios and Rust on every workload of the corpus, holds all three contestants to the answers those workloads are known to have, times them interleaved, and files the sitting as the next record of the contest; `cargo xbench measure <NAME>` takes any other, one of the bench's [`measurements`], by its name, sitting it in a release build of the bench a process a group. `cargo xbench report <MEASUREMENT>` computes what a measurement's records say; it runs anywhere.
 //!
 //! It reads in the order a sitting uses it:
 //!
 //! - [`held`] holds every tool to the pin the file that owns it states, before anything is built.
 //! - [`capture`] asks the host where the record is being taken.
-//! - [`contest_sitting`] builds the contestants, holds them to the answers their workloads are known to have, times them interleaved, and files a [`Record`]; [`test_sitting`] builds the workspace's tests and takes a measurement among them, an invocation a group.
+//! - [`contest_sitting`] builds the contestants, holds them to the answers their workloads are known to have, times them interleaved, and files a [`Record`]; [`measurement_sitting`] builds the bench in release and sits a measurement in it, a process a group.
 //! - [`report()`] and [`figures_report`] compute every median, span, ratio and refusal from the records, since none of them is stored.
 
 #[cfg(test)]
@@ -20,6 +20,9 @@ use sitting::*;
 
 mod contest;
 use contest::*;
+
+mod measurements;
+use measurements::*;
 
 mod runner;
 use runner::*;
@@ -35,7 +38,7 @@ use {
 
 include!(concat!(env!("OUT_DIR"), "/filed.rs"));
 
-/// The measurement whose records the contest files, and the one the bench takes itself: every other measurement is a test beside the code it measures.
+/// The measurement whose records the contest files, the one the bench takes in the process it was asked in: every other is sat in a release build of the bench.
 const CONTEST: &str = "contest";
 
 /// Every record of `measurement` filed, oldest first: a record's number is its index here and its file's name.
@@ -78,8 +81,15 @@ enum Bench {
     Measure {
         #[arg(
             value_name = "MEASUREMENT",
-            help = "The measurement to take: `contest`, Curios and Rust on the corpus, or an ignored test of the workspace by its name"
+            help = "The measurement to take: `contest`, Curios and Rust on the corpus, or another of the bench's by its name"
         )]
+        measurement: String,
+    },
+
+    // What a sitting runs in each process it starts, which nobody asks for by hand.
+    #[command(hide = true, about = "Take a measurement once, printing its readings")]
+    Sit {
+        #[arg(value_name = "MEASUREMENT", help = "The measurement to take")]
         measurement: String,
     },
 
@@ -101,8 +111,11 @@ fn main() -> ExitCode {
         Bench::Measure { measurement } => {
             records(&measurement).and_then(|filed| match measurement.as_str() {
                 CONTEST => contest_sitting(filed.len()),
-                _ => test_sitting(&measurement, filed.len()),
+                _ => measurement_sitting(&measurement, filed.len()),
             })
+        }
+        Bench::Sit { measurement } => {
+            measurement_named(&measurement).map(|measurement| (measurement.take)())
         }
         Bench::Report {
             measurement,

@@ -1,16 +1,16 @@
-//! The runner: a measurement beside the code it measures, taken by name, a group an invocation of its test of its own, and filed as its measurement's next record.
+//! The runner: a measurement of the bench's, taken by name, a group a process of its own, and filed as its measurement's next record.
 //!
-//! **Found by its name.** Cargo builds the workspace's test executables and names each in its messages; the runner asks each which ignored tests it holds and takes the one executable holding the name, a name unique across the workspace.
+//! **A group is a process.** What a run draws — the keys its maps hash with, the addresses it is handed, its restore of the prelude — differs between processes, so the span between groups is the span between processes; inside one, the harness turns the variants a measurement compares round-robin.
 //!
-//! **A group is an invocation.** What a run draws — the keys its maps hash with, the addresses it is handed, its restore of the prelude — differs between processes, so the span between groups is the span between processes; inside one, the harness turns the variants a measurement compares round-robin.
-//!
-//! **Built in release.** A figure is the compiler a user runs, without the checks a test's build keeps, which move counts as well as times.
+//! **Built in release.** A figure is the compiler a user runs, without the checks a debug build keeps, which move counts as well as times: `cargo xbench` runs the bench in the dev profile, so the runner builds it in release and sits each group in that build.
 
 #[cfg(test)]
 mod tests;
 
 use {
-    crate::{Figure, Line, Record, asked, capture, file, held, root, subject, today},
+    crate::{
+        Figure, Line, Record, asked, capture, file, held, measurement_named, root, subject, today,
+    },
     serde::Deserialize,
     std::{
         path::{Path, PathBuf},
@@ -18,42 +18,34 @@ use {
     },
 };
 
-/// The groups a sitting takes, each an invocation: five, the fewest whose ranks separate two records entirely at about p = 0.008, as the decision reads a comparison.
+/// The groups a sitting takes, each a process: five, the fewest whose ranks separate two records entirely at about p = 0.008, as the decision reads a comparison.
 const GROUPS: usize = 5;
 
-/// A test executable cargo built, and the directory of the package it belongs to, which cargo runs it in.
-#[derive(Debug)]
-struct Executable {
-    program: PathBuf,
-    directory: PathBuf,
-}
-
-/// What cargo says of an artifact it built, as much of it as the runner reads.
+/// What cargo says of an artifact it built, as much of it as names the bench's executable.
 #[derive(Deserialize)]
 struct Built {
     reason: String,
+    target: Target,
     #[serde(default)]
     executable: Option<PathBuf>,
-    #[serde(default)]
-    manifest_path: Option<PathBuf>,
-    #[serde(default)]
-    profile: Option<Profiled>,
 }
 
-/// The build profile cargo built an artifact under, as much of it as says whether the artifact is a test.
+/// The target an artifact was built for.
 #[derive(Deserialize)]
-struct Profiled {
-    test: bool,
+struct Target {
+    name: String,
 }
 
-/// Build the workspace's test executables in release, and name each with the directory it runs in.
-fn executables(root: &Path) -> Result<Vec<Executable>, String> {
+/// Build the bench in release, and name the executable a group sits in.
+fn built(root: &Path) -> Result<PathBuf, String> {
     let built = Command::new("cargo")
         .args([
-            "test",
-            "--workspace",
+            "build",
             "--release",
-            "--no-run",
+            "--package",
+            "xbench",
+            "--bin",
+            "xbench",
             "--message-format=json-render-diagnostics",
         ])
         .current_dir(root)
@@ -62,84 +54,30 @@ fn executables(root: &Path) -> Result<Vec<Executable>, String> {
         .output()
         .map_err(|error| format!("cargo did not start: {error}"))?;
     if !built.status.success() {
-        return Err(format!("the measurements did not build: {}", built.status));
+        return Err(format!("the bench did not build: {}", built.status));
     }
 
-    Ok(String::from_utf8_lossy(&built.stdout)
+    String::from_utf8_lossy(&built.stdout)
         .lines()
         .filter_map(|line| serde_json::from_str::<Built>(line).ok())
-        .filter_map(|built| {
-            let test = built.reason == "compiler-artifact" && built.profile?.test;
-            let directory = built.manifest_path?.parent()?.to_path_buf();
-            test.then_some(Executable {
-                program: built.executable?,
-                directory,
-            })
-        })
-        .collect())
+        .filter(|built| built.reason == "compiler-artifact" && built.target.name == "xbench")
+        .find_map(|built| built.executable)
+        .ok_or_else(|| "cargo named no executable of the bench".to_string())
 }
 
-/// The path of the test `name` in what an executable lists of its ignored tests, where it lists one by that name, its path or its last segment.
-fn listed(list: &str, name: &str) -> Option<String> {
-    list.lines()
-        .filter_map(|line| line.strip_suffix(": test"))
-        .find(|path| *path == name || path.ends_with(&format!("::{name}")))
-        .map(str::to_string)
-}
-
-/// The one executable holding the ignored test `name`, and the test's path in it.
-fn found<'a>(
-    executables: &'a [Executable],
-    name: &str,
-) -> Result<(&'a Executable, String), String> {
-    let mut holding = Vec::new();
-    for executable in executables {
-        let list = Command::new(&executable.program)
-            .args(["--list", "--ignored"])
-            .current_dir(&executable.directory)
-            .output()
-            .map_err(|error| format!("{} did not start: {error}", executable.program.display()))?;
-        if let Some(path) = listed(&String::from_utf8_lossy(&list.stdout), name) {
-            holding.push((executable, path));
-        }
-    }
-
-    match holding.len() {
-        1 => Ok(holding.remove(0)),
-        0 => Err(format!("no measurement of the workspace is named {name}")),
-        _ => Err(format!(
-            "{name} names a measurement in each of {}",
-            holding
-                .iter()
-                .map(|(executable, _)| executable.program.display().to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        )),
-    }
-}
-
-/// One invocation of the test at `path`: the readings it printed, or why it failed, in which case nothing is filed.
-///
-/// It is read from libtest's terse formatter, which writes nothing before a test runs: the pretty one writes `test <path> ... ` with no newline, so the first line the test prints would open behind it and read as no reading, in every invocation alike, and the figure would leave the record with nothing to refuse.
-fn invoked(executable: &Executable, path: &str) -> Result<Vec<Line>, String> {
-    let ran = Command::new(&executable.program)
-        .args([
-            "--exact",
-            path,
-            "--ignored",
-            "--nocapture",
-            "--quiet",
-            "--test-threads=1",
-        ])
-        .current_dir(&executable.directory)
+/// One group of `measurement`: a process of `bench` of its own, and the readings it printed, or why it failed, in which case nothing is filed.
+fn sat(bench: &Path, measurement: &str, root: &Path) -> Result<Vec<Line>, String> {
+    let ran = Command::new(bench)
+        .args(["sit", measurement])
+        .current_dir(root)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .output()
-        .map_err(|error| format!("{} did not start: {error}", executable.program.display()))?;
+        .map_err(|error| format!("{} did not start: {error}", bench.display()))?;
     if !ran.status.success() {
         return Err(format!(
-            "{path} failed, so nothing is filed: {}",
+            "{measurement} failed, so nothing is filed: {}",
             ran.status
         ));
     }
@@ -150,11 +88,11 @@ fn invoked(executable: &Executable, path: &str) -> Result<Vec<Line>, String> {
         .collect()
 }
 
-/// Each figure the invocations read, its readings by group, an invocation a group, in the order they first read them: refused where a figure is read in some invocations and not others, or at two sizes.
-fn grouped(invocations: Vec<Vec<Line>>) -> Result<Vec<Figure>, String> {
-    let groups = invocations.len();
+/// Each figure the groups read, its readings by group, in the order they first read them: refused where a figure is read in some invocations and not others, or at two sizes.
+fn grouped(sittings: Vec<Vec<Line>>) -> Result<Vec<Figure>, String> {
+    let groups = sittings.len();
     let mut figures: Vec<Figure> = Vec::new();
-    for (group, lines) in invocations.into_iter().enumerate() {
+    for (group, lines) in sittings.into_iter().enumerate() {
         for line in lines {
             let at = match figures
                 .iter()
@@ -187,7 +125,7 @@ fn grouped(invocations: Vec<Vec<Line>>) -> Result<Vec<Figure>, String> {
         .find(|figure| figure.readings.iter().any(Vec::is_empty))
     {
         return Err(format!(
-            "{} is read in some invocations and not in others",
+            "{} is read in some groups and not in others",
             figure.name
         ));
     }
@@ -199,20 +137,20 @@ fn grouped(invocations: Vec<Vec<Line>>) -> Result<Vec<Figure>, String> {
 }
 
 /// Take a sitting of the measurement `measurement` and file it as its next record, numbered after `filed`, the ones already filed.
-pub fn test_sitting(measurement: &str, filed: usize) -> Result<(), String> {
+pub fn measurement_sitting(measurement: &str, filed: usize) -> Result<(), String> {
     let root = root();
 
     // Before anything is built: building with the wrong compiler and measuring it afterwards spends the run to produce the wrong record.
+    measurement_named(measurement)?;
     let subject = subject(&root)?;
     let pinned = held(&root)?;
     let platform = capture();
 
-    let executables = executables(&root)?;
-    let (executable, path) = found(&executables, measurement)?;
-    let mut invocations = Vec::new();
+    let bench = built(&root)?;
+    let mut sittings = Vec::new();
     for group in 1..=GROUPS {
-        eprintln!(">> {path}, group {group} of {GROUPS}");
-        invocations.push(invoked(executable, &path)?);
+        eprintln!(">> {measurement}, group {group} of {GROUPS}");
+        sittings.push(sat(&bench, measurement, &root)?);
     }
 
     let record = Record {
@@ -220,7 +158,7 @@ pub fn test_sitting(measurement: &str, filed: usize) -> Result<(), String> {
         subject,
         platform,
         pinned,
-        figures: grouped(invocations)?,
+        figures: grouped(sittings)?,
     };
 
     file(&root, measurement, filed, &record)

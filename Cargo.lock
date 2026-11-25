@@ -3328,6 +3328,7 @@ name = "xbench"
 version = "0.16.25"
 dependencies = [
  "clap",
+ "curios",
  "curios-profile",
  "serde",
  "serde_json",

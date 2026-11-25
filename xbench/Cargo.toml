@@ -11,8 +11,10 @@ default-run = "xbench"
 [lints]
 workspace = true
 
-# The bench drives other languages' compilers, a timer and an instruction count, and names of the workspace's only the instruments it reads.
+# The bench drives other languages' compilers, a timer and an instruction count, and the workspace's compiler in its own process, through its public entries and the test support its crates keep for another's tests, as `xboard` drives the checkers.
 [dependencies]
+# The compiler its measurements drive: the launcher image a bundled executable is built from.
+curios = { workspace = true }
 # The instructions each contestant retires, `Instructions`, opened before it starts and inherited into it.
 curios-profile = { workspace = true }
 # The command line, in `xtask`'s own convention.
@@ -20,7 +22,7 @@ clap = { workspace = true }
 # A record is a TOML file beside the code, read where the bench runs and printed where a sitting files one.
 serde = { workspace = true }
 toml = { workspace = true, features = ["display"] }
-# What cargo says of the test executables it builds, read by the runner to find the one holding a measurement.
+# What cargo says of what it builds, read by the runner to find the release build of the bench it sits a measurement in.
 serde_json = { workspace = true }
 # The engine `rust-wasm` runs under, the one `Cargo.lock` resolves for the compiler's own, so the two WebAssembly contestants run under one engine by construction: the twin runner compiles the twin's component and runs it.
 wasmtime = { workspace = true, features = ["cranelift", "component-model", "runtime", "std"] }
