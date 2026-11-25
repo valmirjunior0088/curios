@@ -305,7 +305,7 @@ let eq_of_eql(a: Char, b: Char, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
     ) -> Eq()(Char { code = code1, @valid = valid1 }, Char { code = code2, @valid = valid2 }) =
         let refl() = code;
         Eq/refl();
-    fields(a.code, a.valid, b.code, b.valid, Eql/eq_of_eql(a.code, b.code, h));
+    fields(a.code, a.valid, b.code, b.valid, proved());
 
 satisfy Eql(Char) {
     eql = eql,

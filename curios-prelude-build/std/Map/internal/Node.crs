@@ -331,10 +331,9 @@ pub let missing(
         match Hash/hash(k0) == k
         | false => Eq/refl()
         | true =>
-            let same = Eql/eq_of_eql(Hash/hash(k0), k, Bool/True/qed());
             match Eq/subst(
                 (e: Bytes) => Bool/Holds(digit(e, c) != digit(Hash/hash(k0), c)),
-                Eq/sym(same),
+                Eq/sym(proved(@Eq()(Hash/hash(k0), k))),
                 apart)
             end
         end
@@ -848,9 +847,8 @@ pub let branch_answers(
             Eq/trans(picked(List/set(l, i, n), dj, @proved()), pick_set(l, i, @proved(), n, dj));
         match i == dj
         | true =>
-            let same: Eq()(i, dj) = Eql/eq_of_eql(i, dj, Bool/True/qed());
             let there: Eq()(pick(l, i), List/get(l, dj)) =
-                Eq/trans(Eq/cong((m: Nat) => pick(l, m), same), Eq/sym(old));
+                Eq/trans(Eq/cong((m: Nat) => pick(l, m), proved(@Eq()(i, dj))), Eq/sym(old));
             Eq/trans(
                 Eq/cong((m: Node(K, V)) => find(m, j), new),
                 Eq/subst(
@@ -861,9 +859,8 @@ pub let branch_answers(
         | false =>
             match k == j
             | true =>
-                let same_k = Eql/eq_of_eql(k, j, Bool/True/qed());
                 let moved: Eq()(i, dj) =
-                    Eq/trans(Eq/sym(at_i), Eq/cong((e: Bytes) => digit(e, at), same_k));
+                    Eq/trans(Eq/sym(at_i), Eq/cong((e: Bytes) => digit(e, at), proved()));
                 match Eq/subst((m: Nat) => Bool/Holds(i == m), moved, Bool/True/qed())
                 end
             | false =>
@@ -1140,8 +1137,6 @@ pub let wedge_answers(
         let apart_d: Bool/Holds(digit(k, c) != digit(first(h), c)) = apart.differs;
         match digit(k, c) == digit(j, c)
         | true =>
-            let dk: Eq()(digit(k, c), digit(j, c)) =
-                Eql/eq_of_eql(digit(k, c), digit(j, c), Bool/True/qed());
             match k == j
             | true =>
                 Eq/trans(
@@ -1155,7 +1150,7 @@ pub let wedge_answers(
                         Eq/refl()))
             | false =>
                 let off: Bool/Holds(digit(j, c) != digit(first(h), c)) =
-                    Eq/subst((m: Nat) => Bool/Holds(m != digit(first(h), c)), dk, apart_d);
+                    Eq/subst((m: Nat) => Bool/Holds(m != digit(first(h), c)), proved(), apart_d);
                 Eq/trans(
                     Eq/cong((m: Node(K, V)) => find(m, j), read),
                     Eq/trans(
@@ -1175,8 +1170,7 @@ pub let wedge_answers(
             let read2 = pick_set(e, d, @proved(), h, digit(j, c));
             match k == j
             | true =>
-                let moved =
-                    Eq/cong((b: Bytes) => digit(b, c), Eql/eq_of_eql(k, j, Bool/True/qed()));
+                let moved = Eq/cong((b: Bytes) => digit(b, c), proved(@Eq()(k, j)));
                 match Eq/subst((m: Nat) => Bool/Holds(digit(k, c) == m), moved, Bool/True/qed())
                 end
             | false =>
@@ -1301,7 +1295,7 @@ pub let insert(
                     filled = Bool/True/qed(),
                     kept =
                         (_, _) => Held { under = Bool/True/qed(), agree = (_, _) => Eq/refl() } },
-                @leaf_answers(k0, v0, v, k, Eql/eq_of_eql(e0, k, Bool/True/qed())),
+                @leaf_answers(k0, v0, v, k, proved()),
                 @Bool/True/qed())
         | false =>
             let found: Parting(k, e0, crit(k, e0)) = parting(k, e0);
@@ -1575,11 +1569,10 @@ pub let insert(
                 let before: Bool/Holds(c < at) =
                     match c == at
                     | true =>
-                        let moved: Eq()(c, at) = Eql/eq_of_eql(c, at, Bool/True/qed());
                         let at_at: Bool/Holds(digit(k, at) != digit(first(h), at)) =
                             Eq/subst(
                                 (m: Nat) => Bool/Holds(digit(k, m) != digit(first(h), m)),
-                                moved,
+                                proved(@Eq()(c, at)),
                                 apart.differs);
                         match Eq/subst((x: Nat) => Bool/Holds(digit(k, at) != x), old.placed, at_at)
                         end
@@ -1673,7 +1666,7 @@ let leaf_absent(
                         | false => Option/none()
                         end,
                         Option/none()),
-                Eql/eq_of_eql(k, j, Bool/True/qed()),
+                proved(@Eq()(k, j)),
                 match Hash/hash(k0) == k
                 | true => match differs end
                 | false => Eq/refl()
@@ -1816,7 +1809,7 @@ pub let collapsed(
                 Eq/cong((m: Node(K, V)) => find(m, j), read),
                 Eq/subst(
                     (n: Nat) => Eq()(find(pick(l, n), j), find(lone(l), j)),
-                    Eq/sym(Eql/eq_of_eql(digit(j, at), f, Bool/True/qed())),
+                    Eq/sym(proved(@Eq()(digit(j, at), f))),
                     Eq/cong((m: Node(K, V)) => find(m, j), alone.0))))
     | false =>
         let placed =
@@ -1960,8 +1953,7 @@ pub let remove(
     | empty() => Removed/absent(t, @Eq/refl(), (j) => match k == j | true | false => Eq/refl() end)
     | leaf(k0, v0) =>
         match Hash/hash(k0) == k
-        | true =>
-            Removed/gone(leaf_gone(k0, v0, k, Eql/eq_of_eql(Hash/hash(k0), k, Bool/True/qed())))
+        | true => Removed/gone(leaf_gone(k0, v0, k, proved()))
         | false => Removed/absent(t, @Eq/refl(), leaf_absent(k0, v0, k, Bool/True/qed()))
         end
     | branch(at, tw) =>
@@ -2999,12 +2991,11 @@ pub let either_in(
     | [h, ..t] =>
         match digit(k, at) == d
         | true =>
-            let here: Eq()(digit(k, at), d) = Eql/eq_of_eql(digit(k, at), d, Bool/True/qed());
             Eq/trans(
                 all_miss(t, at, d + 1, a, twigs.1, k, proved(), f, keeps, f(find(h, k), r)),
                 Eq/subst(
                     (n: Nat) => Eq()(f(find(h, k), r), f(find(pick([h, ..t], n - d), k), r)),
-                    Eq/sym(here),
+                    Eq/sym(proved(@Eq()(digit(k, at), d))),
                     Eq/refl()))
         | false =>
             let past = strictly(d, digit(k, at), from, Bool/True/qed());
@@ -3366,7 +3357,7 @@ let leaf_code(
     f: Bool/Holds(Option/is_some(find(Node/leaf(k, v), Hash/hash(x)))),
 ) -> Eq()(Hash/hash(x), Hash/hash(k)) =
     match Hash/hash(k) == Hash/hash(x)
-    | true => Eq/sym(Eql/eq_of_eql(Hash/hash(k), Hash/hash(x), Bool/True/qed()))
+    | true => Eq/sym(proved())
     | false => match f end
     end;
 
@@ -3585,7 +3576,7 @@ pub let canonical(
                     first_in(l2),
                     s1.twigs,
                     twigs2,
-                    Eql/eq_of_eql(List/length(l1), List/length(l2), proved()),
+                    proved(),
                     (x, _) =>
                         let s1x = small(Hash/hash(x), at1);
                         let s2x = small(Hash/hash(x), at2);
@@ -3648,7 +3639,7 @@ pub and canonical_in(
                                     Eq()(
                                         find(pick([h1, ..r1], n - d), Hash/hash(x)),
                                         find(pick([h2, ..r2], n - d), Hash/hash(x))),
-                                Eql/eq_of_eql(digit(Hash/hash(x), at), d, Bool/True/qed()),
+                                proved(@Eq()(digit(Hash/hash(x), at), d)),
                                 alike(x, proved()))
                         | false =>
                             Eq/trans(

@@ -1,5 +1,4 @@
 use /std/{Nat, Bool, Eq, Ordering, Ord, proved};
-use /std/ops/{Eql};
 
 --- The order of the two.
 pub let ord(x: Nat, y: Nat) -> Ordering =
@@ -57,7 +56,7 @@ pub let gt(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/gt())) -> Bool/Holds(b < 
 pub let le(a: Nat, b: Nat, h: Bool/Holds(Ordering/is_le(ord(a, b)))) -> Bool/Holds(a <= b) =
     match
     | a < b => proved()
-    | a == b => Nat/le/of_eq(Eql/eq_of_eql(a, b, Bool/True/qed()))
+    | a == b => Nat/le/of_eq(proved())
     | _ => match h end
     end;
 

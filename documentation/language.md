@@ -1500,6 +1500,19 @@ pub let pick(n: Nat, q: Holds(n < 3)) -> Nat =
     match n | 0 => 10 | 1 => 11 | 2 => 12 end;
 ```
 
+An equation at a type whose equality is decided, one with an `Eql` witness, is proved as its decision is: `proved()` at `Eq()(a, b)` asks for `Holds(a == b)` from the facts in scope and crosses `Eql`'s law to the equation. A program writes the equation's proof as `proved()` where the expected type names both sides, and as `proved(@Eq()(a, b))` where nothing does — the equation `Eq/subst` or `Eq/cong` rewrites along, or a `let` with no type. `Eql/eq_of_eql` is written by name only where the decision lies beyond what the facts state, as a conjunct of a conjunction that only a match arm's reduct holds.
+
+```crs
+use /std/{Eq, Str, proved};
+use /std/Bool/{Holds};
+
+pub let same(a: Str, b: Str, h: Holds(a == b)) -> Eq()(a, b) =
+    proved();
+
+pub let moved(F: (Str) -> Type, a: Str, b: Str, h: Holds(a == b), x: F(a)) -> F(b) =
+    Eq/subst(F, proved(@Eq()(a, b)), x);
+```
+
 A bound the facts do not imply is refused, the report naming the facts it read and values under which they hold and the bound fails, and so is a case of a match they do not rule out.
 
 ## Quick reference

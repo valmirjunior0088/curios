@@ -1,6 +1,6 @@
 mod tests;
 
-use /std/{Bytes, Byte, Str, Nat, Bool, Option, Result, List, Eq, Show, Spell, Fmt};
+use /std/{Bytes, Byte, Str, Nat, Bool, Option, Result, List, Eq, Show, Spell, Fmt, proved};
 use /std/ops/{Eql};
 
 --- A path as the host holds it.
@@ -101,7 +101,7 @@ satisfy Eql(Path) {
         let fields(x: Bytes, y: Bytes, bytes: Eq()(x, y)) -> Eq()(Path { x }, Path { y }) =
             let refl() = bytes;
             Eq/refl();
-        fields(a.0, b.0, Eql/eq_of_eql(a.0, b.0, h)),
+        fields(a.0, b.0, proved()),
     refl(a) = Eql/refl(a.0),
 }
 

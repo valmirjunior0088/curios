@@ -1,7 +1,7 @@
 mod tests;
 
 use /std/{Nat, Int, Byte, Bytes, Bool, Char, Option, List, Str, Eq, Ordering, Ord, Hash, Map, Show,
-    Spell, Fmt, Io, rand};
+    Spell, Fmt, Io, rand, proved};
 use /std/ops/{Eql};
 use /std/time/{Timestamp};
 
@@ -155,7 +155,7 @@ pub let eq_of_bytes(a: Uuid, b: Uuid, p: Eq()(a.bytes, b.bytes)) -> Eq()(a, b) =
 
 satisfy Eql(Uuid) {
     eql(a, b) = a.bytes == b.bytes,
-    eq_of_eql(a, b, h) = eq_of_bytes(a, b, Eql/eq_of_eql(a.bytes, b.bytes, h)),
+    eq_of_eql(a, b, h) = eq_of_bytes(a, b, proved()),
     refl(a) = Eql/refl(a.bytes),
 }
 

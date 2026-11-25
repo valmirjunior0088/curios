@@ -1,5 +1,4 @@
-use /std/{Bytes, Bool, Eq, Hash, Ord};
-use /std/ops/{Eql};
+use /std/{Bytes, Bool, Eq, Hash, Ord, proved};
 
 -- **`Flt` is deliberately not a key, and the reason is not the proof.** Injectivity holds and is cheap — `Flt/of_le_bytes` inverts `Flt/to_le_bytes`, so the witness is one congruence through a guarded decoder. What stops it is that this concept promises injectivity on *propositional* equality while `/std/ops/Eql`'s `Flt` witness is IEEE `==`, and the two disagree at both ends: `+0.0` and `-0.0` are distinct values with distinct encodings that `==` calls equal, so a map would hold them as two entries; a `NaN` is found by lookup though `==` calls it equal to nothing. Nothing here forbids that, because a key's law says nothing about `Eql` — which is exactly why the witness is withheld until what a map means for such a carrier is decided rather than discovered.
 --- How a key type encodes to the byte string that identifies it, with the proofs that distinct keys encode distinctly and that the encodings stand in the keys' own order.
@@ -26,7 +25,7 @@ pub let same(
     b: K,
     h: Bool/Holds(Hash/hash(a) == Hash/hash(b)),
 ) -> Eq()(a, b) =
-    Key/injective(a, b, Eql/eq_of_eql(Hash/hash(a), Hash/hash(b), h));
+    Key/injective(a, b, proved());
 
 --- Two keys whose encodings compare unequal are two keys: one key encodes as itself.
 pub let apart(

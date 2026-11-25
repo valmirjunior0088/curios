@@ -699,13 +699,12 @@ pub let follows(
     let n = Bytes/length(piece.bytes);
     match Bool/holds(n <= Bytes/length(rest.bytes))
     | some(fits), Bytes/slice(rest.bytes, 0, n, @fits) == piece.bytes =>
-        let held = Eql/eq_of_eql(Bytes/slice(rest.bytes, 0, n, @fits), piece.bytes, proved());
         let onward: Valid(Bytes/drop(rest.bytes, n, @fits)) =
             Valid/after_prefix(
                 piece.valid,
                 Eq/subst(
                     (p: Bytes) => Valid(0x[..p, ..Bytes/drop(rest.bytes, n, @fits)]),
-                    held,
+                    proved(@Eq()(Bytes/slice(rest.bytes, 0, n, @fits), piece.bytes)),
                     Eq/subst((w: Bytes) => Valid(w), split_at(rest.bytes, n, fits), rest.valid)));
         Option/some((
             past = At { offset = from.offset + n, @_, @boundary = Valid/begins(onward) },
@@ -753,8 +752,6 @@ pub let strip_suffix(s: Str, suffix: Str) -> Option(Str) =
     let n = Bytes/length(suffix.bytes);
     match Bool/holds(n <= Bytes/length(s.bytes))
     | some(_), Bytes/drop(s.bytes, Bytes/length(s.bytes) - n) == suffix.bytes =>
-        let held =
-            Eql/eq_of_eql(Bytes/drop(s.bytes, Bytes/length(s.bytes) - n), suffix.bytes, proved());
         Option/some(
             before(
                 s,
@@ -764,7 +761,11 @@ pub let strip_suffix(s: Str, suffix: Str) -> Option(Str) =
                     @boundary =
                         Eq/subst(
                             (w: Bytes) => Bool/Holds(At/starts(w)),
-                            Eq/sym(held),
+                            Eq/sym(
+                                proved(
+                                    @Eq()(
+                                        Bytes/drop(s.bytes, Bytes/length(s.bytes) - n),
+                                        suffix.bytes))),
                             Valid/begins(suffix.valid)) }))
     | _ => Option/none()
     end;
@@ -886,7 +887,7 @@ pub let pad_end(s: Str, n: Nat, c: Char) -> Str =
 
 -- Their bytes are one run by `Bytes`'s own law, and a string is its bytes.
 let eq_of_eql(a: Str, b: Str, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
-    eq_of_bytes(a, b, Eql/eq_of_eql(to_bytes(a), to_bytes(b), h));
+    eq_of_bytes(a, b, proved());
 
 satisfy Eql(Str) {
     eql = eql,

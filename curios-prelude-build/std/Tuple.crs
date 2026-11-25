@@ -1,4 +1,4 @@
-use /std/{Bool, Eq, Show, Spell, Fmt, Ord, Ordering, Str, List};
+use /std/{Bool, Eq, Show, Spell, Fmt, Ord, Ordering, Str, List, proved};
 use /std/ops/{Eql};
 
 let parens(parts: List(Str)) -> Str =
@@ -493,39 +493,19 @@ satisfy Eql({}) {
 
 satisfy (@A: Type, use Eql(A)) => Eql({A}) {
     eql(a, b) = a.0 == b.0,
-    eq_of_eql(a, b, h) = same1(a.0, b.0, Eql/eq_of_eql(a.0, b.0, h)),
+    eq_of_eql(a, b, h) = same1(a.0, b.0, proved()),
     refl(a) = Eql/refl(a.0),
 }
 
 satisfy (@A: Type, @B: Type, use Eql(A), use Eql(B)) => Eql({A, B}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1,
-    eq_of_eql(a, b, h) =
-        let p1 = Bool/and/first(a.0 == b.0, a.1 == b.1, h);
-        same2(
-            a.0,
-            a.1,
-            b.0,
-            b.1,
-            Eql/eq_of_eql(a.0, b.0, p1),
-            Eql/eq_of_eql(a.1, b.1, Bool/and/second(a.0 == b.0, a.1 == b.1, h))),
+    eq_of_eql(a, b, h) = same2(a.0, a.1, b.0, b.1, proved(), proved()),
     refl(a) = Bool/and/both(a.0 == a.0, a.1 == a.1, Eql/refl(a.0), Eql/refl(a.1)),
 }
 
 satisfy (@A: Type, @B: Type, @C: Type, use Eql(A), use Eql(B), use Eql(C)) => Eql({A, B, C}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2,
-    eq_of_eql(a, b, h) =
-        let p2 = Bool/and/first(a.0 == b.0 && a.1 == b.1, a.2 == b.2, h);
-        let p1 = Bool/and/first(a.0 == b.0, a.1 == b.1, p2);
-        same3(
-            a.0,
-            a.1,
-            a.2,
-            b.0,
-            b.1,
-            b.2,
-            Eql/eq_of_eql(a.0, b.0, p1),
-            Eql/eq_of_eql(a.1, b.1, Bool/and/second(a.0 == b.0, a.1 == b.1, p2)),
-            Eql/eq_of_eql(a.2, b.2, Bool/and/second(a.0 == b.0 && a.1 == b.1, a.2 == b.2, h))),
+    eq_of_eql(a, b, h) = same3(a.0, a.1, a.2, b.0, b.1, b.2, proved(), proved(), proved()),
     refl(a) =
         Bool/and/both(
             a.0 == a.0 && a.1 == a.1,
@@ -546,25 +526,7 @@ satisfy (
 ) => Eql({A, B, C, D}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3,
     eq_of_eql(a, b, h) =
-        let p3 = Bool/and/first(a.0 == b.0 && a.1 == b.1 && a.2 == b.2, a.3 == b.3, h);
-        let p2 = Bool/and/first(a.0 == b.0 && a.1 == b.1, a.2 == b.2, p3);
-        let p1 = Bool/and/first(a.0 == b.0, a.1 == b.1, p2);
-        same4(
-            a.0,
-            a.1,
-            a.2,
-            a.3,
-            b.0,
-            b.1,
-            b.2,
-            b.3,
-            Eql/eq_of_eql(a.0, b.0, p1),
-            Eql/eq_of_eql(a.1, b.1, Bool/and/second(a.0 == b.0, a.1 == b.1, p2)),
-            Eql/eq_of_eql(a.2, b.2, Bool/and/second(a.0 == b.0 && a.1 == b.1, a.2 == b.2, p3)),
-            Eql/eq_of_eql(
-                a.3,
-                b.3,
-                Bool/and/second(a.0 == b.0 && a.1 == b.1 && a.2 == b.2, a.3 == b.3, h))),
+        same4(a.0, a.1, a.2, a.3, b.0, b.1, b.2, b.3, proved(), proved(), proved(), proved()),
     refl(a) =
         Bool/and/both(
             a.0 == a.0 && a.1 == a.1 && a.2 == a.2,
@@ -591,11 +553,6 @@ satisfy (
 ) => Eql({A, B, C, D, E}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4,
     eq_of_eql(a, b, h) =
-        let p4 =
-            Bool/and/first(a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3, a.4 == b.4, h);
-        let p3 = Bool/and/first(a.0 == b.0 && a.1 == b.1 && a.2 == b.2, a.3 == b.3, p4);
-        let p2 = Bool/and/first(a.0 == b.0 && a.1 == b.1, a.2 == b.2, p3);
-        let p1 = Bool/and/first(a.0 == b.0, a.1 == b.1, p2);
         same5(
             a.0,
             a.1,
@@ -607,20 +564,11 @@ satisfy (
             b.2,
             b.3,
             b.4,
-            Eql/eq_of_eql(a.0, b.0, p1),
-            Eql/eq_of_eql(a.1, b.1, Bool/and/second(a.0 == b.0, a.1 == b.1, p2)),
-            Eql/eq_of_eql(a.2, b.2, Bool/and/second(a.0 == b.0 && a.1 == b.1, a.2 == b.2, p3)),
-            Eql/eq_of_eql(
-                a.3,
-                b.3,
-                Bool/and/second(a.0 == b.0 && a.1 == b.1 && a.2 == b.2, a.3 == b.3, p4)),
-            Eql/eq_of_eql(
-                a.4,
-                b.4,
-                Bool/and/second(
-                    a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3,
-                    a.4 == b.4,
-                    h))),
+            proved(),
+            proved(),
+            proved(),
+            proved(),
+            proved()),
     refl(a) =
         Bool/and/both(
             a.0 == a.0 && a.1 == a.1 && a.2 == a.2 && a.3 == a.3,
@@ -653,16 +601,6 @@ satisfy (
 ) => Eql({A, B, C, D, E, F}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5,
     eq_of_eql(a, b, h) =
-        let p5 =
-            Bool/and/first(
-                a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4,
-                a.5 == b.5,
-                h);
-        let p4 =
-            Bool/and/first(a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3, a.4 == b.4, p5);
-        let p3 = Bool/and/first(a.0 == b.0 && a.1 == b.1 && a.2 == b.2, a.3 == b.3, p4);
-        let p2 = Bool/and/first(a.0 == b.0 && a.1 == b.1, a.2 == b.2, p3);
-        let p1 = Bool/and/first(a.0 == b.0, a.1 == b.1, p2);
         same6(
             a.0,
             a.1,
@@ -676,27 +614,12 @@ satisfy (
             b.3,
             b.4,
             b.5,
-            Eql/eq_of_eql(a.0, b.0, p1),
-            Eql/eq_of_eql(a.1, b.1, Bool/and/second(a.0 == b.0, a.1 == b.1, p2)),
-            Eql/eq_of_eql(a.2, b.2, Bool/and/second(a.0 == b.0 && a.1 == b.1, a.2 == b.2, p3)),
-            Eql/eq_of_eql(
-                a.3,
-                b.3,
-                Bool/and/second(a.0 == b.0 && a.1 == b.1 && a.2 == b.2, a.3 == b.3, p4)),
-            Eql/eq_of_eql(
-                a.4,
-                b.4,
-                Bool/and/second(
-                    a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3,
-                    a.4 == b.4,
-                    p5)),
-            Eql/eq_of_eql(
-                a.5,
-                b.5,
-                Bool/and/second(
-                    a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4,
-                    a.5 == b.5,
-                    h))),
+            proved(),
+            proved(),
+            proved(),
+            proved(),
+            proved(),
+            proved()),
     refl(a) =
         Bool/and/both(
             a.0 == a.0 && a.1 == a.1 && a.2 == a.2 && a.3 == a.3 && a.4 == a.4,
@@ -737,21 +660,6 @@ satisfy (
         a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5
             && a.6 == b.6,
     eq_of_eql(a, b, h) =
-        let p6 =
-            Bool/and/first(
-                a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5,
-                a.6 == b.6,
-                h);
-        let p5 =
-            Bool/and/first(
-                a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4,
-                a.5 == b.5,
-                p6);
-        let p4 =
-            Bool/and/first(a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3, a.4 == b.4, p5);
-        let p3 = Bool/and/first(a.0 == b.0 && a.1 == b.1 && a.2 == b.2, a.3 == b.3, p4);
-        let p2 = Bool/and/first(a.0 == b.0 && a.1 == b.1, a.2 == b.2, p3);
-        let p1 = Bool/and/first(a.0 == b.0, a.1 == b.1, p2);
         same7(
             a.0,
             a.1,
@@ -767,35 +675,13 @@ satisfy (
             b.4,
             b.5,
             b.6,
-            Eql/eq_of_eql(a.0, b.0, p1),
-            Eql/eq_of_eql(a.1, b.1, Bool/and/second(a.0 == b.0, a.1 == b.1, p2)),
-            Eql/eq_of_eql(a.2, b.2, Bool/and/second(a.0 == b.0 && a.1 == b.1, a.2 == b.2, p3)),
-            Eql/eq_of_eql(
-                a.3,
-                b.3,
-                Bool/and/second(a.0 == b.0 && a.1 == b.1 && a.2 == b.2, a.3 == b.3, p4)),
-            Eql/eq_of_eql(
-                a.4,
-                b.4,
-                Bool/and/second(
-                    a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3,
-                    a.4 == b.4,
-                    p5)),
-            Eql/eq_of_eql(
-                a.5,
-                b.5,
-                Bool/and/second(
-                    a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4,
-                    a.5 == b.5,
-                    p6)),
-            Eql/eq_of_eql(
-                a.6,
-                b.6,
-                Bool/and/second(
-                    a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4
-                        && a.5 == b.5,
-                    a.6 == b.6,
-                    h))),
+            proved(),
+            proved(),
+            proved(),
+            proved(),
+            proved(),
+            proved(),
+            proved()),
     refl(a) =
         Bool/and/both(
             a.0 == a.0 && a.1 == a.1 && a.2 == a.2 && a.3 == a.3 && a.4 == a.4 && a.5 == a.5,
@@ -843,27 +729,6 @@ satisfy (
             && a.6 == b.6
             && a.7 == b.7,
     eq_of_eql(a, b, h) =
-        let p7 =
-            Bool/and/first(
-                a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5
-                    && a.6 == b.6,
-                a.7 == b.7,
-                h);
-        let p6 =
-            Bool/and/first(
-                a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5,
-                a.6 == b.6,
-                p7);
-        let p5 =
-            Bool/and/first(
-                a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4,
-                a.5 == b.5,
-                p6);
-        let p4 =
-            Bool/and/first(a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3, a.4 == b.4, p5);
-        let p3 = Bool/and/first(a.0 == b.0 && a.1 == b.1 && a.2 == b.2, a.3 == b.3, p4);
-        let p2 = Bool/and/first(a.0 == b.0 && a.1 == b.1, a.2 == b.2, p3);
-        let p1 = Bool/and/first(a.0 == b.0, a.1 == b.1, p2);
         same8(
             a.0,
             a.1,
@@ -881,43 +746,14 @@ satisfy (
             b.5,
             b.6,
             b.7,
-            Eql/eq_of_eql(a.0, b.0, p1),
-            Eql/eq_of_eql(a.1, b.1, Bool/and/second(a.0 == b.0, a.1 == b.1, p2)),
-            Eql/eq_of_eql(a.2, b.2, Bool/and/second(a.0 == b.0 && a.1 == b.1, a.2 == b.2, p3)),
-            Eql/eq_of_eql(
-                a.3,
-                b.3,
-                Bool/and/second(a.0 == b.0 && a.1 == b.1 && a.2 == b.2, a.3 == b.3, p4)),
-            Eql/eq_of_eql(
-                a.4,
-                b.4,
-                Bool/and/second(
-                    a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3,
-                    a.4 == b.4,
-                    p5)),
-            Eql/eq_of_eql(
-                a.5,
-                b.5,
-                Bool/and/second(
-                    a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4,
-                    a.5 == b.5,
-                    p6)),
-            Eql/eq_of_eql(
-                a.6,
-                b.6,
-                Bool/and/second(
-                    a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4
-                        && a.5 == b.5,
-                    a.6 == b.6,
-                    p7)),
-            Eql/eq_of_eql(
-                a.7,
-                b.7,
-                Bool/and/second(
-                    a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5
-                        && a.6 == b.6,
-                    a.7 == b.7,
-                    h))),
+            proved(),
+            proved(),
+            proved(),
+            proved(),
+            proved(),
+            proved(),
+            proved(),
+            proved()),
     refl(a) =
         Bool/and/both(
             a.0 == a.0 && a.1 == a.1 && a.2 == a.2 && a.3 == a.3 && a.4 == a.4 && a.5 == a.5

@@ -1,5 +1,4 @@
 use /std/{Nat, Eq, proved, Bool};
-use /std/ops/{Eql};
 
 --- That `d` divides `n`: some multiple of `d` is `n`.
 pub induct Divides(d: Nat, n: Nat): pub Prop
@@ -87,7 +86,7 @@ pub let of_rem(n: Nat, d: Nat, @ok: Bool/Holds(0 < d), h: Bool/Holds(n % d == 0)
     let joined: Eq()(n, n / d * d + n % d) = Eq/refl();
     Divides/intro(
         n / d,
-        Eq/subst((r: Nat) => Eq()(n, n / d * d + r), Eql/eq_of_eql(n % d, 0, h), joined));
+        Eq/subst((r: Nat) => Eq()(n, n / d * d + r), proved(@Eq()(n % d, 0)), joined));
 
 --- A divisor leaves no remainder: `Divides(d, n)` gives `n % d == 0`, the converse of [`of_rem`].
 ---

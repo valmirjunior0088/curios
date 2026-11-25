@@ -111,7 +111,7 @@ let eq_of_eql(a: Bytes, b: Bytes, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
             match Byte/to_nat(y) == Byte/to_nat(k)
             | true =>
                 Eq/trans(
-                    Eq/cong((c: Byte) => 0x[c, ..t], Eql/eq_of_eql(y, k, Bool/True/qed())),
+                    Eq/cong((c: Byte) => 0x[c, ..t], proved(@Eq()(y, k))),
                     Eq/cong((q: Bytes) => 0x[k, ..q], eq_of_eql(t, p, h)))
             | false => match h end
             end

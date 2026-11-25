@@ -1,5 +1,4 @@
 use /std/{Nat, Bool, Option, List, Vec, Eq, Hash, Bytes, proved};
-use /std/ops/{Eql};
 use /std/List/{Member};
 use /std/Map/{Map, Key, empty, has, insert, remove, map, union, filter, intersection, difference,
     update, to_list};
@@ -20,14 +19,7 @@ let apart_codes(
 ) -> Eq()(Hash/hash(key) == Hash/hash(other), false) =
     match Hash/hash(key) == Hash/hash(other)
     | false => Eq/refl()
-    | true =>
-        match apart(
-            Eq/sym(
-                Key/injective(
-                    key,
-                    other,
-                    Eql/eq_of_eql(Hash/hash(key), Hash/hash(other), Bool/True/qed()))))
-        end
+    | true => match apart(Eq/sym(Key/injective(key, other, proved()))) end
     end;
 
 -- What a node answering `x` at `key`'s encoding in place of `n` answers at another key's: what `n` does.

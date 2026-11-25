@@ -24,7 +24,7 @@ pub use decode/{let decode};
 mod encode;
 pub use encode/{let encode};
 
-use /std/{Int, Flt, Bool, Str, List, Map, Eq, Spell};
+use /std/{Int, Flt, Bool, Str, List, Map, Eq, Spell, proved};
 use /std/ops/{Eql};
 use /std/time/{Date, Time, DateTime, OffsetDateTime, rfc3339};
 
@@ -79,7 +79,7 @@ satisfy Eql(Toml) {
         | str(x) =>
             match b
             | str(y) =>
-                let refl() = Eql/eq_of_eql(x, y, h);
+                let refl() = proved(@Eq()(x, y));
                 Eq/refl()
             | int(_) => match h end
             | flt(_) => match h end
@@ -95,7 +95,7 @@ satisfy Eql(Toml) {
             match b
             | str(_) => match h end
             | int(y) =>
-                let refl() = Eql/eq_of_eql(x, y, h);
+                let refl() = proved(@Eq()(x, y));
                 Eq/refl()
             | flt(_) => match h end
             | bool(_) => match h end
@@ -127,7 +127,7 @@ satisfy Eql(Toml) {
             | int(_) => match h end
             | flt(_) => match h end
             | bool(y) =>
-                let refl() = Eql/eq_of_eql(x, y, h);
+                let refl() = proved(@Eq()(x, y));
                 Eq/refl()
             | offset_date_time(_) => match h end
             | local_date_time(_) => match h end
@@ -143,7 +143,7 @@ satisfy Eql(Toml) {
             | flt(_) => match h end
             | bool(_) => match h end
             | offset_date_time(y) =>
-                let refl() = Eql/eq_of_eql(x, y, h);
+                let refl() = proved(@Eq()(x, y));
                 Eq/refl()
             | local_date_time(_) => match h end
             | local_date(_) => match h end
@@ -159,7 +159,7 @@ satisfy Eql(Toml) {
             | bool(_) => match h end
             | offset_date_time(_) => match h end
             | local_date_time(y) =>
-                let refl() = Eql/eq_of_eql(x, y, h);
+                let refl() = proved(@Eq()(x, y));
                 Eq/refl()
             | local_date(_) => match h end
             | local_time(_) => match h end
@@ -175,7 +175,7 @@ satisfy Eql(Toml) {
             | offset_date_time(_) => match h end
             | local_date_time(_) => match h end
             | local_date(y) =>
-                let refl() = Eql/eq_of_eql(x, y, h);
+                let refl() = proved(@Eq()(x, y));
                 Eq/refl()
             | local_time(_) => match h end
             | arr(_) => match h end
@@ -191,7 +191,7 @@ satisfy Eql(Toml) {
             | local_date_time(_) => match h end
             | local_date(_) => match h end
             | local_time(y) =>
-                let refl() = Eql/eq_of_eql(x, y, h);
+                let refl() = proved(@Eq()(x, y));
                 Eq/refl()
             | arr(_) => match h end
             | table(_) => match h end
@@ -207,7 +207,7 @@ satisfy Eql(Toml) {
             | local_date(_) => match h end
             | local_time(_) => match h end
             | arr(y) =>
-                let refl() = Eql/eq_of_eql(x, y, h);
+                let refl() = proved(@Eq()(x, y));
                 Eq/refl()
             | table(_) => match h end
             end
@@ -223,7 +223,7 @@ satisfy Eql(Toml) {
             | local_time(_) => match h end
             | arr(_) => match h end
             | table(y) =>
-                let refl() = Eql/eq_of_eql(x, y, h);
+                let refl() = proved(@Eq()(x, y));
                 Eq/refl()
             end
         end,

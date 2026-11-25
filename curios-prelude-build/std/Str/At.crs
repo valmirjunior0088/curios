@@ -354,7 +354,7 @@ let eq_of_offset(@s: Str, a: At(s), b: At(s), offset: Eq()(a.offset, b.offset)) 
 --- Two positions are equal when their offsets are.
 satisfy (@s: Str) => Eql(At(s)) {
     eql(a, b) = a.offset == b.offset,
-    eq_of_eql(a, b, h) = eq_of_offset(a, b, Eql/eq_of_eql(a.offset, b.offset, h)),
+    eq_of_eql(a, b, h) = eq_of_offset(a, b, proved()),
     refl(a) = Eql/refl(a.offset),
 }
 

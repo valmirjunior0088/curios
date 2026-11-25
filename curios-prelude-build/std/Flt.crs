@@ -47,7 +47,7 @@ use grammar/{of_decimal_in, of_str_in, of_hex_str_in};
 
 use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, Show, Spell, Fmt, Hash,
     Vec, Eq, proved};
-use /std/ops/{Add, Sub, Mul, Div, Rem, Eql};
+use /std/ops/{Add, Sub, Mul, Div, Rem};
 
 --- That `b` is eight bytes long, decided.
 pub let EightBytes(b: Bytes) -> Prop =
@@ -421,7 +421,7 @@ pub let identical(a: Flt, b: Flt) -> Bool =
 
 --- Two identical floats are one float.
 pub let eq_of_identical(a: Flt, b: Flt, same: Bool/Holds(identical(a, b))) -> Eq()(a, b) =
-    eq_of_le_bytes(a, b, Eql/eq_of_eql(to_le_bytes(a), to_le_bytes(b), same));
+    eq_of_le_bytes(a, b, proved());
 
 -- So the order `Nat/ord` reads through the key is a total order that answers `eq` exactly at an equation, by `Nat/ord`'s own laws. A key at or above `2^63` is a pattern with its sign clear, lifted, and one below it a pattern with its sign set, complemented, and neither map folds two patterns into one below `2^64`, where eight bytes keep every pattern.
 --- Two floats with one [`total_key`] are one float: the key tells every pattern apart.

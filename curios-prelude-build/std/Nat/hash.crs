@@ -1,5 +1,4 @@
 use /std/{Nat, Bytes, Eq, Ord, Ordering, proved, Bool};
-use /std/ops/{Eql};
 
 -- How many bytes follow a number's first.
 let rank(n: Nat) -> Nat =
@@ -196,7 +195,7 @@ let first_tops(
                             lb - 7,
                             Eq/subst(
                                 (v: Nat) => Bool/Holds(l - 7 == v - 7),
-                                Eql/eq_of_eql(l, lb, ranks),
+                                proved(@Eq()(l, lb)),
                                 Bool/True/qed()))
                     end
                 end,
@@ -255,7 +254,7 @@ let first_same(
                             lb - 7,
                             Eq/subst(
                                 (v: Nat) => Bool/Holds(l - 7 == v - 7),
-                                Eql/eq_of_eql(l, lb, ranks),
+                                proved(@Eq()(l, lb)),
                                 Bool/True/qed()))
                     end
                 end,

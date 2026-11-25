@@ -1,5 +1,4 @@
 use /std/{Nat, Eq, Option, proved, Bool};
-use /std/ops/{Eql};
 use /std/Nat/{Divides, Gcd};
 
 --- That `a` and `b` share no divisor but one: their greatest common divisor is `1`.
@@ -9,7 +8,7 @@ pub let Coprime(a: Nat, b: Nat) -> Prop =
 --- The procedure that decides `Coprime(a, b)`: the evidence when it holds, `none` otherwise.
 pub let try(a: Nat, b: Nat) -> Option(Coprime(a, b)) =
     match Nat/gcd(a, b) == 1
-    | true => Option/some(Eql/eq_of_eql(Nat/gcd(a, b), 1, Bool/True/qed()))
+    | true => Option/some(proved())
     | false => Option/none()
     end;
 

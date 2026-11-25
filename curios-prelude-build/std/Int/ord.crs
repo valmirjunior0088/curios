@@ -1,5 +1,4 @@
 use /std/{Int, Bool, Eq, Ordering, Ord, proved};
-use /std/ops/{Eql};
 
 --- The order of the two.
 pub let ord(x: Int, y: Int) -> Ordering =
@@ -53,7 +52,7 @@ pub let gt(a: Int, b: Int, h: Eq()(ord(a, b), Ordering/gt())) -> Bool/Holds(b < 
 pub let le(a: Int, b: Int, h: Bool/Holds(Ordering/is_le(ord(a, b)))) -> Bool/Holds(a <= b) =
     match
     | a < b => proved()
-    | a == b => Int/le/of_eq(Eql/eq_of_eql(a, b, Bool/True/qed()))
+    | a == b => Int/le/of_eq(proved())
     | _ => match h end
     end;
 

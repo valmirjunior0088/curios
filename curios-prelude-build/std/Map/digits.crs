@@ -1,5 +1,4 @@
 use /std/{Nat, Byte, Bytes, Bool, Eq, Ord, Ordering, proved};
-use /std/ops/{Eql};
 
 -- A byte's high nibble.
 let high(x: Nat) -> Nat =
@@ -170,7 +169,7 @@ let joined(
     down: Eq()(low(Byte/to_nat(h)), low(Byte/to_nat(k))),
 ) -> Eq()(h, k) =
     let (hn, kn) = (Byte/to_nat(h), Byte/to_nat(k));
-    Eq/cong((n: Nat) => Nat/to_byte(n % 256), Eql/eq_of_eql(hn, kn, proved()));
+    Eq/cong((n: Nat) => Nat/to_byte(n % 256), proved(@Eq()(hn, kn)));
 
 -- Two bytes that differ, alike in their high nibble, differ in their low one.
 let low_differs(
@@ -182,12 +181,7 @@ let low_differs(
     match low(Byte/to_nat(h)) == low(Byte/to_nat(k))
     | false => Bool/True/qed()
     | true =>
-        let same =
-            joined(
-                h,
-                k,
-                Eql/eq_of_eql(high(Byte/to_nat(h)), high(Byte/to_nat(k)), up),
-                Eql/eq_of_eql(low(Byte/to_nat(h)), low(Byte/to_nat(k)), Bool/True/qed()));
+        let same = joined(h, k, proved(), proved());
         match Eq/subst((y: Byte) => Bool/Holds(Bool/not(h == y)), Eq/sym(same), differs)
         end
     end;
@@ -204,7 +198,7 @@ let spec(a: Bytes, b: Bytes, g: Nat) -> Found(a, b, g, parts(a, b, g)) =
             let inner = spec(t, r, g + 1);
             Eq/subst(
                 (y: Byte) => Found(0x[h, ..t], 0x[y, ..r], g, parts(t, r, g + 1)),
-                Eql/eq_of_eql(h, k, Bool/True/qed()),
+                proved(),
                 match parts(t, r, g + 1)
                 | same() => Eq/cong((z: Bytes) => 0x[h, ..z], inner)
                 | at(c) =>
@@ -245,11 +239,7 @@ let spec(a: Bytes, b: Bytes, g: Nat) -> Found(a, b, g, parts(a, b, g)) =
                                     (j, under) =>
                                         match j
                                         | 0 => Eq/refl()
-                                        | 1 =>
-                                            Eql/eq_of_eql(
-                                                high(Byte/to_nat(h)),
-                                                high(Byte/to_nat(k)),
-                                                Bool/True/qed())
+                                        | 1 => proved()
                                         | _ + 2 => match under end
                                         end,
                                 differs = low_differs(h, k, Bool/True/qed(), Bool/True/qed()) }) }

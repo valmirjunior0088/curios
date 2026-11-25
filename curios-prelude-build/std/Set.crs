@@ -8,7 +8,7 @@ pub use has/{let has};
 pub mod to_list;
 pub use to_list/{let to_list};
 
-use /std/{Nat, List, Map, Eq, Show, Spell, Fmt};
+use /std/{Nat, List, Map, Eq, Show, Spell, Fmt, proved};
 use /std/ops/{Eql};
 
 --- A set of keys: a map from them to nothing.
@@ -65,7 +65,7 @@ satisfy (@K: Type, use Map/Key(K)) => Eql(Set(K)) {
         ) -> Eq(@Set(K))(Set { map = m1 }, Set { map = m2 }) =
             let refl() = map;
             Eq/refl();
-        fields(a.map, b.map, Eql/eq_of_eql(a.map, b.map, h)),
+        fields(a.map, b.map, proved()),
     refl(a) = Eql/refl(a.map),
 }
 
