@@ -2,7 +2,7 @@
 //!
 //! Two measurements of what a combinator web can drive a compilation to spend: how a case refinement is keyed and what an index inversion reduces, and how a reified closure is shared — the CPS fixpoint's cost is `tests::instrumented::fixpoint`'s. They are kept in code rather than prose because a figure taken by a throwaway script does not survive being re-measured.
 //!
-//! None asserts. A measurement that fails is a measurement with an opinion, and what these report is a cost, not a contract — see `curios-prelude`'s `stored_prelude_measurements`, whose shape this follows.
+//! None asserts. A measurement that fails is a measurement with an opinion, and what these read is a cost, not a contract.
 
 use {
     super::test_support::*,
@@ -10,7 +10,11 @@ use {
     curios_module::RootSource,
     curios_pipeline::{compile_with_prelude, test_support::*},
     curios_surface::Entrypoint,
-    std::{fmt::Write, time::Instant},
+    std::{
+        fmt::Write,
+        time::{Duration, Instant},
+    },
+    xbench::{Unit, read, read_elapsed, turn},
 };
 
 /// Where a rule's inner combinator applications sit. The grammar is identical in all four; only where the applications are written moves.
@@ -238,25 +242,21 @@ fn conjunctions(rules: usize) -> String {
 }
 
 /// Compile for its verdict and its wall clock alone.
-fn compile_only(source: &str) -> (Result<(), String>, f64) {
+fn compile_only(source: &str) -> (Result<(), String>, Duration) {
     let entrypoint = source.parse::<Entrypoint>().expect("probe parses");
     let start = Instant::now();
     let outcome = compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
         .map(|_| ())
         .map_err(|error| error.to_string());
 
-    (outcome, start.elapsed().as_secs_f64())
+    (outcome, start.elapsed())
 }
 
 /// What a combinator application costs when it is written inside a `!` continuation rather than at item level.
 ///
 /// # How to take it
 ///
-/// ```sh
-/// cargo test --release --package curios --lib -- --ignored --nocapture combinator_sharing_measurements
-/// ```
-///
-/// Release only. The wall clocks are dominated by `curios_cps::optimize`, which a debug build prices differently; the *counts* are deterministic and hold in either profile.
+/// `cargo xbench measure combinator_sharing_measurements` takes it: `<spelling> at <rules>`, a compile's time through the ANF optimizer, every spelling at every size turned round-robin three times after an untimed round, with `/chain copies`, the copies of `Parse/chain`, and `/functions`, the functions it emits. The wall clocks are dominated by `curios_cps::optimize`; the counts are deterministic.
 ///
 /// # What it last printed
 ///
@@ -289,27 +289,50 @@ fn compile_only(source: &str) -> (Result<(), String>, f64) {
 ///
 /// **The allocation counts agree to 102 in 5.8 million**, which says more than the wall clocks: the fixpoint does the same work on either spelling's module. `evaluate_closed_terms`, the pass this measurement is about, is never the cost; what it *produces* can be, because the fixpoint below it prices the module it is handed — `tests::instrumented::fixpoint` carries that measurement.
 #[test]
-#[ignore = "measurement, mixed: reports what a spelling costs rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn combinator_sharing_measurements() {
-    println!("rules  inner            chain copies functions  compile");
-    for inner in [Inner::None, Inner::InBlock, Inner::Hoisted] {
-        let label = match inner {
-            Inner::None => "none",
-            Inner::InBlock => "in a continuation",
-            Inner::Hoisted => "hoisted to items",
-        };
+    let mut spellings = Vec::new();
+    for (inner, label) in [
+        (Inner::None, "none"),
+        (Inner::InBlock, "in a continuation"),
+        (Inner::Hoisted, "hoisted to items"),
+    ] {
         for rules in [2usize, 4, 8, 12, 16] {
-            let source = grammar(rules, inner);
-            let start = Instant::now();
-            let module = anf_optm(&source);
-            let elapsed = start.elapsed().as_secs_f64();
-            println!(
-                "{rules:<6} {label:<16} {:<12} {:<10} {elapsed:.2} s",
-                copies(&module, SEQUENCED),
-                emitted(&module),
-            );
+            spellings.push((
+                format!("{label} at {rules}"),
+                rules as u64,
+                grammar(rules, inner),
+            ));
         }
     }
+
+    let mut compiles = spellings
+        .iter()
+        .map(|(name, rules, source)| {
+            move || {
+                let start = Instant::now();
+                let module = anf_optm(source);
+                read_elapsed(name, Some(*rules), start.elapsed());
+                read(
+                    &format!("{name}/chain copies"),
+                    Unit::Count,
+                    Some(*rules),
+                    copies(&module, SEQUENCED) as u64,
+                );
+                read(
+                    &format!("{name}/functions"),
+                    Unit::Count,
+                    Some(*rules),
+                    emitted(&module) as u64,
+                );
+            }
+        })
+        .collect::<Vec<_>>();
+    let mut turned = compiles
+        .iter_mut()
+        .map(|compile| compile as &mut dyn FnMut())
+        .collect::<Vec<_>>();
+    turn(3, &mut turned);
 }
 
 /// One door [`scrutinee_refinement_measurements`] times: whether each definition of its web names the one before it once or twice, how the web's value is consumed, and the program at a size.
@@ -323,9 +346,7 @@ struct Door {
 ///
 /// # How to take it
 ///
-/// ```sh
-/// cargo test --package curios --lib -- --ignored --nocapture scrutinee_refinement_measurements
-/// ```
+/// `cargo xbench measure scrutinee_refinement_measurements` takes it: `<named>, <consumed> at <definitions>`, a compile's time, every door at every size turned round-robin five times after an untimed round, and `/outcome/<outcome>`, a figure of one, `compiled` or the first line of the refusal.
 ///
 /// # What it last printed
 ///
@@ -346,9 +367,8 @@ struct Door {
 ///
 /// The programs end in a plain `/std/print("ok")` rather than a runtime-tainted parse, so these wall clocks are the two checkers and nothing downstream of them.
 #[test]
-#[ignore = "measurement, timed: reports what a scrutinee costs rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn scrutinee_refinement_measurements() {
-    const ROUNDS: usize = 5;
     const SIZES: [usize; 6] = [8, 10, 12, 13, 14, 20];
 
     let doors = [
@@ -385,47 +405,42 @@ fn scrutinee_refinement_measurements() {
         },
     ];
 
-    let mut taken = vec![vec![Vec::new(); SIZES.len()]; doors.len()];
-    let mut verdicts = vec![vec![String::new(); SIZES.len()]; doors.len()];
-    for _ in 0..ROUNDS {
-        // A round over every door and size, so a disturbance during the sitting reaches each alike.
-        for (door, Door { program, .. }) in doors.iter().enumerate() {
-            for (index, &rules) in SIZES.iter().enumerate() {
-                let (outcome, elapsed) = compile_only(&program(rules));
+    let mut compiles = doors
+        .iter()
+        .flat_map(|door| SIZES.map(|rules| (door, rules)))
+        .map(
+            |(
+                Door {
+                    named,
+                    consumed,
+                    program,
+                },
+                rules,
+            )| {
+                move || {
+                    let name = format!("{named}, {consumed} at {rules}");
+                    let (outcome, elapsed) = compile_only(&program(rules));
+                    read_elapsed(&name, Some(rules as u64), elapsed);
 
-                taken[door][index].push(elapsed);
-                verdicts[door][index] = match &outcome {
-                    Ok(()) => "compiled".to_string(),
-                    Err(error) => error.lines().next().unwrap_or("refused").to_string(),
-                };
-            }
-        }
-    }
-
-    println!("{ROUNDS} rounds, interleaved; median and span of each row's rounds");
-    println!(
-        "{:<12} {:<7} {:<20} {:<24} outcome",
-        "definitions", "named", "consumed", "compile"
-    );
-    for (
-        door,
-        Door {
-            named, consumed, ..
-        },
-    ) in doors.iter().enumerate()
-    {
-        for (index, rules) in SIZES.iter().enumerate() {
-            let mut times = taken[door][index].clone();
-            times.sort_by(f64::total_cmp);
-            let middle = times[times.len() / 2];
-            let (least, most) = (times[0], times[times.len() - 1]);
-
-            println!(
-                "{rules:<12} {named:<7} {consumed:<20} {middle:.2} s [{least:.2}-{most:.2}]    {}",
-                verdicts[door][index]
-            );
-        }
-    }
+                    let ended = match &outcome {
+                        Ok(()) => "compiled",
+                        Err(error) => error.lines().next().unwrap_or("refused"),
+                    };
+                    read(
+                        &format!("{name}/outcome/{ended}"),
+                        Unit::Count,
+                        Some(rules as u64),
+                        1,
+                    );
+                }
+            },
+        )
+        .collect::<Vec<_>>();
+    let mut turned = compiles
+        .iter_mut()
+        .map(|compile| compile as &mut dyn FnMut())
+        .collect::<Vec<_>>();
+    turn(5, &mut turned);
 }
 
 /// The [`predicates`] web carried over `Nat` — `+` for `both`, `*` for `anyof`, remainders for the leaves — and proved at `Eq()(top(n), 0)`. Each rule names the one before it twice, as the `twice` arm of [`predicates`] does.

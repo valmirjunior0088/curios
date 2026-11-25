@@ -18,6 +18,7 @@ use {
     curios_pipeline::test_support::*,
     curios_surface::Entrypoint,
     std::time::{Duration, Instant},
+    xbench::{Unit, read, read_elapsed, turn},
 };
 
 /// The bound read off an opaque parameter: reduction stops at `b`, the guard refines it once and generically, and nothing is evaluated. The control the other two arms are read against, and the workaround `tests::runtime`'s accumulation measurement relies on.
@@ -155,11 +156,11 @@ fn certifier_floor(entrypoint: &Entrypoint) -> Result<u64, u64> {
     floor(|budget| recheck_with_prelude(&module, budget).is_empty())
 }
 
-/// Render a [`budget_floor`] outcome for the table.
-fn floor_cell(floor: Result<u64, u64>) -> String {
+/// Read a [`floor`] outcome as the figure `name` where a budget accepted, and as `<name> above`, the largest budget tried, where none did.
+fn read_floor(name: &str, size: u64, floor: Result<u64, u64>) {
     match floor {
-        Ok(steps) => format!("{steps}"),
-        Err(largest) => format!("> {largest}"),
+        Ok(budget) => read(name, Unit::Count, Some(size), budget),
+        Err(largest) => read(&format!("{name} above"), Unit::Count, Some(size), largest),
     }
 }
 
@@ -188,11 +189,7 @@ fn an_accumulated_sequence_is_bounded_when_a_window_is_taken_of_it() {
 
 /// What a type-level accumulation costs, divided three ways per carrier.
 ///
-/// ```sh
-/// cargo test --release --package curios -- --ignored --nocapture type_level_sequence_cost_measurements
-/// ```
-///
-/// It asserts nothing beyond each arm elaborating at all — a measurement that fails is a measurement with an opinion. What it does *not* cover is peak process memory, which no figure taken inside this process would be honest about: the allocator has already returned intermediates to the pool by the time a test could read a high-water mark. That half is taken from outside, with its command recorded below.
+/// `cargo xbench measure type_level_sequence_cost_measurements` takes it: `<carrier>/<arm> at <n>`, the time an arm's elaboration takes, every arm at every rung turned round-robin three times after an untimed round, so the excesses `fixed − opaque` and `growing − fixed` are differences of medians; and `<carrier>/floor fixed at <n>` and `<carrier>/floor growing at <n>`, the least power of two the compile path accepts each at. It asserts nothing beyond each arm elaborating at all — a measurement that fails is a measurement with an opinion. What it does *not* cover is peak process memory, which no figure taken inside this process would be honest about: the allocator has already returned intermediates to the pool by the time a test could read a high-water mark. That half is taken from outside, with its command recorded below.
 ///
 /// # What it last printed
 ///
@@ -224,7 +221,7 @@ fn an_accumulated_sequence_is_bounded_when_a_window_is_taken_of_it() {
 /// /usr/bin/time -l target/release/curios compile bytes_growing_6400.crs -o out
 /// ```
 #[test]
-#[ignore = "measurement, mixed: reports what a type-level accumulation costs rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn type_level_sequence_cost_measurements() {
     type Build = fn(usize) -> String;
     // Each carrier carries its own ladder, because one ladder cannot show both shapes: a packed byte copy is a `memcpy` and an element copy is a reference-count increment per element, so `List` reaches the same construction volume two orders of magnitude sooner. Both ladders stop where the default budget does — the floors below are linear in the iteration count, so the last rung of each is about the largest that still elaborates.
@@ -241,48 +238,40 @@ fn type_level_sequence_cost_measurements() {
         ),
     ];
 
+    let mut arms = Vec::new();
     for (carrier, ladder, [opaque, fixed, growing]) in carriers {
-        println!("\n{carrier}");
-        println!(
-            "    {:>6}  {:>9}  {:>9}  {:>9}  {:>13}  {:>13}  {:>12}  {:>12}",
-            "n",
-            "opaque",
-            "fixed",
-            "growing",
-            "fixed-opaque",
-            "growing-fixed",
-            "floor fixed",
-            "floor growing",
-        );
-
         for n in ladder {
-            // The three arms elaborate the same loop the same number of times, so the excesses below subtract everything they share: the prelude restore, backend and Wasm emission that the opaque arm is made of, under a tenth of a second once the process has compiled once, and then the transition machinery the fixed arm adds. What survives both subtractions is construction.
-            let (fixed_source, growing_source) = (fixed(n), growing(n));
-            let opaque_time = elaboration_time(&opaque(n));
-            let fixed_time = elaboration_time(&fixed_source);
-            let growing_time = elaboration_time(&growing_source);
-
-            println!(
-                "    {n:>6}  {:>9.1?}  {:>9.1?}  {:>9.1?}  {:>13.1?}  {:>13.1?}  {:>12}  {:>12}",
-                opaque_time,
-                fixed_time,
-                growing_time,
-                fixed_time.saturating_sub(opaque_time),
-                growing_time.saturating_sub(fixed_time),
-                floor_cell(budget_floor(&fixed_source)),
-                floor_cell(budget_floor(&growing_source)),
+            read_floor(
+                &format!("{carrier}/floor fixed at {n}"),
+                n as u64,
+                budget_floor(&fixed(n)),
             );
+            read_floor(
+                &format!("{carrier}/floor growing at {n}"),
+                n as u64,
+                budget_floor(&growing(n)),
+            );
+            // The three arms elaborate the same loop the same number of times, so the excesses subtract everything they share: the prelude restore, backend and Wasm emission that the opaque arm is made of, and then the transition machinery the fixed arm adds. What survives both subtractions is construction.
+            for (arm, build) in [("opaque", opaque), ("fixed", fixed), ("growing", growing)] {
+                arms.push((format!("{carrier}/{arm} at {n}"), n as u64, build(n)));
+            }
         }
     }
+
+    let mut elaborations = arms
+        .iter()
+        .map(|(name, n, source)| move || read_elapsed(name, Some(*n), elaboration_time(source)))
+        .collect::<Vec<_>>();
+    let mut turned = elaborations
+        .iter_mut()
+        .map(|elaboration| elaboration as &mut dyn FnMut())
+        .collect::<Vec<_>>();
+    turn(3, &mut turned);
 }
 
 /// What the certifier charges for a memo hit, read off the budget it forces.
 ///
-/// ```sh
-/// cargo test --release --package curios -- --ignored --nocapture certifier_memo_charge_measurements
-/// ```
-///
-/// The two floors are the same program put to the two checkers separately, at a budget swept independently for each: [`elaborator_floor`] does not ask the certifier, and [`certifier_floor`] re-certifies a module elaboration already produced. Their ratio is the quantity of interest. Both checkers reduce the same terms and neither is the reference implementation of the other, so a *small* divergence is expected and says only that two evaluators differ; a large one says the two are pricing differently, and the compile path takes the larger of the two, so it is the certifier's number a user meets.
+/// `cargo xbench measure certifier_memo_charge_measurements` takes it: `<carrier>/floor elaborator at <n>` and `<carrier>/floor certifier at <n>`. The two floors are the same program put to the two checkers separately, at a budget swept independently for each: [`elaborator_floor`] does not ask the certifier, and [`certifier_floor`] re-certifies a module elaboration already produced. Their ratio is the quantity of interest. Both checkers reduce the same terms and neither is the reference implementation of the other, so a *small* divergence is expected and says only that two evaluators differ; a large one says the two are pricing differently, and the compile path takes the larger of the two, so it is the certifier's number a user meets.
 ///
 /// It asserts nothing beyond each arm elaborating at all — a measurement that fails is a measurement with an opinion.
 ///
@@ -310,7 +299,7 @@ fn type_level_sequence_cost_measurements() {
 ///
 /// **A memo hit is free in both checkers.** A certifier charging a hit the whole recorded cost of the computation it replaced would refuse for exhaustion programs the elaborator accepts within its budget — and since the compile path puts one budget to both and meets the larger, that refusal is what a user would meet, with no disagreement about any rule.
 #[test]
-#[ignore = "measurement, counted: reports what a memo hit costs the certifier rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn certifier_memo_charge_measurements() {
     type Build = fn(usize) -> String;
     let carriers: [(&str, [usize; 4], Build); 2] = [
@@ -319,25 +308,17 @@ fn certifier_memo_charge_measurements() {
     ];
 
     for (carrier, ladder, growing) in carriers {
-        println!("\n{carrier}");
-        println!(
-            "    {:>6}  {:>16}  {:>12}  {:>10}",
-            "n", "floor elaborator", "floor certifier", "divergence",
-        );
-
         for n in ladder {
             let entrypoint = growing(n).parse::<Entrypoint>().expect("the arm parses");
-            let elaborator = elaborator_floor(&entrypoint);
-            let certifier = certifier_floor(&entrypoint);
-            let divergence = match (elaborator, certifier) {
-                (Ok(elaborator), Ok(certifier)) => format!("{}x", certifier / elaborator),
-                _ => "—".to_string(),
-            };
-
-            println!(
-                "    {n:>6}  {:>16}  {:>12}  {divergence:>10}",
-                floor_cell(elaborator),
-                floor_cell(certifier),
+            read_floor(
+                &format!("{carrier}/floor elaborator at {n}"),
+                n as u64,
+                elaborator_floor(&entrypoint),
+            );
+            read_floor(
+                &format!("{carrier}/floor certifier at {n}"),
+                n as u64,
+                certifier_floor(&entrypoint),
             );
         }
     }
@@ -402,24 +383,23 @@ fn declaration_cost(source: &str) -> (Consumption, Consumption) {
     (elaborator, heaviest)
 }
 
-/// One row of the table below: what a program cost each checker, split into depth and everything else.
-fn cost_row(label: &str, source: &str) {
+/// Read what `source` cost each checker as the figures of `label`, at `size` where it is taken at one, split into depth and everything else: `<label>/<checker>/units`, `/depth` and `/other`, for the elaborator and the certifier.
+fn read_cost(label: &str, size: Option<u64>, source: &str) {
     let (elaborator, certifier) = declaration_cost(source);
-    let divergence = match elaborator.units() {
-        0 => 0.0,
-        units => certifier.units() as f64 / units as f64,
-    };
-
-    println!(
-        "  {label:<22}  {:>10}  {:>6}  {:>9}  {:>10}  {:>6}  {:>9}  {:>6.1}x",
-        elaborator.units(),
-        elaborator.peak_depth(),
-        elaborator.other_units(),
-        certifier.units(),
-        certifier.peak_depth(),
-        certifier.other_units(),
-        divergence,
-    );
+    for (checker, consumed) in [("elaborator", elaborator), ("certifier", certifier)] {
+        for (figure, value) in [
+            ("units", consumed.units()),
+            ("depth", consumed.peak_depth() as u64),
+            ("other", consumed.other_units()),
+        ] {
+            read(
+                &format!("{label}/{checker}/{figure}"),
+                Unit::Count,
+                size,
+                value,
+            );
+        }
+    }
 }
 
 /// A literal folded at the type level is folded once however many types mention it. Its certificate, `True/qed()`, has no universe to instantiate, so every mention is one term to the reduction cache; a certificate instantiated at a fresh level per mention would make the four mentions here four keys and four full folds.
@@ -518,11 +498,7 @@ fn an_items_verdict_is_the_same_compiled_alone_and_after_its_neighbours() {
 
 /// What a `Str` literal costs to check, and which row of the price list it spends on.
 ///
-/// ```sh
-/// cargo test --release --package curios -- --ignored --nocapture str_literal_cost_measurements
-/// ```
-///
-/// This is the probe [`a_str_literal_costs_transitions_rather_than_frames`] guards. It asserts only that each arm checks at all — a measurement that fails is a measurement with an opinion — and the assertion that a regression has to trip lives in that ordinary test instead.
+/// `cargo xbench measure str_literal_cost_measurements` takes it, each row's figures as [`read_cost`] reads them. This is the probe [`a_str_literal_costs_transitions_rather_than_frames`] guards. It asserts only that each arm checks at all — a measurement that fails is a measurement with an opinion — and the assertion that a regression has to trip lives in that ordinary test instead.
 ///
 /// # What it last printed
 ///
@@ -550,28 +526,32 @@ fn an_items_verdict_is_the_same_compiled_alone_and_after_its_neighbours() {
 ///
 /// **The `Bytes` row is the control**: the same bytes with no proof over them cost each checker under 2 300 units, so a `Str` literal's units are its validity's.
 #[test]
-#[ignore = "measurement, counted: reports what a Str literal costs rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn str_literal_cost_measurements() {
-    println!(
-        "\n  {:<22}  {:>10}  {:>6}  {:>9}  {:>10}  {:>6}  {:>9}  {:>7}",
-        "program", "units", "depth", "other", "units", "depth", "other", "certifier/elab",
-    );
-
     for n in [250, 500, 1000, 2000, 4000, 8000] {
-        cost_row(&format!("Str literal, n={n}"), &str_literal(n, 0));
+        read_cost(
+            &format!("Str literal at {n}"),
+            Some(n as u64),
+            &str_literal(n, 0),
+        );
     }
 
     // Flat in use count: a regression here is a literal checked once per mention.
     for uses in [1, 3] {
-        cost_row(&format!("Str n=500, {uses} uses"), &str_literal(500, uses));
+        read_cost(
+            &format!("Str literal at 500, {uses} uses"),
+            Some(500),
+            &str_literal(500, uses),
+        );
     }
 
     // The control: the same bytes with no proof over them.
-    cost_row("Bytes literal, n=500", &bytes_literal(500));
+    read_cost("Bytes literal at 500", Some(500), &bytes_literal(500));
 
     // A cut at a position decides its boundary by the one byte there, discharged by reduction, so this should sit within a few percent of the bare literal — the check is the cost, not the cut.
-    cost_row(
-        "Str n=500, cut",
+    read_cost(
+        "Str literal at 500, cut",
+        Some(500),
         &str_literal(500, 0).replace(
             r#"/std/print("ok")"#,
             r#"/std/print(Str/before(s, Str/At/of_offset(s, 10)))"#,
@@ -581,11 +561,7 @@ fn str_literal_cost_measurements() {
 
 /// What a web of combinator definitions costs each checker, and what consuming its value does to that.
 ///
-/// ```sh
-/// cargo test --release --package curios -- --ignored --nocapture combinator_web_cost_measurements
-/// ```
-///
-/// The third of the parity probes. [`str_literal_cost_measurements`] holds a proof fixed and divides one checker's cost; [`certifier_memo_charge_measurements`] divides the two checkers by budget floor; this one divides them on a program shape where they can part by an *exponent* without disagreeing about any rule — a scrutinee whose subject mentions a binder, which a checker reducing it once per arm to key its case refinement would pay for per definition in the web.
+/// `cargo xbench measure combinator_web_cost_measurements` takes it, `web at <n>, <consumption>`'s figures as [`read_cost`] reads them. The third of the parity probes. [`str_literal_cost_measurements`] holds a proof fixed and divides one checker's cost; [`certifier_memo_charge_measurements`] divides the two checkers by budget floor; this one divides them on a program shape where they can part by an *exponent* without disagreeing about any rule — a scrutinee whose subject mentions a binder, which a checker reducing it once per arm to key its case refinement would pay for per definition in the web.
 ///
 /// Three rows per size, differing only in what demands the web's value: nothing, a `match` at a binder, a `match` at a literal. The middle row is the one such keying would grow; the last is the control that says the trigger is the binder rather than the `match`.
 ///
@@ -618,21 +594,17 @@ fn str_literal_cost_measurements() {
 ///
 /// **A `match` costs what applying does**, at a binder as at a literal, on both checkers: the web is closed, and the closed machine runs inside an arm as it does outside one, since no equation answers a term that names no local.
 #[test]
-#[ignore = "measurement, counted: reports what a combinator web costs each checker rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn combinator_web_cost_measurements() {
-    println!(
-        "\n  {:<22}  {:>10}  {:>6}  {:>9}  {:>10}  {:>6}  {:>9}  {:>7}",
-        "program", "units", "depth", "other", "units", "depth", "other", "certifier/elab",
-    );
-
     for rules in [8usize, 12, 13, 14, 20] {
         for (consumed, label) in [
             (Consumed::Applied, "applied"),
             (Consumed::Scrutinized, "scrutinized"),
             (Consumed::ScrutinizedClosed, "closed"),
         ] {
-            cost_row(
-                &format!("web n={rules}, {label}"),
+            read_cost(
+                &format!("web at {rules}, {label}"),
+                Some(rules as u64),
                 &predicates(rules, consumed, true),
             );
         }
@@ -1113,11 +1085,7 @@ fn primitive_claim(carrier: &str, parser: &str, input: &str, left: usize) -> Str
 
 /// What each primitive of `/std/Parse/str` costs each checker beside its twin in `/std/Parse/bytes`, over 32 letters: a text primitive steps by a character and hands on a position that is a boundary of valid text, where its twin steps by a byte.
 ///
-/// ```sh
-/// cargo test --package curios -- --ignored --nocapture parse_primitive_measurements
-/// ```
-///
-/// Counted, so a reading transports between machines. A change to `/std/Parse`, to `/std/Str/At` or to what the closed machine evaluates retakes it.
+/// `cargo xbench measure parse_primitive_measurements` takes it, each primitive's figures `<primitive>/text` and its twin's `<primitive>/bytes` as [`read_cost`] reads them. Counted, so a reading transports between machines. A change to `/std/Parse`, to `/std/Str/At` or to what the closed machine evaluates retakes it.
 ///
 /// # What it last printed
 ///
@@ -1136,7 +1104,7 @@ fn primitive_claim(carrier: &str, parser: &str, input: &str, left: usize) -> Str
 ///
 /// **A text primitive that is a walk costs about what its twin does**: `take_while` reads the bytes it walks, a character whole at its lead byte, and costs 1.3 times its twin, and `literal` compares the piece's bytes at once where its twin compares them a byte at a time, and costs under half. **A parser run a character at a time costs under twice its twin**, `char`, `char_if` and `expect` through `times`, each step building the position it hands on. `rest` cuts once and reads nothing.
 #[test]
-#[ignore = "measurement, counted: reports what each parser primitive costs over text and over bytes rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn parse_primitive_measurements() {
     let letters = "a".repeat(32);
     let text = format!("\"{letters}\"");
@@ -1175,41 +1143,29 @@ fn parse_primitive_measurements() {
         ("until", "Parse/str/until(\"b\")".to_string(), None),
     ];
 
-    println!(
-        "\n  {:<18}  {:>10}  {:>10}  {:>10}  {:>10}",
-        "primitive", "text elab", "certifier", "bytes elab", "certifier"
-    );
     for (label, over_text, over_bytes) in rows {
         let (input, left) = match label {
             "until" => (format!("\"{letters}b\""), 1),
             _ => (text.clone(), 0),
         };
-        let (elaborator, certifier) =
-            declaration_cost(&primitive_claim("Str", &over_text, &input, left));
-        let twin = over_bytes
-            .map(|parser| declaration_cost(&primitive_claim("Bytes", &parser, &bytes, 0)))
-            .map_or_else(
-                || format!("{:>10}  {:>10}", "", ""),
-                |(elaborator, certifier)| {
-                    format!("{:>10}  {:>10}", elaborator.units(), certifier.units())
-                },
-            );
-
-        println!(
-            "  {label:<18}  {:>10}  {:>10}  {twin}",
-            elaborator.units(),
-            certifier.units(),
+        read_cost(
+            &format!("{label}/text"),
+            None,
+            &primitive_claim("Str", &over_text, &input, left),
         );
+        if let Some(parser) = over_bytes {
+            read_cost(
+                &format!("{label}/bytes"),
+                None,
+                &primitive_claim("Bytes", &parser, &bytes, 0),
+            );
+        }
     }
 }
 
 /// What each claim of the type-level benchmark set costs each checker: an equality a type states and `Eq/refl()` proves, so that checking the program is reducing the claim's left side to its right. Six take a `Str` apart, one reads a `Flt`, one searches a `Str` and maps the position found.
 ///
-/// ```sh
-/// cargo test --package curios -- --ignored --nocapture type_level_claim_measurements
-/// ```
-///
-/// Counted, so a reading transports between machines. A change to how a `Str` or a `Flt` is read at the type level retakes it and accounts for each row that moved. Each checker reports its heaviest declaration, and a program that states no claim reads under 2 300 units ([`str_literal_cost_measurements`]'s `Bytes` row), so each row is its claim's.
+/// `cargo xbench measure type_level_claim_measurements` takes it, each claim's figures as [`read_cost`] reads them. Counted, so a reading transports between machines. A change to how a `Str` or a `Flt` is read at the type level retakes it and accounts for each row that moved. Each checker reports its heaviest declaration, and a program that states no claim reads under 2 300 units ([`str_literal_cost_measurements`]'s `Bytes` row), so each row is its claim's.
 ///
 /// # What it last printed
 ///
@@ -1233,7 +1189,7 @@ fn parse_primitive_measurements() {
 ///
 /// **`Flt/of_str` is a grammar run**: reading `"-Infinity"` runs the reader's `Parse(Str, Flt)` grammar over nine characters, so its row is what the grammar costs each checker.
 #[test]
-#[ignore = "measurement, counted: reports what each type-level claim costs rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn type_level_claim_measurements() {
     let claims = [
         (
@@ -1270,13 +1226,10 @@ fn type_level_claim_measurements() {
         ),
     ];
 
-    println!(
-        "\n  {:<22}  {:>10}  {:>6}  {:>9}  {:>10}  {:>6}  {:>9}  {:>7}",
-        "claim", "units", "depth", "other", "units", "depth", "other", "certifier/elab",
-    );
     for (label, left, right) in claims {
-        cost_row(
+        read_cost(
             label,
+            None,
             &fill!(
                 "use /std/{Str, Option, Eq, Nat, Flt, List};\n\nlet _claim: Eq()(${left}, ${right}) = Eq/refl();\n\n/std/print(\"ok\")\n",
                 left,
