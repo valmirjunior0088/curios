@@ -22,7 +22,6 @@ libc = { version = "0.2.186", default-features = false }
 
 # Perfetto's schema fetched and checked as every pinned file is, parsed without a `protoc`, and the messages the recorder uses generated from it.
 [build-dependencies]
-curios-download = { workspace = true }
 prost-build = { version = "0.14.6" }
 prost-types = { version = "0.14.6" }
 protox = { version = "0.9.1" }

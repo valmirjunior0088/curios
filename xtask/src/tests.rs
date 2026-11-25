@@ -10,6 +10,7 @@ const LOCK: &str = include_str!("../../Cargo.lock");
 
 /// `curios-profile`'s build script, which names the Perfetto release it takes the trace schema at.
 const PROFILE_BUILD: &str = include_str!("../../curios-profile/build.rs");
+const UNICODE_BUILD: &str = include_str!("../../curios-unicode/build.rs");
 
 fn tree() -> Tree {
     Tree::read().unwrap()
@@ -146,4 +147,29 @@ fn the_trace_reader_is_fetched_at_the_schema_s_release() {
         .expect("curios-profile's build script names the release it takes the schema at");
 
     assert_eq!(version_of(&tree(), "tools.trace_processor_shell"), release);
+}
+
+/// A crate's build names the version of the data it reads, which names the directory it finds it in, so the version the task files pin data at is the one that crate's build script names: a bump of either fails here until the other follows, rather than at a build that finds nothing kept.
+#[test]
+fn data_a_crate_s_build_reads_is_pinned_at_the_version_the_build_names() {
+    let tree = tree();
+    for (data, script, constant) in [
+        ("unicode", UNICODE_BUILD, "VERSION"),
+        ("perfetto", PROFILE_BUILD, "REVISION"),
+    ] {
+        let named = script
+            .lines()
+            .find_map(|line| {
+                line.strip_prefix(&format!("const {constant}: &str = \""))?
+                    .strip_suffix("\";")
+            })
+            .unwrap_or_else(|| panic!("the build script of `{data}`'s reader names `{constant}`"));
+        let pinned = &tree.data[&vec!["data".to_string(), data.to_string()]];
+
+        assert_eq!(pinned.version, named, "`data.{data}`");
+        assert!(
+            pinned.beside.is_some(),
+            "`data.{data}` is kept beside its reader"
+        );
+    }
 }

@@ -104,6 +104,14 @@ files = [
 sha256 = "7527bb5f3bc83f49dd14fb3d899584c93a5737dc07ecb2c9875b6aa4e15e19ff"
 beside = "curios-unicode"
 
+# Perfetto's trace schema, the merged description `curios-profile`'s build generates the recorder's messages from, at the release of the `trace_processor_shell` above, which a test holds it to.
+[data.perfetto]
+version = "v58.2"
+url = "https://raw.githubusercontent.com/google/perfetto/{.data.perfetto.version}/protos/perfetto/trace"
+files = ["perfetto_trace.proto"]
+sha256 = "9568b9df11c8c9da8f0e764bc35de0c7294216bf6a35e9527d10d81e97d08e01"
+beside = "curios-profile"
+
 
 [handoff]
 description = "Run every check the handoff holds work to: each subject's steps, each after what it requires and consumes"

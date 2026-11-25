@@ -1,9 +1,8 @@
-//! Fetches the pinned Perfetto trace schema and generates the messages the recorder writes and reads.
+//! Reads the Perfetto trace schema the task files pin and generates the messages the recorder writes and reads.
 //!
-//! The merged `perfetto_trace.proto` is kept in `.artifacts/<revision>/` beside this crate, outside Cargo's target tree, checked against its pinned SHA-256 whether downloaded or placed there by hand (`curios-download`). `protox` parses it, the descriptor is pruned to the messages, fields and enums [`KEPT`] names, and `prost-build` writes them into `OUT_DIR`, where `src/perfetto.rs` includes them: the schema is Perfetto's, and this crate states only which of it it uses.
+//! The merged `perfetto_trace.proto` is kept in `.artifacts/perfetto-<revision>/` beside this crate, outside Cargo's target tree: `cargo xtask` fetches it there at the digest `xtask/tasks.toml` pins, `[data.perfetto]`, before the first step of any run, and this script reads what is kept and fetches nothing. `protox` parses it, the descriptor is pruned to the messages, fields and enums [`KEPT`] names, and `prost-build` writes them into `OUT_DIR`, where `src/perfetto.rs` includes them: the schema is Perfetto's, and this crate states only which of it it uses.
 
 use {
-    curios_download::Download,
     prost_types::{DescriptorProto, FileDescriptorSet},
     std::{
         collections::BTreeSet,
@@ -12,10 +11,8 @@ use {
     },
 };
 
-/// The Perfetto release the schema is taken at: the one whose `trace_processor_shell` Perfetto's own v59.1 tooling pins.
+/// The Perfetto release the schema is taken at, which names the directory it is kept in: the one whose `trace_processor_shell` Perfetto's own v59.1 tooling pins, and the version `xtask/tasks.toml` pins the schema at, where a build that names another finds nothing kept.
 const REVISION: &str = "v58.2";
-
-const SHA256: &str = "fc2a7f7a6836b85751468b1dd23d06bef4562f791915008ae915feee4e6868e8";
 
 /// The package every message of the schema is declared in.
 const PACKAGE: &str = "perfetto.protos";
@@ -174,21 +171,17 @@ const KEPT: &[Kept] = &[
 fn main() {
     let manifest =
         PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("cargo sets the manifest directory"));
-    let directory = manifest.join(".artifacts").join(REVISION);
+    let directory = manifest
+        .join(".artifacts")
+        .join(format!("perfetto-{REVISION}"));
     let place = directory.join("perfetto_trace.proto");
-    let url = format!(
-        "https://raw.githubusercontent.com/google/perfetto/{REVISION}/protos/perfetto/trace/perfetto_trace.proto"
-    );
-    Download {
-        what: "the Perfetto trace schema curios-profile's messages are generated from",
-        url: &url,
-        sha256: SHA256,
-        place: &place,
-    }
-    .kept()
-    .unwrap_or_else(|unobtained| panic!("{unobtained}"));
-    // The schema sits outside Cargo's target tree, so nothing else tells Cargo when it goes away.
+    // The schema sits outside Cargo's target tree, so nothing else tells Cargo when it goes away or arrives.
     println!("cargo::rerun-if-changed={}", place.display());
+    assert!(
+        place.is_file(),
+        "the Perfetto trace schema is not kept at {}\n\nEvery `cargo xtask` run fetches it before its first step, at the release and the digest `xtask/tasks.toml` pins, and no build fetches: run `cargo xtask compiler launcher`, then build again. This crate reads release {REVISION}.",
+        place.display()
+    );
 
     let parsed = protox::compile([&place], [&directory])
         .unwrap_or_else(|error| panic!("parse {}: {error}", place.display()));

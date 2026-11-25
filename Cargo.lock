@@ -964,7 +964,6 @@ name = "curios-profile"
 version = "0.16.25"
 dependencies = [
  "curios-common",
- "curios-download",
  "libc",
  "prost",
  "prost-build",
