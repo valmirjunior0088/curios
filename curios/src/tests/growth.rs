@@ -2,7 +2,7 @@
 //!
 //! A growth is an ordinary program written along one axis an author grows: longer, wider, deeper, under more binders, or holding a larger literal. Doubling one should at most double what each stage does, and change no verdict, which is `documentation/design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md`'s rule; that its depth costs only memory is `documentation/design/compilation/depth-is-bought-with-stack-not-with-hand-rolled-frames.md`'s, and that its module validates at any size is `curios/src/compile.rs`'s.
 //!
-//! A growth that compiles past the size a stage once refused or never answered at is a fixture here; `growth_slopes`, among the instrumented tests, counts what each stage does at three sizes and holds the growths that are linear today to it.
+//! A growth that compiles past the size a stage once refused or never answered at is a fixture here; the bench's `growth_slopes` (`xbench/src/measurements/growth.rs`) counts what each stage does at three sizes and holds the growths that are linear today to it.
 
 use {
     crate::test_support::*,

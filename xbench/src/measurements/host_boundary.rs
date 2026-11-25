@@ -1,8 +1,8 @@
 //! Repeatable measurements of the host and guest boundary, with compilation and execution captured separately. The measurement below owns its workload settings and individual results.
 
 use {
-    super::test_support::*,
-    crate::{test_support::*, *},
+    super::*,
+    curios::{TALLIES, test_support::*},
     curios_native::{ForeignBindings, test_support::*},
     curios_profile::{Destination, fold, trace},
     std::{
@@ -59,7 +59,7 @@ fn assert_stream(io: &MockIo) {
 /// - **`stream_copy`:** 2,000 chunks of 256 bytes on standard input, copied to standard output through `Io/read` and `Io/write`, requiring the output to equal the input and no stderr. The scripted host answers `would_block` between chunks, so every chunk costs a read that blocks, a poll, a read that succeeds and a write.
 /// - **`tui`:** the bordered listing fixture `coordination.rs` measures beside this file, with the host and assertions the two share: reads, writes, polls and terminal-size queries through a whole session.
 ///
-/// `curios_profile::trace` listens during compilation and execution, writing one stream per sample into a timestamped directory under `curios/.artifacts/host_boundary/`. Each stream is read with `curios profile`. The `host_boundary_compile` span includes parsing, all compiler stages, Binaryen and Cranelift precompilation. The `host_boundary_run` span includes deserialization, instantiation and execution. Host setup, output assertions and folding are outside those spans. All span boundaries must close. The allocator counts while the trace listens, so each boundary of a stream carries what its thread had taken there and what the whole test process held, since counting began: a span is charged its own thread's allocations, and none of Wasmtime's, Binaryen's or Cranelift's threads'.
+/// `curios_profile::trace` listens during compilation and execution, writing one stream per sample into a timestamped directory under `xbench/.artifacts/host_boundary/`. Each stream is read with `curios profile`. The `host_boundary_compile` span includes parsing, all compiler stages, Binaryen and Cranelift precompilation. The `host_boundary_run` span includes deserialization, instantiation and execution. Host setup, output assertions and folding are outside those spans. All span boundaries must close. The allocator counts while the trace listens, so each boundary of a stream carries what its thread had taken there and what the whole test process held, since counting began: a span is charged its own thread's allocations, and none of Wasmtime's, Binaryen's or Cranelift's threads'.
 ///
 /// These are wall-clock timings under built-in tracing, with its overhead included.
 ///
@@ -97,9 +97,7 @@ fn assert_stream(io: &MockIo) {
 /// | `tui` | 7515.068 [7497.237–7585.840] | 60.534 [60.042–62.259] |
 ///
 /// All 18 captures pass the behavior and closed-span assertions; each workload produces the same output length in every sample. The Tui assertions include terminal restoration and all three screen clears.
-#[test]
-#[ignore = "measurement: taken by cargo xbench measure"]
-fn host_boundary_measurements() {
+pub fn host_boundary_measurements() {
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -115,7 +113,7 @@ fn host_boundary_measurements() {
         sampled(
             &directory,
             "monad_io",
-            include_str!("../../../../programs/monad_io.crs"),
+            include_str!("../../../programs/monad_io.crs"),
             monads,
         );
         monads += 1;

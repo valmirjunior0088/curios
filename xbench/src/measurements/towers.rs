@@ -1,7 +1,7 @@
 //! What each tower costs each checker, counted.
 
 use {
-    crate::test_support::*,
+    curios::test_support::*,
     curios_core::looks,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
@@ -129,9 +129,7 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
 /// | bounded | 16 | 56 358 | 232 501 | 56 298 | 150 467 |
 ///
 /// **No row multiplies.** A tower a checker walked once per path would read sixteen times the looks at sixteen lines that it reads at twelve, where a walk that visits each node once reads at most a third more. Every row but one reads under 27 per cent more, the most the arms in the certifier, 12 832 looks and then 16 228. The bounded tower, whose proof folds comparisons over every line, reads 166 311 and then 232 501 in the elaborator and 104 747 and then 150 467 in the certifier: more than its lines add, though far short of what a walk per path reads: its proof reduces each line's comparison over the lines before it, a square its units charge in step with what it costs, which is reduction's (`documentation/design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md`). A row's units are its heaviest declaration's: they stand still across the two heights in every row but four, and in those move by under forty for the aliases, the arrows and the two towers, and by 13 452 in the elaborator and 13 352 in the certifier for the bounded tower, whose proof reduces each line's comparison.
-#[test]
-#[ignore = "measurement: taken by cargo xbench measure"]
-fn tower_measurements() {
+pub fn tower_measurements() {
     let shapes = [
         ("chain", Shape::Chain(Stands::Function)),
         ("chain, in a member", Shape::Chain(Stands::Member)),

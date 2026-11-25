@@ -1,7 +1,7 @@
 //! What each runaway costs at a budget and at twice it, counted.
 
 use {
-    crate::{test_support::*, *},
+    curios::{TALLIES, test_support::*},
     curios_module::RootSource,
     curios_pipeline::compile_with_prelude,
     curios_profile::{Destination, Profile, fold_at, trace},
@@ -91,7 +91,7 @@ fn cost(budget: u64, source: &str, stream: &Path) -> Cost {
 
 /// What every runaway costs each checker at two budgets.
 ///
-/// `cargo xbench measure runaway_measurements` takes it, in release. Counted, so the figures hold on any machine. Units are what a checker's heaviest judgment of the program spent of its budget, and looks how many times a term handed out its node while it was judged (`curios_core::looks`), both read off the stream the compilation files, kept under `curios/.artifacts/runaways/`. The verdict is the compilation's, a figure `<runaway> at <budget>/verdict/<verdict>` of one: `apart` for a mismatch, `budget` where the elaborator's budget ended it, `certifier` where the elaborator accepted and the certifier refused, `accepted` where both held it. The certifier judges a program only where the elaborator accepted it, and files what a judgment cost it where it begins the next, which a refused one never reaches.
+/// `cargo xbench measure runaway_measurements` takes it, in release. Counted, so the figures hold on any machine. Units are what a checker's heaviest judgment of the program spent of its budget, and looks how many times a term handed out its node while it was judged (`curios_core::looks`), both read off the stream the compilation files, kept under `xbench/.artifacts/runaways/`. The verdict is the compilation's, a figure `<runaway> at <budget>/verdict/<verdict>` of one: `apart` for a mismatch, `budget` where the elaborator's budget ended it, `certifier` where the elaborator accepted and the certifier refused, `accepted` where both held it. The certifier judges a program only where the elaborator accepted it, and files what a judgment cost it where it begins the next, which a refused one never reaches.
 ///
 /// **What to read.** A row the budget ends spends the whole of it, and its looks say what a unit bought: looks that double with the budget buy the same for every unit, and looks that more than double buy more the longer the row runs, which is a place a unit is not yet a bound. A row answered inside the smaller budget reads the same at both, and one answered inside the larger alone reads there what its answer cost.
 ///
@@ -129,9 +129,7 @@ fn cost(budget: u64, source: &str, stream: &Path) -> Cost {
 /// **Seven rows read under three nodes a unit at either budget, and five read three or more: the spin, the classes, the image by the time it answers, the stacks and the walk.** The plain recursion reads 4.1 at either budget. The four pairs of calls whose unfolding meets them again are told apart at about one node a unit, and the recursions held by both checkers are held in what their program's definitions cost to elaborate. The product pays a square of its steps and reads one and a half nodes a unit, and the image 2.4 where its budget ends it and 3.1 by the time it answers.
 ///
 /// The classes read three nodes a unit and answer inside the smaller budget: every fold asks again which of its atoms are one, a question a unit at least, and one the elaborator has answered since it last wrote is answered for that unit alone (`same_uncommitted_inside`, `curios-elab/src/convert.rs`), so a unit buys a comparison only where the question is new. The stacks cost the elaborator its 44 294 units at near eight nodes each and the certifier 20 740 at twenty-two, and both checkers hold them inside the smaller budget. The walk costs the elaborator 108 224 units at near six nodes each and the certifier 44 196 at eleven, which reduces its claim a step of the recursion at a time, and the rounds cost the certifier 3 485 at one. A row's looks a unit count what its units buy and what readers that charge nothing read beside them, a key consed to a table's canonical node among them, so they move with those readers where the units stand still.
-#[test]
-#[ignore = "measurement: taken by cargo xbench measure"]
-fn runaway_measurements() {
+pub fn runaway_measurements() {
     let rows = [
         ("spin", Runaway::Spin, 25_000),
         ("sums", Runaway::Sums, 25_000),

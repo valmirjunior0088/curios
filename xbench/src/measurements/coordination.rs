@@ -1,8 +1,8 @@
 //! Repeatable measurements of guest coordination, with compilation and execution captured separately. The measurement below owns its workload settings and individual results.
 
 use {
-    super::test_support::*,
-    crate::{test_support::*, *},
+    super::*,
+    curios::{TALLIES, test_support::*},
     curios_native::{ForeignBindings, test_support::*},
     curios_profile::{Destination, fold, trace},
     std::{
@@ -23,9 +23,9 @@ use {
 /// `cargo xbench measure coordination_measurements` takes it, a group an invocation: an untimed round of each workload, then five rounds, the workloads turned round-robin. Each sample compiles the source afresh against the embedded prelude and executes it once with a fresh scripted host. There is no package-cache lookup. Rust compilation and prelude construction finish before the measurement starts and are excluded. Its figures are `<workload>/compile` and `<workload>/run`, each its span's time, and `<workload>/output`, the bytes the workload wrote.
 ///
 /// - **`monad_suspend`:** the existing `programs/monad_suspend.crs` corpus program, with the argument `10000`, requiring stdout `30000\n` and no stderr. This measures a suspension's path through the driver every combinator is written over, one a step, not contention among branches.
-/// - **`tui`:** the existing bordered listing fixture in `curios/src/tests/tui.rs`, driven by 100 down/up pairs followed by `q`, the keys pausing twice between two whole keys so the session's size ticker runs once at each pause. The first down escape sequence arrives in two chunks; each remaining key has its own chunk. Terminal-size queries answer 12×5, 16×6, then 12×5 forever. Monotonic-clock queries advance by 1 ms, starting at zero, with 100,000 scripted readings. The mock host releases the next input chunk when polled and does not sleep in real time. Assertions require terminal entry and restoration, raw mode on then off, selection `one`, a titled border, exactly three screen clears (initial frame and two resizes), no stderr, and a successful exit.
+/// - **`tui`:** the bordered listing `curios`'s test support holds (`curios/src/test_support/listing.rs`), which the terminal suites drive too, driven by 100 down/up pairs followed by `q`, the keys pausing twice between two whole keys so the session's size ticker runs once at each pause. The first down escape sequence arrives in two chunks; each remaining key has its own chunk. Terminal-size queries answer 12×5, 16×6, then 12×5 forever. Monotonic-clock queries advance by 1 ms, starting at zero, with 100,000 scripted readings. The mock host releases the next input chunk when polled and does not sleep in real time. Assertions require terminal entry and restoration, raw mode on then off, selection `one`, a titled border, exactly three screen clears (initial frame and two resizes), no stderr, and a successful exit.
 ///
-/// `curios_profile::trace` listens during compilation and execution, writing one stream per sample into a timestamped directory under `curios/.artifacts/coordination/`. Each stream is read with `curios profile`. The `coordination_compile` span includes parsing, all compiler stages, Binaryen and Cranelift precompilation. The `coordination_run` span includes deserialization, instantiation and execution. Host setup, output assertions and folding are outside those spans. All span boundaries must close. The allocator counts while the trace listens, so each boundary of a stream carries what its thread had taken there and what the whole test process held, since counting began: a span is charged its own thread's allocations, and none of Wasmtime's, Binaryen's or Cranelift's threads'.
+/// `curios_profile::trace` listens during compilation and execution, writing one stream per sample into a timestamped directory under `xbench/.artifacts/coordination/`. Each stream is read with `curios profile`. The `coordination_compile` span includes parsing, all compiler stages, Binaryen and Cranelift precompilation. The `coordination_run` span includes deserialization, instantiation and execution. Host setup, output assertions and folding are outside those spans. All span boundaries must close. The allocator counts while the trace listens, so each boundary of a stream carries what its thread had taken there and what the whole test process held, since counting began: a span is charged its own thread's allocations, and none of Wasmtime's, Binaryen's or Cranelift's threads'.
 ///
 /// These are wall-clock timings under built-in tracing, with its overhead included. The Tui workload has synthetic time and no physical terminal latency.
 ///
@@ -56,9 +56,7 @@ use {
 /// | `tui` | 7541.695 [7455.739–7546.438] | 60.992 [60.206–63.552] |
 ///
 /// All 12 captures pass the behavior and closed-span assertions; each workload produces the same output length in every sample. The Tui assertions include terminal restoration and all three screen clears.
-#[test]
-#[ignore = "measurement: taken by cargo xbench measure"]
-fn coordination_measurements() {
+pub fn coordination_measurements() {
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -74,7 +72,7 @@ fn coordination_measurements() {
         sampled(
             &directory,
             "monad_suspend",
-            include_str!("../../../../programs/monad_suspend.crs"),
+            include_str!("../../../programs/monad_suspend.crs"),
             monads,
         );
         monads += 1;

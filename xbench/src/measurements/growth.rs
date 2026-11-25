@@ -1,7 +1,7 @@
 //! What each stage does as a program grows, counted.
 
 use {
-    crate::{test_support::*, *},
+    curios::{optimize, test_support::*},
     curios_core::looks,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
@@ -258,9 +258,7 @@ const HELD_SLOPE: f64 = 3.0;
 /// Held growths read past [`HELD_SLOPE`] here, in erasure, parsing, the ANF optimizer, the CPS lowering and elaboration, and the optimizer's bytes over functions and over additions nested either way, which the workspace's findings hold (`documentation/roadmap/000-findings.md`); the hash keys a run draws move some readings, a product commuted's instructions having read 3.21, 2.38 and 2.16 over one compiler.
 ///
 /// **Five growths' looks grow past [`HELD_SLOPE`] today**, the [`UNHELD`] ones: a family's values, a product of two spines commuted, `let`s and nested lambdas at erasure, and matches each on the `let` before it at elaboration; every other growth's looks are held in every stage. One reading below [`HELD_SLOPE`] at the grid's sizes may still hold a square too small there to show.
-#[test]
-#[ignore = "measurement: taken by cargo xbench measure"]
-fn growth_slopes() {
+pub fn growth_slopes() {
     let counters = Counters::open();
     let mut grew = Vec::new();
 

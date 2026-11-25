@@ -2,7 +2,7 @@
 //!
 //! A runaway is a short program whose one claim makes a checker do more the longer it is let run: a recursion that takes a step a unit, a pair of calls whose unfolding meets the pair again, a sum that gains a summand or a product a factor at every step, a type that nests a constructor at every step. None is refused for what it is written as. Each is answered by a verdict where a rule decides it, inside a budget its fixture states, and ended by its budget where none does; what a unit of that budget buys is the half of `documentation/design/soundness/a-reduction-step-costs-what-it-builds.md`'s premise a count of units cannot show.
 //!
-//! A runaway that answers inside a stated budget is a fixture here, and so is a proof a rule keeps inside one, stated whole; `runaway_measurements`, among the instrumented tests, counts what every runaway costs at a budget and at twice it.
+//! A runaway that answers inside a stated budget is a fixture here, and so is a proof a rule keeps inside one, stated whole; the bench's `runaway_measurements` (`xbench/src/measurements/runaways.rs`) counts what every runaway costs at a budget and at twice it.
 //!
 //! What a budget may never do is decide: the two fixtures at the end are a program refused at every budget, where a clash concluded from an unfinished computation would have excused an arm at an equation a lemma inhabits, and a pair of programs with one edge, where a memo crossing a declaration boundary would have let a neighbour pay for a fold. Both are stated at budgets rather than at sizes, so they read what exhaustion is allowed to conclude rather than what a unit buys.
 

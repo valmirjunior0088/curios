@@ -32,9 +32,14 @@ use report::*;
 
 use {
     clap::{Parser, Subcommand},
+    curios_profile::CountingAllocator,
     std::process::ExitCode,
     xbench::{Figure, Line, Measure, Pin, Record, capture},
 };
+
+// A program installs the counting allocator, and the bench is the one its measurements run in: what they read of memory is what it counts.
+#[global_allocator]
+static ALLOCATOR: CountingAllocator = CountingAllocator;
 
 include!(concat!(env!("OUT_DIR"), "/filed.rs"));
 

@@ -1,7 +1,7 @@
 //! What deciding the class of a written site spends of the lint's allowance, counted.
 
 use {
-    crate::{test_support::*, *},
+    curios::{TALLIES, test_support::*},
     curios_elab::{DEFAULT_BUDGET, LINT_ALLOWANCE},
     curios_module::Overlay,
     curios_prelude_build::std_source,
@@ -22,9 +22,7 @@ use {
 /// | `sites::column` | 568 | 13 255 |
 ///
 /// **Both stay under a seventh of the allowance, and the largest is a column's**, whose type is inferred as the matrix reads it, where a site's class reads a type the elaborator already holds.
-#[test]
-#[ignore = "measurement: taken by cargo xbench measure"]
-fn classification_allowance_measurements() {
+pub fn classification_allowance_measurements() {
     let directory = workspace().join("curios/.artifacts/allowance");
     create_dir_all(&directory).expect("capture directory");
     let stream = directory.join("stream.pftrace");

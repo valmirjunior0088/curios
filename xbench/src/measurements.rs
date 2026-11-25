@@ -35,6 +35,27 @@ use census::*;
 mod fixpoint;
 use fixpoint::*;
 
+mod listing;
+use listing::*;
+
+mod towers;
+use towers::*;
+
+mod runaways;
+use runaways::*;
+
+mod allowance;
+use allowance::*;
+
+mod coordination;
+use coordination::*;
+
+mod host_boundary;
+use host_boundary::*;
+
+mod growth;
+use growth::*;
+
 /// A measurement the bench takes by its name.
 pub struct Measurement {
     /// The name a sitting is asked for by, and its records are filed under.
@@ -116,6 +137,30 @@ const MEASUREMENTS: &[Measurement] = &[
     Measurement {
         name: "fixpoint_pass_measurements",
         take: fixpoint_pass_measurements,
+    },
+    Measurement {
+        name: "tower_measurements",
+        take: tower_measurements,
+    },
+    Measurement {
+        name: "runaway_measurements",
+        take: runaway_measurements,
+    },
+    Measurement {
+        name: "classification_allowance_measurements",
+        take: classification_allowance_measurements,
+    },
+    Measurement {
+        name: "coordination_measurements",
+        take: coordination_measurements,
+    },
+    Measurement {
+        name: "host_boundary_measurements",
+        take: host_boundary_measurements,
+    },
+    Measurement {
+        name: "growth_slopes",
+        take: growth_slopes,
     },
 ];
 
