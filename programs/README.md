@@ -6,8 +6,8 @@ Nothing here is a test fixture. Fixtures are written inline in the probes that a
 
 ## Who reads it
 
-- `curios/src/tests/codegen/` — `census.rs` surveys thirteen of the Curios-only programs and four of the workloads — every one but `lcg` and `walk` —, `ladder.rs` and `structural.rs` name individual programs, and `churn.rs` and `alternation.rs` hold what the collector does over three of them and the rope's three.
-- [`xbench/src/measurements/`](../xbench/src/measurements.rs) — `churn.rs` measures three under the collector, `alternation.rs` the rope's three, `map_insert.rs` `spines`' inserts and `shapes.rs` the corpus's field shapes. Figures are a record's, never here.
+- `curios/src/tests/codegen/` — `ladder.rs` and `structural.rs` name individual programs, and `churn.rs` and `alternation.rs` hold what the collector does over three of them and the rope's three.
+- [`xbench/src/measurements/`](../xbench/src/measurements.rs) — `census.rs` surveys thirteen of the Curios-only programs and four of the workloads — every one but `lcg` and `walk` —, `ladder.rs` and `structural.rs` read individual programs, `churn.rs` measures three under the collector, `alternation.rs` the rope's three, `map_insert.rs` `spines`' inserts and `shapes.rs` the corpus's field shapes. Figures are a record's, never here.
 - [`xbench/`](../xbench/README.md) — the bench times the six workloads against Rust, compiled natively and to WebAssembly. That README owns the timings, how a figure is read from them, and when a comparison is refused.
 - `cargo xtask profile debug programs/<file>.crs` — one run under a recorder, folded into its summaries; `profile release` asks for the shipped compiler. What a recorder measures and where it files it is [`curios-profile`](../curios-profile/README.md)'s.
 
@@ -22,7 +22,7 @@ Every program except `hello_world.crs` and `dependent_vectors.crs` reads its wor
 
 ## The Curios-only instruments
 
-**The string-walk ladder.** `parse_digits.crs`, `parse_bindless.crs` and `parse_manual.crs` decode the same digit string the same number of times and differ only in what they pay for it — the UTF-8 scan, the closure per character, the bind per character — so each difference isolates one cost. `parse_multibyte.crs` folds mixed-width text through the same walk. `curios/src/tests/codegen/ladder.rs` owns the rung table and the timings.
+**The string-walk ladder.** `parse_digits.crs`, `parse_bindless.crs` and `parse_manual.crs` decode the same digit string the same number of times and differ only in what they pay for it — the UTF-8 scan, the closure per character, the bind per character — so each difference isolates one cost. `parse_multibyte.crs` folds mixed-width text through the same walk. `xbench/src/measurements/ladder.rs` owns the rung table and the timings.
 
 **The walk mirrors.** `walk_mirror_baseline.crs` is a UTF-8 walk written at user level that reads one byte a turn and carries a scan state from byte to byte, and one program per removed obligation follows it: `flat_acc` (the accumulator tuple), `held_scan` (the scan-argument reconstruction), `inline_step` (the returned scan state), `indexed` (the suffix view). They are bounds rather than equivalents — each removal reshapes the arms around it, and they carry no validity witness — which is why they sit outside the census corpus.
 

@@ -5,10 +5,6 @@
 mod alternation;
 mod binaryen;
 
-mod census;
-// Only the fixpoint probe reads the driver the census keeps.
-pub use census::*;
-
 mod churn;
 mod copying;
 mod dead_loops;

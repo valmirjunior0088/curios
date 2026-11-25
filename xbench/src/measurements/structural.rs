@@ -1,7 +1,7 @@
 //! Recorded figures for the structural shapes, each taken by `cargo xbench measure <name>`. None asserts.
 
 use {
-    crate::test_support::*,
+    curios::test_support::*,
     curios_wasm::{Names, to_bytes},
     xbench::{Measure, read},
 };
@@ -50,9 +50,7 @@ use {
 /// # Constant closures
 ///
 /// The final column counts environments materialized once in `$start` — closures whose captures are all interned constants, which the hoister interns because the code field is an `i32`. The population is everywhere: at least one per corpus fixture, and 9 of the 19–21 environment constructions in each stdin-driven program, the `/std` description machinery's capture-free thunks most of them.
-#[test]
-#[ignore = "measurement: taken by cargo xbench measure"]
-fn closure_index_dispatch_measurements() {
+pub fn closure_index_dispatch_measurements() {
     const MONAD_IO: &str = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../programs/monad_io.crs"
@@ -127,9 +125,7 @@ fn closure_index_dispatch_measurements() {
 /// **The zeroes are not a null result, they are the wrong corpus for the question.** These fixtures take their runtime taint from `/std/Proc/args()!` and never read stdin, so none of them reaches the UTF-8 decode path where the protocol actually fires. What they do establish is that the pass is inert everywhere it has no candidate — which is most places.
 ///
 /// The allocation counts are taken pre-Binaryen, so some of what the pass removes earlier, Binaryen may remove later; only a runtime figure accounts for that. Withholding the pass on `programs/parse_digits.crs`, as [`copy_growth_measurements`] says how, and nothing else, moves the native binary at N = 1 000 000 from 0.226 s [0.224–0.230] to 0.230 s [0.228–0.236] of wall time, and leaves its `user` time at 0.21 s at the clock's ten-millisecond grain, each the median and span of five runs, the two interleaved and printing the same answer, both binaries built by a release compiler, timed at `00627ea06`: the per-character loop is not allocation-bound on the tuple the protocol removes.
-#[test]
-#[ignore = "measurement: taken by cargo xbench measure"]
-fn split_return_measurements() {
+pub fn split_return_measurements() {
     for (label, source) in [
         ("lcg", LCG),
         ("trees", TREES),
@@ -187,9 +183,7 @@ fn split_return_measurements() {
 /// | `trees` | 21 | 0.17 s | 138 760 192 B | 5 136 045 B |
 ///
 /// What this test itself reads is the third unit — `<fixture>/emitted bytes`, the raw pre-Binaryen module size for each structural fixture, which is where code growth shows up first and without a runtime at all. Taken at the same commit: `lcg` 22499, `trees` 23606, `higher-order` 22887, `direct/escaping` 22624, `function-only` 22043, `mutual-recursion` 22190, `split-return` 29002 bytes, so the three units are read together.
-#[test]
-#[ignore = "measurement: taken by cargo xbench measure"]
-fn copy_growth_measurements() {
+pub fn copy_growth_measurements() {
     for (label, source) in [
         ("lcg", LCG),
         ("trees", TREES),

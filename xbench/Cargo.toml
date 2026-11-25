@@ -17,6 +17,12 @@ workspace = true
 curios = { workspace = true, features = ["test-support"] }
 # The field shapes an ANF module settles on, which the census of shapes reads.
 curios-anf = { workspace = true }
+# The arena ids a CPS module's nodes are keyed by, which the census walks.
+curios-common = { workspace = true }
+# The optimized CPS module the census surveys.
+curios-cps = { workspace = true }
+# Cranelift's compile of a module Binaryen never saw, which the ladder runs raw.
+curios-cranelift = { workspace = true }
 # The budget a measurement compiles under: the elaborator's.
 curios-elab = { workspace = true }
 # The empty root a loose program is compiled against.
@@ -29,6 +35,8 @@ curios-pipeline = { workspace = true }
 curios-profile = { workspace = true }
 # The program a measurement's text is parsed as.
 curios-surface = { workspace = true }
+# A module's bytes and the names it is printed with, which the structural surveys and the ladder read as text.
+curios-wasm = { workspace = true }
 # The command line, in `xtask`'s own convention.
 clap = { workspace = true }
 # A record is a TOML file beside the code, read where the bench runs and printed where a sitting files one.

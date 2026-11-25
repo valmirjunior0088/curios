@@ -1,9 +1,12 @@
 //! Aggregate-flow census over optimized CPS — the corpus survey behind `documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md`.
 //!
 //! For every corpus program this classifies each tuple construction and rope-slice result by how its value travels: projection, continuation transfer, known-function transfer, return, closure capture, heap storage, unknown call, and mixed flow. Values that merge at a parameter are surveyed as one region, because eligibility in the spec is a property of the merged flow rather than of a single construction site — the fold accumulator's arm constructions and the loop parameter they meet at are one candidate, not five.
-//! The census is a measurement, not an assertion: the ignored test prints the classification, and the machinery is pinned by the focused test below rather than by the survey's own figures.
+//! The census is a measurement, not an assertion: the measurement prints the classification, and the machinery is pinned by the tests beside it rather than by the survey's own figures.
 //!
 //! A region whose constructions disagree about width is reported as a *variant* beside its roster and class-merged width, and return components are surveyed apart from the regions — a variant-width return need contain no construction at all, an immediate family's bare constructor returning its payload, so a walk seeded at tuple sites would report its absence as its absence.
+
+#[cfg(test)]
+mod tests;
 
 use {
     curios_common::ArenaId,
@@ -923,9 +926,7 @@ fn survey(label: &str, source: &str) -> Survey {
 /// The boxed-tag annex reads 462 tag-led constructions, none of them read back at slot zero within its own flow. Read that as an upper bound rather than a count of dead tags: a construction that comes to rest and is discriminated after a reload is in no flow at all, and this instrument cannot see the read.
 ///
 /// The class merge is degenerate, which is why no width budget is selected here: `curios-emit` types every tuple field `(ref null any)` and a row is padded to one width, so the class-merged width is the plain maximum arity, and `PARAM_SPLIT_GROWTH_LIMIT`'s 16 clears every candidate the corpus holds.
-#[test]
-#[ignore = "measurement: taken by cargo xbench measure"]
-fn aggregate_flow_census() {
+pub fn aggregate_flow_census() {
     let mut buckets = BTreeMap::<&'static str, usize>::new();
     let mut worker_owners = BTreeSet::new();
     let mut reachable_outside = BTreeSet::new();
@@ -1070,48 +1071,6 @@ fn aggregate_flow_census() {
             read(&format!("returns/{owner}/escapes"), Measure::Count, None, 1);
         }
     }
-}
-
-/// Pins the census machinery to the shapes a string walk does not carry: the accumulator travels as fields through continuation scalar replacement, and the suffix view as window fields through the window split, so neither survives as a region — and the census still surveys what remains.
-#[test]
-fn surveys_the_fold_accumulator_region() {
-    let source = r#"
-        use /std/{Nat, Str, Char, List, Proc};
-        let entry() -> /std/Io({}) =
-            let taint = List/length(Proc/args()!);
-            let n : Nat = taint;
-            let text : Str = Nat/to_str(n);
-            /std/print(Nat/to_str(Str/fold(text, 0, (codepoint, acc) => acc + Char/to_nat(codepoint))));
-        entry()
-        "#;
-    let module = cps_optm_module(source);
-    let census = Census::of(&module);
-    let regions = census.regions();
-
-    let accumulator = regions.iter().find(|region| {
-        region.tuple_sites.len() >= 2
-            && region.arities == BTreeSet::from([2])
-            && !region.params.is_empty()
-            && region.classes.contains("continuation-transfer")
-            && region.classes.contains("projection")
-    });
-    assert!(
-        accumulator.is_none(),
-        "the accumulator region dissolved into fields before the survey: {accumulator:#?}",
-    );
-
-    let rope = regions.iter().find(|region| {
-        region.slice_sites.len() >= 2
-            && !region.params.is_empty()
-            && region.classes.contains("continuation-transfer")
-    });
-    assert!(
-        rope.is_none(),
-        "the suffix-view region virtualized into window fields before the survey: {rope:#?}",
-    );
-
-    // What survives in this all-ASCII fixture is the Io plumbing no mechanism claims — enough to pin that the machinery still surveys; the variant-width scan flow needs multi-byte text and is the corpus survey's to report.
-    assert!(!regions.is_empty(), "the census still surveys the walk");
 }
 
 /// The death-birth tally for one program — the churn census instrument, whose verdicts are `documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md`'s — the sibling of [`survey`]. Within one function, a construction of some layout beside a value of matching layout whose every use takes it apart is the pairing Perceus turns into an in-place write and a tracing collector re-allocates. The classifier locates that population per substrate; it proves no pairing — order inside the function is deliberately not consulted, so every count is an upper bound on what a reuse mechanism could establish.
@@ -1347,9 +1306,7 @@ entry()
 /// # The reading
 ///
 /// The population is real and pervasive — 508 of 2130 row sites stand beside a dying value of their row and 359 of 843 tuple sites beside one of their width, the TOML driver holding most of both. Among tuples it is *entirely* the cross-frame shape: zero constructed-width pairs means no dying value pairs with a construction from its own function — every death arrives as a parameter taken apart where the matching birth happens, which is exactly a tail-recursive rebuild loop, and which any reuse mechanism keyed to intra-function allocation sites would miss completely. None of it stands under `/std/Map`: `Node/insert` hands back the node it was given where the new key parts above it, so that node has a use that takes nothing apart and is no death here. And 331 of 383 rope extends are linearly threaded — the base's only use is the extend that consumes it.
-#[test]
-#[ignore = "measurement: taken by cargo xbench measure"]
-fn death_birth_census() {
+pub fn death_birth_census() {
     let mut owners = BTreeSet::new();
     let mut totals = Rebirth::default();
 
@@ -1378,54 +1335,4 @@ fn death_birth_census() {
     for owner in &owners {
         read(&format!("pair owners/{owner}"), Measure::Count, None, 1);
     }
-}
-
-/// The classifier pinned on the canonical pair, so the census above stays a measurement: a cons rebuilt from a predecessor dying in the same function pairs at its row, and a program whose constructions never see a dying same-layout value reports none.
-#[test]
-fn death_birth_classifier_pins_the_canonical_pair() {
-    let paired = r#"
-        use /std/{Str, Nat, Option, Io};
-        induct Chain: Type
-        | nil()
-        | cons(Nat, Chain)
-        end
-        let step(rest: Chain, acc: Chain) -> Chain =
-            match rest
-            | nil() => acc
-            | cons(v, tail) => step(tail, Chain/cons(v + 1, acc))
-            end;
-        let build(n: Nat, acc: Chain) -> Chain =
-            match n
-            | 0 => acc
-            | m + 1 => build(m, Chain/cons(n, acc))
-            end;
-        let total(c: Chain, acc: Nat) -> Nat =
-            match c
-            | nil() => acc
-            | cons(v, tail) => total(tail, (acc + v) % 1000003)
-            end;
-        let entry() -> /std/Io({}) =
-            let arguments = /std/Proc/args()!;
-            let input = /std/List/try_get(arguments, 1);
-            match input
-            | some(bytes) =>
-                match Str/of_bytes(bytes)
-                | success(s) =>
-                    match Nat/of_str(Str/trim(s))
-                    | some(n) => /std/print(Nat/to_str(total(step(build(n, Chain/nil()), Chain/nil()), 0)))
-                    | none() => /std/print("bad input")
-                    end
-                | failure(_) => /std/print("invalid utf-8")
-                end
-            | none() => /std/print("no input")
-            end;
-        entry()
-    "#;
-    let module = cps_optm_module(paired);
-    let census = Census::of(&module);
-    let tally = rebirth(&census);
-    assert!(
-        tally.row_pairs >= 1,
-        "the rebuilt cons beside its dying predecessor pairs: {tally:?}",
-    );
 }

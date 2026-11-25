@@ -3,7 +3,8 @@
 //! Instrumented because the per-pass spans and fired-samples `curios_cps::optimize` carries are recorded only while a trace listens. It reports costs without asserting thresholds, in the shape of `unfolding.rs`'s measurements, and its subject is the census's `TOML_DRIVER`, so the program a figure is taken over is named.
 
 use {
-    crate::{tests::TOML_DRIVER, *},
+    super::*,
+    curios::TALLIES,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_pipeline::compile_with_prelude,
@@ -59,9 +60,7 @@ use {
 /// | `forward_calls` | 2.612 [2.560–2.698] | 2 / 11 | 0.5 | 3,361 [3,360–3,361] |
 ///
 /// `known_values` records no boolean fired sample. `split_windows` runs only on otherwise idle rounds. All eight compilations pass the compilation and closed-span assertions.
-#[test]
-#[ignore = "measurement: taken by cargo xbench measure"]
-fn fixpoint_pass_measurements() {
+pub fn fixpoint_pass_measurements() {
     let entrypoint = TOML_DRIVER.parse::<Entrypoint>().expect("driver parses");
     let compiled = phase(TALLIES, || {
         compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})

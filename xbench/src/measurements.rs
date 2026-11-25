@@ -23,6 +23,18 @@ use map_insert::*;
 mod shapes;
 use shapes::*;
 
+mod structural;
+use structural::*;
+
+mod ladder;
+use ladder::*;
+
+mod census;
+use census::*;
+
+mod fixpoint;
+use fixpoint::*;
+
 /// A measurement the bench takes by its name.
 pub struct Measurement {
     /// The name a sitting is asked for by, and its records are filed under.
@@ -68,6 +80,42 @@ const MEASUREMENTS: &[Measurement] = &[
     Measurement {
         name: "boxed_field_read_measurements",
         take: boxed_field_read_measurements,
+    },
+    Measurement {
+        name: "closure_index_dispatch_measurements",
+        take: closure_index_dispatch_measurements,
+    },
+    Measurement {
+        name: "split_return_measurements",
+        take: split_return_measurements,
+    },
+    Measurement {
+        name: "copy_growth_measurements",
+        take: copy_growth_measurements,
+    },
+    Measurement {
+        name: "string_walk_ladder_measurements",
+        take: string_walk_ladder_measurements,
+    },
+    Measurement {
+        name: "walk_mirror_attribution_measurements",
+        take: walk_mirror_attribution_measurements,
+    },
+    Measurement {
+        name: "decoder_doubling_slope",
+        take: decoder_doubling_slope,
+    },
+    Measurement {
+        name: "aggregate_flow_census",
+        take: aggregate_flow_census,
+    },
+    Measurement {
+        name: "death_birth_census",
+        take: death_birth_census,
+    },
+    Measurement {
+        name: "fixpoint_pass_measurements",
+        take: fixpoint_pass_measurements,
     },
 ];
 

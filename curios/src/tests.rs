@@ -6,11 +6,7 @@ mod binders;
 mod bounds;
 mod characters;
 mod cli;
-
 mod codegen;
-// Only the fixpoint probe reads the driver the census keeps.
-use codegen::*;
-
 mod concepts;
 mod core_text;
 mod derive;

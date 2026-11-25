@@ -7,4 +7,3 @@ mod closure;
 mod fusion;
 mod layout;
 mod loop_;
-mod measurement;
