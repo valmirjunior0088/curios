@@ -56,6 +56,15 @@ use host_boundary::*;
 mod growth;
 use growth::*;
 
+mod reduction;
+use reduction::*;
+
+mod unfolding;
+use unfolding::*;
+
+mod nested;
+use nested::*;
+
 /// A measurement the bench takes by its name.
 pub struct Measurement {
     /// The name a sitting is asked for by, and its records are filed under.
@@ -161,6 +170,42 @@ const MEASUREMENTS: &[Measurement] = &[
     Measurement {
         name: "growth_slopes",
         take: growth_slopes,
+    },
+    Measurement {
+        name: "type_level_sequence_cost_measurements",
+        take: type_level_sequence_cost_measurements,
+    },
+    Measurement {
+        name: "certifier_memo_charge_measurements",
+        take: certifier_memo_charge_measurements,
+    },
+    Measurement {
+        name: "str_literal_cost_measurements",
+        take: str_literal_cost_measurements,
+    },
+    Measurement {
+        name: "combinator_web_cost_measurements",
+        take: combinator_web_cost_measurements,
+    },
+    Measurement {
+        name: "parse_primitive_measurements",
+        take: parse_primitive_measurements,
+    },
+    Measurement {
+        name: "type_level_claim_measurements",
+        take: type_level_claim_measurements,
+    },
+    Measurement {
+        name: "combinator_sharing_measurements",
+        take: combinator_sharing_measurements,
+    },
+    Measurement {
+        name: "scrutinee_refinement_measurements",
+        take: scrutinee_refinement_measurements,
+    },
+    Measurement {
+        name: "nested_operation_measurements",
+        take: nested_operation_measurements,
     },
 ];
 

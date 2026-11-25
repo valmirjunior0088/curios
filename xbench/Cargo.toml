@@ -17,8 +17,8 @@ workspace = true
 curios = { workspace = true, features = ["test-support"] }
 # The field shapes an ANF module settles on, which the census of shapes reads.
 curios-anf = { workspace = true }
-# The arena ids a CPS module's nodes are keyed by, which the census walks.
-curios-common = { workspace = true }
+# The arena ids a CPS module's nodes are keyed by, which the census walks, and its test support's `fill!`, which spells the programs a reduction measurement grows.
+curios-common = { workspace = true, features = ["test-support"] }
 # The look count the checkers' walks keep, which the towers and the growths read.
 curios-core = { workspace = true }
 # The optimized CPS module the census surveys.

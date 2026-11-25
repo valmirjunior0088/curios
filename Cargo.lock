@@ -620,7 +620,6 @@ dependencies = [
  "curios-wonder",
  "httparse",
  "tungstenite",
- "xbench",
 ]
 
 [[package]]
