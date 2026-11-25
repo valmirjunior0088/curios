@@ -9,7 +9,7 @@ use {
     curios_surface::WrittenIn,
     curios_wonder::{Origin, Subject, diagnostics},
     std::fs::{create_dir_all, read_to_string},
-    xbench::{Unit, read},
+    xbench::{Measure, read},
 };
 
 /// **Every site the four corpora hold is classified inside [`LINT_ALLOWANCE`]**: the programs under `programs/`, the examples of `documentation/language.md`, and `/std`, its library and its test modules — compiled whole, since a fold handed no cabinet declines the archived unit as a baseline — each asked about as `curios lint` asks, under a stream filed at `curios/.artifacts/allowance/`. A classification that ran out would answer no class and leave its site unreported, so the allowance is the least power of ten above the largest figure here.
@@ -79,8 +79,8 @@ fn classification_allowance_measurements() {
             .fold((0, 0), |(count, max), sample| {
                 (count + sample.count, max.max(sample.max))
             });
-        read(&format!("{name}/sites"), Unit::Count, None, count);
-        read(&format!("{name}/most"), Unit::Count, None, max);
+        read(&format!("{name}/sites"), Measure::Count, None, count);
+        read(&format!("{name}/most"), Measure::Count, None, max);
         assert!(
             max < LINT_ALLOWANCE,
             "{name} spent {max} of the allowance {LINT_ALLOWANCE}"

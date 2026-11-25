@@ -11,8 +11,8 @@ mod tests;
 
 use {
     crate::{
-        CONTEST, Figure, Record, Unit, asked, capture, edition, file, held, root, subject, table,
-        today,
+        CONTEST, Figure, Measure, Record, asked, capture, edition, file, held, root, subject,
+        table, today,
     },
     curios_profile::Instructions,
     std::{
@@ -385,9 +385,9 @@ struct Contested {
 
 /// `contestant`'s figures on `workload`, read off its executions by group.
 fn contested(workload: &Workload, contestant: &str, groups: &[Vec<Execution>]) -> Contested {
-    let figure = |unit, readings| Figure {
+    let figure = |measure, readings| Figure {
         name: named(workload.name, contestant),
-        unit,
+        measure,
         size: Some(workload.size),
         readings,
     };
@@ -411,8 +411,8 @@ fn contested(workload: &Workload, contestant: &str, groups: &[Vec<Execution>]) -
         .collect::<Option<Vec<_>>>();
 
     Contested {
-        time: figure(Unit::Microseconds, times),
-        instructions: counts.map(|counts| figure(Unit::Instructions, counts)),
+        time: figure(Measure::Microseconds, times),
+        instructions: counts.map(|counts| figure(Measure::Instructions, counts)),
     }
 }
 
@@ -463,11 +463,20 @@ pub fn contest_sitting(filed: usize) -> Result<(), String> {
                 Some((contestant.title, figures.instructions.as_ref()?.stated()))
             })
             .collect::<Vec<_>>();
-        for (unit, rows) in [(Unit::Microseconds, times), (Unit::Instructions, counts)] {
+        for (measure, rows) in [
+            (Measure::Microseconds, times),
+            (Measure::Instructions, counts),
+        ] {
             if !rows.is_empty() {
                 eprint!(
                     "\n{}",
-                    table(workload.title, workload.letter, workload.size, unit, &rows)
+                    table(
+                        workload.title,
+                        workload.letter,
+                        workload.size,
+                        measure,
+                        &rows
+                    )
                 );
             }
         }

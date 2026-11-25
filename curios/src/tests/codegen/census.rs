@@ -16,7 +16,7 @@ use {
     curios_pipeline::{Stage, compile_with_prelude},
     curios_surface::Entrypoint,
     std::collections::{BTreeMap, BTreeSet},
-    xbench::{Unit, read},
+    xbench::{Measure, read},
 };
 
 const CORPUS: [(&str, &str); 14] = [
@@ -891,7 +891,7 @@ fn survey(label: &str, source: &str) -> Survey {
     ] {
         read(
             &format!("{label}/{figure}"),
-            Unit::Count,
+            Measure::Count,
             None,
             count as u64,
         );
@@ -989,7 +989,7 @@ fn aggregate_flow_census() {
     for (bucket, regions) in &buckets {
         read(
             &format!("buckets/{bucket}"),
-            Unit::Count,
+            Measure::Count,
             None,
             *regions as u64,
         );
@@ -997,7 +997,7 @@ fn aggregate_flow_census() {
     for owner in &worker_owners {
         read(
             &format!("needs-workers owners/{owner}"),
-            Unit::Count,
+            Measure::Count,
             None,
             1,
         );
@@ -1005,16 +1005,16 @@ fn aggregate_flow_census() {
     for owner in &reachable_outside {
         read(
             &format!("reachable owners outside the library/{owner}"),
-            Unit::Count,
+            Measure::Count,
             None,
             1,
         );
     }
-    read("variant regions", Unit::Count, None, variants as u64);
+    read("variant regions", Measure::Count, None, variants as u64);
     for (flow, regions) in &variant_flows {
         read(
             &format!("variant flows/{flow}"),
-            Unit::Count,
+            Measure::Count,
             None,
             *regions as u64,
         );
@@ -1022,7 +1022,7 @@ fn aggregate_flow_census() {
     for ((roster, width), regions) in &variant_shapes {
         read(
             &format!("variant shapes/roster {roster} width {width}"),
-            Unit::Count,
+            Measure::Count,
             None,
             *regions as u64,
         );
@@ -1031,7 +1031,7 @@ fn aggregate_flow_census() {
         for owner in owners {
             read(
                 &format!("variant owners/{flow}/{owner}"),
-                Unit::Count,
+                Measure::Count,
                 None,
                 1,
             );
@@ -1040,29 +1040,34 @@ fn aggregate_flow_census() {
     for (population, regions) in &restless {
         read(
             &format!("never rest/{population}"),
-            Unit::Count,
+            Measure::Count,
             None,
             *regions as u64,
         );
     }
     read(
         "tag-led constructions",
-        Unit::Count,
+        Measure::Count,
         None,
         tagged_constructions as u64,
     );
     read(
         "tag-led constructions/never read back",
-        Unit::Count,
+        Measure::Count,
         None,
         unread_tags as u64,
     );
     for (owner, (shapes, escapes)) in &mixed_returns {
         for shape in shapes {
-            read(&format!("returns/{owner}/{shape:?}"), Unit::Count, None, 1);
+            read(
+                &format!("returns/{owner}/{shape:?}"),
+                Measure::Count,
+                None,
+                1,
+            );
         }
         if *escapes {
-            read(&format!("returns/{owner}/escapes"), Unit::Count, None, 1);
+            read(&format!("returns/{owner}/escapes"), Measure::Count, None, 1);
         }
     }
 }
@@ -1147,7 +1152,7 @@ impl Rebirth {
         ] {
             read(
                 &format!("{label}/{figure}"),
-                Unit::Count,
+                Measure::Count,
                 None,
                 count as u64,
             );
@@ -1371,7 +1376,7 @@ fn death_birth_census() {
 
     totals.read("corpus");
     for owner in &owners {
-        read(&format!("pair owners/{owner}"), Unit::Count, None, 1);
+        read(&format!("pair owners/{owner}"), Measure::Count, None, 1);
     }
 }
 

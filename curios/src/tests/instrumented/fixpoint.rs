@@ -8,7 +8,7 @@ use {
     curios_module::RootSource,
     curios_pipeline::compile_with_prelude,
     curios_surface::Entrypoint,
-    xbench::{Unit, phase, read, read_sample, read_span},
+    xbench::{Measure, phase, read, read_sample, read_span},
 };
 
 /// Where the fixpoint's time goes, and which passes keep it running: one compilation of `TOML_DRIVER` taken as a phase, its instructions read whole, each span the compile entry and `curios_cps` carry read as its figures — its time, its calls, what its thread took and the looks its work made — and each sample the CPS optimizer takes. `cargo xbench measure fixpoint_pass_measurements` takes it.
@@ -72,7 +72,7 @@ fn fixpoint_pass_measurements() {
     if let Some(instructions) = compiled.instructions {
         read(
             "compile_with_prelude",
-            Unit::Instructions,
+            Measure::Instructions,
             None,
             instructions,
         );

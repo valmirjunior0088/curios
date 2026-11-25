@@ -14,7 +14,7 @@ use {
         path::Path,
         time::{SystemTime, UNIX_EPOCH},
     },
-    xbench::{Unit, read, read_elapsed, turn},
+    xbench::{Measure, read, read_elapsed, turn},
 };
 
 /// Standard input copied to standard output a chunk at a time, through the `Io` read and write the standard streams serve.
@@ -176,7 +176,7 @@ fn sampled(directory: &Path, workload: &str, source: &str, sample: usize) {
     }
     read(
         &format!("{workload}/output"),
-        Unit::Count,
+        Measure::Count,
         None,
         io.output().len() as u64,
     );

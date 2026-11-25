@@ -31,7 +31,7 @@ fn grouped(groups: &[&[f64]]) -> Vec<Vec<f64>> {
 fn took(workload: &'static str, contestant: &str, groups: &[&[f64]]) -> (&'static str, Figure) {
     let figure = Figure {
         name: named(workload, contestant),
-        unit: Unit::Microseconds,
+        measure: Measure::Microseconds,
         size: None,
         readings: groups
             .iter()
@@ -51,7 +51,7 @@ fn took(workload: &'static str, contestant: &str, groups: &[&[f64]]) -> (&'stati
 fn retired(workload: &'static str, contestant: &str, groups: &[&[u64]]) -> (&'static str, Figure) {
     let figure = Figure {
         name: named(workload, contestant),
-        unit: Unit::Instructions,
+        measure: Measure::Instructions,
         size: None,
         readings: groups
             .iter()
@@ -219,7 +219,7 @@ fn a_table_puts_the_fastest_first_and_reads_the_rest_against_rust() {
         "LCG",
         "N",
         100_000_000,
-        Unit::Microseconds,
+        Measure::Microseconds,
         &[
             ("Curios", grouped(&[&[438.0, 438.4], &[439.0, 439.2]])),
             ("Rust (Native)", grouped(STEADY)),
@@ -362,23 +362,23 @@ fn another_machine_refuses_the_times_and_the_instructions() {
     assert!(counts.contains("Another Processor"), "{rendered}");
 }
 
-/// A figure of one unit, readings given as they are held.
-fn counted(name: &str, unit: Unit, groups: &[&[u64]]) -> Figure {
+/// A figure of one measure, readings given as they are held.
+fn counted(name: &str, measure: Measure, groups: &[&[u64]]) -> Figure {
     Figure {
         name: name.to_string(),
-        unit,
+        measure,
         size: None,
         readings: groups.iter().map(|group| group.to_vec()).collect(),
     }
 }
 
-/// A measurement's figures are compared one by one: a figure whose unit is gated by a line two records differ in is refused on its own row, naming the line, and every other figure is compared, its movement proven or not.
+/// A measurement's figures are compared one by one: a figure whose measure is gated by a line two records differ in is refused on its own row, naming the line, and every other figure is compared, its movement proven or not.
 #[test]
 fn a_measurement_s_figure_is_refused_only_across_what_its_unit_is_gated_by() {
     let figures = |time: &[&[u64]], looks: &[&[u64]]| {
         vec![
-            ("", counted("cps_optimize", Unit::Microseconds, time)),
-            ("", counted("cps_optimize/calls", Unit::Count, looks)),
+            ("", counted("cps_optimize", Measure::Microseconds, time)),
+            ("", counted("cps_optimize/calls", Measure::Count, looks)),
         ]
     };
     let elsewhere = platform("governor schedutil, boost on, smt on", SOFTWARE);
@@ -409,11 +409,15 @@ fn an_engine_s_collections_are_refused_across_a_pin_the_compiler_s_counts_are_no
         vec![
             (
                 "",
-                counted("stock at 400/collections", Unit::Collections, collections),
+                counted(
+                    "stock at 400/collections",
+                    Measure::Collections,
+                    collections,
+                ),
             ),
             (
                 "",
-                counted("stock at 400/looks", Unit::Count, &[&[11], &[11]]),
+                counted("stock at 400/looks", Measure::Count, &[&[11], &[11]]),
             ),
         ]
     };
@@ -448,7 +452,7 @@ fn a_whole_count_is_stated_without_a_fraction() {
             here(),
             vec![(
                 "",
-                counted("cps_optimize/calls", Unit::Count, &[&[11], &[11]]),
+                counted("cps_optimize/calls", Measure::Count, &[&[11], &[11]]),
             )],
         ),
     );

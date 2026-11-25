@@ -14,7 +14,7 @@ use {
         path::Path,
         time::{SystemTime, UNIX_EPOCH},
     },
-    xbench::{Unit, read},
+    xbench::{Measure, read},
 };
 
 /// What one checker's heaviest judgment of a program spent and looked at.
@@ -45,13 +45,13 @@ impl Heaviest {
     fn read(&self, runaway: &str, checker: &str, budget: u64) {
         read(
             &format!("{runaway} at {budget}/{checker}/units"),
-            Unit::Count,
+            Measure::Count,
             Some(budget),
             self.units,
         );
         read(
             &format!("{runaway} at {budget}/{checker}/looks"),
-            Unit::Count,
+            Measure::Count,
             Some(budget),
             self.looks,
         );
@@ -174,7 +174,7 @@ fn runaway_measurements() {
 
             read(
                 &format!("{label} at {budget}/verdict/{verdict}"),
-                Unit::Count,
+                Measure::Count,
                 Some(budget),
                 1,
             );

@@ -6,13 +6,13 @@ fn a_line_reads_back_as_the_reading_it_printed() {
     for line in [
         Line {
             name: "cps_optimize".to_string(),
-            unit: Unit::Microseconds,
+            measure: Measure::Microseconds,
             size: None,
             value: 1_909_334,
         },
         Line {
             name: "LetPlus/looks/erase at n".to_string(),
-            unit: Unit::Count,
+            measure: Measure::Count,
             size: Some(25),
             value: 2,
         },

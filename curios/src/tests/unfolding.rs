@@ -14,7 +14,7 @@ use {
         fmt::Write,
         time::{Duration, Instant},
     },
-    xbench::{Unit, read, read_elapsed, turn},
+    xbench::{Measure, read, read_elapsed, turn},
 };
 
 /// Where a rule's inner combinator applications sit. The grammar is identical in all four; only where the applications are written moves.
@@ -315,13 +315,13 @@ fn combinator_sharing_measurements() {
                 read_elapsed(name, Some(*rules), start.elapsed());
                 read(
                     &format!("{name}/chain copies"),
-                    Unit::Count,
+                    Measure::Count,
                     Some(*rules),
                     copies(&module, SEQUENCED) as u64,
                 );
                 read(
                     &format!("{name}/functions"),
-                    Unit::Count,
+                    Measure::Count,
                     Some(*rules),
                     emitted(&module) as u64,
                 );
@@ -428,7 +428,7 @@ fn scrutinee_refinement_measurements() {
                     };
                     read(
                         &format!("{name}/outcome/{ended}"),
-                        Unit::Count,
+                        Measure::Count,
                         Some(rules as u64),
                         1,
                     );

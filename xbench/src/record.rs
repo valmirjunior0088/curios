@@ -37,7 +37,7 @@ pub struct Pin {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Figure {
     pub name: String,
-    pub unit: Unit,
+    pub measure: Measure,
     /// The size the figure was taken at, where its measurement takes it at one. Recorded rather than read from the measurement, so changing a size later cannot relabel what an earlier record measured.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Option<u64>,
@@ -45,25 +45,25 @@ pub struct Figure {
     pub readings: Vec<Vec<u64>>,
 }
 
-/// What a figure is counted in, which decides how far two records of it compare: the platform lines a comparison of it is refused across ([`Unit::gated`]).
+/// What a figure is counted in, which decides how far two records of it compare: the platform lines a comparison of it is refused across ([`Measure::gated`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(into = "&'static str", try_from = "String")]
-pub enum Unit {
+pub enum Measure {
     /// Wall clock in whole microseconds: compared between two records of one machine, in one state, under one pin.
     Microseconds,
     /// User-space instructions a process and the threads and processes it starts retire: compared between two records of one machine, in any state, under one pin, since the machine's arrangement moves no count and its processor's features, and the pins' builds, choose the code that retires them.
     Instructions,
     /// Bytes a pinned build decides — what a thread took from the allocator, what Binaryen made of a module, what an engine's heap grew by: compared between two records under one pin, on any machine, since the standard library, the optimizer and the engine a pin builds each decide theirs.
     Bytes,
-    /// Trips a thread made through the allocator: compared as [`Unit::Bytes`] are.
+    /// Trips a thread made through the allocator: compared as [`Measure::Bytes`] are.
     Allocations,
-    /// Collections an engine's collector began: compared as [`Unit::Bytes`] are, since the engine a pin builds decides when it collects.
+    /// Collections an engine's collector began: compared as [`Measure::Bytes`] are, since the engine a pin builds decides when it collects.
     Collections,
     /// A count the compiler keeps of its own work — calls, looks, budget units, the bytes it alone emits, a magnitude it samples: compared between any two records.
     Count,
 }
 
-/// Which platform lines a comparison of a unit is refused across, where two records differ in them.
+/// Which platform lines a comparison of a measure is refused across, where two records differ in them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Gated {
     pub machine: bool,
@@ -71,8 +71,8 @@ pub struct Gated {
     pub pins: bool,
 }
 
-impl Unit {
-    /// Every unit, in the order its name is matched.
+impl Measure {
+    /// Every measure, in the order its name is matched.
     const ALL: [Self; 6] = [
         Self::Microseconds,
         Self::Instructions,
@@ -82,7 +82,7 @@ impl Unit {
         Self::Count,
     ];
 
-    /// The one spelling of the unit's name, which a record's file and a measurement's line both write.
+    /// The one spelling of the measure's name, which a record's file and a measurement's line both write.
     pub fn name(self) -> &'static str {
         match self {
             Self::Microseconds => "microseconds",
@@ -94,12 +94,12 @@ impl Unit {
         }
     }
 
-    /// The unit named `name`, where one is.
+    /// The measure named `name`, where one is.
     pub fn named(name: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|unit| unit.name() == name)
+        Self::ALL.into_iter().find(|measure| measure.name() == name)
     }
 
-    /// The platform lines a comparison of a figure counted in this unit is refused across.
+    /// The platform lines a comparison of a figure counted in this measure is refused across.
     pub fn gated(self) -> Gated {
         match self {
             Self::Microseconds => Gated {
@@ -125,7 +125,7 @@ impl Unit {
         }
     }
 
-    /// Whether a figure in this unit counts whole things, and is stated without a fraction: bytes, allocations, collections and the compiler's counts.
+    /// Whether a figure in this measure counts whole things, and is stated without a fraction: bytes, allocations, collections and the compiler's counts.
     pub fn whole(self) -> bool {
         matches!(
             self,
@@ -133,7 +133,7 @@ impl Unit {
         )
     }
 
-    /// What a reading is divided by to be stated in [`Unit::stated`].
+    /// What a reading is divided by to be stated in [`Measure::stated`].
     fn scale(self) -> f64 {
         match self {
             Self::Microseconds => 1e3,
@@ -142,7 +142,7 @@ impl Unit {
         }
     }
 
-    /// The unit a figure counted in this one is stated in: milliseconds for a time, millions for instructions, and every other count as it is.
+    /// The unit a figure counted in this measure is stated in: milliseconds for a time, millions for instructions, and every other count as it is.
     pub fn stated(self) -> &'static str {
         match self {
             Self::Microseconds => "ms",
@@ -155,24 +155,24 @@ impl Unit {
     }
 }
 
-impl From<Unit> for &'static str {
-    fn from(unit: Unit) -> Self {
-        unit.name()
+impl From<Measure> for &'static str {
+    fn from(measure: Measure) -> Self {
+        measure.name()
     }
 }
 
-impl TryFrom<String> for Unit {
+impl TryFrom<String> for Measure {
     type Error = String;
 
     fn try_from(name: String) -> Result<Self, String> {
-        Unit::named(&name).ok_or_else(|| format!("no unit is named `{name}`"))
+        Measure::named(&name).ok_or_else(|| format!("no measure is named `{name}`"))
     }
 }
 
 impl Figure {
-    /// The groups in the unit its unit is stated in ([`Unit::stated`]).
+    /// The groups in the unit its measure is stated in ([`Measure::stated`]).
     pub fn stated(&self) -> Vec<Vec<f64>> {
-        let scale = self.unit.scale();
+        let scale = self.measure.scale();
         self.readings
             .iter()
             .map(|group| group.iter().map(|&read| read as f64 / scale).collect())
@@ -191,11 +191,11 @@ impl Record {
         toml::from_str(text).map_err(|error| error.to_string())
     }
 
-    /// The figure named `name` counted in `unit`, where this record holds it: one name may be counted in several units, a contestant's time and its instructions.
-    pub fn figure(&self, name: &str, unit: Unit) -> Option<&Figure> {
+    /// The figure named `name` counted in `measure`, where this record holds it: one name may be counted in several measures, a contestant's time and its instructions.
+    pub fn figure(&self, name: &str, measure: Measure) -> Option<&Figure> {
         self.figures
             .iter()
-            .find(|figure| figure.name == name && figure.unit == unit)
+            .find(|figure| figure.name == name && figure.measure == measure)
     }
 }
 

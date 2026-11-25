@@ -7,7 +7,7 @@ use {
     curios_module::RootSource,
     curios_pipeline::test_support::*,
     curios_surface::Entrypoint,
-    xbench::{Unit, read},
+    xbench::{Measure, read},
 };
 
 /// What one checker made of a tower: its verdict, what its heaviest declaration spent where it reached one, and the nodes its walks looked at.
@@ -23,14 +23,14 @@ impl Cost {
         let figure = |what: &str| format!("{tower} at {lines}/{checker}/{what}");
         read(
             &figure("accepted"),
-            Unit::Count,
+            Measure::Count,
             Some(lines),
             u64::from(self.verdict == "accepted"),
         );
         if let Some(units) = self.units {
-            read(&figure("units"), Unit::Count, Some(lines), units);
+            read(&figure("units"), Measure::Count, Some(lines), units);
         }
-        read(&figure("looks"), Unit::Count, Some(lines), self.looks);
+        read(&figure("looks"), Measure::Count, Some(lines), self.looks);
     }
 }
 

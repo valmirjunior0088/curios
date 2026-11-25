@@ -10,7 +10,7 @@
 mod tests;
 
 use {
-    crate::{CONTESTANTS, Record, Unit, WORKLOADS, named},
+    crate::{CONTESTANTS, Measure, Record, WORKLOADS, named},
     std::fmt::Write,
 };
 
@@ -121,7 +121,7 @@ fn titled(contestant: &str) -> &str {
 fn sized(record: &Record, workload: &str) -> Option<u64> {
     CONTESTANTS.iter().find_map(|contestant| {
         record
-            .figure(&named(workload, contestant.name), Unit::Microseconds)?
+            .figure(&named(workload, contestant.name), Measure::Microseconds)?
             .size
     })
 }
@@ -131,7 +131,7 @@ fn counted(record: &Record) -> bool {
     record
         .figures
         .iter()
-        .any(|figure| figure.unit == Unit::Instructions)
+        .any(|figure| figure.measure == Measure::Instructions)
 }
 
 /// A Markdown table with every cell left-aligned and its columns padded for a terminal. Each row has one cell per header.
@@ -172,12 +172,12 @@ fn tabulated(headers: &[&str], rows: &[Vec<String>]) -> String {
     out
 }
 
-/// One workload's table in `unit`, over however its samples are held: the contestants least first, each with its span and how many times Rust it is.
+/// One workload's table in `measure`, over however its samples are held: the contestants least first, each with its span and how many times Rust it is.
 pub fn table(
     title: &str,
     letter: &str,
     size: u64,
-    unit: Unit,
+    measure: Measure,
     rows: &[(&str, Vec<Vec<f64>>)],
 ) -> String {
     let mut figures = rows
@@ -209,7 +209,7 @@ pub fn table(
             format!(
                 "{mark}{} {}{mark}",
                 stated(figure.middle, half),
-                unit.stated()
+                measure.stated()
             ),
             format!(
                 "{}–{}",
@@ -220,8 +220,8 @@ pub fn table(
         ]);
     }
 
-    let counted = match unit {
-        Unit::Microseconds => String::new(),
+    let counted = match measure {
+        Measure::Microseconds => String::new(),
         other => format!(", {}", other.name()),
     };
 
@@ -250,7 +250,7 @@ fn header(number: usize, record: &Record) -> String {
     )
 }
 
-/// The record numbered `number`, in full: what it says of itself, then a table per workload it measured and unit it counted it in.
+/// The record numbered `number`, in full: what it says of itself, then a table per workload it measured and measure it counted it in.
 pub fn one(number: usize, record: &Record) -> String {
     let mut out = header(number, record);
 
@@ -258,11 +258,11 @@ pub fn one(number: usize, record: &Record) -> String {
         let Some(size) = sized(record, workload.name) else {
             continue;
         };
-        for unit in [Unit::Microseconds, Unit::Instructions] {
+        for measure in [Measure::Microseconds, Measure::Instructions] {
             let rows = CONTESTANTS
                 .iter()
                 .filter_map(|contestant| {
-                    let figure = record.figure(&named(workload.name, contestant.name), unit)?;
+                    let figure = record.figure(&named(workload.name, contestant.name), measure)?;
                     Some((contestant.title, figure.stated()))
                 })
                 .collect::<Vec<_>>();
@@ -273,7 +273,7 @@ pub fn one(number: usize, record: &Record) -> String {
             let _ = write!(
                 out,
                 "\n{}",
-                table(workload.title, workload.letter, size, unit, &rows)
+                table(workload.title, workload.letter, size, measure, &rows)
             );
         }
     }
@@ -281,18 +281,18 @@ pub fn one(number: usize, record: &Record) -> String {
     out
 }
 
-/// A platform line two records differ in, across which a comparison in some unit is refused: its name, and what each record says of it, as a reader compares them.
+/// A platform line two records differ in, across which a comparison in some measure is refused: its name, and what each record says of it, as a reader compares them.
 struct Crossed {
     line: &'static str,
     before: String,
     after: String,
 }
 
-/// The platform line `before` and `after` differ in that a comparison in `unit` is refused across ([`Unit::gated`]), where there is one.
+/// The platform line `before` and `after` differ in that a comparison in `measure` is refused across ([`Measure::gated`]), where there is one.
 ///
 /// The software line is never among these. A kernel or microcode update that moves a figure moves Rust with Curios, and the ratio a comparison reads cancels it, so gating on it would strand the record at every patch for nothing.
-fn crossed(before: &Record, after: &Record, unit: Unit) -> Option<Crossed> {
-    let gated = unit.gated();
+fn crossed(before: &Record, after: &Record, measure: Measure) -> Option<Crossed> {
+    let gated = measure.gated();
     let differs = |line, before: String, after: String| {
         (before != after).then_some(Crossed {
             line,
@@ -337,9 +337,9 @@ fn crossed(before: &Record, after: &Record, unit: Unit) -> Option<Crossed> {
         .or_else(|| gated.pins.then(pinned).flatten())
 }
 
-/// Why `before` and `after` cannot be compared in `unit`, where they cannot, as the contest's report states it.
-fn incomparable(before: &Record, after: &Record, unit: Unit) -> Option<String> {
-    crossed(before, after, unit).map(|crossed| {
+/// Why `before` and `after` cannot be compared in `measure`, where they cannot, as the contest's report states it.
+fn incomparable(before: &Record, after: &Record, measure: Measure) -> Option<String> {
+    crossed(before, after, measure).map(|crossed| {
         format!(
             "  {}  {}\n       -> {}",
             crossed.line, crossed.before, crossed.after
@@ -372,7 +372,7 @@ fn verdict(workload: &str, before: &Record, after: &Record, was: &Spanned, is: &
 
 /// The two records' times, read as Curios over Rust (Native) group by group, where they compare at all.
 fn times_compared(before: &Record, after: &Record) -> String {
-    if let Some(why) = incomparable(before, after, Unit::Microseconds) {
+    if let Some(why) = incomparable(before, after, Measure::Microseconds) {
         return format!("Not comparable.\n\n```\n{why}\n```\n");
     }
 
@@ -382,7 +382,7 @@ fn times_compared(before: &Record, after: &Record) -> String {
             let groups = |contestant| {
                 Some(
                     record
-                        .figure(&named(workload.name, contestant), Unit::Microseconds)?
+                        .figure(&named(workload.name, contestant), Measure::Microseconds)?
                         .stated(),
                 )
             };
@@ -414,7 +414,7 @@ fn times_compared(before: &Record, after: &Record) -> String {
 
 /// The two records' counts of Curios's instructions, where they compare at all: a count needs no control to cancel what moved the machine.
 fn counts_compared(before: &Record, after: &Record) -> String {
-    if let Some(why) = incomparable(before, after, Unit::Instructions) {
+    if let Some(why) = incomparable(before, after, Measure::Instructions) {
         return format!("Not comparable.\n\n```\n{why}\n```\n");
     }
 
@@ -423,7 +423,7 @@ fn counts_compared(before: &Record, after: &Record) -> String {
         let read = |record: &Record| {
             figure(
                 &record
-                    .figure(&named(workload.name, SUBJECT), Unit::Instructions)?
+                    .figure(&named(workload.name, SUBJECT), Measure::Instructions)?
                     .stated(),
             )
         };
@@ -483,15 +483,19 @@ fn sized_as(size: Option<u64>) -> String {
 }
 
 /// A figure's median in the unit it is stated in, at the resolution `half` supports.
-fn median_of(spanned: &Spanned, half: f64, unit: Unit) -> String {
-    format!("{} {}", in_unit(spanned.middle, half, unit), unit.stated())
-        .trim_end()
-        .to_string()
+fn median_of(spanned: &Spanned, half: f64, measure: Measure) -> String {
+    format!(
+        "{} {}",
+        in_unit(spanned.middle, half, measure),
+        measure.stated()
+    )
+    .trim_end()
+    .to_string()
 }
 
-/// `value` stated to the place `half` supports, and never past the unit where `unit` counts whole things.
-fn in_unit(value: f64, half: f64, unit: Unit) -> String {
-    match unit.whole() {
+/// `value` stated to the place `half` supports, and never past the unit where `measure` counts whole things.
+fn in_unit(value: f64, half: f64, measure: Measure) -> String {
+    match measure.whole() {
         true => stated(value, half.max(1.0)),
         false => stated(value, half),
     }
@@ -508,11 +512,11 @@ pub fn figures_one(number: usize, record: &Record) -> String {
             Some(vec![
                 format!("`{}`", read.name),
                 sized_as(read.size),
-                median_of(&spanned, half, read.unit),
+                median_of(&spanned, half, read.measure),
                 format!(
                     "{}–{}",
-                    in_unit(spanned.least, half, read.unit),
-                    in_unit(spanned.most, half, read.unit)
+                    in_unit(spanned.least, half, read.measure),
+                    in_unit(spanned.most, half, read.measure)
                 ),
             ])
         })
@@ -525,11 +529,11 @@ pub fn figures_one(number: usize, record: &Record) -> String {
     )
 }
 
-/// What changed between two records of a measurement, figure by figure: each compared as far as its unit carries it, and refused, naming the line, where the records differ in one its unit is gated by.
+/// What changed between two records of a measurement, figure by figure: each compared as far as its measure carries it, and refused, naming the line, where the records differ in one its measure is gated by.
 pub fn figures_compare(number: usize, before: &Record, after: &Record) -> String {
     let mut rows = Vec::new();
     for read in &after.figures {
-        let Some(earlier) = before.figure(&read.name, read.unit) else {
+        let Some(earlier) = before.figure(&read.name, read.measure) else {
             continue;
         };
         let (Some(was), Some(is)) = (figure(&earlier.stated()), figure(&read.stated())) else {
@@ -537,7 +541,7 @@ pub fn figures_compare(number: usize, before: &Record, after: &Record) -> String
         };
 
         let half = was.half().max(is.half());
-        let said = match crossed(before, after, read.unit) {
+        let said = match crossed(before, after, read.measure) {
             Some(crossed) => format!("not compared: the {} differs", crossed.line),
             None if earlier.size != read.size => format!(
                 "sized {}, then {}; not compared",
@@ -549,8 +553,8 @@ pub fn figures_compare(number: usize, before: &Record, after: &Record) -> String
         rows.push(vec![
             format!("`{}`", read.name),
             sized_as(read.size),
-            median_of(&was, half, read.unit),
-            median_of(&is, half, read.unit),
+            median_of(&was, half, read.measure),
+            median_of(&is, half, read.measure),
             said,
         ]);
     }

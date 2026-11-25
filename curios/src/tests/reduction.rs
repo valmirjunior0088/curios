@@ -18,7 +18,7 @@ use {
     curios_pipeline::test_support::*,
     curios_surface::Entrypoint,
     std::time::{Duration, Instant},
-    xbench::{Unit, read, read_elapsed, turn},
+    xbench::{Measure, read, read_elapsed, turn},
 };
 
 /// The bound read off an opaque parameter: reduction stops at `b`, the guard refines it once and generically, and nothing is evaluated. The control the other two arms are read against, and the workaround `tests::runtime`'s accumulation measurement relies on.
@@ -159,8 +159,13 @@ fn certifier_floor(entrypoint: &Entrypoint) -> Result<u64, u64> {
 /// Read a [`floor`] outcome as the figure `name` where a budget accepted, and as `<name> above`, the largest budget tried, where none did.
 fn read_floor(name: &str, size: u64, floor: Result<u64, u64>) {
     match floor {
-        Ok(budget) => read(name, Unit::Count, Some(size), budget),
-        Err(largest) => read(&format!("{name} above"), Unit::Count, Some(size), largest),
+        Ok(budget) => read(name, Measure::Count, Some(size), budget),
+        Err(largest) => read(
+            &format!("{name} above"),
+            Measure::Count,
+            Some(size),
+            largest,
+        ),
     }
 }
 
@@ -394,7 +399,7 @@ fn read_cost(label: &str, size: Option<u64>, source: &str) {
         ] {
             read(
                 &format!("{label}/{checker}/{figure}"),
-                Unit::Count,
+                Measure::Count,
                 size,
                 value,
             );

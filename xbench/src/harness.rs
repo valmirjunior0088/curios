@@ -6,7 +6,7 @@
 mod tests;
 
 use {
-    crate::{Line, Unit},
+    crate::{Line, Measure},
     curios_profile::{
         Destination, Instructions, Profile, SampleSummary, Summary, Tally, fold, trace,
     },
@@ -23,11 +23,11 @@ thread_local! {
     static UNTIMED: Cell<bool> = const { Cell::new(false) };
 }
 
-/// Print a reading of the figure `name`, counted in `unit`, at `size` where it is taken at one: a line of the record the runner files, or nothing in an untimed round.
-pub fn read(name: &str, unit: Unit, size: Option<u64>, value: u64) {
+/// Print a reading of the figure `name`, counted in `measure`, at `size` where it is taken at one: a line of the record the runner files, or nothing in an untimed round.
+pub fn read(name: &str, measure: Measure, size: Option<u64>, value: u64) {
     print(Line {
         name: name.to_string(),
-        unit,
+        measure,
         size,
         value,
     });
@@ -35,7 +35,7 @@ pub fn read(name: &str, unit: Unit, size: Option<u64>, value: u64) {
 
 /// Print a reading of the figure `name`, the time `elapsed` in whole microseconds, at `size` where it is taken at one.
 pub fn read_elapsed(name: &str, size: Option<u64>, elapsed: Duration) {
-    read(name, Unit::Microseconds, size, microseconds(elapsed));
+    read(name, Measure::Microseconds, size, microseconds(elapsed));
 }
 
 /// `elapsed` in whole microseconds, the unit a time is read in: what a microsecond holds past its last whole one is dropped, and a time past what `u64` holds reads as its largest.
@@ -98,23 +98,27 @@ pub fn read_span(summary: &Summary, size: Option<u64>) {
 /// The lines [`read_span`] prints of `summary`.
 fn span_lines(summary: &Summary, size: Option<u64>) -> Vec<Line> {
     let name = &summary.name;
-    let line = |suffix: &str, unit, value| Line {
+    let line = |suffix: &str, measure, value| Line {
         name: format!("{name}{suffix}"),
-        unit,
+        measure,
         size,
         value,
     };
     let mut lines = vec![
-        line("", Unit::Microseconds, microseconds(summary.total)),
-        line("/calls", Unit::Count, summary.calls),
+        line("", Measure::Microseconds, microseconds(summary.total)),
+        line("/calls", Measure::Count, summary.calls),
     ];
     if let Some(memory) = summary.memory {
-        lines.push(line("/allocated", Unit::Bytes, memory.allocated));
-        lines.push(line("/allocations", Unit::Allocations, memory.allocations));
+        lines.push(line("/allocated", Measure::Bytes, memory.allocated));
+        lines.push(line(
+            "/allocations",
+            Measure::Allocations,
+            memory.allocations,
+        ));
     }
     for tallied in &summary.tallies {
         let suffix = format!("/{}", tallied.name);
-        lines.push(line(&suffix, Unit::Count, tallied.added));
+        lines.push(line(&suffix, Measure::Count, tallied.added));
     }
 
     lines
@@ -132,13 +136,13 @@ fn sample_lines(sample: &SampleSummary, size: Option<u64>) -> Vec<Line> {
     vec![
         Line {
             name: name.clone(),
-            unit: Unit::Count,
+            measure: Measure::Count,
             size,
             value: sample.total,
         },
         Line {
             name: format!("{name}/observations"),
-            unit: Unit::Count,
+            measure: Measure::Count,
             size,
             value: sample.count,
         },

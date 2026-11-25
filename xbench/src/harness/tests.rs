@@ -30,7 +30,7 @@ fn a_span_reads_as_the_figures_its_fold_states() {
     };
     let read = span_lines(&summary, Some(4))
         .into_iter()
-        .map(|line| (line.name, line.unit, line.size, line.value))
+        .map(|line| (line.name, line.measure, line.size, line.value))
         .collect::<Vec<_>>();
 
     assert_eq!(
@@ -38,26 +38,31 @@ fn a_span_reads_as_the_figures_its_fold_states() {
         [
             (
                 "cps_optimize".to_string(),
-                Unit::Microseconds,
+                Measure::Microseconds,
                 Some(4),
                 1_909_334
             ),
-            ("cps_optimize/calls".to_string(), Unit::Count, Some(4), 11),
+            (
+                "cps_optimize/calls".to_string(),
+                Measure::Count,
+                Some(4),
+                11
+            ),
             (
                 "cps_optimize/allocated".to_string(),
-                Unit::Bytes,
+                Measure::Bytes,
                 Some(4),
                 1_311_244_288
             ),
             (
                 "cps_optimize/allocations".to_string(),
-                Unit::Allocations,
+                Measure::Allocations,
                 Some(4),
                 16_722_058
             ),
             (
                 "cps_optimize/looks".to_string(),
-                Unit::Count,
+                Measure::Count,
                 Some(4),
                 7_340_032
             ),

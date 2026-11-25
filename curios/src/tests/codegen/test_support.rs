@@ -8,7 +8,7 @@ use {
     curios_pipeline::compile_with_prelude,
     curios_surface::Entrypoint,
     std::time::{Duration, Instant},
-    xbench::{Unit, read, read_elapsed, turn},
+    xbench::{Measure, read, read_elapsed, turn},
 };
 
 /// `source` compiled against the prelude and through Binaryen, as the product compiles a program.
@@ -51,13 +51,13 @@ pub fn read_collected(label: &str, compiled: &Compiled, n: u64) {
 
     read(
         &format!("{name}/collections"),
-        Unit::Collections,
+        Measure::Collections,
         Some(n),
         collected.collections as u64,
     );
     read(
         &format!("{name}/grown"),
-        Unit::Bytes,
+        Measure::Bytes,
         Some(n),
         collected.grown,
     );

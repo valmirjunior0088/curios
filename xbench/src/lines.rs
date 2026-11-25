@@ -1,11 +1,11 @@
 //! The lines a measurement prints for its record: one reading a line, under a prefix nothing else a test prints opens with, so the runner reads them off whatever else the test writes.
 //!
-//! A line is `xbench: <unit> <size> <value> <name>`, the size `-` where the figure is taken at none, and the name last, since it alone may hold a space.
+//! A line is `xbench: <measure> <size> <value> <name>`, the size `-` where the figure is taken at none, and the name last, since it alone may hold a space.
 
 #[cfg(test)]
 mod tests;
 
-use crate::Unit;
+use crate::Measure;
 
 /// What every line of a record opens with.
 pub const PREFIX: &str = "xbench:";
@@ -14,7 +14,7 @@ pub const PREFIX: &str = "xbench:";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Line {
     pub name: String,
-    pub unit: Unit,
+    pub measure: Measure,
     pub size: Option<u64>,
     pub value: u64,
 }
@@ -29,7 +29,7 @@ impl Line {
 
         format!(
             "{PREFIX} {} {size} {} {}",
-            self.unit.name(),
+            self.measure.name(),
             self.value,
             self.name
         )
@@ -46,7 +46,7 @@ impl Line {
 /// The reading the words after the prefix state, where they state one.
 fn parsed(rest: &str) -> Option<Line> {
     let mut words = rest.trim_start().splitn(4, ' ');
-    let unit = Unit::named(words.next()?)?;
+    let measure = Measure::named(words.next()?)?;
     let size = match words.next()? {
         "-" => None,
         size => Some(size.parse().ok()?),
@@ -56,7 +56,7 @@ fn parsed(rest: &str) -> Option<Line> {
 
     Some(Line {
         name,
-        unit,
+        measure,
         size,
         value,
     })

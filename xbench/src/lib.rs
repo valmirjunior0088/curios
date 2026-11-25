@@ -8,7 +8,7 @@ mod platform;
 pub use platform::{Platform, capture};
 
 mod record;
-pub use record::{Figure, Gated, Pin, Record, Unit};
+pub use record::{Figure, Gated, Measure, Pin, Record};
 
 mod lines;
 pub use lines::{Line, PREFIX};

@@ -20,7 +20,7 @@ use {
     curios_native::{Compiled, ForeignBindings, test_support::*},
     curios_wasm::{Names, to_bytes},
     std::{cell::RefCell, collections::BTreeMap, time::Instant},
-    xbench::{Unit, read, read_elapsed, turn},
+    xbench::{Measure, read, read_elapsed, turn},
 };
 
 const PARSE_DIGITS: &str = include_str!(concat!(
@@ -126,7 +126,7 @@ fn string_walk_ladder_measurements() {
         ] {
             read(
                 &format!("{label}/{figure}"),
-                Unit::Count,
+                Measure::Count,
                 None,
                 count as u64,
             );
@@ -144,7 +144,7 @@ fn string_walk_ladder_measurements() {
         for (name, sites) in walk {
             read(
                 &format!("{label}/walk/{name}"),
-                Unit::Count,
+                Measure::Count,
                 None,
                 sites as u64,
             );
@@ -451,7 +451,7 @@ fn walk_mirror_attribution_measurements() {
         ] {
             read(
                 &format!("{label}/{figure}"),
-                Unit::Count,
+                Measure::Count,
                 None,
                 *count as u64,
             );

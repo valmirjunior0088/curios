@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     curios_wasm::{Names, to_bytes},
-    xbench::{Unit, read},
+    xbench::{Measure, read},
 };
 
 /// What the closure table index is worth at product level.
@@ -98,7 +98,7 @@ fn closure_index_dispatch_measurements() {
         ] {
             read(
                 &format!("{label}/{figure}"),
-                Unit::Count,
+                Measure::Count,
                 None,
                 count as u64,
             );
@@ -154,13 +154,13 @@ fn split_return_measurements() {
         let allocations = wat.matches("struct.new").count() + wat.matches("array.new").count();
         read(
             &format!("{label}/multi-result types"),
-            Unit::Count,
+            Measure::Count,
             None,
             split as u64,
         );
         read(
             &format!("{label}/allocation sites"),
-            Unit::Count,
+            Measure::Count,
             None,
             allocations as u64,
         );
@@ -203,7 +203,7 @@ fn copy_growth_measurements() {
         let bytes = to_bytes(&module, &Names::EVERY).len();
         read(
             &format!("{label}/emitted bytes"),
-            Unit::Count,
+            Measure::Count,
             None,
             bytes as u64,
         );

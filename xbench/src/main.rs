@@ -30,7 +30,7 @@ use report::*;
 use {
     clap::{Parser, Subcommand},
     std::process::ExitCode,
-    xbench::{Figure, Line, Pin, Record, Unit, capture},
+    xbench::{Figure, Line, Measure, Pin, Record, capture},
 };
 
 include!(concat!(env!("OUT_DIR"), "/filed.rs"));

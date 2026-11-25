@@ -1,6 +1,6 @@
 use {
     super::*,
-    xbench::{Unit, read},
+    xbench::{Measure, read},
 };
 
 /// What libtest lists of its ignored tests: each a path and its kind.
@@ -25,7 +25,7 @@ fn a_measurement_is_found_by_its_name_and_its_path() {
 fn reading(name: &str, size: Option<u64>, value: u64) -> Line {
     Line {
         name: name.to_string(),
-        unit: Unit::Count,
+        measure: Measure::Count,
         size,
         value,
     }
@@ -52,7 +52,7 @@ fn a_reading_a_test_prints_first_is_read() {
 #[test]
 #[ignore = "invoked by a_reading_a_test_prints_first_is_read"]
 fn a_test_that_prints_a_reading_first() {
-    read("first", Unit::Count, None, 1);
+    read("first", Measure::Count, None, 1);
 }
 
 /// A sitting whose invocations read no figure has nothing to file, as a check taken by its name reads none: it refuses rather than filing a record with no figures.

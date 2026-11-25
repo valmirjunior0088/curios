@@ -158,13 +158,13 @@ fn grouped(invocations: Vec<Vec<Line>>) -> Result<Vec<Figure>, String> {
         for line in lines {
             let at = match figures
                 .iter()
-                .position(|figure| figure.name == line.name && figure.unit == line.unit)
+                .position(|figure| figure.name == line.name && figure.measure == line.measure)
             {
                 Some(at) => at,
                 None => {
                     figures.push(Figure {
                         name: line.name.clone(),
-                        unit: line.unit,
+                        measure: line.measure,
                         size: line.size,
                         readings: vec![Vec::new(); groups],
                     });

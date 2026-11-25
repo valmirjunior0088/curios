@@ -9,7 +9,7 @@ use {
     curios_pipeline::compile_with_prelude,
     curios_surface::Entrypoint,
     std::collections::BTreeMap,
-    xbench::{Unit, read},
+    xbench::{Measure, read},
 };
 
 const SPINES: &str = include_str!(concat!(
@@ -178,13 +178,18 @@ fn field_shape_census() {
     ] {
         read(
             &format!("roster/{schemas}"),
-            Unit::Count,
+            Measure::Count,
             None,
             count as u64,
         );
     }
     for (class, fields) in classes {
-        read(&format!("shapes/{class}"), Unit::Count, None, fields as u64);
+        read(
+            &format!("shapes/{class}"),
+            Measure::Count,
+            None,
+            fields as u64,
+        );
     }
 
     for (label, source) in [
@@ -209,7 +214,7 @@ fn field_shape_census() {
         ] {
             read(
                 &format!("{label}/{class}"),
-                Unit::Count,
+                Measure::Count,
                 None,
                 wat.matches(needle).count() as u64,
             );

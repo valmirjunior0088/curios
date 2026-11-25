@@ -12,7 +12,7 @@ use {
     curios_pipeline::{Stage, compile_with_prelude},
     curios_profile::{Instructions, allocated_bytes, allocation_count, count_allocations},
     curios_surface::Entrypoint,
-    xbench::{Unit, read},
+    xbench::{Measure, read},
 };
 
 /// What one stage did: the instructions retired where the certifier counts them, the nodes its walks looked at, and its trips through the allocator with the bytes they took.
@@ -279,16 +279,21 @@ fn growth_slopes() {
                 let name = format!("{growth:?}/{stage}/x{multiple}");
                 let size = Some(size as u64);
                 if let Some(instructions) = count.instructions {
-                    read(&name, Unit::Instructions, size, instructions);
+                    read(&name, Measure::Instructions, size, instructions);
                 }
                 read(
                     &format!("{name}/allocations"),
-                    Unit::Allocations,
+                    Measure::Allocations,
                     size,
                     count.allocations,
                 );
-                read(&format!("{name}/allocated"), Unit::Bytes, size, count.bytes);
-                read(&format!("{name}/looks"), Unit::Count, size, count.looks);
+                read(
+                    &format!("{name}/allocated"),
+                    Measure::Bytes,
+                    size,
+                    count.bytes,
+                );
+                read(&format!("{name}/looks"), Measure::Count, size, count.looks);
             }
         }
 

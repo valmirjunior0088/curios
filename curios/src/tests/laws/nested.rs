@@ -6,7 +6,7 @@ use {
     crate::tests::test_support::*,
     curios_common::fill,
     std::{fmt::Write, time::Instant},
-    xbench::{Unit, read, read_elapsed, turn},
+    xbench::{Measure, read, read_elapsed, turn},
 };
 
 /// `L(0) = x0` and `L(k) = Nat/and(L(k - 1), Nat/or(xk, yk))`, against its mirror with the operands of every operation commuted, closed by `Eq/refl()`.
@@ -199,7 +199,7 @@ fn nested_operation_measurements() {
                 read_elapsed(&name, Some(*size as u64), start.elapsed());
                 read(
                     &format!("{name}/accepted"),
-                    Unit::Count,
+                    Measure::Count,
                     Some(*size as u64),
                     u64::from(accepted),
                 );
