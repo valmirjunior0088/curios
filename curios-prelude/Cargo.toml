@@ -9,11 +9,18 @@ build = "build.rs"
 [lints]
 workspace = true
 
+[features]
+# `test_support`: the scope a root is certified over and the items the roots hold, which this crate's suites and the bench's measurements of the prelude read. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness. **Never add this to `default`.**
+test-support = ["dep:curios-cert", "dep:curios-core"]
+
 [dependencies]
 curios-archive = { workspace = true }
 curios-common = { workspace = true }
 curios-document = { workspace = true }
 curios-unit = { workspace = true }
+# The certifier's environment and the items a root holds, for the test support alone.
+curios-cert = { workspace = true, optional = true }
+curios-core = { workspace = true, optional = true }
 
 # The prelude's one build: `/sys` and `/std` lowered, elaborated, certified and erased by `curios-prelude-build`, each root imaged as the certified unit the crate restores. `curios-package` names the manifest beside `/std`, which the script watches.
 [build-dependencies]

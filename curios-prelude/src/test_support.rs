@@ -1,4 +1,6 @@
-//! What the suites over the restored prelude share: the scope the images are certified over, and the items they hold.
+//! What the suites over the restored prelude and the bench's measurements of it share: the scope the images are certified over, and the items they hold.
+//!
+//! A namespace rather than a root export, for `curios-native`'s `test_support` reason: a call through `curios_prelude::test_support` says at its use site that the caller reached for scaffolding rather than product API.
 
 use {curios_cert::Globals, curios_core::Item, curios_unit::Unit};
 

@@ -150,5 +150,3 @@ mod certifier_tests;
 mod declaration_tests;
 #[cfg(test)]
 mod image_tests;
-#[cfg(test)]
-mod test_support;

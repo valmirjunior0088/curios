@@ -1,7 +1,8 @@
 //! What the restored prelude declares: no tests, monomorphic literal machinery, every root module classified and none pure reaching a host call, each item's erased form and registry key, the syntax targets and concept methods, the marks its binders bear, one universe parameter per `/sys` former, and how far each term's tree outgrows its graph.
 
 use {
-    super::{test_support::*, *},
+    super::*,
+    crate::test_support::*,
     curios_core::{
         Bound, Cases, Enter, Global, Item, Match, Subterm, Telescope, Term, Visit, method_labels,
     },

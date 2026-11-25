@@ -1,7 +1,8 @@
 //! The certifier over the restored prelude: where it disagrees with the elaborator, its memos changing no verdict, a declared type typed at each value of a parameter, and the inventories of the prelude's universe parameters, their variances and its families' polarities.
 
 use {
-    super::{test_support::*, *},
+    super::*,
+    crate::test_support::*,
     curios_cert::{Error, Refusal, certify_definitions, infer, test_support::*},
     curios_core::{
         Definitions, Exhaustion, Free, FuncType, Global, Intrinsic, Item, Nat, Polarity, Quality,

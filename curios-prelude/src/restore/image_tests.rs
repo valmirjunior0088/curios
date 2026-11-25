@@ -1,7 +1,8 @@
 //! What the stored images hold of themselves: each archive validating, a truncated one refused, each image's record of what it read and what precedes it, the digests a record sits ahead of, the record a root's establishing walk filed, and what the stored image costs.
 
 use {
-    super::{test_support::*, *},
+    super::*,
+    crate::test_support::*,
     curios_cert::certify_definitions,
     curios_common::{Qualifier, SourceName, Style, digest},
     curios_core::{Anchors, Global, Item, Size},

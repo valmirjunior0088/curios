@@ -9,3 +9,6 @@ mod tests;
 
 mod restore;
 pub use restore::{documentation, root_prefixes, with_prelude};
+
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;
