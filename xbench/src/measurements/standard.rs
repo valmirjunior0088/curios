@@ -1,6 +1,7 @@
 //! What the standard library's build does as it is built again: a recompile's census of what each edit reads, the images a build divides the library into, a replay's census, and the slots a family's declarations take.
 
 use {
+    crate::{Measure, phase, read},
     curios_anf::FieldShape,
     curios_common::{Qualifier, digest},
     curios_core::{Certification, DefinitionKind, Definitions, Global, Item, Sharing},
@@ -20,7 +21,6 @@ use {
         sync::atomic::{AtomicUsize, Ordering},
         thread,
     },
-    xbench::{Measure, phase, read},
 };
 
 /// What a question about the standard library costs after an edit to one declaration: how many names are lowered again and how many elaborated again, and the time each phase takes, for a leaf and for a hub. `cargo xbench measure std_recompile_census` takes it: for each edit, `<edit>/names`, `/lowered again` and `/elaborated again`, and `/lower`, `/elaborate` and `/recompile`, each phase's time, the last lowering, elaborating, judging and erasing.

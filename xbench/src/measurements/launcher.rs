@@ -1,8 +1,8 @@
 //! The launcher's guards' positive control: the size of the image every bundled executable is built from.
 
 use {
+    crate::{Measure, read},
     curios::LAUNCHER,
-    xbench::{Measure, read},
 };
 
 /// The positive control for the two guards beside the binary's bundle, `the_embedded_launcher_carries_no_native_backend` and `the_embedded_launcher_stays_slim` (`curios/src/bundle/tests.rs`) — the evidence that they can fail.

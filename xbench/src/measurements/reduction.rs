@@ -7,13 +7,13 @@
 //! A second probe reads the same programs the other way round. [`type_level_sequence_cost_measurements`] divides one checker's cost into machinery and construction; [`certifier_memo_charge_measurements`] holds the program fixed and divides the *checkers*, because the compile path puts one budget to both and a user meets whichever demands more.
 
 use {
+    crate::{Measure, phase, read, turn},
     curios::{TALLIES, test_support::*},
     curios_common::fill,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_pipeline::test_support::*,
     curios_surface::Entrypoint,
-    xbench::{Measure, phase, read, turn},
 };
 
 /// The bound read off an opaque parameter: reduction stops at `b`, the guard refines it once and generically, and nothing is evaluated. The control the other two arms are read against, and the workaround `tests::runtime`'s accumulation measurement relies on.
@@ -310,7 +310,7 @@ fn read_cost(label: &str, size: Option<u64>, source: &str) {
 
 /// What a `Str` literal costs to check, and which row of the price list it spends on.
 ///
-/// `cargo xbench measure str_literal_cost_measurements` takes it, each row's figures as [`read_cost`] reads them. This is the probe [`a_str_literal_costs_transitions_rather_than_frames`] guards. It asserts only that each arm checks at all — a measurement that fails is a measurement with an opinion — and the assertion that a regression has to trip lives in that ordinary test instead.
+/// `cargo xbench measure str_literal_cost_measurements` takes it, each row's figures as [`read_cost`] reads them. This is the probe `curios`'s `a_str_literal_costs_transitions_rather_than_frames` guards. It asserts only that each arm checks at all — a measurement that fails is a measurement with an opinion — and the assertion that a regression has to trip lives in that ordinary test instead.
 ///
 /// # What it last printed
 ///

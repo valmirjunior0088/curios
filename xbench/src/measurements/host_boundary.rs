@@ -2,9 +2,9 @@
 
 use {
     super::*,
+    crate::{Measure, phase, read, turn},
     curios::{TALLIES, test_support::*},
     curios_native::{ForeignBindings, test_support::*},
-    xbench::{Measure, phase, read, turn},
 };
 
 /// Standard input copied to standard output a chunk at a time, through the `Io` read and write the standard streams serve.
@@ -83,7 +83,7 @@ fn assert_stream(io: &MockIo) {
 /// | `tui` | 4 | 7515.068 | 61.248 | 8747 |
 /// | `tui` | 5 | 7512.041 | 62.259 | 8747 |
 ///
-/// | Workload | Compile median [span], ms | Run median [span], ms |
+/// | Workload | Compile median \[span\], ms | Run median \[span\], ms |
 /// | --- | ---: | ---: |
 /// | `monad_io` | 408.198 [405.472–410.798] | 0.626 [0.552–0.635] |
 /// | `stream_copy` | 124.316 [122.618–127.507] | 16.541 [16.203–16.858] |

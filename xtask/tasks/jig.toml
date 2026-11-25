@@ -1,7 +1,7 @@
 description = "The jig's own crates, whose names start with x: these task files' runner, the bench and the board"
 
 [lint]
-description = "Lint every target of the jig's crates, which the compiler's lint leaves out: a crate of the jig reaches the compiler's builds only as the bench's library, a dev-dependency of the crates that hold measurements, its dependencies with it"
+description = "Lint every target of the jig's crates, which the compiler's lint leaves out: a crate of the jig takes the compiler's crates, and no crate of the compiler takes one of the jig's"
 run = [
     ["cargo", "clippy", "--package", "x*", "--all-targets", "--keep-going"],
 ]

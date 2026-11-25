@@ -1,6 +1,7 @@
 //! What each stage does as a program grows, counted.
 
 use {
+    crate::{Phase, phase, read_span},
     curios::{TALLIES, optimize, test_support::*},
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
@@ -8,7 +9,6 @@ use {
     curios_pipeline::compile_with_prelude,
     curios_profile::Summary,
     curios_surface::Entrypoint,
-    xbench::{Phase, phase, read_span},
 };
 
 /// The stages a compile passes, in order, each named as the measurement reads it and found by the span its owner opens over it, with the group that span declares: the entrypoint's parse, its lowering, elaboration, the certifier's judgment, erasure, the ANF optimizer, the CPS lowering and its optimizer, emission, Binaryen and Cranelift. What a compile does before its text stage, the fold's preamble, is no stage: no pass runs there.

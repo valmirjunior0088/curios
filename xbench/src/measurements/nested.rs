@@ -1,10 +1,10 @@
 //! What a term costs to class by its layers: an operation whose operands hold operations in turn, each commuted against its mirror, a sum of many operations of one kind, and a sum of many calls of one head.
 
 use {
+    crate::{Measure, phase, read, turn},
     curios::{TALLIES, test_support::*},
     curios_common::fill,
     std::fmt::Write,
-    xbench::{Measure, phase, read, turn},
 };
 
 /// `L(0) = x0` and `L(k)` built from `L(k - 1)` by `step` at `yk`, beside its twin `R` over `u0` and `vk`, under a `match` on `L(depth) <= R(depth)` whose arms are both `0`, claimed `0` by `Eq/refl()`, which the stuck `match` refuses: every operation of the two towers is stuck beside every other of its kind.

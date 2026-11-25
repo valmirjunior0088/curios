@@ -1,10 +1,10 @@
 //! What the prelude's printed trees hold: each declaration's tree against the graph it shares, the library's restored declarations read whole.
 
 use {
+    crate::{Measure, read},
     curios_core::{Enter, Term},
     curios_prelude::{test_support::*, with_prelude},
     std::collections::HashMap,
-    xbench::{Measure, read},
 };
 
 /// The nodes of `term`'s tree, saturating, and the distinct nodes of its graph.

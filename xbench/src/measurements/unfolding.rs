@@ -5,8 +5,8 @@
 //! None asserts. A measurement that fails is a measurement with an opinion, and what these read is a cost, not a contract.
 
 use {
+    crate::{Measure, phase, read, turn},
     curios::{TALLIES, test_support::*},
-    xbench::{Measure, phase, read, turn},
 };
 
 /// What a combinator application costs when it is written inside a `!` continuation rather than at item level.

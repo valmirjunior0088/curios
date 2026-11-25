@@ -1,4 +1,4 @@
-use {super::*, xbench::Measure};
+use {super::*, crate::Measure};
 
 /// A reading of one figure.
 fn reading(name: &str, size: Option<u64>, value: u64) -> Line {

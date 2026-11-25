@@ -1,9 +1,9 @@
 //! What the runtime measurements share: the readings a run gives, the runs a measurement compares turned round-robin.
 
 use {
+    crate::{Measure, phase, read, turn},
     curios::{TALLIES, test_support::*},
     curios_native::{Compiled, test_support::*},
-    xbench::{Measure, phase, read, turn},
 };
 
 /// Read a run of `compiled` at `n` as a phase, the figures `<label> at <n>`: its time — its host built, the program instantiated, and the whole call — what it allocated, and the instructions it retired.

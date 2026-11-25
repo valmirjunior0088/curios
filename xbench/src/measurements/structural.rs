@@ -1,14 +1,14 @@
 //! Recorded figures for the structural shapes, each taken by `cargo xbench measure <name>`. None asserts.
 
 use {
+    crate::{Measure, read},
     curios::test_support::*,
     curios_wasm::{Names, to_bytes},
-    xbench::{Measure, read},
 };
 
 /// What the closure table index is worth at product level.
 ///
-/// It asserts nothing. The structural claim is [`closures_carry_their_code_as_a_table_index`]'s to make; this reads the static shape of the dispatch over the corpus — `<program>/table slots`, `/dispatch sites`, `/environment constructions` and `/interned as consts` — so the timings below stay pinned to the modules that produced them.
+/// It asserts nothing. The structural claim is `curios`'s `closures_carry_their_code_as_a_table_index`'s to make; this reads the static shape of the dispatch over the corpus — `<program>/table slots`, `/dispatch sites`, `/environment constructions` and `/interned as consts` — so the timings below stay pinned to the modules that produced them.
 ///
 /// # What it last printed
 ///
@@ -106,7 +106,7 @@ pub fn closure_index_dispatch_measurements() {
 
 /// What the return protocol removes from the corpus, and what that is worth.
 ///
-/// It asserts nothing. The structural claim is [`a_returned_constructor_is_delivered_as_its_fields`]'s to make and it fails when it stops holding; this only reads how much of the corpus the protocol reaches, `<fixture>/multi-result types` and `<fixture>/allocation sites`, which is a question with no right answer to assert against.
+/// It asserts nothing. The structural claim is `curios`'s `a_returned_constructor_is_delivered_as_its_fields`'s to make and it fails when it stops holding; this only reads how much of the corpus the protocol reaches, `<fixture>/multi-result types` and `<fixture>/allocation sites`, which is a question with no right answer to assert against.
 ///
 /// # What it last printed
 ///

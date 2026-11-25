@@ -9,6 +9,7 @@
 mod tests;
 
 use {
+    crate::{Measure, read},
     curios_common::ArenaId,
     curios_cps::{
         Atom, Callee, ContinuationId, Edge, FunctionId, Intrinsic, Literal, Module, Node, NodeId,
@@ -19,7 +20,6 @@ use {
     curios_pipeline::{Stage, compile_with_prelude},
     curios_surface::Entrypoint,
     std::collections::{BTreeMap, BTreeSet},
-    xbench::{Measure, read},
 };
 
 const CORPUS: [(&str, &str); 14] = [

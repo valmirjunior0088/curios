@@ -2,9 +2,9 @@
 
 use {
     super::*,
+    crate::{Measure, phase, read, turn},
     curios::{TALLIES, test_support::*},
     curios_native::{ForeignBindings, test_support::*},
-    xbench::{Measure, phase, read, turn},
 };
 
 /// Measure the compilation and execution of guest coordination.
@@ -43,7 +43,7 @@ use {
 /// | `tui` | 4 | 7455.739 | 61.362 | 8747 |
 /// | `tui` | 5 | 7541.695 | 60.992 | 8747 |
 ///
-/// | Workload | Compile median [span], ms | Run median [span], ms |
+/// | Workload | Compile median \[span\], ms | Run median \[span\], ms |
 /// | --- | ---: | ---: |
 /// | `monad_suspend` | 657.640 [649.868–663.427] | 17.540 [17.181–17.589] |
 /// | `tui` | 7541.695 [7455.739–7546.438] | 60.992 [60.206–63.552] |

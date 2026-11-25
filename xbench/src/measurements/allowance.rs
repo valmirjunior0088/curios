@@ -1,6 +1,7 @@
 //! What deciding the class of a written site spends of the lint's allowance, counted.
 
 use {
+    crate::{Measure, phase, read},
     curios::{TALLIES, test_support::*},
     curios_elab::{DEFAULT_BUDGET, LINT_ALLOWANCE},
     curios_module::Overlay,
@@ -8,7 +9,6 @@ use {
     curios_surface::WrittenIn,
     curios_wonder::{Origin, Subject, diagnostics},
     std::fs::read_to_string,
-    xbench::{Measure, phase, read},
 };
 
 /// **Every site the four corpora hold is classified inside [`LINT_ALLOWANCE`]**: the programs under `programs/`, the examples of `documentation/language.md`, and `/std`, its library and its test modules — compiled whole, since a fold handed no cabinet declines the archived unit as a baseline — each asked about as `curios lint` asks, all of them one phase whose fold is read. A classification that ran out would answer no class and leave its site unreported, so the allowance is the least power of ten above the largest figure here.

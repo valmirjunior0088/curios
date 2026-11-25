@@ -1,8 +1,8 @@
 //! What the closed machine spends per element on three recursion shapes, read rather than asserted: the assertions are the budget bounds of the core's machine suite.
 
 use {
+    crate::{Measure, read},
     curios_core::{Demand, Intrinsic, Term, reduce_closed, test_support::*},
-    xbench::{Measure, read},
 };
 
 /// What the three recursion shapes spend per element, read rather than asserted — the assertions live in the budget bounds of the ordinary tests above. `cargo xbench measure spend_probe` takes it: `non-tail at <n>`, `tail at <n>` and `neutral at <n>`, the units each shape spends over `n` elements, and `neutral at <n>/<category>`, what the neutral fold spent in each category of the price list. Set `CURIOS_MACHINE_TRACE` to shrink the ladder and print every dispatch.

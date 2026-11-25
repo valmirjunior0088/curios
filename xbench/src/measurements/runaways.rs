@@ -1,12 +1,12 @@
 //! What each runaway costs at a budget and at twice it, counted.
 
 use {
+    crate::{Measure, phase, read},
     curios::{TALLIES, test_support::*},
     curios_module::RootSource,
     curios_pipeline::compile_with_prelude,
     curios_profile::Profile,
     curios_surface::Entrypoint,
-    xbench::{Measure, phase, read},
 };
 
 /// What one checker's heaviest judgment of a program spent and looked at.

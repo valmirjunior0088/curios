@@ -8,9 +8,29 @@
 //! - [`capture`] asks the host where the record is being taken.
 //! - [`contest_sitting`] builds the contestants, holds them to the answers their workloads are known to have, times them interleaved, and files a [`Record`]; [`measurement_sitting`] builds the bench in release and sits a measurement in it, a process a group.
 //! - [`report()`] and [`figures_report`] compute every median, span, ratio and refusal from the records, since none of them is stored.
+//!
+//! What a sitting files and a measurement prints:
+//!
+//! - [`Record`] is one sitting of one measurement, every figure's readings by group and everything the sitting was taken under, with [`Platform`] the host's account of where.
+//! - [`Line`] is one reading as a measurement prints it, under [`PREFIX`].
+//! - [`read`], [`turn`] and [`phase`] are the harness: a reading named, variants interleaved, and a phase run under the recorder inside a span of its own, read as that span's figures and the instructions it retired.
 
 #[cfg(test)]
 mod tests;
+
+mod platform;
+use platform::*;
+
+mod record;
+use record::*;
+// A measure is reachable through the conversions its serde form names, and a gating through a measure's, so both are named where they pass.
+pub use record::{Gated, Measure};
+
+mod lines;
+use lines::*;
+
+mod harness;
+use harness::*;
 
 mod pins;
 use pins::*;
@@ -34,7 +54,6 @@ use {
     clap::{Parser, Subcommand},
     curios_profile::CountingAllocator,
     std::process::ExitCode,
-    xbench::{Figure, Line, Measure, Pin, Record, capture},
 };
 
 // A program installs the counting allocator, and the bench is the one its measurements run in: what they read of memory is what it counts.

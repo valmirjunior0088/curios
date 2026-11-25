@@ -4,12 +4,12 @@
 
 use {
     super::*,
+    crate::{phase, read_sample, read_span},
     curios::TALLIES,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_pipeline::compile_with_prelude,
     curios_surface::Entrypoint,
-    xbench::{phase, read_sample, read_span},
 };
 
 /// Where the fixpoint's time goes, and which passes keep it running: one compilation of `TOML_DRIVER` taken as a phase, its instructions read whole, each span the compile entry and `curios_cps` carry read as its figures — its time, its calls, what its thread took and the looks its work made — and each sample the CPS optimizer takes. `cargo xbench measure fixpoint_pass_measurements` takes it.
@@ -24,14 +24,14 @@ use {
 ///
 /// Mixed: timed span totals; counted optimizer rounds, pass firings and allocation work. Taken on top of `9a18c2491` on 2026-10-23. Host: AMD Ryzen 7 5800X3D (8 cores, 16 logical CPUs), `x86_64-unknown-linux-gnu`, Linux `7.2.9-ogc3.1.fc44.x86_64`; Rust `1.99.1` (`58cf8f9c3`). Cargo release profile, all features, one test thread, no CPU pinning, CPU governor `performance`, boost enabled. One warmup and seven measured compilations of this checkout, with one-minute load averages 1.42–1.58 at invocation boundaries. Times are medians with observed spans in milliseconds. Allocated MiB are medians rounded to 0.1 MiB; allocated-byte totals vary by less than 0.016 MiB in every span. Allocation calls are a single count when identical across all seven compilations, otherwise a median with its observed span.
 ///
-/// | Span | ms [span] | Allocated MiB | Allocation calls |
+/// | Span | ms \[span\] | Allocated MiB | Allocation calls |
 /// | --- | ---: | ---: | ---: |
 /// | `compile_entrypoint` | 2455.121 [2407.826–2458.732] | 1,622.4 | 21,782,607 [21,782,519–21,782,653] |
 /// | `cps_optimize` | 1909.334 [1874.810–1911.951] | 1,250.5 | 16,722,058 [16,722,048–16,722,060] |
 ///
 /// The optimizer settles in 11 rounds. All fired counts and graph-size sample totals and counts agree across the seven measured compilations.
 ///
-/// | Pass | ms [span] | Fired / calls | Allocated MiB | Allocation calls |
+/// | Pass | ms \[span\] | Fired / calls | Allocated MiB | Allocation calls |
 /// | --- | ---: | ---: | ---: | ---: |
 /// | `split_parameters` | 233.562 [230.088–236.762] | 5 / 11 | 105.8 | 1,318,154 |
 /// | `shrink` | 213.210 [209.077–214.218] | 9 / 11 | 111.9 | 1,650,707 [1,650,706–1,650,707] |

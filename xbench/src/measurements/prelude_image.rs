@@ -1,6 +1,7 @@
 //! What the stored prelude costs to restore and to certify again, and what its images hold.
 
 use {
+    crate::{Measure, phase, read},
     curios_cert::certify_definitions,
     curios_core::Item,
     curios_elab::DEFAULT_BUDGET,
@@ -8,7 +9,6 @@ use {
     curios_module::SYNTAX,
     curios_prelude::{test_support::*, with_prelude},
     std::thread,
-    xbench::{Measure, phase, read},
 };
 
 /// The costs of the stored prelude, taken over the image: the figures `curios-package`'s README and `curios-elab`'s budget floors cite.

@@ -2,6 +2,7 @@
 
 use {
     super::*,
+    crate::{Measure, read},
     curios::test_support::*,
     curios_anf::{FieldShape, Module},
     curios_elab::DEFAULT_BUDGET,
@@ -9,7 +10,6 @@ use {
     curios_pipeline::compile_with_prelude,
     curios_surface::Entrypoint,
     std::collections::BTreeMap,
-    xbench::{Measure, read},
 };
 
 const SPINES: &str = include_str!(concat!(

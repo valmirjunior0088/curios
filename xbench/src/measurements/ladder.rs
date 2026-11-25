@@ -15,11 +15,11 @@
 //! A change that moves this ladder owes a reading of the two harness workloads beside it, because "moved the column it aimed at" is only a claim if the other columns were looked at.
 
 use {
+    crate::{Measure, phase, read, turn},
     curios::{TALLIES, test_support::*},
     curios_native::{Compiled, ForeignBindings, test_support::*},
     curios_wasm::{Names, to_bytes},
     std::{cell::RefCell, collections::BTreeMap},
-    xbench::{Measure, phase, read, turn},
 };
 
 const PARSE_DIGITS: &str = include_str!(concat!(

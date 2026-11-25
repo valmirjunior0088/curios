@@ -1,12 +1,12 @@
 //! What each tower costs each checker, counted.
 
 use {
+    crate::{Measure, phase, read},
     curios::{TALLIES, test_support::*},
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_pipeline::test_support::*,
     curios_surface::Entrypoint,
-    xbench::{Measure, phase, read},
 };
 
 /// Put `source` to each checker, a phase each, and read what each made of it as the figures of `name`, sized by `lines`: `<name>/<checker>`, its phase, the looks its walks made among what is read off it; `<name>/<checker>/accepted`; and `<name>/<checker>/units`, what its heaviest declaration spent. The elaborator's side is the lowering, elaboration and erasure, the certifier's its walk over what the elaborator built, which it judges only where the elaborator built something.
