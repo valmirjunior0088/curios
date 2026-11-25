@@ -28,7 +28,7 @@ fn a_span_reads_as_the_figures_its_fold_states() {
             self_added: 512,
         }],
     };
-    let read = span_lines(&summary, Some(4))
+    let read = span_lines("cps_optimize", &summary, Some(4))
         .into_iter()
         .map(|line| (line.name, line.measure, line.size, line.value))
         .collect::<Vec<_>>();
@@ -89,7 +89,7 @@ fn a_sample_reads_as_its_total_and_its_observations() {
         min: 1,
         max: 9,
     };
-    let read = sample_lines(&sample, None)
+    let read = sample_lines("cps::rounds", &sample, None)
         .into_iter()
         .map(|line| (line.name, line.value))
         .collect::<Vec<_>>();
@@ -143,4 +143,46 @@ fn a_phase_answers_with_its_fold_and_its_instructions() {
     if let Some(instructions) = ran.instructions {
         assert!(instructions > 10_000, "{instructions}");
     }
+}
+
+/// A phase reads as the span it opened around its work, under the name its caller gives it, and as the instructions the work retired where the kernel counts: entered once, and what its work added to each tally the phase was handed.
+#[test]
+fn a_phase_reads_as_its_own_span_under_its_callers_name() {
+    static COUNTED: Tally = Tally {
+        name: "steps",
+        read: steps,
+    };
+    thread_local! {
+        static STEPS: Cell<u64> = const { Cell::new(0) };
+    }
+    fn steps() -> u64 {
+        STEPS.with(Cell::get)
+    }
+
+    let ran = phase(std::slice::from_ref(&COUNTED), || {
+        STEPS.with(|steps| steps.set(steps.get() + 7));
+    });
+    let read = ran
+        .lines("work", Some(3))
+        .into_iter()
+        .map(|line| (line.name, line.measure, line.size))
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        read[0],
+        ("work".to_string(), Measure::Microseconds, Some(3))
+    );
+    let lines = ran.lines("work", Some(3));
+    let value = |name: &str, measure: Measure| {
+        lines
+            .iter()
+            .find(|line| line.name == name && line.measure == measure)
+            .map(|line| line.value)
+    };
+    assert_eq!(value("work/calls", Measure::Count), Some(1));
+    assert_eq!(value("work/steps", Measure::Count), Some(7));
+    assert_eq!(
+        value("work", Measure::Instructions).is_some(),
+        ran.instructions.is_some()
+    );
 }

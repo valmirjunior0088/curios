@@ -9,7 +9,7 @@ use {
     curios_module::RootSource,
     curios_pipeline::compile_with_prelude,
     curios_surface::Entrypoint,
-    xbench::{Measure, phase, read, read_sample, read_span},
+    xbench::{phase, read_sample, read_span},
 };
 
 /// Where the fixpoint's time goes, and which passes keep it running: one compilation of `TOML_DRIVER` taken as a phase, its instructions read whole, each span the compile entry and `curios_cps` carry read as its figures — its time, its calls, what its thread took and the looks its work made — and each sample the CPS optimizer takes. `cargo xbench measure fixpoint_pass_measurements` takes it.
@@ -65,21 +65,14 @@ pub fn fixpoint_pass_measurements() {
     let compiled = phase(TALLIES, || {
         compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
     });
-    compiled.answer.expect("driver compiles");
+    compiled.answer.as_ref().expect("driver compiles");
     assert!(compiled.profile.open.is_empty(), "every span closed");
 
-    if let Some(instructions) = compiled.instructions {
-        read(
-            "compile_with_prelude",
-            Measure::Instructions,
-            None,
-            instructions,
-        );
-    }
+    compiled.read("compile_with_prelude", None);
     for summary in compiled.profile.summaries.iter().filter(|summary| {
         summary.name == "compile_entrypoint" || summary.target.starts_with("curios_cps")
     }) {
-        read_span(summary, None);
+        read_span(&summary.name, summary, None);
     }
     for sample in compiled
         .profile
@@ -87,6 +80,6 @@ pub fn fixpoint_pass_measurements() {
         .iter()
         .filter(|sample| sample.name.starts_with("cps"))
     {
-        read_sample(sample, None);
+        read_sample(&sample.name, sample, None);
     }
 }

@@ -1,6 +1,6 @@
-//! The harness a measurement names its figures through: each reading printed as a line of its record ([`read`]), a time it took among them ([`read_elapsed`]), the variants it compares turned round-robin after an untimed round ([`turn`]), and a phase of it run under the recorder with its instructions counted ([`phase`]), whose spans and samples are read as figures by [`read_span`] and [`read_sample`].
+//! The harness a measurement names its figures through: each reading printed as a line of its record ([`read`]), the variants it compares turned round-robin after an untimed round ([`turn`]), and a phase of it run under the recorder inside a span of the harness's own, its instructions counted at the span's two ends ([`phase`]): the phase is read as its span's figures ([`Phase::read`]), and the spans and samples inside it by [`read_span`] and [`read_sample`]. A time, an allocation and a tally are read off the recorder's trace, and nowhere else.
 //!
-//! A measurement stays a test beside the code it measures; what it prints is its record's readings, which the runner files, an invocation of it a group.
+//! A measurement is a function of the bench's; what it prints is its record's readings, which the runner files, a process a group.
 
 #[cfg(test)]
 mod tests;
@@ -74,12 +74,16 @@ pub struct Phase<T> {
     pub instructions: Option<u64>,
 }
 
-/// Run `work` as one phase of a measurement: under the recorder, handed `tallies`, its stream kept in memory and folded once it ends, and an instruction count opened before it and read after.
+/// Run `work` as one phase of a measurement: inside a span of the harness's own, under the recorder, handed `tallies`, its stream kept in memory and folded once it ends, and an instruction count opened before it and read after.
 pub fn phase<T>(tallies: &'static [Tally], work: impl FnOnce() -> T) -> Phase<T> {
     let stream = Stream::default();
     let counted = Instructions::open();
-    let answer = trace(Destination::Stream(Box::new(stream.clone())), tallies, work)
-        .expect("a stream kept in memory opens");
+    let answer = trace(
+        Destination::Stream(Box::new(stream.clone())),
+        tallies,
+        || curios_common::profile!("phase" => work()),
+    )
+    .expect("a stream kept in memory opens");
     let instructions = counted.as_ref().map(Instructions::read);
     let profile = fold(stream.bytes().as_slice()).expect("the recorder's own stream folds");
 
@@ -90,14 +94,42 @@ pub fn phase<T>(tallies: &'static [Tally], work: impl FnOnce() -> T) -> Phase<T>
     }
 }
 
-/// Print a span's figures off a fold, each named after the span: its time in microseconds, how many times it was entered, where the allocator counted, what its thread took, and what its work added to each tally its program handed the recorder — `<span>`, `<span>/calls`, `<span>/allocated`, `<span>/allocations` and `<span>/<tally>`, the looks among them.
-pub fn read_span(summary: &Summary, size: Option<u64>) {
-    span_lines(summary, size).into_iter().for_each(print);
+impl<T> Phase<T> {
+    /// Print the phase's figures, each named after `name`: what [`read_span`] reads of the span the phase opened, and the instructions it retired, `<name>` counted in instructions, where the kernel counted them.
+    pub fn read(&self, name: &str, size: Option<u64>) {
+        self.lines(name, size).into_iter().for_each(print);
+    }
+
+    /// The lines [`Phase::read`] prints.
+    fn lines(&self, name: &str, size: Option<u64>) -> Vec<Line> {
+        let span = self
+            .profile
+            .summaries
+            .iter()
+            // The one span this module opens.
+            .find(|summary| summary.target == module_path!())
+            .expect("a phase's span closes inside its own fold");
+        let mut lines = span_lines(name, span, size);
+        if let Some(instructions) = self.instructions {
+            lines.push(Line {
+                name: name.to_string(),
+                measure: Measure::Instructions,
+                size,
+                value: instructions,
+            });
+        }
+
+        lines
+    }
 }
 
-/// The lines [`read_span`] prints of `summary`.
-fn span_lines(summary: &Summary, size: Option<u64>) -> Vec<Line> {
-    let name = &summary.name;
+/// Print a span's figures off a fold, each named after `name`: its time in microseconds, how many times it was entered, where the allocator counted, what its thread took, and what its work added to each tally its program handed the recorder — `<name>`, `<name>/calls`, `<name>/allocated`, `<name>/allocations` and `<name>/<tally>`, the looks among them.
+pub fn read_span(name: &str, summary: &Summary, size: Option<u64>) {
+    span_lines(name, summary, size).into_iter().for_each(print);
+}
+
+/// The lines [`read_span`] prints of `summary` under `name`.
+fn span_lines(name: &str, summary: &Summary, size: Option<u64>) -> Vec<Line> {
     let line = |suffix: &str, measure, value| Line {
         name: format!("{name}{suffix}"),
         measure,
@@ -124,18 +156,16 @@ fn span_lines(summary: &Summary, size: Option<u64>) -> Vec<Line> {
     lines
 }
 
-/// Print a sample's figures off a fold, each named after the sample: the total of what it observed, and how many observations — `<sample>` and `<sample>/observations`.
-pub fn read_sample(sample: &SampleSummary, size: Option<u64>) {
-    sample_lines(sample, size).into_iter().for_each(print);
+/// Print a sample's figures off a fold, each named after `name`: the total of what it observed, and how many observations — `<name>` and `<name>/observations`.
+pub fn read_sample(name: &str, sample: &SampleSummary, size: Option<u64>) {
+    sample_lines(name, sample, size).into_iter().for_each(print);
 }
 
-/// The lines [`read_sample`] prints of `sample`.
-fn sample_lines(sample: &SampleSummary, size: Option<u64>) -> Vec<Line> {
-    let name = &sample.name;
-
+/// The lines [`read_sample`] prints of `sample` under `name`.
+fn sample_lines(name: &str, sample: &SampleSummary, size: Option<u64>) -> Vec<Line> {
     vec![
         Line {
-            name: name.clone(),
+            name: name.to_string(),
             measure: Measure::Count,
             size,
             value: sample.total,

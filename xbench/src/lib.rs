@@ -2,7 +2,7 @@
 //!
 //! - [`Record`] is one sitting of one measurement, every figure's readings by group and everything the sitting was taken under, with [`Platform`] the host's account of where.
 //! - [`Line`] is one reading as a measurement prints it, under [`PREFIX`].
-//! - [`read`], [`read_elapsed`], [`turn`] and [`phase`] are the harness: a reading named, a time among them, variants interleaved, and a phase run under the recorder with its instructions counted.
+//! - [`read`], [`turn`] and [`phase`] are the harness: a reading named, variants interleaved, and a phase run under the recorder inside a span of its own, read as that span's figures and the instructions it retired.
 
 mod platform;
 pub use platform::{Platform, capture};
