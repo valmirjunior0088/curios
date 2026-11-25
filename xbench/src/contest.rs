@@ -3,20 +3,28 @@
 //! **Interleaved, not batched.** A group runs the contestants round-robin rather than one contestant to exhaustion, so a disturbance during a group — a compile elsewhere on the machine, a thermal ramp, a page cache warming — reaches all three alike and the ratio between them survives it. Between the groups is the span a difference must clear; inside one is iteration noise.
 //!
 //! **No shell, and a cleared environment.** Each contestant is spawned directly, so a figure is one process rather than a shell's and the contestant's, and the environment is the same small thing every time: the size of an inherited environment shifts a stack and moves a measurement without anything looking wrong.
+//!
+//! **A sitting is a record of the contest.** Each contestant on each workload is one of its figures, named by [`named`], in microseconds, at the size the workload was timed at.
 
 #[cfg(test)]
 mod tests;
 
 use {
-    crate::{Pin, Size, Timed, Timing, capture, edition, held, table},
+    crate::{CONTEST, Figure, Pin, Record, Unit, capture, edition, held, table},
     std::{
-        fs, io,
+        fs::{self, OpenOptions},
+        io::{self, Write},
         path::{Path, PathBuf},
         process::{Command, Stdio},
         time::Instant,
     },
     toml::value::Datetime,
 };
+
+/// The name of `contestant`'s figure on `workload` in a record of the contest: the one spelling of it, which the contest files and the report reads.
+pub fn named(workload: &str, contestant: &str) -> String {
+    format!("{workload}/{contestant}")
+}
 
 /// One workload of the measurement corpus, `programs/<name>/`, which carries the same program in Curios and in Rust. What each computes is `programs/README.md`'s.
 #[derive(Debug)]
@@ -120,7 +128,7 @@ pub const CONTESTANTS: &[Contestant] = &[
     },
 ];
 
-/// Where the built contestants go: under the workspace's own build directory, so a timing leaves nothing in the corpus.
+/// Where the built contestants go: under the workspace's own build directory, so a sitting leaves nothing in the corpus.
 const ARTIFACTS: &str = "target/xbench";
 
 /// The WebAssembly target the Rust contestant is built for. The workspace's own toolchain already carries it, so the bench installs nothing.
@@ -199,7 +207,7 @@ fn invocation(contestant: &str, workload: &Workload, size: u64, root: &Path) -> 
 
 /// Run one contestant once: what it printed, and how long the whole process took, in whole microseconds.
 ///
-/// Every contestant is started by its path, so none needs a variable of the environment, and the environment is cleared whole: a contestant starts under the same empty one in every execution of every timing.
+/// Every contestant is started by its path, so none needs a variable of the environment, and the environment is cleared whole: a contestant starts under the same empty one in every execution of every sitting.
 fn once(invocation: &Invocation) -> Result<(String, u64), String> {
     let named = invocation.program.display().to_string();
 
@@ -377,10 +385,10 @@ fn time(workload: &Workload, size: u64, root: &Path) -> Result<Vec<Vec<Vec<u64>>
     Ok(samples)
 }
 
-/// Build the contestants, hold them to the answers their workloads are known to have, time them, and print the timing as the TOML file that records it.
+/// Build the contestants, hold them to the answers their workloads are known to have, time them, and file the sitting as the contest's next record.
 ///
-/// The timing is numbered after `filed`, the timings already filed, which the binary keeps. Standard output carries the timing alone, so a redirect files the capture and nothing else; everything a person watches goes to standard error, the name to file it under among it.
-pub fn collect(filed: usize) -> Result<(), String> {
+/// The record is numbered after `filed`, the contest's records already filed, which the binary keeps, and written only once the sitting has ended, and never over a file that stands: a sitting that fails files nothing. Everything a person watches goes to standard error.
+pub fn measure(filed: usize) -> Result<(), String> {
     let root = root();
 
     // Before anything is built: building with the wrong compiler and timing it afterwards spends the run to produce the wrong artefact.
@@ -409,32 +417,33 @@ pub fn collect(filed: usize) -> Result<(), String> {
         agree(workload, workload.size, &root)?;
     }
 
-    let mut timed = Vec::new();
+    let mut figures = Vec::new();
     for workload in WORKLOADS {
         let measured = CONTESTANTS
             .iter()
             .zip(time(workload, workload.size, &root)?)
-            .map(|(contestant, microseconds)| Timed {
-                workload: workload.name.to_string(),
-                contestant: contestant.name.to_string(),
-                microseconds,
+            .map(|(contestant, readings)| Figure {
+                name: named(workload.name, contestant.name),
+                unit: Unit::Microseconds,
+                size: Some(workload.size),
+                readings,
             })
             .collect::<Vec<_>>();
 
         let rows = CONTESTANTS
             .iter()
             .zip(&measured)
-            .map(|(contestant, timed)| (contestant.title, timed.milliseconds()))
+            .map(|(contestant, figure)| (contestant.title, figure.milliseconds()))
             .collect::<Vec<_>>();
         eprint!(
             "\n{}",
             table(workload.title, workload.letter, workload.size, &rows)
         );
 
-        timed.extend(measured);
+        figures.extend(measured);
     }
 
-    let timing = Timing {
+    let record = Record {
         taken: today(&asked("date", &["-I"], &root)?)?,
         subject,
         platform,
@@ -445,23 +454,23 @@ pub fn collect(filed: usize) -> Result<(), String> {
                 version,
             })
             .collect(),
-        sizes: WORKLOADS
-            .iter()
-            .map(|workload| Size {
-                workload: workload.name.to_string(),
-                size: workload.size,
-            })
-            .collect(),
-        timed,
+        figures,
     };
 
-    print!("{}", timing.filed()?);
-    eprintln!(">> file it as xbench/timings/{filed:02}.toml");
+    let text = record.filed()?;
+    let path = root.join(format!("xbench/records/{CONTEST}/{filed:02}.toml"));
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+        .and_then(|mut file| file.write_all(text.as_bytes()))
+        .map_err(|error| format!("{} cannot be filed: {error}", path.display()))?;
+    eprintln!(">> filed as {}", path.display());
 
     Ok(())
 }
 
-/// The day `date -I` answers, as a timing records it.
+/// The day `date -I` answers, as a record holds it.
 fn today(said: &str) -> Result<toml::value::Date, String> {
     match said.parse::<Datetime>() {
         Ok(Datetime {

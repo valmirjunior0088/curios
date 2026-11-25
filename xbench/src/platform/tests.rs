@@ -43,7 +43,7 @@ fn memory_in_a_unit_the_parser_does_not_know_is_not_guessed_at() {
     assert_eq!(gibibytes(""), UNKNOWN);
 }
 
-/// The two drivers spell boosting oppositely, and a timing that recorded either raw would compare two machines by a number meaning the reverse on each.
+/// The two drivers spell boosting oppositely, and a record that recorded either raw would compare two machines by a number meaning the reverse on each.
 #[test]
 fn both_drivers_are_read_as_the_same_two_words() {
     assert_eq!(boosting(Some("1\n"), None), "boost on");
@@ -62,7 +62,7 @@ fn a_host_with_neither_driver_says_so() {
     assert_eq!(boosting(None, None), "boost unknown");
 }
 
-/// Every timing of one machine must capture one `machine` and one `state`, or the comparability gate would refuse a timing against itself.
+/// Every record of one machine must capture one `machine` and one `state`, or the comparability gate would refuse a record against itself.
 #[test]
 fn capturing_twice_answers_the_same_lines() {
     assert_eq!(capture(), capture());

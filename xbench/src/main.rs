@@ -1,13 +1,13 @@
-//! The benchmark bench, as a cargo subcommand, and the timings it has taken, each a TOML file under `xbench/timings/` that the build embeds.
+//! The benchmark bench, as a cargo subcommand, and the records it has filed, each a TOML file under `xbench/records/<measurement>/` that the build embeds.
 //!
-//! `cargo xbench collect` builds Curios and Rust on every workload of the corpus, holds all three contestants to the answers those workloads are known to have, times them interleaved, and prints the timing as the TOML file that records it — standard output carries the timing alone, so `cargo xbench collect > xbench/timings/NN.toml` files a capture and nothing else. `cargo xbench report` computes what the timings say; it runs anywhere.
+//! `cargo xbench measure contest` builds Curios and Rust on every workload of the corpus, holds all three contestants to the answers those workloads are known to have, times them interleaved, and files the sitting as the next record of the contest. `cargo xbench report contest` computes what the contest's records say; it runs anywhere.
 //!
 //! It reads in the order a sitting uses it:
 //!
 //! - [`held`] holds every tool to the pin the file that owns it states, before anything is built.
-//! - [`capture`] asks the host where the timing is being taken.
-//! - [`collect`] builds the contestants, holds them to the answers their workloads are known to have, times them interleaved, and prints a [`Timing`] as the file that records it.
-//! - [`report()`] computes every median, span, ratio and refusal from the timings, since none of them is stored.
+//! - [`capture`] asks the host where the record is being taken.
+//! - [`measure`] builds the contestants, holds them to the answers their workloads are known to have, times them interleaved, and files a [`Record`].
+//! - [`report()`] computes every median, span, ratio and refusal from the records, since none of them is stored.
 
 #[cfg(test)]
 mod tests;
@@ -15,8 +15,8 @@ mod tests;
 mod platform;
 use platform::*;
 
-mod timing;
-use timing::*;
+mod record;
+use record::*;
 
 mod pins;
 use pins::*;
@@ -34,15 +34,21 @@ use {
 
 include!(concat!(env!("OUT_DIR"), "/filed.rs"));
 
-/// Every timing filed, oldest first: a timing's number is its index here and its file's name.
+/// The measurement whose records the contest files, and the one the bench takes itself: every other measurement is a test beside the code it measures.
+const CONTEST: &str = "contest";
+
+/// Every record of `measurement` filed, oldest first: a record's number is its index here and its file's name.
 ///
-/// The bench begins with none, as the board began with no ticket. A timing is filed from what a sitting printed, never written by hand, and the ones a vanished harness took are not carried in: none was taken under a protocol this bench records, so none could be compared with a timing taken now.
-fn timings() -> Result<Vec<Timing>, String> {
+/// A measurement begins with none, as the board began with no ticket. A record is filed by the sitting that took it, never written by hand, and the ones a vanished harness took are not carried in: none was taken under a protocol this bench records, so none could be compared with a record taken now.
+fn records(measurement: &str) -> Result<Vec<Record>, String> {
     FILED
         .iter()
+        .filter(|(filed, _)| *filed == measurement)
+        .flat_map(|(_, texts)| texts.iter())
         .enumerate()
         .map(|(number, text)| {
-            Timing::read(text).map_err(|why| format!("timing {number:02} is malformed: {why}"))
+            Record::read(text)
+                .map_err(|why| format!("record {number:02} of {measurement} is malformed: {why}"))
         })
         .collect()
 }
@@ -67,37 +73,62 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Bench {
-    #[command(
-        about = "Take a timing: build the contestants, hold them to their answers, and time them"
-    )]
-    Collect,
+    #[command(about = "Take a sitting of a measurement and file it as its next record")]
+    Measure {
+        #[arg(
+            value_name = "MEASUREMENT",
+            help = "The measurement to take: `contest`, Curios and Rust on the corpus"
+        )]
+        measurement: String,
+    },
 
-    #[command(about = "Print what the timings say, or one timing in full")]
+    #[command(about = "Print what a measurement's records say, or one record in full")]
     Report {
-        #[arg(value_name = "TIMING", help = "The timing to print in full")]
-        timing: Option<usize>,
+        #[arg(
+            value_name = "MEASUREMENT",
+            help = "The measurement whose records to read"
+        )]
+        measurement: String,
+        #[arg(value_name = "RECORD", help = "The record to print in full")]
+        record: Option<usize>,
     },
 }
 
+/// Refuse a measurement the bench takes no sitting of.
+fn known(measurement: &str) -> Result<(), String> {
+    match measurement == CONTEST {
+        true => Ok(()),
+        false => Err(format!(
+            "there is no measurement {measurement}; the one the bench takes is {CONTEST}"
+        )),
+    }
+}
+
 fn main() -> ExitCode {
-    let command = Cli::parse().command;
-    let outcome = timings().and_then(|timings| match command {
-        // The next timing is numbered after the ones already filed, which is something only the binary knows.
-        Bench::Collect => collect(timings.len()),
-        Bench::Report { timing: None } => {
-            print!("{}", report(&timings));
-            Ok(())
-        }
+    let outcome = match Cli::parse().command {
+        // The next record is numbered after the ones already filed, which is something only the binary knows.
+        Bench::Measure { measurement } => known(&measurement)
+            .and_then(|()| records(&measurement))
+            .and_then(|filed| measure(filed.len())),
         Bench::Report {
-            timing: Some(number),
-        } => match timings.get(number) {
-            Some(timing) => {
-                print!("{}", one(number, timing));
-                Ok(())
-            }
-            None => Err(format!("there is no timing {number:02}")),
-        },
-    });
+            measurement,
+            record: None,
+        } => known(&measurement)
+            .and_then(|()| records(&measurement))
+            .map(|filed| print!("{}", report(&filed))),
+        Bench::Report {
+            measurement,
+            record: Some(number),
+        } => known(&measurement)
+            .and_then(|()| records(&measurement))
+            .and_then(|filed| match filed.get(number) {
+                Some(record) => {
+                    print!("{}", one(number, record));
+                    Ok(())
+                }
+                None => Err(format!("there is no record {number:02} of {measurement}")),
+            }),
+    };
 
     match outcome {
         Ok(()) => ExitCode::SUCCESS,

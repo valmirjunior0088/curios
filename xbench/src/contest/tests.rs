@@ -102,9 +102,9 @@ fn a_workload_is_checked_at_a_smaller_size_than_it_is_timed_at() {
     }
 }
 
-/// `date -I` answers a zero-padded day, and a timing records it as TOML's local date, which refuses a day its month does not have.
+/// `date -I` answers a zero-padded day, and a record holds it as TOML's local date, which refuses a day its month does not have.
 #[test]
-fn the_day_date_answers_is_the_day_a_timing_records() {
+fn the_day_date_answers_is_the_day_a_record_holds() {
     assert_eq!(
         today("2026-10-07").map(|day| day.to_string()),
         Ok("2026-10-07".to_string())

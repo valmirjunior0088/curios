@@ -1,8 +1,8 @@
-//! The tools a timing is taken with, pinned, and the check that refuses to measure under anything else.
+//! The tools a record is taken with, pinned, and the check that refuses to measure under anything else.
 //!
 //! Neither version is written here. `rust-toolchain.toml` pins the compiler the workspace builds under and `Cargo.lock` resolves the engine the compiler embeds, so this module reads the file that owns each rather than keeping a second copy for the bench to fall behind.
 //!
-//! No engine is found on the path: `rust-wasm` runs under the bench's own runner, which links the `wasmtime` `Cargo.lock` resolves for the compiler's own, so the WebAssembly comparison is between two compilers on one engine by construction, and the timing names that engine for each.
+//! No engine is found on the path: `rust-wasm` runs under the bench's own runner, which links the `wasmtime` `Cargo.lock` resolves for the compiler's own, so the WebAssembly comparison is between two compilers on one engine by construction, and the record names that engine for each.
 //!
 //! What a pin buys is that Rust cannot drift for a reason the record does not show: a comparison reads Curios against it, and a new toolchain moves Rust alone. The ratio still cancels what moves both, and a pin moved deliberately is a visible commit; a toolchain that floats is the drift that left run 04's result unattributable in the bench this one replaces.
 
@@ -75,7 +75,7 @@ fn reported(program: &str) -> Result<String, String> {
 
 /// Ask `program` what it is, refuse where it is not `pinned`, and hand back what it said.
 ///
-/// What a timing records is this answer rather than the pin it was held to: the pin is what a file says the tool should be, and the answer is what the tool on the path reported of itself when the figures were taken.
+/// What a record holds is this answer rather than the pin it was held to: the pin is what a file says the tool should be, and the answer is what the tool on the path reported of itself when the figures were taken.
 fn hold(program: &str, pinned: &str) -> Result<String, String> {
     let found = version(&reported(program)?);
 
@@ -91,7 +91,7 @@ fn hold(program: &str, pinned: &str) -> Result<String, String> {
     }
 }
 
-/// Hold every tool a timing is taken with to its pin, and hand back the pins for the timing to record.
+/// Hold every tool a record is taken with to its pin, and hand back the pins for the record to record.
 ///
 /// This runs before anything is built, since building with the wrong compiler and timing it afterwards spends the run to produce the wrong artefact.
 pub fn held(root: &Path) -> Result<Vec<(&'static str, String)>, String> {
@@ -103,7 +103,7 @@ pub fn held(root: &Path) -> Result<Vec<(&'static str, String)>, String> {
         .map_err(|error| format!("Cargo.lock cannot be read: {error}"))?;
     let wasmtime = locked(&lock, "wasmtime").ok_or("Cargo.lock resolves no wasmtime")?;
 
-    // The engine is recorded for each WebAssembly contestant, `wasmtime` the one `rust-wasm`'s runner links and `wasmtime in Curios` the one the compiler embeds: both the lock's, by construction, and named apart, as every timing before the runner names them, so a sitting compares with those.
+    // The engine is recorded for each WebAssembly contestant, `wasmtime` the one `rust-wasm`'s runner links and `wasmtime in Curios` the one the compiler embeds: both the lock's, by construction, and named apart, as every record before the runner names them, so a sitting compares with those.
     let rustc = hold("rustc", &rustc)?;
 
     Ok(vec![

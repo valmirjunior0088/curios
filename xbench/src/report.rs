@@ -1,8 +1,8 @@
 //! The report: every figure computed from the samples when it is asked, so none can disagree with what it is a figure of.
 //!
-//! **A difference is proven only where two spans are disjoint.** A figure's span is the least and greatest of what its groups give, and two timings whose spans overlap could have produced each other, so the report says `no difference proven` rather than a percentage. The rule assumes nothing about how the samples are distributed, and it errs toward missing a real movement rather than announcing one: a single bad batch widens a span and hides a change, which is the direction worth being wrong in.
+//! **A difference is proven only where two spans are disjoint.** A figure's span is the least and greatest of what its groups give, and two records whose spans overlap could have produced each other, so the report says `no difference proven` rather than a percentage. The rule assumes nothing about how the samples are distributed, and it errs toward missing a real movement rather than announcing one: a single bad batch widens a span and hides a change, which is the direction worth being wrong in.
 //!
-//! **A movement is read against Rust (Native).** Across two timings the report compares Curios's time over native Rust's, group by group. The two ran interleaved in each group, so what moved the machine during a group or between the two sittings reaches both and cancels in the ratio, and what is left is Curios's own.
+//! **A movement is read against Rust (Native).** Across two records the report compares Curios's time over native Rust's, group by group. The two ran interleaved in each group, so what moved the machine during a group or between the two sittings reaches both and cancels in the ratio, and what is left is Curios's own.
 //!
 //! **No figure states a precision its span does not support.** Every number is rounded to the place of the first significant digit of its half-span, so a median of 438.2 with a span of six milliseconds prints as 438.
 
@@ -10,19 +10,19 @@
 mod tests;
 
 use {
-    crate::{CONTESTANTS, Pin, Timing, WORKLOADS},
+    crate::{CONTESTANTS, Pin, Record, WORKLOADS, named},
     std::fmt::Write,
 };
 
-/// The anchor every other contestant is read against, within a timing and across two.
+/// The anchor every other contestant is read against, within a record and across two.
 const CONTROL: &str = "rust";
 
 /// The subject, whose movement the bench exists to report.
 const SUBJECT: &str = "curios";
 
-/// What a contestant did, as the report reads it.
+/// What a figure's groups amount to, as the report reads them: the median of their medians, and the span about it.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Figure {
+pub struct Spanned {
     /// The median of the group medians.
     middle: f64,
     /// The least group median, and the greatest: between them is the span a difference must clear.
@@ -49,8 +49,8 @@ fn median(samples: &[f64]) -> Option<f64> {
 }
 
 /// The median of what each group gave, and the least and greatest of it.
-fn spanned(values: &[f64]) -> Option<Figure> {
-    Some(Figure {
+fn spanned(values: &[f64]) -> Option<Spanned> {
+    Some(Spanned {
         middle: median(values)?,
         least: values.iter().copied().fold(f64::INFINITY, f64::min),
         most: values.iter().copied().fold(f64::NEG_INFINITY, f64::max),
@@ -58,7 +58,7 @@ fn spanned(values: &[f64]) -> Option<Figure> {
 }
 
 /// What `groups` amount to: the median of each group's median, and the least and greatest of them.
-pub fn figure(groups: &[Vec<f64>]) -> Option<Figure> {
+pub fn figure(groups: &[Vec<f64>]) -> Option<Spanned> {
     spanned(
         &groups
             .iter()
@@ -68,7 +68,7 @@ pub fn figure(groups: &[Vec<f64>]) -> Option<Figure> {
 }
 
 /// `subject` over `against`, group by group: each group's median of the one over the other's in the same group, where the two ran interleaved, so what disturbed the machine during it reaches both and cancels.
-fn relative(subject: &[Vec<f64>], against: &[Vec<f64>]) -> Option<Figure> {
+fn relative(subject: &[Vec<f64>], against: &[Vec<f64>]) -> Option<Spanned> {
     spanned(
         &subject
             .iter()
@@ -78,7 +78,7 @@ fn relative(subject: &[Vec<f64>], against: &[Vec<f64>]) -> Option<Figure> {
     )
 }
 
-impl Figure {
+impl Spanned {
     /// Half the span, which is the resolution every figure read from it is stated to.
     fn half(&self) -> f64 {
         (self.most - self.least) / 2.0
@@ -96,7 +96,7 @@ fn stated(value: f64, half: f64) -> String {
 }
 
 /// How many times `figure` is `against`, stated to the resolution the wider of the two supports.
-fn times(figure: &Figure, against: &Figure) -> String {
+fn times(figure: &Spanned, against: &Spanned) -> String {
     let ratio = figure.middle / against.middle;
     // The ratio's own resolution: a fraction is only as sharp as the figures it divides.
     let half = ratio * (figure.half() / figure.middle + against.half() / against.middle);
@@ -105,7 +105,7 @@ fn times(figure: &Figure, against: &Figure) -> String {
 }
 
 /// Whether two spans could not have produced each other.
-fn moved(before: &Figure, after: &Figure) -> bool {
+fn moved(before: &Spanned, after: &Spanned) -> bool {
     after.most < before.least || after.least > before.most
 }
 
@@ -115,6 +115,13 @@ fn titled(contestant: &str) -> &str {
         .iter()
         .find(|named| named.name == contestant)
         .map_or(contestant, |named| named.title)
+}
+
+/// The size `record` timed `workload` at, as its contestants' figures record it, where it timed the workload at all.
+fn sized(record: &Record, workload: &str) -> Option<u64> {
+    CONTESTANTS
+        .iter()
+        .find_map(|contestant| record.figure(&named(workload, contestant.name))?.size)
 }
 
 /// A Markdown table with every cell left-aligned and its columns padded for a terminal. Each row has one cell per header.
@@ -199,9 +206,9 @@ pub fn table(title: &str, letter: &str, size: u64, rows: &[(&str, Vec<Vec<f64>>)
     )
 }
 
-/// What a timing says of itself, ahead of its tables.
-fn header(number: usize, timing: &Timing) -> String {
-    let pinned = timing
+/// What a record says of itself, ahead of its tables.
+fn header(number: usize, record: &Record) -> String {
+    let pinned = record
         .pinned
         .iter()
         .map(|pin| format!("{} {}", pin.tool, pin.version))
@@ -209,28 +216,28 @@ fn header(number: usize, timing: &Timing) -> String {
         .join(", ");
 
     format!(
-        "# Timing {number:02} — taken {}\n\n- **subject** {}\n- **machine** {}\n- **state** {}\n- **software** {}\n- **pinned** {pinned}\n",
-        timing.taken,
-        timing.subject,
-        timing.platform.machine,
-        timing.platform.state,
-        timing.platform.software,
+        "# Record {number:02} — taken {}\n\n- **subject** {}\n- **machine** {}\n- **state** {}\n- **software** {}\n- **pinned** {pinned}\n",
+        record.taken,
+        record.subject,
+        record.platform.machine,
+        record.platform.state,
+        record.platform.software,
     )
 }
 
-/// The timing numbered `number`, in full: what it says of itself, then a table per workload it measured.
-pub fn one(number: usize, timing: &Timing) -> String {
-    let mut out = header(number, timing);
+/// The record numbered `number`, in full: what it says of itself, then a table per workload it measured.
+pub fn one(number: usize, record: &Record) -> String {
+    let mut out = header(number, record);
 
     for workload in WORKLOADS {
-        let Some(size) = timing.size(workload.name) else {
+        let Some(size) = sized(record, workload.name) else {
             continue;
         };
         let rows = CONTESTANTS
             .iter()
             .filter_map(|contestant| {
-                let timed = timing.took(workload.name, contestant.name)?;
-                Some((contestant.title, timed.milliseconds()))
+                let figure = record.figure(&named(workload.name, contestant.name))?;
+                Some((contestant.title, figure.milliseconds()))
             })
             .collect::<Vec<_>>();
         if rows.is_empty() {
@@ -250,7 +257,7 @@ pub fn one(number: usize, timing: &Timing) -> String {
 /// Why `before` and `after` cannot be compared, where they cannot.
 ///
 /// The software line is not among these. A kernel or microcode update that moves a figure moves Rust with Curios, and the ratio a comparison reads cancels it, so gating on it would strand the record at every patch for nothing.
-fn incomparable(before: &Timing, after: &Timing) -> Option<String> {
+fn incomparable(before: &Record, after: &Record) -> Option<String> {
     let differs = |what: &str, before: &str, after: &str| {
         (before != after).then(|| format!("  {what}  {before:?}\n       -> {after:?}"))
     };
@@ -276,9 +283,9 @@ fn incomparable(before: &Timing, after: &Timing) -> Option<String> {
         })
 }
 
-/// What changed between two timings, where anything can be said of it at all.
-pub fn compare(number: usize, before: &Timing, after: &Timing) -> String {
-    let heading = format!("## Timing {:02} → {number:02}\n\n", number - 1);
+/// What changed between two records, where anything can be said of it at all.
+pub fn compare(number: usize, before: &Record, after: &Record) -> String {
+    let heading = format!("## Record {:02} → {number:02}\n\n", number - 1);
 
     if let Some(why) = incomparable(before, after) {
         return format!("{heading}Not comparable.\n\n```\n{why}\n```\n");
@@ -287,8 +294,14 @@ pub fn compare(number: usize, before: &Timing, after: &Timing) -> String {
     let mut out = heading;
     let mut rows = Vec::new();
     for workload in WORKLOADS {
-        let read = |timing: &Timing| {
-            let groups = |contestant| Some(timing.took(workload.name, contestant)?.milliseconds());
+        let read = |record: &Record| {
+            let groups = |contestant| {
+                Some(
+                    record
+                        .figure(&named(workload.name, contestant))?
+                        .milliseconds(),
+                )
+            };
             relative(&groups(SUBJECT)?, &groups(CONTROL)?)
         };
         let (Some(was), Some(is)) = (read(before), read(after)) else {
@@ -296,8 +309,8 @@ pub fn compare(number: usize, before: &Timing, after: &Timing) -> String {
         };
 
         let half = was.half().max(is.half());
-        // The size is held per workload rather than over the timing: one resized, or one entering the record later, says so on its own row and leaves every other row comparable.
-        let said = match (before.size(workload.name), after.size(workload.name)) {
+        // The size is held by each figure rather than over the record: a workload resized, or one entering the record later, says so on its own row and leaves every other row comparable.
+        let said = match (sized(before, workload.name), sized(after, workload.name)) {
             (Some(then), Some(now)) if then != now => {
                 format!("sized {then}, then {now}; not compared")
             }
@@ -334,19 +347,19 @@ pub fn compare(number: usize, before: &Timing, after: &Timing) -> String {
     out
 }
 
-/// Every timing so far: each in full, with what changed between consecutive ones.
-pub fn report(timings: &[Timing]) -> String {
-    let Some((first, rest)) = timings.split_first() else {
-        return "No timing recorded. `cargo xbench collect` takes the first.\n".to_string();
+/// Every record so far: each in full, with what changed between consecutive ones.
+pub fn report(records: &[Record]) -> String {
+    let Some((first, rest)) = records.split_first() else {
+        return "No record filed. `cargo xbench measure contest` takes the first.\n".to_string();
     };
 
     let mut out = one(0, first);
-    for (number, timing) in rest.iter().enumerate() {
+    for (number, record) in rest.iter().enumerate() {
         let _ = write!(
             out,
             "\n{}\n{}",
-            one(number + 1, timing),
-            compare(number + 1, &timings[number], timing)
+            one(number + 1, record),
+            compare(number + 1, &records[number], record)
         );
     }
 
