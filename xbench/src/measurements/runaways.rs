@@ -4,14 +4,9 @@ use {
     curios::{TALLIES, test_support::*},
     curios_module::RootSource,
     curios_pipeline::compile_with_prelude,
-    curios_profile::{Destination, Profile, fold_at, trace},
+    curios_profile::Profile,
     curios_surface::Entrypoint,
-    std::{
-        fs::create_dir_all,
-        path::Path,
-        time::{SystemTime, UNIX_EPOCH},
-    },
-    xbench::{Measure, read},
+    xbench::{Measure, phase, read},
 };
 
 /// What one checker's heaviest judgment of a program spent and looked at.
@@ -62,36 +57,33 @@ struct Cost {
     certifier: Option<Heaviest>,
 }
 
-/// `source` compiled under `budget` with its stream filed at `stream`, and read back.
+/// `source` compiled under `budget` as a phase, and its fold read.
 ///
-/// A refusal carries no consumption, which is why the stream is read and not the answer.
-fn cost(budget: u64, source: &str, stream: &Path) -> Cost {
+/// A refusal carries no consumption, which is why the fold is read and not the answer.
+fn cost(budget: u64, source: &str) -> Cost {
     let entrypoint = source.parse::<Entrypoint>().expect("a runaway parses");
-    let answer = trace(Destination::File(stream.to_path_buf()), TALLIES, || {
+    let compiled = phase(TALLIES, || {
         compile_with_prelude(budget, &entrypoint, &RootSource::none(), |_| {})
             .map(|_| ())
             .map_err(|error| error.to_string())
-    })
-    .expect("the stream opens");
-    let verdict = match &answer {
+    });
+    let verdict = match &compiled.answer {
         Ok(()) => "accepted",
         Err(report) if report.contains("the certifier refused") => "certifier",
         Err(report) if report.contains("ran out of steps") => "budget",
         Err(report) if report.contains("type mismatch") => "apart",
         Err(_) => "refused",
     };
-    let report = fold_at(stream).expect("the stream folds");
-
     Cost {
         verdict,
-        elaborator: Heaviest::of(&report, "curios_elab"),
-        certifier: Heaviest::of(&report, "curios_cert"),
+        elaborator: Heaviest::of(&compiled.profile, "curios_elab"),
+        certifier: Heaviest::of(&compiled.profile, "curios_cert"),
     }
 }
 
 /// What every runaway costs each checker at two budgets.
 ///
-/// `cargo xbench measure runaway_measurements` takes it, in release. Counted, so the figures hold on any machine. Units are what a checker's heaviest judgment of the program spent of its budget, and looks how many times a term handed out its node while it was judged (`curios_core::looks`), both read off the stream the compilation files, kept under `xbench/.artifacts/runaways/`. The verdict is the compilation's, a figure `<runaway> at <budget>/verdict/<verdict>` of one: `apart` for a mismatch, `budget` where the elaborator's budget ended it, `certifier` where the elaborator accepted and the certifier refused, `accepted` where both held it. The certifier judges a program only where the elaborator accepted it, and files what a judgment cost it where it begins the next, which a refused one never reaches.
+/// `cargo xbench measure runaway_measurements` takes it, in release. Counted, so the figures hold on any machine. Units are what a checker's heaviest judgment of the program spent of its budget, and looks how many times a term handed out its node while it was judged (`curios_core::looks`), both read off the fold of the phase the compilation runs as. The verdict is the compilation's, a figure `<runaway> at <budget>/verdict/<verdict>` of one: `apart` for a mismatch, `budget` where the elaborator's budget ended it, `certifier` where the elaborator accepted and the certifier refused, `accepted` where both held it. The certifier judges a program only where the elaborator accepted it, and files what a judgment cost it where it begins the next, which a refused one never reaches.
 ///
 /// **What to read.** A row the budget ends spends the whole of it, and its looks say what a unit bought: looks that double with the budget buy the same for every unit, and looks that more than double buy more the longer the row runs, which is a place a unit is not yet a bound. A row answered inside the smaller budget reads the same at both, and one answered inside the larger alone reads there what its answer cost.
 ///
@@ -145,27 +137,13 @@ pub fn runaway_measurements() {
         ("walks", Runaway::Walks(2000), 150_000),
     ];
 
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("a clock past the epoch")
-        .as_nanos();
-    let directory = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join(".artifacts/runaways")
-        .join(stamp.to_string());
-    create_dir_all(&directory).expect("capture directory");
-    println!("captures: {}", directory.display());
-
     for (label, shape, budget) in rows {
         for budget in [budget, 2 * budget] {
-            let stream = directory.join(format!(
-                "{}-{budget}.pftrace",
-                label.replace([' ', ','], "")
-            ));
             let Cost {
                 verdict,
                 elaborator,
                 certifier,
-            } = cost(budget, &runaway(shape), &stream);
+            } = cost(budget, &runaway(shape));
 
             read(
                 &format!("{label} at {budget}/verdict/{verdict}"),
