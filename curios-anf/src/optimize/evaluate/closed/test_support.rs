@@ -19,7 +19,12 @@ impl Module {
             .filter(|plan| plan.contains_description(self))
             .filter_map(|plan| {
                 let (_, _, position) = plan.splice_point(&block_items, &item_positions);
-                scope.begin_replacement(position, plan.block(), plan.looping(self));
+                scope.begin_replacement(
+                    position,
+                    plan.block(),
+                    plan.looping(self),
+                    plan.named(self),
+                );
                 let mut probe = ReifyBudget::new();
 
                 plan.materializes(self, &mut probe, &mut scope)

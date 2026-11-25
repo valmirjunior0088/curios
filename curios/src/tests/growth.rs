@@ -495,6 +495,18 @@ fn chain(size: usize, line: impl Fn(&str) -> String) -> String {
     program(&body, "f(a)")
 }
 
+/// `size` constant prints at a program's top level, each of its own line, `line 1` to `line {size}`: the chain a program writes where `Growth::Statements` writes one in a function's body.
+fn printed_lines(size: usize) -> String {
+    let lines = (1..size)
+        .map(|line| fill!("let () = print(\"line ${line}\\n\")!;\n", line))
+        .collect::<String>();
+    fill!(
+        "use /std/{print};\n\n${lines}print(\"line ${size}\\n\")\n",
+        lines,
+        size,
+    )
+}
+
 /// `x0: Nat, …`, `size` of them.
 fn parameters(size: usize) -> String {
     joined((0..size).map(|index| format!("x{index}: Nat")), ", ")
@@ -596,6 +608,35 @@ fn a_wide_scope_elaborates_in_its_size() {
 #[test]
 fn a_family_of_many_constructors_compiles_in_its_size() {
     assert_eq!(compiles(&grown(Growth::Constructors, 4_000)), Ok(()));
+}
+
+/// A chain of constant prints folds in its length, at a program's top level and in a function's body: each print's description is copied where it stands, its bytes reaching the host write as one constant, and the continuation each link names is that function rather than a copy carrying the rest of the chain into the next round, so twice the prints leave at most twice the writes in the optimized code.
+#[test]
+fn a_chain_of_constant_prints_folds_in_its_length() {
+    let [top_level_8, top_level_16] =
+        [8, 16].map(|size| host_writes(&anf_optm(&printed_lines(size))));
+    let [in_body_8, in_body_16] =
+        [8, 16].map(|size| host_writes(&anf_optm(&grown(Growth::Statements, size))));
+    for (shape, shorter, longer) in [
+        ("at the top level", &top_level_8, &top_level_16),
+        ("in a function's body", &in_body_8, &in_body_16),
+    ] {
+        assert!(
+            longer.len() <= 2 * shorter.len(),
+            "{shape}, 16 prints leave {} host writes where 8 leave {}",
+            longer.len(),
+            shorter.len(),
+        );
+    }
+
+    let constant = top_level_16.iter().flatten().collect::<Vec<_>>();
+    for line in 1..=16 {
+        let message = format!("line {line}\n").into_bytes();
+        assert!(
+            constant.contains(&&message),
+            "line {line}'s bytes reach no host write as a constant"
+        );
+    }
 }
 
 /// A concept of two thousand methods compiles in its size: each method's wrapper reads its one field of the concept's record, its parameter's shape off the record's row, and the record type's sort alone, where each once read every field.

@@ -229,6 +229,32 @@ pub fn anf_optm(source: &str) -> curios_anf::Module {
     captured.expect("the pipeline emits the optimized ANF stage")
 }
 
+/// The message each host write of `module` hands the host: its bytes where they are a constant, and `None` where a value computes them. Every write a live block holds is listed, the copies of a description among them, so the count is what the optimizer left for the stages after it.
+pub fn host_writes(module: &curios_anf::Module) -> Vec<Option<Vec<u8>>> {
+    module
+        .blocks()
+        .iter()
+        .flatten()
+        .flat_map(|block| &block.statements)
+        .filter_map(|&statement| match module.statement(statement)? {
+            curios_anf::Statement::Let {
+                rhs: curios_anf::Rhs::Foreign { foreign, operands },
+                ..
+            } if module.foreign(*foreign)?.name == "/std/internal/Handle/handle_write" => {
+                Some(operands)
+            }
+            _ => None,
+        })
+        .map(|operands| match operands.get(1) {
+            Some(curios_anf::Atom::Constant(constant)) => match module.constant(*constant) {
+                Some(curios_anf::Constant::Bytes(bytes)) => Some(bytes.as_bytes().to_vec()),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect()
+}
+
 /// Whether the census settles `family`'s `constructor` field named `field` in `source` — the named assertion surface over the door's verdict, so a fixture pins the settling by name instead of grepping a dump for the op the settling later becomes.
 pub fn census_settles(source: &str, family: &str, constructor: &str, field: &str) -> bool {
     census_settles_constructor_field(&anf_optm(source), family, constructor, field)

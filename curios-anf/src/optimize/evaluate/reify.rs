@@ -53,7 +53,7 @@ pub fn reify_check(
                 return Err(Bail::Unsupported);
             }
             // A closure over nothing needs no specialized copy — see `reify_closure`.
-            if closure.env.borrow().is_empty() && scope.is_item_bound(module, closure.function) {
+            if closure.env.borrow().is_empty() && scope.in_scope(module, closure.function) {
                 return Ok(());
             }
             if scope.escapes_knot(module, closure.function)
@@ -171,9 +171,9 @@ fn reify_closure(
     if !scope.free_values_settled(module, closure) {
         return Err(Bail::Unsupported);
     }
-    // A closure capturing nothing has an empty substitution, so the "specialized" copy would be byte-identical to a function the module already holds. Name the original instead -- provided it is item-bound, so it is in scope wherever this reification is spliced. On a combinator-heavy prelude about half of a round's closure reifications take this path.
+    // A closure capturing nothing has an empty substitution, so the "specialized" copy would be byte-identical to a function the module already holds. Name the original instead, provided it is in scope where the candidate stands — see `ReifyScope::in_scope`. On a combinator-heavy prelude about half of a round's closure reifications take this path.
     let captures = closure.env.borrow().clone();
-    if captures.is_empty() && scope.is_item_bound(module, closure.function) {
+    if captures.is_empty() && scope.in_scope(module, closure.function) {
         return Ok(Atom::Function(closure.function));
     }
     // A knot's own function stays in its initializer, and a loop's continuation stays the call it was — see `ReifyScope::escapes_knot` and `ReifyScope::reaches_candidate`.
@@ -253,6 +253,8 @@ pub struct ReifyScope {
     candidate: Option<FunctionId>,
     /// Whether each function's region reaches each candidate's function, computed once per pair a pass asks about.
     reaches: BTreeMap<(FunctionId, FunctionId), bool>,
+    /// The functions the current candidate names, where its replacement holds a description. See [`ReifyScope::in_scope`].
+    named: BTreeSet<FunctionId>,
 }
 
 impl ReifyScope {
@@ -270,22 +272,32 @@ impl ReifyScope {
             owner: None,
             candidate: None,
             reaches: BTreeMap::new(),
+            named: BTreeSet::new(),
         }
     }
 
     /// Drop the previous replacement's copies before reifying the next one's value.
     ///
-    /// The memo is scoped to one replacement because a copy is bound where it is spliced: the `Functions` statement goes immediately before *its* candidate, so the function it binds is in scope for that candidate and for nothing that does not follow it. Carrying an atom into the next replacement would name a function bound in a block that need not dominate it. The pass-stable facts above are untouched. `owner` is the block the candidate stands in, which [`ReifyScope::escapes_knot`] reads, and `candidate` the function whose call it folds where its replacement holds a description, which [`ReifyScope::reaches_candidate`] reads.
+    /// The memo is scoped to one replacement because a copy is bound where it is spliced: the `Functions` statement goes immediately before *its* candidate, so the function it binds is in scope for that candidate and for nothing that does not follow it. Carrying an atom into the next replacement would name a function bound in a block that need not dominate it. The pass-stable facts above are untouched. `owner` is the block the candidate stands in, which [`ReifyScope::escapes_knot`] reads; `candidate` the function whose call it folds where its replacement holds a description, which [`ReifyScope::reaches_candidate`] reads; and `named` the functions the candidate names where its replacement holds one, which [`ReifyScope::in_scope`] reads.
     pub fn begin_replacement(
         &mut self,
         position: Option<usize>,
         owner: Option<BlockId>,
         candidate: Option<FunctionId>,
+        named: BTreeSet<FunctionId>,
     ) {
         self.local.clear();
         self.position = position;
         self.owner = owner;
         self.candidate = candidate;
+        self.named = named;
+    }
+
+    /// Whether `function` is in scope where the current candidate stands, so that a closure over nothing reifies as `function` itself: an item binds it, or the candidate names it where its replacement holds a description.
+    ///
+    /// A closure that captures nothing copies under an empty substitution, to the function it closes under fresh identities, so wherever that function is in scope the closure is the function. A link of a sequencing chain names its continuation, the rest of the chain, which its own block binds: copied, the continuation carries every closed call of the chain as the round found it, which the round folds in place and the next round folds again in the copy, whose links copy their own suffixes in turn. Named, it is never copied, and a group naming it is closed in the candidate's block alone, where `group_is_item_level_safe` binds it as it binds any group that names a block's own value. A pure replacement still copies such a closure: its group stays closed at item level, where a later candidate shares what it copied.
+    pub fn in_scope(&mut self, module: &Module, function: FunctionId) -> bool {
+        self.named.contains(&function) || self.is_item_bound(module, function)
     }
 
     /// Whether copying `function` for the current candidate would copy a call back to the function the candidate calls.

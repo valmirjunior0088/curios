@@ -577,6 +577,101 @@ fn a_description_whose_performance_ends_still_folds() {
     );
 }
 
+/// `sequence(k)` answers a description over `k` that applies it where it is performed, bound as an item: the shape a bind's performance has over its continuation.
+fn define_sequencer(builder: &mut Builder) -> FunctionId {
+    let sequence = builder.reserve_function();
+    let performance = builder.reserve_function();
+    let k = builder.value(Some("k".into()));
+
+    builder.open_block();
+    let applied = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Value(k),
+            arguments: vec![],
+        },
+    );
+    let performance_body = builder.seal_block(Terminator::Return(Atom::Value(applied)));
+    builder.define_function(
+        performance,
+        Some("performance".into()),
+        vec![],
+        performance_body,
+    );
+    builder.assign_role(performance, Role::Performance);
+
+    builder.open_block();
+    builder.let_functions(vec![performance]);
+    let sequence_body = builder.seal_block(Terminator::Return(Atom::Function(performance)));
+    builder.define_function(sequence, Some("sequence".into()), vec![k], sequence_body);
+    builder.item_functions(vec![sequence]);
+    sequence
+}
+
+/// A module whose one host binds `continuation() = describe(1)` in its own block, a closure over nothing, and applies `sequence` to it: a candidate that names its continuation, as each link of a chain of `!` names the rest of the chain.
+fn a_sequenced_candidate() -> Module {
+    let mut builder = Builder::new();
+    let describe = define_describer(&mut builder, false);
+    let sequence = define_sequencer(&mut builder);
+    let one = builder.constant(Constant::Nat(Natural::from(1u32)));
+
+    let continuation = builder.reserve_function();
+    builder.open_block();
+    let described = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(describe),
+            arguments: vec![Atom::Constant(one)],
+        },
+    );
+    let continuation_body = builder.seal_block(Terminator::Return(Atom::Value(described)));
+    builder.define_function(
+        continuation,
+        Some("continuation".into()),
+        vec![],
+        continuation_body,
+    );
+
+    let host = builder.reserve_function();
+    builder.open_block();
+    builder.let_functions(vec![continuation]);
+    let sequenced = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(sequence),
+            arguments: vec![Atom::Function(continuation)],
+        },
+    );
+    let host_body = builder.seal_block(Terminator::Return(Atom::Value(sequenced)));
+    builder.define_function(host, Some("host".into()), vec![], host_body);
+    builder.item_functions(vec![host]);
+
+    let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
+    builder.set_entry(entry);
+    builder.finalize().expect("the fixture verifies")
+}
+
+/// A description's continuation its candidate names is that function, never a copy of it: a copy under its empty substitution would carry the closed call it holds into the next round, as a chain of `!` carried every link's suffix, and the one folded where it stands is folded once.
+#[test]
+fn a_descriptions_continuation_its_candidate_names_is_named_not_copied() {
+    let mut module = a_sequenced_candidate();
+
+    assert!(
+        evaluate_closed_terms(&mut module),
+        "the candidate folds:\n{module}"
+    );
+    module.verify().expect("the folded module verifies");
+    let continuations = module
+        .functions()
+        .iter()
+        .flatten()
+        .filter(|function| function.debug_name.as_deref() == Some("continuation"))
+        .count();
+    assert_eq!(continuations, 1, "no copy of the continuation:\n{module}");
+}
+
 /// `walk(n, acc) = match n | 0 => acc | _ => walk(n - 1, acc + 1)`, bound as an item: a recursion whose every call is its body's tail.
 fn define_walk(builder: &mut Builder) -> FunctionId {
     let walk = builder.reserve_function();

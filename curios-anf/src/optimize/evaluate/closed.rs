@@ -33,6 +33,8 @@ struct Planned {
     owner: Owner,
     /// The function the candidate calls, where it calls one by name.
     callee: Option<FunctionId>,
+    /// The functions the candidate's callee and arguments name, each in scope where it stands.
+    names: Vec<FunctionId>,
     kind: Kind,
 }
 
@@ -67,6 +69,14 @@ impl Planned {
     /// The function a copy for this replacement must not reach again ([`ReifyScope::reaches_candidate`]): the one the candidate calls, where its replacement holds a description.
     fn looping(&self, module: &Module) -> Option<FunctionId> {
         self.callee.filter(|_| self.contains_description(module))
+    }
+
+    /// The functions a closure over nothing reifies as rather than copies ([`ReifyScope::in_scope`]) beside the item-bound ones: the ones the candidate names, where its replacement holds a description.
+    fn named(&self, module: &Module) -> BTreeSet<FunctionId> {
+        match self.contains_description(module) {
+            true => self.names.iter().copied().collect(),
+            false => BTreeSet::new(),
+        }
     }
 
     /// Whether the replacement holds a description anywhere ([`Value::contains_description`]).
@@ -186,6 +196,13 @@ fn plan(
                 continue;
             }
         };
+        let names = std::iter::once(callee)
+            .chain(arguments)
+            .filter_map(|atom| match atom {
+                Atom::Function(function) => Some(*function),
+                Atom::Value(_) | Atom::Constant(_) => None,
+            })
+            .collect();
         let callee = match callee {
             Atom::Function(function) => Some(*function),
             Atom::Value(_) | Atom::Constant(_) => None,
@@ -195,6 +212,7 @@ fn plan(
             result: *result,
             owner,
             callee,
+            names,
             kind,
         }));
     }
@@ -243,7 +261,12 @@ fn apply(module: &mut Module, plans: Vec<Result<Planned, Bail>>) -> (usize, usiz
             plan.splice_point(&block_items, &item_positions);
         let hoisting = plan.owner != splice_owner;
         // Before the dry run, which reads the candidate's block through the same gates the real run does.
-        scope.begin_replacement(position, plan.block(), plan.looping(module));
+        scope.begin_replacement(
+            position,
+            plan.block(),
+            plan.looping(module),
+            plan.named(module),
+        );
         // A candidate holding a description gets the tight cap: a big description-bearing replacement is a sequencing chain's suffix, and copying it per link per round is the compounding the cap stops; the small staged residuals pass untouched. Probe and real run share the cap, or a plan the probe admits would strand at the tighter gate.
         let contains_description = plan.contains_description(module);
         let capped = |pool: usize| {
