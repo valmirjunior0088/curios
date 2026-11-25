@@ -11,7 +11,8 @@ mod tests;
 
 use {
     crate::{
-        CONTEST, Figure, Record, Unit, asked, capture, edition, file, held, root, table, today,
+        CONTEST, Figure, Record, Unit, asked, capture, edition, file, held, root, subject, table,
+        today,
     },
     curios_profile::Instructions,
     std::{
@@ -422,9 +423,9 @@ pub fn contest_sitting(filed: usize) -> Result<(), String> {
     let root = root();
 
     // Before anything is built: building with the wrong compiler and timing it afterwards spends the run to produce the wrong artefact.
+    let subject = subject(&root)?;
     let pinned = held(&root)?;
     let platform = capture();
-    let commit = asked("git", &["rev-parse", "--short", "HEAD"], &root)?;
 
     fs::create_dir_all(root.join(ARTIFACTS)).map_err(|error| error.to_string())?;
     run("cargo", &["xtask", "compiler", "build"], &root)?;
@@ -433,11 +434,6 @@ pub fn contest_sitting(filed: usize) -> Result<(), String> {
         &["build", "--release", "--package", "xbench", "--bin", "twin"],
         &root,
     )?;
-
-    let subject = format!(
-        "{} ({commit})",
-        asked("target/release/curios", &["--version"], &root)?
-    );
 
     for workload in WORKLOADS {
         build(workload, &root)?;

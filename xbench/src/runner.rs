@@ -10,7 +10,7 @@
 mod tests;
 
 use {
-    crate::{Figure, Line, Record, asked, capture, file, held, root, today, workspace_version},
+    crate::{Figure, Line, Record, asked, capture, file, held, root, subject, today},
     serde::Deserialize,
     std::{
         path::{Path, PathBuf},
@@ -203,10 +203,9 @@ pub fn test_sitting(measurement: &str, filed: usize) -> Result<(), String> {
     let root = root();
 
     // Before anything is built: building with the wrong compiler and measuring it afterwards spends the run to produce the wrong record.
+    let subject = subject(&root)?;
     let pinned = held(&root)?;
     let platform = capture();
-    let commit = asked("git", &["rev-parse", "--short", "HEAD"], &root)?;
-    let subject = format!("curios {} ({commit})", workspace_version(&root)?);
 
     let executables = executables(&root)?;
     let (executable, path) = found(&executables, measurement)?;

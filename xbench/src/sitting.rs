@@ -4,7 +4,7 @@
 mod tests;
 
 use {
-    crate::Record,
+    crate::{Record, workspace_version},
     std::{
         fs::{self, OpenOptions},
         io::Write,
@@ -33,6 +33,24 @@ pub fn asked(program: &str, arguments: &[&str], directory: &Path) -> Result<Stri
     match produced.status.success() {
         true => Ok(String::from_utf8_lossy(&produced.stdout).trim().to_string()),
         false => Err(format!("{program} {} failed", arguments.join(" "))),
+    }
+}
+
+/// The subject a record taken in `root` is about: the workspace's version and the commit the sitting is of, refused where the tree holds a change no commit does, before anything is built.
+pub fn subject(root: &Path) -> Result<String, String> {
+    clean(&asked("git", &["status", "--porcelain"], root)?)?;
+    let commit = asked("git", &["rev-parse", "--short", "HEAD"], root)?;
+
+    Ok(format!("curios {} ({commit})", workspace_version(root)?))
+}
+
+/// Refuse a tree whose `git status --porcelain` lists a change: a record names the commit that holds what it measured, and a change no commit holds would make it name one that does not.
+fn clean(status: &str) -> Result<(), String> {
+    match status.trim().is_empty() {
+        true => Ok(()),
+        false => Err(format!(
+            "the tree holds changes no commit does, so a record could name no commit that holds what it measured; commit them first:\n{status}"
+        )),
     }
 }
 
