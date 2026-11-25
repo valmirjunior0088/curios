@@ -54,18 +54,6 @@ The measurement is `curios/tests/profile.rs`'s `prelude_build_profile`, and its 
 
 **Rationale.** A span no recorder listens to costs one relaxed load and a compare, `tracing-core`'s maximum level standing at `OFF` until a subscriber raises it, and a sample's or a note's fields are evaluated only past it. The instrumentation as a build of its own costs more than it saves: what only its features compile takes a compilation of the workspace of its own at every check, a profile of a change compiles the instrumenting crates again, and the compiler a user installs can profile nothing. The node looks of `curios-core` count in every build for the same reason, a thread-local increment a look.
 
-What every build pays is counted, in the user-space instructions a process and every thread and process it starts retire, so a loaded machine reads what a quiet one does. At `0c26dff30`, six release builds of one copy of the tree, made with features of that copy alone that set the macros, the look counter and the allocator apart and told apart by digest, each ran the prelude's build (the program `cargo xtask profile prelude` runs, its recorder taken out) and `curios compile -o` over the 31 programs of `programs/`, each with a fresh `CURIOS_CABINET`, under `BINARYEN_CORES=1 RAYON_NUM_THREADS=1`, read by a wrapper that opens `Instructions` and then starts the subject:
-
-| | the prelude's build | the corpus compiled |
-| --- | --- | --- |
-| no instrumentation | 1,323,874,529,180 | 480,562,435,429 |
-| the macros and their sites, over none | −0.22% | +0.05% |
-| the look counter counting, over the macros | +0.31% | +0.01% |
-| the allocator counting every allocation, over the macros | +3.42% | +0.53% |
-| the allocator counting behind one relaxed load, over the macros | −0.78% | −0.06% |
-
-One build repeats to 0.02%, and two builds of one source differ by up to 0.8% for being different binaries, which is how a build doing more reads below one doing less; only the allocator counting every allocation stands past it, by its four locked read-modify-writes. The release `curios` grows by 0.49% of its bytes and the browser bundle's module by 0.26%, and every program's executable and the prelude's images were one digest across the builds.
-
 **Rejected.** A `profile` feature each instrumenting crate declares, the instrumentation compiled only where it is on: every cost the rationale names. The counting allocator counting in every run, which the allocator's own section refuses.
 
 ### Four instruments, because time and bytes cannot tell waste from bad inputs, and neither sees everything a stage does
