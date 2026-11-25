@@ -1,14 +1,8 @@
 //! The combinator webs the unfolding suites compile, the spellings of one grammar and the doors a web's value is consumed through, and what a compile of one is counted by, which the bench's measurements of unfolding read too.
 
 use {
-    curios_elab::DEFAULT_BUDGET,
-    curios_module::RootSource,
-    curios_pipeline::compile_with_prelude,
-    curios_surface::Entrypoint,
-    std::{
-        fmt::Write,
-        time::{Duration, Instant},
-    },
+    curios_elab::DEFAULT_BUDGET, curios_module::RootSource, curios_pipeline::compile_with_prelude,
+    curios_surface::Entrypoint, std::fmt::Write,
 };
 
 /// Where a rule's inner combinator applications sit. The grammar is identical in all four; only where the applications are written moves.
@@ -211,15 +205,13 @@ pub fn predicates(rules: usize, consumed: Consumed, twice: bool) -> String {
     source
 }
 
-/// Compile for its verdict and its wall clock alone.
-pub fn compile_only(source: &str) -> (Result<(), String>, Duration) {
+/// Compile for its verdict alone.
+pub fn compile_only(source: &str) -> Result<(), String> {
     let entrypoint = source.parse::<Entrypoint>().expect("probe parses");
-    let start = Instant::now();
-    let outcome = compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
-        .map(|_| ())
-        .map_err(|error| error.to_string());
 
-    (outcome, start.elapsed())
+    compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
+        .map(|_| ())
+        .map_err(|error| error.to_string())
 }
 
 /// The [`predicates`] web carried over `Nat` — `+` for `both`, `*` for `anyof`, remainders for the leaves — and proved at `Eq()(top(n), 0)`. Each rule names the one before it twice, as the `twice` arm of [`predicates`] does.

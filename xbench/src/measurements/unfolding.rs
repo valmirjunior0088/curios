@@ -5,9 +5,8 @@
 //! None asserts. A measurement that fails is a measurement with an opinion, and what these read is a cost, not a contract.
 
 use {
-    curios::test_support::*,
-    std::time::Instant,
-    xbench::{Measure, read, read_elapsed, turn},
+    curios::{TALLIES, test_support::*},
+    xbench::{Measure, phase, read, turn},
 };
 
 /// What a combinator application costs when it is written inside a `!` continuation rather than at item level.
@@ -66,9 +65,9 @@ pub fn combinator_sharing_measurements() {
         .iter()
         .map(|(name, rules, source)| {
             move || {
-                let start = Instant::now();
-                let module = anf_optm(source);
-                read_elapsed(name, Some(*rules), start.elapsed());
+                let compiled = phase(TALLIES, || anf_optm(source));
+                compiled.read(name, Some(*rules));
+                let module = compiled.answer;
                 read(
                     &format!("{name}/chain copies"),
                     Measure::Count,
@@ -173,8 +172,9 @@ pub fn scrutinee_refinement_measurements() {
             )| {
                 move || {
                     let name = format!("{named}, {consumed} at {rules}");
-                    let (outcome, elapsed) = compile_only(&program(rules));
-                    read_elapsed(&name, Some(rules as u64), elapsed);
+                    let compiled = phase(TALLIES, || compile_only(&program(rules)));
+                    compiled.read(&name, Some(rules as u64));
+                    let outcome = compiled.answer;
 
                     let ended = match &outcome {
                         Ok(()) => "compiled",
