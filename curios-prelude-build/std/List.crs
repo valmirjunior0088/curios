@@ -39,7 +39,7 @@ pub use sort/{let sort};
 pub mod ord;
 pub use ord/{let ord};
 
-use /std/{Nat, Bool, Option, Str, Eq, Show, Spell, Fmt, Monad, Ordering, Ord, Hash, proved};
+use /std/{Nat, Bool, Option, Str, Eq, Show, Spell, Fmt, Monad, Hash, proved};
 use /std/ops/{Eql};
 
 --- The element at `i`, or `none` past the end.
@@ -275,17 +275,6 @@ satisfy (@A: Type, use Spell(A)) => Spell(List(A)) {
 satisfy Monad(List) {
     pure(x) = [x],
     bind(m, f) = fold(m, [], (x, acc) => [..acc, ..f(x)]),
-}
-
-satisfy (@T: Type, use Ord(T)) => Ord(List(T)) {
-    ord = ord,
-    lt(a, b) = Ordering/is_lt(ord(a, b)),
-    le(a, b) = Ordering/is_le(ord(a, b)),
-    flips = ord/flips,
-    trans = ord/trans,
-    eq = ord/eq,
-    lt_of_ord(_, _) = Eq/refl(),
-    le_of_ord(_, _) = Eq/refl(),
 }
 
 satisfy (@A: Type, use Hash(A)) => Hash(List(A)) {

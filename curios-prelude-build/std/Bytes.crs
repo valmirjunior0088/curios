@@ -11,8 +11,7 @@ pub use to_nat/{let to_nat};
 pub mod ord;
 pub use ord/{let ord};
 
-use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Show, Spell, Fmt, Ordering, Ord, Hash, Map,
-    proved};
+use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Show, Spell, Fmt, Hash, Map, proved};
 use /std/ops/{Eql};
 
 --- The byte at `i`, or `none` past the end.
@@ -299,17 +298,6 @@ satisfy Eql(Bytes) {
     eql = eql,
     eq = eq_of_eql,
     refl(_) = Bool/True/qed(),
-}
-
-satisfy Ord(Bytes) {
-    ord = ord,
-    lt(a, b) = Ordering/is_lt(ord(a, b)),
-    le(a, b) = Ordering/is_le(ord(a, b)),
-    flips = ord/flips,
-    trans = ord/trans,
-    eq = ord/eq,
-    lt_of_ord(_, _) = Eq/refl(),
-    le_of_ord(_, _) = Eq/refl(),
 }
 
 --- Hexadecimal, two digits per byte.

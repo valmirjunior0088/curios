@@ -6,16 +6,16 @@ let _a_number_orders_as_equal_to_itself(a: Int) -> Eq()(Int/ord(a, a), Ordering/
     Ord/refl(a);
 
 let _opposite_signs_of_one_magnitude_are_ordered: Holds(-7 < +7) =
-    Int/ord/lt(-7, +7, Eq/refl());
+    Ord/below(-7, +7, Eq/refl());
 
 let _an_answer_of_eq_is_an_equation(a: Int, h: Eq()(Int/ord(a, +0), Ordering/eq())) -> Eq()(a, +0) =
-    Int/ord/eq(a, +0, h);
+    Ord/eq(a, +0, h);
 
 let _swapping_the_operands_flips_the_answer(
     a: Int,
     b: Int,
 ) -> Eq()(Int/ord(b, a), Ordering/flip(Int/ord(a, b))) =
-    Int/ord/flips(a, b);
+    Ord/flips(a, b);
 
 let _the_order_is_transitive(
     a: Int,
@@ -24,13 +24,13 @@ let _the_order_is_transitive(
     p: Holds(Ordering/is_le(Int/ord(a, b))),
     q: Holds(Ordering/is_le(Int/ord(b, c))),
 ) -> Holds(Ordering/is_le(Int/ord(a, c))) =
-    Int/ord/trans(a, b, c, p, q);
+    Ord/trans(a, b, c, p, q);
 
 let _the_naturals_order_the_same_way(
     a: Nat,
     b: Nat,
 ) -> Eq()(Nat/ord(b, a), Ordering/flip(Nat/ord(a, b))) =
-    Nat/ord/flips(a, b);
+    Ord/flips(a, b);
 
 let _a_factor_below_zero_cancels(a: Int, b: Int, e: Eq()(a * -3, b * -3)) -> Eq()(a, b) =
     Int/mul/cancel_r(a, b, -3, e);

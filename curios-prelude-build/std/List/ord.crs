@@ -16,7 +16,7 @@ pub let ord(@T: Type, use Ord(T), a: List(T), b: List(T)) -> Ordering =
 
 -- A recursion over both lists. At two conses `ord` is a step ([`Ordering/then`]): the heads' answer, and the tails' where they tie, so each law below is the step's, the heads' part by the elements' own law and the tails' by the recursion.
 --- `ord` answers the flipped answer with its operands swapped.
-pub let flips(
+let flips(
     @T: Type,
     use Ord(T),
     a: List(T),
@@ -40,7 +40,7 @@ pub let flips(
 
 -- An empty list and a list that is not settle what is asked wherever they meet, a `gt` or an `lt` that [`Ordering/chains`] reads alone, and two empty lists leave the third's answer chaining with itself. A case of the third list is taken where the first is empty and the second is not: the third empty, the second answer is `gt`, and otherwise the third answer is `lt`.
 --- The answers of `ord` at `a` and `b`, at `b` and `c`, and at `a` and `c` chain ([`Ordering/chains`]).
-pub let chains(
+let chains(
     @T: Type,
     use Ord(T),
     a: List(T),
@@ -74,7 +74,7 @@ pub let chains(
     end;
 
 --- `ord` as a relation carries across a middle list.
-pub let trans(
+let trans(
     @T: Type,
     use Ord(T),
     a: List(T),
@@ -86,7 +86,7 @@ pub let trans(
     Ordering/chains/le(ord(a, b), ord(b, c), ord(a, c), chains(a, b, c), below, above);
 
 --- `ord(a, b)` is `eq` only where `a` is `b`: the order agrees with equality.
-pub let eq(
+let eq(
     @T: Type,
     use Ord(T),
     a: List(T),
@@ -108,3 +108,14 @@ pub let eq(
             Eq/refl()
         end
     end;
+
+satisfy (@T: Type, use Ord(T)) => Ord(List(T)) {
+    ord = ord,
+    lt(a, b) = Ordering/is_lt(ord(a, b)),
+    le(a, b) = Ordering/is_le(ord(a, b)),
+    flips = flips,
+    trans = trans,
+    eq = eq,
+    lt_of_ord(_, _) = Eq/refl(),
+    le_of_ord(_, _) = Eq/refl(),
+}

@@ -23,10 +23,10 @@ let reversed(
             match Nat/ord(hn, kn)
             | gt() => match parted end
             | lt() =>
-                let under: Bool/Holds(hn < kn) = Nat/ord/lt(hn, kn, Eq/refl());
+                let under: Bool/Holds(hn < kn) = Ord/below(hn, kn, Eq/refl());
                 Bytes/ord/below/of_heads(Byte/not(k), Byte/not(h), flipped(r), flipped(t), proved())
             | eq() =>
-                let same: Eq()(hn, kn) = Nat/ord/eq(hn, kn, Eq/refl());
+                let same: Eq()(hn, kn) = Ord/eq(hn, kn, Eq/refl());
                 Eq/subst(
                     (o: Ordering) =>
                         Bool/Holds(
@@ -58,10 +58,10 @@ let halves(
             let (hn, kn) = (Byte/to_nat(h), Byte/to_nat(k));
             match Nat/ord(127, hn)
             | lt() =>
-                let over_h: Bool/Holds(127 < hn) = Nat/ord/lt(127, hn, Eq/refl());
+                let over_h: Bool/Holds(127 < hn) = Ord/below(127, hn, Eq/refl());
                 match Nat/ord(127, kn)
                 | lt() =>
-                    let over_k: Bool/Holds(127 < kn) = Nat/ord/lt(127, kn, Eq/refl());
+                    let over_k: Bool/Holds(127 < kn) = Ord/below(127, kn, Eq/refl());
                     Bytes/ord/below/of_heads(Byte/not(h), k, flipped(t), r, proved())
                 | eq() | gt() => match upper_b end
                 end
@@ -115,7 +115,7 @@ pub let monotone(a: Int, b: Int) -> Eq()(Int/ord(a, b), Bytes/ord(hash(a), hash(
             Ord/of_gt(a, b, Bool/True/qed()),
             Eq/sym(
                 Eq/trans(
-                    Bytes/ord/flips(hash(b), hash(a)),
+                    Ord/flips(hash(b), hash(a)),
                     Eq/cong(
                         Ordering/flip,
                         Bytes/ord/below/lt(hash(b), hash(a), of_lt(b, a, Bool/True/qed()))))))
@@ -123,12 +123,12 @@ pub let monotone(a: Int, b: Int) -> Eq()(Int/ord(a, b), Bytes/ord(hash(a), hash(
         Eq/subst(
             (y: Int) => Eq()(Int/ord(a, y), Bytes/ord(hash(a), hash(y))),
             Int/le/antisym(a, b, proved(), proved()),
-            Eq/sym(Bytes/ord/refl(hash(a))))
+            Eq/sym(Ord/refl(hash(a))))
     end;
 
 --- Distinct integers have distinct encodings: two with one encoding are `eq` in their order, which is equality.
 pub let injective(a: Int, b: Int, same: Eq()(hash(a), hash(b))) -> Eq()(a, b) =
-    Int/ord/eq(
+    Ord/eq(
         a,
         b,
         Eq/trans(
@@ -136,4 +136,4 @@ pub let injective(a: Int, b: Int, same: Eq()(hash(a), hash(b))) -> Eq()(a, b) =
             Eq/subst(
                 (z: Bytes) => Eq()(Bytes/ord(hash(a), z), Ordering/eq()),
                 same,
-                Bytes/ord/refl(hash(a)))));
+                Ord/refl(hash(a)))));

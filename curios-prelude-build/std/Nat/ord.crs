@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, Eq, Ordering, Ord, proved};
+use /std/{Nat, Bool, Eq, Ordering, Ord};
 
 --- The order of the two.
 pub let ord(x: Nat, y: Nat) -> Ordering =
@@ -8,31 +8,9 @@ pub let ord(x: Nat, y: Nat) -> Ordering =
     | _ => Ordering/gt()
     end;
 
--- Of two naturals that differ, the one that is at most the other is below it.
-let below(
-    a: Nat,
-    b: Nat,
-    le: Bool/Holds(b <= a),
-    ne: Bool/Holds(Bool/not(a == b)),
-) -> Bool/Holds(b < a) =
-    match b < a
-    | true => Bool/True/qed()
-    | false =>
-        let same: Eq()(a, b) = Nat/le/antisym(a, b, proved(), le);
-        match Eq/subst((x: Nat) => Bool/Holds(Bool/not(a == x)), Eq/sym(same), ne)
-        end
-    end;
-
-pub let lt(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/lt())) -> Bool/Holds(a < b) =
-    match
-    | a < b => Bool/True/qed()
-    | a == b => match Ordering/eq_neq_lt(h) end
-    | _ => match Ordering/gt_neq_lt(h) end
-    end;
-
 -- By recursion on both sides, as [`flips`] is.
 --- `ord(a, b)` is `eq` only where `a` is `b`: the order agrees with equality.
-pub let eq(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/eq())) -> Eq()(a, b) =
+let eq(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/eq())) -> Eq()(a, b) =
     match a
     | 0 =>
         match b
@@ -46,32 +24,9 @@ pub let eq(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/eq())) -> Eq()(a, b) =
         end
     end;
 
-pub let gt(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/gt())) -> Bool/Holds(b < a) =
-    match
-    | a < b => match Ordering/gt_neq_lt(Eq/sym(h)) end
-    | a == b => match Ordering/gt_neq_eq(Eq/sym(h)) end
-    | _ => below(a, b, proved(), Bool/True/qed())
-    end;
-
-pub let le(a: Nat, b: Nat, h: Bool/Holds(Ordering/is_le(ord(a, b)))) -> Bool/Holds(a <= b) =
-    match
-    | a < b => proved()
-    | a == b => Nat/le/of_eq(proved())
-    | _ => match h end
-    end;
-
-pub let of_le(a: Nat, b: Nat, p: Bool/Holds(a <= b)) -> Bool/Holds(Ordering/is_le(ord(a, b))) =
-    match
-    | a < b => Bool/True/qed()
-    | a == b => Bool/True/qed()
-    | _ =>
-        let strict: Bool/Holds(b < a) = below(a, b, proved(), Bool/True/qed());
-        match proved(@Bool/False) end
-    end;
-
--- By recursion on both sides: a successor on each cancels in the two comparisons `ord` reads, so `ord` of two successors is `ord` of their predecessors. It reads no lemma, and none typed through `<` or `<=`: `Ord`'s witness at `Nat` names this law and the four below, and an operator would read that witness back.
+-- By recursion on both sides: a successor on each cancels in the two comparisons `ord` reads, so `ord` of two successors is `ord` of their predecessors. It reads no lemma, and none typed through `<` or `<=`: `Ord`'s witness at `Nat`, below, names this law and the others here, and an operator would read that witness back.
 --- `ord` answers the flipped answer with its operands swapped.
-pub let flips: Ord/Flips(ord) =
+let flips: Ord/Flips(ord) =
     (a, b) =>
         match a
         | 0 => match b | 0 => Eq/refl() | _ + 1 => Eq/refl() end
@@ -80,7 +35,7 @@ pub let flips: Ord/Flips(ord) =
 
 -- By recursion on the three, as [`flips`] is on its two.
 --- `ord` as a relation carries across a middle element.
-pub let trans: Ord/Trans(Ord/le_by(ord)) =
+let trans: Ord/Trans(Ord/le_by(ord)) =
     (a, b, c, p, q) =>
         match a
         | 0 => match c | 0 => Bool/True/qed() | _ + 1 => Bool/True/qed() end
@@ -97,15 +52,26 @@ pub let trans: Ord/Trans(Ord/le_by(ord)) =
 
 -- Stated over `Nat/lt` by name, as [`is_le`] is over `Nat/le`: `a < b` would read the witness that names this.
 --- `a < b` is `ord` answering `lt`.
-pub let is_lt(a: Nat, b: Nat) -> Eq()(Nat/lt(a, b), Ordering/is_lt(ord(a, b))) =
+let is_lt(a: Nat, b: Nat) -> Eq()(Nat/lt(a, b), Ordering/is_lt(ord(a, b))) =
     match a
     | 0 => match b | 0 => Eq/refl() | _ + 1 => Eq/refl() end
     | ap + 1 => match b | 0 => Eq/refl() | bp + 1 => is_lt(ap, bp) end
     end;
 
 --- `a <= b` is `ord` answering `lt` or `eq`.
-pub let is_le(a: Nat, b: Nat) -> Eq()(Nat/le(a, b), Ordering/is_le(ord(a, b))) =
+let is_le(a: Nat, b: Nat) -> Eq()(Nat/le(a, b), Ordering/is_le(ord(a, b))) =
     match a
     | 0 => match b | 0 => Eq/refl() | _ + 1 => Eq/refl() end
     | ap + 1 => match b | 0 => Eq/refl() | bp + 1 => is_le(ap, bp) end
     end;
+
+satisfy Ord(Nat) {
+    ord = ord,
+    lt = Nat/lt,
+    le = Nat/le,
+    flips = flips,
+    trans = trans,
+    eq = eq,
+    lt_of_ord = is_lt,
+    le_of_ord = is_le,
+}

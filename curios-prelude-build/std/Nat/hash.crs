@@ -398,7 +398,7 @@ pub let monotone(a: Nat, b: Nat) -> Eq()(Nat/ord(a, b), Bytes/ord(hash(a), hash(
             Ord/of_gt(a, b, Bool/True/qed()),
             Eq/sym(
                 Eq/trans(
-                    Bytes/ord/flips(hash(b), hash(a)),
+                    Ord/flips(hash(b), hash(a)),
                     Eq/cong(
                         Ordering/flip,
                         Bytes/ord/below/lt(hash(b), hash(a), of_lt(b, a, Bool/True/qed()))))))
@@ -406,12 +406,12 @@ pub let monotone(a: Nat, b: Nat) -> Eq()(Nat/ord(a, b), Bytes/ord(hash(a), hash(
         Eq/subst(
             (y: Nat) => Eq()(Nat/ord(a, y), Bytes/ord(hash(a), hash(y))),
             Nat/le/antisym(a, b, proved(), proved()),
-            Eq/sym(Bytes/ord/refl(hash(a))))
+            Eq/sym(Ord/refl(hash(a))))
     end;
 
 --- Distinct numbers have distinct encodings: two with one encoding are `eq` in their order, which is equality.
 pub let injective(a: Nat, b: Nat, same: Eq()(hash(a), hash(b))) -> Eq()(a, b) =
-    Nat/ord/eq(
+    Ord/eq(
         a,
         b,
         Eq/trans(
@@ -419,7 +419,7 @@ pub let injective(a: Nat, b: Nat, same: Eq()(hash(a), hash(b))) -> Eq()(a, b) =
             Eq/subst(
                 (z: Bytes) => Eq()(Bytes/ord(hash(a), z), Ordering/eq()),
                 same,
-                Bytes/ord/refl(hash(a)))));
+                Ord/refl(hash(a)))));
 
 --- An encoding leads with a byte in the upper half: the one byte `0x7F` is below every encoding, which is what leaves the lower half to the complements an integer below zero is written as.
 pub let leads(n: Nat) -> Bool/Holds(Bytes/ord/below(0x[0x7F], hash(n))) =

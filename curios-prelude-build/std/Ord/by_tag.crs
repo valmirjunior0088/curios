@@ -19,8 +19,8 @@ pub let flips(
         same,
         Nat/ord(right, left),
         back,
-        Nat/ord/flips(left, right),
-        (e) => tied(Nat/ord/eq(left, right, e)));
+        Ord/flips(left, right),
+        (e) => tied(Ord/eq(left, right, e)));
 
 --- Two positions `by_tag` answers `eq` at are one.
 pub let tied(
@@ -29,7 +29,7 @@ pub let tied(
     same: Ordering,
     h: Eq()(by_tag(left, right, same), Ordering/eq()),
 ) -> Eq()(left, right) =
-    Nat/ord/eq(left, right, Ordering/then/first(Nat/ord(left, right), same, h));
+    Ord/eq(left, right, Ordering/then/first(Nat/ord(left, right), same, h));
 
 --- Three answers of `by_tag` chain, where the answers it is handed chain at one position.
 pub let chains(
@@ -50,4 +50,4 @@ pub let chains(
         y,
         z,
         Ord/chains(left, middle, right),
-        (e, f) => tied(Nat/ord/eq(left, middle, e), Nat/ord/eq(middle, right, f)));
+        (e, f) => tied(Ord/eq(left, middle, e), Ord/eq(middle, right, f)));

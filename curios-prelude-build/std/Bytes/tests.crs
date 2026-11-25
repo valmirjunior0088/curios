@@ -33,7 +33,7 @@ test bytes_show_as_hexadecimal =
 
 -- The orders of `Bytes` and `Str` walk both runs' structure, so a type may name them: each is stated reflexive here, a statement an index walked upward under a guard is refused for.
 let bytes_order_is_reflexive(a: Bytes) -> Eq()(Bytes/ord(a, a), Ordering/eq()) =
-    Bytes/ord/refl(a);
+    Ord/refl(a);
 
 let _str_order_is_reflexive(a: Str) -> Eq()(Str/ord(a, a), Ordering/eq()) =
     bytes_order_is_reflexive(Str/to_bytes(a));
@@ -80,7 +80,7 @@ let _a_run_below_another_is_before_it_wherever_the_two_stand(
 
 -- The order of bytes carries across a middle run, and reads through a shared prefix.
 let _the_order_of_bytes_is_transitive: Ord/Trans(Ord/le_by(Bytes/ord)) =
-    Bytes/ord/trans;
+    (a, b, c, p, q) => Ord/trans(a, b, c, p, q);
 
 let _the_order_of_bytes_reads_past_a_shared_prefix(
     p: Bytes,
