@@ -122,9 +122,9 @@ fn a_file_kind_no_code_names_fails_the_stat() {
     );
 }
 
-/// A write takes the whole of its message before anything waits, so one the host answers would block is a reply its row rules out, which the library reads as a failure rather than a wait.
+/// A write the host answers would block took the whole of its message and still holds some of it, so the library waits on a flush of the handle and never sends the write again: the write succeeds once the flush drains.
 #[test]
-fn a_write_the_host_answers_would_block_is_a_failure() {
+fn a_write_the_host_answers_would_block_is_handed_on_by_a_flush() {
     let code = answering(
         r#"
         use /std/{Io, Try, Proc};
@@ -138,7 +138,7 @@ fn a_write_the_host_answers_would_block_is_a_failure() {
         vec![RawValue::Nat(StatusCodes::WOULD_BLOCK)],
     );
 
-    assert_eq!(code, Ok(7));
+    assert_eq!(code, Ok(0));
 }
 
 /// Nothing resumes after `exit`, so the program holds no code for a return from it: a host whose `exit` returns traps where it lands.

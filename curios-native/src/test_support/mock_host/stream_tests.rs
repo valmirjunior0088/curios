@@ -179,7 +179,7 @@ fn a_request_for_nothing_moves_nothing() {
     );
 }
 
-/// A scripted flush waits as a TLS stream's does while its records wait for the socket, then drains; the standard streams hold nothing, and an unknown handle is `NotFound`.
+/// A scripted flush waits as a TLS stream's does while its records wait for the socket, then drains, and a write says which it met: `WouldBlock` while a flush still waits, having taken its bytes, and `Ok` once none does. The standard streams hold nothing, and an unknown handle is `NotFound`.
 #[test]
 fn a_scripted_flush_waits_then_drains() {
     let (host, _io) = MockHost::builder()
@@ -193,9 +193,14 @@ fn a_scripted_flush_waits_then_drains() {
     );
 
     assert_eq!(host.handle_flush(Handle::Stdout), Ok(()));
+    assert_eq!(
+        host.handle_write(socket.clone(), b"held".to_vec()),
+        Err(Failure::WouldBlock)
+    );
     assert_eq!(host.handle_flush(socket.clone()), Err(Failure::WouldBlock));
     assert_eq!(host.handle_flush(socket.clone()), Err(Failure::WouldBlock));
-    assert_eq!(host.handle_flush(socket), Ok(()));
+    assert_eq!(host.handle_flush(socket.clone()), Ok(()));
+    assert_eq!(host.handle_write(socket, b"taken".to_vec()), Ok(()));
     assert_eq!(
         host.handle_flush(Handle::Other(vec![0xff])),
         Err(Failure::NotFound)

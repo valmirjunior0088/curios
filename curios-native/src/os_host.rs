@@ -1335,13 +1335,10 @@ impl HostOps for OsHost {
     fn handle_write(&self, io: Handle, bytes: Vec<u8>) -> Result<(), Failure> {
         self.stream(&io, Direction::Write)?;
 
-        // An empty write takes nothing: it only asks whether the handle could be written.
-        if bytes.is_empty() {
-            return Ok(());
-        }
-
         let mut outbound = self.outbound.lock().unwrap();
         match outbound.get_mut(&io.bytes()) {
+            // An empty write takes nothing: it hands on what is held already, as any write does.
+            _ if bytes.is_empty() => {}
             // The message is held whole or not at all: where the host cannot hold it beside what it holds already, the write fails having taken none of it.
             Some(held) => {
                 if held.try_reserve(bytes.len()).is_err() {
@@ -1354,11 +1351,8 @@ impl HostOps for OsHost {
             }
         }
 
-        // The message is held, so a stream that takes no more of it now has taken it all the same: what is held waits for the next row of the handle.
-        match self.handed_on(&mut outbound, &io) {
-            Err(Failure::WouldBlock) => Ok(()),
-            handed => handed,
-        }
+        // The message is held, so a stream that takes no more of it now has taken it all the same, and the reply says so: `WouldBlock` is what is held waiting for a flush, never a write to send again.
+        self.handed_on(&mut outbound, &io)
     }
 
     fn handle_flush(&self, io: Handle) -> Result<(), Failure> {

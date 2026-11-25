@@ -101,9 +101,37 @@ fn with_finishes_its_socket_before_it_closes_it() {
             [
                 SocketEvent::Wrote(9),
                 SocketEvent::Ended,
+                SocketEvent::Flushed,
                 SocketEvent::Finished,
                 SocketEvent::Closed,
             ]
+        );
+    }
+}
+
+// A write is one host call where the host hands the message on whole, and is followed by a flush only where the host says it still holds some: one that waits, as a TLS stream's does while its records wait for the socket, is asked again until it drains. The flush ahead of the finish is the release's own, a connection's courtesy to its peer.
+#[test]
+fn a_write_is_flushed_only_where_the_host_still_holds_some() {
+    for (waits, flushes) in [(0, 0), (2, 3)] {
+        let (system, io) = MockHost::builder()
+            .net([("example.com:80", "pong")])
+            .pending_flushes(waits)
+            .build();
+        run_text(EXCHANGE, system).expect("expected result");
+        assert_eq!(io.output(), b"pong");
+        assert_eq!(
+            io.socket_events(),
+            [
+                vec![SocketEvent::Wrote(9)],
+                vec![SocketEvent::Flushed; flushes],
+                vec![
+                    SocketEvent::Ended,
+                    SocketEvent::Flushed,
+                    SocketEvent::Finished,
+                    SocketEvent::Closed,
+                ],
+            ]
+            .concat()
         );
     }
 }
@@ -211,6 +239,7 @@ fn serve_finishes_a_connection_before_it_closes_it() {
         io.socket_events(),
         [
             SocketEvent::Wrote(10),
+            SocketEvent::Flushed,
             SocketEvent::Finished,
             SocketEvent::Closed,
         ]

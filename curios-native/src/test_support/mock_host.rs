@@ -1043,6 +1043,11 @@ impl HostOps for MockHost {
             return Err(Failure::NotFound);
         }
 
+        self.socket_events
+            .lock()
+            .unwrap()
+            .push(SocketEvent::Flushed);
+
         // The scripted host holds nothing of what it accepted, so a flush drains at once — unless the script says a flush waits, as a TLS stream's does while its records wait for the socket.
         let mut pending = self.pending_flushes.lock().unwrap();
 
@@ -1242,7 +1247,7 @@ impl HostOps for MockHost {
             return Ok(());
         }
 
-        match self.table.lock().unwrap().get(&io) {
+        let taken = match self.table.lock().unwrap().get(&io) {
             // File-backed handle: append to the in-memory filesystem.
             Some(MockResource::File(open)) => {
                 self.files.append(&open.path, &bytes);
@@ -1284,6 +1289,13 @@ impl HostOps for MockHost {
                 Ok(())
             }
             _ => Err(Failure::NotFound),
+        };
+        taken?;
+
+        // The scripted host holds nothing of what it accepted, so a write answers that nothing is held, unless the script says a flush waits: then the write says something is, as a TLS stream's does while its records wait for the socket.
+        match *self.pending_flushes.lock().unwrap() {
+            0 => Ok(()),
+            _ => Err(Failure::WouldBlock),
         }
     }
 
@@ -1613,6 +1625,8 @@ fn serve_from(
 pub enum SocketEvent {
     /// A write, by the bytes it took.
     Wrote(usize),
+    /// A flush of what the host holds of a handle it knows, whatever it answered.
+    Flushed,
     /// A read that answered the end of the stream.
     Ended,
     /// The sending half was ended.

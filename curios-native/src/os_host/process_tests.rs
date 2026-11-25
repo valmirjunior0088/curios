@@ -62,7 +62,7 @@ fn a_piped_child_stream_is_filed_non_blocking() {
     host.handle_close(stdout);
 }
 
-/// A write takes the whole of its message and holds what the pipe has no room for, which each flush hands on as the reader makes room: `cat` echoes the message whole, and a flush answers `WouldBlock` until nothing is held. A mebibyte is past what the two pipes and `cat` hold between them.
+/// A write takes the whole of its message and holds what the pipe has no room for, answering `WouldBlock` for what it still holds, which each flush hands on as the reader makes room: `cat` echoes the message whole, and a flush answers `WouldBlock` until nothing is held. A mebibyte is past what the two pipes and `cat` hold between them.
 #[test]
 fn a_write_holds_what_its_pipe_has_no_room_for_until_flushes_hand_it_on() {
     let host = OsHost::with_args(vec![]);
@@ -86,7 +86,10 @@ fn a_write_holds_what_its_pipe_has_no_room_for_until_flushes_hand_it_on() {
     };
     let message: Vec<u8> = (0..1 << 20).map(|i: u32| (i % 251) as u8).collect();
 
-    assert_eq!(host.handle_write(stdin.clone(), message.clone()), Ok(()));
+    assert_eq!(
+        host.handle_write(stdin.clone(), message.clone()),
+        Err(Failure::WouldBlock)
+    );
     assert_eq!(host.handle_flush(stdin.clone()), Err(Failure::WouldBlock));
 
     let given_up = Instant::now() + Duration::from_secs(10);
@@ -141,7 +144,7 @@ fn a_drain_that_fails_is_answered_once_and_drops_what_was_held() {
 
     assert_eq!(
         host.handle_write(stdin.clone(), vec![b'x'; 1 << 20]),
-        Ok(())
+        Err(Failure::WouldBlock)
     );
     assert_eq!(host.handle_flush(stdin.clone()), Err(Failure::WouldBlock));
     assert!(awaited(&host, &child, true, false));

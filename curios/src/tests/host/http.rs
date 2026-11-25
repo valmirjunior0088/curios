@@ -338,6 +338,7 @@ fn a_reply_is_written_finished_and_read_past_before_the_close(server: &Compiled)
         events,
         [
             SocketEvent::Wrote(reply.len()),
+            SocketEvent::Flushed,
             SocketEvent::Finished,
             SocketEvent::Ended,
             SocketEvent::Closed,
@@ -356,6 +357,7 @@ fn a_reply_is_written_finished_and_read_past_before_the_close(server: &Compiled)
         events,
         [
             SocketEvent::Wrote(reply.len()),
+            SocketEvent::Flushed,
             SocketEvent::Finished,
             SocketEvent::Closed,
         ]

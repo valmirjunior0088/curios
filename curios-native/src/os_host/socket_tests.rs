@@ -86,7 +86,7 @@ fn a_loopback_connect_settles_and_both_ends_would_block_before_data() {
     host.handle_close(listener);
 }
 
-/// A TLS upgrade files the stream and touches the socket not at all: the client hello leaves only when the guest first writes, which takes its bytes and holds them while the reply is awaited, a flush answering `WouldBlock` meanwhile, and the bytes the server side then reads are a TLS handshake record — the handshake is driven by the guest's own reads and writes and parks like any other progress. A plaintext reply is not TLS, so the client's next read reports `TlsError`, with the handle still filed for its finalizer to close.
+/// A TLS upgrade files the stream and touches the socket not at all: the client hello leaves only when the guest first writes, which takes its bytes and answers `WouldBlock` for what it holds of them while the reply is awaited, as a flush does meanwhile, and the bytes the server side then reads are a TLS handshake record — the handshake is driven by the guest's own reads and writes and parks like any other progress. A plaintext reply is not TLS, so the client's next read reports `TlsError`, with the handle still filed for its finalizer to close.
 #[test]
 fn a_tls_upgrade_is_driven_by_the_reads_and_writes_that_follow() {
     let host = OsHost::with_args(vec![]);
@@ -100,7 +100,10 @@ fn a_tls_upgrade_is_driven_by_the_reads_and_writes_that_follow() {
         host.handle_read(server.clone(), 8),
         Err(Failure::WouldBlock)
     );
-    assert_eq!(host.handle_write(client.clone(), b"x".to_vec()), Ok(()));
+    assert_eq!(
+        host.handle_write(client.clone(), b"x".to_vec()),
+        Err(Failure::WouldBlock)
+    );
     assert_eq!(host.handle_flush(client.clone()), Err(Failure::WouldBlock));
 
     assert!(awaited(&host, &server, true, false));
