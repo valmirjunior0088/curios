@@ -1,117 +1,14 @@
 use {
     super::*,
-    crate::*,
-    curios_num::Binary,
-    std::collections::BTreeMap,
+    crate::{test_support::*, *},
     xbench::{Measure, read},
 };
-
-/// The minimal host: a definition store and a budget. Its own reduction *is* the machine, which is exactly the position the real hosts put it in for closed terms — anything the intrinsic folds hand back through the [`Reducer`] seam lands here and re-enters the machine.
-struct Host {
-    definitions: BTreeMap<Free, Term>,
-    budget: u64,
-    by_category: BTreeMap<Category, u64>,
-    minted: u64,
-    /// What this host reads for a payload off a scrutinee's type: nothing, unless a test states one.
-    stated: Option<Vec<Term>>,
-    /// Which payloads of any constructor this host's entries state are proofs: none, unless a test states some.
-    proofs: Vec<bool>,
-    /// The bodies of the declarations an instance names, as stated, before its levels are read into them: none, unless a test states some.
-    declared: BTreeMap<Global, Term>,
-    memo: ClosedMemo,
-}
-
-impl Host {
-    fn new(budget: u64) -> Self {
-        Self {
-            definitions: BTreeMap::new(),
-            budget,
-            by_category: BTreeMap::new(),
-            minted: 0,
-            stated: None,
-            proofs: Vec::new(),
-            declared: BTreeMap::new(),
-            memo: ClosedMemo::default(),
-        }
-    }
-}
-
-impl Reducer for Host {
-    fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
-        reduce_closed(self, term, Demand::Whnf)
-    }
-
-    fn reduce_forced(&mut self, term: Term) -> Result<Term, ReduceError> {
-        reduce_closed(self, term, Demand::Forced)
-    }
-
-    fn spend(&mut self, cost: Cost) -> Result<(), ReduceError> {
-        if cost.is_refused() || cost.get() > self.budget {
-            return Err(ReduceError::exhausted(self.budget, cost));
-        }
-
-        *self.by_category.entry(cost.category()).or_default() += cost.get();
-        self.budget -= cost.get();
-        Ok(())
-    }
-
-    fn fresh_binder(&mut self, _hint: Option<&str>) -> Free {
-        self.minted += 1;
-        Free::local(1_000_000 + self.minted, Some("fresh"))
-    }
-}
-
-impl ClosedHost for Host {
-    fn closed_body(&self, name: &Free) -> Option<&Term> {
-        self.definitions.get(name)
-    }
-
-    fn closed_body_at(&self, name: &Global, _: &Universes) -> Option<&Term> {
-        self.declared.get(name)
-    }
-
-    fn stated_payload(
-        &mut self,
-        _head: &Term,
-        _tag: &crate::Atom,
-    ) -> Result<Option<Vec<Term>>, ReduceError> {
-        Ok(self.stated.clone())
-    }
-
-    fn payload_proofs(&self, _family: &Global, _tag: &crate::Atom) -> Vec<bool> {
-        self.proofs.clone()
-    }
-
-    fn closed_memo(&mut self) -> &mut ClosedMemo {
-        &mut self.memo
-    }
-}
-
-fn binder(index: u32, hint: &str) -> Free {
-    Free::local(u64::from(index), Some(hint))
-}
-
-fn nat(n: usize) -> Term {
-    Term::intrinsic(Intrinsic::Nat(crate::Nat::new(n)))
-}
-
-fn nat_type() -> Term {
-    Term::intrinsic(Intrinsic::NatType)
-}
-
-fn bytes_type() -> Term {
-    Term::intrinsic(Intrinsic::BytesType)
-}
-
-fn bytes(data: Vec<u8>) -> Term {
-    Term::intrinsic(Intrinsic::Bytes(Binary::from_bytes(data)))
-}
 
 /// The non-tail form: a structural recursion whose cons arm combines the call at the tail, `count(0x[]) = 0`, `count(0x[h, ..t]) = count(t) + 1`. Its depth is the nesting of calls — the shape only an explicit stack can walk without a native frame per element — so the budget this passes under is the claim: about two hundred units per element where the recursive strategy's frame row alone is [`Cost::FRAME`].
 #[test]
 fn a_non_tail_recursion_costs_transitions_rather_than_frames() {
     let n = 2_000usize;
-    let mut host = Host::new(200 * n as u64);
+    let mut host = MachineHost::new(200 * n as u64);
 
     let count = non_tail(vec![7; n], nat(0), |call| {
         Term::intrinsic(Intrinsic::nat_add(call, nat(1)))
@@ -124,7 +21,7 @@ fn a_non_tail_recursion_costs_transitions_rather_than_frames() {
 #[test]
 fn a_call_demanded_twice_is_forced_once() {
     let n = 2_000usize;
-    let mut host = Host::new(200 * n as u64);
+    let mut host = MachineHost::new(200 * n as u64);
     let c = binder(6, "c");
 
     let count = non_tail(vec![7; n], nat(5), |call| {
@@ -134,37 +31,11 @@ fn a_call_demanded_twice_is_forced_once() {
     assert_eq!(reduce_closed(&mut host, count, Demand::Forced), Ok(nat(5)));
 }
 
-/// `count(0x[]) = empty`, `count(0x[h, ..t]) = cons(count(t))` over `data`.
-fn non_tail(data: Vec<u8>, empty: Term, cons: impl Fn(Term) -> Term) -> Term {
-    let (count, b) = (binder(0, "count"), binder(1, "b"));
-    let (h, t) = (binder(3, "h"), binder(4, "t"));
-
-    let body = Term::func(
-        [(b, bytes_type())],
-        Term::bytes_match(
-            Term::free_var(&b),
-            nat_type(),
-            empty,
-            &[&h, &t],
-            cons(Term::apply(Term::free_var(&count), [Term::free_var(&t)])),
-        ),
-    );
-
-    Term::rec(
-        [(
-            count,
-            Term::func_type([(b, bytes_type())], nat_type()),
-            body,
-        )],
-        Term::apply(Term::free_var(&count), [bytes(data)]),
-    )
-}
-
 /// The tail-accumulator fold `go(acc, 0x[h, ..t]) = go(acc + to_nat(h), t)`, built by `tail_fold`. Eager argument evaluation is what keeps the accumulator a literal at every step instead of a chain of unevaluated additions, and the per-element budget is the same claim as the non-tail recursion's above.
 #[test]
 fn a_tail_accumulator_fold_carries_values_not_chains() {
     let n = 2_000usize;
-    let mut host = Host::new(200 * n as u64);
+    let mut host = MachineHost::new(200 * n as u64);
 
     let term = tail_fold(vec![3; n], |acc, h| {
         Term::intrinsic(Intrinsic::nat_add(
@@ -183,7 +54,7 @@ fn a_tail_accumulator_fold_carries_values_not_chains() {
 #[test]
 fn a_closed_neutral_accumulator_stays_linear() {
     let n = 2_000usize;
-    let mut host = Host::new(400 * n as u64);
+    let mut host = MachineHost::new(400 * n as u64);
 
     let term = tail_fold(vec![3; n], |acc, h| {
         let bumped = Term::intrinsic(Intrinsic::nat_add(acc, nat(1)));
@@ -197,42 +68,10 @@ fn a_closed_neutral_accumulator_stays_linear() {
     ));
 }
 
-/// `go(acc, 0x[]) = acc`, `go(acc, 0x[h, ..t]) = go(combine(acc, h), t)` over `data`, applied to an accumulator of zero.
-fn tail_fold(data: Vec<u8>, combine: impl Fn(Term, Term) -> Term) -> Term {
-    let (go, acc, b) = (binder(0, "go"), binder(1, "acc"), binder(2, "b"));
-    let (h, t) = (binder(3, "h"), binder(4, "t"));
-
-    let body = Term::func(
-        [(acc, nat_type()), (b, bytes_type())],
-        Term::bytes_match(
-            Term::free_var(&b),
-            nat_type(),
-            Term::free_var(&acc),
-            &[&h, &t],
-            Term::apply(
-                Term::free_var(&go),
-                [
-                    combine(Term::free_var(&acc), Term::free_var(&h)),
-                    Term::free_var(&t),
-                ],
-            ),
-        ),
-    );
-
-    Term::rec(
-        [(
-            go,
-            Term::func_type([(acc, nat_type()), (b, bytes_type())], nat_type()),
-            body,
-        )],
-        Term::apply(Term::free_var(&go), [nat(0), bytes(data)]),
-    )
-}
-
 /// The plain-reduction contract: a recursive application is its own weak-head normal form, and only a forced demand unfolds it.
 #[test]
 fn whnf_keeps_a_recursive_application_folded() {
-    let mut host = Host::new(100_000);
+    let mut host = MachineHost::new(100_000);
     let (go, b) = (binder(0, "go"), binder(1, "b"));
     let (h, t) = (binder(2, "h"), binder(3, "t"));
 
@@ -281,7 +120,7 @@ fn whnf_keeps_a_recursive_application_folded() {
 /// The forced probe on the same term is the control: answering a projection from its shape at *every* demand, or declining the machine for `rec` altogether, would pass the probe above and fail here, because the member's body still has to be stepped into when a value is what was asked for.
 #[test]
 fn a_forced_bare_selection_does_not_answer_a_plain_probe() {
-    let mut host = Host::new(1_000_000);
+    let mut host = MachineHost::new(1_000_000);
     let (go, b, x) = (binder(0, "go"), binder(1, "b"), binder(6, "x"));
     let (h, t) = (binder(2, "h"), binder(3, "t"));
 
@@ -349,7 +188,7 @@ fn a_forced_bare_selection_does_not_answer_a_plain_probe() {
 /// The substitution positions catch: an argument whose evaluation errors falls back to its unreduced spelling, so a dead erroring argument costs nothing observable — exactly the deferral the hosts get by substituting unreduced. The demanded twin below is the control: the same error at a demanded position surfaces. The error is an instance whose level, read into its declaration's body, overflows the offset a level holds.
 #[test]
 fn a_dead_erroring_argument_defers_and_a_demanded_one_surfaces() {
-    let mut host = Host::new(100_000);
+    let mut host = MachineHost::new(100_000);
     let (x, y) = (binder(0, "x"), binder(1, "y"));
     let parameter = UniverseParam(0);
     let mut highest = Level::param(parameter);
@@ -388,7 +227,7 @@ fn a_dead_erroring_argument_defers_and_a_demanded_one_surfaces() {
 /// A group that consumes nothing spins until the budget answers, exactly as it does under the recursive strategy.
 #[test]
 fn a_non_productive_recursion_exhausts_the_budget() {
-    let mut host = Host::new(1_000);
+    let mut host = MachineHost::new(1_000);
     let (loop_, n) = (binder(0, "loop"), binder(1, "n"));
 
     let body = Term::func(
@@ -408,7 +247,7 @@ fn a_non_productive_recursion_exhausts_the_budget() {
 /// Zeta binds left to right, each value seeing the ones before it — the machine's eager spelling of the certifier's substitution.
 #[test]
 fn let_bindings_bind_left_to_right() {
-    let mut host = Host::new(100_000);
+    let mut host = MachineHost::new(100_000);
     let (x, y) = (binder(0, "x"), binder(1, "y"));
 
     let term = Term::let_(
@@ -429,7 +268,7 @@ fn let_bindings_bind_left_to_right() {
 /// Delta through the host seam: a defined name unfolds to its body's value.
 #[test]
 fn a_definition_unfolds_through_the_host() {
-    let mut host = Host::new(100_000);
+    let mut host = MachineHost::new(100_000);
     let f = binder(0, "f");
     host.definitions
         .insert(f, Term::intrinsic(Intrinsic::nat_add(nat(1), nat(1))));
@@ -464,7 +303,7 @@ fn spinning() -> Term {
 /// The proof of a bound is not run: no fold reads it, so a quotient is its operands' whatever its certificate would cost. Forced beside them, as every operand of an operation once was, the certificate below spends the budget.
 #[test]
 fn the_proof_of_a_bound_is_not_run() {
-    let mut host = Host::new(100_000);
+    let mut host = MachineHost::new(100_000);
     let quotient = Term::intrinsic(Intrinsic::NatDiv {
         dividend: nat(6),
         divisor: nat(3),
@@ -480,7 +319,7 @@ fn the_proof_of_a_bound_is_not_run() {
 /// An operation that does not fold keeps the proof of its bound as it was written: a pointwise operation, the fold that rebuilds its node over a proof, hands it on unreduced.
 #[test]
 fn an_operation_that_does_not_fold_keeps_its_proof_as_written() {
-    let mut host = Host::new(100_000);
+    let mut host = MachineHost::new(100_000);
     let (left, right) = (binder(92, "left"), binder(93, "right"));
     let stuck = [
         Intrinsic::BytesAnd {
@@ -527,7 +366,7 @@ fn stating(function: Term, proofs: &[bool]) -> Term {
 /// An argument at a binder that states it binds a proof is bound as written: the function below never reads its second argument, and applied to one no budget reduces it answers its first. The same function with the binder unmarked evaluates the argument before it binds it, and is refused.
 #[test]
 fn an_argument_at_a_proof_binder_is_bound_as_written() {
-    let mut host = Host::new(100_000);
+    let mut host = MachineHost::new(100_000);
     let (n, h) = (binder(0, "n"), binder(1, "h"));
     let function = Term::func([(n, nat_type()), (h, nat_type())], Term::free_var(&n));
 
@@ -545,7 +384,7 @@ fn an_argument_at_a_proof_binder_is_bound_as_written() {
     // On a host of its own: one that ran the marked call holds its answer, and a mark is no part of the term the answer is kept by.
     assert!(
         reduce_closed(
-            &mut Host::new(100_000),
+            &mut MachineHost::new(100_000),
             Term::apply(function, [nat(7), unaffordable()]),
             Demand::Forced
         )
@@ -556,7 +395,7 @@ fn an_argument_at_a_proof_binder_is_bound_as_written() {
 /// A body that eliminates what a proof binder binds still demands it: a mark is the machine's leave to bind a term as written and changes no value, so the sum below is its operands' whichever binder says what.
 #[test]
 fn a_body_that_reads_a_proof_binder_demands_it() {
-    let mut host = Host::new(100_000);
+    let mut host = MachineHost::new(100_000);
     let h = binder(0, "h");
     let function = stating(
         Term::func(
@@ -590,18 +429,18 @@ fn a_let_and_an_arm_bind_a_proof_as_written() {
     };
     let (bindings, tail) = let_.into_parts();
     let marked = Term::from(Subterm::Let(Let::new(bindings, tail.with_proofs(&[true]))));
-    let proving = || Host {
+    let proving = || MachineHost {
         proofs: vec![true],
-        ..Host::new(100_000)
+        ..MachineHost::new(100_000)
     };
 
     for (marked, unmarked, mut host) in [
-        (marked, block, Host::new(100_000)),
+        (marked, block, MachineHost::new(100_000)),
         (matched.clone(), matched, proving()),
     ] {
         assert_eq!(reduce_closed(&mut host, marked, Demand::Forced), Ok(nat(5)));
         assert!(
-            reduce_closed(&mut Host::new(100_000), unmarked, Demand::Forced)
+            reduce_closed(&mut MachineHost::new(100_000), unmarked, Demand::Forced)
                 .is_err_and(|refusal| refusal.is_exhausted())
         );
     }
@@ -620,7 +459,7 @@ fn a_match_stating_what_it_eliminates_reads_nothing_of_its_scrutinee() {
 
     assert_eq!(
         reduce_closed(
-            &mut Host::new(100_000),
+            &mut MachineHost::new(100_000),
             unread().stating(nat_type()),
             Demand::Forced
         ),
@@ -628,7 +467,7 @@ fn a_match_stating_what_it_eliminates_reads_nothing_of_its_scrutinee() {
     );
     for run in [unread(), read] {
         assert!(
-            reduce_closed(&mut Host::new(100_000), run, Demand::Forced)
+            reduce_closed(&mut MachineHost::new(100_000), run, Demand::Forced)
                 .is_err_and(|refusal| refusal.is_exhausted())
         );
     }
@@ -645,7 +484,7 @@ fn an_arm_that_names_its_payload_is_bound_to_what_the_host_states() {
             [("box", vec![x], Term::free_var(&x))],
         )
     };
-    let mut host = Host::new(100_000);
+    let mut host = MachineHost::new(100_000);
     host.stated = Some(vec![nat(5)]);
 
     assert_eq!(
@@ -668,14 +507,14 @@ fn spend_probe() {
     };
     for n in sizes {
         let budget = 1_000_000_000u64;
-        let mut host = Host::new(budget);
+        let mut host = MachineHost::new(budget);
         let count = non_tail(vec![7; n], nat(0), |call| {
             Term::intrinsic(Intrinsic::nat_add(call, nat(1)))
         });
         reduce_closed(&mut host, count, Demand::Forced).unwrap();
         let non_tail_spent = budget - host.budget;
 
-        let mut host = Host::new(budget);
+        let mut host = MachineHost::new(budget);
         let term = tail_fold(vec![3; n], |acc, h| {
             Term::intrinsic(Intrinsic::nat_add(
                 acc,
@@ -685,7 +524,7 @@ fn spend_probe() {
         reduce_closed(&mut host, term, Demand::Forced).unwrap();
         let tail_spent = budget - host.budget;
 
-        let mut host = Host::new(budget);
+        let mut host = MachineHost::new(budget);
         let term = tail_fold(vec![3; n], |acc, h| {
             Term::intrinsic(Intrinsic::nat_add(acc, h))
         });

@@ -102,10 +102,6 @@ pub fn run_of(n: usize) -> Term {
     })
 }
 
-pub fn nat_type() -> Term {
-    Term::intrinsic(Intrinsic::NatType)
-}
-
 /// A stand-in for a discharged bound. Reduction never inspects one — proof irrelevance makes its value unobservable, and these tests are about the fold laws rather than the obligation — so every bounded operation below states it with the same name.
 pub fn qed() -> Term {
     symbol(9_999, "qed")

@@ -4,6 +4,9 @@
 //!
 //! **Behind `test-support`, not `#[cfg(test)]`.** The callers are other crates' suites, and that cfg is set only while *this* crate is its own test harness — so a `cfg(test)` item would be invisible to them. The gate is also what keeps a shape no compiler stage produces out of every build that ships.
 
+mod machine;
+pub use machine::{MachineHost, binder, bytes, bytes_type, nat, nat_type, non_tail, tail_fold};
+
 use {
     crate::*,
     curios_common::Plicity,
