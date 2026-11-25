@@ -13,10 +13,22 @@ workspace = true
 
 # The bench drives other languages' compilers, a timer and an instruction count, and the workspace's compiler in its own process, through its public entries and the test support its crates keep for another's tests, as `xboard` drives the checkers.
 [dependencies]
-# The compiler its measurements drive: the launcher image a bundled executable is built from.
-curios = { workspace = true }
+# The compiler its measurements drive, its test support with it: the launcher image a bundled executable is built from, and a program compiled and run in this process as the compiler's suites compile and run one.
+curios = { workspace = true, features = ["test-support"] }
+# The field shapes an ANF module settles on, which the census of shapes reads.
+curios-anf = { workspace = true }
+# The budget a measurement compiles under: the elaborator's.
+curios-elab = { workspace = true }
+# The empty root a loose program is compiled against.
+curios-module = { workspace = true }
+# The engine a program runs on, its test support with it: the host a run is answered by, and what the collector did over it.
+curios-native = { workspace = true, features = ["test-support"] }
+# The fold a measurement compiles a program through, the fixed prelude in front of it.
+curios-pipeline = { workspace = true }
 # The instructions each contestant retires, `Instructions`, opened before it starts and inherited into it.
 curios-profile = { workspace = true }
+# The program a measurement's text is parsed as.
+curios-surface = { workspace = true }
 # The command line, in `xtask`'s own convention.
 clap = { workspace = true }
 # A record is a TOML file beside the code, read where the bench runs and printed where a sitting files one.

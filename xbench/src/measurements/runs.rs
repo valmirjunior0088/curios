@@ -1,7 +1,7 @@
-//! What `codegen`'s runtime measurements share: the readings a run gives, the runs a measurement compares turned round-robin.
+//! What the runtime measurements share: the readings a run gives, the runs a measurement compares turned round-robin.
 
 use {
-    crate::test_support::*,
+    curios::test_support::*,
     curios_native::{Compiled, test_support::*},
     xbench::{Measure, read, read_elapsed, turn},
 };

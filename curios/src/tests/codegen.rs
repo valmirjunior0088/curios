@@ -19,12 +19,10 @@ mod frames;
 mod inversion;
 mod ladder;
 mod leaves;
-mod map_insert;
 mod rebuild;
 mod reconstruction;
 mod specialize;
 mod sweeps;
-mod test_support;
 
 mod parity;
 mod shapes;

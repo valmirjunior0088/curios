@@ -1,6 +1,6 @@
 //! What a `/std/Map` insert costs: the `spines` insert slope, the end-to-end instrument behind `documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md`, and the share of it an insert's key encodings take.
 
-use {super::test_support::*, crate::test_support::*};
+use {super::*, curios::test_support::*};
 
 /// The cross-language workload, read from the corpus so the probe measures the program the results files time.
 const SPINES: &str = include_str!(concat!(
@@ -24,9 +24,7 @@ const SPINES: &str = include_str!(concat!(
 /// - **The leaf split is the emitter's.** At Binaryen optimize 3 / shrink 0 the optimized `spines` module still carries 36 of the emitter's 37 `call $bytes/read` sites, counted at `5bccb9ebd`, so no level produces the call-site leaf split (`emit_seq_get`) and the invariant is written in the emitter. A map's reads are of immediate keys, so the read protocol's *call* component is not this wall; a walk's are of one rope at every turn, which a read inside a loop keeps ([`curios-emit`'s README](../../../../curios-emit/README.md#a-read-in-a-loop-keeps-the-run-it-last-resolved)).
 /// - **The trie forks sixteen ways.** A branch reads its twig by the key's digit and the descent writes each level's twig back in place where nothing else holds the list, so a level costs a read and a write of one slot and a key's five levels replace seventeen ([`Map` is a trie forking sixteen ways](../../../../curios-prelude-build/README.md#map-is-a-trie-forking-sixteen-ways-and-its-shape-is-its-api)).
 /// - **The map walks once.** `Node/insert` and `Node/remove` descend once and decide on the way back up.
-#[test]
-#[ignore = "measurement: taken by cargo xbench measure"]
-fn spines_insert_slope() {
+pub fn spines_insert_slope() {
     let compiled = compiled_of(SPINES);
 
     // The documented cross-language anchor, so a mistranslation fails before any figure is read.
@@ -116,9 +114,7 @@ entry()
 /// Over the seven: encoded 40, 40, 40, 42, 42, 44, 44, median 42; control 2, 3, 3, 3, 4, 4, 5, median 3; key construction 36, 36, 36, 39, 40, 40, 41, median 39 ns/insert. The two encodings an insert builds are 39 of its 265 nanoseconds, under 15%.
 ///
 /// Beside the key class, the collector's share measured nil (`spines_collection_decomposition`). Of the emitted `spines` module's 25 `br_table`s, as `wonder --stage wasm` prints it at `06ea35a7d`, fourteen sit in the program's entry, the `io/bind` its description runs, three in `/std/Map/internal/Node/insert` itself and one in its heap version, two in the heap version's resumption, one in each of `/std/Map/internal/Node/fold`'s two copies and one in its heap version, one in `/std/answered` and one in a handle's retry, none in a digit read, so the descent still holds tables. What else remains of the insert is the uniform-representation tax, which `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` takes up.
-#[test]
-#[ignore = "measurement: taken by cargo xbench measure"]
-fn map_insert_key_share() {
+pub fn map_insert_key_share() {
     let encoded = compiled_of(KEY_ENCODED);
     let control = compiled_of(KEY_CONTROL);
 

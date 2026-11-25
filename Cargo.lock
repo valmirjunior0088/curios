@@ -3329,7 +3329,13 @@ version = "0.16.25"
 dependencies = [
  "clap",
  "curios",
+ "curios-anf",
+ "curios-elab",
+ "curios-module",
+ "curios-native",
+ "curios-pipeline",
  "curios-profile",
+ "curios-surface",
  "serde",
  "serde_json",
  "toml",
