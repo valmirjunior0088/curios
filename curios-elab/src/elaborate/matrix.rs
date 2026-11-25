@@ -499,6 +499,17 @@ struct Compiler<'m> {
     texts: BTreeSet<usize>,
 }
 
+/// The contradiction the facts prove where a match stands, bound once around it for the cases it closes.
+struct Contradiction {
+    /// What it is bound to.
+    binder: Free,
+    /// The empty proposition it proves, as it is referenced.
+    stated: Term,
+    /// That proposition reduced, which a zero-arm match is read at.
+    reduced: Term,
+    proof: Term,
+}
+
 /// The row that cannot fail, while the rows before it are read.
 struct Fallthrough {
     /// Which row it is.
@@ -814,10 +825,7 @@ impl<'m> Compiler<'m> {
         refused: impl FnOnce(String, Box<Refusal>) -> Error,
     ) -> Result<(Term, Term), Error> {
         let value = self.value(0);
-        let empty = Global::Authored(context.syntax().proof.false_type.qualifier());
-        let (bound, _) = reference(context, empty, None)?
-            .ok_or_else(|| context.unbound_variable(Term::written(empty)))?;
-        let reduced = reduce_with(context, &bound)?;
+        let (bound, reduced) = empty(context)?;
 
         // The facts a refusal names are terms of the case's own frame, its binders among them, so it records the scope its reader stands in here, which a report writes them in.
         match entail(context, &bound, &reduced)? {
@@ -1377,12 +1385,14 @@ impl<'m> Compiler<'m> {
                 split.admit(context, groups.is_empty() && unnamed.is_empty(), defaulted)?;
             split.declared(context, tags.values())?;
 
+            // The contradiction the facts prove where the match stands, asked at the first case no row names that the facts of its own arm leave standing, and bound once around the match for every such case.
+            let mut contradiction = None;
             let mut arms = Vec::with_capacity(cases.len());
             for tag in &cases {
                 if let Some(group) = groups.remove(&tag.as_string()) {
                     arms.push(self.variant(context, &split, tag, group, &column, &rest)?);
                 } else if unnamed.contains(&tag.as_string()) {
-                    arms.push(self.unnamed(context, &split, tag, &column)?);
+                    arms.push(self.unnamed(context, &split, tag, &column, &mut contradiction)?);
                 }
             }
 
@@ -1393,6 +1403,15 @@ impl<'m> Compiler<'m> {
                 false => None,
             };
             let (rebuilt, type_) = split.rebuild(context, arms, default, undecided, term)?;
+            let rebuilt = match contradiction {
+                Some(Contradiction {
+                    binder,
+                    stated,
+                    proof,
+                    ..
+                }) => Term::let_block(vec![(binder, stated, proof)], rebuilt),
+                None => rebuilt,
+            };
 
             self.settled(context, top, rebuilt, type_)
         })
@@ -1447,13 +1466,72 @@ impl<'m> Compiler<'m> {
         arm
     }
 
-    /// The arm of `tag`'s case where no row names it and inversion leaves it possible: entered as an arm of it is, each payload bound by a binder of the compiler's, and closed where the facts in scope refute it ([`Compiler::unreached`]). Its refusal says whether the family is indexed, which inversion alone excuses a case of.
+    /// The arm of `tag`'s case where no row names it and inversion leaves it possible, closed by a contradiction: the one the facts prove where the arm stands ([`Compiler::unreached`]), and where they prove none there, the one they prove where the match stands, held in `contradiction` once it is asked and named in each arm it closes. Its refusal is the arm's, and says whether the family is indexed, which inversion alone excuses a case of.
+    ///
+    /// **What the scrutinee's own type states is a fact where the match stands.** In its own arm the scrutinee is typed as its case is ([`NominalSplit::arm`]), so the equation of an `Eq` the unifier leaves standing, `g(n) = g(n) + 1`, is stated by no local there, and a proof from it is typed where its hypothesis has that type: bound around the match, as a reader binds it by hand. It is asked only of a case its own arm's facts leave standing, so a match those facts close asks nothing more than it did.
     fn unnamed(
         &mut self,
         context: &mut Context,
         split: &NominalSplit,
         tag: &Atom,
         column: &Column,
+        contradiction: &mut Option<Contradiction>,
+    ) -> Result<(Atom, InductArm), Error> {
+        let indexed = split.indexed();
+        // Whether the arm's refusal is the facts' own, the one the scope the match stands in may answer.
+        let mut left = false;
+        let arm = self.entered(context, split, tag, column, |compiler, context, mode| {
+            compiler.unreached(context, mode, |value, refusal| {
+                left = true;
+                Error::MatrixUncovered {
+                    value,
+                    indexed,
+                    refusal,
+                }
+            })
+        });
+        let refused = match arm {
+            Err(refused) if left => refused,
+            arm => return arm,
+        };
+
+        if contradiction.is_none() {
+            let (stated, reduced) = empty(context)?;
+            if let Entailed::Proved(proof) = entail(context, &stated, &reduced)? {
+                *contradiction = Some(Contradiction {
+                    binder: context.fresh(None),
+                    stated,
+                    reduced,
+                    proof,
+                });
+            }
+        }
+        let Some(bound) = contradiction else {
+            return Err(refused);
+        };
+
+        context.with_frame(|context| {
+            context.assume(&bound.binder, &bound.stated);
+            self.entered(context, split, tag, column, |compiler, context, mode| {
+                absurd(
+                    context,
+                    Term::free_var(&bound.binder),
+                    bound.reduced.clone(),
+                    mode,
+                    compiler.term,
+                )
+            })
+        })
+    }
+
+    /// The arm of `tag`'s case, which no row names: entered as an arm of it is, each payload bound by a binder of the compiler's, and closed by `close`, which is handed the mode the arm is read at.
+    fn entered(
+        &mut self,
+        context: &mut Context,
+        split: &NominalSplit,
+        tag: &Atom,
+        column: &Column,
+        close: impl FnOnce(&mut Self, &mut Context, Mode) -> Result<(Term, Term), Error>,
     ) -> Result<(Atom, InductArm), Error> {
         let payload = split.payload(context, tag)?;
         let marks = payload.marks();
@@ -1462,7 +1540,6 @@ impl<'m> Compiler<'m> {
             .iter()
             .map(|_| context.fresh(None))
             .collect::<Vec<_>>();
-        let indexed = split.indexed();
 
         self.seen[column.seen] = Seen::Variant(
             tag.as_string(),
@@ -1475,12 +1552,7 @@ impl<'m> Compiler<'m> {
         );
         let arm = split.arm(context, tag, payload, &binders, |context, expected| {
             let mode = Mode::Check(self.mode.at(expected));
-            self.unreached(context, mode, |value, refusal| Error::MatrixUncovered {
-                value,
-                indexed,
-                refusal,
-            })
-            .map(|(arm, _)| arm)
+            close(self, context, mode).map(|(arm, _)| arm)
         });
         self.seen[column.seen] = Seen::Any;
 
@@ -2976,6 +3048,16 @@ fn payload_cells<'m>(
         .into_iter()
         .map(|fill| fill.map(|member| (Shape::Pattern(&args[member].1), places[member])))
         .collect())
+}
+
+/// The empty proposition a contradiction proves, as it is referenced and as it reduces.
+fn empty(context: &mut Context) -> Result<(Term, Term), Error> {
+    let empty = Global::Authored(context.syntax().proof.false_type.qualifier());
+    let (stated, _) = reference(context, empty, None)?
+        .ok_or_else(|| context.unbound_variable(Term::written(empty)))?;
+    let reduced = reduce_with(context, &stated)?;
+
+    Ok((stated, reduced))
 }
 
 /// How many dispatches a pattern is refuted at: one for each constructor and each carrier leaf it writes, at any depth. A pattern refuted at none takes nothing apart that could fail.

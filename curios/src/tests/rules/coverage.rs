@@ -511,6 +511,35 @@ fn a_constructor_the_facts_refute_is_left_unwritten() {
     });
 }
 
+// A case its scrutinee's own type refutes is closed by the contradiction proved where the match stands. In its own arm `h` is `refl` at `Eq()(g(n), g(n))`, the case's type, so the equation it was declared at, `g(n) = g(n) + 1`, is a fact of the scope around the match alone: the proof is bound there once and the arm is the zero-arm match on it, typed by both checkers where the hypothesis has its declared type. An equation between two sums and one over a field read stand the same way. The refusal's equation is one the facts do not refute.
+#[test]
+fn a_case_its_scrutinees_own_type_refutes_is_left_unwritten() {
+    control(
+        r#"
+        use /std/{Nat, Eq};
+        use /std/Bool/{False};
+
+        struct Point: Type { x: Nat }
+
+        let never(g: (Nat) -> Nat, n: Nat, h: Eq()(g(n), g(n) + 1)) -> False =
+            match h end;
+
+        let apart(g: (Nat) -> Nat, n: Nat, h: Eq()(g(n) + 2, g(n))) -> False =
+            match h end;
+
+        let read(p: Point, h: Eq()(p.x, p.x + 1)) -> False =
+            match h end;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("Eq()(g(n), g(n) + 1)", "Eq()(g(n), g(n + 1))")])
+    .by_elaborator_in("/never", |error| {
+        matches!(error, Error::MatrixUncovered { value, indexed: true, .. } if value == "refl()")
+    });
+}
+
 // A truth value no arm writes is a case like any other: under `n <= 10`, `n > 20` is never `true`, so the `false` arm is the whole match. The refusal loosens the bound to one `n > 20` can pass.
 #[test]
 fn a_truth_value_the_facts_refute_is_left_unwritten() {
