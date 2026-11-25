@@ -10,9 +10,12 @@ workspace = true
 
 [features]
 # `test_support`: the puts, a program handed to the checkers with the fixed prelude in scope, for `curios`'s suites that judge what the checkers judge. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to every other crate — the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
-test-support = []
+test-support = ["dep:curios-archive", "dep:curios-prelude-build"]
 
 [dependencies]
+# Where the standard library is authored, and the bytes a unit stores, for the test support's package of the library and its stored halves alone.
+curios-archive = { workspace = true, optional = true }
+curios-prelude-build = { workspace = true, optional = true }
 curios-abi = { workspace = true }
 curios-common = { workspace = true }
 curios-cert = { workspace = true }

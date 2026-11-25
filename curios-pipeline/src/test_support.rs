@@ -2,6 +2,12 @@
 //!
 //! Behind the `test-support` feature, so no build that ships holds it, and compiled for this crate's own tests.
 
+mod standard;
+pub use standard::{Edit, declarations, edits, std_from_its_tree};
+
+mod stored;
+pub use stored::{asked_stored, lowering_stored, traces_stored};
+
 use {
     crate::{
         EntryTail, Examined, Obligation, Refused, elaborate_entry, examine_entrypoint, globals,

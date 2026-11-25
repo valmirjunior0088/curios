@@ -2,7 +2,7 @@
 
 use {
     super::*,
-    crate::{tests::test_support::*, *},
+    crate::{test_support::*, tests::test_support::*, *},
     curios_abi::{TEST_REPORT, WireReturn, WireType},
     curios_anf::FieldShape,
     curios_common::{Qualifier, RootKind, digest, test_support::*},
@@ -35,19 +35,6 @@ use {
     xbench::{Measure, read, read_elapsed},
 };
 
-/// The standard library's own tree, as the package claiming `/std` from it.
-fn std_from_its_tree() -> RootSource {
-    let directory = std_directory();
-
-    RootSource::mounted(
-        "std",
-        RootKind::Ordinary,
-        directory.join("lib.crs"),
-        directory,
-    )
-    .declaring([Qualifier::from(["sys"])])
-}
-
 /// The same claim from a directory that is not the archive's tree — one nothing creates, so its guard has nothing to remove.
 fn std_from_elsewhere() -> RootSource {
     let directory = Temporary::new("standard", "elsewhere");
@@ -58,29 +45,6 @@ fn std_from_elsewhere() -> RootSource {
         directory.join("lib.crs"),
         directory.to_path_buf(),
     )
-}
-
-/// One edit the census measures: what it is, the file it touches, and the text it leaves there.
-struct Edit {
-    label: &'static str,
-    file: &'static str,
-    edit: fn(&str) -> String,
-}
-
-/// The two edits the standard library is measured over: `leaf`, a declaration added to `/std/Nat`, which nothing reads, and `hub`, the body of `/std/Bool/not` respelled, which most of the library reaches.
-fn edits() -> [Edit; 2] {
-    [
-        Edit {
-            label: "leaf",
-            file: "Nat.crs",
-            edit: |text| format!("{text}\npub let _census_probe(a: Nat) -> Nat =\n    a;\n"),
-        },
-        Edit {
-            label: "hub",
-            file: "Bool.crs",
-            edit: |text| text.replacen("xor(b, true)", "xor(true, b)", 1),
-        },
-    ]
 }
 
 /// `lowered`, the library's sources lowered over the archived unit `std`, elaborated over it: every name of `relowered` is offered to the walk as one the lowering made anew, and the walk keeps each declaration whose reads stand.
@@ -880,15 +844,6 @@ fn std_vocabulary_reach_reproduction() {
             ),
         }
     });
-}
-
-/// The names of each declaration of `module`, in item order: each item's, a family's constructors among its own.
-fn declarations(definitions: &Definitions) -> Vec<BTreeSet<Global>> {
-    definitions
-        .items
-        .iter()
-        .map(|item| item.declared_names().into_iter().collect())
-        .collect()
 }
 
 /// What differs between the items of `whole` declaring `names` and `replayed`'s, each beside the traces its elaboration filed, each as the definition and the part that differs.

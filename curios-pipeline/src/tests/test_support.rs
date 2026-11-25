@@ -1,15 +1,15 @@
 //! Compiling a program end to end and reading the answer back: the harness every case in these suites asserts through.
 
 use {
-    crate::{compile::test_support::*, *},
+    crate::{compile::test_support::*, test_support::*, *},
     curios_cert::Rechecked,
     curios_common::{
         Blob, Candidates, Digest, Facet, Report, RootKind, candidate_prefix, test_support::*,
     },
     curios_core::{Definitions, Enter, Item, LintKind, Nominal, Sharing, Term, Variance},
-    curios_elab::{DEFAULT_BUDGET, TraceTable, Traces},
-    curios_erase::{AskedItems, AskedTable, Erasures, erase_program},
-    curios_module::{PreparedText, RootSource, SYNTAX, UnitSource},
+    curios_elab::DEFAULT_BUDGET,
+    curios_erase::{Erasures, erase_program},
+    curios_module::{RootSource, SYNTAX, UnitSource},
     curios_prelude::with_prelude,
     curios_surface::Entrypoint,
     curios_unit::{Pack, Predecessors, Unit, packed},
@@ -600,53 +600,6 @@ pub fn assert_definitions_agree(whole: &Definitions, incremental: &Definitions) 
     assert_eq!(whole.induct_decls(), incremental.induct_decls());
     assert_eq!(whole.struct_decls(), incremental.struct_decls());
     assert_eq!(whole.concepts(), incremental.concepts());
-}
-
-/// What a unit stores of the lowering's baseline half `text` holds: its own part, then each record and scan, each stored alone.
-pub fn lowering_stored(text: &PreparedText) -> Vec<u8> {
-    let mut bytes = text.baseline_table().expect("a baseline half serializes");
-    for blob in text
-        .baseline_blobs(&|_| true)
-        .expect("a baseline half serializes")
-    {
-        bytes.extend_from_slice(blob.bytes.as_slice());
-    }
-
-    bytes
-}
-
-/// What a unit stores of `traces`: the rest of them, then each declaration's trace, all in one run.
-pub fn traces_stored(traces: &Traces) -> Vec<u8> {
-    let mut bytes = curios_archive::to_bytes(traces)
-        .expect("a unit's traces serialize")
-        .to_vec();
-    bytes.extend(
-        TraceTable::run(
-            traces
-                .declarations()
-                .map(|(name, held)| (name, &***held, held.concluded(), held.made())),
-        )
-        .expect("a unit's traces serialize"),
-    );
-
-    bytes
-}
-
-/// What a unit stores of `asked`, what erasing its items read: the rest of it, then each item's record, all in one run.
-pub fn asked_stored(asked: &AskedItems) -> Vec<u8> {
-    let mut bytes = curios_archive::to_bytes(asked)
-        .expect("what erasing a unit read serializes")
-        .to_vec();
-    bytes.extend(
-        AskedTable::run(
-            asked
-                .records()
-                .map(|(name, held)| (name, &***held, held.made())),
-        )
-        .expect("what erasing a unit read serializes"),
-    );
-
-    bytes
 }
 
 /// `unit` stored and restored, the blobs its index names found in one pack of their own, as a cabinet keeps them beside an object's unit file.
