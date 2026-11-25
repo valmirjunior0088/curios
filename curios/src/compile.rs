@@ -47,7 +47,7 @@ pub fn optimize(module: &curios_wasm::Module) -> Vec<u8> {
 pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, Box<Report>> {
     let bytes = optimize(module);
 
-    curios_common::profile!("precompile" => curios_cranelift::precompile(&bytes)).map_err(|error| {
+    curios_cranelift::precompile(&bytes).map_err(|error| {
         fault(
             "the emitted module could not be compiled to machine code",
             error,

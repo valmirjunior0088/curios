@@ -33,6 +33,7 @@ const ROUNDS: usize = 8;
 ///
 /// Not a debug assertion either. Restating the check under `cfg(debug_assertions)` would put the whole cost back exactly where the suite runs, in exchange for a verdict the link already gave.
 pub fn optimize(module: &mut Module) {
+    curios_common::profile!("anf_optimize");
     prune_unreachable(module);
     compact(module);
     // Before anything reads the arms a fold orphans: the evaluation's own verification refuses an orphan, and its budgets would count one.

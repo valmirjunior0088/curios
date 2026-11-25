@@ -15,7 +15,7 @@ pub fn to_compiled(
     start_engine(GuestMap::Unwritten)?;
     let bytes = optimize(module);
 
-    let code = curios_common::profile!("precompile" => curios_cranelift::compile(&bytes))
+    let code = curios_cranelift::compile(&bytes)
         .map_err(|error| format!("failed to compile module: {error}"))?;
 
     Ok(Compiled::of(code, foreigns))

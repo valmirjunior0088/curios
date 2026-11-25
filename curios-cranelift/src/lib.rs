@@ -10,6 +10,7 @@ use {
 
 /// AOT-compile `bytes` to the `.cwasm` payload [`MachineCode::deserialize`] reads back: what a bundle carries and a cabinet files.
 pub fn precompile(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    curios_common::profile!("cranelift_precompile");
     shared_engine()
         .precompile_module(bytes)
         .map_err(|error| format!("failed to precompile module: {error}"))
@@ -17,6 +18,7 @@ pub fn precompile(bytes: &[u8]) -> Result<Vec<u8>, String> {
 
 /// Compile `bytes`, a WebAssembly module, to machine code this process holds. Nothing is read back, so nothing is vouched for: the machine code is what the engine made of `bytes` just now. A refusal is the engine's own sentence, for the caller to say whose module it was.
 pub fn compile(bytes: &[u8]) -> Result<MachineCode, String> {
+    curios_common::profile!("cranelift_compile");
     Module::new(shared_engine(), bytes)
         .map(MachineCode::of)
         .map_err(|error| error.to_string())

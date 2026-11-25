@@ -679,6 +679,7 @@ name = "curios-binaryen"
 version = "0.16.25"
 dependencies = [
  "cmake",
+ "curios-common",
 ]
 
 [[package]]
@@ -748,6 +749,7 @@ dependencies = [
 name = "curios-cranelift"
 version = "0.16.25"
 dependencies = [
+ "curios-common",
  "curios-native",
  "wasmtime",
 ]
