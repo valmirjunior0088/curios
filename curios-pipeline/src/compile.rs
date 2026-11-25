@@ -827,8 +827,13 @@ pub fn declared_test_paths(definitions: &curios_core::Definitions) -> Vec<String
         .collect()
 }
 
-/// The report metadata of each module's tests: the path of each scheduled one, with where `anchors` place its name, and of each left out.
-fn test_modules(schedule: Vec<ScheduledModule>, anchors: &[&Anchors]) -> Vec<TestModule> {
+/// The report metadata of each module's tests: the path of each scheduled one, with where `anchors` place its name, and of each left out. `anchors` are asked for by the first scheduled test, and never where none is.
+fn test_modules<'a>(
+    schedule: Vec<ScheduledModule>,
+    anchors: impl FnOnce() -> Vec<&'a Anchors>,
+) -> Vec<TestModule> {
+    let anchors = LazyCell::new(anchors);
+
     schedule
         .into_iter()
         .map(|module| TestModule {
@@ -839,7 +844,7 @@ fn test_modules(schedule: Vec<ScheduledModule>, anchors: &[&Anchors]) -> Vec<Tes
                 .filter_map(|test| {
                     Some(ScheduledTest {
                         path: *test.qualifier()?,
-                        location: Anchors::label(anchors, test).map(|span| span.location()),
+                        location: Anchors::label(&anchors, test).map(|span| span.location()),
                     })
                 })
                 .collect(),
@@ -1162,7 +1167,8 @@ where
     let schedule = tail.schedule(lowered.core(), &predecessors.lowered());
     let scheduled = tail_tests(&schedule);
     let unmatched = tail.unmatched(&schedule);
-    let modules = test_modules(schedule, &anchors_of(&lowered, predecessors));
+    // Gathered where a scheduled test is placed: a program that schedules none restores where no unit's declarations lie.
+    let modules = test_modules(schedule, || anchors_of(&lowered, predecessors));
 
     // The entrypoint contract, stated in the entry: a program *is* a description of doing something and yielding nothing, so an authored entry states `Io({})`, and elaboration checks the body against it, the certifier rechecks it and erasure seals at it — each reading it off the entry.
     state(&mut written, &tail, syntax);

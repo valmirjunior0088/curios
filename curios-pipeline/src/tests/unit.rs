@@ -367,3 +367,26 @@ fn a_unit_compiled_after_another_restores_none_of_its_records() {
         "a record of the unit is read by nothing that asked for one"
     );
 }
+
+/// A program that checks restores no anchors of the units before it, where their declarations lie in their texts. The anchors are gathered where a report is first placed, and a program that checks and schedules no test places none: so a unit whose stored texts are unreadable stands before one.
+#[test]
+fn a_program_that_checks_restores_no_anchors_of_the_units_before_it() {
+    let earlier = unit_of("pub let two: /std/Nat = 2;");
+    let unreadable = restored_with_unreadable_anchors(&earlier);
+
+    assert!(
+        checked_after(
+            "let _two: /std/Nat = /lib/two;\n\n/std/Io/pure(())",
+            &[&unreadable]
+        )
+        .verdict
+        .is_ok()
+    );
+    assert!(
+        catch_unwind(AssertUnwindSafe(|| {
+            unreadable.anchors();
+        }))
+        .is_err(),
+        "the unit's anchors are read by nothing that asked for them"
+    );
+}

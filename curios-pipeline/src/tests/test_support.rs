@@ -88,15 +88,26 @@ impl Cache for Keeping {
 
 /// What checking the program `source` decides against the prelude, its declarations taken from `cache` and handed to it: its lints, and its verdict.
 pub fn checked_through(source: &str, cache: &dyn Cache) -> Checked {
+    checked(source, &[], Some(cache))
+}
+
+/// What checking the program `source` decides against the prelude and then `units`, each of which it may name.
+pub fn checked_after(source: &str, units: &[&Unit]) -> Checked {
+    checked(source, units, None)
+}
+
+fn checked(source: &str, units: &[&Unit], cache: Option<&dyn Cache>) -> Checked {
     let entrypoint = entrypoint_of(source);
 
     with_prelude(|prelude| {
+        let scope = prelude.iter().chain(units).copied().collect::<Vec<_>>();
+
         check_entrypoint(
             DEFAULT_BUDGET,
-            Predecessors::over(prelude),
+            Predecessors::over(&scope),
             &SYNTAX,
             &UnitSource::entry(&entrypoint, &RootSource::none()),
-            Some(cache),
+            cache,
             EntryTail::Program,
             Told {
                 observe: &mut |_: Stage<'_>| {},
@@ -650,24 +661,44 @@ pub fn restored(unit: &Unit) -> Unit {
 
 /// `unit` stored and restored as [`restored`] restores one, with every record its elaboration filed unreadable: its bytes are no run of traces, so a compile that restored one stops there.
 pub fn restored_with_unreadable_records(unit: &Unit) -> Unit {
+    restored_unreadable(unit, || {
+        unit.traces()
+            .declarations()
+            .map(|(name, held)| {
+                held.digest(Facet::Elaboration, name)
+                    .expect("a record is named")
+            })
+            .collect()
+    })
+}
+
+/// `unit` stored and restored as [`restored`] restores one, with the texts of each of its sources unreadable, where its declarations lie: a compile that restored its anchors stops there.
+pub fn restored_with_unreadable_anchors(unit: &Unit) -> Unit {
+    restored_unreadable(unit, || {
+        unit.anchors()
+            .digests()
+            .expect("a source's texts are named")
+            .into_iter()
+            .collect()
+    })
+}
+
+/// `unit` stored and restored as [`restored`] restores one, each blob `unreadable` names holding bytes that are no value of its kind. The names are asked for once the unit is stored, a record being named by what its filing completed it with.
+fn restored_unreadable(unit: &Unit, unreadable: impl FnOnce() -> BTreeSet<Digest>) -> Unit {
     let stored = unit.stored().expect("a unit serializes");
     let blobs = stored.blobs(|_| true).expect("a unit's blobs serialize");
     let pack =
         Pack::read(curios_archive::Bytes::from(packed(&blobs))).expect("a unit's blobs pack");
-    let records = unit
-        .traces()
-        .declarations()
-        .map(|(name, held)| {
-            held.digest(Facet::Elaboration, name)
-                .expect("a record is named")
-        })
-        .collect::<BTreeSet<_>>();
-    assert!(!records.is_empty(), "the unit files a record");
+    let unreadable = unreadable();
+    assert!(
+        !unreadable.is_empty(),
+        "the unit stores what is made unreadable"
+    );
 
     Unit::restored(stored.index(), |digest| {
         let blob = pack.get(digest)?;
 
-        Some(match records.contains(digest) {
+        Some(match unreadable.contains(digest) {
             true => Blob {
                 bytes: curios_archive::Bytes::from(vec![0xff; 8]),
                 ..blob
