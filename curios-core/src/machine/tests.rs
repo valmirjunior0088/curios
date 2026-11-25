@@ -1,7 +1,6 @@
 use {
     super::*,
     crate::{test_support::*, *},
-    xbench::{Measure, read},
 };
 
 /// The non-tail form: a structural recursion whose cons arm combines the call at the tail, `count(0x[]) = 0`, `count(0x[h, ..t]) = count(t) + 1`. Its depth is the nesting of calls — the shape only an explicit stack can walk without a native frame per element — so the budget this passes under is the claim: about two hundred units per element where the recursive strategy's frame row alone is [`Cost::FRAME`].
@@ -495,61 +494,4 @@ fn an_arm_that_names_its_payload_is_bound_to_what_the_host_states() {
         reduce_closed(&mut host, read(), Demand::Forced)
             .is_err_and(|refusal| refusal.is_exhausted())
     );
-}
-
-/// What the three recursion shapes spend per element, read rather than asserted — the assertions live in the budget bounds of the ordinary tests above. `cargo xbench measure spend_probe` takes it: `non-tail at <n>`, `tail at <n>` and `neutral at <n>`, the units each shape spends over `n` elements, and `neutral at <n>/<category>`, what the neutral fold spent in each category of the price list. Set `CURIOS_MACHINE_TRACE` to shrink the ladder and print every dispatch.
-#[test]
-#[ignore = "measurement: taken by cargo xbench measure"]
-fn spend_probe() {
-    let sizes: Vec<usize> = match std::env::var_os("CURIOS_MACHINE_TRACE") {
-        Some(_) => vec![3],
-        None => vec![250, 500, 1000, 2000],
-    };
-    for n in sizes {
-        let budget = 1_000_000_000u64;
-        let mut host = MachineHost::new(budget);
-        let count = non_tail(vec![7; n], nat(0), |call| {
-            Term::intrinsic(Intrinsic::nat_add(call, nat(1)))
-        });
-        reduce_closed(&mut host, count, Demand::Forced).unwrap();
-        let non_tail_spent = budget - host.budget;
-
-        let mut host = MachineHost::new(budget);
-        let term = tail_fold(vec![3; n], |acc, h| {
-            Term::intrinsic(Intrinsic::nat_add(
-                acc,
-                Term::intrinsic(Intrinsic::ByteToNat(h)),
-            ))
-        });
-        reduce_closed(&mut host, term, Demand::Forced).unwrap();
-        let tail_spent = budget - host.budget;
-
-        let mut host = MachineHost::new(budget);
-        let term = tail_fold(vec![3; n], |acc, h| {
-            Term::intrinsic(Intrinsic::nat_add(acc, h))
-        });
-        reduce_closed(&mut host, term, Demand::Forced).unwrap();
-        let size = Some(n as u64);
-        read(
-            &format!("non-tail at {n}"),
-            Measure::Count,
-            size,
-            non_tail_spent,
-        );
-        read(&format!("tail at {n}"), Measure::Count, size, tail_spent);
-        read(
-            &format!("neutral at {n}"),
-            Measure::Count,
-            size,
-            budget - host.budget,
-        );
-        for (category, spent) in &host.by_category {
-            read(
-                &format!("neutral at {n}/{category:?}"),
-                Measure::Count,
-                size,
-                *spent,
-            );
-        }
-    }
 }

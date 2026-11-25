@@ -34,7 +34,6 @@ curios-abi = { workspace = true }
 curios-cert = { workspace = true, features = ["test-support"] }
 curios-core = { workspace = true, features = ["test-support"] }
 curios-elab = { workspace = true }
-curios-erase = { workspace = true }
 curios-module = { workspace = true }
 curios-native = { workspace = true, features = ["test-support"] }
 curios-package = { workspace = true }
@@ -50,5 +49,3 @@ curios-wonder = { workspace = true }
 curios-unicode = { workspace = true, features = ["test-support"] }
 # `fill!`, for the program the conformance cases are written into.
 curios-common = { workspace = true, features = ["test-support"] }
-# The harness the measurements beside the code name their figures through, which `cargo xbench measure` takes by name.
-xbench = { workspace = true }

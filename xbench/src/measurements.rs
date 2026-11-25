@@ -65,6 +65,18 @@ use unfolding::*;
 mod nested;
 use nested::*;
 
+mod standard;
+use standard::*;
+
+mod prelude_trees;
+use prelude_trees::*;
+
+mod prelude_image;
+use prelude_image::*;
+
+mod machine;
+use machine::*;
+
 /// A measurement the bench takes by its name.
 pub struct Measurement {
     /// The name a sitting is asked for by, and its records are filed under.
@@ -206,6 +218,34 @@ const MEASUREMENTS: &[Measurement] = &[
     Measurement {
         name: "nested_operation_measurements",
         take: nested_operation_measurements,
+    },
+    Measurement {
+        name: "std_recompile_census",
+        take: std_recompile_census,
+    },
+    Measurement {
+        name: "std_image_division",
+        take: std_image_division,
+    },
+    Measurement {
+        name: "std_replay_census",
+        take: std_replay_census,
+    },
+    Measurement {
+        name: "family_slot_probe",
+        take: family_slot_probe,
+    },
+    Measurement {
+        name: "printed_tree_measurements",
+        take: printed_tree_measurements,
+    },
+    Measurement {
+        name: "stored_prelude_measurements",
+        take: stored_prelude_measurements,
+    },
+    Measurement {
+        name: "spend_probe",
+        take: spend_probe,
     },
 ];
 

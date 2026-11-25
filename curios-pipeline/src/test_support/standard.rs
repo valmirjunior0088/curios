@@ -1,10 +1,16 @@
 //! The standard library as its own package, and what its suites and the bench's measurements of it compile it over: the edits measured, and a module's declarations.
 
 use {
+    crate::*,
     curios_common::{Qualifier, RootKind},
     curios_core::{Definitions, Global},
-    curios_module::RootSource,
+    curios_elab::{
+        Context, DEFAULT_BUDGET, Error, Established, Recompile, Recompiled,
+        elaborate_and_zonk_unit_over,
+    },
+    curios_module::{PreparedText, RootSource, SYNTAX, UnitSource},
     curios_prelude_build::std_directory,
+    curios_unit::{Predecessors, Unit},
     std::collections::BTreeSet,
 };
 
@@ -51,4 +57,74 @@ pub fn declarations(definitions: &Definitions) -> Vec<BTreeSet<Global>> {
         .iter()
         .map(|item| item.declared_names().into_iter().collect())
         .collect()
+}
+
+/// `source`, the standard library with an edit in it, compiled over `baseline`, its unit before the edit, as the product's cache compiles a unit no record agrees with: under `budget`, after `predecessors`, whose one unit has not moved since the baseline was compiled, with no candidates offered and nothing told.
+pub fn recompiled_over(
+    budget: u64,
+    predecessors: Predecessors<'_>,
+    source: &UnitSource<'_>,
+    baseline: &Unit,
+) -> Result<Unit, CompileError> {
+    compile_unit_over(
+        budget,
+        predecessors,
+        &SYNTAX,
+        source,
+        Over {
+            baseline,
+            moved: &[false],
+            candidates: None,
+        },
+        &|_| {},
+        Telling::default(),
+    )
+}
+
+/// `lowered`, the library's sources lowered over the archived unit `std`, elaborated over it: every name of `relowered` is offered to the walk as one the lowering made anew, and the walk keeps each declaration whose reads stand.
+pub fn elaborated_over(
+    predecessors: Predecessors<'_>,
+    std: &Unit,
+    lowered: &PreparedText,
+    relowered: &BTreeSet<Global>,
+) -> Result<Recompiled, Error> {
+    let established = Established::placed(&predecessors.placed()).keeping(
+        std.core(),
+        std.places(),
+        std.classifications(),
+    );
+    let mut context = Context::new(DEFAULT_BUDGET, SYNTAX);
+    context.set_imports(lowered.imports().clone());
+    context.set_broken(lowered.broken_names());
+    // A unit lowered whole drops what the archived unit's lowering declares and it does not.
+    let dropped = lowered.dropped().cloned().unwrap_or_else(|| {
+        let items = &std
+            .text()
+            .expect("a program's unit holds its lowering")
+            .core()
+            .items;
+        items
+            .places()
+            .flat_map(|place| items.names(place))
+            .filter(|name| lowered.declared_as(name).is_none())
+            .collect()
+    });
+
+    elaborate_and_zonk_unit_over(
+        &mut context,
+        &established,
+        Recompile {
+            baseline: std.core(),
+            places: std.places(),
+            traces: std.traces(),
+            readers: std.readers(),
+            declarations: lowered.declarations(),
+            relowered,
+            dropped: &dropped,
+            candidates: None,
+        },
+        lowered.core(),
+        lowered.mounts(),
+        lowered.minted(),
+    )
 }

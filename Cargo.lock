@@ -732,7 +732,6 @@ dependencies = [
  "curios-archive",
  "curios-common",
  "curios-num",
- "xbench",
 ]
 
 [[package]]
@@ -905,7 +904,6 @@ dependencies = [
  "curios-surface",
  "curios-unit",
  "curios-wasm",
- "xbench",
 ]
 
 [[package]]
@@ -920,7 +918,6 @@ dependencies = [
  "curios-core",
  "curios-document",
  "curios-elab",
- "curios-erase",
  "curios-module",
  "curios-native",
  "curios-package",
@@ -931,7 +928,6 @@ dependencies = [
  "curios-unit",
  "curios-verdict",
  "curios-wonder",
- "xbench",
 ]
 
 [[package]]
@@ -3329,17 +3325,22 @@ dependencies = [
  "clap",
  "curios",
  "curios-anf",
+ "curios-archive",
+ "curios-cert",
  "curios-common",
  "curios-core",
  "curios-cps",
  "curios-cranelift",
  "curios-elab",
+ "curios-erase",
  "curios-module",
  "curios-native",
  "curios-pipeline",
+ "curios-prelude",
  "curios-prelude-build",
  "curios-profile",
  "curios-surface",
+ "curios-unit",
  "curios-wasm",
  "curios-wonder",
  "serde",
