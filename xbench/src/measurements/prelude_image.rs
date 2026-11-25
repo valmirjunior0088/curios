@@ -7,8 +7,8 @@ use {
     curios_erase::{Erasures, erase_unit},
     curios_module::SYNTAX,
     curios_prelude::{test_support::*, with_prelude},
-    std::{thread, time::Instant},
-    xbench::{Measure, read, read_elapsed},
+    std::thread,
+    xbench::{Measure, phase, read},
 };
 
 /// The costs of the stored prelude, taken over the image: the figures `curios-package`'s README and `curios-elab`'s budget floors cite.
@@ -33,17 +33,12 @@ use {
 /// The heaviest declaration's figure counts the closed machine re-deriving within a run — the trade that buys a closed fold's check back a thousandfold — and at thirty times under the default budget it decides nothing.
 pub fn stored_prelude_measurements() {
     // A restore happens once per thread, so a *cold* one needs a thread that has not had one — measuring it on this thread would measure a thread-local read.
-    let cold = thread::spawn(|| {
-        let start = Instant::now();
-        with_prelude(|_| ());
-
-        start.elapsed()
-    })
-    .join()
-    .expect("the restoring thread");
+    let cold = thread::spawn(|| phase(&[], || with_prelude(|_| ())))
+        .join()
+        .expect("the restoring thread");
 
     with_prelude(|prelude| {
-        read_elapsed("cold restore", None, cold);
+        cold.read("cold restore", None);
 
         // Per root, against the roots before it: the figures are per *unit*, and the prelude is two of them, so summing them would report a cost no single operation has.
         let mut cores = Vec::new();
@@ -60,23 +55,25 @@ pub fn stored_prelude_measurements() {
                 .unwrap_or_else(|| "?".to_string());
             // Certified, then erased through the certifier that accepted it, as the build makes the root.
             let globals = certified(&prelude[..index]);
-            let start = Instant::now();
-            let (rechecked, mut certifier) =
-                certify_definitions(core, DEFAULT_BUDGET, &globals, SYNTAX);
-            let certification = start.elapsed();
+            let certification = phase(&[], || {
+                certify_definitions(core, DEFAULT_BUDGET, &globals, SYNTAX)
+            });
+            certification.read(&format!("{name}/certifying"), None);
+            let (rechecked, mut certifier) = certification.answer;
             let heaviest = certifier.heaviest_declaration();
             let accepted = rechecked
                 .accepted()
                 .expect("a stored prelude root is certified");
 
-            let start = Instant::now();
-            erase_unit(
-                &mut certifier,
-                Erasures::of(&cores, &places, &records, &units),
-                accepted,
-            )
-            .expect("a stored prelude root re-erases");
-            let erasure = start.elapsed();
+            phase(&[], || {
+                erase_unit(
+                    &mut certifier,
+                    Erasures::of(&cores, &places, &records, &units),
+                    accepted,
+                )
+                .expect("a stored prelude root re-erases")
+            })
+            .read(&format!("{name}/re-erasing"), None);
 
             let definitions: usize = core
                 .items
@@ -88,8 +85,6 @@ pub fn stored_prelude_measurements() {
                 })
                 .sum();
 
-            read_elapsed(&format!("{name}/re-erasing"), None, erasure);
-            read_elapsed(&format!("{name}/certifying"), None, certification);
             for (figure, count) in [
                 ("refusals", rechecked.refusals().len() as u64),
                 ("heaviest declaration/units", heaviest.units()),

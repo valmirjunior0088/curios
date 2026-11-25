@@ -19,9 +19,8 @@ use {
         num::NonZero,
         sync::atomic::{AtomicUsize, Ordering},
         thread,
-        time::Instant,
     },
-    xbench::{Measure, read, read_elapsed},
+    xbench::{Measure, phase, read},
 };
 
 /// What a question about the standard library costs after an edit to one declaration: how many names are lowered again and how many elaborated again, and the time each phase takes, for a leaf and for a hub. `cargo xbench measure std_recompile_census` takes it: for each edit, `<edit>/names`, `/lowered again` and `/elaborated again`, and `/lower`, `/elaborate` and `/recompile`, each phase's time, the last lowering, elaborating, judging and erasing.
@@ -41,28 +40,33 @@ pub fn std_recompile_census() {
             let source = std_from_its_tree().with_overlay(Overlay::of([(path, text)]));
             let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
 
-            let start = Instant::now();
-            let lowered = into_core_unit_over(
-                &unit,
-                &predecessors.text(),
-                &SYNTAX,
-                std.text().expect("a program's unit holds its lowering"),
-                true,
-            )
-            .expect("the edited library lowers");
-            let lowered_in = start.elapsed();
+            let lowering = phase(&[], || {
+                into_core_unit_over(
+                    &unit,
+                    &predecessors.text(),
+                    &SYNTAX,
+                    std.text().expect("a program's unit holds its lowering"),
+                    true,
+                )
+                .expect("the edited library lowers")
+            });
+            lowering.read(&format!("{label}/lower"), None);
+            let lowered = lowering.answer;
             let relowered = lowered
                 .lowered_anew()
                 .expect("lowered over a baseline")
                 .clone();
-            let start = Instant::now();
-            let elaborated = elaborated_over(predecessors, std, &lowered, &relowered)
-                .unwrap_or_else(|error| panic!("the edited library elaborates: {error}"));
-            let elaborated_in = start.elapsed();
-            let start = Instant::now();
-            recompiled_over(DEFAULT_BUDGET, predecessors, &unit, std)
-                .expect("the edited library recompiles");
-            let recompiled_in = start.elapsed();
+            let elaboration = phase(&[], || {
+                elaborated_over(predecessors, std, &lowered, &relowered)
+                    .unwrap_or_else(|error| panic!("the edited library elaborates: {error}"))
+            });
+            elaboration.read(&format!("{label}/elaborate"), None);
+            let elaborated = elaboration.answer;
+            phase(&[], || {
+                recompiled_over(DEFAULT_BUDGET, predecessors, &unit, std)
+                    .expect("the edited library recompiles")
+            })
+            .read(&format!("{label}/recompile"), None);
 
             let names = lowered
                 .core()
@@ -81,13 +85,6 @@ pub fn std_recompile_census() {
                     None,
                     count as u64,
                 );
-            }
-            for (phase, took) in [
-                ("lower", lowered_in),
-                ("elaborate", elaborated_in),
-                ("recompile", recompiled_in),
-            ] {
-                read_elapsed(&format!("{label}/{phase}"), None, took);
             }
         }
     });
@@ -111,11 +108,10 @@ pub fn std_image_division() {
         macro_rules! restored {
             ($part:expr, $type:ty, $bytes:expr) => {{
                 for _ in 0..5 {
-                    let start = Instant::now();
-                    let value =
-                        curios_archive::from_bytes::<$type>($bytes).expect("a part restores");
-                    read_elapsed(concat!($part, "/restore"), None, start.elapsed());
-                    drop(value);
+                    phase(&[], || {
+                        curios_archive::from_bytes::<$type>($bytes).expect("a part restores")
+                    })
+                    .read(concat!($part, "/restore"), None);
                 }
             }};
         }
@@ -330,10 +326,7 @@ pub fn std_image_division() {
         macro_rules! timed {
             ($name:expr, $step:expr) => {{
                 for _ in 0..5 {
-                    let start = Instant::now();
-                    let value = $step;
-                    read_elapsed(concat!("a filing's steps/", $name), None, start.elapsed());
-                    drop(value);
+                    phase(&[], || $step).read(concat!("a filing's steps/", $name), None);
                 }
             }};
         }
