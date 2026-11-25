@@ -68,6 +68,8 @@ curios-anf = { workspace = true, features = ["test-support"] }
 curios-num = { workspace = true }
 # The prelude's units, for the suites that read them whole.
 curios-prelude = { workspace = true }
+# The harness the measurements beside the code name their figures through, which `cargo xbench measure` takes by name.
+xbench = { workspace = true }
 # Where the standard library is authored, for the transport test that asks about one of its files.
 curios-prelude-build = { workspace = true }
 # The directory of its own every suite here works in, canonical and removed however the test ends.

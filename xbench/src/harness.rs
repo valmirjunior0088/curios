@@ -79,7 +79,7 @@ pub fn phase<T>(tallies: &'static [Tally], work: impl FnOnce() -> T) -> Phase<T>
     }
 }
 
-/// Print a span's figures off a fold, each named after the span: its time in microseconds, how many times it was entered, and, where the allocator counted, what its thread took — `<span>`, `<span>/calls`, `<span>/allocated` and `<span>/allocations`.
+/// Print a span's figures off a fold, each named after the span: its time in microseconds, how many times it was entered, where the allocator counted, what its thread took, and what its work added to each tally its program handed the recorder — `<span>`, `<span>/calls`, `<span>/allocated`, `<span>/allocations` and `<span>/<tally>`, the looks among them.
 pub fn read_span(summary: &Summary, size: Option<u64>) {
     span_lines(summary, size).into_iter().for_each(print);
 }
@@ -104,6 +104,10 @@ fn span_lines(summary: &Summary, size: Option<u64>) -> Vec<Line> {
     if let Some(memory) = summary.memory {
         lines.push(line("/allocated", Unit::Bytes, memory.allocated));
         lines.push(line("/allocations", Unit::Allocations, memory.allocations));
+    }
+    for tallied in &summary.tallies {
+        let suffix = format!("/{}", tallied.name);
+        lines.push(line(&suffix, Unit::Count, tallied.added));
     }
 
     lines

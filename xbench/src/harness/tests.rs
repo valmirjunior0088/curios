@@ -1,10 +1,10 @@
 use {
     super::*,
-    curios_profile::Memory,
+    curios_profile::{Memory, Tallied},
     std::{cell::RefCell, time::Duration},
 };
 
-/// A span's figures are its fold's: its time to the microsecond, its calls, and what its thread took.
+/// A span's figures are its fold's: its time to the microsecond, its calls, what its thread took, and what its work added to each tally.
 #[test]
 fn a_span_reads_as_the_figures_its_fold_states() {
     let summary = Summary {
@@ -22,7 +22,11 @@ fn a_span_reads_as_the_figures_its_fold_states() {
             self_allocated: 12,
             allocations: 16_722_058,
         }),
-        tallies: Vec::new(),
+        tallies: vec![Tallied {
+            name: "looks".to_string(),
+            added: 7_340_032,
+            self_added: 512,
+        }],
     };
     let read = span_lines(&summary, Some(4))
         .into_iter()
@@ -50,6 +54,12 @@ fn a_span_reads_as_the_figures_its_fold_states() {
                 Unit::Allocations,
                 Some(4),
                 16_722_058
+            ),
+            (
+                "cps_optimize/looks".to_string(),
+                Unit::Count,
+                Some(4),
+                7_340_032
             ),
         ]
     );

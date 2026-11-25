@@ -7,47 +7,17 @@ use {
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_pipeline::compile_with_prelude,
-    curios_profile::{Destination, fold, trace},
     curios_surface::Entrypoint,
+    xbench::{Unit, phase, read, read_sample, read_span},
 };
 
-/// The stream, kept in memory so the fold reads it back without a file.
-#[derive(Clone, Default)]
-struct Stream(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
-
-impl Stream {
-    fn bytes(&self) -> Vec<u8> {
-        self.0.lock().expect("stream lock").clone()
-    }
-}
-
-impl std::io::Write for Stream {
-    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-        self.0.lock().expect("stream lock").extend_from_slice(bytes);
-
-        Ok(bytes.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
-/// Where the fixpoint's time goes, and which passes keep it running.
+/// Where the fixpoint's time goes, and which passes keep it running: one compilation of `TOML_DRIVER` taken as a phase, its instructions read whole, each span the compile entry and `curios_cps` carry read as its figures — its time, its calls, what its thread took and the looks its work made — and each sample the CPS optimizer takes. `cargo xbench measure fixpoint_pass_measurements` takes it.
 ///
-/// # How to take it
+/// A pass's boolean sample total counts rounds in which it changes the graph; its observations count invocations. A sweep can rewrite many candidates in one invocation. Its fired count neither counts rewrites nor establishes one-candidate draining or independence: the direct pass tests hold the snapshot and deferral contracts. Samples ending in `::nodes`, `::conts`, `::cap` and `::values` are graph sizes, not fired counts. Every span must close.
 ///
-/// ```sh
-/// cargo test --release --package curios --lib -- --ignored --nocapture fixpoint_pass_measurements --test-threads=1
-/// ```
+/// Parsing precedes the phase. The phase wraps `compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})`, with no package cache or stage rendering. The `compile_entrypoint` span starts after prelude restoration and covers the pipeline through Wasm emission; it excludes Binaryen, Cranelift and guest execution.
 ///
-/// This prints one profiled compilation of `TOML_DRIVER`: each span's total, call count, extremes, allocated bytes and allocation calls, followed by its magnitude samples. A pass's boolean sample total counts rounds in which it changes the graph; its sample count counts invocations. A sweep can rewrite many candidates in one invocation. Its fired count neither counts rewrites nor establishes one-candidate draining or independence: the direct pass tests hold the snapshot and deferral contracts. Samples ending in `::nodes`, `::conts`, `::cap` and `::values` are graph sizes, not fired counts. Every span must close.
-///
-/// For a reading, finish all builds and checks first, then run the command once as a warmup and seven more times sequentially, each invocation in a fresh test process. Keep the checkout, toolchain and feature set fixed, and keep other machine work idle. Cargo's test executable can be invoked directly with the same test filter and flags after the build. Retain each invocation's stdout. Discard the warmup; report the median and observed minimum–maximum of each span's aggregate time over the seven measured compilations. Record whether counted samples and allocations agree across those compilations; summarize varying allocation calls with their medians and observed spans.
-///
-/// Parsing precedes the trace. The trace wraps `compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})`, with no package cache or stage rendering. The `compile_entrypoint` span starts after prelude restoration and covers the pipeline through Wasm emission; it excludes Binaryen, Cranelift and guest execution. The stream stays in memory and is folded after compilation; printing is outside the trace.
-///
-/// The allocator counts while the trace listens, a span charged what its own thread took. Timings and allocation work include this observer, including its in-memory stream, and do not price a compiler no recorder listens to. Allocation columns are cumulative work, including nested spans, rather than peak resident memory. Per-pass times and allocations are inclusive as well; nested spans cannot be added to their parent.
+/// Times include the recorder's own work, and allocations leave it out. Allocations are cumulative work, including nested spans, rather than peak resident memory. Per-pass times and allocations are inclusive as well; nested spans cannot be added to their parent.
 ///
 /// # Latest reading
 ///
@@ -90,50 +60,34 @@ impl std::io::Write for Stream {
 ///
 /// `known_values` records no boolean fired sample. `split_windows` runs only on otherwise idle rounds. All eight compilations pass the compilation and closed-span assertions.
 #[test]
-#[ignore = "measurement, mixed: reports pass costs and counts"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn fixpoint_pass_measurements() {
     let entrypoint = TOML_DRIVER.parse::<Entrypoint>().expect("driver parses");
-    // The stream goes to a buffer and is folded back here: this test wants the aggregate, which is one consumer of the stream.
-    let stream = Stream::default();
-    let outcome = trace(
-        Destination::Stream(Box::new(stream.clone())),
-        TALLIES,
-        || compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {}),
-    )
-    .expect("a stream destination opens");
-    outcome.expect("driver compiles");
-    let report = fold(stream.bytes().as_slice()).expect("the stream folds");
-    assert!(report.open.is_empty(), "every span closed");
+    let compiled = phase(TALLIES, || {
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
+    });
+    compiled.answer.expect("driver compiles");
+    assert!(compiled.profile.open.is_empty(), "every span closed");
 
-    println!(
-        "{:>10} {:>6} {:>9} {:>9} {:>15} {:>12}  name",
-        "total_ms", "calls", "min_ms", "max_ms", "allocated_bytes", "allocations"
-    );
-    for summary in report.summaries.iter().filter(|summary| {
-        summary.name == "compile_entrypoint" || summary.target.starts_with("curios_cps")
-    }) {
-        let memory = summary
-            .memory
-            .expect("the suite installs the counting allocator");
-        println!(
-            "{:>10.3} {:>6} {:>9.3} {:>9.3} {:>15} {:>12}  {}",
-            summary.total.as_secs_f64() * 1_000.0,
-            summary.calls,
-            summary.min.as_secs_f64() * 1_000.0,
-            summary.max.as_secs_f64() * 1_000.0,
-            memory.allocated,
-            memory.allocations,
-            summary.name,
+    if let Some(instructions) = compiled.instructions {
+        read(
+            "compile_with_prelude",
+            Unit::Instructions,
+            None,
+            instructions,
         );
     }
-
-    println!();
-    println!("{:>10} {:>7}  name", "total", "samples");
-    for sample in report
+    for summary in compiled.profile.summaries.iter().filter(|summary| {
+        summary.name == "compile_entrypoint" || summary.target.starts_with("curios_cps")
+    }) {
+        read_span(summary, None);
+    }
+    for sample in compiled
+        .profile
         .samples
         .iter()
         .filter(|sample| sample.name.starts_with("cps"))
     {
-        println!("{:>10} {:>7}  {}", sample.total, sample.count, sample.name);
+        read_sample(sample, None);
     }
 }
