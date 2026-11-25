@@ -7,11 +7,11 @@
 use {
     crate::*,
     curios_common::{
-        CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax, EqlDerivation,
-        EqualitySyntax, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
-        OperatorSyntax, OptionSyntax, OrdDerivation, OrdLaws, OrderSyntax, ProgramSyntax,
-        ProofSyntax, ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax, SyntaxName,
-        SyntaxRegistry, TestSyntax,
+        CharacterSyntax, ConceptField, ConjunctionSyntax, DerivationSyntax, EntailmentSyntax,
+        EqlSyntax, EqualitySyntax, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax,
+        NaturalSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, OrdLaws, OrderSyntax,
+        ProgramSyntax, ProofSyntax, ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax,
+        SyntaxName, SyntaxRegistry, TestSyntax,
     },
     curios_core::{Applications, Free, Global, InductDecl, Polarity, StructDecl, Term},
     std::{collections::BTreeMap, convert::Infallible},
@@ -51,18 +51,21 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         mul: field(&["std", "Multiply"], "mul"),
         div: field(&["std", "Divide"], "div"),
         rem: field(&["std", "Remainder"], "rem"),
-        eql: field(&["std", "Equal", "Equal"], "eql"),
         lt: field(&["std", "Compare"], "lt"),
         le: field(&["std", "Compare"], "le"),
         and: field(&["std", "And"], "and"),
         or: field(&["std", "Or"], "or"),
+    },
+    eql: EqlSyntax {
+        eql: field(&["std", "Equal", "Equal"], "eql"),
+        eq_of_eql: field(&["std", "Equal", "Equal"], "eq_of_eql"),
+        refl: field(&["std", "Equal", "Equal"], "refl"),
     },
     character: CharacterSyntax {
         character: name(&["std", "Char", "Char"]),
     },
     string: StringSyntax {
         string: name(&["std", "Str", "Str"]),
-        qed: name(&["std", "Bool", "True", "qed"]),
     },
     proof: ProofSyntax {
         true_qed: name(&["std", "Bool", "True", "qed"]),
@@ -74,6 +77,11 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         family: name(&["std", "Eq", "Eq"]),
         refl: name(&["std", "Eq", "Eq", "refl"]),
         sym: name(&["std", "Eq", "sym"]),
+    },
+    conjunction: ConjunctionSyntax {
+        first: name(&["std", "Bool", "and", "first"]),
+        second: name(&["std", "Bool", "and", "second"]),
+        both: name(&["std", "Bool", "and", "both"]),
     },
     test: TestSyntax {
         test_type: name(&["std", "Test", "Test"]),
@@ -94,15 +102,6 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             call: name(&["std", "Spell", "call"]),
             record: name(&["std", "Spell", "record"]),
             hidden: name(&["std", "Spell", "hidden"]),
-        },
-        eql: EqlDerivation {
-            eql: field(&["std", "Equal", "Equal"], "eql"),
-            eq_of_eql: field(&["std", "Equal", "Equal"], "eq_of_eql"),
-            refl: field(&["std", "Equal", "Equal"], "refl"),
-            first: name(&["std", "Bool", "and", "first"]),
-            second: name(&["std", "Bool", "and", "second"]),
-            both: name(&["std", "Bool", "and", "both"]),
-            qed: name(&["sys", "Bool", "True", "qed"]),
         },
         ord: OrdDerivation {
             ord: field(&["std", "Ord", "Ord"], "ord"),
@@ -131,12 +130,8 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         },
     },
     entailment: EntailmentSyntax {
-        decided: field(&["std", "Equal", "Equal"], "eq_of_eql"),
         range: name(&["std", "Nat", "le", "of_in_range"]),
         in_range: name(&["std", "Nat", "in_range"]),
-        and_first: name(&["std", "Bool", "and", "first"]),
-        and_second: name(&["std", "Bool", "and", "second"]),
-        and_both: name(&["std", "Bool", "and", "both"]),
         or_first: name(&["std", "Bool", "or", "of_first"]),
         or_second: name(&["std", "Bool", "or", "of_second"]),
         proved: name(&["std", "proved"]),

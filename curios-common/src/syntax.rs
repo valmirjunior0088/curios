@@ -44,7 +44,7 @@ pub struct ConceptField {
     pub field: &'static str,
 }
 
-/// The compiler-known names, grouped by the surface feature that emits them.
+/// The compiler-known names, grouped by the surface feature that emits them, and a name more than one feature emits in a group they all read — `eql`, `string`, `proof`, `equality` and `conjunction` — so each name is one slot.
 ///
 /// The crate that owns the corresponding source declarations fills the fields as an exhaustive named struct literal: a new slot is a compile error at every fill site until it is filled, and the fill names each slot, where a positional constructor would let two like-typed slots swap silently past every check. [`SyntaxRegistry::targets`] and [`SyntaxRegistry::concept_fields`] enumerate the whole obligation, which is what lets the prelude build check every slot against the sources rather than trusting them to agree.
 #[derive(Debug, Clone, Copy)]
@@ -54,10 +54,12 @@ pub struct SyntaxRegistry {
     pub monad: MonadSyntax,
     pub lift: LiftSyntax,
     pub operator: OperatorSyntax,
+    pub eql: EqlSyntax,
     pub character: CharacterSyntax,
     pub string: StringSyntax,
     pub proof: ProofSyntax,
     pub equality: EqualitySyntax,
+    pub conjunction: ConjunctionSyntax,
     pub test: TestSyntax,
     pub program: ProgramSyntax,
     pub report: ReportSyntax,
@@ -70,20 +72,26 @@ impl SyntaxRegistry {
     ///
     /// Each group answers for its own slots instead of having them reached through from here, so that the exhaustive pattern sits in the same scope as the fields it has to keep up with.
     pub fn targets(self) -> impl Iterator<Item = SyntaxName> {
+        let rows = self
+            .derivation_rows()
+            .flat_map(Derivation::targets)
+            .collect::<Vec<_>>();
         let Self {
             option,
             result,
             monad,
             lift,
             operator,
+            eql,
             character,
             string,
             proof,
             equality,
+            conjunction,
             test,
             program,
             report,
-            derivations,
+            derivations: _,
             entailment,
         } = self;
 
@@ -93,45 +101,97 @@ impl SyntaxRegistry {
             .chain(monad.targets())
             .chain(lift.targets())
             .chain(operator.targets())
+            .chain(eql.targets())
             .chain(character.targets())
             .chain(string.targets())
             .chain(proof.targets())
             .chain(equality.targets())
+            .chain(conjunction.targets())
             .chain(test.targets())
             .chain(program.targets())
             .chain(report.targets())
-            .chain(derivations.targets())
-            .chain(entailment.targets(equality))
+            .chain(rows)
+            .chain(entailment.targets(equality, conjunction))
     }
 
     /// Every registered concept method, for the prelude build's field check. A concept can exist under the registered name and still not declare the field the compiler projects, which is the drift a presence check alone cannot see.
     ///
-    /// Only six groups hold concept methods; the other eight are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
+    /// Only six groups hold concept methods; the other ten are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
     pub fn concept_fields(self) -> impl Iterator<Item = ConceptField> {
+        let rows = self
+            .derivation_rows()
+            .flat_map(Derivation::concept_fields)
+            .collect::<Vec<_>>();
         let Self {
             option: _,
             result: _,
             monad,
             lift,
             operator,
+            eql,
             character: _,
             string: _,
             proof: _,
             equality: _,
+            conjunction: _,
             test: _,
             program,
             report: _,
-            derivations,
-            entailment,
+            derivations: _,
+            entailment: _,
         } = self;
 
         operator
             .concept_fields()
+            .chain(eql.concept_fields())
             .chain([monad.bind])
             .chain([lift.lift])
             .chain([program.execute])
-            .chain(derivations.concept_fields())
-            .chain([entailment.decided])
+            .chain(rows)
+    }
+
+    /// The method `op` dispatches through, and how it reads it: `!=` is the negation of `Eql`'s `eql`, so a witness states equality once and `a != b` cannot disagree with `a == b`; and `a > b` and `a >= b` are `b < a` and `b <= a`, so an order states `lt` and `le` alone.
+    pub const fn operator_method(self, op: InfixOp) -> OperatorMethod {
+        let operator = self.operator;
+        let (method, form) = match op {
+            InfixOp::Add => (operator.add, MethodForm::Direct),
+            InfixOp::Sub => (operator.sub, MethodForm::Direct),
+            InfixOp::Mul => (operator.mul, MethodForm::Direct),
+            InfixOp::Div => (operator.div, MethodForm::Direct),
+            InfixOp::Rem => (operator.rem, MethodForm::Direct),
+            InfixOp::Eql => (self.eql.eql, MethodForm::Direct),
+            InfixOp::Neq => (self.eql.eql, MethodForm::Negated),
+            InfixOp::Lt => (operator.lt, MethodForm::Direct),
+            InfixOp::Gt => (operator.lt, MethodForm::Swapped),
+            InfixOp::Le => (operator.le, MethodForm::Direct),
+            InfixOp::Ge => (operator.le, MethodForm::Swapped),
+            InfixOp::And => (operator.and, MethodForm::Direct),
+            InfixOp::Or => (operator.or, MethodForm::Direct),
+        };
+        OperatorMethod { method, form }
+    }
+
+    /// The operator that reads `concept`'s `field` as it stands, for folding an elaborated projection back to operator syntax in a report: [`SyntaxRegistry::operator_method`]'s reverse at [`MethodForm::Direct`], since a form that negates is folded from the negation around the projection.
+    pub fn operator_for(self, concept: &Qualifier, field: &str) -> Option<InfixOp> {
+        InfixOp::ALL.into_iter().find(|op| {
+            let OperatorMethod { method, form } = self.operator_method(*op);
+            form == MethodForm::Direct
+                && method.concept.qualifier() == *concept
+                && method.field == field
+        })
+    }
+
+    /// Every derivation's row, for the concept lookup and the references a derived witness makes: `Eql`'s is the concept's own group, [`SyntaxRegistry::eql`], and the others are [`DerivationSyntax`]'s. Destructures it, so a row added and not yielded here does not compile. Each row is borrowed, so the tag is a reference whatever its row's size.
+    pub fn derivation_rows(&self) -> impl Iterator<Item = Derivation<'_>> {
+        let DerivationSyntax { spell, ord, hash } = &self.derivations;
+
+        [
+            Derivation::Spell(spell),
+            Derivation::Eql(&self.eql),
+            Derivation::Ord(ord),
+            Derivation::Hash(hash),
+        ]
+        .into_iter()
     }
 }
 
@@ -197,7 +257,7 @@ impl LiftSyntax {
     }
 }
 
-/// The operator→concept table backing `elaborate_infix`: one slot per method the fixed infix operators dispatch through.
+/// The operator→concept table backing `elaborate_infix`: one slot per method the fixed infix operators dispatch through, but `Eql`'s `eql`, which [`SyntaxRegistry::eql`] holds beside the concept's laws; [`SyntaxRegistry::operator_method`] reads both.
 ///
 /// One slot per *method* rather than per concept, because that is the granularity the elaborator asks at — `Ord`'s `lt` and `le` answer four operators, `>` and `>=` reading them swapped, and `Eql` answers two, and a per-concept grouping would have to reintroduce the method as a positional index into a field list. Every operator, `&&`/`||` included, resolves through a witness projection of its concept; there is no carved-out exception, so there is no operator without a slot.
 #[derive(Debug, Clone, Copy)]
@@ -207,7 +267,6 @@ pub struct OperatorSyntax {
     pub mul: ConceptField,
     pub div: ConceptField,
     pub rem: ConceptField,
-    pub eql: ConceptField,
     pub lt: ConceptField,
     pub le: ConceptField,
     pub and: ConceptField,
@@ -215,36 +274,6 @@ pub struct OperatorSyntax {
 }
 
 impl OperatorSyntax {
-    /// The method `op` dispatches through, and how it reads it: `!=` is the negation of `Eql`'s `eql`, so a witness states equality once and `a != b` cannot disagree with `a == b`; and `a > b` and `a >= b` are `b < a` and `b <= a`, so an order states `lt` and `le` alone.
-    pub const fn method(self, op: InfixOp) -> OperatorMethod {
-        let (method, form) = match op {
-            InfixOp::Add => (self.add, MethodForm::Direct),
-            InfixOp::Sub => (self.sub, MethodForm::Direct),
-            InfixOp::Mul => (self.mul, MethodForm::Direct),
-            InfixOp::Div => (self.div, MethodForm::Direct),
-            InfixOp::Rem => (self.rem, MethodForm::Direct),
-            InfixOp::Eql => (self.eql, MethodForm::Direct),
-            InfixOp::Neq => (self.eql, MethodForm::Negated),
-            InfixOp::Lt => (self.lt, MethodForm::Direct),
-            InfixOp::Gt => (self.lt, MethodForm::Swapped),
-            InfixOp::Le => (self.le, MethodForm::Direct),
-            InfixOp::Ge => (self.le, MethodForm::Swapped),
-            InfixOp::And => (self.and, MethodForm::Direct),
-            InfixOp::Or => (self.or, MethodForm::Direct),
-        };
-        OperatorMethod { method, form }
-    }
-
-    /// The operator that reads `concept`'s `field` as it stands, for folding an elaborated projection back to operator syntax in a report: [`OperatorSyntax::method`]'s reverse at [`MethodForm::Direct`], since a form that negates is folded from the negation around the projection.
-    pub fn operator_for(self, concept: &Qualifier, field: &str) -> Option<InfixOp> {
-        InfixOp::ALL.into_iter().find(|op| {
-            let OperatorMethod { method, form } = self.method(*op);
-            form == MethodForm::Direct
-                && method.concept.qualifier() == *concept
-                && method.field == field
-        })
-    }
-
     fn targets(self) -> impl Iterator<Item = SyntaxName> {
         self.concept_fields().map(|target| target.concept)
     }
@@ -256,14 +285,40 @@ impl OperatorSyntax {
             mul,
             div,
             rem,
-            eql,
             lt,
             le,
             and,
             or,
         } = self;
 
-        [add, sub, mul, div, rem, eql, lt, le, and, or].into_iter()
+        [add, sub, mul, div, rem, lt, le, and, or].into_iter()
+    }
+}
+
+/// `/std/ops/Eql`: the method `==` and `!=` dispatch through, and the two laws that hold it to `Eq`. A group of its own because three features read it: the operators dispatch through `eql`, the `Eql` derivation writes a witness of all three — this group is its row — and the procedure that proves a bound crosses a decided equality to its equation by `eq_of_eql`. The law is no lemma of that procedure's vocabulary ([`EntailmentSyntax::targets`]): a proof names it where its witness resolves.
+#[derive(Debug, Clone, Copy)]
+pub struct EqlSyntax {
+    /// Whether the two are equal.
+    pub eql: ConceptField,
+    /// The law that two values `eql` holds equal are one value.
+    pub eq_of_eql: ConceptField,
+    /// The law that a value is `eql` to itself.
+    pub refl: ConceptField,
+}
+
+impl EqlSyntax {
+    fn targets(self) -> impl Iterator<Item = SyntaxName> {
+        self.concept_fields().map(|target| target.concept)
+    }
+
+    fn concept_fields(self) -> impl Iterator<Item = ConceptField> {
+        let Self {
+            eql,
+            eq_of_eql,
+            refl,
+        } = self;
+
+        [eql, eq_of_eql, refl].into_iter()
     }
 }
 
@@ -299,19 +354,17 @@ impl CharacterSyntax {
     }
 }
 
-/// The names a string literal writes: `/std/Str`, and the inhabitant of `True` its decided `Valid` field is closed with.
+/// The name a string literal builds: `/std/Str`, whose decided `Valid` field the literal closes with [`ProofSyntax::true_qed`].
 #[derive(Debug, Clone, Copy)]
 pub struct StringSyntax {
     pub string: SyntaxName,
-    /// The same declaration [`ProofSyntax::true_qed`] names, carried here as well because the `Spell` derivation's row holds this group alone and writes literals from it.
-    pub qed: SyntaxName,
 }
 
 impl StringSyntax {
     fn targets(self) -> impl Iterator<Item = SyntaxName> {
-        let Self { string, qed } = self;
+        let Self { string } = self;
 
-        [string, qed].into_iter()
+        [string].into_iter()
     }
 }
 
@@ -359,21 +412,35 @@ impl EqualitySyntax {
     }
 }
 
+/// `/std/Bool/and`'s lemmas: a conjunction's first conjunct and its second from a proof of the whole, and two decisions that hold as their conjunction.
+///
+/// A group of its own because two features split and join conjunctions by them: the procedure that proves a bound reads a conjunction's guard a conjunct at a time and proves a conjunction conjunct by conjunct, and a derived `Eql` witness's laws take apart and put together the conjunction its comparison is.
+#[derive(Debug, Clone, Copy)]
+pub struct ConjunctionSyntax {
+    pub first: SyntaxName,
+    pub second: SyntaxName,
+    pub both: SyntaxName,
+}
+
+impl ConjunctionSyntax {
+    fn targets(self) -> impl Iterator<Item = SyntaxName> {
+        let Self {
+            first,
+            second,
+            both,
+        } = self;
+
+        [first, second, both].into_iter()
+    }
+}
+
 /// The names the procedure that proves a bound from the facts in scope writes into its proofs — `curios-elab`'s `entailment`. A proof form is written only where every name it applies is assumed in the context. Inside `/std`, where the vocabulary is elaborated beside its users, `curios-elab`'s walk elaborates the vocabulary first, with every declaration it reads, and offers it to the rest of the unit from then on ([`EntailmentSyntax::targets`]), since any item may omit a bound and no item says so ahead of elaboration.
 #[derive(Debug, Clone, Copy)]
 pub struct EntailmentSyntax {
-    /// `Eql`'s law that a decided equality is an equation, by which an equation at a type that decides its equality is proved from the decision. A concept's method and no lemma of the vocabulary: [`EntailmentSyntax::targets`], which the elaborator elaborates ahead of a unit's other declarations, does not list it, and a proof names it where its witness resolves.
-    pub decided: ConceptField,
     /// A range check's two bounds, as a pair: how a range check's guard is read, where a split on it would meet the guard's own key.
     pub range: SyntaxName,
     /// The range check `range` reads, which a guard's written spelling is opened to: its bounds are proved over the arguments the guard's key spells, the one spelling both checkers record.
     pub in_range: SyntaxName,
-    /// A conjunction's first conjunct, from a proof of the whole: how a conjunction's guard is read in its true arm, where a split on the first conjunct would meet the guard's own key.
-    pub and_first: SyntaxName,
-    /// Its second conjunct, read the same way.
-    pub and_second: SyntaxName,
-    /// Two decisions that hold, as their conjunction: how a bound that is a conjunction is proved from a proof of each conjunct.
-    pub and_both: SyntaxName,
     /// A disjunction from its first side, which a bound that is a disjunction is proved by in the case the side holds.
     pub or_first: SyntaxName,
     /// A disjunction from its second side, in the case every side before it fails.
@@ -391,15 +458,15 @@ pub struct EntailmentSyntax {
 }
 
 impl EntailmentSyntax {
-    /// Every lemma the procedure writes or reads: its vocabulary, which the law it crosses to an equation by is no part of. `equality` is [`SyntaxRegistry::equality`]: a hypothesis states an equation in the family, and the procedure reads one the other way round for its second bound.
-    pub fn targets(self, equality: EqualitySyntax) -> impl Iterator<Item = SyntaxName> {
+    /// Every lemma the procedure writes or reads: its vocabulary, which `Eql`'s law it crosses to an equation by ([`SyntaxRegistry::eql`]) is no part of, a concept's method whose witness resolves where a proof names it. `equality` is [`SyntaxRegistry::equality`]: a hypothesis states an equation in the family, and the procedure reads one the other way round for its second bound. `conjunction` is [`SyntaxRegistry::conjunction`]: a conjunction's guard is read a conjunct at a time, where a split on the first conjunct would meet the guard's own key, and a bound that is a conjunction is proved conjunct by conjunct and joined.
+    pub fn targets(
+        self,
+        equality: EqualitySyntax,
+        conjunction: ConjunctionSyntax,
+    ) -> impl Iterator<Item = SyntaxName> {
         let Self {
-            decided: _,
             range,
             in_range,
-            and_first,
-            and_second,
-            and_both,
             or_first,
             or_second,
             proved,
@@ -414,14 +481,12 @@ impl EntailmentSyntax {
             equality.sym,
             range,
             in_range,
-            and_first,
-            and_second,
-            and_both,
             or_first,
             or_second,
             proved,
         ]
         .into_iter()
+        .chain(conjunction.targets())
         .chain(nat.targets())
         .chain(int.targets())
         .chain(natural.targets())
@@ -628,7 +693,7 @@ impl TestSyntax {
     }
 }
 
-/// The blessed set: the concepts the compiler writes a witness body for, each row carrying the names the body it writes applies.
+/// The blessed set: the concepts the compiler writes a witness body for, each row carrying the names the body it writes applies — but `Eql`'s, whose row is the concept's own group, [`SyntaxRegistry::eql`], every name its body writes beside the concept's three being a shared group's. [`SyntaxRegistry::derivation_rows`] yields them all.
 ///
 /// A struct of rows rather than a list of them, for the reason this whole registry is one — a row is a named slot, so a derivation added here is a compile error at every fill site until it is filled, where a list would have let a missing row pass every check. That is the drift the roster exists to end, and a list would have relocated it rather than removed it.
 ///
@@ -636,42 +701,13 @@ impl TestSyntax {
 #[derive(Debug, Clone, Copy)]
 pub struct DerivationSyntax {
     pub spell: SpellDerivation,
-    pub eql: EqlDerivation,
     pub ord: OrdDerivation,
     pub hash: HashDerivation,
 }
 
-impl DerivationSyntax {
-    /// Every row, for the concept lookup and the references a derived witness makes. Destructures `Self`, so a row added and not yielded here does not compile.
-    pub fn rows(self) -> impl Iterator<Item = Derivation> {
-        let Self {
-            spell,
-            eql,
-            ord,
-            hash,
-        } = self;
-
-        [
-            Derivation::Spell(spell),
-            Derivation::Eql(eql),
-            Derivation::Ord(ord),
-            Derivation::Hash(hash),
-        ]
-        .into_iter()
-    }
-
-    fn targets(self) -> impl Iterator<Item = SyntaxName> {
-        self.rows().flat_map(Derivation::targets)
-    }
-
-    fn concept_fields(self) -> impl Iterator<Item = ConceptField> {
-        self.rows().flat_map(Derivation::concept_fields)
-    }
-}
-
 /// The names specific to a derived `Spell` witness body: the concept's `spell` method, applied to each payload and resolved like any written call; and the renderers the body applies over the spelled pieces — `call` for a constructor over its payloads, `record` for a struct over its fields, and `hidden` for a member written under its mark. The re-parse grammar is spelled once, in `/std/Spell`, where the certifier re-certifies it on every prelude build; the derivation only ever emits an application of one of these.
 ///
-/// The body writer and [`Derivation::vocabulary`] both receive [`SyntaxRegistry::string`]: `curios_core::str_literal` names the scan certificate and constructs the carrier at every rendered piece, so a derived witness references those shared names too. They have one registry entry, shared with ordinary string literals.
+/// The body writer and [`Derivation::vocabulary`] both receive [`SyntaxRegistry::string`] and [`ProofSyntax::true_qed`]: `curios_core::str_literal` constructs the carrier and closes its scan certificate at every rendered piece, so a derived witness references those shared names too. They have one registry entry each, shared with ordinary string literals.
 #[derive(Debug, Clone, Copy)]
 pub struct SpellDerivation {
     pub spell: ConceptField,
@@ -679,26 +715,6 @@ pub struct SpellDerivation {
     pub record: SyntaxName,
     /// What a hidden member spells as, under its mark.
     pub hidden: SyntaxName,
-}
-
-/// The names a derived `Eql` witness body is written with: its own method, applied to each payload pair, and the names its two laws' proofs apply. `eql`'s own body builds nothing beside its method but an intrinsic or an infix operator, and the elaborator resolves an operator to a projection off a witness, neither a global for anything to order against.
-///
-/// The proofs name the concept's two laws, each applied to a payload as the method is; the three lemmas of `/std/Bool/and`, by which a conjunction of comparisons is split and joined; propositional equality with its one constructor, which each proof closes on and [`SyntaxRegistry::equality`] names; and the inhabitant of `Holds(true)`, which proves a comparison of nothing. `qed` is the declaration [`ProofSyntax::true_qed`] names, carried here as well.
-#[derive(Debug, Clone, Copy)]
-pub struct EqlDerivation {
-    pub eql: ConceptField,
-    /// The law that two values `eql` holds equal are one value.
-    pub eq_of_eql: ConceptField,
-    /// The law that a value is `eql` to itself.
-    pub refl: ConceptField,
-    /// A conjunction's first conjunct, from a proof of the whole.
-    pub first: SyntaxName,
-    /// Its second conjunct.
-    pub second: SyntaxName,
-    /// Two decisions that hold, as their conjunction.
-    pub both: SyntaxName,
-    /// The inhabitant of `Holds(true)`, which `refl` answers where a constructor holds no payload to compare.
-    pub qed: SyntaxName,
 }
 
 /// The names a derived `Ord` witness body is written with: its own method, applied to each payload pair; the names its laws' proofs apply ([`OrdLaws`]); and the two `/std/Ord` combinators the body folds their answers through — `lexicographic` within one constructor, `by_tag` across two, with `Ordering/eq` filling the arm that cannot be reached because the tags already agreed — and `Ordering/is_lt` and `is_le`, which read `lt` and `le` off the same comparison.
@@ -786,14 +802,14 @@ pub struct HashDerivation {
 
 /// One row of the roster as the lookup yields it: the tag a body writer dispatches on, carrying the names that writer applies.
 #[derive(Debug, Clone, Copy)]
-pub enum Derivation {
-    Spell(SpellDerivation),
-    Eql(EqlDerivation),
-    Ord(OrdDerivation),
-    Hash(HashDerivation),
+pub enum Derivation<'r> {
+    Spell(&'r SpellDerivation),
+    Eql(&'r EqlSyntax),
+    Ord(&'r OrdDerivation),
+    Hash(&'r HashDerivation),
 }
 
-impl Derivation {
+impl Derivation<'_> {
     /// The concept method a derived `satisfy` of this derivation asks for — the key the lookup matches on, and the field the prelude build checks against the declaration.
     pub const fn concept_field(self) -> ConceptField {
         match self {
@@ -807,15 +823,7 @@ impl Derivation {
     /// Every concept method a body written by this derivation projects, for the prelude build's field check: the method the lookup keys on, and for `Eql` the two laws its body proves through each payload's own.
     fn concept_fields(self) -> Vec<ConceptField> {
         match self {
-            Derivation::Eql(EqlDerivation {
-                eql,
-                eq_of_eql,
-                refl,
-                first: _,
-                second: _,
-                both: _,
-                qed: _,
-            }) => vec![eql, eq_of_eql, refl],
+            Derivation::Eql(row) => row.concept_fields().collect(),
             Derivation::Ord(row) => vec![row.ord, row.laws.flips, row.laws.eq_of_ord],
             Derivation::Spell(_) | Derivation::Hash(_) => vec![self.concept_field()],
         }
@@ -825,14 +833,16 @@ impl Derivation {
     ///
     /// A [`Qualifier`] rather than a [`SyntaxName`], as the bodies' references are read.
     ///
-    /// `registry` is the registry this row is of, for the groups a body shares with other features and the body writer reads there too: [`SyntaxRegistry::string`], for the string literals only `Spell` emits; [`SyntaxRegistry::equality`], for the equations `Eql`'s laws and `Ord`'s conclude; and [`SyntaxRegistry::proof`], for the inhabitant of `True` an `Ord` law closes on where a constructor holds nothing.
+    /// `registry` is the registry this row is of, for the groups a body shares with other features and the body writer reads there too: [`SyntaxRegistry::string`], for the string literals only `Spell` emits; [`SyntaxRegistry::equality`], for the equations `Eql`'s laws and `Ord`'s conclude; [`SyntaxRegistry::conjunction`], for the conjunction `Eql`'s laws take apart and join; and [`SyntaxRegistry::proof`], for the inhabitant of `True` a string literal's certificate is and an `Eql` or `Ord` law closes on where a constructor holds nothing.
     pub fn vocabulary(self, registry: &SyntaxRegistry) -> Vec<Qualifier> {
-        let (string, equality) = (registry.string, registry.equality);
+        let (string, equality, conjunction) =
+            (registry.string, registry.equality, registry.conjunction);
+        let qed = registry.proof.true_qed;
         // A method named by its path reads its concept: a method is its concept's field, and no declaration.
         let concept = self.concept_field().concept.qualifier();
 
         match self {
-            Derivation::Spell(SpellDerivation {
+            Derivation::Spell(&SpellDerivation {
                 spell: _,
                 call,
                 record,
@@ -840,28 +850,22 @@ impl Derivation {
             }) => [concept]
                 .into_iter()
                 .chain(
-                    [call, record, hidden]
+                    [call, record, hidden, qed]
                         .into_iter()
                         .chain(string.targets())
                         .map(SyntaxName::qualifier),
                 )
                 .collect(),
-            Derivation::Eql(EqlDerivation {
-                eql: _,
-                eq_of_eql: _,
-                refl: _,
-                first,
-                second,
-                both,
-                qed,
-            }) => [concept]
+            Derivation::Eql(_) => [concept]
                 .into_iter()
                 .chain(
-                    [first, second, both, equality.family, equality.refl, qed]
+                    conjunction
+                        .targets()
+                        .chain([equality.family, equality.refl, qed])
                         .map(SyntaxName::qualifier),
                 )
                 .collect(),
-            Derivation::Ord(OrdDerivation {
+            Derivation::Ord(&OrdDerivation {
                 ord: _,
                 lexicographic,
                 by_tag,
@@ -880,14 +884,14 @@ impl Derivation {
                         is_le,
                         equality.family,
                         equality.refl,
-                        registry.proof.true_qed,
+                        qed,
                     ]
                     .into_iter()
                     .chain(laws.lemmas())
                     .map(SyntaxName::qualifier),
                 )
                 .collect(),
-            Derivation::Hash(HashDerivation { hash: _, tagged }) => {
+            Derivation::Hash(&HashDerivation { hash: _, tagged }) => {
                 vec![concept, tagged.qualifier()]
             }
         }
@@ -896,22 +900,14 @@ impl Derivation {
     /// The names among this row's fields, for the prelude build's presence check.
     fn targets(self) -> impl Iterator<Item = SyntaxName> {
         match self {
-            Derivation::Spell(SpellDerivation {
+            Derivation::Spell(&SpellDerivation {
                 spell,
                 call,
                 record,
                 hidden,
             }) => vec![spell.concept, call, record, hidden],
-            Derivation::Eql(EqlDerivation {
-                eql,
-                eq_of_eql: _,
-                refl: _,
-                first,
-                second,
-                both,
-                qed,
-            }) => vec![eql.concept, first, second, both, qed],
-            Derivation::Ord(OrdDerivation {
+            Derivation::Eql(row) => row.targets().collect(),
+            Derivation::Ord(&OrdDerivation {
                 ord,
                 lexicographic,
                 by_tag,
@@ -923,7 +919,7 @@ impl Derivation {
                 .into_iter()
                 .chain(laws.lemmas())
                 .collect(),
-            Derivation::Hash(HashDerivation { hash, tagged }) => vec![hash.concept, tagged],
+            Derivation::Hash(&HashDerivation { hash, tagged }) => vec![hash.concept, tagged],
         }
         .into_iter()
     }

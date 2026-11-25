@@ -144,8 +144,7 @@ fn derived_vocabulary(item: &FlatItem, syntax: &SyntaxRegistry) -> Vec<curios_co
             continue;
         };
         let Some(derivation) = syntax
-            .derivations
-            .rows()
+            .derivation_rows()
             .find(|derivation| derivation.concept_field().concept.qualifier() == concept)
         else {
             continue;

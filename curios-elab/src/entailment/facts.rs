@@ -666,8 +666,8 @@ impl<'a> Reader<'a> {
         origin: Origin,
         written: &Term,
     ) -> Result<(), Error> {
-        let entailment = context.syntax().entailment;
-        let (and_first, and_second) = (entailment.and_first, entailment.and_second);
+        let conjunction = context.syntax().conjunction;
+        let (and_first, and_second) = (conjunction.first, conjunction.second);
         if !in_scope(context, &[and_first, and_second]) {
             self.read.unread.push((origin, written.clone()));
             return Ok(());

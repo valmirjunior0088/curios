@@ -1,11 +1,11 @@
 //! Canonical compiler-known names, owned by the `/sys` and `/std` declarations this crate supplies, and by `/test`, the runner's half of a test program.
 
 use curios_common::{
-    CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax, EqlDerivation,
-    EqualitySyntax, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
-    OperatorSyntax, OptionSyntax, OrdDerivation, OrdLaws, OrderSyntax, ProgramSyntax, ProofSyntax,
-    ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry,
-    TestSyntax,
+    CharacterSyntax, ConceptField, ConjunctionSyntax, DerivationSyntax, EntailmentSyntax,
+    EqlSyntax, EqualitySyntax, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax,
+    NaturalSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, OrdLaws, OrderSyntax,
+    ProgramSyntax, ProofSyntax, ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax,
+    SyntaxName, SyntaxRegistry, TestSyntax,
 };
 
 /// Each target is stated as its module segments, so no stage has to split a path back apart to learn where the name lives.
@@ -47,18 +47,21 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         mul: field(&["std", "ops", "Mul"], "mul"),
         div: field(&["std", "ops", "Div"], "div"),
         rem: field(&["std", "ops", "Rem"], "rem"),
-        eql: field(&["std", "ops", "Eql"], "eql"),
         lt: field(&["std", "Ord", "Ord"], "lt"),
         le: field(&["std", "Ord", "Ord"], "le"),
         and: field(&["std", "ops", "And"], "and"),
         or: field(&["std", "ops", "Or"], "or"),
+    },
+    eql: EqlSyntax {
+        eql: field(&["std", "ops", "Eql"], "eql"),
+        eq_of_eql: field(&["std", "ops", "Eql"], "eq_of_eql"),
+        refl: field(&["std", "ops", "Eql"], "refl"),
     },
     character: CharacterSyntax {
         character: name(&["std", "Char", "Char"]),
     },
     string: StringSyntax {
         string: name(&["std", "Str", "Str"]),
-        qed: name(&["sys", "Bool", "True", "qed"]),
     },
     proof: ProofSyntax {
         true_qed: name(&["sys", "Bool", "True", "qed"]),
@@ -70,6 +73,11 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         family: name(&["std", "Eq", "Eq"]),
         refl: name(&["std", "Eq", "Eq", "refl"]),
         sym: name(&["std", "Eq", "sym"]),
+    },
+    conjunction: ConjunctionSyntax {
+        first: name(&["std", "Bool", "and", "first"]),
+        second: name(&["std", "Bool", "and", "second"]),
+        both: name(&["std", "Bool", "and", "both"]),
     },
     test: TestSyntax {
         test_type: name(&["std", "Test", "Test"]),
@@ -90,16 +98,6 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             call: name(&["std", "Spell", "call"]),
             record: name(&["std", "Spell", "record"]),
             hidden: name(&["std", "Spell", "hidden"]),
-        },
-        // `Eql`'s method is named here as well as in `OperatorSyntax`, deliberately: `==` dispatches through it and this derivation applies it, and the two are free to move apart. Sharing one slot would make them agree by coincidence rather than by decision.
-        eql: EqlDerivation {
-            eql: field(&["std", "ops", "Eql"], "eql"),
-            eq_of_eql: field(&["std", "ops", "Eql"], "eq_of_eql"),
-            refl: field(&["std", "ops", "Eql"], "refl"),
-            first: name(&["std", "Bool", "and", "first"]),
-            second: name(&["std", "Bool", "and", "second"]),
-            both: name(&["std", "Bool", "and", "both"]),
-            qed: name(&["sys", "Bool", "True", "qed"]),
         },
         ord: OrdDerivation {
             ord: field(&["std", "Ord", "Ord"], "ord"),
@@ -128,12 +126,8 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         },
     },
     entailment: EntailmentSyntax {
-        decided: field(&["std", "ops", "Eql"], "eq_of_eql"),
         range: name(&["std", "Nat", "le", "of_in_range"]),
         in_range: name(&["std", "Nat", "in_range"]),
-        and_first: name(&["std", "Bool", "and", "first"]),
-        and_second: name(&["std", "Bool", "and", "second"]),
-        and_both: name(&["std", "Bool", "and", "both"]),
         or_first: name(&["std", "Bool", "or", "of_first"]),
         or_second: name(&["std", "Bool", "or", "of_second"]),
         proved: name(&["std", "proved"]),

@@ -1567,7 +1567,7 @@ fn elaborate_definitions_suffix<'s>(
     let syntax = context.syntax();
     let vocabulary = syntax
         .entailment
-        .targets(syntax.equality)
+        .targets(syntax.equality, syntax.conjunction)
         .map(|name| Global::Authored(name.qualifier()))
         .filter(|name| declarations.item(name).is_some())
         .collect::<BTreeSet<_>>();

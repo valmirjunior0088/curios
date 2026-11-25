@@ -18,8 +18,8 @@ use {
     super::{Context, Error, Mode, Opened, Underivable, elaborate, method_type, reduce_with},
     crate::{is_prop_to, sort_of_in},
     curios_common::{
-        ConceptField, Derivation, EqlDerivation, HashDerivation, InfixOp, OrdDerivation, Plicity,
-        Qualifier, SpellDerivation, StringSyntax, Symbol, SyntaxName, SyntaxRegistry,
+        ConceptField, Derivation, EqlSyntax, HashDerivation, InfixOp, OrdDerivation, Plicity,
+        ProofSyntax, Qualifier, SpellDerivation, StringSyntax, Symbol, SyntaxName, SyntaxRegistry,
     },
     curios_core::{
         Atom, CalleeId, Extent, Free, Global, InductDecl, InductParam, InductType, Intrinsic,
@@ -31,11 +31,10 @@ use {
 };
 
 /// The roster row for `concept`, if it has one. A row carries the names its body writer applies, so that writer and `curios-module`'s scheduler read one value rather than two lists obliged to agree.
-fn derivation_for(syntax: &SyntaxRegistry, concept: &Global) -> Option<Derivation> {
+fn derivation_for<'r>(syntax: &'r SyntaxRegistry, concept: &Global) -> Option<Derivation<'r>> {
     let concept = *concept.qualifier()?;
     syntax
-        .derivations
-        .rows()
+        .derivation_rows()
         .find(|derivation| derivation.concept_field().concept.qualifier() == concept)
 }
 
@@ -88,10 +87,17 @@ pub fn elaborate_derive(
     };
     let subject = subject(context, &site)?;
     let body = match derivation {
-        Derivation::Spell(row) => spell_body(context, &site, &subject, row, &syntax.string)?,
-        Derivation::Eql(row) => eql_body(context, &site, &subject, row)?,
-        Derivation::Ord(row) => ord_body(context, &site, &subject, row)?,
-        Derivation::Hash(row) => hash_body(context, &site, &subject, row)?,
+        Derivation::Spell(row) => spell_body(
+            context,
+            &site,
+            &subject,
+            *row,
+            &syntax.string,
+            &syntax.proof,
+        )?,
+        Derivation::Eql(row) => eql_body(context, &site, &subject, *row)?,
+        Derivation::Ord(row) => ord_body(context, &site, &subject, *row)?,
+        Derivation::Hash(row) => hash_body(context, &site, &subject, *row)?,
     };
     elaborate(context, &body, mode)
 }
@@ -616,13 +622,14 @@ fn spell_body(
     subject: &Subject,
     row: SpellDerivation,
     string: &StringSyntax,
+    proof: &ProofSyntax,
 ) -> Result<Term, Error> {
     let value = context.fresh(None);
 
     // The spelling of one classified payload read through `read`.
     let spell = |context: &mut Context, classified: &Classified, read: Term| match &classified.part
     {
-        Part::Proof => str_literal(string, b"?"),
+        Part::Proof => str_literal(string, proof, b"?"),
         Part::Value { premise } => witness_call(
             context,
             site,
@@ -649,11 +656,11 @@ fn spell_body(
                         (true, true) => (String::new(), syn_call(row.hidden, [spelled])),
                         (false, _) => (label.clone(), spelled),
                     };
-                    Term::tuple([str_literal(string, label.as_bytes()), spelled])
+                    Term::tuple([str_literal(string, proof, label.as_bytes()), spelled])
                 })
                 .collect::<Vec<_>>();
             let items = list(context, entries);
-            let head = str_literal(string, path(name, None).as_bytes());
+            let head = str_literal(string, proof, path(name, None).as_bytes());
             site.at(syn_call(row.record, [head, items]))
         }
         Subject::Induct { name, decl, params } => {
@@ -679,7 +686,7 @@ fn spell_body(
                     })
                     .collect::<Vec<_>>();
                 let items = list(context, pieces);
-                let head = str_literal(string, path(name, Some(tag.as_str())).as_bytes());
+                let head = str_literal(string, proof, path(name, Some(tag.as_str())).as_bytes());
                 let body = site.at(syn_call(row.call, [head, items]));
                 arms.push((
                     tag.clone(),
@@ -799,7 +806,7 @@ fn eql_body(
     context: &mut Context,
     site: &Site<'_>,
     subject: &Subject,
-    row: EqlDerivation,
+    row: EqlSyntax,
 ) -> Result<Term, Error> {
     let left = context.fresh(None);
     let right = context.fresh(None);
@@ -819,14 +826,14 @@ fn eql_body(
 
 /// The comparisons `eql` joins for one constructor or one struct: the parts that are values, in order, and the two terms each is compared at. A proof takes no part.
 struct Compared<'c> {
-    row: EqlDerivation,
+    row: EqlSyntax,
     values: Vec<(&'c Classified, Option<&'c Term>)>,
     reads: &'c dyn Fn(usize) -> (Term, Term),
 }
 
 impl<'c> Compared<'c> {
     fn new(
-        row: EqlDerivation,
+        row: EqlSyntax,
         parts: &'c [Classified],
         reads: &'c dyn Fn(usize) -> (Term, Term),
     ) -> Self {
@@ -890,7 +897,7 @@ fn compare(
     context: &mut Context,
     site: &Site<'_>,
     subject: &Subject,
-    row: EqlDerivation,
+    row: EqlSyntax,
     left: &Free,
     right: &Free,
 ) -> Result<Term, Error> {
@@ -965,7 +972,7 @@ fn equal_where_eql(
     context: &mut Context,
     site: &Site<'_>,
     subject: &Subject,
-    row: EqlDerivation,
+    row: EqlSyntax,
 ) -> Result<Term, Error> {
     let left = context.fresh(None);
     let right = context.fresh(None);
@@ -1197,6 +1204,7 @@ fn equations(
     held: &Free,
 ) -> (Vec<(Free, Term)>, Vec<Term>) {
     let row = compared.row;
+    let conjunction = context.syntax().conjunction;
     let count = compared.values.len();
 
     // `prefixes[n]` proves the first `count - n` comparisons joined.
@@ -1209,7 +1217,7 @@ fn equations(
         let binder = context.fresh(None);
         bound.push((
             binder,
-            site.at(syn_call(row.first, [shorter, last, longer])),
+            site.at(syn_call(conjunction.first, [shorter, last, longer])),
         ));
         prefixes.push(binder);
     }
@@ -1222,7 +1230,7 @@ fn equations(
                 _ => {
                     let before = compared.conjunction(context, site, index);
                     let own = compared.comparison(context, site, index);
-                    site.at(syn_call(row.second, [before, own, prefix]))
+                    site.at(syn_call(conjunction.second, [before, own, prefix]))
                 }
             };
             let (this, that) = compared.pair(index);
@@ -1278,7 +1286,7 @@ fn eql_to_itself(
     context: &mut Context,
     site: &Site<'_>,
     subject: &Subject,
-    row: EqlDerivation,
+    row: EqlSyntax,
 ) -> Result<Term, Error> {
     let value = context.fresh(None);
 
@@ -1338,9 +1346,10 @@ fn eql_to_itself(
 /// A proof that every comparison of `compared` holds where both sides are one term: each part's by the concept's own law at that part, joined a conjunct at a time as `eql` joins the comparisons, and `True/qed()` where there is nothing to compare.
 fn held_of_itself(context: &mut Context, site: &Site<'_>, compared: &Compared<'_>) -> Term {
     let row = compared.row;
+    let syntax = context.syntax();
     let count = compared.values.len();
     if count == 0 {
-        return site.at(syn_call(row.qed, []));
+        return site.at(syn_call(syntax.proof.true_qed, []));
     }
 
     let own = |context: &mut Context, index: usize| {
@@ -1352,7 +1361,10 @@ fn held_of_itself(context: &mut Context, site: &Site<'_>, compared: &Compared<'_
         let before = compared.conjunction(context, site, index);
         let last = compared.comparison(context, site, index);
         let next = own(context, index);
-        proof = site.at(syn_call(row.both, [before, last, proof, next]));
+        proof = site.at(syn_call(
+            syntax.conjunction.both,
+            [before, last, proof, next],
+        ));
     }
 
     proof

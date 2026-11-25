@@ -203,7 +203,7 @@ fn conjoined(
     first: &Term,
     second: &Term,
 ) -> Result<Entailed, Error> {
-    let both = context.syntax().entailment.and_both;
+    let both = context.syntax().conjunction.both;
     let proof = match context.with_entailing(|context| stated_by_a_fact(context, bound))? {
         Some(proof) => proof,
         None => {
@@ -254,7 +254,7 @@ fn equated(context: &mut Context, bound: &Term, reduced: &Term) -> Result<Option
     ) else {
         return Ok(None);
     };
-    let law = context.syntax().entailment.decided;
+    let law = context.syntax().eql.eq_of_eql;
     if !in_scope(context, &[law.concept]) {
         return Ok(None);
     }

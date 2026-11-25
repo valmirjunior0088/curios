@@ -7,7 +7,7 @@ use {
         Apply, Ascribed, Bang, Declared, Func, Global, Infix, Intrinsic, Level, Matrix, NumLit,
         Numeral, Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, Universes,
     },
-    curios_common::{InfixOp, StringSyntax, SyntaxName},
+    curios_common::{InfixOp, ProofSyntax, StringSyntax, SyntaxName},
     curios_num::{Binary, Rounding},
 };
 
@@ -19,15 +19,15 @@ pub fn syn_call(name: SyntaxName, args: impl IntoIterator<Item = Term>) -> Term 
     )
 }
 
-/// The Core expansion of a string literal: the `/std/Str` struct over the packed bytes, its `Valid` field closed by the one inhabitant of `True`, built from the [`StringSyntax`] slots alone. Owned here so the surface lowering, the synthesized test tail and the derivations expand a literal identically.
+/// The Core expansion of a string literal: the `/std/Str` struct over the packed bytes, its `Valid` field closed by the one inhabitant of `True`, built from the [`StringSyntax`] and [`ProofSyntax`] slots alone. Owned here so the surface lowering, the synthesized test tail and the derivations expand a literal identically.
 ///
 /// `Valid` is decided, so the literal's bytes certify themselves: `True/qed()` checks against `Valid(b)` by running the scan over `b` in both checkers, and the term the compiler writes is the same whatever the literal's length or content. How the library proves validity is the library's; nothing here knows the scan.
-pub fn str_literal(syntax: &StringSyntax, bytes: &[u8]) -> Term {
+pub fn str_literal(string: &StringSyntax, proof: &ProofSyntax, bytes: &[u8]) -> Term {
     let packed = Term::intrinsic(Intrinsic::Bytes(Binary::from_bytes(bytes.to_vec())));
-    let valid = syn_call(syntax.qed, []);
+    let valid = syn_call(proof.true_qed, []);
 
     Term::struct_(
-        Global::Authored(syntax.string.qualifier()),
+        Global::Authored(string.string.qualifier()),
         Vec::<Term>::new(),
         [packed, valid],
     )

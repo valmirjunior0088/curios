@@ -1,11 +1,11 @@
 //! The fixtures another crate's suites lower a source through: the registry of compiler-known names the lowering's suites declare as source, whose spellings are load-bearing where a suite writes the declarations they name — the lowering's `unused_declaration` among them.
 
 use curios_common::{
-    CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax, EqlDerivation,
-    EqualitySyntax, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
-    OperatorSyntax, OptionSyntax, OrdDerivation, OrdLaws, OrderSyntax, ProgramSyntax, ProofSyntax,
-    ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry,
-    TestSyntax,
+    CharacterSyntax, ConceptField, ConjunctionSyntax, DerivationSyntax, EntailmentSyntax,
+    EqlSyntax, EqualitySyntax, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax,
+    NaturalSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, OrdLaws, OrderSyntax,
+    ProgramSyntax, ProofSyntax, ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax,
+    SyntaxName, SyntaxRegistry, TestSyntax,
 };
 
 pub const fn registry_name(segments: &'static [&'static str]) -> SyntaxName {
@@ -45,18 +45,21 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         mul: registry_field(&["std", "Multiply"], "mul"),
         div: registry_field(&["std", "Divide"], "div"),
         rem: registry_field(&["std", "Remainder"], "rem"),
-        eql: registry_field(&["std", "Equal", "Equal"], "eql"),
         lt: registry_field(&["std", "Compare"], "lt"),
         le: registry_field(&["std", "Compare"], "le"),
         and: registry_field(&["std", "And"], "and"),
         or: registry_field(&["std", "Or"], "or"),
+    },
+    eql: EqlSyntax {
+        eql: registry_field(&["std", "Equal", "Equal"], "eql"),
+        eq_of_eql: registry_field(&["std", "Equal", "Equal"], "eq_of_eql"),
+        refl: registry_field(&["std", "Equal", "Equal"], "refl"),
     },
     character: CharacterSyntax {
         character: registry_name(&["std", "Char", "Char"]),
     },
     string: StringSyntax {
         string: registry_name(&["std", "Str", "Str"]),
-        qed: registry_name(&["std", "Bool", "True", "qed"]),
     },
     proof: ProofSyntax {
         true_qed: registry_name(&["std", "Bool", "True", "qed"]),
@@ -68,6 +71,11 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         family: registry_name(&["std", "Eq", "Eq"]),
         refl: registry_name(&["std", "Eq", "Eq", "refl"]),
         sym: registry_name(&["std", "Eq", "sym"]),
+    },
+    conjunction: ConjunctionSyntax {
+        first: registry_name(&["std", "Bool", "and", "first"]),
+        second: registry_name(&["std", "Bool", "and", "second"]),
+        both: registry_name(&["std", "Bool", "and", "both"]),
     },
     test: TestSyntax {
         test_type: registry_name(&["std", "Test", "Test"]),
@@ -89,15 +97,6 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             call: registry_name(&["std", "Spell", "call"]),
             record: registry_name(&["std", "Spell", "record"]),
             hidden: registry_name(&["std", "Spell", "hidden"]),
-        },
-        eql: EqlDerivation {
-            eql: registry_field(&["std", "Equal", "Equal"], "eql"),
-            eq_of_eql: registry_field(&["std", "Equal", "Equal"], "eq_of_eql"),
-            refl: registry_field(&["std", "Equal", "Equal"], "refl"),
-            first: registry_name(&["std", "Bool", "and", "first"]),
-            second: registry_name(&["std", "Bool", "and", "second"]),
-            both: registry_name(&["std", "Bool", "and", "both"]),
-            qed: registry_name(&["sys", "Bool", "True", "qed"]),
         },
         ord: OrdDerivation {
             ord: registry_field(&["std", "Ord", "Ord"], "ord"),
@@ -126,12 +125,8 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         },
     },
     entailment: EntailmentSyntax {
-        decided: registry_field(&["std", "Equal", "Equal"], "eq_of_eql"),
         range: registry_name(&["std", "Nat", "le", "of_in_range"]),
         in_range: registry_name(&["std", "Nat", "in_range"]),
-        and_first: registry_name(&["std", "Bool", "and", "first"]),
-        and_second: registry_name(&["std", "Bool", "and", "second"]),
-        and_both: registry_name(&["std", "Bool", "and", "both"]),
         or_first: registry_name(&["std", "Bool", "or", "of_first"]),
         or_second: registry_name(&["std", "Bool", "or", "of_second"]),
         proved: registry_name(&["std", "proved"]),

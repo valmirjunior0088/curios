@@ -751,7 +751,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     //
     // Reduction of the scan is linear in the literal's length, and it runs on `curios-core`'s closed machine — the explicit-stack evaluator both checkers enter for closed terms — so a character costs transitions and machine frames rather than a native reduction level, and guarded depth is flat in the length. No figure is quoted here; `curios`' `str_literal_cost_measurements` carries the per-character price and the ceiling, and `a_str_literal_costs_transitions_rather_than_frames` is the ordinary assertion that holds the shape. A native scan intrinsic is refused (see `documentation/design/soundness/an-independent-certifier-re-checks-what-the-elaborator-accepts.md`): it would bless one type's fold where the machine accelerates every closed fold on the same terms, `Str`'s and a user's alike.
     pub fn str_literal(&self, bytes: &[u8]) -> curios_core::Term {
-        curios_core::str_literal(&self.context.syntax().string, bytes)
+        let syntax = self.context.syntax();
+        curios_core::str_literal(&syntax.string, &syntax.proof, bytes)
     }
 
     // A registry-synthesized literal — its value is synthesized from the registry by the meta-emitter rather than lowered to a core intrinsic.

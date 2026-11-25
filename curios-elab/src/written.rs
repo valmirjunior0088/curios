@@ -426,7 +426,7 @@ impl Writing {
         // An operator takes no written argument, so it stands only where resolution would put the dictionary back.
         if restored
             && let Some(arguments) = arguments
-            && let Some(op) = context.syntax().operator.operator_for(&path, &label)
+            && let Some(op) = context.syntax().operator_for(&path, &label)
             && let [left, right, filled @ ..] = arguments
             && left.plicity == Plicity::Explicit
             && right.plicity == Plicity::Explicit

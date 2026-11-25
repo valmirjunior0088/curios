@@ -43,7 +43,7 @@ pub enum Resolution {
 pub fn callee(context: &Context, func: &CalleeId) -> Callee {
     match func {
         CalleeId::Operator(op) => {
-            let method = context.syntax().operator.method(*op).method;
+            let method = context.syntax().operator_method(*op).method;
             Callee::Operator {
                 op: *op,
                 method: Global::Authored(method.concept.qualifier().with(method.field)),
