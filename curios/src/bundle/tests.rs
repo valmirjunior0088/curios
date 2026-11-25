@@ -1,4 +1,7 @@
-use super::*;
+use {
+    super::*,
+    xbench::{Measure, read},
+};
 
 /// Markers of a native backend, as they appear in a linked image: `cranelift-codegen`'s panic-location paths, its Rust symbol names, and Binaryen's.
 ///
@@ -37,7 +40,7 @@ fn the_embedded_launcher_stays_slim() {
 
 /// The positive control for the two guards above — the evidence that they can fail.
 ///
-/// A guard that has never been shown to bite is decoration. A failing image is a build of its own, so this test reports the *current* image's figures and records what a compiler-carrying one measured; compare the two.
+/// A guard that has never been shown to bite is decoration. A failing image is a build of its own, so this test reads the *current* image's size, `embedded launcher`, and records what a compiler-carrying one measured; compare the two. That the current image holds no marker is [`the_embedded_launcher_carries_no_native_backend`]'s, at every run. `cargo xbench measure launcher_guard_positive_control` takes it.
 ///
 /// To rebuild the failing image (about a minute):
 ///
@@ -49,21 +52,12 @@ fn the_embedded_launcher_stays_slim() {
 ///
 /// Re-run this after bumping wasmtime or changing the release profile: the string markers depend on panic-location paths surviving, which `strip = true` would not change (they are `.rodata` literals, not symbols) but a toolchain change might.
 #[test]
-#[ignore = "measurement, counted: reports the launcher's figures rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn launcher_guard_positive_control() {
-    let counts = BACKEND_MARKERS.map(|marker| {
-        let hits = LAUNCHER
-            .windows(marker.len())
-            .filter(|window| *window == marker)
-            .count();
-
-        format!("{}={hits}", String::from_utf8_lossy(marker))
-    });
-
-    println!(
-        "embedded launcher: {} bytes ({:.1} MiB), {}",
-        LAUNCHER.len(),
-        LAUNCHER.len() as f64 / (1024.0 * 1024.0),
-        counts.join(", "),
+    read(
+        "embedded launcher",
+        Measure::Bytes,
+        None,
+        LAUNCHER.len() as u64,
     );
 }
