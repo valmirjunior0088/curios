@@ -6,7 +6,7 @@
 //!
 //! **What it proves.**
 //!
-//! - A proposition a fact in scope states outright — a hypothesis, or a proof field one level down, whose statement converts with the bound with nothing solved: [`stated_by_a_fact`]. The fact is the proof, whatever the proposition is: a decision the linear view reads nothing in, or an inductive proposition the procedure never opens, such as an equation.
+//! - A proposition a fact in scope states outright — a hypothesis, a proof field one level down, or a conjunct of a conjunction either of them or a live guard's true arm states, its heads opened, whose statement converts with the bound with nothing solved: [`stated_by_a_fact`]. The fact is the proof, whatever the proposition is: a decision the linear view reads nothing in, or an inductive proposition the procedure never opens, such as an equation.
 //! - A `Nat` or `Int` comparison that follows from the facts in scope ([`Reader`]) by linear arithmetic over the rationals, a strict integer fact strengthened to its successor, within the search's cap ([`refute`]): a `<` or a `<=` as it stands, a disequality through the equation its negation is, and an equality through the two cases its negation makes ([`negated`]), `Bool/not` of each read as the comparison true exactly where it fails, in a fact, a guard or the goal alike. A consequence that holds only over the integers and needs a cut is refused, as `linarith` and `omega` without its dark and grey shadows refuse it.
 //! - Over `Nat`, through the operations whose definitions are linear facts: a quotient or remainder through the quotient's bounds, at `Int` too, a truncated subtraction through the case split `omega` makes, a `min` or a `max` through the split on its operands' order and an `Int`'s `abs` or `sign` through the splits on its operand's sign, each opened only where the search needs it ([`plan`]) — a subtraction, a `min` and a `max` being asked first through what both of their cases state, so a sum of them that turns on no case opens none — and a power of a base conversion holds at least one, as the `pow(2, m)` a shift by a symbolic count multiplies by is, through its being at least one.
 //! - Where linear arithmetic finds an assignment, through the products of pairs of facts and the negated goal, as `nlinarith` does ([`products`]): what a multiplier that is no literal needs, `Nat/div_mod`'s among them. A case a split opens multiplies its own facts by them and by one another ([`case_products`]), so the fact a case adds — each order the disequality an equality goal is refuted through makes — enters a product as an order's negated goal does.
@@ -173,26 +173,48 @@ pub fn facts_in_scope(context: &mut Context) -> Result<Vec<(Origin, Term)>, Erro
         .collect())
 }
 
-/// The fact that states `bound` outright, as its proof: the first hypothesis, or proof field one level down, in scope order, whose statement converts with the bound and checks against it.
+/// The fact that states `bound` outright, as its proof: the first hypothesis, proof field one level down, or conjunct of a conjunction either states, in scope order, and then the first conjunct a live guard's true arm decides ([`conjuncts`], [`guard_conjuncts`]), whose statement converts with the bound and checks against it.
 ///
-/// **Conversion alone, and nothing solved.** A statement is put to the bound only where the two convert with no metavariable assigned and no universe constrained, so the step makes no solving choice: a bound still waiting on its subject is stated by no fact yet, and is asked again once the subject is known. Congruence and a fact's consequences are no part of it — within its fragment they are the linear half's, and past it the author's.
+/// **Conversion alone, and nothing solved.** A statement is put to the bound only where the two convert with no metavariable assigned and no universe constrained, so the step makes no solving choice: a bound still waiting on its subject is stated by no fact yet, and is asked again once the subject is known. Congruence and a fact's consequences are no part of it — within its fragment they are the linear half's, and past it the author's — but a conjunct is no consequence: a conjunction its heads open to states each conjunct as its own statement, at any type, as the linear half reads it for its comparisons.
 ///
 /// **Any proposition.** The bound need be nothing the search reads: a proposition is proof-irrelevant, so the fact that states it is as good a proof as any, and which fact is taken decides nothing.
 fn stated_by_a_fact(context: &mut Context, bound: &Term) -> Result<Option<Term>, Error> {
     curios_common::profile!("entailment::stated_by_a_fact");
     for (name, type_) in binders(context) {
-        for Statement { stated, proof, .. } in statements(context, &name, &type_)? {
-            let states = same_uncommitted(context, &stated, bound).map_err(|error| {
-                Error::from_reduce(error, |refusal| {
-                    Error::reduce_exhausted(bound.clone(), refusal)
-                })
-            })?;
-            if states && let Some(proof) = check(context, &proof, bound)? {
+        for statement in statements(context, &name, &type_)? {
+            if let Some(proof) = stating(context, &statement, bound)? {
                 return Ok(Some(proof));
+            }
+            for conjunct in conjuncts(context, &statement)? {
+                if let Some(proof) = stating(context, &conjunct, bound)? {
+                    return Ok(Some(proof));
+                }
             }
         }
     }
+    for conjunct in guard_conjuncts(context)? {
+        if let Some(proof) = stating(context, &conjunct, bound)? {
+            return Ok(Some(proof));
+        }
+    }
     Ok(None)
+}
+
+/// `statement`'s proof, checked against `bound`, where what it states converts with the bound with nothing solved.
+fn stating(
+    context: &mut Context,
+    statement: &Statement,
+    bound: &Term,
+) -> Result<Option<Term>, Error> {
+    let states = same_uncommitted(context, &statement.stated, bound).map_err(|error| {
+        Error::from_reduce(error, |refusal| {
+            Error::reduce_exhausted(bound.clone(), refusal)
+        })
+    })?;
+    match states {
+        true => check(context, &statement.proof, bound),
+        false => Ok(None),
+    }
 }
 
 /// A bound that is a conjunction, proved by a fact that states it whole or by a proof of each conjunct joined with `and/both` — the proof a reader writes, `Bool/and/both(a, b, proved(), proved())`. Each conjunct is a bound of its own, stated as `bound` states its decision where that opens to `Holds`, and otherwise as `reduced` is, the match `Holds` reduces to, over the conjunct. A conjunct not proved refuses the whole with its own refusal, which names it; with `and/both` out of scope the bound is refused as it would be with no procedure.

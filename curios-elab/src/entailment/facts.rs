@@ -14,6 +14,8 @@
 //!
 //! A local definition and a variable a match refined need no reading of their own: every statement is read reduced, so a fact stated over a `let` meets a goal stated over its value, and one over `k` meets one over the successor an arm refined `k` to.
 //!
+//! **What a bound is found stated by**, at any type and whatever it is: a hypothesis and its fields ([`statements`]), and each conjunct of a conjunction one of them or a live guard's true arm opens to by its heads ([`conjuncts`], [`guard_conjuncts`]), which the fact that states a bound outright puts to it by conversion. A conjunction only a reduct holds is no statement's: reading one would be a search through what the definition behind it computes.
+//!
 //! **A remainder by a literal is lifted away.** Conversion reads `k * (x / k) + x % k` as `x` wherever one side of a comparison holds both, so a sum of facts that holds a remainder beside its quotient's multiple is not the sum of their views. Every fact over `x % k` is therefore raised by the multiple on both sides, which conversion reads as a fact over `x` ([`Lift`]), and the remainder stays out of every form the search reads.
 //!
 //! **A statement is written as it is stated and read as it reduces.** A hypothesis, a field, a guard and the goal are opened by their heads alone, as a guard's resolved spelling is, to the comparison, range check or conjunction they state ([`opened`]) — `Bool/not` of a comparison being the comparison true exactly where it fails, `Bool/not(a < b)` being `b <= a` ([`sides`]) — and their sides are the operands as stated; only the view reads their reducts, each with the metavariables elaboration has solved substituted and its atoms classed by the elaborator's conversion among those of every operand read before it ([`Reader::reading`]), so a call is one atom however each statement spells it. A reduct is no spelling to write: a call reduced to the body it unfolds to carries that body's own arms, which elaborate only where they were written, and a local definition reduced to its value names locals the arm's key does not. What the facts invent over atoms is written through the spellings the atoms were read from ([`Facts::respell`]). Where opening reaches none of the three, the statement is read reduced.
@@ -23,7 +25,7 @@
 //! **What is not read is recorded.** A proposition stating a decision the view does not read — a disjunction, an opaque `Bool` function — is kept for the report.
 
 use {
-    super::{decision_of, global, in_scope, is_empty},
+    super::{decision_of, global, in_scope, is_empty, stated},
     crate::{
         Binders, Context, Error, answered_guard, classing_among, distributed, open_layer,
         reduce_with, same_uncommitted, synth_neutral, zonk_solved_term_metas,
@@ -1829,6 +1831,71 @@ pub struct Statement {
     pub stated: Term,
     pub proof: Term,
     pub origin: Origin,
+}
+
+/// What `statement` states beside itself: each conjunct of a conjunction its heads open to ([`held`], then [`opened`]), at any depth of `&&`, as a statement of its own, proved by `and/first` or `and/second` over the proof of the whole — so a bound a conjunct states is found by conversion as one a hypothesis states is, at any type. A conjunction only a reduct holds, as a match's arm under a refinement, is opened by nothing here.
+pub fn conjuncts(context: &mut Context, statement: &Statement) -> Result<Vec<Statement>, Error> {
+    let conjunction = context.syntax().conjunction;
+    if !in_scope(context, &[conjunction.first, conjunction.second]) {
+        return Ok(Vec::new());
+    }
+    let mut found = Vec::new();
+    let mut open = vec![(statement.stated.clone(), statement.proof.clone())];
+    while let Some((stated, proof)) = open.pop() {
+        let Some(decision) = held(context, &stated)? else {
+            continue;
+        };
+        let Some(Opened::Conjunction(first, second)) = opened(context, &decision)? else {
+            continue;
+        };
+        for (lemma, conjunct) in [(conjunction.first, &first), (conjunction.second, &second)] {
+            let Some(part) = holding(context, &stated, conjunct)? else {
+                continue;
+            };
+            let proof = Term::apply(
+                global(lemma),
+                [first.clone(), second.clone(), proof.clone()],
+            );
+            found.push(Statement {
+                stated: part.clone(),
+                proof: proof.clone(),
+                origin: statement.origin.clone(),
+            });
+            open.push((part, proof));
+        }
+    }
+    Ok(found)
+}
+
+/// The conjuncts the live guards' true arms state, as [`conjuncts`] reads a statement's: each guard a conjunction opens to is stated as one, `Holds(first && second)` elaborated as a program writes it, over the guard's `qed`, which checks wherever the arm's key answers it. A guard is opened with its own refinement withheld, as [`Reader::guards`] opens one, so its spelling is the key's.
+pub fn guard_conjuncts(context: &mut Context) -> Result<Vec<Statement>, Error> {
+    let holds = context.syntax().proof.holds;
+    let entries = context
+        .visible_scrutinee_entries()
+        .map(|(frame, _, entry)| (frame, entry.original.clone(), entry.value.clone()))
+        .collect::<Vec<_>>();
+    let mut found = Vec::new();
+    for (frame, written, value) in entries {
+        if !matches!(&*value, Subterm::Intrinsic(Intrinsic::Bool(true))) {
+            continue;
+        }
+        let Some(Opened::Conjunction(first, second)) =
+            context.with_refinements_withheld_from(frame, |context| opened(context, &written))?
+        else {
+            continue;
+        };
+        let conjunction = Term::intrinsic(Intrinsic::BoolAnd(first, second));
+        let Some(stated) = stated(context, &Term::apply(global(holds), [conjunction]))? else {
+            continue;
+        };
+        let whole = Statement {
+            stated,
+            proof: qed(context),
+            origin: Origin::Guard(written, true),
+        };
+        found.extend(conjuncts(context, &whole)?);
+    }
+    Ok(found)
 }
 
 /// The fields of `value`, a tuple or a structure of type `type_`, one level down and in their order, each statement beside the read of `value` that inhabits it and where it came from, `subject` the term a report names `value` by: a hypothesis's, or those of a term a bound names. `None` where `type_` is neither, and no field where the item may not open the structure's representation.

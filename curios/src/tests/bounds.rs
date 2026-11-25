@@ -51,6 +51,33 @@ const ROWS: &[Row] = &[
     // The same for a proposition the search reads nothing in: an equation, which is no decision, and `Str/Valid`, a decision over a scan of bytes.
     claim("a: Nat, b: Nat, p: Eq()(a, b)", "Eq()(a, b)"),
     claim("b: Bytes, v: Str/Valid(b)", "Str/Valid(b)"),
+    // A conjunct a fact states is a statement of its own, at any type: of a hypothesis, of a field and of a guard's true arm, at `Str` and at a type with an `Eql` witness as at `Nat`; a conjunct the view reads nothing in; and one of a `Bool` function's call whose body is the conjunction, which its heads open to.
+    claim("b: Bool, c: Bool, p: Holds(b && c)", "Holds(c)"),
+    claim(
+        "a: {Str, Str}, b: {Str, Str}, h: Holds(a.0 == b.0 && a.1 == b.1)",
+        "Eq()(a.1, b.1)",
+    ),
+    claim(
+        "a: {Str, Str}, b: {Str, Str}, w: {n: Nat, ok: Holds(a.0 == b.0 && a.1 == b.1)}",
+        "Eq()(a.0, b.0)",
+    ),
+    body(
+        "a: {Str, Str}, b: {Str, Str}",
+        "{}",
+        "match a.0 == b.0 && a.1 == b.1 | true => let _: Eq()(a.1, b.1) = proved(); () | false => () end",
+    ),
+    claim(
+        "@A: Type, use /std/ops/Eql(A), a: {A, A, A}, b: {A, A, A}, h: Holds(a.0 == b.0 && a.1 == b.1 && a.2 == b.2)",
+        "Eq()(a.1, b.1)",
+    ),
+    claim(
+        "y: Int, n: Nat, p: Holds(/std/time/Date/is_leap(y) && n < 3)",
+        "Holds(/std/time/Date/is_leap(y))",
+    ),
+    claim(
+        "f: /std/Flt, p: Holds(/std/Flt/is_signaling(f))",
+        "Holds(/std/Flt/is_nan(f))",
+    ),
     // An equation at a type that decides its equality, proved as the decision is and crossed by `Eql`'s law: one reduction decides, one the facts' arithmetic proves at each carrier it reads, one an equation read the other way round gives as its two bounds, and one a fact states decided at a carrier whose equality is derived.
     claim("", "Eq()(List/length([1, 2, 3]), 3)"),
     claim(
@@ -754,12 +781,16 @@ const ROWS: &[Row] = &[
 const CONTROLS: &[Row] = &[
     // A decision no tautology settles, with nothing in scope that could.
     claim("b: Bool", "Holds(b)"),
-    // A decision no fact states outright: one of another operand, one conjunct of an opaque conjunction, and one stated two levels down.
+    // A decision no fact states outright: one of another operand, a conjunct of a conjunction only a match arm's reduct holds, and one stated two levels down.
     claim(
         "f: (Nat) -> Bool, n: Nat, m: Nat, p: Holds(f(n))",
         "Holds(f(m))",
     ),
-    claim("b: Bool, c: Bool, p: Holds(b && c)", "Holds(c)"),
+    body(
+        "n: Nat, b: Bool, c: Bool, p: Holds(match n | 0 => b && c | _ => false end)",
+        "{}",
+        "match n | 0 => let _: Holds(c) = proved(); () | _ => () end",
+    ),
     // A conjunction's guard in its false arm, which is a disjunction of the conjuncts' failures.
     body(
         "x: Nat, w: Nat, y: Nat, h: Nat",
