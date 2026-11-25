@@ -125,6 +125,19 @@ fn data_that_states_what_is_kept_of_it_no_one_way_or_holds_another_key_is_refuse
     ));
     assert!(neither.contains("and one of them"), "{neither}");
 
+    // An archive that states no `path` is kept whole.
+    let whole = under(
+        &format!(
+            "[data.cases]\nversion = \"1\"\nurl = \"https://example.invalid/cases.tar.gz\"\nsha256 = \"{DIGEST}\"\n"
+        ),
+        "run = [[\"true\"]]",
+    )
+    .unwrap();
+    assert_eq!(
+        whole.data[&name("data.cases")].form,
+        Form::Directory(String::new())
+    );
+
     let none = headline(&tables("https://example.invalid/ucd", ""));
     assert!(none.contains("at least one of its `files`"), "{none}");
 

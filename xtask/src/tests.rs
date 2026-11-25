@@ -11,6 +11,7 @@ const LOCK: &str = include_str!("../../Cargo.lock");
 /// `curios-profile`'s build script, which names the Perfetto release it takes the trace schema at.
 const PROFILE_BUILD: &str = include_str!("../../curios-profile/build.rs");
 const UNICODE_BUILD: &str = include_str!("../../curios-unicode/build.rs");
+const BINARYEN_BUILD: &str = include_str!("../../curios-binaryen/build.rs");
 
 fn tree() -> Tree {
     Tree::read().unwrap()
@@ -156,6 +157,7 @@ fn data_a_crate_s_build_reads_is_pinned_at_the_version_the_build_names() {
     for (data, script, constant) in [
         ("unicode", UNICODE_BUILD, "VERSION"),
         ("perfetto", PROFILE_BUILD, "REVISION"),
+        ("binaryen", BINARYEN_BUILD, "BINARYEN_VERSION"),
     ] {
         let named = script
             .lines()

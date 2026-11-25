@@ -112,7 +112,7 @@ pub struct Unpacked<'a> {
     pub what: &'a str,
     /// Where the archive is published, at the commit the run pins.
     pub url: &'a str,
-    /// The directory kept, from the archive's top, its sole top directory taken as the contents as [`unpack`] takes it.
+    /// The directory kept, from the archive's top, its sole top directory taken as the contents as [`unpack`] takes it: the whole of it where this is empty.
     pub directory: &'a str,
     /// The digest of the files the directory holds, as [`tree_sha256_hex`] writes it.
     pub digest: &'a str,
@@ -157,9 +157,13 @@ impl Unpacked<'_> {
         let actual = tree_sha256_hex(&directory)
             .map_err(|error| self.unobtained(format!("read {}: {error}", directory.display())))?;
         if actual != self.digest {
+            let over = match self.directory.is_empty() {
+                true => "the archive",
+                false => self.directory,
+            };
             return Err(self.unobtained(format!(
-                "digest mismatch over {}: expected {}, got {actual}",
-                self.directory, self.digest
+                "digest mismatch over {over}: expected {}, got {actual}",
+                self.digest
             )));
         }
         if let Some(parent) = self.place.parent() {
@@ -179,9 +183,12 @@ impl Unpacked<'_> {
             what: self.what.to_string(),
             cause,
             by_hand: format!(
-                "download this file by hand:\n  {}\nthe files of its directory `{}` are checked to have the digest:\n  {}\nand place it at:\n  {}",
+                "download this file by hand:\n  {}\n{} are checked to have the digest:\n  {}\nand place it at:\n  {}",
                 self.url,
-                self.directory,
+                match self.directory.is_empty() {
+                    true => "its files".to_string(),
+                    false => format!("the files of its directory `{}`", self.directory),
+                },
                 self.digest,
                 self.placed.display()
             ),

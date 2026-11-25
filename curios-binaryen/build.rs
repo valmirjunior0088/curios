@@ -1,15 +1,15 @@
-//! Downloads, verifies, and builds the pinned Binaryen source release.
+//! Builds the Binaryen source release the task files pin.
+//!
+//! The source is kept in `.artifacts/binaryen-<version>/` beside this crate: `cargo xtask` fetches it there at the digest `xtask/tasks.toml` pins, `[data.binaryen]`, before the first step of any run, and this script reads it where it has a library to build and fetches nothing.
 //!
 //! Cargo gives distinct build-script fingerprints their own `OUT_DIR`, so that directory cannot cache an expensive C++ build shared by ordinary builds, tests, and Clippy. This script builds in `OUT_DIR`, then keeps only the static library in one locked cache per compilation target in `.artifacts/` beside this crate — outside Cargo's target tree, so `cargo clean` does not take a build measured in minutes with it — and empties `OUT_DIR` again. A cache entry is complete only once its library is in place and the script writes its versioned `done` marker.
 
-use {
-    curios_download::{Download, sha256_hex, unpack},
-    std::{
-        env,
-        fs::{self, File, OpenOptions},
-        path::{Path, PathBuf},
-        process::Command,
-    },
+use std::{
+    env,
+    fs::{self, File, OpenOptions},
+    hash::{DefaultHasher, Hasher},
+    path::{Path, PathBuf},
+    process::Command,
 };
 
 /// Set, a cache entry that does not hold this build is refused rather than filled: what the workspace's Binaryen check sets on a second cargo mode, which must reuse the entry the first one left.
@@ -17,13 +17,8 @@ use {
 /// Read and never declared with `rerun-if-env-changed`: a declared variable runs this script again whenever it comes or goes, and with it a rebuild of this crate and of everything that depends on it.
 const CACHED_ONLY: &str = "CURIOS_BINARYEN_CACHED";
 
+/// The Binaryen release the library is built from, which names the directory its source is kept in: the version `xtask/tasks.toml` pins, where a build that names another finds nothing kept.
 const BINARYEN_VERSION: &str = "version_133";
-const BINARYEN_SOURCE_SHA256: &str =
-    "2f3e3d9edc56751499571da073a8a81943ca3fcbc08a945d2c619a7a1d4eb88b";
-
-fn source_url() -> String {
-    format!("https://github.com/WebAssembly/binaryen/archive/refs/tags/{BINARYEN_VERSION}.tar.gz")
-}
 
 /// This script's own bytes, hashed — the build *recipe*, as distinct from the source it builds.
 ///
@@ -33,7 +28,11 @@ fn source_url() -> String {
 ///
 /// The cost is that any edit here — a comment included — discards the cache. This file changes rarely, and the error is in the direction of rebuilding.
 fn build_schema() -> String {
-    sha256_hex(include_bytes!("build.rs"))
+    // A hash the standard library fixes for one release of itself and no longer: a toolchain that changes it builds the library once more, which errs as every other part of the marker does.
+    let mut hasher = DefaultHasher::new();
+    hasher.write(include_bytes!("build.rs"));
+
+    format!("{:016x}", hasher.finish())
 }
 
 /// How the C++ toolchain identifies itself, which is what the cached library is actually compatible with.
@@ -59,9 +58,7 @@ fn build_marker() -> String {
     let target = env::var("TARGET").unwrap();
     let toolchain = toolchain();
 
-    format!(
-        "version={BINARYEN_VERSION}\nsource={BINARYEN_SOURCE_SHA256}\nschema={schema}\ntarget={target}\ntoolchain={toolchain}\n"
-    )
+    format!("version={BINARYEN_VERSION}\nschema={schema}\ntarget={target}\ntoolchain={toolchain}\n")
 }
 
 /// Where a cache entry records that it is done: written last by [`build`], so its presence is what says the entry is usable.
@@ -105,21 +102,21 @@ fn fresh(directory: &Path) {
         .unwrap_or_else(|error| panic!("create {}: {error}", directory.display()));
 }
 
-/// The source archive, checked against its pinned hash in memory and never stored: one placed in the cache entry by hand, for an offline build, or else a download.
-fn source(entry: &Path) -> Vec<u8> {
-    let url = source_url();
-    let placed = entry.join(format!("{BINARYEN_VERSION}.tar.gz"));
-    Download {
-        what: "the Binaryen source needed to build curios-binaryen",
-        url: &url,
-        sha256: BINARYEN_SOURCE_SHA256,
-        place: &placed,
-    }
-    .bytes()
-    .unwrap_or_else(|unobtained| panic!("{unobtained}"))
+/// Where the source is kept, which a build reads only where it has a library to make: beside this crate, under its name and version in the task files, where `cargo xtask` files it.
+fn source() -> PathBuf {
+    let kept = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
+        .join(".artifacts")
+        .join(format!("binaryen-{BINARYEN_VERSION}"));
+    assert!(
+        kept.join("CMakeLists.txt").is_file(),
+        "the Binaryen source is not kept at {}\n\nEvery `cargo xtask` run fetches it before its first step, at the release and the digest `xtask/tasks.toml` pins, and no build fetches: run `cargo xtask compiler launcher`, then build again. This crate builds release {BINARYEN_VERSION}.",
+        kept.display()
+    );
+
+    kept
 }
 
-/// Fill the cache `entry` unless its marker already names this build: unpack the source into `out`, build and install it there, keep the static library alone in the entry's `lib/`, and empty `out` again.
+/// Fill the cache `entry` unless its marker already names this build: build the kept source in `out` and install it there, keep the static library alone in the entry's `lib/`, and empty `out` again.
 fn build(entry: &Path, out: &Path) {
     let done = done_marker(entry);
     let cached = entry.join("lib");
@@ -143,20 +140,19 @@ fn build(entry: &Path, out: &Path) {
     }
     fresh(out);
 
-    let unpacked = out.join("source");
-    unpack(&source(entry), &unpacked).unwrap_or_else(|error| {
-        panic!(
-            "unpack the Binaryen source into {}: {error}",
-            unpacked.display()
-        )
-    });
+    let source = source();
 
-    // An assertion names the file it is written in, so the build's own directory would be in every compiler that links the library: mapped to a word, as the release's Rust is (`xtask/tasks/compiler.toml`).
-    let mapped = format!("-ffile-prefix-map={}=binaryen", out.display());
-    let prefix = cmake::Config::new(&unpacked)
+    // An assertion names the file it is written in, so the directories the source is kept and built in would be in every compiler that links the library: each mapped to a word, as the release's Rust is (`xtask/tasks/compiler.toml`).
+    let mapped = [
+        format!("-ffile-prefix-map={}=binaryen", source.display()),
+        format!("-ffile-prefix-map={}=binaryen", out.display()),
+    ];
+    let prefix = cmake::Config::new(&source)
         .profile("Release")
-        .cflag(&mapped)
-        .cxxflag(&mapped)
+        .cflag(&mapped[0])
+        .cflag(&mapped[1])
+        .cxxflag(&mapped[0])
+        .cxxflag(&mapped[1])
         .define("BUILD_SHARED_LIBS", "OFF")
         .define("BUILD_TOOLS", "OFF")
         .define("BUILD_TESTS", "OFF")

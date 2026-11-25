@@ -445,3 +445,45 @@ fn gathered_files_that_differ_are_refused_and_not_kept() {
     assert_eq!(fs::read_dir(&directory).unwrap().count(), 1);
     let _ = fs::remove_dir_all(&directory);
 }
+
+// An archive that names no directory is kept whole, its top directory taken as the contents, once all its files check.
+#[test]
+fn an_archive_kept_whole_holds_all_its_files_once_they_check() {
+    let directory = directory("whole");
+    let placed = directory.join("abc.tar.gz");
+    fs::write(&placed, generated()).unwrap();
+    let written = directory.join("written");
+    files(
+        &written,
+        &[
+            ("cases/one.json", "[1]"),
+            ("cases/deeper/two.json", "[2]"),
+            ("parsers/huge.bin", "not kept"),
+        ],
+    );
+    let digest = tree_sha256_hex(&written).unwrap();
+    fs::remove_dir_all(&written).unwrap();
+    let place = directory.join("kept");
+    let url = unanswered();
+
+    Unpacked {
+        what: "a test's source",
+        url: &url,
+        directory: "",
+        digest: &digest,
+        placed: &placed,
+        place: &place,
+    }
+    .kept()
+    .unwrap();
+
+    assert_eq!(
+        fs::read(place.join("parsers/huge.bin")).unwrap(),
+        b"not kept"
+    );
+    assert_eq!(
+        fs::read(place.join("cases/deeper/two.json")).unwrap(),
+        b"[2]"
+    );
+    let _ = fs::remove_dir_all(&directory);
+}

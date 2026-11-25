@@ -187,16 +187,16 @@ pub struct Data {
     pub beside: Option<String>,
 }
 
-/// How data is published and what of it is kept, as its table states it: `path` or `files`.
+/// How data is published and what of it is kept, as its table states it: an archive, whole or the `path` of one directory of it, or `files`.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Form {
-    /// One directory of a gzipped tarball, from the archive's top, its sole top directory taken as the contents.
+    /// One directory of a gzipped tarball, from the archive's top, its sole top directory taken as the contents: the whole of it where the path is empty, which is what an archive stating no `path` keeps.
     Directory(String),
     /// Files published one by one, each at its path under the URL, kept at that path.
     Files(Vec<String>),
 }
 
-/// The keys data holds, of which it states `path` or `files`, and `beside` where a crate's build reads it.
+/// The keys data holds, of which an archive may state the `path` it keeps and data that is no archive states its `files`, and `beside` where a crate's build reads it.
 const DATA_KEYS: [&str; 6] = ["version", "url", "path", "files", "sha256", "beside"];
 
 /// How a download is kept, read off the end of its URL: a gzipped tarball, `.tar.gz`, is unpacked into a directory; a gzipped file, `.gz`, is decoded into the executable; anything else is the executable as it was downloaded.
@@ -1228,6 +1228,7 @@ fn data_of(
     let archive = matches!(url_word.0.last(), Some(Piece::Text(tail)) if tail.ends_with(".tar.gz"));
     let form = match (table.get("path"), table.get("files")) {
         (Some(path), None) if archive => Form::Directory(text_of(file, path, "path")?),
+        (None, None) if archive => Form::Directory(String::new()),
         (Some(_), None) => {
             return Err(file.refuse(
                 url.span(),
@@ -1267,7 +1268,7 @@ fn data_of(
         _ => {
             return Err(file.refuse(
                 written.span.clone(),
-                format!("data `{key}` states what is kept of it, its `path` in an archive or its `files`, and one of them"),
+                format!("data `{key}` states what is kept of it: an archive in its `url`, with the `path` kept of it or none for the whole, or its `files`, and one of them"),
             ));
         }
     };

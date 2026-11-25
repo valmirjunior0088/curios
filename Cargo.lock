@@ -672,7 +672,6 @@ name = "curios-binaryen"
 version = "0.16.25"
 dependencies = [
  "cmake",
- "curios-download",
 ]
 
 [[package]]
