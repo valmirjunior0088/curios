@@ -20,46 +20,9 @@ use {
 ///
 /// Times include the recorder's own work, and allocations leave it out. Allocations are cumulative work, including nested spans, rather than peak resident memory. Per-pass times and allocations are inclusive as well; nested spans cannot be added to their parent.
 ///
-/// # Latest reading
+/// # Its records
 ///
-/// Mixed: timed span totals; counted optimizer rounds, pass firings and allocation work. Taken on top of `9a18c2491` on 2026-10-23. Host: AMD Ryzen 7 5800X3D (8 cores, 16 logical CPUs), `x86_64-unknown-linux-gnu`, Linux `7.2.9-ogc3.1.fc44.x86_64`; Rust `1.99.1` (`58cf8f9c3`). Cargo release profile, all features, one test thread, no CPU pinning, CPU governor `performance`, boost enabled. One warmup and seven measured compilations of this checkout, with one-minute load averages 1.42–1.58 at invocation boundaries. Times are medians with observed spans in milliseconds. Allocated MiB are medians rounded to 0.1 MiB; allocated-byte totals vary by less than 0.016 MiB in every span. Allocation calls are a single count when identical across all seven compilations, otherwise a median with its observed span.
-///
-/// | Span | ms \[span\] | Allocated MiB | Allocation calls |
-/// | --- | ---: | ---: | ---: |
-/// | `compile_entrypoint` | 2455.121 [2407.826–2458.732] | 1,622.4 | 21,782,607 [21,782,519–21,782,653] |
-/// | `cps_optimize` | 1909.334 [1874.810–1911.951] | 1,250.5 | 16,722,058 [16,722,048–16,722,060] |
-///
-/// The optimizer settles in 11 rounds. All fired counts and graph-size sample totals and counts agree across the seven measured compilations.
-///
-/// | Pass | ms \[span\] | Fired / calls | Allocated MiB | Allocation calls |
-/// | --- | ---: | ---: | ---: | ---: |
-/// | `split_parameters` | 233.562 [230.088–236.762] | 5 / 11 | 105.8 | 1,318,154 |
-/// | `shrink` | 213.210 [209.077–214.218] | 9 / 11 | 111.9 | 1,650,707 [1,650,706–1,650,707] |
-/// | `split_workers` | 192.100 [189.031–193.395] | 2 / 11 | 162.6 | 1,986,048 |
-/// | `inline_known_calls` | 189.549 [186.523–191.377] | 4 / 11 | 149.5 | 1,889,774 |
-/// | `split_returns` | 128.824 [127.356–129.791] | 6 / 11 | 95.9 | 1,253,116 |
-/// | `flatten_indexed_lists` | 124.423 [122.796–124.724] | 1 / 11 | 57.2 | 1,029,201 |
-/// | `answer_row_tests` | 119.003 [116.901–119.647] | 0 / 11 | 104.7 | 1,077,875 |
-/// | `known_values` | 98.306 [96.256–99.328] | — / 11 | 79.4 | 1,094,948 [1,094,947–1,094,948] |
-/// | `uncurry_returns` | 97.345 [95.947–98.859] | 4 / 11 | 72.8 | 999,936 |
-/// | `specialize_scc_calls` | 74.940 [74.680–75.839] | 2 / 11 | 62.1 | 803,059 |
-/// | `contify_calls` | 73.759 [72.162–74.700] | 5 / 11 | 57.8 | 768,589 |
-/// | `separate_loop_entries` | 69.666 [67.971–70.493] | 5 / 11 | 58.7 | 788,046 |
-/// | `prune_unreachable` | 35.947 [35.662–36.453] | 6 / 11 | 5.3 | 131,309 [131,309–131,310] |
-/// | `uncurry_nests` | 32.392 [31.774–32.580] | 1 / 11 | 15.6 | 333,542 |
-/// | `eliminate_dead_parameters` | 31.869 [31.384–32.337] | 5 / 11 | 23.4 | 288,372 |
-/// | `eliminate_dead_calls` | 24.980 [24.583–25.465] | 1 / 11 | 20.2 | 197,927 |
-/// | `split_windows` | 23.957 [23.560–24.238] | 1 / 2 | 9.7 | 174,054 |
-/// | `answer_window_guards` | 20.360 [19.966–20.768] | 1 / 11 | 7.0 | 111,153 |
-/// | `dedupe_intrinsics` | 18.603 [18.242–19.072] | 5 / 11 | 6.7 | 94,781 |
-/// | `specialize_jump_patterns` | 18.524 [18.306–18.730] | 3 / 11 | 9.9 | 178,576 |
-/// | `fuse_append_chains` | 11.866 [11.732–12.057] | 1 / 11 | 4.2 | 95,686 |
-/// | `specialize_call_patterns` | 6.346 [6.254–6.616] | 3 / 11 | 2.3 | 23,702 |
-/// | `forward_continuations` | 5.142 [5.056–5.253] | 6 / 11 | 6.0 | 109,781 [109,780–109,781] |
-/// | `rewrite_atoms` | 3.231 [3.179–3.297] | 3 / 11 | 0.0 | 53 [52–53] |
-/// | `forward_calls` | 2.612 [2.560–2.698] | 2 / 11 | 0.5 | 3,361 [3,360–3,361] |
-///
-/// `known_values` records no boolean fired sample. `split_windows` runs only on otherwise idle rounds. All eight compilations pass the compilation and closed-span assertions.
+/// `cargo xbench report fixpoint_pass_measurements` reads them: each figure's readings by group, and what each sitting was taken under.
 pub fn fixpoint_pass_measurements() {
     let entrypoint = TOML_DRIVER.parse::<Entrypoint>().expect("driver parses");
     let compiled = phase(TALLIES, || {

@@ -607,25 +607,9 @@ fn replays(next: &AtomicUsize) -> Share {
 ///
 /// `cargo xbench measure family_slot_probe` takes it: `families declared` and `families holding a family-typed field`, `free/families` and `free/slots typed`, `paid/families`, `paid/slots typed` and `paid/width`, and for each family holding one, `<family>/slots uniform`, `/slots typed`, `/typed slots uniform`, `/typed slots typed` and `/paid`, one where typing its reference slots widens it.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// Counted on top of `89b3697ab`:
-///
-/// ```text
-/// families declared: 82, holding a family-typed field: 24
-///   free: 16 families, 16 slots typed at no width cost
-///   paid: 8 families, 11 slots typed for 10 slots of width
-///   /std/Map/Node/Node                 4 slots -> 5 slots, 0 typed -> 2 typed   PAID
-///   /std/Cli/Chosen                    3 slots -> 5 slots, 1 typed -> 3 typed   PAID
-///   /std/Cli/Outcome                   2 slots -> 4 slots, 0 typed -> 2 typed   PAID
-///   /std/Cli/Cluster                   4 slots -> 5 slots, 2 typed -> 3 typed   PAID
-///   /std/Test/Test                     2 slots -> 3 slots, 0 typed -> 1 typed   PAID
-///   /std/Tui/Wake                      2 slots -> 3 slots, 0 typed -> 1 typed   PAID
-///   /std/http/read/Step                3 slots -> 4 slots, 0 typed -> 1 typed   PAID
-///   /std/http/stream/Stop              2 slots -> 3 slots, 0 typed -> 1 typed   PAID
-/// ```
-///
-/// **What the figures decide.** `/std/Map/Node/Node`, the family a typed fork's children would serve, is a paid row: four slots to five, a quarter again as much live memory on the corpus's hottest allocated structure, to replace two casts that are already exact compares against a final type. Against the `trees` finding that live bytes convert to time under an all-live collector, that is a trade to decline, and the door declines it. What the door does instead is admit the free column by the exact criterion: it types a family's reference slots iff the row's width is unchanged, which sixteen families meet, the command line's, the formatter's, the layout's and the TOML reader's among them. A product needs no such test: one writer can never widen a row, so its reference fields always type.
+/// `cargo xbench report family_slot_probe` reads them: each figure's readings by group, and what each sitting was taken under.
 pub fn family_slot_probe() {
     with_prelude(|prelude| {
         let families = prelude

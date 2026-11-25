@@ -19,18 +19,9 @@ use {
 ///
 /// It asserts nothing and cannot fail — a measurement that fails is a measurement with an opinion. What it does not cover: the elaboration figures come from the stream `cargo xtask profile prelude` files and need no probe, and the witness inventory is a term walk this does not do.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// The latest reading of each row, taken on top of `9c543476a` in release on `x86_64-unknown-linux-gnu`, at a load average under two, over two runs of one host. Kept here rather than in a document that cites this test, so a number cannot drift from the thing that would check it.
-///
-/// | What | Measured |
-/// | --- | --- |
-/// | Cold restore — bytecheck, then deserializing the prepared Text state, the Core, the items' erased forms and the certifier's record | 19.3–19.8 ms |
-/// | Re-erasing `/std` whole over the stored Core | 2.6–2.7 s |
-/// | Certifying `/std` whole | 6.7–6.8 s, 0 refusals |
-/// | Heaviest declaration that certification makes | 980 868 units, peak depth 17 |
-///
-/// The heaviest declaration's figure counts the closed machine re-deriving within a run — the trade that buys a closed fold's check back a thousandfold — and at thirty times under the default budget it decides nothing.
+/// `cargo xbench report stored_prelude_measurements` reads them: each figure's readings by group, and what each sitting was taken under.
 pub fn stored_prelude_measurements() {
     // A restore happens once per thread, so a *cold* one needs a thread that has not had one — measuring it on this thread would measure a thread-local read.
     let cold = thread::spawn(|| phase(&[], || with_prelude(|_| ())))

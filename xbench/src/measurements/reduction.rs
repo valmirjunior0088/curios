@@ -143,27 +143,9 @@ fn elaborated(source: &str) {
 ///
 /// `cargo xbench measure type_level_sequence_cost_measurements` takes it: `<carrier>/<arm> at <n>`, the time an arm's elaboration takes, every arm at every rung turned round-robin three times after an untimed round, so the excesses `fixed − opaque` and `growing − fixed` are differences of medians; and `<carrier>/floor fixed at <n>` and `<carrier>/floor growing at <n>`, the least power of two the compile path accepts each at. It asserts nothing beyond each arm elaborating at all — a measurement that fails is a measurement with an opinion. What it does *not* cover is peak process memory, which no figure taken inside this process would be honest about: the allocator has already returned intermediates to the pool by the time a test could read a high-water mark. That half is taken from outside, with its command recorded below.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// Taken at `9c543476a`, **release**, on `x86_64-unknown-linux-gnu`, at a load average under two, with the closed machine evaluating the accumulation. Mixed: the floors are counted, and each time is one reading of the whole compile.
-///
-/// ```text
-/// Bytes
-///          n     opaque      fixed    growing   fixed-opaque  growing-fixed   floor fixed  floor growing
-///        800    129.8ms    107.5ms    129.5ms          0.0ns         21.9ms         65536        131072
-///       1600     55.0ms    162.9ms    211.5ms        107.9ms         48.6ms        131072        262144
-///       3200     55.1ms    271.7ms    368.2ms        216.6ms         96.5ms        262144        524288
-///       6400     54.6ms    502.7ms    764.3ms        448.2ms        261.5ms        524288       1048576
-///
-/// List
-///          n     opaque      fixed    growing   fixed-opaque  growing-fixed   floor fixed  floor growing
-///        250     65.8ms     67.2ms     86.9ms          1.4ms         19.7ms         32768         32768
-///        500     84.1ms     96.6ms    130.9ms         12.6ms         34.3ms         65536         65536
-///       1000     84.1ms    132.0ms    178.8ms         47.9ms         46.9ms        131072        131072
-///       2000     83.8ms    200.1ms    272.6ms        116.3ms         72.5ms        262144        262144
-/// ```
-///
-/// **The two arms' floors sit within one power of two of each other at every rung**, and both double with the input: the transitions are what a budget sees, and ten bytes of payload price six units a step. Construction shows in the wall-time excess of the `growing-fixed` column alone, which grows with the input: on `List` by under twice a rung, to 72.5 ms, and on `Bytes` by about twice a rung to 96.5 ms, then by 2.7 times, to 261.5 ms at 6400. The first `Bytes` opaque arm is the process's first compile, slower than the fixed arm after it, so its `fixed-opaque` reads zero.
+/// `cargo xbench report type_level_sequence_cost_measurements` reads them: each figure's readings by group, and what each sitting was taken under.
 ///
 /// # Peak memory
 ///
@@ -225,29 +207,9 @@ pub fn type_level_sequence_cost_measurements() {
 ///
 /// It asserts nothing beyond each arm elaborating at all — a measurement that fails is a measurement with an opinion.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// Counted, at `9c543476a`, **release**, on `x86_64-unknown-linux-gnu`, with the closed machine evaluating the accumulation on both sides.
-///
-/// ```text
-/// Bytes
-///          n  floor elaborator  floor certifier  divergence
-///        800            131072        131072          1x
-///       1600            262144        262144          1x
-///       3200            524288        524288          1x
-///       6400           1048576       1048576          1x
-///
-/// List
-///          n  floor elaborator  floor certifier  divergence
-///        250             32768         32768          1x
-///        500             65536         65536          1x
-///       1000            131072        131072          1x
-///       2000            262144        262144          1x
-/// ```
-///
-/// **Parity holds, and structurally.** The two checkers run one shared evaluator for the closed accumulation, and the two floors are one power of two at every rung, which is as fine as the sweep tells them apart. Nor do they part on a `Str` literal, whose scan each demands once: [`str_literal_cost_measurements`] reads the certifier 24 units over the elaborator at every length.
-///
-/// **A memo hit is free in both checkers.** A certifier charging a hit the whole recorded cost of the computation it replaced would refuse for exhaustion programs the elaborator accepts within its budget — and since the compile path puts one budget to both and meets the larger, that refusal is what a user would meet, with no disagreement about any rule.
+/// `cargo xbench report certifier_memo_charge_measurements` reads them: each figure's readings by group, and what each sitting was taken under.
 pub fn certifier_memo_charge_measurements() {
     type Build = fn(usize) -> String;
     let carriers: [(&str, [usize; 4], Build); 2] = [
@@ -312,31 +274,9 @@ fn read_cost(label: &str, size: Option<u64>, source: &str) {
 ///
 /// `cargo xbench measure str_literal_cost_measurements` takes it, each row's figures as [`read_cost`] reads them. This is the probe `curios`'s `a_str_literal_costs_transitions_rather_than_frames` guards. It asserts only that each arm checks at all — a measurement that fails is a measurement with an opinion — and the assertion that a regression has to trip lives in that ordinary test instead.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// Counted, at `9c543476a`. The unit columns do not depend on the profile — a debug run of a ladder reproduces its release units exactly — and the table carries no wall clock.
-///
-/// ```text
-///   program                      units   depth      other       units   depth      other  certifier/elab
-///   Str literal, n=250           22188       1      21164       22212       1      21188     1.0x
-///   Str literal, n=500           39438       1      38414       39462       1      38438     1.0x
-///   Str literal, n=1000          73938       1      72914       73962       1      72938     1.0x
-///   Str literal, n=2000         142938       1     141914      142962       1     141938     1.0x
-///   Str literal, n=4000         280938       1     279914      280962       1     279938     1.0x
-///   Str literal, n=8000         556938       1     555914      556962       1     555938     1.0x
-///   Str n=500, 1 uses            39438       1      38414       39462       1      38438     1.0x
-///   Str n=500, 3 uses            39438       1      38414       39462       1      38438     1.0x
-///   Bytes literal, n=500          2258       2        210        1289       1        265     0.6x
-///   Str n=500, cut               39438       1      38414       39462       1      38438     1.0x
-/// ```
-///
-/// **A character costs 69 units on each checker**, at every rung of the ladder. Dividing the default budget by it puts the ceiling near 434 000 characters, by arithmetic rather than by bisection. Guarded depth is flat in the literal's length on both checkers, and so is the cost in use count.
-///
-/// **Cutting costs nothing a unit column sees.** The cut row, which cuts through `Str/before` at a position whose boundary is decided by the one byte there, spends exactly the bare `n=500` row's units on both checkers.
-///
-/// **The `certifier/elab` column reads 1.0× on every `Str` row**, the certifier 24 units over the elaborator at each.
-///
-/// **The `Bytes` row is the control**: the same bytes with no proof over them cost each checker under 2 300 units, so a `Str` literal's units are its validity's.
+/// `cargo xbench report str_literal_cost_measurements` reads them: each figure's readings by group, and what each sitting was taken under.
 pub fn str_literal_cost_measurements() {
     for n in [250, 500, 1000, 2000, 4000, 8000] {
         read_cost(
@@ -377,32 +317,9 @@ pub fn str_literal_cost_measurements() {
 ///
 /// It asserts nothing beyond each arm checking at all. `scrutinee_refinement_measurements` carries the wall clocks beside it.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// Counted, at `9c543476a`.
-///
-/// ```text
-///   program                      units   depth      other       units   depth      other  certifier/elab
-///   web n=8, applied              4121       4         25        3676       3        604     0.9x
-///   web n=8, scrutinized          4121       4         25        3676       3        604     0.9x
-///   web n=8, closed               4121       4         25        3676       3        604     0.9x
-///   web n=12, applied             4121       4         25        3676       3        604     0.9x
-///   web n=12, scrutinized         4121       4         25        3676       3        604     0.9x
-///   web n=12, closed              4121       4         25        3676       3        604     0.9x
-///   web n=13, applied             4121       4         25        3676       3        604     0.9x
-///   web n=13, scrutinized         4121       4         25        3676       3        604     0.9x
-///   web n=13, closed              4121       4         25        3676       3        604     0.9x
-///   web n=14, applied             4121       4         25        3676       3        604     0.9x
-///   web n=14, scrutinized         4121       4         25        3676       3        604     0.9x
-///   web n=14, closed              4121       4         25        3676       3        604     0.9x
-///   web n=20, applied             4121       4         25        3676       3        604     0.9x
-///   web n=20, scrutinized         4121       4         25        3676       3        604     0.9x
-///   web n=20, closed              4121       4         25        3676       3        604     0.9x
-/// ```
-///
-/// **Every unit column is constant across the sizes**, under each consumption and on both checkers: twenty definitions cost what eight do. Keyed on the reduced spelling rather than the written one, the middle row would grow by a factor of two per definition.
-///
-/// **A `match` costs what applying does**, at a binder as at a literal, on both checkers: the web is closed, and the closed machine runs inside an arm as it does outside one, since no equation answers a term that names no local.
+/// `cargo xbench report combinator_web_cost_measurements` reads them: each figure's readings by group, and what each sitting was taken under.
 pub fn combinator_web_cost_measurements() {
     for rules in [8usize, 12, 13, 14, 20] {
         for (consumed, label) in [
@@ -440,22 +357,9 @@ fn primitive_claim(carrier: &str, parser: &str, input: &str, left: usize) -> Str
 ///
 /// `cargo xbench measure parse_primitive_measurements` takes it, each primitive's figures `<primitive>/text` and its twin's `<primitive>/bytes` as [`read_cost`] reads them. Counted, so a reading transports between machines. A change to `/std/Parse`, to `/std/Str/At` or to what the closed machine evaluates retakes it.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// On top of `7bbf27ea6`:
-///
-/// ```text
-///   primitive            text elab   certifier  bytes elab   certifier
-///   literal                   7970        7804       17650       19688
-///   take_while               14254       16292       10702       12740
-///   char, byte               52801       54839       28650       30688
-///   char_if, byte_if         58937       60975       34793       36831
-///   expect                   54598       56636       31169       33207
-///   rest                      7186        7563        8319        7566
-///   until                    13654       15695
-/// ```
-///
-/// **A text primitive that is a walk costs about what its twin does**: `take_while` reads the bytes it walks, a character whole at its lead byte, and costs 1.3 times its twin, and `literal` compares the piece's bytes at once where its twin compares them a byte at a time, and costs under half. **A parser run a character at a time costs under twice its twin**, `char`, `char_if` and `expect` through `times`, each step building the position it hands on. `rest` cuts once and reads nothing.
+/// `cargo xbench report parse_primitive_measurements` reads them: each figure's readings by group, and what each sitting was taken under.
 pub fn parse_primitive_measurements() {
     let letters = "a".repeat(32);
     let text = format!("\"{letters}\"");
@@ -518,27 +422,9 @@ pub fn parse_primitive_measurements() {
 ///
 /// `cargo xbench measure type_level_claim_measurements` takes it, each claim's figures as [`read_cost`] reads them. Counted, so a reading transports between machines. A change to how a `Str` or a `Flt` is read at the type level retakes it and accounts for each row that moved. Each checker reports its heaviest declaration, and a program that states no claim reads under 2 300 units ([`str_literal_cost_measurements`]'s `Bytes` row), so each row is its claim's.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// On top of `7bbf27ea6`:
-///
-/// ```text
-///   claim                        units   depth      other       units   depth      other  certifier/elab
-///   Str/split                    16602       1      15578       18633       3      15561     1.1x
-///   Str/split_once               11089       1      10065       13139       3      10067     1.2x
-///   Str/lines                    13054       1      12030       15086       3      12014     1.2x
-///   Str/replace                  14186       1      13162       16194       3      13122     1.1x
-///   Str/trim                     14035       1      13011       16074       3      13002     1.1x
-///   Str/strip_suffix              6613       1       5589        8642       3       5570     1.3x
-///   Flt/of_str                   23265       1      22241       25305       3      22233     1.1x
-///   Str/index_of                 11147       1      10123       14182       4      10086     1.3x
-/// ```
-///
-/// **A builder holds no depth**: `Str/split`, `Str/lines` and `Str/replace` hand on what they have built, and the elaborator's guarded depth is 1 on their rows as on every other, the certifier's 3, and 4 on `Str/index_of`.
-///
-/// **The certifier spends between 1.1 and 1.3 times the elaborator's units on every row**, the units past depth within a hundred of the elaborator's on each.
-///
-/// **`Flt/of_str` is a grammar run**: reading `"-Infinity"` runs the reader's `Parse(Str, Flt)` grammar over nine characters, so its row is what the grammar costs each checker.
+/// `cargo xbench report type_level_claim_measurements` reads them: each figure's readings by group, and what each sitting was taken under.
 pub fn type_level_claim_measurements() {
     let claims = [
         (

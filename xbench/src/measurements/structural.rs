@@ -10,22 +10,9 @@ use {
 ///
 /// It asserts nothing. The structural claim is `curios`'s `closures_carry_their_code_as_a_table_index`'s to make; this reads the static shape of the dispatch over the corpus — `<program>/table slots`, `/dispatch sites`, `/environment constructions` and `/interned as consts` — so the timings below stay pinned to the modules that produced them.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// Taken at `447fbb0a1`, x86-64 Linux, debug.
-///
-/// | Program | Table slots | Dispatch sites | Environment constructions | Interned as consts |
-/// | --- | ---: | ---: | ---: | ---: |
-/// | `lcg` | 5 | 3 | 2 | 0 |
-/// | `trees` | 5 | 3 | 2 | 0 |
-/// | higher-order | 7 | 4 | 4 | 2 |
-/// | uncurry | 5 | 3 | 2 | 0 |
-/// | string-walk | 5 | 3 | 2 | 0 |
-/// | `monad_io` | 10 | 25 | 8 | 1 |
-/// | `parse_digits` | 8 | 23 | 6 | 1 |
-/// | `rng_state` | 8 | 23 | 6 | 1 |
-///
-/// The closure-free controls sit at five slots and three dispatch sites, which is `/std`'s own plumbing rather than anything the program asked for; the monadic and walking programs are where the table is actually exercised.
+/// `cargo xbench report closure_index_dispatch_measurements` reads them: each figure's readings by group, and what each sitting was taken under.
 ///
 /// # What the index buys
 ///
@@ -108,23 +95,9 @@ pub fn closure_index_dispatch_measurements() {
 ///
 /// It asserts nothing. The structural claim is `curios`'s `a_returned_constructor_is_delivered_as_its_fields`'s to make and it fails when it stops holding; this only reads how much of the corpus the protocol reaches, `<fixture>/multi-result types` and `<fixture>/allocation sites`, which is a question with no right answer to assert against.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// Taken at `447fbb0a1`, x86-64 Linux, **debug**.
-///
-/// | Fixture | Multi-result types | Allocation sites |
-/// | --- | --- | --- |
-/// | lcg | 0 | 91 |
-/// | trees | 0 | 92 |
-/// | higher-order | 0 | 93 |
-/// | direct/escaping | 0 | 92 |
-/// | function-only | 0 | 90 |
-/// | mutual-recursion | 0 | 90 |
-/// | split-return | 1 | 91 |
-///
-/// **The zeroes are not a null result, they are the wrong corpus for the question.** These fixtures take their runtime taint from `/std/Proc/args()!` and never read stdin, so none of them reaches the UTF-8 decode path where the protocol actually fires. What they do establish is that the pass is inert everywhere it has no candidate — which is most places.
-///
-/// The allocation counts are taken pre-Binaryen, so some of what the pass removes earlier, Binaryen may remove later; only a runtime figure accounts for that. Withholding the pass on `programs/parse_digits.crs`, as [`copy_growth_measurements`] says how, and nothing else, moves the native binary at N = 1 000 000 from 0.226 s [0.224–0.230] to 0.230 s [0.228–0.236] of wall time, and leaves its `user` time at 0.21 s at the clock's ten-millisecond grain, each the median and span of five runs, the two interleaved and printing the same answer, both binaries built by a release compiler, timed at `00627ea06`: the per-character loop is not allocation-bound on the tuple the protocol removes.
+/// `cargo xbench report split_return_measurements` reads them: each figure's readings by group, and what each sitting was taken under.
 pub fn split_return_measurements() {
     for (label, source) in [
         ("lcg", LCG),

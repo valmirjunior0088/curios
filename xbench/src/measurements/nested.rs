@@ -70,25 +70,9 @@ const SHAPES: [Shape; 4] = [
 ///
 /// `cargo xbench measure nested_operation_measurements` takes it: `<shape> at <size>`, one compilation through both checkers, every shape at every size turned round-robin five times after an untimed round so no row is read on a warmer machine than another, and `<shape> at <size>/accepted`, one where both checkers accepted it and nought where one refused.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// Taken at `9c543476a` on `x86_64-unknown-linux-gnu`, at a load average under two. The nested and summed rows are accepted, and both towers are refused, as their claim is.
-///
-/// | shape | size | compile |
-/// | --- | --- | --- |
-/// | nested | 8 | 0.01 s [0.01–0.05] |
-/// | nested | 16 | 0.02 s [0.02–0.02] |
-/// | nested | 32 | 0.03 s [0.03–0.03] |
-/// | nested | 64 | 0.05 s [0.05–0.05] |
-/// | summed | 16 | 0.02 s [0.02–0.02] |
-/// | summed | 64 | 0.06 s [0.06–0.07] |
-/// | summed | 256 | 0.46 s [0.45–0.55] |
-/// | remainders | 12 | 0.09 s [0.09–0.11] |
-/// | remainders | 24 | 0.45 s [0.45–0.45] |
-/// | conjunctions | 12 | 0.03 s [0.03–0.03] |
-/// | conjunctions | 24 | 0.16 s [0.16–0.16] |
-///
-/// **A nested term costs its depth and no doubling of it.** **A long sum grows by 7.7 times from 64 summands to 256**, each stuck fold extending the classification the fold beneath it filed (`curios_analysis::Classification`). **Two towers of remainders grow as two of conjunctions do**, by five times from twelve to twenty-four against five and a third: no remainder is put to a checker beside another.
+/// `cargo xbench report nested_operation_measurements` reads them: each figure's readings by group, and what each sitting was taken under.
 pub fn nested_operation_measurements() {
     let rows = SHAPES
         .iter()

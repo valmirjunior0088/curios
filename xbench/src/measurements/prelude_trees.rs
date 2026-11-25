@@ -32,17 +32,9 @@ fn tree_and_graph(term: &Term) -> (u128, usize) {
 ///
 /// `cargo xbench measure printed_tree_measurements` takes it: `terms` and `terms past the floor`, and for each of the eight terms whose tree outgrows its graph the most, over all terms and over those past the floor, `largest/<term>/tree` and `/graph`, or `largest past the floor/…`, the nodes of its tree and the distinct nodes of its graph, the first over the second its ratio. A print builds about one document per node of its term's tree, so an allowance of that many documents per distinct node, set well above the largest ratio here, elides none of them.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// At `84eff3c90`: 4 898 terms, none with a tree past 5 000 nodes. The largest ratios:
-///
-/// | Tree over graph | Tree | Graph | Term |
-/// | --- | --- | --- | --- |
-/// | 10.9 | 1 065 | 98 | `/std/Bytes/euclid`, body |
-/// | 10.0 | 2 873 | 286 | `/std/Str/Valid/encoded`, body |
-/// | 8.9 | 688 | 77 | `/std/Command/capture`, body |
-/// | 8.7 | 2 449 | 281 | `/std/Str/advanced`, body |
-/// | 8.4 | 652 | 78 | `/std/Str/At/next`, body |
+/// `cargo xbench report printed_tree_measurements` reads them: each figure's readings by group, and what each sitting was taken under.
 pub fn printed_tree_measurements() {
     const FLOOR: u128 = 5_000;
 

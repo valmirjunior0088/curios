@@ -138,52 +138,9 @@ const HELD_SLOPE: f64 = 3.0;
 ///
 /// A slope is read off the figures, never filed: the second difference over the first across the three sizes, so what every compile pays whatever its size cancels, two linear and four quadratic. Looks alone repeat from run to run, so the measurement's own assert holds them alone to [`HELD_SLOPE`], in every stage of every growth but the [`UNHELD`] ones, a test of the suite holding them taking most of a minute; allocations and bytes move with the keys a run draws and times with the machine, and are read with their spans in the record, never bounded.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// Over the compiler of `ba7b9b9fc`, as instructions, looks, allocations and bytes, each the steepest slope and the stage it is at; `-` where no stage grows.
-///
-/// | growth | n | instructions | looks | allocations | bytes |
-/// | --- | --- | --- | --- | --- | --- |
-/// | LetPlus | 25 | 2.49 cps | 2.00 erase | 2.04 elaborate | 4.71 cps |
-/// | LetCall | 25 | 2.36 binaryen | 2.00 erase | 2.03 emit | 4.71 cps |
-/// | Statements | 100 | 2.85 erase | 2.00 erase | 2.05 cps | 2.21 elaborate |
-/// | Definitions | 250 | 2.09 lower | 2.00 erase | 2.00 elaborate | 2.52 parse |
-/// | Functions | 250 | 3.36 binaryen | 2.00 erase | 2.16 cranelift | 3.07 cps-optm |
-/// | Strings | 250 | 2.16 lower | 2.00 lower | 2.00 parse | 2.10 lower |
-/// | List | 1000 | 2.00 parse | 2.00 erase | 2.00 parse | 2.00 anf-optm |
-/// | ListOpen | 400 | 3.79 binaryen | 2.00 erase | 2.10 cranelift | 2.82 cps |
-/// | Arms | 250 | 3.26 binaryen | 2.00 erase | 2.10 cranelift | 2.98 cranelift |
-/// | Parameters | 400 | 3.68 erase | 2.00 erase | 2.01 anf-optm | 2.26 anf-optm |
-/// | ParametersSummed | 100 | 2.84 binaryen | 2.00 erase | 2.08 cranelift | 2.24 cps-optm |
-/// | CodomainSummed | 100 | 2.69 elaborate | 2.98 elaborate | 2.56 elaborate | 2.88 elaborate |
-/// | LetsSummed | 250 | 3.97 cranelift | 2.00 erase | 2.16 cps | 3.48 cranelift |
-/// | ProductCommuted | 128 | 3.65 erase | 3.70 erase | 3.62 erase | 3.68 erase |
-/// | Tuple | 250 | 2.04 erase | 2.00 erase | 2.00 parse | 2.02 elaborate |
-/// | Fields | 250 | 2.11 parse | 2.00 erase | 2.00 parse | 2.03 binaryen |
-/// | StructReaders | 250 | 2.18 elaborate | 2.00 erase | 2.00 elaborate | 2.00 elaborate |
-/// | Constructors | 250 | 3.81 erase | 2.00 erase | 2.01 anf-optm | 2.80 erase |
-/// | Values | 250 | 4.27 erase | 3.92 erase | 3.95 erase | 7.43 erase |
-/// | DefaultedMatches | 250 | 2.07 erase | 2.00 erase | 2.00 elaborate | 2.88 parse |
-/// | ComparedConstructions | 250 | 2.02 erase | 2.00 erase | 2.00 elaborate | 2.00 erase |
-/// | AliasReaders | 250 | 2.16 lower | 2.00 erase | 2.00 elaborate | 2.13 lower |
-/// | ArrowAliasReaders | 250 | 3.54 erase | 2.00 erase | 3.26 erase | 3.64 erase |
-/// | Methods | 250 | 2.34 elaborate | 2.00 erase | 2.01 cps-optm | 2.71 elaborate |
-/// | Calls | 250 | 2.22 cps-optm | 2.00 erase | 2.03 cps-optm | 2.72 cps |
-/// | Parentheses | 1000 | 3.87 parse | - | 2.10 parse | 3.95 parse |
-/// | RightPlus | 250 | 3.64 cranelift | 2.00 erase | 2.13 cranelift | 3.54 cranelift |
-/// | LeftPlus | 250 | 3.37 binaryen | 2.00 erase | 2.17 cranelift | 3.18 cps-optm |
-/// | Matches | 200 | 3.46 elaborate | 2.00 erase | 2.06 cranelift | 3.14 cranelift |
-/// | ChainedMatches | 100 | 2.92 binaryen | 2.00 erase | 2.22 cranelift | 2.30 cranelift |
-/// | Loops | 128 | 6.30 binaryen | 2.00 erase | 2.09 cranelift | 2.94 cranelift |
-/// | Lambdas | 100 | 4.84 anf-optm | 3.20 erase | 4.07 anf-optm | 3.47 erase |
-/// | Lists | 400 | 3.68 binaryen | 2.00 erase | 2.08 parse | 3.75 parse |
-/// | Lets | 100 | 3.34 erase | 2.00 erase | 2.00 parse | 2.42 erase |
-/// | Arrow | 1000 | 2.06 parse | 2.00 erase | 2.08 elaborate | 2.03 elaborate |
-/// | StringLiteral | 2000 | 2.02 erase | 2.00 erase | 2.00 elaborate | 2.00 elaborate |
-///
-/// Held growths read past [`HELD_SLOPE`] here, in erasure, parsing, the ANF optimizer, the CPS lowering and elaboration, and the optimizer's bytes over functions and over additions nested either way, which the workspace's findings hold (`documentation/roadmap/000-findings.md`); the hash keys a run draws move some readings, a product commuted's instructions having read 3.21, 2.38 and 2.16 over one compiler.
-///
-/// **Five growths' looks grow past [`HELD_SLOPE`] today**, the [`UNHELD`] ones: a family's values, a product of two spines commuted, `let`s and nested lambdas at erasure, and matches each on the `let` before it at elaboration; every other growth's looks are held in every stage. One reading below [`HELD_SLOPE`] at the grid's sizes may still hold a square too small there to show.
+/// `cargo xbench report growth_slopes` reads them: each figure's readings by group, and what each sitting was taken under.
 pub fn growth_slopes() {
     let mut grew = Vec::new();
 

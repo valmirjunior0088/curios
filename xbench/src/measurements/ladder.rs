@@ -83,22 +83,9 @@ const PARSE_MANUAL: &str = include_str!(concat!(
 ///
 /// N is read from the command line and the string decoded is `Nat/to_str(n)`, so at N = 1 000 000 these programs decode a **seven-character** string a million times — seven million characters through a seven-link chain, not one walk over a million. Per-call overhead amortizes differently in the two regimes, so a per-character figure derived here does not transfer to a long string without saying so.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// The three rungs together, timed at `00627ea06`, release compiler, native binaries, Linux, N = 1 000 000, `user` seconds as the median and span of five interleaved runs: `parse_digits` 0.20 [0.20–0.21], `parse_bindless` 0.23 [0.23–0.24], `parse_manual` 0.19 [0.18–0.19]. `parse_digits` beats `parse_bindless` although it does strictly more work, since `!` is what separates them: read the bind as an upper bound that has closed rather than as evidence `!` is free — two rungs this close are separated by code layout as much as by work.
-///
-/// The idiomatic walks alone, in one interleaved session of their own with the two harness workloads as controls, timed at `00627ea06` as the rungs are, `user` seconds as the median and span of five runs: `parse_digits` at N = 1 000 000 0.20 [0.20–0.20], `parse_multibyte` at N = 300 000 0.19 [0.19–0.20], `lcg` at 100 000 000 0.37 [0.36–0.37], `trees` at 21 0.17 [0.16–0.18]. A delta read across two sessions is not attributable to the change between them, so a change to the walk is timed against a control built from the same tree in the same session.
-///
-/// The static half, taken at `ac663f240`:
-///
-/// ```text
-/// parse_digits:   0 closure sites, 4 env sites, 21 slice calls, 1153927 bytes of wat
-/// parse_bindless: 0 closure sites, 6 env sites, 21 slice calls, 1202540 bytes of wat
-///     $envr/2093$/std/Nat/of_str/1
-/// parse_manual:   0 closure sites, 4 env sites, 21 slice calls, 1273107 bytes of wat
-/// ```
-///
-/// Four env sites in every rung, `parse_manual` included, carry the hint of a local `go`: two loops, each of which builds its environment once in `$start` and once in its own body. `parse_bindless` adds `/decode/1` and `/std/Nat/of_str/1`, the one site the walk's own filter names. **A site count cannot see a loop.** It is kept because it is the half that survives a machine change, and because a site appearing or vanishing is a real event; it is never the half that answers "what does this cost".
+/// `cargo xbench report string_walk_ladder_measurements` reads them: each figure's readings by group, and what each sitting was taken under.
 pub fn string_walk_ladder_measurements() {
     for (label, source) in [
         ("parse_digits", PARSE_DIGITS),

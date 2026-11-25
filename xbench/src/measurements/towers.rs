@@ -67,54 +67,9 @@ fn read_costs(name: &str, lines: u64, source: &str) {
 ///
 /// Looks are the column a walk cannot hide from. A hit on a remembered reduct is free, so a walk that only reads — the sort of a type — spends no unit however many paths it takes, and shows in looks alone.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// Over the checkers of `cf3aa6e85`, every row accepted by both.
-///
-/// | tower | lines | elaborator units | elaborator looks | certifier units | certifier looks |
-/// | --- | --- | --- | --- | --- | --- |
-/// | chain | 12 | 4 046 | 12 889 | 3 039 | 8 599 |
-/// | chain | 16 | 4 046 | 14 133 | 3 039 | 8 979 |
-/// | chain, in a member | 12 | 4 046 | 16 946 | 3 039 | 9 620 |
-/// | chain, in a member | 16 | 4 046 | 18 620 | 3 039 | 10 048 |
-/// | calls | 12 | 4 046 | 14 347 | 3 039 | 8 883 |
-/// | calls | 16 | 4 046 | 16 019 | 3 039 | 9 351 |
-/// | calls, in a member | 12 | 4 046 | 18 254 | 3 039 | 9 731 |
-/// | calls, in a member | 16 | 4 046 | 20 490 | 3 039 | 10 247 |
-/// | pairs | 12 | 4 046 | 13 009 | 3 039 | 8 890 |
-/// | pairs | 16 | 4 046 | 14 305 | 3 039 | 9 362 |
-/// | pairs, in a member | 12 | 4 046 | 16 506 | 3 039 | 9 401 |
-/// | pairs, in a member | 16 | 4 046 | 18 690 | 3 039 | 9 873 |
-/// | lists | 12 | 4 046 | 27 210 | 3 039 | 11 357 |
-/// | lists | 16 | 4 046 | 33 542 | 3 039 | 12 601 |
-/// | lists, in a member | 12 | 4 046 | 31 063 | 3 039 | 11 826 |
-/// | lists, in a member | 16 | 4 046 | 38 427 | 3 039 | 13 070 |
-/// | arms | 12 | 4 046 | 20 256 | 3 039 | 12 832 |
-/// | arms | 16 | 4 046 | 24 212 | 3 039 | 16 228 |
-/// | arms, in a member | 12 | 4 046 | 24 655 | 3 039 | 14 252 |
-/// | arms, in a member | 16 | 4 046 | 29 259 | 3 039 | 17 852 |
-/// | guards | 12 | 4 046 | 24 043 | 3 039 | 10 248 |
-/// | guards | 16 | 4 046 | 29 159 | 3 039 | 11 164 |
-/// | guards, in a member | 12 | 4 046 | 29 423 | 3 039 | 12 929 |
-/// | guards, in a member | 16 | 4 046 | 35 455 | 3 039 | 14 457 |
-/// | recursions | 12 | 4 046 | 37 739 | 3 039 | 14 590 |
-/// | recursions | 16 | 4 046 | 46 495 | 3 039 | 16 698 |
-/// | handed | 12 | 4 046 | 20 081 | 3 039 | 10 133 |
-/// | handed | 16 | 4 046 | 23 525 | 3 039 | 10 745 |
-/// | aliases | 12 | 4 060 | 12 549 | 3 093 | 9 758 |
-/// | aliases | 16 | 4 060 | 13 837 | 3 105 | 10 494 |
-/// | arrows | 12 | 4 060 | 12 440 | 3 117 | 9 842 |
-/// | arrows | 16 | 4 060 | 13 692 | 3 137 | 10 606 |
-/// | fields | 12 | 4 046 | 16 399 | 3 039 | 12 299 |
-/// | fields | 16 | 4 046 | 18 823 | 3 039 | 13 855 |
-/// | two towers | 12 | 4 164 | 22 946 | 3 160 | 12 299 |
-/// | two towers | 16 | 4 184 | 28 504 | 3 188 | 13 607 |
-/// | apart | 12 | 4 046 | 24 221 | 3 039 | 13 893 |
-/// | apart | 16 | 4 046 | 28 005 | 3 039 | 15 493 |
-/// | bounded | 12 | 42 906 | 166 311 | 42 946 | 104 747 |
-/// | bounded | 16 | 56 358 | 232 501 | 56 298 | 150 467 |
-///
-/// **No row multiplies.** A tower a checker walked once per path would read sixteen times the looks at sixteen lines that it reads at twelve, where a walk that visits each node once reads at most a third more. Every row but one reads under 27 per cent more, the most the arms in the certifier, 12 832 looks and then 16 228. The bounded tower, whose proof folds comparisons over every line, reads 166 311 and then 232 501 in the elaborator and 104 747 and then 150 467 in the certifier: more than its lines add, though far short of what a walk per path reads: its proof reduces each line's comparison over the lines before it, a square its units charge in step with what it costs, which is reduction's (`documentation/design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md`). A row's units are its heaviest declaration's: they stand still across the two heights in every row but four, and in those move by under forty for the aliases, the arrows and the two towers, and by 13 452 in the elaborator and 13 352 in the certifier for the bounded tower, whose proof reduces each line's comparison.
+/// `cargo xbench report tower_measurements` reads them: each figure's readings by group, and what each sitting was taken under.
 pub fn tower_measurements() {
     let shapes = [
         ("chain", Shape::Chain(Stands::Function)),

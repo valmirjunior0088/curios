@@ -22,33 +22,9 @@ use {
 ///
 /// These are wall-clock timings under built-in tracing, with its overhead included. The Tui workload has synthetic time and no physical terminal latency.
 ///
-/// ## What it last printed
+/// ## Its records
 ///
-/// Timed, taken on top of `9a18c2491` on 2026-10-23. Host: AMD Ryzen 7 5800X3D (8 cores, 16 logical CPUs), `x86_64-unknown-linux-gnu`, Linux `7.2.9-ogc3.1.fc44.x86_64`; Rust `1.99.1` (`58cf8f9c3`). Cargo release profile, all features, one test thread, no CPU pinning, CPU governor `performance`, boost enabled. Default runtime engine configuration. The one-minute load average is 1.00 before the instrument and 2.60 after it; every Rust build finishes before timing.
-///
-/// All times are milliseconds. Sample 0 is the warmup and is excluded from the medians and observed spans.
-///
-/// | Workload | Sample | Compile (ms) | Run (ms) | Output bytes |
-/// | --- | ---: | ---: | ---: | ---: |
-/// | `monad_suspend` | 0 (warmup) | 702.711 | 17.636 | 6 |
-/// | `monad_suspend` | 1 | 663.383 | 17.558 | 6 |
-/// | `monad_suspend` | 2 | 663.427 | 17.540 | 6 |
-/// | `monad_suspend` | 3 | 657.640 | 17.181 | 6 |
-/// | `monad_suspend` | 4 | 649.868 | 17.288 | 6 |
-/// | `monad_suspend` | 5 | 652.808 | 17.589 | 6 |
-/// | `tui` | 0 (warmup) | 7337.520 | 59.785 | 8747 |
-/// | `tui` | 1 | 7546.438 | 63.552 | 8747 |
-/// | `tui` | 2 | 7543.518 | 60.639 | 8747 |
-/// | `tui` | 3 | 7531.747 | 60.206 | 8747 |
-/// | `tui` | 4 | 7455.739 | 61.362 | 8747 |
-/// | `tui` | 5 | 7541.695 | 60.992 | 8747 |
-///
-/// | Workload | Compile median \[span\], ms | Run median \[span\], ms |
-/// | --- | ---: | ---: |
-/// | `monad_suspend` | 657.640 [649.868–663.427] | 17.540 [17.181–17.589] |
-/// | `tui` | 7541.695 [7455.739–7546.438] | 60.992 [60.206–63.552] |
-///
-/// All 12 captures pass the behavior and closed-span assertions; each workload produces the same output length in every sample. The Tui assertions include terminal restoration and all three screen clears.
+/// `cargo xbench report coordination_measurements` reads them: each figure's readings by group, and what each sitting was taken under.
 pub fn coordination_measurements() {
     let mut monad = || {
         sampled(

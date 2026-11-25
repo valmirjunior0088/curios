@@ -919,13 +919,9 @@ fn survey(label: &str, source: &str) -> Survey {
 
 /// The corpus survey, which `cargo xbench measure aggregate_flow_census` takes: each program's `<program>/tuple sites`, `/slice sites` and `/regions` ([`survey`]); over the corpus, `buckets/<bucket>` the regions in each bucket, `variant regions`, `variant flows/<flow>`, `variant shapes/roster <size> width <width>`, `never rest/<population>`, and `tag-led constructions` with `tag-led constructions/never read back`; and each set's members as figures of one, `needs-workers owners/<owner>`, `reachable owners outside the library/<owner>`, `variant owners/<flow>/<owner>`, and `returns/<owner>/<shape>` for each shape a function's returns take where they take more than one, with `returns/<owner>/escapes` where it escapes.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// Taken at `447fbb0a1`, x86-64 Linux. Over the fourteen-program corpus: 585 regions — 522 blocked, 47 continuation-only, 16 needs-workers — and no variant regions at all. Most regions repeat across programs because they live in `/std`'s shared plumbing. The needs-workers owners are `/std/Str/fold`, `io/bind` and `main`. Three functions carry return edges of more than one shape — `/build` (`{Tuple(4), Bare}`), `/std/Nat/of_str` (`{Tuple(2), Bare}`) and `io/bind` (`{Tuple(2), Bare}`, escaping) — and none is evidence for a return-side mechanism: an escaping one is declined for escaping, and a `trees` node is stored in its parent, so splitting `/build`'s return relocates the allocation into the caller rather than removing it.
-///
-/// The boxed-tag annex reads 462 tag-led constructions, none of them read back at slot zero within its own flow. Read that as an upper bound rather than a count of dead tags: a construction that comes to rest and is discriminated after a reload is in no flow at all, and this instrument cannot see the read.
-///
-/// The class merge is degenerate, which is why no width budget is selected here: `curios-emit` types every tuple field `(ref null any)` and a row is padded to one width, so the class-merged width is the plain maximum arity, and `PARAM_SPLIT_GROWTH_LIMIT`'s 16 clears every candidate the corpus holds.
+/// `cargo xbench report aggregate_flow_census` reads them: each figure's readings by group, and what each sitting was taken under.
 pub fn aggregate_flow_census() {
     let mut buckets = BTreeMap::<&'static str, usize>::new();
     let mut worker_owners = BTreeSet::new();
@@ -1293,15 +1289,9 @@ entry()
 
 /// The death-birth census, which `cargo xbench measure death_birth_census` takes: each program's tally ([`Rebirth::read`]) under its label, the corpus's under `corpus`, and `pair owners/<owner>` a figure of one for each function that carries a pair.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// Over the fourteen-program corpus, the three workloads, and the TOML driver, taken at `f5bfe7f60`:
-///
-/// ```text
-/// == death-birth totals: 843 tuple sites, 0 constructed-width pairs, 359 projected-width pairs; 2130 row sites, 508 same-row pairs; 0 under /std/Map; 331/383 extends linear
-/// ```
-///
-/// with `chain` at 13 same-row pairs of 43 row sites, `spines` at 6 of 58 with none under `/std/Map`, and the TOML driver at 405 of 1466 row sites and 313 of 451 tuple sites, with 109 of its 152 extends linear.
+/// `cargo xbench report death_birth_census` reads them: each figure's readings by group, and what each sitting was taken under.
 ///
 /// # The reading
 ///

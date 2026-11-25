@@ -14,9 +14,9 @@ const SPINES: &str = include_str!(concat!(
 ///
 /// `cargo xbench measure spines_insert_slope` takes it: `spines at 25000` and `spines at 75000`, each run's time, the two turned round-robin, and the slope the difference of their medians over the 50 000 inserts between them. The slope isolates the marginal insert between N=25 000 and N=75 000 — deeper-than-average descents plus the replace churn of returning keys — so it reads *steeper* than the harness's total-over-N average and is not comparable to that table. It is one fixed method compared against itself across steps, not a decomposition. The anchor `spines(8) = 28` fails the probe before any figure is read if the workload mistranslates.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// Taken at `5bccb9ebd`, release, x86-64 Linux, at a load average under four, seven readings in one sitting: 263, 264, 264, 265, 265, 267, 285 ns/insert, median 265. Six of the seven read within 1% of the median and one 8% over it; a sitting on another box once read bimodally, two clusters about 10% apart, so a figure is compared only within one sitting.
+/// `cargo xbench report spines_insert_slope` reads them: each figure's readings by group, and what each sitting was taken under.
 ///
 /// # What the design rests on
 ///
@@ -102,18 +102,9 @@ entry()
 ///
 /// `cargo xbench measure map_insert_key_share` takes it: `encoded` and `control`, each at 25 000 and 75 000 iterations, the four runs turned round-robin, each slope the difference of its two medians over the 50 000 iterations between them. The control folds a constant where the probe folds the lengths of `Hash/hash` of this step's key and of the last's, so the delta is two encodings and two immediate `len`s — read it as a slight upper bound on the key class. An insert into a `Map(Nat, V)` builds those two, the map holding its keys and deriving their encodings where it compares them, so the share arithmetic is direct against `spines_insert_slope`'s figure read in the same sitting.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// Taken at `5bccb9ebd`, release, x86-64 Linux, seven readings in the sitting `spines_insert_slope`'s were taken in, alternating with its, the first of which printed:
-///
-/// ```text
-/// outputs at N=1000: encoded "927554", control "925689"
-///   encoded 44 ns/iter, control 4 ns/iter, key construction 40 ns/insert
-/// ```
-///
-/// Over the seven: encoded 40, 40, 40, 42, 42, 44, 44, median 42; control 2, 3, 3, 3, 4, 4, 5, median 3; key construction 36, 36, 36, 39, 40, 40, 41, median 39 ns/insert. The two encodings an insert builds are 39 of its 265 nanoseconds, under 15%.
-///
-/// Beside the key class, the collector's share measured nil (`spines_collection_decomposition`). Of the emitted `spines` module's 25 `br_table`s, as `wonder --stage wasm` prints it at `06ea35a7d`, fourteen sit in the program's entry, the `io/bind` its description runs, three in `/std/Map/internal/Node/insert` itself and one in its heap version, two in the heap version's resumption, one in each of `/std/Map/internal/Node/fold`'s two copies and one in its heap version, one in `/std/answered` and one in a handle's retry, none in a digit read, so the descent still holds tables. What else remains of the insert is the uniform-representation tax, which `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` takes up.
+/// `cargo xbench report map_insert_key_share` reads them: each figure's readings by group, and what each sitting was taken under.
 pub fn map_insert_key_share() {
     let encoded = compiled_of(KEY_ENCODED);
     let control = compiled_of(KEY_CONTROL);

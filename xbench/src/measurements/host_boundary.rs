@@ -56,40 +56,9 @@ fn assert_stream(io: &MockIo) {
 ///
 /// These are wall-clock timings under built-in tracing, with its overhead included.
 ///
-/// ## Last reading
+/// ## Its records
 ///
-/// Timed, taken on top of `9a18c2491` on 2026-10-23. Host: AMD Ryzen 7 5800X3D (8 cores, 16 logical CPUs), `x86_64-unknown-linux-gnu`, Linux `7.2.9-ogc3.1.fc44.x86_64`; Rust `1.99.1` (`58cf8f9c3`). Cargo release profile, all features, one test thread, no CPU pinning, CPU governor `performance`, boost enabled. Default runtime engine configuration. The one-minute load average is 1.66 before the instrument and 1.58 after it; every Rust build finishes before timing.
-///
-/// All times are milliseconds. Sample 0 is the warmup and is excluded from the medians and observed spans.
-///
-/// | Workload | Sample | Compile (ms) | Run (ms) | Output bytes |
-/// | --- | ---: | ---: | ---: | ---: |
-/// | `monad_io` | 0 (warmup) | 457.769 | 0.724 | 6 |
-/// | `monad_io` | 1 | 405.472 | 0.626 | 6 |
-/// | `monad_io` | 2 | 408.198 | 0.635 | 6 |
-/// | `monad_io` | 3 | 410.798 | 0.613 | 6 |
-/// | `monad_io` | 4 | 409.711 | 0.552 | 6 |
-/// | `monad_io` | 5 | 407.037 | 0.631 | 6 |
-/// | `stream_copy` | 0 (warmup) | 132.299 | 16.838 | 512000 |
-/// | `stream_copy` | 1 | 123.333 | 16.203 | 512000 |
-/// | `stream_copy` | 2 | 122.618 | 16.829 | 512000 |
-/// | `stream_copy` | 3 | 124.316 | 16.858 | 512000 |
-/// | `stream_copy` | 4 | 127.507 | 16.310 | 512000 |
-/// | `stream_copy` | 5 | 125.570 | 16.541 | 512000 |
-/// | `tui` | 0 (warmup) | 7338.942 | 60.602 | 8747 |
-/// | `tui` | 1 | 7497.237 | 60.432 | 8747 |
-/// | `tui` | 2 | 7585.840 | 60.534 | 8747 |
-/// | `tui` | 3 | 7520.488 | 60.042 | 8747 |
-/// | `tui` | 4 | 7515.068 | 61.248 | 8747 |
-/// | `tui` | 5 | 7512.041 | 62.259 | 8747 |
-///
-/// | Workload | Compile median \[span\], ms | Run median \[span\], ms |
-/// | --- | ---: | ---: |
-/// | `monad_io` | 408.198 [405.472–410.798] | 0.626 [0.552–0.635] |
-/// | `stream_copy` | 124.316 [122.618–127.507] | 16.541 [16.203–16.858] |
-/// | `tui` | 7515.068 [7497.237–7585.840] | 60.534 [60.042–62.259] |
-///
-/// All 18 captures pass the behavior and closed-span assertions; each workload produces the same output length in every sample. The Tui assertions include terminal restoration and all three screen clears.
+/// `cargo xbench report host_boundary_measurements` reads them: each figure's readings by group, and what each sitting was taken under.
 pub fn host_boundary_measurements() {
     let mut monad = || sampled("monad_io", include_str!("../../../programs/monad_io.crs"));
     let mut stream = || sampled("stream_copy", STREAM_COPY);

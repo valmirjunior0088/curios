@@ -78,16 +78,9 @@ fn decomposed(rounds: usize, runs: &[(&str, &Compiled, u64)]) {
 ///
 /// `cargo xbench measure chain_collection_decomposition` takes it. Three arrangements run the identical churn phase — `ROUNDS` rounds over the harness's 10 000-cell chain — inside heaps the dead ballast pre-grows to different sizes, `stock`, `ballast 500k` (about 32 MiB) and `ballast 4M` (about 256 MiB), each read at K = `ROUNDS` and at K = 0 ([`decomposed`]): `<arrangement> at <K>` the time of a run, the runs turned round-robin, the churn cost the first's median less the second's, which cancels startup and the ballast phase itself; and `/collections` and `/grown` what the collector did, counted from the engine's own records through `curios_native::test_support::collected` in a run of its own, so the raised log level never touches a timed figure.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// Taken on top of `9c543476a` on an x86-64 Linux dev machine at a load average under two, wasmtime 47.0.3 with the thirty-two-mebibyte default (see `curios-native/README.md`), the command above:
-///
-/// ```text
-/// == chain collection decomposition (K = 400)
-///   stock: churn 0.083 ms/round, 0.018 collections/round, no heap growth recorded
-///   ballast 500k (~32 MiB heap): churn 0.068 ms/round, 0.020 collections/round, no heap growth recorded
-///   ballast 4M (~256 MiB heap): churn 0.174 ms/round, 0.003 collections/round, -> grew GC heap by 0x8000000 bytes: new size is 0x10000000 bytes
-/// ```
+/// `cargo xbench report chain_collection_decomposition` reads them: each figure's readings by group, and what each sitting was taken under.
 ///
 /// # The reading
 ///
@@ -173,19 +166,9 @@ entry()
 
 /// The `spines` half of the heap-sizing evidence, by the method `chain_collection_decomposition` documents, `cargo xbench measure spines_collection_decomposition` taking it: `stock` read at none, 12 500 and 25 000 inserts, and the two ballast arms at none and 25 000, an insert's cost the difference of two sizes' medians over the inserts between them. The one difference is the subject: `spines`' live set grows toward the map's plateau instead of holding still, so an unsized heap's collections copy a growing structure and the per-insert cost is superlinear until the plateau.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// Taken on top of `9c543476a` on an x86-64 Linux dev machine at a load average under two, release, under the thirty-two-mebibyte default:
-///
-/// ```text
-/// == spines collection decomposition
-///   stock, N=12500: churn 0.59 us/insert, 0.0 collections per 1000 inserts, no heap growth recorded
-///   stock, N=25000: churn 0.63 us/insert, 0.0 collections per 1000 inserts, no heap growth recorded
-///   ballast 500k, N=25000: churn 0.55 us/insert, 0.0 collections per 1000 inserts, no heap growth recorded
-///   ballast 4M, N=25000: churn 0.51 us/insert, 0.0 collections per 1000 inserts, -> grew GC heap by 0x8000000 bytes: new size is 0x10000000 bytes
-/// ```
-///
-/// **The collector's share of the remaining insert is nil** — zero collections per thousand inserts at stock, at both Ns. The remaining insert cost (`spines_insert_slope`) is mutator work, so a rebuild-and-collection lever — a generational nursery among them — has nothing to take on this workload; what is left to rank is the representation tax against per-insert key construction, which `shapes.rs`'s instruments measure.
+/// `cargo xbench report spines_collection_decomposition` reads them: each figure's readings by group, and what each sitting was taken under.
 pub fn spines_collection_decomposition() {
     let stock = compiled_of(SPINES);
 
@@ -251,27 +234,9 @@ entry()
 ///
 /// `cargo xbench measure spines_key_width_measurements` takes it. Four programs, `spines` as it is (`nat`) and over `Bytes` keys of three, five and ten bytes (`bytes3`, `Bytes/of_nat(y * 251)`; `bytes5`, `Bytes/of_nat(y * 70001)`; `text10`, `Str/to_bytes(Nat/to_str(y * 70001))`), each read at 4 000, 12 000, 25 000 and 75 000 inserts as [`decomposed`] reads a run: the slope between two sizes, at 4 000 and 12 000 inserts and at 25 000 and 75 000, is the difference of their medians over the inserts between them, and the collections each size makes are counted in a run of their own.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// Taken on top of `9c543476a` on an x86-64 Linux dev machine at a load average under two, release, under the thirty-two-mebibyte default, nanoseconds an insert:
-///
-/// ```text
-/// == spines key width
-///   nat, 4000-12000: 623 ns/insert [583-630]
-///   nat, 25000-75000: 669 ns/insert [652-674]
-///   nat, collections at 4k, 12k, 25k, 75k: 0, 0, 0, 2
-///   bytes3, 4000-12000: 609 ns/insert [573-621]
-///   bytes3, 25000-75000: 625 ns/insert [620-633]
-///   bytes3, collections at 4k, 12k, 25k, 75k: 0, 0, 0, 2
-///   bytes5, 4000-12000: 1549 ns/insert [1544-1607]
-///   bytes5, 25000-75000: 1512 ns/insert [1509-1523]
-///   bytes5, collections at 4k, 12k, 25k, 75k: 0, 0, 2, 9
-///   text10, 4000-12000: 3055 ns/insert [2947-3118]
-///   text10, 25000-75000: 2801 ns/insert [2776-2814]
-///   text10, collections at 4k, 12k, 25k, 75k: 0, 2, 4, 19
-/// ```
-///
-/// **No width sits at the knee by seventy-five thousand inserts.** An insert between 25 000 and 75 000 inserts costs within a tenth of what it cost between 4 000 and 12 000 at every width — up to 7% more over immediates and three-byte keys, less over five and ten — and a map of ten-byte keys, the widest, is collected 19 times in its 75 000 inserts. Collection counts are deterministic and transport across machines; the slopes are this machine's.
+/// `cargo xbench report spines_key_width_measurements` reads them: each figure's readings by group, and what each sitting was taken under.
 pub fn spines_key_width_measurements() {
     let programs = [
         ("nat", SPINES.to_string()),

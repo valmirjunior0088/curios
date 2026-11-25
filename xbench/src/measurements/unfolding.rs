@@ -15,17 +15,9 @@ use {
 ///
 /// `cargo xbench measure combinator_sharing_measurements` takes it: `<spelling> at <rules>`, a compile's time through the ANF optimizer, every spelling at every size turned round-robin three times after an untimed round, with `/chain copies`, the copies of `Parse/chain`, and `/functions`, the functions it emits. The wall clocks are dominated by `curios_cps::optimize`; the counts are deterministic.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// Taken on top of `9c543476a`, **release**, `x86_64-unknown-linux-gnu`, at a load average under two. A copy is counted by the function a `Parse` region's `!` comes to, `Parse/chain`.
-///
-/// | spelling | `Parse/chain` copies at 16 rules | emitted functions | compile | growth of copies |
-/// | --- | --- | --- | --- | --- |
-/// | no application inside a continuation | 18 | 380 | 0.53 s | `n + 2` |
-/// | **as written** — applications inside the continuation | **18** | **476** | **0.95 s** | **`n + 2`** |
-/// | applications hoisted to items | 18 | 476 | 1.03 s | `n + 2` |
-///
-/// **Where the application is written decides nothing.** The as-written row and the hoisted row agree to the copy and to the function at every size — 4/322, 6/344, 10/388, 14/432, 18/476 — and to within eight hundredths of a second. The hoisted spelling is the sharing emulated in source and therefore a ceiling, and the as-written spelling reaches it because a replacement's residual group is bound at item level. Bound inside the candidate's block, the as-written row grows as `n² + 2`.
+/// `cargo xbench report combinator_sharing_measurements` reads them: each figure's readings by group, and what each sitting was taken under.
 ///
 /// # Where the time goes
 ///
@@ -103,24 +95,9 @@ struct Door {
 ///
 /// `cargo xbench measure scrutinee_refinement_measurements` takes it: `<named>, <consumed> at <definitions>`, a compile's time, every door at every size turned round-robin five times after an untimed round, and `/outcome/<outcome>`, a figure of one, `compiled` or the first line of the refusal.
 ///
-/// # What it last printed
+/// # Its records
 ///
-/// Timed, taken on top of `9c543476a` on `x86_64-unknown-linux-gnu`, in the test profile, at a load average under two: five rounds, each over every door and size so no row is read on a warmer machine than another. Median of the five, with their span. The 0.06 s every row shares is the prelude's restore and a trivial compile, so the columns are read against each other.
-///
-/// | definitions | applied | scrutinized | proved | numeric, proved |
-/// | --- | --- | --- | --- | --- |
-/// | 8 | 0.06 s [0.06–0.11] | 0.06 s [0.06–0.06] | 0.07 s [0.07–0.07] | 0.07 s [0.07–0.08] |
-/// | 10 | 0.06 s [0.06–0.06] | 0.06 s [0.06–0.06] | 0.08 s [0.08–0.08] | 0.08 s [0.08–0.08] |
-/// | 12 | 0.06 s [0.06–0.06] | 0.06 s [0.06–0.07] | 0.08 s [0.08–0.08] | 0.09 s [0.09–0.09] |
-/// | 13 | 0.06 s [0.06–0.06] | 0.06 s [0.06–0.07] | 0.08 s [0.08–0.08] | 0.10 s [0.10–0.10] |
-/// | 14 | 0.06 s [0.06–0.06] | 0.07 s [0.07–0.07] | 0.08 s [0.08–0.08] | 0.11 s [0.11–0.11] |
-/// | 20 | 0.07 s [0.07–0.07] | 0.07 s [0.07–0.07] | 0.10 s [0.10–0.10] | 0.18 s [0.18–0.18] |
-///
-/// **Every door but the numeric one is flat.** The applied and scrutinized doors grow by a hundredth of a second from eight definitions to twenty and the proved door by three hundredths; the numeric door grows from 0.07 s to 0.18 s, 0.11 s over the applied door at twenty. The `once` and `closed` scrutinized columns read within a hundredth of the one shown and are omitted. `a_ten_definition_numeric_web_compiles`, `a_proved_web_of_twenty_definitions_compiles` and `a_symbolic_web_compares_against_zero_in_linear_units` are the fixtures that refuse a regression.
-///
-/// Each door is held where it stands for a reason of its own. A case refinement is keyed at the written spelling, so keying never demands the scrutinee's reduction — a web nothing reduces is flat however it fans out, and what makes a reduction unaffordable is a subject that mentions a binder, the term `Memos::storable` may not remember and the closed machine may not take. `&&` and `||` reduce their right operand only behind a literal left, and the closed machine keeps a global argument as a name rather than substituting its value, both in `curios-core`, which the two checkers share. A comparison of two `Bool` webs is put to the decision diagram, which reads a term once, so the proved door costs its web's graph. A `Nat` fold must read its right operand for its identity laws, so its web's weak-head form is its normalization: it stays within a fifth of a second at twenty definitions because the certifier's `Memos` keeps a local-bearing reduct while the equations in force stand, the elaborator's cache admits a universe metavariable, the certifier's `capture` is memoized on node and depth, `Term::eq` remembers the pairs it has entered, and a product of two symbolic sums is its own weak-head form, distributed only where a value is asked for.
-///
-/// The programs end in a plain `/std/print("ok")` rather than a runtime-tainted parse, so these wall clocks are the two checkers and nothing downstream of them.
+/// `cargo xbench report scrutinee_refinement_measurements` reads them: each figure's readings by group, and what each sitting was taken under.
 pub fn scrutinee_refinement_measurements() {
     const SIZES: [usize; 6] = [8, 10, 12, 13, 14, 20];
 
