@@ -93,7 +93,7 @@ fn a_run_unasked_writes_no_map() {
 ///
 /// **A measurement is asked, and no build is.** A build script takes no argument, so nothing can ask one for a stream, and one that recorded for carrying its instrumentation would record every build; and a program of the build's own crate would put the recorder in the prelude's image key. The images it builds go to a directory of its own, removed when it is done: the ones the compiler embeds are the build script's.
 #[test]
-#[ignore = "measurement, mixed: files the prelude's build's stream and prints its summary"]
+#[ignore = "profile: files the prelude's build's stream for `cargo xtask profile prelude` to read, and no record"]
 fn prelude_build_profile() {
     let stream = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join(".artifacts")

@@ -1,4 +1,4 @@
-//! The harness a measurement names its figures through: each reading printed as a line of its record ([`read`]), the variants it compares turned round-robin after an untimed round ([`turn`]), and a phase of it run under the recorder with its instructions counted ([`phase`]), whose spans and samples are read as figures by [`read_span`] and [`read_sample`].
+//! The harness a measurement names its figures through: each reading printed as a line of its record ([`read`]), a time it took among them ([`read_elapsed`]), the variants it compares turned round-robin after an untimed round ([`turn`]), and a phase of it run under the recorder with its instructions counted ([`phase`]), whose spans and samples are read as figures by [`read_span`] and [`read_sample`].
 //!
 //! A measurement stays a test beside the code it measures; what it prints is its record's readings, which the runner files, an invocation of it a group.
 
@@ -14,6 +14,7 @@ use {
         cell::Cell,
         io::{self, Write},
         sync::{Arc, Mutex},
+        time::Duration,
     },
 };
 
@@ -30,6 +31,16 @@ pub fn read(name: &str, unit: Unit, size: Option<u64>, value: u64) {
         size,
         value,
     });
+}
+
+/// Print a reading of the figure `name`, the time `elapsed` in whole microseconds, at `size` where it is taken at one.
+pub fn read_elapsed(name: &str, size: Option<u64>, elapsed: Duration) {
+    read(name, Unit::Microseconds, size, microseconds(elapsed));
+}
+
+/// `elapsed` in whole microseconds, the unit a time is read in: what a microsecond holds past its last whole one is dropped, and a time past what `u64` holds reads as its largest.
+fn microseconds(elapsed: Duration) -> u64 {
+    u64::try_from(elapsed.as_micros()).unwrap_or(u64::MAX)
 }
 
 /// Print `line`, unless the round under way is untimed.
@@ -94,11 +105,7 @@ fn span_lines(summary: &Summary, size: Option<u64>) -> Vec<Line> {
         value,
     };
     let mut lines = vec![
-        line(
-            "",
-            Unit::Microseconds,
-            u64::try_from(summary.total.as_micros()).unwrap_or(u64::MAX),
-        ),
+        line("", Unit::Microseconds, microseconds(summary.total)),
         line("/calls", Unit::Count, summary.calls),
     ];
     if let Some(memory) = summary.memory {

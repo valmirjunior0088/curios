@@ -12,6 +12,7 @@ use {
     curios_pipeline::{Stage, compile_with_prelude},
     curios_profile::{Instructions, allocated_bytes, allocation_count, count_allocations},
     curios_surface::Entrypoint,
+    xbench::{Unit, read},
 };
 
 /// What one stage did: the instructions retired where the certifier counts them, the nodes its walks looked at, and its trips through the allocator with the bytes they took.
@@ -196,60 +197,23 @@ fn base(growth: Growth) -> usize {
     }
 }
 
-/// The growths every stage of which is linear today: each slope at most [`HELD_SLOPE`], and a stage that regresses fails here.
-const HELD: &[Growth] = &[
-    Growth::Definitions,
-    Growth::Strings,
-    Growth::List,
-    Growth::Parameters,
-    Growth::Tuple,
-    Growth::Constructors,
-    Growth::Methods,
-    Growth::Calls,
-    Growth::Parentheses,
-    Growth::Lets,
-    Growth::Arrow,
-    Growth::StringLiteral,
-    Growth::Statements,
-    Growth::Lambdas,
-    Growth::ChainedMatches,
-    Growth::ProductCommuted,
-    Growth::StructReaders,
+/// The growths whose looks grow past [`HELD_SLOPE`] today, which the workspace's growth entry holds (`documentation/roadmap/000-findings.md`): every other growth's looks are held to it in every stage.
+const UNHELD: &[Growth] = &[
     Growth::Values,
-    Growth::ComparedConstructions,
-    Growth::AliasReaders,
-    Growth::ArrowAliasReaders,
+    Growth::ProductCommuted,
+    Growth::ChainedMatches,
+    Growth::Lambdas,
+    Growth::Lets,
 ];
 
-/// The growths held through emission.
-const HELD_FRONT: &[Growth] = &[
-    Growth::LetPlus,
-    Growth::LetCall,
-    Growth::Functions,
-    Growth::ListOpen,
-    Growth::Arms,
-    Growth::ParametersSummed,
-    Growth::Fields,
-    Growth::RightPlus,
-    Growth::LeftPlus,
-    Growth::Matches,
-    Growth::Lists,
-    Growth::LetsSummed,
-    Growth::Loops,
-];
-
-/// The steepest slope a held growth's stage may show: two is linear and four quadratic, so three tells them apart with room on both sides — for a logarithm's factor, and for the instructions a run's drawn hash keys move in a stage that grows little.
+/// The steepest slope a growth's looks may show in a stage: two is linear and four quadratic, so three tells them apart with room on both sides, for a logarithm's factor.
 const HELD_SLOPE: f64 = 3.0;
 
-/// How each stage's work grows as a program grows along each axis an author grows one: the slope of instructions, node looks, allocations and bytes across three sizes, at the steepest stage of each.
+/// How each stage's work grows as a program grows along each axis an author grows one: every growth compiled at three sizes, each double the last, each stage's counts read as the harness reads a span's, its instructions `<growth>/<stage>/x<k>` at the `k`-fold size, its allocations `…/allocations`, the bytes they took `…/allocated` and its looks `…/looks`, each sized by its `n`.
 ///
-/// # How to take it
+/// `cargo xbench measure growth_slopes` takes it, alone in its invocation as the runner invokes it: the instruction counts open before Binaryen's and Wasmtime's pools start, so a stage before Binaryen is read on this thread alone and Binaryen and Cranelift with the pools' threads. Counted, so the figures hold on any machine as far as their units carry them; a growth reads no instructions where the certifier opens no count.
 ///
-/// ```sh
-/// cargo test --package curios --lib -- --ignored --nocapture growth_slopes
-/// ```
-///
-/// Alone in its invocation: the instruction counts open before Binaryen's and Wasmtime's pools start, so a stage before Binaryen is read on this thread alone and Binaryen and Cranelift with the pools' threads, and a measurement run beside it would share the allocator's counters. Counted, so the slopes hold on any machine; the instruction column reads `-` where the certifier opens no count.
+/// A slope is read off the figures, never filed: the second difference over the first across the three sizes, so what every compile pays whatever its size cancels, two linear and four quadratic. Of the four counts, looks alone repeat from run to run, so the measurement's own assert holds them alone to [`HELD_SLOPE`], in every stage of every growth but the [`UNHELD`] ones, a test of the suite holding them taking most of a minute; instructions, allocations and bytes move with the keys a run draws, and are read with their spans in the record, never bounded.
 ///
 /// # What it last printed
 ///
@@ -296,75 +260,47 @@ const HELD_SLOPE: f64 = 3.0;
 ///
 /// Held growths read past [`HELD_SLOPE`] here, in erasure, parsing, the ANF optimizer, the CPS lowering and elaboration, and the optimizer's bytes over functions and over additions nested either way, which the workspace's findings hold (`documentation/roadmap/000-findings.md`); the hash keys a run draws move some readings, a product commuted's instructions having read 3.21, 2.38 and 2.16 over one compiler.
 ///
-/// **Twenty-one growths are held in every stage**: definitions, strings, a list literal, a telescope's parameters, a tuple, a family's constructors, a concept's methods, nested calls, parentheses, `let`s, an arrow, a string literal, an `Io` block's statements, nested lambdas, matches each on the `let` before it, a product of two spines commuted, a structure's readers, a family's values, its constructions compared, and a tuple alias's and a function-type alias's readers, the ones [`HELD`] lists. **Thirteen more are held through emission**, the ones [`HELD_FRONT`] lists, self-tail loops among them, whose instructions grow at Binaryen. A family's defaulted matches and a codomain's sums are held in neither. One reading below [`HELD_SLOPE`] at the grid's sizes may still hold a square too small there to show, as nested list literals' bytes in `cps` do.
+/// **Five growths' looks grow past [`HELD_SLOPE`] today**, the [`UNHELD`] ones: a family's values, a product of two spines commuted, `let`s and nested lambdas at erasure, and matches each on the `let` before it at elaboration; every other growth's looks are held in every stage. One reading below [`HELD_SLOPE`] at the grid's sizes may still hold a square too small there to show.
 #[test]
-#[ignore = "measurement, counted: run by hand, alone in its invocation"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn growth_slopes() {
     let counters = Counters::open();
-    let mut regressed = Vec::new();
-    let front = STAGES
-        .iter()
-        .position(|stage| *stage == "binaryen")
-        .expect("Binaryen is a stage");
+    let mut grew = Vec::new();
 
-    println!("| growth | n | instructions | looks | allocations | bytes |");
-    println!("| --- | --- | --- | --- | --- | --- |");
     for growth in Growth::ALL {
         let base = base(growth);
         // Compiled once uncounted first: the prelude's modules are restored where a compile first reads them, once a process, so the smallest size would otherwise carry its growth's first restores and steepen its slope.
         counted(&grown(growth, base), &Counters::default());
-        let counts =
-            [base, base * 2, base * 4].map(|size| counted(&grown(growth, size), &counters));
-        let shown = |steepest: Option<(f64, &str)>| match steepest {
-            Some((slope, stage)) => format!("{slope:.2} {stage}"),
-            None => "-".to_string(),
-        };
-        let columns = |stages: usize| {
-            [
-                (
-                    "instructions",
-                    steepest(&counts, stages, |count| count.instructions),
-                ),
-                (
-                    "looks",
-                    steepest(&counts, stages, |count| Some(count.looks)),
-                ),
-                (
-                    "allocations",
-                    steepest(&counts, stages, |count| Some(count.allocations)),
-                ),
-                (
-                    "bytes",
-                    steepest(&counts, stages, |count| Some(count.bytes)),
-                ),
-            ]
-        };
-        let every = columns(STAGES.len());
-        let [instructions, looks, allocations, bytes] = every.map(|(_, steepest)| steepest);
-        println!(
-            "| {growth:?} | {base} | {} | {} | {} | {} |",
-            shown(instructions),
-            shown(looks),
-            shown(allocations),
-            shown(bytes),
-        );
+        let sizes = [base, base * 2, base * 4];
+        let counts = sizes.map(|size| counted(&grown(growth, size), &counters));
 
-        let held = match (HELD.contains(&growth), HELD_FRONT.contains(&growth)) {
-            (true, _) => every,
-            (false, true) => columns(front),
-            (false, false) => continue,
-        };
-        for (column, steepest) in held {
-            if let Some((slope, stage)) = steepest
-                && slope > HELD_SLOPE
-            {
-                regressed.push(format!("{growth:?}: {column} at {stage} grows {slope:.2}"));
+        for ((multiple, size), stages) in [1, 2, 4].into_iter().zip(sizes).zip(&counts) {
+            for (stage, count) in STAGES.iter().zip(stages) {
+                let name = format!("{growth:?}/{stage}/x{multiple}");
+                let size = Some(size as u64);
+                if let Some(instructions) = count.instructions {
+                    read(&name, Unit::Instructions, size, instructions);
+                }
+                read(
+                    &format!("{name}/allocations"),
+                    Unit::Allocations,
+                    size,
+                    count.allocations,
+                );
+                read(&format!("{name}/allocated"), Unit::Bytes, size, count.bytes);
+                read(&format!("{name}/looks"), Unit::Count, size, count.looks);
             }
+        }
+
+        if UNHELD.contains(&growth) {
+            continue;
+        }
+        if let Some((slope, stage)) = steepest(&counts, STAGES.len(), |count| Some(count.looks))
+            && slope > HELD_SLOPE
+        {
+            grew.push(format!("{growth:?}: looks at {stage} grow {slope:.2}"));
         }
     }
 
-    assert!(
-        regressed.is_empty(),
-        "held growths that grew: {regressed:#?}"
-    );
+    assert!(grew.is_empty(), "held growths that grew: {grew:#?}");
 }

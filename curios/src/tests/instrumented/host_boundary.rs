@@ -14,6 +14,7 @@ use {
         path::Path,
         time::{SystemTime, UNIX_EPOCH},
     },
+    xbench::{Unit, read, read_elapsed, turn},
 };
 
 /// Standard input copied to standard output a chunk at a time, through the `Io` read and write the standard streams serve.
@@ -55,11 +56,7 @@ fn assert_stream(io: &MockIo) {
 ///
 /// ## Workloads and reproduction
 ///
-/// ```text
-/// cargo test --release --package curios --lib -- --ignored --nocapture host_boundary_measurements --test-threads=1
-/// ```
-///
-/// The instrument runs one warmup (sample 0) and five measured samples per workload, in order: `monad_io`, then `stream_copy`, then `tui`. Each sample compiles the source afresh against the embedded prelude and executes it once with a fresh scripted host. There is no package-cache lookup. Rust compilation and prelude construction finish before the instrument starts and are excluded.
+/// `cargo xbench measure host_boundary_measurements` takes it, a group an invocation: an untimed round of each workload, then five rounds, the workloads turned round-robin. Each sample compiles the source afresh against the embedded prelude and executes it once with a fresh scripted host. There is no package-cache lookup. Rust compilation and prelude construction finish before the measurement starts and are excluded. Its figures are `<workload>/compile` and `<workload>/run`, each its span's time, and `<workload>/output`, the bytes the workload wrote.
 ///
 /// - **`monad_io`:** the existing `programs/monad_io.crs` corpus program, with the argument `10000`, requiring stdout `30000\n` and no stderr. It measures the `Io` carrier's per-`bind` cost, which every reading of a reply adds to.
 /// - **`stream_copy`:** 2,000 chunks of 256 bytes on standard input, copied to standard output through `Io/read` and `Io/write`, requiring the output to equal the input and no stderr. The scripted host answers `would_block` between chunks, so every chunk costs a read that blocks, a poll, a read that succeeds and a write.
@@ -67,7 +64,7 @@ fn assert_stream(io: &MockIo) {
 ///
 /// `curios_profile::trace` listens during compilation and execution, writing one stream per sample into a timestamped directory under `curios/.artifacts/host_boundary/`. Each stream is read with `curios profile`. The `host_boundary_compile` span includes parsing, all compiler stages, Binaryen and Cranelift precompilation. The `host_boundary_run` span includes deserialization, instantiation and execution. Host setup, output assertions and folding are outside those spans. All span boundaries must close. The allocator counts while the trace listens, so each boundary of a stream carries what its thread had taken there and what the whole test process held, since counting began: a span is charged its own thread's allocations, and none of Wasmtime's, Binaryen's or Cranelift's threads'.
 ///
-/// These are wall-clock timings under built-in tracing, with its overhead included. The process is not CPU-pinned; its CPU governor and boost settings are recorded with the reading. One warmup does not eliminate machine noise; retain the individual samples, use the same workload and profiling configuration for the comparison, and investigate changes before drawing conclusions.
+/// These are wall-clock timings under built-in tracing, with its overhead included.
 ///
 /// ## Last reading
 ///
@@ -104,7 +101,7 @@ fn assert_stream(io: &MockIo) {
 ///
 /// All 18 captures pass the behavior and closed-span assertions; each workload produces the same output length in every sample. The Tui assertions include terminal restoration and all three screen clears.
 #[test]
-#[ignore = "measurement, timed: captures compilation and execution costs"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn host_boundary_measurements() {
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -115,58 +112,72 @@ fn host_boundary_measurements() {
         .join(stamp.to_string());
     create_dir_all(&directory).expect("capture directory");
     println!("captures: {}", directory.display());
-    println!("workload\tsample\tcompile_ms\trun_ms\toutput_bytes");
 
-    for (workload, source) in [
-        (
+    let (mut monads, mut streams, mut tuis) = (0, 0, 0);
+    let mut monad = || {
+        sampled(
+            &directory,
             "monad_io",
             include_str!("../../../../programs/monad_io.crs"),
-        ),
-        ("stream_copy", STREAM_COPY),
-        ("tui", LISTING_PROGRAM),
-    ] {
-        for sample in 0..=5 {
-            let (host, io) = match workload {
-                "monad_io" => MockHost::builder().args(["program", "10000"]).build(),
-                "stream_copy" => stream_host(),
-                _ => listing_host(),
-            };
-            let path = directory.join(format!("{workload}-{sample}.pftrace"));
-            let sink = BufWriter::new(File::create(&path).expect("capture file"));
-            trace(Destination::Stream(Box::new(sink)), TALLIES, || {
-                let compiled = curios_common::profile!("host_boundary_compile" => compile(source))
-                    .expect("workload compiles");
-                let status = curios_common::profile!("host_boundary_run" => compiled.run(host, ForeignBindings::empty()))
-                    .expect("workload runs");
-                assert_eq!(status, 0);
-            })
-            .expect("capture opens");
-            match workload {
-                "monad_io" => {
-                    assert_eq!(io.output(), b"30000\n");
-                    assert!(io.errors().is_empty());
-                }
-                "stream_copy" => assert_stream(&io),
-                _ => assert_listing(&io),
-            }
+            monads,
+        );
+        monads += 1;
+    };
+    let mut stream = || {
+        sampled(&directory, "stream_copy", STREAM_COPY, streams);
+        streams += 1;
+    };
+    let mut tui = || {
+        sampled(&directory, "tui", LISTING_PROGRAM, tuis);
+        tuis += 1;
+    };
+    turn(5, &mut [&mut monad, &mut stream, &mut tui]);
+}
 
-            let report = fold(BufReader::new(File::open(&path).unwrap())).expect("capture folds");
-            assert!(report.open.is_empty(), "every span closed");
-            let millis = |name| {
-                let summary = report
-                    .summaries
-                    .iter()
-                    .find(|row| row.name == name)
-                    .unwrap();
-                assert_eq!(summary.calls, 1);
-                summary.total.as_secs_f64() * 1_000.0
-            };
-            println!(
-                "{workload}\t{sample}\t{:.3}\t{:.3}\t{}",
-                millis("host_boundary_compile"),
-                millis("host_boundary_run"),
-                io.output().len(),
-            );
+/// One sample of `workload`, the `sample`th: compiled and run under the recorder, its stream filed in `directory`, and its compile, its run and its output read as its figures.
+fn sampled(directory: &Path, workload: &str, source: &str, sample: usize) {
+    let (host, io) = match workload {
+        "monad_io" => MockHost::builder().args(["program", "10000"]).build(),
+        "stream_copy" => stream_host(),
+        _ => listing_host(),
+    };
+    let path = directory.join(format!("{workload}-{sample}.pftrace"));
+    let sink = BufWriter::new(File::create(&path).expect("capture file"));
+    trace(Destination::Stream(Box::new(sink)), TALLIES, || {
+        let compiled = curios_common::profile!("host_boundary_compile" => compile(source))
+            .expect("workload compiles");
+        let status = curios_common::profile!("host_boundary_run" => compiled.run(host, ForeignBindings::empty()))
+            .expect("workload runs");
+        assert_eq!(status, 0);
+    })
+    .expect("capture opens");
+    match workload {
+        "monad_io" => {
+            assert_eq!(io.output(), b"30000\n");
+            assert!(io.errors().is_empty());
         }
+        "stream_copy" => assert_stream(&io),
+        _ => assert_listing(&io),
     }
+
+    let report = fold(BufReader::new(File::open(&path).unwrap())).expect("capture folds");
+    assert!(report.open.is_empty(), "every span closed");
+    for (span, figure) in [
+        ("host_boundary_compile", "compile"),
+        ("host_boundary_run", "run"),
+    ] {
+        let summary = report
+            .summaries
+            .iter()
+            .find(|row| row.name == span)
+            .unwrap();
+        assert_eq!(summary.calls, 1);
+        read_elapsed(&format!("{workload}/{figure}"), None, summary.total);
+    }
+    read(
+        &format!("{workload}/output"),
+        Unit::Count,
+        None,
+        io.output().len() as u64,
+    );
 }

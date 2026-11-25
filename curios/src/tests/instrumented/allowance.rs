@@ -9,13 +9,12 @@ use {
     curios_surface::WrittenIn,
     curios_wonder::{Origin, Subject, diagnostics},
     std::fs::{create_dir_all, read_to_string},
+    xbench::{Unit, read},
 };
 
 /// **Every site the four corpora hold is classified inside [`LINT_ALLOWANCE`]**: the programs under `programs/`, the examples of `documentation/language.md`, and `/std`, its library and its test modules — compiled whole, since a fold handed no cabinet declines the archived unit as a baseline — each asked about as `curios lint` asks, under a stream filed at `curios/.artifacts/allowance/`. A classification that ran out would answer no class and leave its site unreported, so the allowance is the least power of ten above the largest figure here.
 ///
-/// cargo test --package curios --lib -- --ignored --nocapture classification_allowance_measurements
-///
-/// Counted, in units of the elaborator's budget, taken on top of `62915760a`: `classify` is what reducing a site's type to its class spent, `column` what inferring the type of a column a match pattern's `_` stands at spent.
+/// `cargo xbench measure classification_allowance_measurements` takes it: `<sample>/sites` how many sites a sample observed, and `<sample>/most` the most units one spent. Counted, in units of the elaborator's budget, taken on top of `62915760a`: `classify` is what reducing a site's type to its class spent, `column` what inferring the type of a column a match pattern's `_` stands at spent.
 ///
 /// | sample | sites | units at most |
 /// | --- | ---: | ---: |
@@ -24,7 +23,7 @@ use {
 ///
 /// **Both stay under a seventh of the allowance, and the largest is a column's**, whose type is inferred as the matrix reads it, where a site's class reads a type the elaborator already holds.
 #[test]
-#[ignore = "measurement, counted: run by hand, alone in its invocation"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn classification_allowance_measurements() {
     let directory = workspace().join("curios/.artifacts/allowance");
     create_dir_all(&directory).expect("capture directory");
@@ -80,7 +79,8 @@ fn classification_allowance_measurements() {
             .fold((0, 0), |(count, max), sample| {
                 (count + sample.count, max.max(sample.max))
             });
-        println!("{name:<16} {count:>8} sites {max:>10} units at most");
+        read(&format!("{name}/sites"), Unit::Count, None, count);
+        read(&format!("{name}/most"), Unit::Count, None, max);
         assert!(
             max < LINT_ALLOWANCE,
             "{name} spent {max} of the allowance {LINT_ALLOWANCE}"

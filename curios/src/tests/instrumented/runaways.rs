@@ -14,6 +14,7 @@ use {
         path::Path,
         time::{SystemTime, UNIX_EPOCH},
     },
+    xbench::{Unit, read},
 };
 
 /// What one checker's heaviest judgment of a program spent and looked at.
@@ -40,14 +41,20 @@ impl Heaviest {
         })
     }
 
-    fn row(checker: Option<&Self>) -> String {
-        match checker {
-            Some(Self { units, looks }) => format!(
-                "{units:>10} {looks:>12} {:>7.1}",
-                *looks as f64 / (*units).max(1) as f64
-            ),
-            None => format!("{:>10} {:>12} {:>7}", "-", "-", "-"),
-        }
+    /// Read what `checker`'s heaviest judgment of `runaway` under `budget` spent and looked at as its figures, `<runaway> at <budget>/<checker>/units` and `/looks`, sized by the budget.
+    fn read(&self, runaway: &str, checker: &str, budget: u64) {
+        read(
+            &format!("{runaway} at {budget}/{checker}/units"),
+            Unit::Count,
+            Some(budget),
+            self.units,
+        );
+        read(
+            &format!("{runaway} at {budget}/{checker}/looks"),
+            Unit::Count,
+            Some(budget),
+            self.looks,
+        );
     }
 }
 
@@ -87,13 +94,7 @@ fn cost(budget: u64, source: &str, stream: &Path) -> Cost {
 
 /// What every runaway costs each checker at two budgets.
 ///
-/// # How to take it
-///
-/// ```sh
-/// cargo test --package curios --lib -- --ignored --nocapture runaway_measurements
-/// ```
-///
-/// Counted, so the figures hold on any machine. The looks are the test profile's: a build with debug assertions asks every peel of a pair again, to hold their answers to each other (`curios-core`'s `peel_spine`), so a row whose comparisons peel reads fewer under the release compiler. Units are what a checker's heaviest judgment of the program spent of its budget, and looks how many times a term handed out its node while it was judged (`curios_core::looks`), both read off the stream the compilation files, kept under `curios/.artifacts/runaways/`. The verdict is the compilation's: `apart` for a mismatch, `budget` where the elaborator's budget ended it, `certifier` where the elaborator accepted and the certifier refused, `accepted` where both held it. The certifier judges a program only where the elaborator accepted it, and files what a judgment cost it where it begins the next, which a refused one never reaches.
+/// `cargo xbench measure runaway_measurements` takes it, in release. Counted, so the figures hold on any machine. Units are what a checker's heaviest judgment of the program spent of its budget, and looks how many times a term handed out its node while it was judged (`curios_core::looks`), both read off the stream the compilation files, kept under `curios/.artifacts/runaways/`. The verdict is the compilation's, a figure `<runaway> at <budget>/verdict/<verdict>` of one: `apart` for a mismatch, `budget` where the elaborator's budget ended it, `certifier` where the elaborator accepted and the certifier refused, `accepted` where both held it. The certifier judges a program only where the elaborator accepted it, and files what a judgment cost it where it begins the next, which a refused one never reaches.
 ///
 /// **What to read.** A row the budget ends spends the whole of it, and its looks say what a unit bought: looks that double with the budget buy the same for every unit, and looks that more than double buy more the longer the row runs, which is a place a unit is not yet a bound. A row answered inside the smaller budget reads the same at both, and one answered inside the larger alone reads there what its answer cost.
 ///
@@ -132,7 +133,7 @@ fn cost(budget: u64, source: &str, stream: &Path) -> Cost {
 ///
 /// The classes read three nodes a unit and answer inside the smaller budget: every fold asks again which of its atoms are one, a question a unit at least, and one the elaborator has answered since it last wrote is answered for that unit alone (`same_uncommitted_inside`, `curios-elab/src/convert.rs`), so a unit buys a comparison only where the question is new. The stacks cost the elaborator its 44 294 units at near eight nodes each and the certifier 20 740 at twenty-two, and both checkers hold them inside the smaller budget. The walk costs the elaborator 108 224 units at near six nodes each and the certifier 44 196 at eleven, which reduces its claim a step of the recursion at a time, and the rounds cost the certifier 3 485 at one. A row's looks a unit count what its units buy and what readers that charge nothing read beside them, a key consed to a table's canonical node among them, so they move with those readers where the units stand still.
 #[test]
-#[ignore = "measurement, counted: reports what a runaway costs at two budgets rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn runaway_measurements() {
     let rows = [
         ("spin", Runaway::Spin, 25_000),
@@ -159,10 +160,6 @@ fn runaway_measurements() {
     create_dir_all(&directory).expect("capture directory");
     println!("captures: {}", directory.display());
 
-    println!(
-        "{:<14} {:>9} {:<9} {:>10} {:>12} {:>7}   {:>10} {:>12} {:>7}",
-        "runaway", "budget", "verdict", "units", "looks", "a unit", "certifier", "looks", "a unit"
-    );
     for (label, shape, budget) in rows {
         for budget in [budget, 2 * budget] {
             let stream = directory.join(format!(
@@ -175,11 +172,17 @@ fn runaway_measurements() {
                 certifier,
             } = cost(budget, &runaway(shape), &stream);
 
-            println!(
-                "{label:<14} {budget:>9} {verdict:<9} {}   {}",
-                Heaviest::row(elaborator.as_ref()),
-                Heaviest::row(certifier.as_ref())
+            read(
+                &format!("{label} at {budget}/verdict/{verdict}"),
+                Unit::Count,
+                Some(budget),
+                1,
             );
+            for (checker, heaviest) in [("elaborator", elaborator), ("certifier", certifier)] {
+                if let Some(heaviest) = heaviest {
+                    heaviest.read(label, checker, budget);
+                }
+            }
         }
     }
 }

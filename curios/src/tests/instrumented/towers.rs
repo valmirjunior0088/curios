@@ -7,6 +7,7 @@ use {
     curios_module::RootSource,
     curios_pipeline::test_support::*,
     curios_surface::Entrypoint,
+    xbench::{Unit, read},
 };
 
 /// What one checker made of a tower: its verdict, what its heaviest declaration spent where it reached one, and the nodes its walks looked at.
@@ -17,13 +18,19 @@ struct Cost {
 }
 
 impl Cost {
-    fn row(&self) -> String {
-        let units = match self.units {
-            Some(units) => units.to_string(),
-            None => "-".to_string(),
-        };
-
-        format!("{:<9} {units:>10} {:>12}", self.verdict, self.looks)
+    /// Read what `checker` made of `tower` at `lines` as its figures: whether it accepted, what its heaviest declaration spent where it reached one, and its looks — each named `<tower> at <lines>/<checker>/<figure>`, sized by the tower's lines.
+    fn read(&self, tower: &str, checker: &str, lines: u64) {
+        let figure = |what: &str| format!("{tower} at {lines}/{checker}/{what}");
+        read(
+            &figure("accepted"),
+            Unit::Count,
+            Some(lines),
+            u64::from(self.verdict == "accepted"),
+        );
+        if let Some(units) = self.units {
+            read(&figure("units"), Unit::Count, Some(lines), units);
+        }
+        read(&figure("looks"), Unit::Count, Some(lines), self.looks);
     }
 }
 
@@ -70,13 +77,7 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
 
 /// What every tower costs each checker at two heights.
 ///
-/// # How to take it
-///
-/// ```sh
-/// cargo test --package curios --lib -- --ignored --nocapture tower_measurements
-/// ```
-///
-/// Counted, so the figures hold on any machine and in either profile. Units are what the heaviest declaration spent of its budget; looks are how many times a term handed out its node while the checker ran (`curios_core::looks`) — the lowering, elaboration and erasure on one side, the certifier's walk on the other. A checker that walks a tower's graph adds four lines' worth across four lines, as the chain's rows do; one that walks it once per path multiplies by sixteen.
+/// `cargo xbench measure tower_measurements` takes it. Counted, so the figures hold on any machine. Units are what the heaviest declaration spent of its budget; looks are how many times a term handed out its node while the checker ran (`curios_core::looks`) — the lowering, elaboration and erasure on one side, the certifier's walk on the other. A checker that walks a tower's graph adds four lines' worth across four lines, as the chain's rows do; one that walks it once per path multiplies by sixteen.
 ///
 /// Looks are the column a walk cannot hide from. A hit on a remembered reduct is free, so a walk that only reads — the sort of a type — spends no unit however many paths it takes, and shows in looks alone.
 ///
@@ -129,7 +130,7 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
 ///
 /// **No row multiplies.** A tower a checker walked once per path would read sixteen times the looks at sixteen lines that it reads at twelve, where a walk that visits each node once reads at most a third more. Every row but one reads under 27 per cent more, the most the arms in the certifier, 12 832 looks and then 16 228. The bounded tower, whose proof folds comparisons over every line, reads 166 311 and then 232 501 in the elaborator and 104 747 and then 150 467 in the certifier: more than its lines add, though far short of what a walk per path reads: its proof reduces each line's comparison over the lines before it, a square its units charge in step with what it costs, which is reduction's (`documentation/design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md`). A row's units are its heaviest declaration's: they stand still across the two heights in every row but four, and in those move by under forty for the aliases, the arrows and the two towers, and by 13 452 in the elaborator and 13 352 in the certifier for the bounded tower, whose proof reduces each line's comparison.
 #[test]
-#[ignore = "measurement, counted: reports what a tower costs each checker rather than asserting"]
+#[ignore = "measurement: taken by cargo xbench measure"]
 fn tower_measurements() {
     let shapes = [
         ("chain", Shape::Chain(Stands::Function)),
@@ -157,19 +158,13 @@ fn tower_measurements() {
     // The prelude is restored once per thread, and its restore is not a tower's cost.
     costs(&tower(Shape::Chain(Stands::Function), 1));
 
-    println!(
-        "{:<20} {:<5} {:<9} {:>10} {:>12}   {:<9} {:>10} {:>12}",
-        "tower", "lines", "elaborator", "units", "looks", "certifier", "units", "looks"
-    );
     for (label, shape) in shapes {
         for lines in [12usize, 16] {
             let (elaborator, certifier) = costs(&tower(shape, lines));
-            let certifier = match certifier {
-                Some(certifier) => certifier.row(),
-                None => "-".to_string(),
-            };
-
-            println!("{label:<20} {lines:<5} {}   {certifier}", elaborator.row());
+            elaborator.read(label, "elaborator", lines as u64);
+            if let Some(certifier) = certifier {
+                certifier.read(label, "certifier", lines as u64);
+            }
         }
     }
 }

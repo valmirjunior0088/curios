@@ -65,6 +65,14 @@ fn a_span_reads_as_the_figures_its_fold_states() {
     );
 }
 
+/// A time reads in whole microseconds, a part of one dropped, and one past what `u64` holds as its largest.
+#[test]
+fn a_time_reads_as_its_whole_microseconds() {
+    assert_eq!(microseconds(Duration::from_nanos(1_999)), 1);
+    assert_eq!(microseconds(Duration::from_millis(1_909)), 1_909_000);
+    assert_eq!(microseconds(Duration::MAX), u64::MAX);
+}
+
 /// A sample's figures are what it observed in total and how many times.
 #[test]
 fn a_sample_reads_as_its_total_and_its_observations() {
