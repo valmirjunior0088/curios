@@ -38,7 +38,9 @@ fn a_misspelled_name_is_refused_rather_than_answered() {
 
     assert!(
         refused.contains("Cli/Has(")
-            && refused.contains(r#"which reduces to `Cli/Unknown("prot", Option/some("port"), ["port"])`"#),
+            && refused.contains(
+                r#"which reduces to `Cli/Unknown("prot", Option/some("port"), ["port"])`"#
+            ),
         "the refusal names the bound nothing discharged and what it came to:\n{refused}"
     );
 }
@@ -53,7 +55,8 @@ fn a_misspelled_command_is_refused_rather_than_answered() {
 
     assert!(
         refused.contains("Cli/HasCommand(")
-            && refused.contains(r#"which reduces to `Cli/Unknown("ad", Option/some("add"), ["add"])`"#),
+            && refused
+                .contains(r#"which reduces to `Cli/Unknown("ad", Option/some("add"), ["add"])`"#),
         "{refused}"
     );
 }

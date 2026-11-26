@@ -1617,5 +1617,8 @@ fn an_undischarged_bound_is_reported_with_its_reducts_arguments_evaluated() {
         "#,
     );
 
-    assert!(report.contains("which reduces to `Missing([2, 3])`"), "{report}");
+    assert!(
+        report.contains("which reduces to `Missing([2, 3])`"),
+        "{report}"
+    );
 }
