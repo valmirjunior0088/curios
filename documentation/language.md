@@ -1293,7 +1293,7 @@ satisfy (@A: Type, use Show(A)) => Show(Bag(A)) {
 
 A witness is keyed by its concept and by the head of each of the concept's arguments, which its signature spells: an inductive, a structure, an intrinsic type or a tuple type's shape, applied or not, or a family applied in part, written as a lambda, `(A: Type) => State(S, A)`. A function type has no key. One witness at most stands at a key in a whole program, declared where its concept or a head of its key is, and its `use` premises are smaller than its own application. Why: [Concepts resolve with global coherence](design/surface/concepts-resolve-with-global-coherence.md).
 
-Witnesses that resolve through one another are one group, joined by `and` ([Recursive groups](#recursive-groups)). A lone witness may resolve through its own key with nothing said. A method written by another method of its witness — `le(a, b) = Bool/not(b < a)` — reads that method alone, so only a method that reaches itself makes its witness recursive.
+Witnesses that resolve through one another are one group, joined by `and` ([Recursive groups](#recursive-groups)). A lone witness may resolve through its own key with nothing said, and its superclasses read through that key as the registered witnesses once its recursion is known to descend, as a group's members' do ([Concepts resolve with global coherence](design/surface/concepts-resolve-with-global-coherence.md)). A method written by another method of its witness — `le(a, b) = Bool/not(b < a)` — reads that method alone, so only a method that reaches itself makes its witness recursive.
 
 ```crs
 use /std/{Nat, Show, Str};
