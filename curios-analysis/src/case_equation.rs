@@ -13,7 +13,7 @@ use {
     curios_core::{
         Apply, Atom, Bound, Cases, Cost, Declaration, Free, Func, Global, Instance, Intrinsic,
         Keys, Nat, ReduceError, Reducer, Subterm, Telescope, Term, Variant, bool_value,
-        is_bool_connective,
+        is_bool_connective, value_former,
     },
     std::{collections::HashMap, mem, slice},
 };
@@ -23,13 +23,15 @@ use {
 /// One number because the checkers answer the same occurrences at the same point only while they resolve the same spellings: the certifier's `resolved_spelling`, the elaborator's `spine_whnf` and its `open_until` all stop here.
 pub const RESOLVED_SPELLING_LAYERS: usize = 16;
 
-/// Whether an arm's case equation may be recorded under `spelling` — the scrutinee as the certifier is handed it, local definitions substituted, or a spelling a dispatch resolves it to: only where it mentions a local.
+/// Whether an arm's case equation may be recorded under `spelling` — the scrutinee as the certifier is handed it, local definitions substituted, or a spelling a dispatch resolves it to: only where it mentions a local and is no value former ([`value_former`]).
+///
+/// **An equation states what a stuck scrutinee is.** A constructor applied, a structure, a tuple or a type is its own case, which reduction reads off it, so an equation under one teaches nothing, and one whose value is its key would answer that key with itself for as long as the budget lasts: an inner match over a scrutinee an outer arm solved to a constructor with no fields, `T/a(A)` of a family with a parameter, is one.
 ///
 /// **The certifier's evaluation memos are why.** A local-free term's reduct is remembered for the whole declaration, so an equation about one would leave an entry resting on an equation the arm's exit retracts; a local-bearing term's entry is cleared with the equations in force. The rule costs nothing a program needs: a local-free scrutinee reduces to its case value rather than sticking, so an arm under one is either the arm reduction takes or dead.
 ///
 /// **Both checkers call it, and the elaborator on the certifier's spelling.** An equation one checker records and the other does not reads one arm two ways, and the arm is always a dead one: a proof the elaborator accepted there, under a guard over a top-level name, a global's projection, a local definition of a closed term or a dispatch whose method ignores its locals, is one the certifier refuses.
 pub fn records_case_equation(spelling: &Term) -> bool {
-    spelling.has_local_free()
+    spelling.has_local_free() && !value_former(spelling)
 }
 
 /// The tests a dispatch on `head` over `keys` is reached past at its catch-all, one a key: `head == key`, by its carrier's equality. Each is false wherever the catch-all is taken, at a literal no key names or, for a natural, at a successor floor past every key, so the catch-all is typed under each at `false`, as a lone guard's `false` arm is typed under its test.

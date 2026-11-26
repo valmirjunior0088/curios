@@ -75,6 +75,26 @@ fn a_struct_and_a_parameterized_family_order_fieldwise() {
     assert_eq!(run(source), b"lt gt eq lt ");
 }
 
+// A family with a parameter and a constructor of no fields derives its order: the derived laws match one value under another's arm, and a scrutinee an outer arm solved to `T/a(A)` is its own case, which records no equation, rather than an identity that answered itself until the certifier's budget ran out.
+#[test]
+fn a_parameterized_family_with_a_constructor_of_no_fields_derives_its_order() {
+    let source = r#"
+        use /std/{Nat, Str, Ord, Show, print};
+        use /std/ops/{Eql};
+        induct T(A: Type): pub Type | a() | b(A) end
+        satisfy (@A: Type, use Eql(A)) => Eql(T(A)) { .. }
+        satisfy (@A: Type, use Ord(A)) => Ord(T(A)) { .. }
+        let show(a: T(Nat), b: T(Nat)) -> Str = Str/concat(Show/show(Ord/ord(a, b)), " ");
+        let entry() -> /std/Io({}) =
+            let _ = print(show(T/a(), T/b(1)))!;
+            let _ = print(show(T/b(2), T/b(1)))!;
+            print(show(T/a(), T/a()));
+        entry()
+        "#;
+
+    assert_eq!(run(source), b"lt gt eq ");
+}
+
 // A family nested through a witness over `use Ord(A)` alone derives its order: `Box`'s witness builds its superclass from the `Eql` inside its premise and publishes how it applies that premise, so `Forest`'s, comparing its children through `Box`'s, descends.
 #[test]
 fn a_family_nested_through_a_witness_over_its_order_alone_derives_its_order() {

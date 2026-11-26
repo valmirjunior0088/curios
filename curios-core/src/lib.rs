@@ -125,7 +125,7 @@ pub use reduce::{
 mod machine;
 pub use machine::{
     AsideAnswers, ClosedHost, ClosedMemo, Demand, accelerable, lasting, reduce_closed,
-    weak_head_value,
+    value_former, weak_head_value,
 };
 
 mod names;

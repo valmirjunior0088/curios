@@ -222,18 +222,22 @@ pub fn accelerable(term: &Term) -> bool {
 ///
 /// **Its answer is the node.** The machine hands one back as the node it was given, and so does every host's reducer at its door, before any table is asked of it: a table would file it under itself, and asking conses it as a key, which walks a node a declaration has not met however shared it is. Lean 4's kernel stands the same easy cases outside its table (`whnf`'s "Do not cache easy cases"). A lambda is not one, its table entry recording its η probe, and nor is an intrinsic, which reduction may fold.
 pub fn weak_head_value(term: &Term) -> bool {
-    accelerable(term)
-        && matches!(
-            &**term,
-            Subterm::Sort(_)
-                | Subterm::FuncType(_)
-                | Subterm::TupleType(_)
-                | Subterm::Tuple(_)
-                | Subterm::InductType(_)
-                | Subterm::Variant(_)
-                | Subterm::StructType(_)
-                | Subterm::Struct(_)
-        )
+    accelerable(term) && value_former(term)
+}
+
+/// Whether `term` is a former reduction leaves as it is, whatever it mentions: a sort, a function, tuple, structure or inductive type, a tuple, a structure literal or a constructor applied. Its case is read off it, so no arm's equation is recorded under it (`curios-analysis`'s `records_case_equation`).
+pub fn value_former(term: &Term) -> bool {
+    matches!(
+        &**term,
+        Subterm::Sort(_)
+            | Subterm::FuncType(_)
+            | Subterm::TupleType(_)
+            | Subterm::Tuple(_)
+            | Subterm::InductType(_)
+            | Subterm::Variant(_)
+            | Subterm::StructType(_)
+            | Subterm::Struct(_)
+    )
 }
 
 /// How far the caller wants the focus taken: [`Demand::Whnf`] is the plain reducer contract, where a folded recursive application is its own normal form; [`Demand::Forced`] is the eliminator's, where a `rec` head unfolds because a value is required.
