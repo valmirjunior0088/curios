@@ -20,6 +20,10 @@ satisfy Hash(DateTime) {
     ..
 }
 
+satisfy Hash/Key(DateTime) {
+    ..
+}
+
 satisfy Spell(DateTime) {
     ..
 }

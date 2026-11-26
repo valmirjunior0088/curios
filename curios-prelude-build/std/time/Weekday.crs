@@ -26,6 +26,10 @@ satisfy Hash(Weekday) {
     ..
 }
 
+satisfy Hash/Key(Weekday) {
+    ..
+}
+
 satisfy Spell(Weekday) {
     ..
 }

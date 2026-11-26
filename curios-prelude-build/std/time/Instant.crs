@@ -19,6 +19,10 @@ satisfy Hash(Instant) {
     ..
 }
 
+satisfy Hash/Key(Instant) {
+    ..
+}
+
 --- The monotonic clock: seconds since a fixed origin, signed, and the nanoseconds past them.
 foreign clock_mono() -> {secs: Int, nanos: Nat};
 

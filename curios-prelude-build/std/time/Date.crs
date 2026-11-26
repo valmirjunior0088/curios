@@ -60,6 +60,10 @@ satisfy Hash(Date) {
     ..
 }
 
+satisfy Hash/Key(Date) {
+    ..
+}
+
 satisfy Spell(Date) {
     ..
 }

@@ -19,6 +19,10 @@ satisfy Hash(Duration) {
     ..
 }
 
+satisfy Hash/Key(Duration) {
+    ..
+}
+
 satisfy Add(Duration) {
     add(a, b) = Duration { nanos = a.nanos + b.nanos },
 }

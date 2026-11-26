@@ -45,3 +45,7 @@ satisfy Ord(Rounding) {
 satisfy Hash(Rounding) {
     ..
 }
+
+satisfy Hash/Key(Rounding) {
+    ..
+}

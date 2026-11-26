@@ -24,6 +24,10 @@ satisfy Hash(Offset) {
     ..
 }
 
+satisfy Hash/Key(Offset) {
+    ..
+}
+
 satisfy Spell(Offset) {
     ..
 }

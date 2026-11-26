@@ -1,5 +1,5 @@
--- The calendar under its proofs: a day count and a date are one, leap days fall where the Gregorian calendar puts them, a date outside it is no date, and a moment crosses to its date and time at an offset and back.
-use /std/{Bool, Nat, Int, List, Option, Eq, Test};
+-- The calendar under its proofs: a day count and a date are one, leap days fall where the Gregorian calendar puts them, a date outside it is no date, a moment crosses to its date and time at an offset and back, and a date keys a map in its order.
+use /std/{Bool, Nat, Int, List, Option, Eq, Map, Test};
 use /std/time/{Timestamp, Duration, Date, Time, DateTime, Month, Weekday, Offset, OffsetDateTime};
 
 -- The date a day count names, as its fields.
@@ -129,6 +129,12 @@ test every_day_of_an_era_follows_the_one_before_and_reads_back_its_count =
             let n = Nat/to_int(i);
             let d = Date/of_days(n);
             Date/to_days(d) == n && follows(Date/of_days(n - +1), d)));
+
+-- A date's key is derived beside its order and encoding, so a map of dates walks them in date order, by year, then month, then day, whatever order they went in.
+test dates_key_a_map_in_date_order =
+    let m =
+        Map/of_list([(Date/of_days(+400), "c"), (Date/of_days(-3), "a"), (Date/of_days(+31), "b")]);
+    Test/equal(Map/values(m), ["a", "b", "c"]);
 
 -- Claims the types hold: the absolute layer's laws are the count's own, and closed dates are decided where they are written.
 let _a_difference_undoes_an_addition(

@@ -19,6 +19,10 @@ satisfy Hash(Timestamp) {
     ..
 }
 
+satisfy Hash/Key(Timestamp) {
+    ..
+}
+
 --- As its constructor's call: `Timestamp/of_unix_nanos(+1500000000)`.
 satisfy Spell(Timestamp) {
     spell(t) = Fmt/render("Timestamp/of_unix_nanos(#)")(t.nanos),

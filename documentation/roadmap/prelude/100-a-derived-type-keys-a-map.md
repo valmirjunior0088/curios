@@ -4,7 +4,6 @@ Adopted on 2026-11-25: a type a program declares keys a `Map` and fills a `Set` 
 
 ## What is wrong today
 
-- **`/std`'s own types key no map.** `Hash/Key` derives ([A witness body may be written by the compiler](../../design/surface/a-witness-body-may-be-written-by-the-compiler.md)), and no type `/std` declares derives one: `Ordering`, `Flt/Rounding` and the `time` types derive their `Ord` and `Hash` and no key, so a `Date` keys no `Map`.
 - **No tuple keys a map.** `/std/Tuple` writes `Eql` and `Ord` for the tuples of zero to eight fields and no `Hash` (probed on standard input at `f76966ced`).
 
 ## Settled
@@ -15,7 +14,6 @@ Adopted on 2026-11-25: a type a program declares keys a `Map` and fills a `Set` 
 
 ## Stages
 
-6. **`/std`'s own types derive their keys**: `Ordering`, `Flt/Rounding` and the `time` types whose `Ord` and `Hash` are derived. Check: `/std` builds and a map keyed by `Date` walks in date order.
 7. **Tuples key maps.** `Hash` and the key written for the tuples of zero to eight fields. Check: a map keyed by a tuple of a `Str` and a `Nat` walks in its `Ord` order.
 
 ## What moves
@@ -24,4 +22,4 @@ The figures the change may move are the time `/std` takes to elaborate and the c
 
 ## Verification and retirement
 
-Check: a tuple keys a `Map` whose walk answers its `Ord` order, and so does a `Date`. Once it lands, `/std/Hash/Key`'s statement and the derivation's documentation hold the rules, the two left-out keys are filed in [`prelude/`'s findings](000-findings.md), and this file is deleted.
+Check: a tuple keys a `Map` whose walk answers its `Ord` order. Once it lands, `/std/Hash/Key`'s statement and the derivation's documentation hold the rules, the two left-out keys are filed in [`prelude/`'s findings](000-findings.md), and this file is deleted.

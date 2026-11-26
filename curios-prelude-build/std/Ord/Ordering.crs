@@ -90,3 +90,7 @@ satisfy Ord(Ordering) {
 satisfy Hash(Ordering) {
     ..
 }
+
+satisfy Hash/Key(Ordering) {
+    ..
+}

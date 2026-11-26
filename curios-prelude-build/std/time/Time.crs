@@ -30,6 +30,10 @@ satisfy Hash(Time) {
     ..
 }
 
+satisfy Hash/Key(Time) {
+    ..
+}
+
 satisfy Spell(Time) {
     ..
 }
