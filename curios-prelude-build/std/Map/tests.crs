@@ -1,5 +1,5 @@
 -- `Map`, the sixteen-way trie over `Hash/Key`-encoded bytes: lookups, the canonical shape, and the rewriting functions.
-use /std/{Str, Nat, Int, Bool, Byte, Bytes, List, Option, Eq, Hash, Ord, Ordering, Map, Set, Test};
+use /std/{Str, Nat, Int, Bool, Byte, Bytes, List, Option, Eq, Hash, Ord, Ordering, Map, Set, Test, time};
 use /std/Bool/{True, False, Holds};
 
 test a_key_an_empty_map_lacks_is_tried_as_none =
@@ -85,6 +85,19 @@ test tuple_keys_enumerate_in_their_order =
             ("a", 1, false),
             ("", 7, true)];
     Test/equal(Set/to_list(Set/of_list(keys)), List/sort(keys));
+
+-- A map of offset date-times enumerates them in their order, by the moment and then the local date-time: two of one moment at two offsets stand apart, the one whose clock reads earlier first, and a later moment after both.
+test offset_date_time_keys_enumerate_in_their_order =
+    let at(s: Str) -> List(time/OffsetDateTime) =
+        match time/OffsetDateTime/of_str(s) | some(t) => [t] | none() => [] end;
+    let keys =
+        List/flatten([
+            at("2024-02-29T08:30:00+00:00"),
+            at("2024-02-29T09:00:00+01:00"),
+            at("2024-02-29T08:00:00+00:00")]);
+    Test/all([
+        Test/equal(List/length(keys), 3),
+        Test/equal(Set/to_list(Set/of_list(keys)), List/sort(keys))]);
 
 -- A smaller natural's encoding is before a larger one's, by the law beside the code.
 let _a_smaller_natural_encodes_before_a_larger(

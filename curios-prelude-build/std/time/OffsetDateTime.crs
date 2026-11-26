@@ -12,8 +12,13 @@ satisfy Eql(OffsetDateTime) {
     ..
 }
 
+--- The moment's encoding, then the local date-time's, then the offset's: the order's own sequence, which its key's law reads.
 satisfy Hash(OffsetDateTime) {
-    ..
+    hash(odt) =
+        0x[
+            ..Hash/delimited(Hash/hash(to_timestamp(odt))),
+            ..Hash/delimited(Hash/hash(odt.date_time)),
+            ..Hash/hash(odt.offset)],
 }
 
 satisfy Spell(OffsetDateTime) {
@@ -95,6 +100,37 @@ satisfy Ord(OffsetDateTime) {
                     h))),
     is_lt(_, _) = Eq/refl(),
     is_le(_, _) = Eq/refl(),
+}
+
+-- Its order folds the moment's, the date-time's and the offset's from the left, so its law is `Hash/Key/then` at the moment with the rest's below it, `Hash/Key/then` again at the date-time, and `Hash/Key/last` at the offset.
+satisfy Hash/Key(OffsetDateTime) {
+    mono(a, b) =
+        Hash/Key/then(
+            Ordering/eq(),
+            Ord/ord(to_timestamp(a), to_timestamp(b)),
+            Hash/hash(to_timestamp(a)),
+            Hash/hash(to_timestamp(b)),
+            0x[..Hash/delimited(Hash/hash(a.date_time)), ..Hash/hash(a.offset)],
+            0x[..Hash/delimited(Hash/hash(b.date_time)), ..Hash/hash(b.offset)],
+            Hash/Key/mono(to_timestamp(a), to_timestamp(b)),
+            ord(a, b),
+            Hash/Key/then(
+                Ordering/then(Ordering/eq(), Ord/ord(to_timestamp(a), to_timestamp(b))),
+                Ord/ord(a.date_time, b.date_time),
+                Hash/hash(a.date_time),
+                Hash/hash(b.date_time),
+                Hash/hash(a.offset),
+                Hash/hash(b.offset),
+                Hash/Key/mono(a.date_time, b.date_time),
+                ord(a, b),
+                Hash/Key/last(
+                    Ordering/then(
+                        Ordering/then(Ordering/eq(), Ord/ord(to_timestamp(a), to_timestamp(b))),
+                        Ord/ord(a.date_time, b.date_time)),
+                    Ord/ord(a.offset, b.offset),
+                    Hash/hash(a.offset),
+                    Hash/hash(b.offset),
+                    Hash/Key/mono(a.offset, b.offset)))),
 }
 
 --- The moment the date-time names at its offset: its seconds counted as POSIX counts a date and a time, less how far ahead of UTC the offset is, so a second of `60` counts as the next minute's first.
