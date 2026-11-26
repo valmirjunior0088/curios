@@ -40,9 +40,9 @@ Foundational utilities shared across every pipeline stage: source spans and repo
 
 ### The syntax registry states slots, never spellings
 
-**Decision.** `SyntaxRegistry` names every compiler-known slot as a typed field; `curios-module` fills it (`registry.rs`), `curios-prelude`'s build holds every slot to a declaration of the prelude, and `curios-module`'s lowering and `curios-elab`'s type-directed features read the filled registry. Every enumeration over it opens by destructuring the struct it enumerates.
+**Decision.** `SyntaxRegistry` names every compiler-known slot as a typed field; `curios-module` fills it (`registry.rs`), `curios-prelude`'s build holds every slot to a declaration of the prelude, and `curios-module`'s lowering and `curios-elab`'s type-directed features read the filled registry. Every enumeration over it opens by destructuring the struct it enumerates. Its `roots` group holds the word each root a name lies under is mounted at — `/sys`, `/std` and `/test` — so every name of the fill opens with one of them, which the prelude's build holds, and every reader asking where a root is mounted reads it there: the surface, which writes an intrinsic under `/sys`, takes the root's word from the registry it is handed, and a reader above `curios-module` reads the filled registry's.
 
-**Rationale.** The consumers sit below the crate holding the authored declarations, so the shape lives below both. A pattern naming fewer fields than its struct does not compile, so a slot added to a group is a compile error until it is enumerated.
+**Rationale.** The consumers sit below the crate holding the authored declarations, so the shape lives below both. A pattern naming fewer fields than its struct does not compile, so a slot added to a group is a compile error until it is enumerated. Every name is relative to a root, so a root restated where a reader needs it would be a second statement of where each name below it lives.
 
 **Rejected.** Enumerations written out by hand, which leave a slot unenumerated, and so unchecked, from the commit that adds it.
 
