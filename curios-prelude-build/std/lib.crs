@@ -240,9 +240,9 @@ pub mod http;
 pub mod Cli;
 pub use Cli/{let Cli};
 
---- A terminal interface: a screen is a view whose size is in its type, and a program is a model, an `update` and a `view` that the loop drives.
+--- A terminal interface: a screen is a view, and a program is a model, an `update` and a `view` that the loop drives.
 ---
---- A view that does not fill its pane is refused where it is written; `View/fit` is the one coercion where a runtime size meets a typed one. `drive` is the loop with no terminal, for a test.
+--- `drive` is the loop with no terminal, for a test.
 pub mod Tui;
 pub use Tui/{let Tui};
 

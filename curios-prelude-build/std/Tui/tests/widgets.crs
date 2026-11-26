@@ -2,7 +2,7 @@
 use /std/{Nat, Bool, Str, Char, Option, Test};
 use /std/Tui/{Style, Frame, View, Pane, Key, Listing, Field, Focus};
 
-let shown(@w: Nat, @h: Nat, v: View(w, h)) -> Str =
+let shown(@w: Nat, @h: Nat, v: View/Sized(w, h)) -> Str =
     Str/join("/", Frame/to_lines(Frame/of_view(v)));
 
 let named(name: Str) -> Pane =
@@ -102,7 +102,9 @@ test a_field_edits_at_its_cursor_and_places_the_terminal_s =
     let past = Field/handle(Field/handle(f, press(Key/Code/right())), press(Key/Code/right()));
     Test/all([
         Test/equal(shown(drawn), "aXb  "),
-        Test/equal(Option/map(View/cursor(drawn), (p: View/Point(5, 1)) => p.x), Option/some(2)),
+        Test/equal(
+            Option/map(View/cursor(View/shown(drawn)), (p: View/Point) => p.x),
+            Option/some(2)),
         Test/equal(Str/At/to_offset(past.cursor), 3),
         Test/equal(Field/handle(past, press(Key/Code/backspace())).text, "aX")]);
 
@@ -151,7 +153,10 @@ test the_focus_rings_round_its_labels =
 
 -- A window is a part of a larger view, blank past its edge.
 test a_window_shows_part_of_a_larger_view =
-    let big = View/above(View/above(named("abcd")(4, 1), named("efgh")(4, 1)), named("ijkl")(4, 1));
+    let big =
+        View/above(
+            View/above(View/shown(named("abcd")(4, 1)), View/shown(named("efgh")(4, 1))),
+            View/shown(named("ijkl")(4, 1)));
     Test/equal(
         Str/join(" ", [shown(Pane/window(big, 1, 1)(2, 2)), shown(Pane/window(big, 3, 2)(2, 2))]),
         "fg/jk l /  ");

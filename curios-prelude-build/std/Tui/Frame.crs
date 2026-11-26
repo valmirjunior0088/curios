@@ -73,84 +73,77 @@ let mended(row: List(Tile)) -> List(Tile) =
         end);
 
 -- A row of exactly `w` tiles from `tiles`, cut or padded with blanks, its wide glyphs mended where the cut parted one.
+let row(w: Nat, tiles: List(Tile)) -> List(Tile) =
+    mended(padded(Tile/blank, w)(tiles));
+
+-- `row`, its length carried in its type.
 let row_of(w: Nat, tiles: List(Tile)) -> Vec(Tile, w) =
-    resize(Tile/blank, w, mended(padded(Tile/blank, w)(tiles)));
+    resize(Tile/blank, w, row(w, tiles));
 
-let filled(g: Glyph, style: Style, w: Nat, h: Nat) -> Frame(w, h) =
-    Vec/replicate(h, row_of(w, List/flatten(List/replicate(w, Tile/of_glyph(g, style)))));
+-- `rows` at exactly `w` by `h`: each row cut or padded, and rows of blanks beneath where they fall short.
+let boxed(rows: List(List(Tile)), w: Nat, h: Nat) -> List(List(Tile)) =
+    padded(row(w, []), h)(List/map(rows, (r) => row(w, r)));
 
-let line(style: Style, l: Line) -> Frame(Line/width(l), 1) =
-    let tiles = List/flatten(List/map(l.glyphs, (g) => Tile/of_glyph(g, style)));
-    Vec/cons(row_of(Line/width(l), tiles), Vec/nil());
+-- `top`'s rows spliced into `base`'s from column `x` and row `y`, each row of `base` keeping its length.
+let overlaid(base: List(List(Tile)), top: List(List(Tile)), x: Nat, y: Nat) -> List(List(Tile)) =
+    List/map(
+        List/zip(List/range(0, List/length(base)), base),
+        (r: {Nat, List(Tile)}) =>
+            match y <= r.0
+            | false => r.1
+            | true =>
+                match List/try_get(top, r.0 - y)
+                | none() => r.1
+                | some(patch) =>
+                    row(
+                        List/length(r.1),
+                        List/flatten([
+                            List/take(r.1, x),
+                            patch,
+                            drop_upto(r.1, x + List/length(patch))]))
+                end
+            end);
 
-let beside(@w1: Nat, @w2: Nat, @h: Nat, a: Frame(w1, h), b: Frame(w2, h)) -> Frame(w1 + w2, h) =
-    Vec/map(Vec/zip(a, b), (r) => Vec/append(r.0, r.1));
-
-let above(@w: Nat, @h1: Nat, @h2: Nat, a: Frame(w, h1), b: Frame(w, h2)) -> Frame(w, h1 + h2) =
-    Vec/append(a, b);
-
-let fit(@w0: Nat, @h0: Nat, frame: Frame(w0, h0), w: Nat, h: Nat) -> Frame(w, h) =
-    resize(row_of(w, []), h, List/map(frame.list, (r) => row_of(w, r.list)));
-
-let crop(@w: Nat, @h: Nat, frame: Frame(w, h), x: Nat, y: Nat) -> Frame(w - x, h - y) =
-    resize(
-        row_of(w - x, []),
-        h - y,
-        List/map(drop_upto(frame.list, y), (r) => row_of(w - x, drop_upto(r.list, x))));
-
-let overlay(
-    @w: Nat,
-    @h: Nat,
-    @w1: Nat,
-    @h1: Nat,
-    base: Frame(w, h),
-    top: Frame(w1, h1),
-    x: Nat,
-    y: Nat,
-) -> Frame(w, h) =
-    let patches = List/map(top.list, (r) => r.list);
-    let splice(index: Nat, under: List(Tile)) -> List(Tile) =
-        match y <= index
-        | false => under
-        | true =>
-            match List/try_get(patches, index - y)
-            | none() => under
-            | some(patch) =>
-                List/flatten([List/take(under, x), patch, drop_upto(under, x + List/length(patch))])
-            end
-        end;
-    resize(
-        row_of(w, []),
-        h,
-        List/map(
-            List/zip(List/range(0, h), base.list),
-            (r: {Nat, Vec(Tile, w)}) => row_of(w, splice(r.0, r.1.list))));
-
-let restyle(@w: Nat, @h: Nat, f: (Style) -> Style, frame: Frame(w, h)) -> Frame(w, h) =
-    Vec/map(frame, (row) =>
-        Vec/map(row, (tile) =>
-            match tile
-            | glyph(g, s) => Tile/glyph(g, f(s))
-            | continuation() => tile
-            end));
-
---- `v` drawn: the tiles every reading of a view agrees on.
-pub let of_view(@w: Nat, @h: Nat, v: View(w, h)) -> Frame(w, h) =
-    match v
-    | filled(g, style, fw, fh) => filled(g, style, fw, fh)
-    | line(style, l) => line(style, l)
-    | beside(left, right) => beside(of_view(left), of_view(right))
-    | above(top, bottom) => above(of_view(top), of_view(bottom))
-    | fit(inner, fw, fh) => fit(of_view(inner), fw, fh)
-    | crop(inner, x, y) => crop(of_view(inner), x, y)
-    | over(base, top, x, y) => overlay(of_view(base), of_view(top), x, y)
-    | styled(f, inner) => restyle(f, of_view(inner))
-    | with_cursor(inner, _) => of_view(inner)
+-- `tile` with its style passed through `f`.
+let restyled(f: (Style) -> Style, tile: Tile) -> Tile =
+    match tile
+    | glyph(g, s) => Tile/glyph(g, f(s))
+    | continuation() => tile
     end;
+
+-- `v` drawn as rows of tiles: `View/height(v)` rows of `View/width(v)` tiles each.
+let drawn(v: View) -> List(List(Tile)) =
+    match v
+    | filled(g, style, fw, fh) =>
+        List/replicate(fh, row(fw, List/flatten(List/replicate(fw, Tile/of_glyph(g, style)))))
+    | line(style, l) =>
+        [row(Line/width(l), List/flatten(List/map(l.glyphs, (g) => Tile/of_glyph(g, style))))]
+    | beside(left, right) =>
+        let tall = View/height(v);
+        List/map(
+            List/zip(
+                boxed(drawn(left), View/width(left), tall),
+                boxed(drawn(right), View/width(right), tall)),
+            (r) => [..r.0, ..r.1])
+    | above(top, bottom) =>
+        let wide = View/width(v);
+        [
+            ..boxed(drawn(top), wide, View/height(top)),
+            ..boxed(drawn(bottom), wide, View/height(bottom))]
+    | sized(inner, fw, fh) => boxed(drawn(inner), fw, fh)
+    | crop(inner, x, y) => List/map(drop_upto(drawn(inner), y), (r) => drop_upto(r, x))
+    | over(base, top, x, y) => overlaid(drawn(base), drawn(top), x, y)
+    | styled(f, inner) => List/map(drawn(inner), (r) => List/map(r, (tile) => restyled(f, tile)))
+    | with_cursor(inner, _) => drawn(inner)
+    end;
+
+--- `s` drawn: the tiles every reading of a view agrees on.
+pub let of_view(@w: Nat, @h: Nat, s: View/Sized(w, h)) -> Frame(w, h) =
+    resize(row_of(w, []), h, List/map(drawn(View/shown(s)), (r) => row_of(w, r)));
 
 --- `w` by `h` of blanks.
 pub let blank(w: Nat, h: Nat) -> Frame(w, h) =
-    filled(Glyph/space, Style/plain, w, h);
+    resize(row_of(w, []), h, []);
 
 --- The frame as text, one string per row. A continuation contributes nothing, so a wide glyph reads back as itself.
 pub let to_lines(@w: Nat, @h: Nat, frame: Frame(w, h)) -> List(Str) =

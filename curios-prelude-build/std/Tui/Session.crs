@@ -159,7 +159,7 @@ let drawn_at(w: Nat, h: Nat, shown: Option(Shown)) -> Option(Frame(w, h)) =
     end;
 
 --- `v` written as the difference from the frame the terminal shows where the size is unchanged, and whole where it is not or no frame is known to be shown, the terminal's cursor where `v` asks for it or hidden. A write that fails is raised, and leaves the terminal's screen unknown, so the next draw is whole.
-pub let draw(@w: Nat, @h: Nat, s: Session, v: View(w, h)) -> Try(Io, Io/Error, {}) =
+pub let draw(@w: Nat, @h: Nat, s: Session, v: View/Sized(w, h)) -> Try(Io, Io/Error, {}) =
     let frame = Frame/of_view(v);
     let before: Option(Frame(w, h)) =
         Box/change(s.kept, (kept: Kept) =>
@@ -167,7 +167,10 @@ pub let draw(@w: Nat, @h: Nat, s: Session, v: View(w, h)) -> Try(Io, Io/Error, {
                 Kept { ..kept, shown = Option/some(Shown { w = w, h = h, frame = frame }) },
                 drawn_at(w, h, kept.shown)))!;
     let wrote =
-        Try/run(Io/write(s.tty, render(before, frame, View/cursor(v), s.support.synchronized)))!;
+        Try/run(
+            Io/write(
+                s.tty,
+                render(before, frame, View/cursor(View/shown(v)), s.support.synchronized)))!;
     match wrote
     | success(()) => Try/pure(())
     | failure(why) =>

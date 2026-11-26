@@ -9,10 +9,13 @@ let esc: Str =
 let spelled(b: Bytes) -> Str =
     Str/replace(Result/unwrap_or(Str/of_bytes(b), "?"), esc, "^[");
 
-let row(style: Style, s: Str, w: Nat) -> View(w, 1) =
-    View/fit(View/text(style, s), w, 1);
+let line(style: Style, s: Str, w: Nat) -> View =
+    View/sized(View/text(style, s), w, 1);
 
-let none_at: Option(View/Point(2, 1)) =
+let row(style: Style, s: Str, w: Nat) -> View/Sized(w, 1) =
+    View/fit(line(style, s, w), w, 1);
+
+let none_at: Option(View/Point) =
     Option/none();
 
 -- With no previous frame, the screen is cleared and every tile written, one move at the start and one style for the run.
@@ -24,8 +27,12 @@ test a_first_frame_clears_and_writes_every_tile =
 
 -- Against a previous frame, only the tile that differs is written, with one move to it.
 test a_diff_writes_only_the_changed_tile =
-    let before = Frame/of_view(View/above(row(Style/plain, "ab", 2), row(Style/plain, "cd", 2)));
-    let after = Frame/of_view(View/above(row(Style/plain, "ab", 2), row(Style/plain, "cX", 2)));
+    let before =
+        Frame/of_view(
+            View/fit(View/above(line(Style/plain, "ab", 2), line(Style/plain, "cd", 2)), 2, 2));
+    let after =
+        Frame/of_view(
+            View/fit(View/above(line(Style/plain, "ab", 2), line(Style/plain, "cX", 2)), 2, 2));
     Test/equal(
         spelled(Tui/render(Option/some(before), after, Option/none(), true)),
         "^[[?2026h^[[?25l^[[2;2H^[[0mX^[[0m^[[?2026l");
@@ -63,9 +70,15 @@ test a_frame_is_bracketed_only_where_the_terminal_shows_it_whole =
 test the_cursor_is_placed_after_the_tiles =
     let f = Frame/of_view(row(Style/plain, "ab", 2));
     Test/equal(
-        spelled(
-            Tui/render(Option/some(f), f, Option/some(View/Point(2, 1) { x = 1, y = 0 }), true)),
+        spelled(Tui/render(Option/some(f), f, Option/some(View/Point { x = 1, y = 0 }), true)),
         "^[[?2026h^[[?25l^[[0m^[[1;2H^[[?25h^[[?2026l");
+
+-- A cursor asked for past the frame's edge is clipped there: it stays hidden.
+test a_cursor_past_the_frame_stays_hidden =
+    let f = Frame/of_view(row(Style/plain, "ab", 2));
+    Test/equal(
+        spelled(Tui/render(Option/some(f), f, Option/some(View/Point { x = 2, y = 0 }), true)),
+        "^[[?2026h^[[?25l^[[0m^[[?2026l");
 
 -- Text that holds controls reaches the terminal as their pictures: no bell, no line break and no Escape but the renderer's own sequences' is written, so a label cannot set a window title or move the cursor.
 test text_holding_controls_writes_none_of_them =
@@ -159,9 +172,12 @@ test what_the_renderer_writes_takes_a_terminal_to_the_frame =
     let frame =
         (top: Str, bottom: Str) =>
             Frame/of_view(
-                View/above(
-                    row(Style/plain, top, 4),
-                    row(Style { ..Style/plain, bold = true }, bottom, 4)));
+                View/fit(
+                    View/above(
+                        line(Style/plain, top, 4),
+                        line(Style { ..Style/plain, bold = true }, bottom, 4)),
+                    4,
+                    2));
     let pairs =
         [
             (frame("abcd", "efgh"), frame("abXd", "efgh")),

@@ -81,17 +81,12 @@ pub let view(@A: Type, l: Listing(A), show: (A) -> Str, style: Style, highlight:
                     List/zip(List/range(0, List/length(l.items)), l.items),
                     (e) => e.0 < first),
                 h);
-        let row(entry: {Nat, A}) -> View(w, 1) =
+        let row(entry: {Nat, A}) -> View =
             let s =
                 match chosen == Option/some(entry.0)
                 | true => highlight
                 | false => style
                 end;
-            View/fit(View/text(s, show(entry.1)), w, 1);
-        let none: {h: Nat, view: View(w, h)} = (h = 0, view = View/blank(w, 0));
-        let stacked =
-            List/fold(
-                List/reverse(List/map(shown, row)),
-                none,
-                (r, acc) => (h = 1 + acc.h, view = View/above(r, acc.view)));
-        View/fit(stacked.view, w, h);
+            View/sized(View/text(s, show(entry.1)), w, 1);
+        let stacked = List/fold(List/reverse(List/map(shown, row)), View/blank(w, 0), View/above);
+        View/fit(stacked, w, h);

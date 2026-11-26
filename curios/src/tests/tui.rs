@@ -244,11 +244,11 @@ fn a_session_remembers_what_it_drew_and_the_size_it_was_told() {
         use /std/Tui/{Session, View};
         let program() -> Io({}) =
             let outcome = Try/run(Try/scope((scope) => Try/bind(Session/open(scope), (s) =>
-                let _ = Session/draw(s, View/blank(4, 2))!;
-                let _ = Session/draw(s, View/blank(4, 2))!;
+                let _ = Session/draw(s, View/fit(View/blank(4, 2), 4, 2))!;
+                let _ = Session/draw(s, View/fit(View/blank(4, 2), 4, 2))!;
                 let original = Session/size(s)!;
                 let now = Session/measure(s)!;
-                let _ = Session/draw(s, View/blank(6, 3))!;
+                let _ = Session/draw(s, View/fit(View/blank(6, 3), 6, 3))!;
                 let known = Session/size(s)!;
                 let _ = print(Nat/to_str(original.w))!;
                 let _ = print("/")!;
@@ -287,7 +287,7 @@ fn resize_events_update_the_drawing_session_before_rendering() {
                     end
                 | _ => (model, Directive/none())
                 end,
-            view(model) = (w, h) => View/blank(w, h),
+            view(model) = (w, h) => View/fit(View/blank(w, h), w, h),
         };
         let program() -> Io({}) =
             let result = Try/run(Tui/main(app))!;
@@ -310,7 +310,7 @@ const IDLE_PROGRAM: &str = r#"
     let app: Tui(Nat, Nat) = Tui {
         init = (0, Directive/none()),
         update(model, event) = (model, Directive/none()),
-        view(model) = (w, h) => View/blank(w, h),
+        view(model) = (w, h) => View/fit(View/blank(w, h), w, h),
     };
     let program() -> Io({}) =
         let result = Try/run(Tui/main(app))!;
@@ -379,7 +379,7 @@ fn a_program_outlives_the_end_of_its_input() {
                 | custom(n) => (n, Directive/quit())
                 | _ => (model, Directive/none())
                 end,
-            view(model) = (w, h) => View/blank(w, h),
+            view(model) = (w, h) => View/fit(View/blank(w, h), w, h),
         };
         let program() -> Io({}) =
             let result = Try/run(Tui/main(app))!;
@@ -414,7 +414,7 @@ fn a_quit_waits_for_the_work_its_update_asked_for() {
                 | input(key(_)) => (model, Directive/batch([Directive/perform(save()), Directive/quit()]))
                 | _ => (model, Directive/none())
                 end,
-            view(model) = (w, h) => View/blank(w, h),
+            view(model) = (w, h) => View/fit(View/blank(w, h), w, h),
         };
         let program() -> Io({}) =
             let result = Try/run(Tui/main(app))!;
@@ -476,7 +476,7 @@ fn a_release_gives_the_terminal_back_around_its_action() {
                 | custom(n) => (model + n, Directive/none())
                 | _ => (model, Directive/none())
                 end,
-            view(model) = (w, h) => View/blank(w, h),
+            view(model) = (w, h) => View/fit(View/blank(w, h), w, h),
         };
         let program() -> Io({}) =
             let result = Try/run(Tui/main(app))!;
@@ -519,7 +519,7 @@ fn a_size_the_terminal_reports_reaches_update_as_an_input() {
                 | input(resize(size)) => (size.w, Directive/quit())
                 | _ => (model, Directive/none())
                 end,
-            view(model) = (w, h) => View/blank(w, h),
+            view(model) = (w, h) => View/fit(View/blank(w, h), w, h),
         };
         let program() -> Io({}) =
             let result = Try/run(Tui/main(app))!;

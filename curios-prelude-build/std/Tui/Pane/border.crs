@@ -6,7 +6,7 @@ pub let border(style: Style, title: Str, inner: Pane) -> Pane =
     (w, h) =>
         let iw = w - 2;
         let ih = h - 2;
-        let edge(left: Glyph, right: Glyph, middle: View(iw, 1)) -> View(1 + iw + 1, 1) =
+        let edge(left: Glyph, right: Glyph, middle: View) -> View =
             View/beside(
                 View/beside(View/filled(left, style, 1, 1), middle),
                 View/filled(right, style, 1, 1));
@@ -17,6 +17,6 @@ pub let border(style: Style, title: Str, inner: Pane) -> Pane =
                 Glyph/of_char('┌'),
                 Glyph/of_char('┐'),
                 View/over(bar, View/text(style, title), 0, 0));
-        let middle = View/beside(View/beside(side, inner(iw, ih)), side);
+        let middle = View/beside(View/beside(side, View/shown(inner(iw, ih))), side);
         let bottom = edge(Glyph/of_char('└'), Glyph/of_char('┘'), bar);
         View/fit(View/above(View/above(top, middle), bottom), w, h);

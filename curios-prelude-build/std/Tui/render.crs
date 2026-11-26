@@ -47,13 +47,13 @@ let paint_row(@w: Nat, pen: Pen, y: Nat, row: Vec(Tile, w), before: Option(Vec(T
         pen,
         (entry, acc) => paint(acc, entry.0.0, y, entry.0.1, entry.1));
 
---- The bytes that take the terminal from `previous` to `next`: tiles written only where they differ, inside one synchronized update where `synchronized` says the terminal shows one whole, and the cursor placed at `cursor` or hidden. With no previous frame the screen is cleared and every tile written.
+--- The bytes that take the terminal from `previous` to `next`: tiles written only where they differ, inside one synchronized update where `synchronized` says the terminal shows one whole, and the cursor placed at `cursor` where it stands within the frame, and hidden otherwise. With no previous frame the screen is cleared and every tile written.
 pub let render(
     @w: Nat,
     @h: Nat,
     previous: Option(Frame(w, h)),
     next: Frame(w, h),
-    cursor: Option(View/Point(w, h)),
+    cursor: Option(View/Point),
     synchronized: Bool,
 ) -> Bytes =
     let bracket(b: Bytes) -> Bytes = match synchronized | true => b | false => 0x[] end;
@@ -76,7 +76,7 @@ pub let render(
             (entry, acc) => paint_row(acc, entry.0.0, entry.0.1, entry.1));
     let place =
         match cursor
-        | some(c) => 0x[..ansi/move_to(c.x, c.y), ..ansi/cursor_show]
-        | none() => 0x[]
+        | some(c), c.x < w && c.y < h => 0x[..ansi/move_to(c.x, c.y), ..ansi/cursor_show]
+        | _ => 0x[]
         end;
     0x[..painted.out, ..ansi/reset, ..place, ..bracket(ansi/off(Mode/synchronized_output()))];

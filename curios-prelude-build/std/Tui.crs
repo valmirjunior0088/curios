@@ -24,7 +24,7 @@ pub use Tile/{let Tile};
 pub mod Frame;
 pub use Frame/{let Frame};
 
---- What a terminal is to show at a size its type holds, the algebra that composes one, and where it asks for the cursor.
+--- What a terminal is to show, the algebra that composes one, and where it asks for the cursor.
 pub mod View;
 pub use View/{let View};
 
@@ -132,7 +132,12 @@ pub let drive(
     w: Nat,
     h: Nat,
     events: List(Event(E)),
-) -> {model: M, quit: Bool, size: Tty/Size, view: View(size.w, size.h), pending: List(Io(E))} =
+) -> {
+    model: M,
+    quit: Bool,
+    size: Tty/Size,
+    view: View/Sized(size.w, size.h),
+    pending: List(Io(E))} =
     let start = asked(app.init.1);
     let state =
         List/fold(

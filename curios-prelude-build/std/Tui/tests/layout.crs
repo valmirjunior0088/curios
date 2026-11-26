@@ -2,7 +2,7 @@
 use /std/{Nat, Str, List, Test};
 use /std/Tui/{Style, Frame, View, Pane};
 
-let shown(@w: Nat, @h: Nat, v: View(w, h)) -> Str =
+let shown(@w: Nat, @h: Nat, v: View/Sized(w, h)) -> Str =
     Str/join("/", Frame/to_lines(Frame/of_view(v)));
 
 let shares(cs: List(Pane/Constraint), avail: Nat) -> Str =
@@ -72,3 +72,11 @@ test a_pane_left_at_nothing_takes_no_room =
             (Pane/Constraint/length(0), named("gone")),
             (Pane/Constraint/fill(1), named("all"))]);
     Test/equal(shown(l(3, 2)), "all/   ");
+
+-- A pane is drawn within its share: one that draws two rows in a share of one keeps to it, and the pane beneath stands where its share puts it.
+test a_pane_is_drawn_within_its_share_whatever_it_holds =
+    let tall: Pane =
+        (w, h) =>
+            View/fit(View/above(View/text(Style/plain, "x"), View/text(Style/plain, "y")), w, h);
+    let l = Pane/rows([(Pane/Constraint/length(1), tall), (Pane/Constraint/length(1), named("z"))]);
+    Test/equal(shown(l(1, 2)), "x/z");

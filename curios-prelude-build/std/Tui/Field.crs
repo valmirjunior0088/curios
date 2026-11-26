@@ -154,9 +154,10 @@ let scrolled(s: Str, at: Str/At(s), room: Nat) -> Str/At(s) =
 pub let view(i: Field, style: Style) -> Pane =
     (w, h) =>
         let first = scrolled(i.text, i.cursor, w - 1);
-        let shown = View/fit(View/text(style, Str/after(i.text, first)), w, h);
         let x = columns(Str/before(i.text, i.cursor)) - columns(Str/before(i.text, first));
-        match x < w && 0 < h
-        | true => View/with_cursor(shown, View/Point(w, h) { x = x, y = 0 })
-        | false => shown
-        end;
+        View/fit(
+            View/with_cursor(
+                View/text(style, Str/after(i.text, first)),
+                View/Point { x = x, y = 0 }),
+            w,
+            h);
