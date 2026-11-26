@@ -390,7 +390,7 @@ pub let sum: Nat =
     x + y;
 ```
 
-A local function is written with parameters and an optional result type:
+A local function is written with its parameters and its result type, as a top-level one is:
 
 ```crs
 use /std/{Nat};

@@ -120,7 +120,7 @@ fn base(growth: Growth) -> usize {
     }
 }
 
-/// The growths whose looks grow past [`HELD_SLOPE`] today, which the workspace's growth entry holds (`documentation/roadmap/000-findings.md`): every other growth's looks are held to it in every stage.
+/// The growths whose looks grow past [`HELD_SLOPE`] today, which the growths' specification holds (`documentation/roadmap/200-a-counted-growth-is-linear-in-its-size.md`): every other growth's looks are held to it in every stage.
 const UNHELD: &[Growth] = &[
     Growth::Values,
     Growth::ProductCommuted,
