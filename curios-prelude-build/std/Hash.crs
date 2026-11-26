@@ -1,8 +1,12 @@
+--- How a key type encodes to the byte string that identifies it, in its own order: the concept, and the laws every key has from it.
+pub mod Key;
+pub use Key/{let Key};
+
 use /std/{Nat, Byte, Bytes, Bool, List};
 
 --- How a value encodes to the bytes that identify it.
 ---
---- The encoding is a value's identity and is *determined*: one value always encodes to the same bytes, in any program, from the value and its carrier's documented reading alone. `/std/Map/Key` adds injectivity and the type's own order on top of it, and it is what makes two runs of one program agree.
+--- The encoding is a value's identity and is *determined*: one value always encodes to the same bytes, in any program, from the value and its carrier's documented reading alone. [`Key`] adds the type's own order on top of it, and it is what makes two runs of one program agree.
 pub concept Hash(T: Type): pub Type {
     --- The encoding.
     hash(T) -> Bytes,

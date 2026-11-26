@@ -390,7 +390,7 @@ pub let of_lt(
         end);
 
 --- The order of two numbers is the order of their encodings.
-pub let monotone(a: Nat, b: Nat) -> Eq()(Nat/ord(a, b), Bytes/ord(hash(a), hash(b))) =
+pub let mono(a: Nat, b: Nat) -> Eq()(Nat/ord(a, b), Bytes/ord(hash(a), hash(b))) =
     match
     | a < b => Eq/sym(Bytes/ord/below/lt(hash(a), hash(b), of_lt(a, b, Bool/True/qed())))
     | b < a =>

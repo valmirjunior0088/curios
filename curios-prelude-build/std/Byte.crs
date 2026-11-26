@@ -1,7 +1,7 @@
 pub use /sys/{let Byte};
 pub use /sys/Byte/{to_nat};
 
-use /std/{Ordering, Nat, Bool, Show, Spell, Ord, Hash, Map, Eq, proved};
+use /std/{Ordering, Nat, Bool, Show, Spell, Ord, Hash, Eq, proved};
 use /std/ops/{Eql, And, Or};
 
 --- Whether the two are equal.
@@ -111,15 +111,15 @@ satisfy Ord(Byte) {
     is_le(a, b) = Ord/is_le(to_nat(a), to_nat(b)),
 }
 
--- Spelled as the byte rather than routed through `Bytes/of_nat` and padded back to one byte, which is the same encoding for all 256 values and says it the long way round: `of_nat` answers the empty run at zero, so the padding existed only to undo that. Written directly, `/std/Map`'s `Key(Byte)` orders the encodings as the bytes by reduction alone instead of proving its way through a minimal encoding.
+-- Spelled as the byte rather than routed through `Bytes/of_nat` and padded back to one byte, which is the same encoding for all 256 values and says it the long way round: `of_nat` answers the empty run at zero, so the padding existed only to undo that. Written directly, `Hash/Key(Byte)` orders the encodings as the bytes by reduction alone instead of proving its way through a minimal encoding.
 --- The one byte itself.
 satisfy Hash(Byte) {
     hash(b) = 0x[b],
 }
 
 --- The one byte itself, a cons onto no bytes, ordered as its head is.
-satisfy Map/Key(Byte) {
-    monotone(a, b) =
+satisfy Hash/Key(Byte) {
+    mono(a, b) =
         match a < b
         | true => Eq/refl()
         | false => match a == b | true | false => Eq/refl() end

@@ -1,8 +1,8 @@
-use /std/{Bool, Option, Eq, Map};
+use /std/{Bool, Option, Eq, Map, Hash};
 use /std/Set/{Set, empty, insert, remove, union, intersection, difference};
 
 --- Whether `k` is an element.
-pub let has(@K: Type, use Map/Key(K), s: Set(K), k: K) -> Bool =
+pub let has(@K: Type, use Hash/Key(K), s: Set(K), k: K) -> Bool =
     Map/has(s.map, k);
 
 -- Whether an option holds a value, carried across an equation between two options.
@@ -14,16 +14,16 @@ let held(
 ) -> Eq()(Option/is_some(x), Option/is_some(y)) =
     Eq/cong((m: Option(A)) => Option/is_some(m), e);
 
-pub let of_empty(@K: Type, use Map/Key(K), k: K) -> Eq()(has(empty(), k), false) =
+pub let of_empty(@K: Type, use Hash/Key(K), k: K) -> Eq()(has(empty(), k), false) =
     Eq/refl();
 
-pub let of_insert(@K: Type, use Map/Key(K), s: Set(K), k: K) -> Eq()(has(insert(s, k), k), true) =
+pub let of_insert(@K: Type, use Hash/Key(K), s: Set(K), k: K) -> Eq()(has(insert(s, k), k), true) =
     held(Map/try_get/of_insert(s.map, k, ()));
 
 --- `insert` leaves every other key as it was.
 pub let of_insert_other(
     @K: Type,
-    use Map/Key(K),
+    use Hash/Key(K),
     s: Set(K),
     k: K,
     other: K,
@@ -31,13 +31,13 @@ pub let of_insert_other(
 ) -> Eq()(has(insert(s, k), other), has(s, other)) =
     held(Map/try_get/of_insert_other(s.map, k, (), other, apart));
 
-pub let of_remove(@K: Type, use Map/Key(K), s: Set(K), k: K) -> Eq()(has(remove(s, k), k), false) =
+pub let of_remove(@K: Type, use Hash/Key(K), s: Set(K), k: K) -> Eq()(has(remove(s, k), k), false) =
     held(Map/try_get/of_remove(s.map, k));
 
 --- `remove` leaves every other key as it was.
 pub let of_remove_other(
     @K: Type,
-    use Map/Key(K),
+    use Hash/Key(K),
     s: Set(K),
     k: K,
     other: K,
@@ -56,7 +56,7 @@ let either(
 --- An element of `union` is an element of either.
 pub let of_union(
     @K: Type,
-    use Map/Key(K),
+    use Hash/Key(K),
     a: Set(K),
     b: Set(K),
     k: K,
@@ -78,7 +78,7 @@ let kept(
 --- An element of `intersection` is an element of both.
 pub let of_intersection(
     @K: Type,
-    use Map/Key(K),
+    use Hash/Key(K),
     a: Set(K),
     b: Set(K),
     k: K,
@@ -90,7 +90,7 @@ pub let of_intersection(
 --- An element of `difference` is an element of the first and no element of the second.
 pub let of_difference(
     @K: Type,
-    use Map/Key(K),
+    use Hash/Key(K),
     a: Set(K),
     b: Set(K),
     k: K,
@@ -121,7 +121,7 @@ let held_once(
 --- Two sets with the same elements are one set.
 pub let extensional(
     @K: Type,
-    use Map/Key(K),
+    use Hash/Key(K),
     a: Set(K),
     b: Set(K),
     same: (k: K) -> Eq()(has(a, k), has(b, k)),

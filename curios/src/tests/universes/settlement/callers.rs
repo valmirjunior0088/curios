@@ -482,12 +482,12 @@ fn a_level_nothing_holds_settles_at_its_least_value() {
     assert_eq!(run(source), b"least");
 }
 
-// **A declaration under two premises over one carrier is judged alike by both checkers.** `both` builds a `Map` under its `Key(K)` premise and sorts the map's keys under its `Ord(K)` one, each premise a witness with levels of its own over the one `K`.
+// **A declaration under two premises over one carrier is judged alike by both checkers.** `both` builds a `Map` under its `Hash/Key(K)` premise and sorts the map's keys under its `Ord(K)` one, each premise a witness with levels of its own over the one `K`.
 #[test]
 fn a_declaration_under_a_key_and_an_order_over_one_carrier_is_judged_alike() {
     let source = r#"
-        use /std/{Nat, List, Map, Ord};
-        pub let both(@K: Type, use Map/Key(K), use Ord(K), keys: List(K)) -> List(K) =
+        use /std/{Nat, List, Map, Hash, Ord};
+        pub let both(@K: Type, use Hash/Key(K), use Ord(K), keys: List(K)) -> List(K) =
             let m: Map(K, Nat) = Map/of_list(List/map(keys, (k: K) => (k, 0)));
             List/sort(Map/keys(m));
         /std/print("both")

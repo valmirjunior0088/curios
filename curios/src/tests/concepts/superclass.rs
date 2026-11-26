@@ -123,14 +123,13 @@ fn a_superclass_edge_is_reached_by_no_label() {
     assert_eq!(run(declared), b"2");
 }
 
-// A literal's law is stated over the superclass slot it writes, a hidden member of the value like any other: a `Key(Nat)` written over an encoding that sends every key to one string cannot borrow the law the registered encoding proves, which is what `/std/Map` would otherwise merge two keys under.
+// A literal's law is stated over the superclass slot it writes, a hidden member of the value like any other: a `Hash/Key(Nat)` written over an encoding that sends every key to one string cannot borrow the law the registered encoding proves, which is what `/std/Map` would otherwise merge two keys under.
 #[test]
 fn a_literals_law_is_stated_over_the_superclass_it_writes() {
     let source = r#"
         use /std/{Nat, Bytes, Hash};
-        use /std/Map/{Key};
         let flat: Hash(Nat) = Hash { hash(n) = 0x[] };
-        let _forged: Key(Nat) = Key { use flat, use _, monotone = Nat/hash/monotone };
+        let _forged: Hash/Key(Nat) = Hash/Key { use flat, use _, mono = Nat/hash/mono };
         /std/print("")
         "#;
 

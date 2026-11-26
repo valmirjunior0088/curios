@@ -1,10 +1,10 @@
-use /std/{List, Option, Eq, Ord, Bool};
+use /std/{List, Option, Eq, Ord, Bool, Hash};
 use /std/List/{Member};
-use /std/Map/{Map, Key, keys};
+use /std/Map/{Map, keys};
 use /std/Map/internal/{Node};
 
 --- The entry of the least key, or `none` of the empty map: the one of the first twig that holds any, at every branch down.
-pub let least(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Option({K, V}) =
+pub let least(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V)) -> Option({K, V}) =
     Node/least(m.root);
 
 --- That `found` is an entry whose key is one of `l`, or no entry at all.
@@ -15,13 +15,13 @@ pub let Among(@K: Type, @V: Type, found: Option({K, V}), l: List(K)) -> Prop =
     end;
 
 --- That `found` is an entry whose key is at or below `x` in the keys' order.
-pub let Below(@K: Type, use Key(K), @V: Type, found: Option({K, V}), x: K) -> Prop =
+pub let Below(@K: Type, use Hash/Key(K), @V: Type, found: Option({K, V}), x: K) -> Prop =
     match found
     | none() => Bool/False
     | some(entry) => Bool/Holds(Ord/le_by((a: K, b: K) => Ord/ord(a, b))(entry.0, x))
     end;
 
-pub let among(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Among(least(m), keys(m)) =
+pub let among(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V)) -> Among(least(m), keys(m)) =
     Eq/subst(
         (l: List(K)) => Among(Node/least(m.root), l),
         Eq/sym(Node/collected(m.root, [])),
@@ -30,7 +30,7 @@ pub let among(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Among(least(m), k
 --- No key of a map is below its least: a map that has a key has a least entry, whose key is at or below it.
 pub let below(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     m: Map(K, V),
     x: K,

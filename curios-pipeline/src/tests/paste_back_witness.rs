@@ -246,13 +246,12 @@ fn an_edge_of_the_programs_own_concept_reads_back() {
 
 #[test]
 fn a_method_reached_through_the_inner_of_two_binders_is_written_as_its_call() {
-    // `Key(K)` and `Key(J)` each reach `Hash` by an edge: the goal at `J` is the inner binder's, and its path the one resolution takes.
+    // `Hash/Key(K)` and `Hash/Key(J)` each reach `Hash` by an edge: the goal at `J` is the inner binder's, and its path the one resolution takes.
     let error = compile(
         r#"
         use /std/{Nat, Bytes, Hash, Eq, Io};
-        use /std/Map/{Key};
-        pub let outer(@K: Type, use Key(K), k: K) -> Nat =
-            let inner(@J: Type, use Key(J), j: J) -> Nat =
+        pub let outer(@K: Type, use Hash/Key(K), k: K) -> Nat =
+            let inner(@J: Type, use Hash/Key(J), j: J) -> Nat =
                 let p: Eq()(Hash/hash(j), 0x[]) = Eq/refl();
                 0;
             0;

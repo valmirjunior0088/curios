@@ -1,31 +1,31 @@
 use /std/{Nat, Bool, Option, List, Vec, Eq, Hash, Bytes, proved};
 use /std/List/{Member};
-use /std/Map/{Map, Key, empty, has, insert, remove, map, union, filter, intersection, difference,
-    update, to_list};
+use /std/Map/{Map, empty, has, insert, remove, map, union, filter, intersection, difference, update,
+    to_list};
 use /std/Map/internal/{Node};
 use /std/Map/digits/{digit, small, Apart};
 
 --- The value at `key`, or `none`.
-pub let try_get(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K) -> Option(V) =
+pub let try_get(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V), key: K) -> Option(V) =
     Node/find(m.root, Hash/hash(key));
 
 -- Two keys the one is not the other of encode apart.
 let apart_codes(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     key: K,
     other: K,
     apart: (Eq()(other, key)) -> Bool/False,
 ) -> Eq()(Hash/hash(key) == Hash/hash(other), false) =
     match Hash/hash(key) == Hash/hash(other)
     | false => Eq/refl()
-    | true => match apart(Eq/sym(Key/inj(key, other, proved()))) end
+    | true => match apart(Eq/sym(Hash/Key/inj(key, other, proved()))) end
     end;
 
 -- What a node answering `x` at `key`'s encoding in place of `n` answers at another key's: what `n` does.
 let elsewhere(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     n: Node(K, V),
     n2: Node(K, V),
@@ -48,7 +48,7 @@ let elsewhere(
 -- The leaf an insertion wedges in beside the node it parted from answers its value at its key in that node's place.
 let parted_answers(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     n: Node(K, V),
     n2: Node(K, V),
@@ -92,7 +92,7 @@ let parted_answers(
 --- The empty map has no value at any key.
 pub let of_empty(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     key: K,
 ) -> Eq()(try_get(empty(), key), Option/none(@V)) =
@@ -101,7 +101,7 @@ pub let of_empty(
 --- `insert` sets the value at its key.
 pub let of_insert(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     m: Map(K, V),
     key: K,
@@ -118,7 +118,7 @@ pub let of_insert(
 --- `insert` leaves the value at every other key as it was.
 pub let of_insert_other(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     m: Map(K, V),
     key: K,
@@ -158,7 +158,7 @@ pub let of_insert_other(
 --- `remove` leaves no value at its key.
 pub let of_remove(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     m: Map(K, V),
     key: K,
@@ -176,7 +176,7 @@ pub let of_remove(
 --- `remove` leaves the value at every other key as it was.
 pub let of_remove_other(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     m: Map(K, V),
     key: K,
@@ -209,7 +209,7 @@ pub let of_remove_other(
 --- `map` rewrites the value at every key.
 pub let of_map(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     @W: Type,
     m: Map(K, V),
@@ -221,7 +221,7 @@ pub let of_map(
 -- Two maps with one root are one map: what else a map holds is the proof about its root.
 let of_root(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     a: Map(K, V),
     b: Map(K, V),
@@ -237,7 +237,7 @@ let of_root(
 --- Two maps with the same value at every key are one map.
 pub let inj(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     a: Map(K, V),
     b: Map(K, V),
@@ -248,27 +248,30 @@ pub let inj(
 -- Two keys whose encodings compare equal, as an equation, are one key.
 let same_key(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     a: K,
     b: K,
     e: Eq()(Hash/hash(a) == Hash/hash(b), true),
 ) -> Eq()(a, b) =
-    Key/same(a, b, Bool/holds_of_eq(Hash/hash(a) == Hash/hash(b), e));
+    Hash/Key/same(a, b, Bool/holds_of_eq(Hash/hash(a) == Hash/hash(b), e));
 
 -- Two keys whose encodings compare unequal, as an equation, are two keys.
 let other_key(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     a: K,
     b: K,
     e: Eq()(Hash/hash(a) == Hash/hash(b), false),
 ) -> (Eq()(b, a)) -> Bool/False =
-    Key/apart(a, b, Eq/subst((c: Bool) => Bool/Holds(Bool/not(c)), Eq/sym(e), Bool/True/qed()));
+    Hash/Key/apart(
+        a,
+        b,
+        Eq/subst((c: Bool) => Bool/Holds(Bool/not(c)), Eq/sym(e), Bool/True/qed()));
 
 -- What a sound branch's twigs answer at `k`, asked in turn by a combination that `none` leaves as it was, is what the branch answers there.
 let either(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     @R: Type,
     at: Nat,
@@ -299,7 +302,7 @@ let either(
 -- Inserting a sound node's entries into a map one by one leaves at a key the node's value there, and the map's where the node has none.
 let inserted_all(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     n: Node(K, V),
     sound: Node/Sound(n),
@@ -343,7 +346,7 @@ let inserted_all(
 -- Inserting placed twigs' entries into a map one by one leaves at a key what the twigs answer there, asked in turn.
 and inserted_in(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     l: List(Node(K, V)),
     at: Nat,
@@ -384,7 +387,7 @@ and inserted_in(
 --- `union` has at every key the second map's value, and the first's where the second has none.
 pub let of_union(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     a: Map(K, V),
     b: Map(K, V),
@@ -409,7 +412,7 @@ let kept(
 -- Inserting the entries of a sound node `pred` accepts into a map one by one leaves at a key the node's value there where `pred` accepts it, and the map's otherwise.
 let kept_all(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     n: Node(K, V),
     sound: Node/Sound(n),
@@ -477,7 +480,7 @@ let kept_all(
 -- Inserting the entries of placed twigs `pred` accepts into a map one by one leaves at a key what the twigs keep there, asked in turn.
 and kept_in(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     l: List(Node(K, V)),
     at: Nat,
@@ -524,7 +527,7 @@ and kept_in(
 --- `filter` has at every key the value there where `pred` accepts it, and none otherwise.
 pub let of_filter(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     m: Map(K, V),
     pred: (K, V) -> Bool,
@@ -535,7 +538,7 @@ pub let of_filter(
 --- `intersection` has at every key the first map's value where the second has an entry there, and none otherwise.
 pub let of_intersection(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     @W: Type,
     a: Map(K, V),
@@ -547,7 +550,7 @@ pub let of_intersection(
 --- `difference` has at every key the first map's value where the second has no entry there, and none otherwise.
 pub let of_difference(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     @W: Type,
     a: Map(K, V),
@@ -561,7 +564,7 @@ pub let of_difference(
 --- `update` sets the value at its key to what `f` answers of the value there.
 pub let of_update(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     m: Map(K, V),
     key: K,
@@ -575,7 +578,7 @@ pub let of_update(
 --- `update` leaves the value at every other key as it was.
 pub let of_update_other(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     m: Map(K, V),
     key: K,
@@ -591,7 +594,7 @@ pub let of_update_other(
 --- An entry `to_list` holds is the value at its key.
 pub let of_listed(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     m: Map(K, V),
     key: K,
@@ -607,7 +610,7 @@ pub let of_listed(
 --- The value at a key is an entry `to_list` holds.
 pub let listed(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     m: Map(K, V),
     key: K,

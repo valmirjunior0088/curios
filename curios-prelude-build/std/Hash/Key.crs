@@ -2,19 +2,19 @@ use /std/{Bytes, Bool, Eq, Hash, Ord, Ordering, proved};
 
 --- How a key type encodes to the byte string that identifies it, with the proof that the encodings stand in the keys' own order.
 ---
---- The encoding is `/std/Hash`'s and the order `/std/Ord`'s, reached through the concept's parents rather than restated, so a type has one identity as bytes and one order. The concept adds the one law neither parent carries, `monotone`, so a walk of the trie, which follows the encodings, follows the keys' order; that distinct keys encode distinctly, so the trie never merges two keys into one entry, follows from it ([`inj`]). A witness whose encoding collides or breaks the order is refused where it is declared.
+--- The encoding is `/std/Hash`'s and the order `/std/Ord`'s, reached through the concept's parents rather than restated, so a type has one identity as bytes and one order. The concept adds the one law neither parent carries, `mono`, so a walk of the trie, which follows the encodings, follows the keys' order; that distinct keys encode distinctly, so the trie never merges two keys into one entry, follows from it ([`inj`]). A witness whose encoding collides or breaks the order is refused where it is declared.
 ---
---- A type with an encoding and no order of its own takes its encoding's, and its `monotone` is `Eq/refl()`.
+--- A type with an encoding and no order of its own takes its encoding's, and its `mono` is `Eq/refl()`.
 pub concept Key(K: Type): pub Type {
     use Hash(K),
     use Ord(K),
     --- The order of two keys is the order of their encodings, as `Bytes/ord` reads them.
-    monotone(a: K, b: K) -> Eq()(Ord/ord(a, b), Bytes/ord(Hash/hash(a), Hash/hash(b))),
+    mono(a: K, b: K) -> Eq()(Ord/ord(a, b), Bytes/ord(Hash/hash(a), Hash/hash(b))),
 }
 
 pub use Key/*;
 
--- Two keys of one encoding are `eq` in the encodings' order, so in their own by `monotone`, and two keys their order ties are one.
+-- Two keys of one encoding are `eq` in the encodings' order, so in their own by `mono`, and two keys their order ties are one.
 --- Distinct keys encode distinctly.
 pub let inj(
     @K: Type,
@@ -27,7 +27,7 @@ pub let inj(
         a,
         b,
         Eq/trans(
-            monotone(a, b),
+            mono(a, b),
             Eq/subst(
                 (z: Bytes) => Eq()(Bytes/ord(Hash/hash(a), z), Ordering/eq()),
                 same,

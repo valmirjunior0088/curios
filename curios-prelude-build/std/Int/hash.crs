@@ -107,7 +107,7 @@ pub let of_lt(
     end;
 
 --- The order of two integers is the order of their encodings.
-pub let monotone(a: Int, b: Int) -> Eq()(Int/ord(a, b), Bytes/ord(hash(a), hash(b))) =
+pub let mono(a: Int, b: Int) -> Eq()(Int/ord(a, b), Bytes/ord(hash(a), hash(b))) =
     match
     | a < b => Eq/sym(Bytes/ord/below/lt(hash(a), hash(b), of_lt(a, b, Bool/True/qed())))
     | b < a =>

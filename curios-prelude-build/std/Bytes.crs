@@ -11,7 +11,7 @@ pub use to_nat/{let to_nat};
 pub mod ord;
 pub use ord/{let ord};
 
-use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Show, Spell, Fmt, Hash, Map, proved};
+use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Show, Spell, Fmt, Hash, proved};
 use /std/ops/{Eql};
 
 --- The byte at `i`, or `none` past the end.
@@ -327,6 +327,6 @@ satisfy Hash(Bytes) {
 }
 
 --- The identity encoding, in the order of bytes.
-satisfy Map/Key(Bytes) {
-    monotone(_, _) = Eq/refl(),
+satisfy Hash/Key(Bytes) {
+    mono(_, _) = Eq/refl(),
 }

@@ -1,8 +1,8 @@
-//! The `Key` laws, which a witness must discharge where it is declared. `Map` and `Set` themselves — lookups, the canonical shape and the rewriting functions — are `/std/Map`'s own tests'.
+//! The `Hash/Key` laws, which a witness must discharge where it is declared. `Map` and `Set` themselves — lookups, the canonical shape and the rewriting functions — are `/std/Map`'s own tests'.
 
 use crate::test_support::*;
 
-// The trie's identity is the byte string a key's `Hash` produces, so a colliding encoding does not fail a lookup — it silently merges two keys into one entry. The key's one law refuses it where it is declared: an order holds two values apart unless they are one (`Ord/eq`), and two values of one encoding tie in the encodings' order, so `monotone` is false at any two distinct keys of one encoding, which is why injectivity is a lemma of it (`Map/Key/inj`). Both constructors here hash to the empty byte string, so the law at `left` and `right` asks that `lt` be `eq`. The collision is declared once, in the `Hash` witness — `Key` reaches the encoding through its superclass edge and has no second field to disagree with it — so there is one place for a collision to come from and the law catches it there.
+// The trie's identity is the byte string a key's `Hash` produces, so a colliding encoding does not fail a lookup — it silently merges two keys into one entry. The key's one law refuses it where it is declared: an order holds two values apart unless they are one (`Ord/eq`), and two values of one encoding tie in the encodings' order, so `mono` is false at any two distinct keys of one encoding, which is why injectivity is a lemma of it (`Hash/Key/inj`). Both constructors here hash to the empty byte string, so the law at `left` and `right` asks that `lt` be `eq`. The collision is declared once, in the `Hash` witness — `Hash/Key` reaches the encoding through its superclass edge and has no second field to disagree with it — so there is one place for a collision to come from and the law catches it there.
 #[test]
 fn a_colliding_key_witness_is_rejected() {
     let source = r#"
@@ -17,8 +17,8 @@ fn a_colliding_key_witness_is_rejected() {
         satisfy Hash(Side) {
             hash(s) = 0x[],
         }
-        satisfy Map/Key(Side) {
-            monotone(a, b) =
+        satisfy Hash/Key(Side) {
+            mono(a, b) =
                 match a
                 | left() => match b | left() => Eq/refl() | right() => Eq/refl() end
                 | right() => match b | left() => Eq/refl() | right() => Eq/refl() end
@@ -35,7 +35,7 @@ fn a_colliding_key_witness_is_rejected() {
     );
 }
 
-// A walk of the trie is in the order of the encodings, so an encoding out of its type's order does not fail a lookup either — it enumerates a map's keys in an order no reader of the type expects. `Key/monotone` states that obligation: the order of two keys is `Bytes/ord` of their encodings. `left` is below `right` by their declaration and its byte is above `right`'s, and the law is refused at the one pair it is false of.
+// A walk of the trie is in the order of the encodings, so an encoding out of its type's order does not fail a lookup either — it enumerates a map's keys in an order no reader of the type expects. `Hash/Key/mono` states that obligation: the order of two keys is `Bytes/ord` of their encodings. `left` is below `right` by their declaration and its byte is above `right`'s, and the law is refused at the one pair it is false of.
 #[test]
 fn a_key_witness_out_of_its_order_is_rejected() {
     let source = r#"
@@ -50,8 +50,8 @@ fn a_key_witness_out_of_its_order_is_rejected() {
         satisfy Hash(Side) {
             hash(s) = match s | left() => 0x[0x1] | right() => 0x[0x0] end,
         }
-        satisfy Map/Key(Side) {
-            monotone(a, b) =
+        satisfy Hash/Key(Side) {
+            mono(a, b) =
                 match a
                 | left() => match b | left() => Eq/refl() | right() => Eq/refl() end
                 | right() => match b | left() => Eq/refl() | right() => Eq/refl() end
@@ -68,18 +68,17 @@ fn a_key_witness_out_of_its_order_is_rejected() {
     );
 }
 
-// A function under `use Key(K)` alone reads its keys' order through the dictionary: the sort takes `Ord(K)` from the key's superclass edge, and the law that the sort's answer is in order reads the order's own laws through that edge, so no caller states an order or proves a law beside the key it names.
+// A function under `use Hash/Key(K)` alone reads its keys' order through the dictionary: the sort takes `Ord(K)` from the key's superclass edge, and the law that the sort's answer is in order reads the order's own laws through that edge, so no caller states an order or proves a law beside the key it names.
 #[test]
 fn a_function_under_a_key_alone_sorts_its_keys_and_states_their_order() {
     let source = r#"
-        use /std/{Nat, Int, Bool, Str, List, Map, Ord};
-        use /std/Map/{Key};
+        use /std/{Nat, Int, Bool, Str, List, Map, Hash, Ord};
         use /std/Bool/{Holds};
-        let sorted(@K: Type, use Key(K), keys: List(K)) -> List(K) =
+        let sorted(@K: Type, use Hash/Key(K), keys: List(K)) -> List(K) =
             List/sort(keys);
         let in_order(
             @K: Type,
-            use Key(K),
+            use Hash/Key(K),
             keys: List(K),
         ) -> Holds(List/ordered(sorted(keys), Ord/le_by((a: K, b: K) => Ord/ord(a, b)))) =
             List/sort/sorted(keys);

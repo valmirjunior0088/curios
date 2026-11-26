@@ -1,6 +1,5 @@
 use /std/{Bytes, Nat, Bool, Option, List, Vec, Eq, Hash, Ord, Ordering, proved};
 use /std/List/{Member, Pairwise};
-use /std/Map/{Key};
 use /std/Map/digits/{digit, small, crit, Parting, parting, Apart, turned, reheaded, before};
 use /std/ops/{Eql};
 
@@ -14,7 +13,7 @@ end
 pub use Node/*;
 
 --- The encoding of the first key of the first twig that holds any; nothing where none does.
-pub let first_in(@K: Type, use Key(K), @V: Type, l: List(Node(K, V))) -> Bytes =
+pub let first_in(@K: Type, use Hash/Key(K), @V: Type, l: List(Node(K, V))) -> Bytes =
     match l
     | [] => 0x[]
     | [h, ..r] =>
@@ -26,7 +25,7 @@ pub let first_in(@K: Type, use Key(K), @V: Type, l: List(Node(K, V))) -> Bytes =
     end;
 
 --- The encoding of a node's first key, the one of its first twig that holds any; nothing for an empty node.
-pub let first(@K: Type, use Key(K), @V: Type, t: Node(K, V)) -> Bytes =
+pub let first(@K: Type, use Hash/Key(K), @V: Type, t: Node(K, V)) -> Bytes =
     match t
     | empty() => 0x[]
     | leaf(k, _) => Hash/hash(k)
@@ -63,7 +62,7 @@ pub struct Branched(Held: Prop, many: Bool): pub Prop {
 }
 
 --- A trie is sound where every branch of it is.
-pub let Sound(@K: Type, use Key(K), @V: Type, t: Node(K, V)) -> Prop =
+pub let Sound(@K: Type, use Hash/Key(K), @V: Type, t: Node(K, V)) -> Prop =
     match t
     | empty() => Bool/True
     | leaf(_, _) => Bool/True
@@ -72,7 +71,7 @@ pub let Sound(@K: Type, use Key(K), @V: Type, t: Node(K, V)) -> Prop =
 --- The twigs of a branch at `at`, the first at the digit `d`, each where it stands under the branch whose first key is `a`.
 pub and Twigs(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     l: List(Node(K, V)),
     at: Nat,
@@ -84,7 +83,15 @@ pub and Twigs(
     | [h, ..r] => {Twig(h, at, d, a), Twigs(r, at, d + 1, a)}
     end
 --- One twig, at the digit `d`: nothing, or [`Placed`].
-pub and Twig(@K: Type, use Key(K), @V: Type, h: Node(K, V), at: Nat, d: Nat, a: Bytes) -> Prop =
+pub and Twig(
+    @K: Type,
+    use Hash/Key(K),
+    @V: Type,
+    h: Node(K, V),
+    at: Nat,
+    d: Nat,
+    a: Bytes,
+) -> Prop =
     match h
     | empty() => Bool/True
     | leaf(_, _) => Placed(Sound(h), first(h), a, at, d, deeper(h, at))
@@ -112,7 +119,7 @@ pub let picked(
     end;
 
 --- The value of the key whose encoding is `k` under `t`: a branch's twig at `k`'s digit there holds it where anything does.
-pub let find(@K: Type, use Key(K), @V: Type, t: Node(K, V), k: Bytes) -> Option(V) =
+pub let find(@K: Type, use Hash/Key(K), @V: Type, t: Node(K, V), k: Bytes) -> Option(V) =
     match t
     | empty() => Option/none()
     | leaf(k0, v0) =>
@@ -154,7 +161,7 @@ pub let deeper_down(
 --- A key under a sound node agrees with the node's first key at every position the node forks past.
 pub let within(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     t: Node(K, V),
     sound: Sound(t),
@@ -177,7 +184,7 @@ pub let within(
 --- A key under twigs placed under a branch's first key `a` agrees with it below the branch's position, and has the digit of the twig holding it there.
 pub and within_in(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     l: List(Node(K, V)),
     at: Nat,
@@ -221,7 +228,7 @@ pub and within_in(
 --- A key under a sound node is found.
 pub let found(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     t: Node(K, V),
     sound: Sound(t),
@@ -250,7 +257,7 @@ pub let found(
 --- A key under twigs placed from the digit `d` on stands past `d`, and the twig its digit picks finds it.
 pub and found_in(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     l: List(Node(K, V)),
     at: Nat,
@@ -316,7 +323,7 @@ pub and found_in(
 --- A walk by an encoding whose digit at `c` is not the one every key of a sound node has there, `c` a position the node forks past, finds nothing.
 pub let missing(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     t: Node(K, V),
     sound: Sound(t),
@@ -357,7 +364,7 @@ pub let missing(
 --- No twig placed under a branch whose first key is `a`, `c` before the branch's position, finds an encoding whose digit at `c` is not `a`'s.
 pub and missing_in(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     l: List(Node(K, V)),
     at: Nat,
@@ -463,7 +470,7 @@ pub let count_set(
 --- The twig at `i` of twigs placed from the digit `d` stands at the digit `d + i`.
 pub let twig_at(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     l: List(Node(K, V)),
     at: Nat,
@@ -484,7 +491,7 @@ pub let twig_at(
 --- Twigs placed from the digit `d`, one updated at `i` with a twig that stands at `d + i`, are placed.
 pub let twigs_set(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     l: List(Node(K, V)),
     at: Nat,
@@ -508,7 +515,7 @@ pub let twigs_set(
 --- Twigs that hold nothing stand under anything.
 pub let vacant(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     l: List(Node(K, V)),
     at: Nat,
@@ -529,7 +536,7 @@ pub let vacant(
 --- A twig placed under one first key below the branch's position is placed under another that agrees with the first there.
 pub let twig_moved(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     h: Node(K, V),
     at: Nat,
@@ -558,7 +565,7 @@ pub let twig_moved(
 --- Twigs placed under one first key are placed under another that agrees with it below the branch's position.
 pub let moved(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     l: List(Node(K, V)),
     at: Nat,
@@ -577,7 +584,7 @@ pub let moved(
 --- The first key of twigs that hold anything agrees below the branch's position with the first key they are placed under.
 pub let first_agrees(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     l: List(Node(K, V)),
     at: Nat,
@@ -601,7 +608,7 @@ pub let first_agrees(
 --- A sound twig is sound, empty or not.
 pub let twig_sound(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     h: Node(K, V),
     at: Nat,
@@ -618,7 +625,7 @@ pub let twig_sound(
 --- That `n` answers `x` at the encoding `k`, and at every other what `t` answers: what a node that may stand where `t` did says once the key encoding to `k` is set to `x`.
 pub let Answers(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     n: Node(K, V),
     t: Node(K, V),
@@ -634,7 +641,7 @@ pub struct Held(a: Bytes, b: Bytes, c: Nat, past: Bool): pub Prop {
 }
 
 --- A node that may stand where another did: sound, holding something, and keeping the other's place under every branch above it.
-pub struct Stands(@K: Type, use Key(K), @V: Type, n: Node(K, V), t: Node(K, V)): pub Prop {
+pub struct Stands(@K: Type, use Hash/Key(K), @V: Type, n: Node(K, V), t: Node(K, V)): pub Prop {
     sound: Sound(n),
     filled: Bool/Holds(filled(n)),
     kept: (c: Nat, past: Bool/Holds(deeper(t, c))) -> Held(first(n), first(t), c, deeper(n, c)),
@@ -683,7 +690,7 @@ pub let pick_vacant(
 --- A twig that holds something and states [`Placed`] stands where it is.
 pub let placing(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     h: Node(K, V),
     at: Nat,
@@ -701,7 +708,7 @@ pub let placing(
 --- A twig holding something is [`Placed`].
 pub let placed_of(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     h: Node(K, V),
     at: Nat,
@@ -719,7 +726,7 @@ pub let placed_of(
 --- A node that may stand where a twig stood stands where the twig did.
 pub let restand(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     h: Node(K, V),
     n: Node(K, V),
@@ -747,7 +754,7 @@ pub let restand(
 --- A sound branch with one twig updated to a node that stands at its digit and holds something may stand where the branch did.
 pub let branch_stands(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     at: Nat,
     tw: Vec(Node(K, V), 16),
@@ -826,7 +833,7 @@ pub let rebased(
 --- Updating the twig `k`'s digit picks to a node that answers `x` at `k` gives a branch that answers `x` at `k`: an encoding with another digit there finds what it found before, and is not `k`.
 pub let branch_answers(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     at: Nat,
     tw: Vec(Node(K, V), 16),
@@ -873,7 +880,7 @@ pub let branch_answers(
 --- A leaf whose key encodes to `k`, its value rewritten to `v`, answers `v` at `k` in its own place.
 pub let leaf_answers(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     k0: K,
     v0: V,
@@ -896,7 +903,7 @@ pub let leaf_answers(
 --- A leaf of `key`, whose encoding is `k`, answers its value at `k` in an empty node's place.
 pub let vacant_answers(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     key: K,
     v: V,
@@ -944,7 +951,7 @@ pub let wedge(
 -- The twigs of a wedge, placed under `k`.
 let wedge_twigs(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     c: Nat,
     d: Nat,
@@ -1000,7 +1007,7 @@ let wedge_twigs(
 -- A wedge holds two twigs.
 let wedge_count(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     c: Nat,
     d: Nat,
@@ -1049,7 +1056,7 @@ let wedge_count(
 --- A wedge's first key agrees with the wedged key below the position it was wedged at.
 pub let wedge_first(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     c: Nat,
     d: Nat,
@@ -1074,7 +1081,7 @@ pub let wedge_first(
 --- A leaf of `key`, whose encoding is `k`, wedged in beside a sound node it parts from at `c`, the node forking past `c` and at the digit `d` there, is sound.
 pub let wedged(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     c: Nat,
     d: Nat,
@@ -1109,7 +1116,7 @@ pub let wedged(
 --- A leaf for `key`, encoded `k`, wedged beside a sound node it parts from at `c`, the node forking past `c`, answers `key`'s value at `k`: an encoding with the leaf's digit at `c` is not the node's, and one with another digit is not `k`.
 pub let wedge_answers(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     c: Nat,
     d: Nat,
@@ -1198,7 +1205,7 @@ pub let wedge_answers(
 --- The first key of twigs placed from the digit `d` that hold anything stands past `d`, and the twig its digit picks holds something.
 pub let first_filled(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     l: List(Node(K, V)),
     at: Nat,
@@ -1245,7 +1252,7 @@ pub let first_filled(
     end;
 
 --- How inserting `v` at `k` under the node `t` ended: `t` was empty, for the branch above to fill; a node with the key's leaf added, or with the value of the leaf it held replaced, either standing where `t` did and answering `v` at `k`; or `t` unchanged, with the position where the key first parts from its keys and its first key's digit there, for the branch above to wedge the new leaf in.
-pub induct Inserted(K: Type, use Key(K), V: Type, t: Node(K, V), k: Bytes, v: V): pub Type
+pub induct Inserted(K: Type, use Hash/Key(K), V: Type, t: Node(K, V), k: Bytes, v: V): pub Type
 | vacant(empty: Eq()(t, Node/empty()))
 | added(
     n: Node(K, V),
@@ -1273,7 +1280,7 @@ end
 --- `key` under the sound node `t` at `v`, where `k` is `key`'s encoding, computed once by the caller; a leaf's is derived here, where it is compared.
 pub let insert(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     t: Node(K, V),
     key: K,
@@ -1606,13 +1613,13 @@ pub let insert(
     end;
 
 --- That nothing is left of `t` once the key encoding to `k` goes: `t` answers nothing at any other encoding.
-pub let Gone(@K: Type, use Key(K), @V: Type, t: Node(K, V), k: Bytes) -> Prop =
+pub let Gone(@K: Type, use Hash/Key(K), @V: Type, t: Node(K, V), k: Bytes) -> Prop =
     (j: Bytes) -> Eq()(
         match k == j | true => Option/none() | false => find(t, j) end,
         Option/none());
 
 --- How removing `k` under the node `t` ended: the key was absent, and `t` answers nothing at `k`; the node held that key alone, and nothing is left; or what is left, which stands where `t` did and answers nothing at `k`.
-pub induct Removed(K: Type, use Key(K), V: Type, t: Node(K, V), k: Bytes): pub Type
+pub induct Removed(K: Type, use Hash/Key(K), V: Type, t: Node(K, V), k: Bytes): pub Type
 | absent(n: Node(K, V), @back: Eq()(n, t), answers: Answers(t, t, k, Option/none()))
 | gone(empty: Gone(t, k))
 | kept(
@@ -1625,7 +1632,7 @@ end
 -- A leaf whose key encodes to `k` is all there was.
 let leaf_gone(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     k0: K,
     v0: V,
@@ -1647,7 +1654,7 @@ let leaf_gone(
 -- A leaf whose key does not encode to `k` answers nothing at `k`.
 let leaf_absent(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     k0: K,
     v0: V,
@@ -1683,7 +1690,7 @@ pub let lone(@K: Type, @V: Type, l: List(Node(K, V))) -> Node(K, V) =
 --- The first twig that holds anything is the one the first key's digit picks, and holds something.
 pub let lone_at(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     l: List(Node(K, V)),
     at: Nat,
@@ -1786,7 +1793,7 @@ pub let only_one(
 --- A branch whose twigs hold one thing finds what that twig finds.
 pub let collapsed(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     at: Nat,
     tw: Vec(Node(K, V), 16),
@@ -1838,7 +1845,7 @@ pub let collapsed(
 --- The one twig left of a branch may stand where the branch did.
 pub let lone_stands(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     at: Nat,
     tw: Vec(Node(K, V), 16),
@@ -1891,7 +1898,7 @@ pub let present_small(@K: Type, @V: Type, h: Node(K, V)) -> Bool/Holds(present(h
 --- A sound branch one of whose twigs empties, two twigs still holding something, may stand where the branch did.
 pub let branch_emptied(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     at: Nat,
     tw: Vec(Node(K, V), 16),
@@ -1943,7 +1950,7 @@ pub let branch_emptied(
 --- The sound node `t` without the key whose encoding is `k`.
 pub let remove(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     t: Node(K, V),
     k: Bytes,
@@ -2108,9 +2115,16 @@ pub let fold(@K: Type, @V: Type, @A: Type, t: Node(K, V), acc: A, f: (K, V, A) -
 pub and fold_in(@K: Type, @V: Type, @A: Type, l: List(Node(K, V)), acc: A, f: (K, V, A) -> A) -> A =
     match l | [] => acc | [h, ..r] => fold_in(r, fold(h, acc, f), f) end;
 
--- Keys are compared by their encodings, which `Key`'s law makes equality, so a map's own dictionary is all that equality of maps asks of its keys. A value is compared where the trie holds it, a leaf's own payload, so a family whose values are maps of itself descends through this as it does through a list's equality.
+-- Keys are compared by their encodings, which `Hash/Key`'s law makes equality, so a map's own dictionary is all that equality of maps asks of its keys. A value is compared where the trie holds it, a leaf's own payload, so a family whose values are maps of itself descends through this as it does through a list's equality.
 --- Whether two nodes are alike: one shape, each leaf's key encoded alike and its value equal. A trie is a function of its entries, so two sound nodes are alike exactly where they hold the same keys at equal values.
-pub let same(@K: Type, use Key(K), @V: Type, use Eql(V), a: Node(K, V), b: Node(K, V)) -> Bool =
+pub let same(
+    @K: Type,
+    use Hash/Key(K),
+    @V: Type,
+    use Eql(V),
+    a: Node(K, V),
+    b: Node(K, V),
+) -> Bool =
     match a
     | empty() => match b | empty() => true | _ => false end
     | leaf(k1, v1) =>
@@ -2126,7 +2140,7 @@ pub let same(@K: Type, use Key(K), @V: Type, use Eql(V), a: Node(K, V), b: Node(
     end
 pub and same_in(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     use Eql(V),
     a: List(Node(K, V)),
@@ -2137,11 +2151,11 @@ pub and same_in(
     | [x, ..xs] => match b | [] => false | [y, ..ys] => same(x, y) && same_in(xs, ys) end
     end;
 
--- By recursion on both nodes: two nodes [`same`] holds alike are at one case, a leaf's keys one by [`Key/same`] and its values by the values' own law, and a branch's twigs one by one.
+-- By recursion on both nodes: two nodes [`same`] holds alike are at one case, a leaf's keys one by [`Hash/Key/same`] and its values by the values' own law, and a branch's twigs one by one.
 --- Two nodes that are alike are one node.
 pub let eq_of_same(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     use Eql(V),
     a: Node(K, V),
@@ -2160,7 +2174,7 @@ pub let eq_of_same(
         | empty() => match h end
         | leaf(k2, v2) =>
             let refl() =
-                Key/same(k1, k2, Bool/and/first(Hash/hash(k1) == Hash/hash(k2), v1 == v2, h));
+                Hash/Key/same(k1, k2, Bool/and/first(Hash/hash(k1) == Hash/hash(k2), v1 == v2, h));
             let refl() =
                 Eql/eq(v1, v2, Bool/and/second(Hash/hash(k1) == Hash/hash(k2), v1 == v2, h));
             Eq/refl()
@@ -2185,7 +2199,7 @@ pub let eq_of_same(
     end
 pub and eq_of_same_in(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     use Eql(V),
     a: List(Node(K, V)),
@@ -2211,7 +2225,7 @@ pub and eq_of_same_in(
 --- A node is alike to itself.
 pub let same_refl(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     use Eql(V),
     a: Node(K, V),
@@ -2225,7 +2239,7 @@ pub let same_refl(
     end
 pub and same_refl_in(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     use Eql(V),
     a: List(Node(K, V)),
@@ -2321,7 +2335,7 @@ pub and listed_in(
 --- Twigs with their values rewritten keep their first key.
 pub let map_first_in(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     @W: Type,
     l: List(Node(K, V)),
@@ -2340,7 +2354,7 @@ pub let map_first_in(
 --- A node with its values rewritten keeps its first key.
 pub let map_first(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     @W: Type,
     t: Node(K, V),
@@ -2373,7 +2387,7 @@ let map_count(
 --- A sound node with its values rewritten is sound.
 pub let mapped(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     @W: Type,
     t: Node(K, V),
@@ -2395,7 +2409,7 @@ pub let mapped(
     end
 pub and mapped_in(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     @W: Type,
     l: List(Node(K, V)),
@@ -2434,7 +2448,7 @@ pub and mapped_in(
 --- A node with its values rewritten finds what it found, rewritten.
 pub let mapped_find(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     @W: Type,
     t: Node(K, V),
@@ -2452,7 +2466,7 @@ pub let mapped_find(
 --- A key under a twig standing at the digit `d` has that digit at the branch's position.
 pub let twig_digit(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     h: Node(K, V),
     at: Nat,
@@ -2472,7 +2486,7 @@ pub let twig_digit(
 --- A key under a twig agrees with the branch's first key below the branch's position.
 pub let twig_agree(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     h: Node(K, V),
     at: Nat,
@@ -2505,7 +2519,7 @@ pub let twig_agree(
 --- A key under a twig is before every key under the twigs after it, as `Bytes/ord` reads their encodings: the two are apart at the branch's position, where the first has the lesser digit.
 pub let across(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     h: Node(K, V),
     at: Nat,
@@ -2537,7 +2551,7 @@ pub let across(
 --- The keys under a sound node are in strict order, each before every one after it.
 pub let ascending(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     t: Node(K, V),
     sound: Sound(t),
@@ -2550,7 +2564,7 @@ pub let ascending(
 --- The keys under placed twigs are in strict order.
 pub and ascending_in(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     l: List(Node(K, V)),
     at: Nat,
@@ -2570,7 +2584,7 @@ pub and ascending_in(
                     (o: Ordering) => Bool/Holds(Ordering/is_lt(o)),
                     Eq/sym(
                         Eq/trans(
-                            Key/monotone(x, y),
+                            Hash/Key/mono(x, y),
                             across(h, at, d, a, twigs.0, r, twigs.1, x, i, y, j))),
                     Bool/True/qed()))
     end;
@@ -2725,7 +2739,7 @@ end =
 -- A key is at or below itself.
 let le_self(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     k: K,
 ) -> Bool/Holds(Ord/le_by((a: K, b: K) => Ord/ord(a, b))(k, k)) =
     Eq/subst((r: Ordering) => Bool/Holds(Ordering/is_le(r)), Eq/sym(Ord/refl(k)), Bool/True/qed());
@@ -2733,20 +2747,20 @@ let le_self(
 -- A key before another by their encodings is at or below it.
 let le_of_before(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     x: K,
     y: K,
     lt: Eq()(Bytes/ord(Hash/hash(x), Hash/hash(y)), Ordering/lt()),
 ) -> Bool/Holds(Ord/le_by((a: K, b: K) => Ord/ord(a, b))(x, y)) =
     Eq/subst(
         (r: Ordering) => Bool/Holds(Ordering/is_le(r)),
-        Eq/sym(Eq/trans(Key/monotone(x, y), lt)),
+        Eq/sym(Eq/trans(Hash/Key/mono(x, y), lt)),
         Bool/True/qed());
 
 --- No key under a sound node is below its least entry's.
 pub let least_below(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     t: Node(K, V),
     sound: Sound(t),
@@ -2771,7 +2785,7 @@ end =
     end
 pub and least_below_in(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     l: List(Node(K, V)),
     at: Nat,
@@ -2810,7 +2824,7 @@ end =
 --- No key under a sound node is above its greatest entry's.
 pub let greatest_above(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     t: Node(K, V),
     sound: Sound(t),
@@ -2835,7 +2849,7 @@ end =
     end
 pub and greatest_above_in(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     l: List(Node(K, V)),
     at: Nat,
@@ -2885,7 +2899,7 @@ end =
 --- What twigs answer at `k` asked in turn, each's combined by `f` with what came before it, from `r`.
 pub let folded(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     @R: Type,
     l: List(Node(K, V)),
@@ -2898,7 +2912,7 @@ pub let folded(
 --- A twig standing at a digit other than `k`'s at the branch's position finds nothing at `k`.
 pub let twig_miss(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     h: Node(K, V),
     at: Nat,
@@ -2931,7 +2945,7 @@ pub let twig_miss(
 --- Twigs placed past `k`'s digit answer nothing at `k`, so a combination `none` leaves as it was leaves what came before.
 pub let all_miss(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     @R: Type,
     l: List(Node(K, V)),
@@ -2971,7 +2985,7 @@ let strictly(
 --- What placed twigs answer at `k` asked in turn, by a combination that `none` leaves as it was, is what the twig at `k`'s digit answers, combined with what came before them all.
 pub let either_in(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     @R: Type,
     l: List(Node(K, V)),
@@ -3059,7 +3073,7 @@ pub and entry_key_in(
 --- An entry of a sound node is found at its key, with its value.
 pub let entry_found(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     t: Node(K, V),
     sound: Sound(t),
@@ -3086,7 +3100,7 @@ pub let entry_found(
     end
 pub and entry_found_in(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     l: List(Node(K, V)),
     at: Nat,
@@ -3140,7 +3154,7 @@ pub let entry_lift(
 --- What a node finds at a key's encoding is an entry of it, at that key.
 pub let found_entry(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     t: Node(K, V),
     x: K,
@@ -3154,7 +3168,7 @@ pub let found_entry(
     | leaf(k0, v0) =>
         match Hash/hash(k0) == Hash/hash(x)
         | true =>
-            let key = Key/same(k0, x, Bool/True/qed());
+            let key = Hash/Key/same(k0, x, Bool/True/qed());
             let value: Eq()(v0, v) = Option/some_inj(h);
             Eq/subst(
                 (p: {K, V}) => Member()(p, [(k0, v0)]),
@@ -3180,7 +3194,7 @@ pub let found_entry(
 -- A key a node finds what `o` is at, `o` something, is one of its keys.
 let found_at(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     t: Node(K, V),
     x: K,
@@ -3196,7 +3210,7 @@ let found_at(
 --- A key found under a node is one of its keys.
 pub let found_key(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     t: Node(K, V),
     x: K,
@@ -3207,7 +3221,7 @@ pub let found_key(
 --- A sound node that holds anything holds a key, which `then` is handed.
 pub let node_key(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     @P: Prop,
     t: Node(K, V),
@@ -3224,7 +3238,7 @@ pub let node_key(
 --- Placed twigs some of which hold anything hold a key at or past their first digit, which `then` is handed.
 pub and one_key(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     @P: Prop,
     l: List(Node(K, V)),
@@ -3270,7 +3284,7 @@ pub and one_key(
 --- Placed twigs two of which hold anything hold two keys whose digits at the branch's position differ, which `then` is handed.
 pub let two_keys(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     @P: Prop,
     l: List(Node(K, V)),
@@ -3348,7 +3362,7 @@ pub let two_keys(
 -- A key a leaf finds is the leaf's own, by its encoding.
 let leaf_code(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     k: K,
     v: V,
@@ -3363,7 +3377,7 @@ let leaf_code(
 -- Two keys of a sound node, apart at a position the node forks past, are no keys of one node.
 let not_past(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     n: Node(K, V),
     sound: Sound(n),
@@ -3382,7 +3396,7 @@ let not_past(
 -- A key one node finds, another that finds alike finds.
 let carried_find(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     a: Node(K, V),
     b: Node(K, V),
@@ -3396,7 +3410,7 @@ let carried_find(
 --- Two sound nodes that find alike at every key's encoding are one node.
 pub let canonical(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     n1: Node(K, V),
     n2: Node(K, V),
@@ -3434,7 +3448,7 @@ pub let canonical(
         | leaf(k2, v2) =>
             match Hash/hash(k2) == Hash/hash(k1)
             | true =>
-                let key: Eq()(k2, k1) = Key/same(k2, k1, Bool/True/qed());
+                let key: Eq()(k2, k1) = Hash/Key/same(k2, k1, Bool/True/qed());
                 let value: Eq()(v1, v2) = Option/some_inj(same(k1));
                 Eq/trans(
                     Eq/cong((w: V) => Node/leaf(k1, w), value),
@@ -3604,7 +3618,7 @@ pub let canonical(
 --- Two lists of placed twigs of one length, whose twigs at each key's digit find alike at that key, are one list.
 pub and canonical_in(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     l1: List(Node(K, V)),
     l2: List(Node(K, V)),

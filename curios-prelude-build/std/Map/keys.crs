@@ -1,17 +1,17 @@
-use /std/{List, Eq, Ord, Bool};
+use /std/{List, Eq, Ord, Bool, Hash};
 use /std/List/{Pairwise};
-use /std/Map/{Map, Key};
+use /std/Map/{Map};
 use /std/Map/internal/{Node};
 
 --- The keys, in their type's own order: each is before every one after it, by [`pairwise`].
-pub let keys(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> List(K) =
+pub let keys(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V)) -> List(K) =
     Node/collect(m.root, []);
 
--- A map's trie is sound, so a key under a branch's twig is before every key under the twigs after it as `Bytes/ord` reads their encodings, and `Key/monotone` makes that the keys' own order. It asks nothing beyond the map's `Key(K)`.
+-- A map's trie is sound, so a key under a branch's twig is before every key under the twigs after it as `Bytes/ord` reads their encodings, and `Hash/Key/mono` makes that the keys' own order. It asks nothing beyond the map's `Hash/Key(K)`.
 --- The keys of a map are in strict order by their type's own order, each before every one after it.
 pub let pairwise(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     m: Map(K, V),
 ) -> Pairwise(Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))(keys(m)) =
@@ -23,7 +23,7 @@ pub let pairwise(
 --- The keys of a map are in strict order at adjacent elements, as a decision.
 pub let ordered(
     @K: Type,
-    use Key(K),
+    use Hash/Key(K),
     @V: Type,
     m: Map(K, V),
 ) -> Bool/Holds(List/ordered(keys(m), Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))) =

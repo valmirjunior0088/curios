@@ -1,5 +1,5 @@
 -- `Set`, a map from its elements to nothing: its laws read off `Map`'s, its order, and the operations that build one from two.
-use /std/{Str, Nat, Bool, List, Ord, Eq, Hash, Map, Set, Test};
+use /std/{Str, Nat, Bool, List, Ord, Eq, Hash, Set, Test};
 use /std/Bool/{True};
 
 -- A `Set(K)` is a structure over `Map(K, {})`, whose leaves hold the keys themselves, so `to_list` hands the elements back typed — `List(Str)` here, joined without a decoder.
@@ -27,7 +27,7 @@ test intersection_and_difference_part_the_first_set_by_the_seconds_elements =
 -- The elements of a set are in their type's own order at every pair.
 let _a_sets_elements_are_in_their_order(
     @K: Type,
-    use Map/Key(K),
+    use Hash/Key(K),
     s: Set(K),
 ) -> List/Pairwise(Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))(Set/to_list(s)) =
     Set/to_list/pairwise(s);
@@ -35,7 +35,7 @@ let _a_sets_elements_are_in_their_order(
 -- Inserting an element twice is inserting it once, for every set: the two have the same elements, which `Set/has/extensional` takes to the sets.
 let _an_element_inserted_twice_is_inserted_once(
     @K: Type,
-    use Map/Key(K),
+    use Hash/Key(K),
     s: Set(K),
     k: K,
 ) -> Eq()(Set/insert(Set/insert(s, k), k), Set/insert(s, k)) =
@@ -50,18 +50,22 @@ let _an_element_inserted_twice_is_inserted_once(
                         Eq()(
                             Set/has(Set/insert(Set/insert(s, k), k), y),
                             Set/has(Set/insert(s, k), y)),
-                    Map/Key/same(k, key, True/qed()),
+                    Hash/Key/same(k, key, True/qed()),
                     Eq/trans(
                         Set/has/of_insert(Set/insert(s, k), k),
                         Eq/sym(Set/has/of_insert(s, k))))
             | false =>
-                Set/has/of_insert_other(Set/insert(s, k), k, key, Map/Key/apart(k, key, True/qed()))
+                Set/has/of_insert_other(
+                    Set/insert(s, k),
+                    k,
+                    key,
+                    Hash/Key/apart(k, key, True/qed()))
             end);
 
 -- No element of an intersection is an element of the difference by the same set, for every two sets: the laws state each as the two decisions at the key, false together in every case.
 let _an_intersection_and_a_difference_share_no_element(
     @K: Type,
-    use Map/Key(K),
+    use Hash/Key(K),
     a: Set(K),
     b: Set(K),
     k: K,

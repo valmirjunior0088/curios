@@ -77,7 +77,7 @@ pub use Coprime/{let Coprime};
 pub mod Scale;
 pub use Scale/{let Scale};
 
-use /std/{Str, Option, Char, Bool, Show, Spell, Hash, Map, Eq};
+use /std/{Str, Option, Char, Bool, Show, Spell, Hash, Eq};
 use /std/ops/{Eql, Add, Sub, Mul, Div, Rem};
 
 --- That `n` is not zero, decided — what `/` and `%` on `Nat` ask of a divisor. It is `Bool/Holds(0 < n)`: a natural is not zero exactly where zero is below it, which conversion decides.
@@ -215,6 +215,6 @@ satisfy Hash(Nat) {
 }
 
 --- The encoding in the order of the numbers.
-satisfy Map/Key(Nat) {
-    monotone = hash/monotone,
+satisfy Hash/Key(Nat) {
+    mono = hash/mono,
 }

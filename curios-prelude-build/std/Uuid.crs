@@ -1,6 +1,6 @@
 mod tests;
 
-use /std/{Nat, Int, Byte, Bytes, Bool, Char, Option, List, Str, Eq, Ordering, Ord, Hash, Map, Show,
+use /std/{Nat, Int, Byte, Bytes, Bool, Char, Option, List, Str, Eq, Ordering, Ord, Hash, Show,
     Spell, Fmt, Io, rand, proved};
 use /std/ops/{Eql};
 use /std/time/{Timestamp};
@@ -177,8 +177,8 @@ satisfy Hash(Uuid) {
 }
 
 --- The sixteen bytes, whose order is the UUIDs'.
-satisfy Map/Key(Uuid) {
-    monotone(_, _) = Eq/refl(),
+satisfy Hash/Key(Uuid) {
+    mono(_, _) = Eq/refl(),
 }
 
 --- The canonical text.
