@@ -4,7 +4,7 @@
 
 ## What is wrong today
 
-Each is probed at `2cbcf388a`.
+Each is probed at `c9bdf46a3`.
 
 - **A written key recursing through its own entry is refused.** Over `induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end` with `Eql`, `Ord` and `Hash` derived, a written `satisfy Hash/Key(Tree)` whose `node` arm hands `Hash/Key/then` the part `Hash/Key/mono(l, s)` is refused there: expected `Ord/ord(@Tree, use x0.1, x1, x2)`, the entry's own superclass slot, against the registered `Ord(Tree)`'s comparison. A written key recurses today only through a lemma of its own.
 - **A derived key over such a family is refused alike**, directly and through another key's type: `satisfy Hash/Key(Tree) { .. }` at `Hash/Key/then`'s `part`, and over `node(Box(Tree))`, under `Box`'s derived key, at `Hash/Key/last`'s.
