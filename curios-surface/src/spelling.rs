@@ -23,7 +23,7 @@ use {
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeSet, HashMap},
-        fmt,
+        fmt, iter,
         rc::Rc,
         sync::{Arc, OnceLock},
     },
@@ -1214,19 +1214,27 @@ pub enum IntrinsicForm<T = Term> {
     Handle(u32),
 }
 
+/// The root an intrinsic is declared under.
+const SYS: &str = "sys";
+
 /// The absolute path a reader writes an intrinsic's `path` by: an operation at its own path, and a carrier's type at the root, where `/sys` hoists it — `/sys/Bool`.
 pub fn intrinsic_path(path: &str) -> Qualifier {
-    Qualifier::from(std::iter::once("sys").chain(path.split('/')))
+    Qualifier::from(iter::once(SYS).chain(path.split('/')))
+}
+
+/// The segments below `/sys` of the declaration an intrinsic's `path` names: a carrier's type `X` at `X/X`, below the carrier `/sys` hoists to its root, and an operation at its own path.
+fn declared_below(path: &str) -> Vec<&str> {
+    let mut segments = path.split('/').collect::<Vec<_>>();
+    if let [carrier] = segments[..] {
+        segments.push(carrier);
+    }
+
+    segments
 }
 
 /// The declaration under `/sys` an intrinsic's `path` names: a carrier's type `X` at `X/X`, an operation at its own path.
 pub fn intrinsic_global(path: &str) -> Global {
-    let written = intrinsic_path(path);
-
-    Global::Authored(match written.segments().len() {
-        2 => written.with(written.last()),
-        _ => written,
-    })
+    Global::Authored(Qualifier::from(iter::once(SYS).chain(declared_below(path))))
 }
 
 /// The declaration under `/sys` that forms the carrier `head` keys on, `/sys/Nat/Nat` for `Nat`, read off the path its former is written at. None for a head no intrinsic former keys: a nominal one, or a tuple's shape.
@@ -1253,9 +1261,17 @@ pub fn carrier_former(head: &HeadKey) -> Option<Global> {
     }
 }
 
-/// The intrinsic type former `/sys` declares at `global`, over `operands`: `NatType` at `/sys/Nat/Nat` over none, `ListType(T)` at `/sys/List/List` over `T`. `None` where `global` names no intrinsic former, or `operands` are not as many as it takes. What a former written by its name and applied in full is, read off the path each former is written at ([`intrinsic_form`]) once for the process: elaboration asks it of every name it meets.
-pub fn intrinsic_former(global: &Global, operands: &[Term]) -> Option<Intrinsic> {
-    static FORMERS: OnceLock<HashMap<Global, IntrinsicFormer>> = OnceLock::new();
+/// The intrinsic type former `/sys` declares at `global`, over `operands`: `NatType` at `/sys/Nat/Nat` over none, `ListType(T)` at `/sys/List/List` over `T`, `sys` being the word the registry's roots mount `/sys` at (`RootSyntax::sys`). `None` where `global` names no intrinsic former, or `operands` are not as many as it takes. What a former written by its name and applied in full is, read off the path each former is written at ([`intrinsic_form`]) once for the process, below the root, so the table holds nothing a registry decides: elaboration asks it of every name it meets, which is why it is handed the root's word and not the registry it would copy out of a context.
+pub fn intrinsic_former(sys: &str, global: &Global, operands: &[Term]) -> Option<Intrinsic> {
+    static FORMERS: OnceLock<HashMap<Vec<String>, IntrinsicFormer>> = OnceLock::new();
+
+    let Global::Authored(name) = global else {
+        return None;
+    };
+    let (root, below) = name.segments().split_first()?;
+    if root != sys {
+        return None;
+    }
 
     FORMERS
         .get_or_init(|| {
@@ -1286,11 +1302,15 @@ pub fn intrinsic_former(global: &Global, operands: &[Term]) -> Option<Intrinsic>
                         IntrinsicForm::Call { path, .. } => path,
                         _ => unreachable!("a type former is written by its name"),
                     };
-                    (intrinsic_global(&path), former)
+                    let below = declared_below(&path)
+                        .into_iter()
+                        .map(str::to_string)
+                        .collect();
+                    (below, former)
                 })
                 .collect()
         })
-        .get(global)?
+        .get(below)?
         .over(operands)
 }
 

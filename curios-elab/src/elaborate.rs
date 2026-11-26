@@ -183,7 +183,7 @@ fn elaborate_subterm(
     }
 
     // An intrinsic former written by its name and applied in full is elaborated as its node.
-    if let Some(node) = written_intrinsic_former(term) {
+    if let Some(node) = written_intrinsic_former(context.syntax().roots.sys, term) {
         return elaborate(context, &node, mode);
     }
 
@@ -309,7 +309,7 @@ fn elaborate_subterm(
 }
 
 /// An intrinsic type former written by its name and applied in full, every argument explicit, or a closed one written bare, as the node it is ([`intrinsic_former`]): what elaboration reads in its place. Read before it is elaborated, so its operands are checked against the node's own signature and no level of its name's instance is minted: `/sys/List/List.{c}(Nat)` stands at `Type c` where `ListType(Nat)` stands at its operand's level, and an instance minted and then dropped would leave its levels to close on nothing. `None` for any other term.
-fn written_intrinsic_former(term: &Term) -> Option<Term> {
+fn written_intrinsic_former(sys: &str, term: &Term) -> Option<Term> {
     let (head, operands) = match &**term {
         Subterm::Transient(Transient::Name(name)) => (name, Vec::new()),
         Subterm::Apply(apply)
@@ -325,7 +325,7 @@ fn written_intrinsic_former(term: &Term) -> Option<Term> {
         }
         _ => return None,
     };
-    let node = Term::intrinsic(intrinsic_former(head, &operands)?);
+    let node = Term::intrinsic(intrinsic_former(sys, head, &operands)?);
 
     Some(match term.extent() {
         Some(extent) => node.with_extent(extent),
@@ -474,7 +474,11 @@ fn spelled_former(
         return Ok(None);
     };
     let binder = context.fresh(hint);
-    let Some(former) = intrinsic_former(&global, &[Term::free_var(&binder)]) else {
+    let Some(former) = intrinsic_former(
+        context.syntax().roots.sys,
+        &global,
+        &[Term::free_var(&binder)],
+    ) else {
         return Ok(None);
     };
 

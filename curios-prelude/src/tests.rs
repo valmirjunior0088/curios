@@ -366,8 +366,8 @@ fn no_term_of_the_prelude_names_a_type_former() {
         assert!(!nominal.is_empty(), "the prelude declares formers");
         let is_former = |name: &Global| {
             nominal.contains(name)
-                || intrinsic_former(name, &[]).is_some()
-                || intrinsic_former(name, &[Term::type_ground()]).is_some()
+                || intrinsic_former(SYNTAX.roots.sys, name, &[]).is_some()
+                || intrinsic_former(SYNTAX.roots.sys, name, &[Term::type_ground()]).is_some()
         };
 
         let mut named = Vec::new();
