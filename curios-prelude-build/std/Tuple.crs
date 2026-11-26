@@ -1,4 +1,4 @@
-use /std/{Bool, Eq, Show, Spell, Fmt, Ord, Ordering, Str, List, proved};
+use /std/{Bool, Eq, Show, Spell, Fmt, Ord, Ordering, Hash, Str, List, proved};
 use /std/ops/{Eql};
 
 let parens(parts: List(Str)) -> Str =
@@ -1802,4 +1802,848 @@ satisfy (
             Ord/eq(a.7, b.7, h7)),
     is_lt(_, _) = Eq/refl(),
     is_le(_, _) = Eq/refl(),
+}
+
+-- The encoding of a tuple, for each number of fields, as a derived encoding writes a struct's: each field's in order, every one but the last delimited, so a tuple encodes in its order, by the first field and by the rest where it ties.
+satisfy Hash({}) {
+    hash(()) = 0x[],
+}
+
+satisfy (@A: Type, use Hash(A)) => Hash({A}) {
+    hash(t) = Hash/hash(t.0),
+}
+
+satisfy (@A: Type, @B: Type, use Hash(A), use Hash(B)) => Hash({A, B}) {
+    hash(t) = 0x[..Hash/delimited(Hash/hash(t.0)), ..Hash/hash(t.1)],
+}
+
+satisfy (@A: Type, @B: Type, @C: Type, use Hash(A), use Hash(B), use Hash(C)) => Hash({A, B, C}) {
+    hash(t) =
+        0x[..Hash/delimited(Hash/hash(t.0)), ..Hash/delimited(Hash/hash(t.1)), ..Hash/hash(t.2)],
+}
+
+satisfy (
+    @A: Type,
+    @B: Type,
+    @C: Type,
+    @D: Type,
+    use Hash(A),
+    use Hash(B),
+    use Hash(C),
+    use Hash(D),
+) => Hash({A, B, C, D}) {
+    hash(t) =
+        0x[
+            ..Hash/delimited(Hash/hash(t.0)),
+            ..Hash/delimited(Hash/hash(t.1)),
+            ..Hash/delimited(Hash/hash(t.2)),
+            ..Hash/hash(t.3)],
+}
+
+satisfy (
+    @A: Type,
+    @B: Type,
+    @C: Type,
+    @D: Type,
+    @E: Type,
+    use Hash(A),
+    use Hash(B),
+    use Hash(C),
+    use Hash(D),
+    use Hash(E),
+) => Hash({A, B, C, D, E}) {
+    hash(t) =
+        0x[
+            ..Hash/delimited(Hash/hash(t.0)),
+            ..Hash/delimited(Hash/hash(t.1)),
+            ..Hash/delimited(Hash/hash(t.2)),
+            ..Hash/delimited(Hash/hash(t.3)),
+            ..Hash/hash(t.4)],
+}
+
+satisfy (
+    @A: Type,
+    @B: Type,
+    @C: Type,
+    @D: Type,
+    @E: Type,
+    @F: Type,
+    use Hash(A),
+    use Hash(B),
+    use Hash(C),
+    use Hash(D),
+    use Hash(E),
+    use Hash(F),
+) => Hash({A, B, C, D, E, F}) {
+    hash(t) =
+        0x[
+            ..Hash/delimited(Hash/hash(t.0)),
+            ..Hash/delimited(Hash/hash(t.1)),
+            ..Hash/delimited(Hash/hash(t.2)),
+            ..Hash/delimited(Hash/hash(t.3)),
+            ..Hash/delimited(Hash/hash(t.4)),
+            ..Hash/hash(t.5)],
+}
+
+satisfy (
+    @A: Type,
+    @B: Type,
+    @C: Type,
+    @D: Type,
+    @E: Type,
+    @F: Type,
+    @G: Type,
+    use Hash(A),
+    use Hash(B),
+    use Hash(C),
+    use Hash(D),
+    use Hash(E),
+    use Hash(F),
+    use Hash(G),
+) => Hash({A, B, C, D, E, F, G}) {
+    hash(t) =
+        0x[
+            ..Hash/delimited(Hash/hash(t.0)),
+            ..Hash/delimited(Hash/hash(t.1)),
+            ..Hash/delimited(Hash/hash(t.2)),
+            ..Hash/delimited(Hash/hash(t.3)),
+            ..Hash/delimited(Hash/hash(t.4)),
+            ..Hash/delimited(Hash/hash(t.5)),
+            ..Hash/hash(t.6)],
+}
+
+satisfy (
+    @A: Type,
+    @B: Type,
+    @C: Type,
+    @D: Type,
+    @E: Type,
+    @F: Type,
+    @G: Type,
+    @H: Type,
+    use Hash(A),
+    use Hash(B),
+    use Hash(C),
+    use Hash(D),
+    use Hash(E),
+    use Hash(F),
+    use Hash(G),
+    use Hash(H),
+) => Hash({A, B, C, D, E, F, G, H}) {
+    hash(t) =
+        0x[
+            ..Hash/delimited(Hash/hash(t.0)),
+            ..Hash/delimited(Hash/hash(t.1)),
+            ..Hash/delimited(Hash/hash(t.2)),
+            ..Hash/delimited(Hash/hash(t.3)),
+            ..Hash/delimited(Hash/hash(t.4)),
+            ..Hash/delimited(Hash/hash(t.5)),
+            ..Hash/delimited(Hash/hash(t.6)),
+            ..Hash/hash(t.7)],
+}
+
+-- A tuple's key, for each number of fields. Its order nests to the right, so its law is the first field's own key's and then the rest's below it, through `Hash/Key/then` with nothing compared before it, the rest's proof under the first field's step, and `Hash/Key/last` at the last field.
+satisfy Hash/Key({}) {
+    mono((), ()) = Eq/refl(),
+}
+
+satisfy (@A: Type, use Hash/Key(A)) => Hash/Key({A}) {
+    mono(a, b) = Hash/Key/mono(a.0, b.0),
+}
+
+satisfy (@A: Type, @B: Type, use Hash/Key(A), use Hash/Key(B)) => Hash/Key({A, B}) {
+    mono(a, b) =
+        Hash/Key/then(
+            Ordering/eq(),
+            Ord/ord(a.0, b.0),
+            Hash/hash(a.0),
+            Hash/hash(b.0),
+            Hash/hash(a.1),
+            Hash/hash(b.1),
+            Hash/Key/mono(a.0, b.0),
+            Ordering/then(Ord/ord(a.0, b.0), Ord/ord(a.1, b.1)),
+            Hash/Key/last(
+                Ord/ord(a.0, b.0),
+                Ord/ord(a.1, b.1),
+                Hash/hash(a.1),
+                Hash/hash(b.1),
+                Hash/Key/mono(a.1, b.1))),
+}
+
+satisfy (
+    @A: Type,
+    @B: Type,
+    @C: Type,
+    use Hash/Key(A),
+    use Hash/Key(B),
+    use Hash/Key(C),
+) => Hash/Key({A, B, C}) {
+    mono(a, b) =
+        Hash/Key/then(
+            Ordering/eq(),
+            Ord/ord(a.0, b.0),
+            Hash/hash(a.0),
+            Hash/hash(b.0),
+            0x[..Hash/delimited(Hash/hash(a.1)), ..Hash/hash(a.2)],
+            0x[..Hash/delimited(Hash/hash(b.1)), ..Hash/hash(b.2)],
+            Hash/Key/mono(a.0, b.0),
+            Ordering/then(Ord/ord(a.0, b.0), Ordering/then(Ord/ord(a.1, b.1), Ord/ord(a.2, b.2))),
+            Eq/cong(
+                (p: Ordering) => Ordering/then(Ord/ord(a.0, b.0), p),
+                Hash/Key/then(
+                    Ordering/eq(),
+                    Ord/ord(a.1, b.1),
+                    Hash/hash(a.1),
+                    Hash/hash(b.1),
+                    Hash/hash(a.2),
+                    Hash/hash(b.2),
+                    Hash/Key/mono(a.1, b.1),
+                    Ordering/then(Ord/ord(a.1, b.1), Ord/ord(a.2, b.2)),
+                    Hash/Key/last(
+                        Ord/ord(a.1, b.1),
+                        Ord/ord(a.2, b.2),
+                        Hash/hash(a.2),
+                        Hash/hash(b.2),
+                        Hash/Key/mono(a.2, b.2))))),
+}
+
+satisfy (
+    @A: Type,
+    @B: Type,
+    @C: Type,
+    @D: Type,
+    use Hash/Key(A),
+    use Hash/Key(B),
+    use Hash/Key(C),
+    use Hash/Key(D),
+) => Hash/Key({A, B, C, D}) {
+    mono(a, b) =
+        Hash/Key/then(
+            Ordering/eq(),
+            Ord/ord(a.0, b.0),
+            Hash/hash(a.0),
+            Hash/hash(b.0),
+            0x[
+                ..Hash/delimited(Hash/hash(a.1)),
+                ..Hash/delimited(Hash/hash(a.2)),
+                ..Hash/hash(a.3)],
+            0x[
+                ..Hash/delimited(Hash/hash(b.1)),
+                ..Hash/delimited(Hash/hash(b.2)),
+                ..Hash/hash(b.3)],
+            Hash/Key/mono(a.0, b.0),
+            Ordering/then(
+                Ord/ord(a.0, b.0),
+                Ordering/then(
+                    Ord/ord(a.1, b.1),
+                    Ordering/then(Ord/ord(a.2, b.2), Ord/ord(a.3, b.3)))),
+            Eq/cong(
+                (p: Ordering) => Ordering/then(Ord/ord(a.0, b.0), p),
+                Hash/Key/then(
+                    Ordering/eq(),
+                    Ord/ord(a.1, b.1),
+                    Hash/hash(a.1),
+                    Hash/hash(b.1),
+                    0x[..Hash/delimited(Hash/hash(a.2)), ..Hash/hash(a.3)],
+                    0x[..Hash/delimited(Hash/hash(b.2)), ..Hash/hash(b.3)],
+                    Hash/Key/mono(a.1, b.1),
+                    Ordering/then(
+                        Ord/ord(a.1, b.1),
+                        Ordering/then(Ord/ord(a.2, b.2), Ord/ord(a.3, b.3))),
+                    Eq/cong(
+                        (p: Ordering) => Ordering/then(Ord/ord(a.1, b.1), p),
+                        Hash/Key/then(
+                            Ordering/eq(),
+                            Ord/ord(a.2, b.2),
+                            Hash/hash(a.2),
+                            Hash/hash(b.2),
+                            Hash/hash(a.3),
+                            Hash/hash(b.3),
+                            Hash/Key/mono(a.2, b.2),
+                            Ordering/then(Ord/ord(a.2, b.2), Ord/ord(a.3, b.3)),
+                            Hash/Key/last(
+                                Ord/ord(a.2, b.2),
+                                Ord/ord(a.3, b.3),
+                                Hash/hash(a.3),
+                                Hash/hash(b.3),
+                                Hash/Key/mono(a.3, b.3))))))),
+}
+
+satisfy (
+    @A: Type,
+    @B: Type,
+    @C: Type,
+    @D: Type,
+    @E: Type,
+    use Hash/Key(A),
+    use Hash/Key(B),
+    use Hash/Key(C),
+    use Hash/Key(D),
+    use Hash/Key(E),
+) => Hash/Key({A, B, C, D, E}) {
+    mono(a, b) =
+        Hash/Key/then(
+            Ordering/eq(),
+            Ord/ord(a.0, b.0),
+            Hash/hash(a.0),
+            Hash/hash(b.0),
+            0x[
+                ..Hash/delimited(Hash/hash(a.1)),
+                ..Hash/delimited(Hash/hash(a.2)),
+                ..Hash/delimited(Hash/hash(a.3)),
+                ..Hash/hash(a.4)],
+            0x[
+                ..Hash/delimited(Hash/hash(b.1)),
+                ..Hash/delimited(Hash/hash(b.2)),
+                ..Hash/delimited(Hash/hash(b.3)),
+                ..Hash/hash(b.4)],
+            Hash/Key/mono(a.0, b.0),
+            Ordering/then(
+                Ord/ord(a.0, b.0),
+                Ordering/then(
+                    Ord/ord(a.1, b.1),
+                    Ordering/then(
+                        Ord/ord(a.2, b.2),
+                        Ordering/then(Ord/ord(a.3, b.3), Ord/ord(a.4, b.4))))),
+            Eq/cong(
+                (p: Ordering) => Ordering/then(Ord/ord(a.0, b.0), p),
+                Hash/Key/then(
+                    Ordering/eq(),
+                    Ord/ord(a.1, b.1),
+                    Hash/hash(a.1),
+                    Hash/hash(b.1),
+                    0x[
+                        ..Hash/delimited(Hash/hash(a.2)),
+                        ..Hash/delimited(Hash/hash(a.3)),
+                        ..Hash/hash(a.4)],
+                    0x[
+                        ..Hash/delimited(Hash/hash(b.2)),
+                        ..Hash/delimited(Hash/hash(b.3)),
+                        ..Hash/hash(b.4)],
+                    Hash/Key/mono(a.1, b.1),
+                    Ordering/then(
+                        Ord/ord(a.1, b.1),
+                        Ordering/then(
+                            Ord/ord(a.2, b.2),
+                            Ordering/then(Ord/ord(a.3, b.3), Ord/ord(a.4, b.4)))),
+                    Eq/cong(
+                        (p: Ordering) => Ordering/then(Ord/ord(a.1, b.1), p),
+                        Hash/Key/then(
+                            Ordering/eq(),
+                            Ord/ord(a.2, b.2),
+                            Hash/hash(a.2),
+                            Hash/hash(b.2),
+                            0x[..Hash/delimited(Hash/hash(a.3)), ..Hash/hash(a.4)],
+                            0x[..Hash/delimited(Hash/hash(b.3)), ..Hash/hash(b.4)],
+                            Hash/Key/mono(a.2, b.2),
+                            Ordering/then(
+                                Ord/ord(a.2, b.2),
+                                Ordering/then(Ord/ord(a.3, b.3), Ord/ord(a.4, b.4))),
+                            Eq/cong(
+                                (p: Ordering) => Ordering/then(Ord/ord(a.2, b.2), p),
+                                Hash/Key/then(
+                                    Ordering/eq(),
+                                    Ord/ord(a.3, b.3),
+                                    Hash/hash(a.3),
+                                    Hash/hash(b.3),
+                                    Hash/hash(a.4),
+                                    Hash/hash(b.4),
+                                    Hash/Key/mono(a.3, b.3),
+                                    Ordering/then(Ord/ord(a.3, b.3), Ord/ord(a.4, b.4)),
+                                    Hash/Key/last(
+                                        Ord/ord(a.3, b.3),
+                                        Ord/ord(a.4, b.4),
+                                        Hash/hash(a.4),
+                                        Hash/hash(b.4),
+                                        Hash/Key/mono(a.4, b.4))))))))),
+}
+
+satisfy (
+    @A: Type,
+    @B: Type,
+    @C: Type,
+    @D: Type,
+    @E: Type,
+    @F: Type,
+    use Hash/Key(A),
+    use Hash/Key(B),
+    use Hash/Key(C),
+    use Hash/Key(D),
+    use Hash/Key(E),
+    use Hash/Key(F),
+) => Hash/Key({A, B, C, D, E, F}) {
+    mono(a, b) =
+        Hash/Key/then(
+            Ordering/eq(),
+            Ord/ord(a.0, b.0),
+            Hash/hash(a.0),
+            Hash/hash(b.0),
+            0x[
+                ..Hash/delimited(Hash/hash(a.1)),
+                ..Hash/delimited(Hash/hash(a.2)),
+                ..Hash/delimited(Hash/hash(a.3)),
+                ..Hash/delimited(Hash/hash(a.4)),
+                ..Hash/hash(a.5)],
+            0x[
+                ..Hash/delimited(Hash/hash(b.1)),
+                ..Hash/delimited(Hash/hash(b.2)),
+                ..Hash/delimited(Hash/hash(b.3)),
+                ..Hash/delimited(Hash/hash(b.4)),
+                ..Hash/hash(b.5)],
+            Hash/Key/mono(a.0, b.0),
+            Ordering/then(
+                Ord/ord(a.0, b.0),
+                Ordering/then(
+                    Ord/ord(a.1, b.1),
+                    Ordering/then(
+                        Ord/ord(a.2, b.2),
+                        Ordering/then(
+                            Ord/ord(a.3, b.3),
+                            Ordering/then(Ord/ord(a.4, b.4), Ord/ord(a.5, b.5)))))),
+            Eq/cong(
+                (p: Ordering) => Ordering/then(Ord/ord(a.0, b.0), p),
+                Hash/Key/then(
+                    Ordering/eq(),
+                    Ord/ord(a.1, b.1),
+                    Hash/hash(a.1),
+                    Hash/hash(b.1),
+                    0x[
+                        ..Hash/delimited(Hash/hash(a.2)),
+                        ..Hash/delimited(Hash/hash(a.3)),
+                        ..Hash/delimited(Hash/hash(a.4)),
+                        ..Hash/hash(a.5)],
+                    0x[
+                        ..Hash/delimited(Hash/hash(b.2)),
+                        ..Hash/delimited(Hash/hash(b.3)),
+                        ..Hash/delimited(Hash/hash(b.4)),
+                        ..Hash/hash(b.5)],
+                    Hash/Key/mono(a.1, b.1),
+                    Ordering/then(
+                        Ord/ord(a.1, b.1),
+                        Ordering/then(
+                            Ord/ord(a.2, b.2),
+                            Ordering/then(
+                                Ord/ord(a.3, b.3),
+                                Ordering/then(Ord/ord(a.4, b.4), Ord/ord(a.5, b.5))))),
+                    Eq/cong(
+                        (p: Ordering) => Ordering/then(Ord/ord(a.1, b.1), p),
+                        Hash/Key/then(
+                            Ordering/eq(),
+                            Ord/ord(a.2, b.2),
+                            Hash/hash(a.2),
+                            Hash/hash(b.2),
+                            0x[
+                                ..Hash/delimited(Hash/hash(a.3)),
+                                ..Hash/delimited(Hash/hash(a.4)),
+                                ..Hash/hash(a.5)],
+                            0x[
+                                ..Hash/delimited(Hash/hash(b.3)),
+                                ..Hash/delimited(Hash/hash(b.4)),
+                                ..Hash/hash(b.5)],
+                            Hash/Key/mono(a.2, b.2),
+                            Ordering/then(
+                                Ord/ord(a.2, b.2),
+                                Ordering/then(
+                                    Ord/ord(a.3, b.3),
+                                    Ordering/then(Ord/ord(a.4, b.4), Ord/ord(a.5, b.5)))),
+                            Eq/cong(
+                                (p: Ordering) => Ordering/then(Ord/ord(a.2, b.2), p),
+                                Hash/Key/then(
+                                    Ordering/eq(),
+                                    Ord/ord(a.3, b.3),
+                                    Hash/hash(a.3),
+                                    Hash/hash(b.3),
+                                    0x[..Hash/delimited(Hash/hash(a.4)), ..Hash/hash(a.5)],
+                                    0x[..Hash/delimited(Hash/hash(b.4)), ..Hash/hash(b.5)],
+                                    Hash/Key/mono(a.3, b.3),
+                                    Ordering/then(
+                                        Ord/ord(a.3, b.3),
+                                        Ordering/then(Ord/ord(a.4, b.4), Ord/ord(a.5, b.5))),
+                                    Eq/cong(
+                                        (p: Ordering) => Ordering/then(Ord/ord(a.3, b.3), p),
+                                        Hash/Key/then(
+                                            Ordering/eq(),
+                                            Ord/ord(a.4, b.4),
+                                            Hash/hash(a.4),
+                                            Hash/hash(b.4),
+                                            Hash/hash(a.5),
+                                            Hash/hash(b.5),
+                                            Hash/Key/mono(a.4, b.4),
+                                            Ordering/then(Ord/ord(a.4, b.4), Ord/ord(a.5, b.5)),
+                                            Hash/Key/last(
+                                                Ord/ord(a.4, b.4),
+                                                Ord/ord(a.5, b.5),
+                                                Hash/hash(a.5),
+                                                Hash/hash(b.5),
+                                                Hash/Key/mono(a.5, b.5))))))))))),
+}
+
+satisfy (
+    @A: Type,
+    @B: Type,
+    @C: Type,
+    @D: Type,
+    @E: Type,
+    @F: Type,
+    @G: Type,
+    use Hash/Key(A),
+    use Hash/Key(B),
+    use Hash/Key(C),
+    use Hash/Key(D),
+    use Hash/Key(E),
+    use Hash/Key(F),
+    use Hash/Key(G),
+) => Hash/Key({A, B, C, D, E, F, G}) {
+    mono(a, b) =
+        Hash/Key/then(
+            Ordering/eq(),
+            Ord/ord(a.0, b.0),
+            Hash/hash(a.0),
+            Hash/hash(b.0),
+            0x[
+                ..Hash/delimited(Hash/hash(a.1)),
+                ..Hash/delimited(Hash/hash(a.2)),
+                ..Hash/delimited(Hash/hash(a.3)),
+                ..Hash/delimited(Hash/hash(a.4)),
+                ..Hash/delimited(Hash/hash(a.5)),
+                ..Hash/hash(a.6)],
+            0x[
+                ..Hash/delimited(Hash/hash(b.1)),
+                ..Hash/delimited(Hash/hash(b.2)),
+                ..Hash/delimited(Hash/hash(b.3)),
+                ..Hash/delimited(Hash/hash(b.4)),
+                ..Hash/delimited(Hash/hash(b.5)),
+                ..Hash/hash(b.6)],
+            Hash/Key/mono(a.0, b.0),
+            Ordering/then(
+                Ord/ord(a.0, b.0),
+                Ordering/then(
+                    Ord/ord(a.1, b.1),
+                    Ordering/then(
+                        Ord/ord(a.2, b.2),
+                        Ordering/then(
+                            Ord/ord(a.3, b.3),
+                            Ordering/then(
+                                Ord/ord(a.4, b.4),
+                                Ordering/then(Ord/ord(a.5, b.5), Ord/ord(a.6, b.6))))))),
+            Eq/cong(
+                (p: Ordering) => Ordering/then(Ord/ord(a.0, b.0), p),
+                Hash/Key/then(
+                    Ordering/eq(),
+                    Ord/ord(a.1, b.1),
+                    Hash/hash(a.1),
+                    Hash/hash(b.1),
+                    0x[
+                        ..Hash/delimited(Hash/hash(a.2)),
+                        ..Hash/delimited(Hash/hash(a.3)),
+                        ..Hash/delimited(Hash/hash(a.4)),
+                        ..Hash/delimited(Hash/hash(a.5)),
+                        ..Hash/hash(a.6)],
+                    0x[
+                        ..Hash/delimited(Hash/hash(b.2)),
+                        ..Hash/delimited(Hash/hash(b.3)),
+                        ..Hash/delimited(Hash/hash(b.4)),
+                        ..Hash/delimited(Hash/hash(b.5)),
+                        ..Hash/hash(b.6)],
+                    Hash/Key/mono(a.1, b.1),
+                    Ordering/then(
+                        Ord/ord(a.1, b.1),
+                        Ordering/then(
+                            Ord/ord(a.2, b.2),
+                            Ordering/then(
+                                Ord/ord(a.3, b.3),
+                                Ordering/then(
+                                    Ord/ord(a.4, b.4),
+                                    Ordering/then(Ord/ord(a.5, b.5), Ord/ord(a.6, b.6)))))),
+                    Eq/cong(
+                        (p: Ordering) => Ordering/then(Ord/ord(a.1, b.1), p),
+                        Hash/Key/then(
+                            Ordering/eq(),
+                            Ord/ord(a.2, b.2),
+                            Hash/hash(a.2),
+                            Hash/hash(b.2),
+                            0x[
+                                ..Hash/delimited(Hash/hash(a.3)),
+                                ..Hash/delimited(Hash/hash(a.4)),
+                                ..Hash/delimited(Hash/hash(a.5)),
+                                ..Hash/hash(a.6)],
+                            0x[
+                                ..Hash/delimited(Hash/hash(b.3)),
+                                ..Hash/delimited(Hash/hash(b.4)),
+                                ..Hash/delimited(Hash/hash(b.5)),
+                                ..Hash/hash(b.6)],
+                            Hash/Key/mono(a.2, b.2),
+                            Ordering/then(
+                                Ord/ord(a.2, b.2),
+                                Ordering/then(
+                                    Ord/ord(a.3, b.3),
+                                    Ordering/then(
+                                        Ord/ord(a.4, b.4),
+                                        Ordering/then(Ord/ord(a.5, b.5), Ord/ord(a.6, b.6))))),
+                            Eq/cong(
+                                (p: Ordering) => Ordering/then(Ord/ord(a.2, b.2), p),
+                                Hash/Key/then(
+                                    Ordering/eq(),
+                                    Ord/ord(a.3, b.3),
+                                    Hash/hash(a.3),
+                                    Hash/hash(b.3),
+                                    0x[
+                                        ..Hash/delimited(Hash/hash(a.4)),
+                                        ..Hash/delimited(Hash/hash(a.5)),
+                                        ..Hash/hash(a.6)],
+                                    0x[
+                                        ..Hash/delimited(Hash/hash(b.4)),
+                                        ..Hash/delimited(Hash/hash(b.5)),
+                                        ..Hash/hash(b.6)],
+                                    Hash/Key/mono(a.3, b.3),
+                                    Ordering/then(
+                                        Ord/ord(a.3, b.3),
+                                        Ordering/then(
+                                            Ord/ord(a.4, b.4),
+                                            Ordering/then(Ord/ord(a.5, b.5), Ord/ord(a.6, b.6)))),
+                                    Eq/cong(
+                                        (p: Ordering) => Ordering/then(Ord/ord(a.3, b.3), p),
+                                        Hash/Key/then(
+                                            Ordering/eq(),
+                                            Ord/ord(a.4, b.4),
+                                            Hash/hash(a.4),
+                                            Hash/hash(b.4),
+                                            0x[..Hash/delimited(Hash/hash(a.5)), ..Hash/hash(a.6)],
+                                            0x[..Hash/delimited(Hash/hash(b.5)), ..Hash/hash(b.6)],
+                                            Hash/Key/mono(a.4, b.4),
+                                            Ordering/then(
+                                                Ord/ord(a.4, b.4),
+                                                Ordering/then(
+                                                    Ord/ord(a.5, b.5),
+                                                    Ord/ord(a.6, b.6))),
+                                            Eq/cong(
+                                                (p: Ordering) =>
+                                                    Ordering/then(Ord/ord(a.4, b.4), p),
+                                                Hash/Key/then(
+                                                    Ordering/eq(),
+                                                    Ord/ord(a.5, b.5),
+                                                    Hash/hash(a.5),
+                                                    Hash/hash(b.5),
+                                                    Hash/hash(a.6),
+                                                    Hash/hash(b.6),
+                                                    Hash/Key/mono(a.5, b.5),
+                                                    Ordering/then(
+                                                        Ord/ord(a.5, b.5),
+                                                        Ord/ord(a.6, b.6)),
+                                                    Hash/Key/last(
+                                                        Ord/ord(a.5, b.5),
+                                                        Ord/ord(a.6, b.6),
+                                                        Hash/hash(a.6),
+                                                        Hash/hash(b.6),
+                                                        Hash/Key/mono(a.6, b.6))))))))))))),
+}
+
+satisfy (
+    @A: Type,
+    @B: Type,
+    @C: Type,
+    @D: Type,
+    @E: Type,
+    @F: Type,
+    @G: Type,
+    @H: Type,
+    use Hash/Key(A),
+    use Hash/Key(B),
+    use Hash/Key(C),
+    use Hash/Key(D),
+    use Hash/Key(E),
+    use Hash/Key(F),
+    use Hash/Key(G),
+    use Hash/Key(H),
+) => Hash/Key({A, B, C, D, E, F, G, H}) {
+    mono(a, b) =
+        Hash/Key/then(
+            Ordering/eq(),
+            Ord/ord(a.0, b.0),
+            Hash/hash(a.0),
+            Hash/hash(b.0),
+            0x[
+                ..Hash/delimited(Hash/hash(a.1)),
+                ..Hash/delimited(Hash/hash(a.2)),
+                ..Hash/delimited(Hash/hash(a.3)),
+                ..Hash/delimited(Hash/hash(a.4)),
+                ..Hash/delimited(Hash/hash(a.5)),
+                ..Hash/delimited(Hash/hash(a.6)),
+                ..Hash/hash(a.7)],
+            0x[
+                ..Hash/delimited(Hash/hash(b.1)),
+                ..Hash/delimited(Hash/hash(b.2)),
+                ..Hash/delimited(Hash/hash(b.3)),
+                ..Hash/delimited(Hash/hash(b.4)),
+                ..Hash/delimited(Hash/hash(b.5)),
+                ..Hash/delimited(Hash/hash(b.6)),
+                ..Hash/hash(b.7)],
+            Hash/Key/mono(a.0, b.0),
+            Ordering/then(
+                Ord/ord(a.0, b.0),
+                Ordering/then(
+                    Ord/ord(a.1, b.1),
+                    Ordering/then(
+                        Ord/ord(a.2, b.2),
+                        Ordering/then(
+                            Ord/ord(a.3, b.3),
+                            Ordering/then(
+                                Ord/ord(a.4, b.4),
+                                Ordering/then(
+                                    Ord/ord(a.5, b.5),
+                                    Ordering/then(Ord/ord(a.6, b.6), Ord/ord(a.7, b.7)))))))),
+            Eq/cong(
+                (p: Ordering) => Ordering/then(Ord/ord(a.0, b.0), p),
+                Hash/Key/then(
+                    Ordering/eq(),
+                    Ord/ord(a.1, b.1),
+                    Hash/hash(a.1),
+                    Hash/hash(b.1),
+                    0x[
+                        ..Hash/delimited(Hash/hash(a.2)),
+                        ..Hash/delimited(Hash/hash(a.3)),
+                        ..Hash/delimited(Hash/hash(a.4)),
+                        ..Hash/delimited(Hash/hash(a.5)),
+                        ..Hash/delimited(Hash/hash(a.6)),
+                        ..Hash/hash(a.7)],
+                    0x[
+                        ..Hash/delimited(Hash/hash(b.2)),
+                        ..Hash/delimited(Hash/hash(b.3)),
+                        ..Hash/delimited(Hash/hash(b.4)),
+                        ..Hash/delimited(Hash/hash(b.5)),
+                        ..Hash/delimited(Hash/hash(b.6)),
+                        ..Hash/hash(b.7)],
+                    Hash/Key/mono(a.1, b.1),
+                    Ordering/then(
+                        Ord/ord(a.1, b.1),
+                        Ordering/then(
+                            Ord/ord(a.2, b.2),
+                            Ordering/then(
+                                Ord/ord(a.3, b.3),
+                                Ordering/then(
+                                    Ord/ord(a.4, b.4),
+                                    Ordering/then(
+                                        Ord/ord(a.5, b.5),
+                                        Ordering/then(Ord/ord(a.6, b.6), Ord/ord(a.7, b.7))))))),
+                    Eq/cong(
+                        (p: Ordering) => Ordering/then(Ord/ord(a.1, b.1), p),
+                        Hash/Key/then(
+                            Ordering/eq(),
+                            Ord/ord(a.2, b.2),
+                            Hash/hash(a.2),
+                            Hash/hash(b.2),
+                            0x[
+                                ..Hash/delimited(Hash/hash(a.3)),
+                                ..Hash/delimited(Hash/hash(a.4)),
+                                ..Hash/delimited(Hash/hash(a.5)),
+                                ..Hash/delimited(Hash/hash(a.6)),
+                                ..Hash/hash(a.7)],
+                            0x[
+                                ..Hash/delimited(Hash/hash(b.3)),
+                                ..Hash/delimited(Hash/hash(b.4)),
+                                ..Hash/delimited(Hash/hash(b.5)),
+                                ..Hash/delimited(Hash/hash(b.6)),
+                                ..Hash/hash(b.7)],
+                            Hash/Key/mono(a.2, b.2),
+                            Ordering/then(
+                                Ord/ord(a.2, b.2),
+                                Ordering/then(
+                                    Ord/ord(a.3, b.3),
+                                    Ordering/then(
+                                        Ord/ord(a.4, b.4),
+                                        Ordering/then(
+                                            Ord/ord(a.5, b.5),
+                                            Ordering/then(Ord/ord(a.6, b.6), Ord/ord(a.7, b.7)))))),
+                            Eq/cong(
+                                (p: Ordering) => Ordering/then(Ord/ord(a.2, b.2), p),
+                                Hash/Key/then(
+                                    Ordering/eq(),
+                                    Ord/ord(a.3, b.3),
+                                    Hash/hash(a.3),
+                                    Hash/hash(b.3),
+                                    0x[
+                                        ..Hash/delimited(Hash/hash(a.4)),
+                                        ..Hash/delimited(Hash/hash(a.5)),
+                                        ..Hash/delimited(Hash/hash(a.6)),
+                                        ..Hash/hash(a.7)],
+                                    0x[
+                                        ..Hash/delimited(Hash/hash(b.4)),
+                                        ..Hash/delimited(Hash/hash(b.5)),
+                                        ..Hash/delimited(Hash/hash(b.6)),
+                                        ..Hash/hash(b.7)],
+                                    Hash/Key/mono(a.3, b.3),
+                                    Ordering/then(
+                                        Ord/ord(a.3, b.3),
+                                        Ordering/then(
+                                            Ord/ord(a.4, b.4),
+                                            Ordering/then(
+                                                Ord/ord(a.5, b.5),
+                                                Ordering/then(
+                                                    Ord/ord(a.6, b.6),
+                                                    Ord/ord(a.7, b.7))))),
+                                    Eq/cong(
+                                        (p: Ordering) => Ordering/then(Ord/ord(a.3, b.3), p),
+                                        Hash/Key/then(
+                                            Ordering/eq(),
+                                            Ord/ord(a.4, b.4),
+                                            Hash/hash(a.4),
+                                            Hash/hash(b.4),
+                                            0x[
+                                                ..Hash/delimited(Hash/hash(a.5)),
+                                                ..Hash/delimited(Hash/hash(a.6)),
+                                                ..Hash/hash(a.7)],
+                                            0x[
+                                                ..Hash/delimited(Hash/hash(b.5)),
+                                                ..Hash/delimited(Hash/hash(b.6)),
+                                                ..Hash/hash(b.7)],
+                                            Hash/Key/mono(a.4, b.4),
+                                            Ordering/then(
+                                                Ord/ord(a.4, b.4),
+                                                Ordering/then(
+                                                    Ord/ord(a.5, b.5),
+                                                    Ordering/then(
+                                                        Ord/ord(a.6, b.6),
+                                                        Ord/ord(a.7, b.7)))),
+                                            Eq/cong(
+                                                (p: Ordering) =>
+                                                    Ordering/then(Ord/ord(a.4, b.4), p),
+                                                Hash/Key/then(
+                                                    Ordering/eq(),
+                                                    Ord/ord(a.5, b.5),
+                                                    Hash/hash(a.5),
+                                                    Hash/hash(b.5),
+                                                    0x[
+                                                        ..Hash/delimited(Hash/hash(a.6)),
+                                                        ..Hash/hash(a.7)],
+                                                    0x[
+                                                        ..Hash/delimited(Hash/hash(b.6)),
+                                                        ..Hash/hash(b.7)],
+                                                    Hash/Key/mono(a.5, b.5),
+                                                    Ordering/then(
+                                                        Ord/ord(a.5, b.5),
+                                                        Ordering/then(
+                                                            Ord/ord(a.6, b.6),
+                                                            Ord/ord(a.7, b.7))),
+                                                    Eq/cong(
+                                                        (p: Ordering) =>
+                                                            Ordering/then(Ord/ord(a.5, b.5), p),
+                                                        Hash/Key/then(
+                                                            Ordering/eq(),
+                                                            Ord/ord(a.6, b.6),
+                                                            Hash/hash(a.6),
+                                                            Hash/hash(b.6),
+                                                            Hash/hash(a.7),
+                                                            Hash/hash(b.7),
+                                                            Hash/Key/mono(a.6, b.6),
+                                                            Ordering/then(
+                                                                Ord/ord(a.6, b.6),
+                                                                Ord/ord(a.7, b.7)),
+                                                            Hash/Key/last(
+                                                                Ord/ord(a.6, b.6),
+                                                                Ord/ord(a.7, b.7),
+                                                                Hash/hash(a.7),
+                                                                Hash/hash(b.7),
+                                                                Hash/Key/mono(
+                                                                    a.7,
+                                                                    b.7))))))))))))))),
 }

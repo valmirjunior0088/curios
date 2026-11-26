@@ -4,7 +4,6 @@ Adopted on 2026-11-25: a type a program declares keys a `Map` and fills a `Set` 
 
 ## What is wrong today
 
-- **No tuple keys a map.** `/std/Tuple` writes `Eql` and `Ord` for the tuples of zero to eight fields and no `Hash` (probed on standard input at `f76966ced`).
 
 ## Settled
 
@@ -14,7 +13,6 @@ Adopted on 2026-11-25: a type a program declares keys a `Map` and fills a `Set` 
 
 ## Stages
 
-7. **Tuples key maps.** `Hash` and the key written for the tuples of zero to eight fields. Check: a map keyed by a tuple of a `Str` and a `Nat` walks in its `Ord` order.
 
 ## What moves
 

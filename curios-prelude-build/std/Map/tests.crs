@@ -73,6 +73,19 @@ test natural_keys_enumerate_in_number_order =
             edge(14)];
     Test/equal(Set/to_list(Set/of_list(keys)), List/sort(keys));
 
+-- A map of tuples enumerates them in their order, by the first field and then the rest: a text that begins a longer one first, a zero byte in a text below every other, and each field's own order where the ones before it tie.
+test tuple_keys_enumerate_in_their_order =
+    let keys: List({Str, Nat, Bool}) =
+        [
+            ("b", 1, false),
+            ("ab", 1, true),
+            ("a", 2, false),
+            ("a\u{0}", 0, true),
+            ("a", 1, true),
+            ("a", 1, false),
+            ("", 7, true)];
+    Test/equal(Set/to_list(Set/of_list(keys)), List/sort(keys));
+
 -- A smaller natural's encoding is before a larger one's, by the law beside the code.
 let _a_smaller_natural_encodes_before_a_larger(
     a: Nat,
