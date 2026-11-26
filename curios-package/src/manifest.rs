@@ -20,7 +20,7 @@ use {
         TreeHash, decode, misshapen,
     },
     curios_common::{About, Code, OsError, Report, Said, Source, is_identifier, is_reserved},
-    curios_module::TEST_UNIT,
+    curios_module::SYNTAX,
     serde::Deserialize,
     std::{
         collections::BTreeMap,
@@ -1013,11 +1013,12 @@ pub fn canonical(written: &str) -> Result<String, Refused> {
 /// **`/sys` and `/std` collide everywhere; `/test` would collide late.** The prelude's roots are in every compilation, so a package claiming either is refused by the fold wherever it is compiled; `/test` is linked into a test compilation alone, so a package of that name would build, and collide only once its tests ran. Refused where the name is read, it never builds.
 pub fn package_name(written: &str) -> Result<String, Refused> {
     let name = canonical(written)?;
+    let test = SYNTAX.roots.test;
 
-    match name == TEST_UNIT {
+    match name == test {
         true => Err(Refused::of("invalid name")
             .stating(format_args!(
-                "`{written}` names `/{TEST_UNIT}`, the toolchain's unit a test compilation links"
+                "`{written}` names `/{test}`, the toolchain's unit a test compilation links"
             ))
             .stating("a package mounted there would collide with it once its tests ran")),
         false => Ok(name),

@@ -5,7 +5,7 @@
 use {
     crate::{std_source, sys_source},
     curios_cert::{Accepted, Globals, Rechecked, certify_definitions},
-    curios_common::{Qualifier, Report, Source, digest},
+    curios_common::{Qualifier, Report, RootSyntax, Source, digest},
     curios_core::{
         Anchors, Definitions, Global, Item, Sharing, method_labels, validate_stored_identities,
     },
@@ -30,16 +30,21 @@ use {
 pub fn compile(out: &Path) -> Vec<PathBuf> {
     let sys_modules = sys_source();
     let std_modules = std_source();
+    let RootSyntax {
+        sys: sys_root,
+        std: std_root,
+        test: _,
+    } = SYNTAX.roots;
 
     // Both roots lowered before either is elaborated, because the registry spans them: a target check over `/sys` alone would miss every `/std` slot and one over `/std` alone every `/sys` slot, so the check runs once over the union and there is no half to pass by being asked the wrong question.
-    let sys_text = lower("sys", &sys_modules, &[]);
-    let std_text = lower("std", &std_modules, &[&sys_text]);
-    validate_syntax_targets(&[("sys", sys_text.core()), ("std", std_text.core())]);
+    let sys_text = lower(sys_root, &sys_modules, &[]);
+    let std_text = lower(std_root, &std_modules, &[&sys_text]);
+    validate_syntax_targets(&[(sys_root, sys_text.core()), (std_root, std_text.core())]);
 
     // The fold: `/sys` against nothing, `/std` against what `/sys` established. Each root is certified as it is made and its image framed as every unit the cabinet keeps is, holding the certified unit, so the prelude the crate restores is a fold of two units and not a shape of its own.
-    let sys = unit("sys", sys_text, &Established::nothing(), &[]);
+    let sys = unit(sys_root, sys_text, &Established::nothing(), &[]);
     let std = unit(
-        "std",
+        std_root,
         std_text,
         // Every root before this one is the compiler's own, of which no read is recorded.
         &Established::placed(&[(
@@ -53,15 +58,15 @@ pub fn compile(out: &Path) -> Vec<PathBuf> {
     );
 
     // The records `document --std` renders, made once each root is checked, since a page says which declarations are proofs and which are proven total, and filed as an image of their own: nothing that compiles reads one, so neither unit holds one. `/sys` first, because `/std` adopts its intrinsic declarations out of that record.
-    let sys_record = documented("sys", &sys_modules, &sys, &[], &[]);
-    let std_record = documented("std", &std_modules, &std, &[&sys], &[&sys_record]);
+    let sys_record = documented(sys_root, &sys_modules, &sys, &[], &[]);
+    let std_record = documented(std_root, &std_modules, &std, &[&sys], &[&sys_record]);
 
     // Each image carries the record an object carries: what the root was compiled from, by the read log the lowering kept, and what came before it. `/sys` is supplied whole and reads nothing; `/std` reads its tree and follows `/sys`, whose image is what its record's one predecessor digests.
-    let sys_digest = write_image(out, "sys", &sys, sys_modules.reads(), Vec::new());
-    let sys_prefix = Qualifier::from(["sys"]).join();
+    let sys_digest = write_image(out, sys_root, &sys, sys_modules.reads(), Vec::new());
+    let sys_prefix = Qualifier::from([sys_root]).join();
     write_image(
         out,
-        "std",
+        std_root,
         &std,
         std_modules.reads(),
         vec![(sys_prefix, sys_digest)],
@@ -384,9 +389,9 @@ fn write_documentation(directory: &Path, records: &Vec<Documentation>) {
         .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
 }
 
-/// Check every registered syntax target under one of the prelude's roots, each `(prefix, definitions)`, against the lowered prelude, over the **union** of its roots.
+/// Check every registered syntax target against the lowered prelude, over the **union** of its roots, each `(prefix, definitions)`: a target under none of them, nor under `/test`, is refused, and every one under them is declared there.
 ///
-/// The union rather than each root in turn, because the registry spans them: `/sys` holds the intrinsic preconditions and `/std` everything the compiler emits by name, so either half alone would report the other's slots as absent. A target under `/test`, which a test compilation alone links, is no root's: `curios-pipeline` holds it where `/test` is compiled.
+/// The union rather than each root in turn, because the registry spans them: `/sys` holds the intrinsic preconditions and `/std` everything the compiler emits by name, so either half alone would report the other's slots as absent. A target under `/test`, which a test compilation alone links, is no root's: `curios-pipeline` holds it where `/test` is compiled. One under none of the three is a name the fill misplaced, which no compilation would declare, so it is refused here rather than at the first program that reaches it.
 fn validate_syntax_targets(roots: &[(&str, &curios_core::Definitions)]) {
     let names = roots
         .iter()
@@ -397,12 +402,24 @@ fn validate_syntax_targets(roots: &[(&str, &curios_core::Definitions)]) {
         .iter()
         .map(|(prefix, _)| Qualifier::from([*prefix]))
         .collect::<Vec<_>>();
-    for target in SYNTAX.targets().filter(|target| {
-        prefixes
-            .iter()
-            .any(|prefix| target.qualifier().is_within(prefix))
-    }) {
+    let test = Qualifier::from([SYNTAX.roots.test]);
+    for target in SYNTAX
+        .targets()
+        .filter(|target| !target.qualifier().is_within(&test))
+    {
         let symbol = target.symbol();
+        assert!(
+            prefixes
+                .iter()
+                .any(|prefix| target.qualifier().is_within(prefix)),
+            "registered syntax target '{symbol}' lies under none of the prelude's roots, {}, nor under {}",
+            prefixes
+                .iter()
+                .map(Qualifier::join)
+                .collect::<Vec<_>>()
+                .join(" and "),
+            test.join()
+        );
         assert!(
             names.contains(&Global::Authored(target.qualifier())),
             "registered syntax target '{symbol}' is absent from the lowered prelude; nearby names: {:?}",

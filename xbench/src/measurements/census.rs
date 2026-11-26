@@ -10,13 +10,13 @@ mod tests;
 
 use {
     crate::{Measure, read},
-    curios_common::ArenaId,
+    curios_common::{ArenaId, Qualifier},
     curios_cps::{
         Atom, Callee, ContinuationId, Edge, FunctionId, Intrinsic, Literal, Module, Node, NodeId,
         RowId, ValueExpr, ValueId,
     },
     curios_elab::DEFAULT_BUDGET,
-    curios_module::RootSource,
+    curios_module::{RootSource, SYNTAX},
     curios_pipeline::{Stage, compile_with_prelude},
     curios_surface::Entrypoint,
     std::collections::{BTreeMap, BTreeSet},
@@ -311,8 +311,15 @@ impl Region {
     }
 
     fn outside_std(&self) -> bool {
-        self.owners.iter().any(|owner| !owner.contains("/std/"))
+        self.owners
+            .iter()
+            .any(|owner| !owner.contains(&library_owner()))
     }
+}
+
+/// What the name of an owner the standard library declares holds: its root, mounted where the registry says, as a module.
+fn library_owner() -> String {
+    format!("{}/", Qualifier::from([SYNTAX.roots.std]).join())
 }
 
 impl<'m> Census<'m> {
@@ -950,7 +957,7 @@ pub fn aggregate_flow_census() {
                     region
                         .owners
                         .iter()
-                        .filter(|owner| !owner.contains("/std/"))
+                        .filter(|owner| !owner.contains(&library_owner()))
                         .cloned(),
                 );
             }
@@ -1206,7 +1213,7 @@ fn rebirth(census: &Census) -> Rebirth {
         };
         if paired {
             let owner = census.owner_name(*fun);
-            if owner.contains("/std/Map") {
+            if owner.contains(&format!("{}Map", library_owner())) {
                 tally.spine_pairs += 1;
             }
             tally.owners.insert(owner);

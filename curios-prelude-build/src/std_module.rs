@@ -2,7 +2,7 @@
 
 use {
     curios_common::Qualifier,
-    curios_module::RootSource,
+    curios_module::{RootSource, SYNTAX},
     curios_package::package_at,
     std::path::{Path, PathBuf},
 };
@@ -28,5 +28,5 @@ pub fn std_source() -> RootSource {
     source
         .expect("the standard library's header sits beside its manifest")
         // The one declaration of `/sys` anywhere. A closed root is in no unit's default set — it has no path for a manifest to name — so this is what lets `/std` wrap the intrinsics, and its absence everywhere else is what keeps them wrapped.
-        .declaring([Qualifier::from(["sys"])])
+        .declaring([Qualifier::from([SYNTAX.roots.sys])])
 }

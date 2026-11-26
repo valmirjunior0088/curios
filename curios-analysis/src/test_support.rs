@@ -10,8 +10,8 @@ use {
         CharacterSyntax, ConceptField, ConjunctionSyntax, DerivationSyntax, EntailmentSyntax,
         EqlSyntax, EqualitySyntax, HashDerivation, IntegerSyntax, KeyDerivation, LiftSyntax,
         MonadSyntax, NaturalSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, OrdLaws,
-        OrderSyntax, ProgramSyntax, ProofSyntax, ReportSyntax, SpellDerivation, StringSyntax,
-        SyntaxName, SyntaxRegistry, TestSyntax,
+        OrderSyntax, ProgramSyntax, ProofSyntax, ReportSyntax, RootSyntax, SpellDerivation,
+        StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
     },
     curios_core::{Applications, Free, Global, InductDecl, Polarity, StructDecl, Term},
     std::{collections::BTreeMap, convert::Infallible},
@@ -29,6 +29,11 @@ const fn field(segments: &'static [&'static str], label: &'static str) -> Concep
 }
 
 pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
+    roots: RootSyntax {
+        sys: "sys",
+        std: "std",
+        test: "test",
+    },
     option: OptionSyntax {
         family: name(&["sys", "Option"]),
         some: name(&["sys", "Option", "some"]),

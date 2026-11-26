@@ -16,7 +16,7 @@ use {
         EXTENSION, LIBRARY, MANIFEST, Manifest, Package, Refused, require_compiler, umbrella_over,
     },
     curios_common::{Qualifier, Report, RootKind, is_identifier},
-    curios_module::{PackageRoot, RootSource, open_entrypoint},
+    curios_module::{PackageRoot, RootSource, SYNTAX, open_entrypoint},
     std::{
         collections::BTreeMap,
         iter,
@@ -45,13 +45,13 @@ pub fn package_at(directory: &Path) -> Result<(Package, Option<RootSource>), Box
 ///
 /// **Direct dependencies only.** A dependency of a dependency is in the fold — it had to be, for the one in between to compile — and is unspellable here, which is what makes a manifest's rows the whole statement of what a unit reaches. This is law 3: membership organizes and dependency compiles.
 ///
-/// `/std` is implicit because it is the one unit every program is entitled to and no manifest declares: a row for it would be ceremony every package in existence repeats. It is named here rather than derived, which is the one place in this crate that knows the standard library by name; the root beneath it, `/sys`, is named by nothing here at all — it has no path, so no manifest can reach it and `curios-pipeline`'s `standard` module makes the one grant of it.
+/// `/std` is implicit because it is the one unit every program is entitled to and no manifest declares: a row for it would be ceremony every package in existence repeats. It is granted here rather than derived, the one place in this crate that knows the standard library, by the root the registry mounts it at; the root beneath it, `/sys`, is named by nothing here at all — it has no path, so no manifest can reach it and `curios-pipeline`'s `standard` module makes the one grant of it.
 pub fn declared(package: &Package) -> Vec<Qualifier> {
     package
         .dependencies
         .keys()
         .map(|name| Qualifier::from([name.as_str()]))
-        .chain([Qualifier::from(["std"])])
+        .chain([Qualifier::from([SYNTAX.roots.std])])
         .collect()
 }
 

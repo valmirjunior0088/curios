@@ -1174,9 +1174,6 @@ pub fn sys_module(syntax: &SyntaxRegistry) -> Module {
 }
 
 /// What `/sys` is, for its record. No consumer reads this page — `curios document --std` renders `/std`'s — but the record is what `/std` adopts its declarations out of, and a record states what it is about.
-const SYS_NAME: &str = "sys";
-
-/// See [`SYS_NAME`].
 const SYS_DESCRIPTION: &str = "The compiler's own root: every intrinsic type former with the operations over it, and the propositions those operations state their preconditions in.";
 
 /// The `/sys` root, supplied whole by `sys_module` — the first unit of the prelude fold, which nothing precedes.
@@ -1184,7 +1181,7 @@ const SYS_DESCRIPTION: &str = "The compiler's own root: every intrinsic type for
 /// **It documents itself, and that is what makes `/std`'s pages possible.** A declaration `/std` re-exports out of `/sys` is rendered from `/sys`'s *surface tree*, which no unit keeps — a `PreparedText` carries resolution tables and a lowered module, never the items they were read from. So `/sys`'s record is made from this source, and `/std`'s adopts declarations out of it rather than re-deriving them from items it cannot reach.
 pub fn sys_source() -> RootSource {
     let mut modules = RootSource::supplied();
-    modules.insert_root(SYS_NAME, RootKind::Internal, sys_module(&SYNTAX));
+    modules.insert_root(SYNTAX.roots.sys, RootKind::Internal, sys_module(&SYNTAX));
 
-    modules.documented(SYS_NAME, Some(SYS_DESCRIPTION))
+    modules.documented(SYNTAX.roots.sys, Some(SYS_DESCRIPTION))
 }

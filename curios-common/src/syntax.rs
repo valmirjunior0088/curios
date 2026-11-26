@@ -49,6 +49,7 @@ pub struct ConceptField {
 /// The crate that owns the corresponding source declarations fills the fields as an exhaustive named struct literal: a new slot is a compile error at every fill site until it is filled, and the fill names each slot, where a positional constructor would let two like-typed slots swap silently past every check. [`SyntaxRegistry::targets`] and [`SyntaxRegistry::concept_fields`] enumerate the whole obligation, which is what lets the prelude build check every slot against the sources rather than trusting them to agree.
 #[derive(Debug, Clone, Copy)]
 pub struct SyntaxRegistry {
+    pub roots: RootSyntax,
     pub option: OptionSyntax,
     pub monad: MonadSyntax,
     pub lift: LiftSyntax,
@@ -75,7 +76,9 @@ impl SyntaxRegistry {
             .derivation_rows()
             .flat_map(Derivation::targets)
             .collect::<Vec<_>>();
+        // No root is a target: a root is a prefix, and no declaration stands at one.
         let Self {
+            roots: _,
             option,
             monad,
             lift,
@@ -113,13 +116,14 @@ impl SyntaxRegistry {
 
     /// Every registered concept method, for the prelude build's field check. A concept can exist under the registered name and still not declare the field the compiler projects, which is the drift a presence check alone cannot see.
     ///
-    /// Only six groups hold concept methods; the other nine are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
+    /// Only six groups hold concept methods; the other ten are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
     pub fn concept_fields(self) -> impl Iterator<Item = ConceptField> {
         let rows = self
             .derivation_rows()
             .flat_map(Derivation::concept_fields)
             .collect::<Vec<_>>();
         let Self {
+            roots: _,
             option: _,
             monad,
             lift,
@@ -195,6 +199,14 @@ impl SyntaxRegistry {
         ]
         .into_iter()
     }
+}
+
+/// The roots the registry's names lie under, each by the one word it is mounted at: `/sys`, the compiler's own; `/std`, the standard library; and `/test`, the runner's half of a test program, which a test compilation alone links. Every name of the fill opens with one of them, which the prelude's build holds, and a reader asking where a root is mounted reads it here rather than spelling it.
+#[derive(Debug, Clone, Copy)]
+pub struct RootSyntax {
+    pub sys: &'static str,
+    pub std: &'static str,
+    pub test: &'static str,
 }
 
 /// The ordinary optional family and its constructors, in declaration order.

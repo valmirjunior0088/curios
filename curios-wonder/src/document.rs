@@ -3,6 +3,7 @@
 use {
     curios_common::Qualifier,
     curios_document::Documentation,
+    curios_module::SYNTAX,
     curios_package::Refused,
     curios_pipeline::{CompileError, prelude_documentation},
 };
@@ -11,15 +12,15 @@ use {
 ///
 /// **The record of `/std`, named by its prefix rather than taken as the first one found.** Both prelude roots have one — `/sys` documents itself so that `/std` has something to adopt its intrinsic declarations out of — and the fold puts `/sys` first, so a search for "the" record finds the wrong half.
 pub fn std_documentation() -> Result<Documentation, CompileError> {
-    let std = Qualifier::from(["std"]);
+    let std = Qualifier::from([SYNTAX.roots.std]);
 
     prelude_documentation()
         .into_iter()
         .find(|record| record.prefix == std)
         .ok_or_else(|| {
             Refused::of("compiler fault")
-                .stating("the prelude carries no `/std` record")
-                .about_named("/std")
+                .stating("the prelude carries no record of the standard library")
+                .about_named(std.join())
                 .into()
         })
 }

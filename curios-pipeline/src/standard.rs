@@ -17,7 +17,7 @@ use {
     curios_abi::ForeignStore,
     curios_common::{Qualifier, Source, SourceName},
     curios_document::Documentation,
-    curios_module::{PreparedText, RootSource, SYNTAX, TEST_UNIT, UnitSource, document_unit},
+    curios_module::{PreparedText, RootSource, SYNTAX, UnitSource, document_unit},
     curios_prelude::{root_prefixes, with_prelude},
     curios_unit::{Predecessors, Unit},
     std::{path::Path, sync::Arc},
@@ -28,10 +28,10 @@ const TEST_SOURCE: &str = include_str!("standard/test.crs");
 
 /// `/test`, compiled over `roots`, the prelude's: the unit a test program's tail is closed over, and nothing else is compiled over ([`EntryTail::Test`]). Filed nowhere: its source is the compiler's, which a filed payload's header names, and what it is compiled over is among the units the payload's record names, so a payload is believed without it.
 fn runner(budget: u64, roots: Predecessors<'_>) -> Result<Unit, CompileError> {
-    let name = SourceName::of(TEST_UNIT, Path::new("test.crs"))
+    let name = SourceName::of(SYNTAX.roots.test, Path::new("test.crs"))
         .expect("`/test` and `test.crs` are plain names");
     let source = Source::named(name, TEST_SOURCE);
-    let root = RootSource::supplied_module(TEST_UNIT, &source)
+    let root = RootSource::supplied_module(SYNTAX.roots.test, &source)
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
 
     compile_unit(

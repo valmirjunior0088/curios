@@ -4,8 +4,8 @@ use curios_common::{
     CharacterSyntax, ConceptField, ConjunctionSyntax, DerivationSyntax, EntailmentSyntax,
     EqlSyntax, EqualitySyntax, HashDerivation, IntegerSyntax, KeyDerivation, LiftSyntax,
     MonadSyntax, NaturalSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, OrdLaws, OrderSyntax,
-    ProgramSyntax, ProofSyntax, ReportSyntax, SpellDerivation, StringSyntax, SyntaxName,
-    SyntaxRegistry, TestSyntax,
+    ProgramSyntax, ProofSyntax, ReportSyntax, RootSyntax, SpellDerivation, StringSyntax,
+    SyntaxName, SyntaxRegistry, TestSyntax,
 };
 
 pub const fn registry_name(segments: &'static [&'static str]) -> SyntaxName {
@@ -23,6 +23,11 @@ pub const fn registry_field(
 }
 
 pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
+    roots: RootSyntax {
+        sys: "sys",
+        std: "std",
+        test: "test",
+    },
     option: OptionSyntax {
         family: registry_name(&["sys", "Option"]),
         some: registry_name(&["sys", "Option", "some"]),
