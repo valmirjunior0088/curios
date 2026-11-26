@@ -221,8 +221,9 @@ impl Module {
     /// Every recursive group's computed members, against the two rules forcing by need rests on, handing back the members [`unforced`](Self::unforced) names. It runs once the structure holds, so every live group it reads off the arena is one the module owns; it is not inside the walk because the walk is the half that panics.
     fn check_recursion(&self) -> Result<Vec<CycleStep>, VerifyError> {
         let mut unforced = Vec::new();
+        let constructed = Constructed::of(self);
         for group in self.rec_groups().iter().flatten() {
-            unforced.extend(check_group(self, &group.values)?);
+            unforced.extend(check_group(self, &constructed, &group.values)?);
         }
 
         Ok(unforced)

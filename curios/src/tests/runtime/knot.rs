@@ -190,3 +190,38 @@ fn a_member_reading_itself_is_refused_before_it_can_trap() {
         "the self-read must be refused at compile time: {error}"
     );
 }
+
+// What an initializer evaluates is read through the arm its constructed scrutinee takes alone: `n` matches `Tree/leaf()`, so its `node` arm, which calls the witness `n` belongs to, never runs as the witness is initialized, and the program prints `n`. The refusal matches a node, whose arm, now taken, evaluates the witness as it is initialized.
+#[test]
+fn an_initializer_is_read_through_the_arm_its_constructed_scrutinee_takes() {
+    let program = |scrutinee: &str| {
+        fill!(
+            r#"
+            use /std/{Nat, Bool};
+
+            induct Tree: Type | leaf() | node(Tree, Tree) end
+
+            concept Same(A: Type): Type { same(A, A) -> Bool, n: Nat }
+
+            satisfy Same(Tree) {
+                same(a, b) =
+                    match a
+                    | leaf() => match b | leaf() => true | node(_, _) => false end
+                    | node(l, r) => match b | leaf() => false | node(p, q) => Same/same(l, p) && Same/same(r, q) end
+                    end,
+                n = match ${scrutinee} | leaf() => 0 | node(l, m) => match Same/same(l, m) | true => 0 | false => 0 end end,
+            }
+
+            /std/print(Nat/to_str(Same/n(@Tree)))
+            "#,
+            scrutinee
+        )
+    };
+
+    assert_eq!(run(&program("Tree/leaf()")), b"0");
+    let refused = error(&program("Tree/node(Tree/leaf(), Tree/leaf())"));
+    assert!(
+        refused.contains("evaluates itself as it is initialized"),
+        "{refused}"
+    );
+}

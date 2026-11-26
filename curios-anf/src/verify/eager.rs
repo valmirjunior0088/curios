@@ -9,7 +9,7 @@ use {
         Atom, BlockId, CycleCall, CycleStep, FunctionId, Intrinsic, Module, Rhs, Statement,
         ValueId, VerifyError,
     },
-    crate::{Interface, LocalBehavior, RecValue, Semantics},
+    crate::{Interface, LocalBehavior, RecValue, Semantics, Terminator},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -31,9 +31,13 @@ fn performs(behavior: &LocalBehavior) -> bool {
 /// Check one group's computed members: no initializer evaluates itself, and none performs an effect.
 ///
 /// Hands back the members that read themselves where nothing outside their own initializers reads them — see [`Module::unforced`](super::Module::unforced).
-pub fn check_group(module: &Module, values: &[RecValue]) -> Result<Vec<CycleStep>, VerifyError> {
+pub fn check_group(
+    module: &Module,
+    constructed: &Constructed,
+    values: &[RecValue],
+) -> Result<Vec<CycleStep>, VerifyError> {
     let computed: Vec<ValueId> = values.iter().map(|member| member.value).collect();
-    let mut summaries = Summaries::default();
+    let mut summaries = Summaries::new(constructed);
     let mut unforced = Vec::new();
     // Each member's evaluation edges to the members it reads, with the callee a read came through.
     let mut evaluates: Vec<BTreeMap<usize, Option<FunctionId>>> = Vec::with_capacity(values.len());
@@ -104,7 +108,9 @@ pub fn check_group(module: &Module, values: &[RecValue]) -> Result<Vec<CycleStep
 ///
 /// What it reads is left out. A value it reads is one its own module binds, and no initializer of another module is among those, a declaration being erased after everything it names.
 pub fn interface(module: &Module, function: FunctionId) -> Interface {
-    let mut summaries = Summaries::default();
+    // Every arm is read: a function's interface is asked one function at a time, and what it performs or applies is the same over each arm a caller may take.
+    let constructed = Constructed::default();
+    let mut summaries = Summaries::new(&constructed);
     summaries.function(module, function);
     summaries.settle(module);
     let summary = &summaries.functions[&function];
@@ -114,6 +120,7 @@ pub fn interface(module: &Module, function: FunctionId) -> Interface {
         .unwrap_or_default();
 
     Interface {
+        answers: answered(module, function, &mut BTreeSet::new()),
         performs: summary.effect.is_some(),
         applies: params
             .iter()
@@ -199,11 +206,119 @@ fn cycle_from(
 }
 
 /// Per-function summaries over the functions some initializer reaches, settled together: a function enters at the bottom the first time a region applies it, and every entered function is re-summarized from the others until none changes. The lattice is finite — reads and applied values over the module's values — and re-summarizing only grows a summary, so the settling terminates. Settling the set as a whole, rather than each function on entry, is what makes mutual recursion sound: a callee summarized against its caller's seed alone would never see the caller's settled reads.
-#[derive(Default)]
-struct Summaries {
+struct Summaries<'c> {
+    /// What the module's bindings construct, which decides the arm a match takes.
+    constructed: &'c Constructed,
     functions: BTreeMap<FunctionId, Evaluation>,
     /// Bumped whenever a summary enters or grows, so a driver can tell a settled map from one it has to re-read a region against.
     version: usize,
+}
+
+/// The blocks of `rhs` its evaluation may run: every one, save a match on a value of a known constructor ([`Constructed`]), which takes that constructor's arm, or its default where no arm names it, and runs no other.
+fn taken(module: &Module, rhs: &Rhs, scope: &Scope<'_>, constructed: &Constructed) -> Vec<BlockId> {
+    if let Rhs::MatchVariant {
+        family,
+        scrutinee,
+        arms,
+        default,
+    } = rhs
+        && let Atom::Value(value) = scope.resolve(*scrutinee)
+        && let Some(&position) = constructed.values.get(&value)
+        && let Some(constructor) = usize::try_from(position)
+            .ok()
+            .and_then(|position| module.constructor_at(*family, position))
+    {
+        return match arms.iter().find(|arm| arm.constructor == constructor) {
+            Some(arm) => vec![arm.block],
+            None => default.iter().copied().collect(),
+        };
+    }
+    rhs.sub_blocks()
+}
+
+/// The position, within its family, of the constructor each value of a module is bound to, where its binding settles one: a construction, an alias of such a value, or a call of a function at every parameter that answers one ([`answered`]). Read once a module, before any group is checked.
+#[derive(Default)]
+pub struct Constructed {
+    values: BTreeMap<ValueId, u32>,
+}
+
+impl Constructed {
+    /// The constructors `module`'s bindings settle, each found once every binding it is read through is.
+    pub fn of(module: &Module) -> Self {
+        let mut values = BTreeMap::new();
+        loop {
+            let known = values.len();
+            for statement in module.statements().iter().flatten() {
+                let Statement::Let { result, rhs } = statement else {
+                    continue;
+                };
+                if values.contains_key(result) {
+                    continue;
+                }
+                let position = match rhs {
+                    Rhs::Alias(Atom::Value(value)) => values.get(value).copied(),
+                    rhs => constructs(module, rhs, &mut BTreeSet::new()),
+                };
+                if let Some(position) = position {
+                    values.insert(*result, position);
+                }
+            }
+            if values.len() == known {
+                return Self { values };
+            }
+        }
+    }
+}
+
+/// The position of the constructor `rhs` answers, where it is a construction or a call at every parameter of a function that answers one.
+fn constructs(module: &Module, rhs: &Rhs, seen: &mut BTreeSet<FunctionId>) -> Option<u32> {
+    match rhs {
+        Rhs::Construct { constructor, .. } => module
+            .constructor_position(*constructor)
+            .and_then(|position| u32::try_from(position).ok()),
+        Rhs::Apply {
+            callee: Atom::Function(function),
+            arguments,
+        } if module
+            .function(*function)
+            .is_some_and(|definition| definition.params.len() == arguments.len()) =>
+        {
+            answered(module, *function, seen)
+        }
+        _ => None,
+    }
+}
+
+/// The position of the constructor every call of `function` answers ([`Interface::answers`]): an import's, as its interface states it, and one the module defines, where its body returns a value the body binds to one, directly or through aliases.
+fn answered(module: &Module, function: FunctionId, seen: &mut BTreeSet<FunctionId>) -> Option<u32> {
+    if let Some(import) = module
+        .imports()
+        .functions()
+        .iter()
+        .find(|import| import.function == function)
+    {
+        return import.interface.answers;
+    }
+    if !seen.insert(function) {
+        return None;
+    }
+    let body = module.block(module.function(function)?.body)?;
+    let Terminator::Return(Atom::Value(mut returned)) = body.terminator else {
+        return None;
+    };
+    for &statement in body.statements.iter().rev() {
+        let Some(Statement::Let { result, rhs }) = module.statement(statement) else {
+            continue;
+        };
+        if *result != returned {
+            continue;
+        }
+        match rhs {
+            Rhs::Alias(Atom::Value(aliased)) => returned = *aliased,
+            rhs => return constructs(module, rhs, seen),
+        }
+    }
+    None
 }
 
 /// One region being evaluated: what it binds, the atoms its aliases name, the nested members a read would force, and the functions already composed into it — composing one is idempotent, so a function reached twice, or reaching itself through a capture, is composed once.
@@ -236,7 +351,15 @@ impl Scope<'_> {
     }
 }
 
-impl Summaries {
+impl<'c> Summaries<'c> {
+    fn new(constructed: &'c Constructed) -> Self {
+        Self {
+            constructed,
+            functions: BTreeMap::new(),
+            version: 0,
+        }
+    }
+
     /// Evaluate an initializer's region against settled summaries: the region enters the functions it applies, settling summarizes them, and the region is read again until neither changes anything.
     fn settled_region(&mut self, module: &Module, block: BlockId) -> Evaluation {
         loop {
@@ -324,7 +447,7 @@ impl Summaries {
                             evaluation.effect.get_or_insert(None);
                         }
                         self.application(module, rhs, &mut scope, &mut evaluation);
-                        blocks.extend(rhs.sub_blocks());
+                        blocks.extend(taken(module, rhs, &scope, self.constructed));
                     }
                     // A nested group's members are forced by need like the outer one's: an initializer is read into this region the first time the region reads its member, not merely because the group is bound here.
                     Some(Statement::Rec { group }) => {

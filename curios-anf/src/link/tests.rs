@@ -376,6 +376,7 @@ fn an_initializer_is_refused_for_the_effect_an_imported_callee_performs() {
     let refused = initialized_through(Interface {
         performs: true,
         applies: Vec::new(),
+        answers: None,
     });
     assert!(matches!(
         refused,
@@ -407,8 +408,39 @@ fn a_function_that_applies_its_parameter_says_so_in_its_interface() {
         Interface {
             performs: false,
             applies: vec![1],
+            answers: None,
         }
     );
+}
+
+// A constructor's own function answers its constructor on every call, which a fragment calling it reads through the interface it imports: the position within the family, `node` being its second constructor. A function returning what it is handed answers none.
+#[test]
+fn a_function_that_returns_a_construction_says_which_in_its_interface() {
+    let mut builder = Builder::new();
+    let family = builder.family(Some("Tree".into()));
+    builder.constructor(family, Some("leaf".into()), Vec::new());
+    let node = builder.constructor(family, Some("node".into()), Vec::new());
+    let constructs = builder.reserve_function();
+    builder.open_block();
+    let built = builder.let_value(
+        None,
+        Rhs::Construct {
+            constructor: node,
+            fields: Vec::new(),
+        },
+    );
+    let body = builder.seal_block(Terminator::Return(Atom::Value(built)));
+    builder.define_function(constructs, Some("node".into()), Vec::new(), body);
+    let passes = builder.reserve_function();
+    let handed = builder.value(Some("handed".into()));
+    builder.open_block();
+    let body = builder.seal_block(Terminator::Return(Atom::Value(handed)));
+    builder.define_function(passes, Some("pass".into()), vec![handed], body);
+    builder.item_functions(vec![constructs, passes]);
+    let module = builder.into_module().expect("the fragment verifies");
+
+    assert_eq!(module.interface(constructs).answers, Some(1));
+    assert_eq!(module.interface(passes).answers, None);
 }
 
 #[test]

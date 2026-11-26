@@ -40,7 +40,7 @@ pub struct ValueDef {
     pub register: Option<RegisterShape>,
 }
 
-/// What applying a function does that a caller in another module has to know, beyond how many arguments it takes, which its parameter list says: whether its body performs an effect an initializer may not, and which of its parameters it applies. Computed where the function is defined ([`Module::interface`]) and carried where it is imported, so a module is held to the recursion rules through a callee it does not hold.
+/// What applying a function does that a caller in another module has to know, beyond how many arguments it takes, which its parameter list says: whether its body performs an effect an initializer may not, which of its parameters it applies, and the constructor every call of it answers. Computed where the function is defined ([`Module::interface`]) and carried where it is imported, so a module is held to the recursion rules through a callee it does not hold.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[curios_archive::archived]
 pub struct Interface {
@@ -48,6 +48,8 @@ pub struct Interface {
     pub performs: bool,
     /// The positions of the parameters it applies, ascending.
     pub applies: Vec<u32>,
+    /// The position, within the family a caller matches its result as, of the constructor every call of it at all its parameters answers, where its body returns one construction: a constructor's own function, which erasure calls where a program writes the constructor. A position rather than an identity, since linking interns a family by its shape and a match names its own.
+    pub answers: Option<u32>,
 }
 
 /// A function a module applies and another defines: its identity here, a live function whose parameters are real and whose body is a stub, and its interface.
