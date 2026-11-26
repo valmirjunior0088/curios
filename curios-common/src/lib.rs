@@ -74,8 +74,8 @@ pub use syntax::{
     CharacterSyntax, ConceptField, ConjunctionSyntax, Derivation, DerivationSyntax,
     EntailmentSyntax, EqlSyntax, EqualitySyntax, HashDerivation, IntegerSyntax, LiftSyntax,
     MethodForm, MonadSyntax, NaturalSyntax, OperatorMethod, OperatorSyntax, OptionSyntax,
-    OrdDerivation, OrdLaws, OrderSyntax, ProgramSyntax, ProofSyntax, ReportSyntax, ResultSyntax,
-    SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
+    OrdDerivation, OrdLaws, OrderSyntax, ProgramSyntax, ProofSyntax, ReportSyntax, SpellDerivation,
+    StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
 };
 
 mod recurse;

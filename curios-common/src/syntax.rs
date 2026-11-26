@@ -50,7 +50,6 @@ pub struct ConceptField {
 #[derive(Debug, Clone, Copy)]
 pub struct SyntaxRegistry {
     pub option: OptionSyntax,
-    pub result: ResultSyntax,
     pub monad: MonadSyntax,
     pub lift: LiftSyntax,
     pub operator: OperatorSyntax,
@@ -78,7 +77,6 @@ impl SyntaxRegistry {
             .collect::<Vec<_>>();
         let Self {
             option,
-            result,
             monad,
             lift,
             operator,
@@ -97,7 +95,6 @@ impl SyntaxRegistry {
 
         option
             .targets()
-            .chain(result.targets())
             .chain(monad.targets())
             .chain(lift.targets())
             .chain(operator.targets())
@@ -116,7 +113,7 @@ impl SyntaxRegistry {
 
     /// Every registered concept method, for the prelude build's field check. A concept can exist under the registered name and still not declare the field the compiler projects, which is the drift a presence check alone cannot see.
     ///
-    /// Only six groups hold concept methods; the other ten are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
+    /// Only six groups hold concept methods; the other nine are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
     pub fn concept_fields(self) -> impl Iterator<Item = ConceptField> {
         let rows = self
             .derivation_rows()
@@ -124,7 +121,6 @@ impl SyntaxRegistry {
             .collect::<Vec<_>>();
         let Self {
             option: _,
-            result: _,
             monad,
             lift,
             operator,
@@ -207,25 +203,6 @@ impl OptionSyntax {
     fn targets(self) -> impl Iterator<Item = SyntaxName> {
         let Self { family, some, none } = self;
         [family, some, none].into_iter()
-    }
-}
-
-/// The ordinary success-or-failure family and its constructors, in declaration order: what a `/sys` host row's generated outcome is built from.
-#[derive(Debug, Clone, Copy)]
-pub struct ResultSyntax {
-    pub family: SyntaxName,
-    pub success: SyntaxName,
-    pub failure: SyntaxName,
-}
-
-impl ResultSyntax {
-    fn targets(self) -> impl Iterator<Item = SyntaxName> {
-        let Self {
-            family,
-            success,
-            failure,
-        } = self;
-        [family, success, failure].into_iter()
     }
 }
 
@@ -648,11 +625,12 @@ impl ProgramSyntax {
     }
 }
 
-/// What a report names for its reader to write in place of a form that is refused: `/std/Try` and its `run`, where an action that may fail meets a region it has no edge into, and `/std/Str/concat` and `/std/Fmt/render`, where `+` meets a `Str`. Read by the elaborator's reports alone: no stage builds a term the program holds from them.
+/// What a report names for its reader to write in place of a form that is refused: `/std/Try`, its `run` and the `/std/Result` that hands back, where an action that may fail meets a region it has no edge into, and `/std/Str/concat` and `/std/Fmt/render`, where `+` meets a `Str`. Read by the elaborator's reports alone: no stage builds a term the program holds from them.
 #[derive(Debug, Clone, Copy)]
 pub struct ReportSyntax {
     pub try_type: SyntaxName,
     pub try_run: SyntaxName,
+    pub result_type: SyntaxName,
     pub str_concat: SyntaxName,
     pub fmt_render: SyntaxName,
 }
@@ -662,11 +640,12 @@ impl ReportSyntax {
         let Self {
             try_type,
             try_run,
+            result_type,
             str_concat,
             fmt_render,
         } = self;
 
-        [try_type, try_run, str_concat, fmt_render].into_iter()
+        [try_type, try_run, result_type, str_concat, fmt_render].into_iter()
     }
 }
 

@@ -354,7 +354,7 @@ fn diagnose_embedding(
             Box::new(Runner::new(
                 global(syntax.report.try_type),
                 global(syntax.report.try_run),
-                global(syntax.result.family),
+                global(syntax.report.result_type),
             ))
         });
 

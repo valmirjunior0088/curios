@@ -4,8 +4,8 @@ use curios_common::{
     CharacterSyntax, ConceptField, ConjunctionSyntax, DerivationSyntax, EntailmentSyntax,
     EqlSyntax, EqualitySyntax, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax,
     NaturalSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, OrdLaws, OrderSyntax,
-    ProgramSyntax, ProofSyntax, ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax,
-    SyntaxName, SyntaxRegistry, TestSyntax,
+    ProgramSyntax, ProofSyntax, ReportSyntax, SpellDerivation, StringSyntax, SyntaxName,
+    SyntaxRegistry, TestSyntax,
 };
 
 /// Each target is stated as its module segments, so no stage has to split a path back apart to learn where the name lives.
@@ -29,11 +29,6 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         family: name(&["sys", "Option"]),
         some: name(&["sys", "Option", "some"]),
         none: name(&["sys", "Option", "none"]),
-    },
-    result: ResultSyntax {
-        family: name(&["sys", "Result"]),
-        success: name(&["sys", "Result", "success"]),
-        failure: name(&["sys", "Result", "failure"]),
     },
     monad: MonadSyntax {
         bind: field(&["std", "Monad", "Monad"], "bind"),
@@ -91,6 +86,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         try_run: name(&["std", "Try", "run"]),
         str_concat: name(&["std", "Str", "concat"]),
         fmt_render: name(&["std", "Fmt", "render"]),
+        result_type: name(&["std", "Result", "Result"]),
     },
     derivations: DerivationSyntax {
         spell: SpellDerivation {

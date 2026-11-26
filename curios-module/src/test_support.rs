@@ -4,8 +4,8 @@ use curios_common::{
     CharacterSyntax, ConceptField, ConjunctionSyntax, DerivationSyntax, EntailmentSyntax,
     EqlSyntax, EqualitySyntax, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax,
     NaturalSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, OrdLaws, OrderSyntax,
-    ProgramSyntax, ProofSyntax, ReportSyntax, ResultSyntax, SpellDerivation, StringSyntax,
-    SyntaxName, SyntaxRegistry, TestSyntax,
+    ProgramSyntax, ProofSyntax, ReportSyntax, SpellDerivation, StringSyntax, SyntaxName,
+    SyntaxRegistry, TestSyntax,
 };
 
 pub const fn registry_name(segments: &'static [&'static str]) -> SyntaxName {
@@ -27,11 +27,6 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         family: registry_name(&["sys", "Option"]),
         some: registry_name(&["sys", "Option", "some"]),
         none: registry_name(&["sys", "Option", "none"]),
-    },
-    result: ResultSyntax {
-        family: registry_name(&["sys", "Result"]),
-        success: registry_name(&["sys", "Result", "success"]),
-        failure: registry_name(&["sys", "Result", "failure"]),
     },
     monad: MonadSyntax {
         bind: registry_field(&["std", "Monad"], "bind"),
@@ -89,6 +84,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         try_run: registry_name(&["std", "Try", "run"]),
         str_concat: registry_name(&["std", "Str", "concat"]),
         fmt_render: registry_name(&["std", "Fmt", "render"]),
+        result_type: registry_name(&["std", "Result"]),
     },
     // These spellings are load-bearing for the lowering's `unused_declaration` suite, which declares them as source and asserts the references that follow: a row whose concept does not match what the source declares yields no vocabulary at all, and that suite is what says so.
     derivations: DerivationSyntax {

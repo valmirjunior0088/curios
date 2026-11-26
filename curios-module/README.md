@@ -26,11 +26,13 @@ The Curios module system, over the tree [`curios-surface`](../curios-surface/REA
 
 **Rejected.** Moving the emitted names down into `/sys`: `Test` needs `List`, `Str`, `Io` and `Bool`, and `Test/equal` needs `Eql`, `Spell` and `Show`, so `/sys` would absorb most of `/std` and re-create the cycle a level lower. `/sys` membership is decided by what `/sys` itself must name.
 
-### Optional and fallible values belong to the guest foundation
+### An optional value belongs to the guest foundation
 
-**Decision.** `/sys/Option` and `/sys/Result` are ordinary universe-polymorphic inductives, `some` before `none` and `success` before `failure`, the failure's type first; `/std/Option` and `/std/Result` re-export each family and its constructors, and their functions, witnesses and derivations stay in `/std`. The registry names each declaration and its constructors directly. The generated declaration keeps source identities for its `Type` occurrences, so its type former and constructor signatures share their universe seeds.
+**Decision.** `/sys/Option` is an ordinary universe-polymorphic inductive, `some` before `none`; `/std/Option` re-exports the family and its constructors, and its functions, witnesses and derivations stay in `/std`. `Result` is `/std/Result`'s own declaration, `success` before `failure`, the failure's type first. The registry names `Option` and its constructors directly, and `Result` only as the family a report's advice offers. The generated declaration keeps source identities for its `Type` occurrences, so its type former and constructor signatures share their universe seeds.
 
-**Rationale.** The compiler constructs them without reaching into `/std`, as erasure reads a latch's poll and a host call's optional answer as an `Option`. Anonymous generated occurrences would assign unrelated levels and specialize consumers such as `Cli` wrongly.
+**Rationale.** The compiler constructs an `Option` without reaching into `/std`, as erasure reads a latch's poll and a host call's optional answer as one, and `/sys` membership is decided by what `/sys` itself must name; a `Result` is built by programs and by `/std` alone. Anonymous generated occurrences would assign unrelated levels and specialize consumers such as `Cli` wrongly.
+
+**Rejected.** `Result` in `/sys` beside `Option`, for the symmetry of the two: `/sys` would declare a family no stage builds or reads, which is what its membership rule turns away.
 
 ### A unit read from Curios/Core is a root source over its file
 

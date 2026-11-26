@@ -1,8 +1,15 @@
-pub use /sys/{let Result};
-pub use /sys/Result/{success, failure};
+pub use Result/{success, failure};
 
 use /std/{Bool, Eq, Show, Spell, Fmt, Option, Ordering, Ord, Monad};
 use /std/ops/{Eql};
+
+--- Success or failure, the failure's type first.
+pub induct Result(E: Type, A: Type): pub Type
+--- It worked, carrying the value.
+| success(A)
+--- It did not, carrying the error.
+| failure(E)
+end
 
 --- `a` as a success.
 pub let pure(@E: Type, @A: Type, a: A) -> Result(E, A) =

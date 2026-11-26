@@ -56,22 +56,6 @@ fn option_decl() -> TopItem {
     module.items.into_iter().next().expect("one declaration")
 }
 
-// Parsed for the reason `option_decl` is: repeated lowerings of each written `Type` share their universe seed.
-fn result_decl() -> TopItem {
-    let module: Module = r#"
-        --- Success or failure, the failure's type first.
-        pub induct Result(E: Type, A: Type): pub Type
-        --- It worked, carrying the value.
-        | success(A)
-        --- It did not, carrying the error.
-        | failure(E)
-        end
-    "#
-    .parse()
-    .expect("the ordinary Result declaration parses");
-    module.items.into_iter().next().expect("one declaration")
-}
-
 // `pub induct True: pub Prop | qed() end` — the trivially true proposition and its proof, which every discharged obligation is answered with.
 fn true_prop() -> TopItem {
     TopItem::Induct(vec![TopInduct {
@@ -1183,7 +1167,7 @@ pub fn sys_module(syntax: &SyntaxRegistry) -> Module {
         .chain(code_modules())
         .chain(unicode_modules())
         .flat_map(SysModule::into_items)
-        .chain([option_decl(), result_decl()])
+        .chain([option_decl()])
         .collect();
 
     Module::built(items)
