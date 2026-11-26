@@ -203,6 +203,8 @@ pub(super) fn member_parts(parts: &[PartShape], member: usize) -> impl Iterator<
 pub(super) struct Part {
     pub shape: PartShape,
     pub params: Vec<Free>,
+    /// The declared types of the member's leading lambdas' parameters, the first of `params`: a field lambda's own parameters, and a held part's, have none here.
+    pub types: Vec<Term>,
     pub runs: Vec<Term>,
     /// The definitions a field of the record the leading lambdas answer holds, each applied to every argument its leading lambdas take, which they answer held, their parts this member's ([`Held`]).
     pub answers: Vec<(Global, Vec<Term>)>,
@@ -250,8 +252,8 @@ pub fn held_application<D: Driver>(driver: &D, term: &Term) -> Option<Holding> {
 pub(super) fn open_parts<D: Driver>(driver: &mut D, group: &RecGroup) -> Vec<Part> {
     let mut parts = Vec::new();
     for member in 0..group.length() {
-        let (params, _, body) = peel(driver, group.member_body(member));
-        open_member(driver, member, params, &body, &mut parts);
+        let (params, types, body) = peel(driver, group.member_body(member));
+        open_member(driver, member, params, types, &body, &mut parts);
     }
     parts
 }
@@ -276,7 +278,7 @@ pub(super) fn open_definition<D: Driver>(
         return Ok(None);
     }
     let mut parts = Vec::new();
-    open_member(driver, 0, params, &body, &mut parts);
+    open_member(driver, 0, params, types, &body, &mut parts);
     Ok(Some(parts))
 }
 
@@ -285,11 +287,13 @@ fn open_member<D: Driver>(
     driver: &mut D,
     member: usize,
     params: Vec<Free>,
+    types: Vec<Term>,
     body: &Term,
     parts: &mut Vec<Part>,
 ) {
     let base = parts.len();
     parts.push(Part {
+        types,
         shape: PartShape {
             member,
             path: Vec::new(),
@@ -363,6 +367,7 @@ fn record<D: Driver>(
                         arity: all.len(),
                     },
                     params: all,
+                    types: parts[owner].types.clone(),
                     runs: vec![inner],
                     answers: Vec::new(),
                     held: None,
@@ -395,6 +400,7 @@ fn record<D: Driver>(
                                 arity: all.len(),
                             },
                             params: all,
+                            types: parts[owner].types.clone(),
                             runs: Vec::new(),
                             answers: Vec::new(),
                             held: Some(Held {

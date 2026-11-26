@@ -935,7 +935,7 @@ pub fn verdicts_visiting<'s>(
                 reads.insert(name, (**record).clone());
                 let made = record.made().expect("a record taken is complete");
                 totals.adopt(name, made.totality);
-                if !made.applications.is_empty() {
+                if !made.applications.states_nothing() {
                     certifier.file_applications(&name, made.applications.clone());
                     applications.insert(name, made.applications.clone());
                 }
@@ -1043,7 +1043,7 @@ pub fn verdicts_visiting<'s>(
                         // How each member applies its parameters, read off the group as checked, within the item's judgment: what it reads is the item's. A budget that runs out leaves the group summarizing nothing, which grades a call through it as no summary does.
                         if let Ok(applied) = group_applications(certifier, rec.group()) {
                             for ((name, _), applied) in members.iter().zip(applied) {
-                                if !applied.is_empty() {
+                                if !applied.states_nothing() {
                                     certifier.file_applications(name, applied.clone());
                                     applications.insert(*name, applied);
                                 }
@@ -1696,7 +1696,7 @@ fn stands(
                     .vectors
                     .as_ref()
                     .map(|(_, variances)| variances.as_slice()),
-                Some(&concluded.applications).filter(|applied| !applied.is_empty()),
+                Some(&concluded.applications).filter(|applied| !applied.states_nothing()),
             );
             return held_digest(now.stated, now.places, read, verdict, body)
                 .ok()

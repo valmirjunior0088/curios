@@ -2,6 +2,9 @@
 //!
 //! Representation, not analysis. A matrix grades what one call or one application hands against what its caller was handed, and composition is the (join, compose) semiring over [`Size`]: the best relation reachable through any intermediate position. Nothing here reads a term: what an argument *is* is `curios-analysis`'s `Shape`'s question, grading it against a parameter `Shape::against`'s, and closing a group's calls to a verdict `decide`'s. A matrix belongs here because a certifier's record stores the ones a definition's applications are graded by, as a registry entry's [`Polarity`](crate::Polarity) vector is stored beside it.
 
+#[cfg(test)]
+mod tests;
+
 /// How a call argument's size compares to the caller parameter it is graded against.
 ///
 /// Ordered `Unknown ⊏ Same ⊏ Less`, so joining several routes to the same entry keeps the most informative one.
@@ -233,9 +236,9 @@ impl Applications {
         &self.parts
     }
 
-    /// Whether no part applies anything where every use of it is seen: what a record files nothing for.
-    pub fn is_empty(&self) -> bool {
-        self.parts.iter().all(PartApplications::is_empty)
+    /// Whether no part states anything of a parameter, every one used otherwise: what a record files nothing for, so that a definition with nothing filed is read as using every parameter otherwise. A parameter every use of which is seen and that is applied nowhere is stated, as applying nothing.
+    pub fn states_nothing(&self) -> bool {
+        self.parts.iter().all(PartApplications::states_nothing)
     }
 }
 
@@ -277,11 +280,8 @@ impl PartApplications {
             .map(|field| (field.path.as_slice(), field.applied.as_slice()))
     }
 
-    /// Whether no parameter, and no field of one, is applied where every use of it is seen: what a record files nothing for.
-    pub fn is_empty(&self) -> bool {
-        self.parameters
-            .iter()
-            .all(|applied| applied.as_ref().is_none_or(Vec::is_empty))
-            && self.fields.iter().all(|field| field.applied.is_empty())
+    /// Whether every parameter is used otherwise, so that the part states nothing of any ([`Applications::states_nothing`]).
+    pub fn states_nothing(&self) -> bool {
+        self.parameters.iter().all(Option::is_none)
     }
 }

@@ -251,3 +251,85 @@ fn a_members_field_handed_where_its_callee_applies_it_is_the_member_at_that_path
         matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
     });
 }
+
+// A witness whose superclass is built from a premise's field read as a value publishes what it applies of the premise: `mark: Nat` holds nothing that can be applied, so `List`'s `Mark` witness reading `Mark/mark(@T)` uses its premise as no call does, and `List`'s `Big` witness, whose superclass slot holds it, states what `all_big` applies of its own premise, through which `Doc`'s witness descends. The refusal makes `mark` a record holding a function, read as a value and handed on, where it may be applied wherever it goes.
+#[test]
+fn a_premises_field_read_as_a_value_that_holds_no_function_is_no_use() {
+    control(
+        r#"
+        use /std/{Nat, List};
+        use /std/Bool/{True};
+
+        induct Doc: Type | leaf() | arr(List(Doc)) end
+
+        concept Mark(A: Type): pub Type { mark: Nat }
+
+        concept Big(A: Type): pub Type { use Mark(A), big(A) -> True }
+
+        satisfy Mark(Doc) { mark = 0 }
+
+        satisfy (@T: Type, use Mark(T)) => Mark(List(T)) { mark = Mark/mark(@T) + 1 }
+
+        let all_big(@T: Type, use Big(T), xs: List(T)) -> True =
+            match xs | [] => True/qed() | [x, ..rest] => match Big/big(x) | qed() => all_big(rest) end end;
+
+        satisfy (@T: Type, use Big(T)) => Big(List(T)) { big = all_big }
+
+        satisfy Big(Doc) { big(d) = match d | leaf() => True/qed() | arr(xs) => Big/big(xs) end }
+
+        let _ = Big/big(Doc/arr([Doc/leaf()]));
+        /std/print(Nat/to_str(Mark/mark(@List(Doc))))
+        "#,
+        b"1",
+    )
+    .refused(&[
+        ("concept Mark(A: Type): pub Type { mark: Nat }", "struct Box: Type { f: (Nat) -> Nat }\n\n        concept Mark(A: Type): pub Type { mark: Box }"),
+        ("satisfy Mark(Doc) { mark = 0 }", "satisfy Mark(Doc) { mark = Box { f(n) = n } }"),
+        ("{ mark = Mark/mark(@T) + 1 }", "{ mark = Mark/mark(@T) }"),
+        ("/std/print(Nat/to_str(Mark/mark(@List(Doc))))", "/std/print(Nat/to_str(Mark/mark(@List(Doc)).f(1)))"),
+    ])
+    .by_elaborator_in("/witness~/Big(/Doc)", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    });
+}
+
+// A definition that applies nothing of a parameter every use of which is seen states so, and a caller handing it the parameter makes no use of it there: `List`'s `Mark` witness never reads its premise, so `List`'s `Big` witness, whose superclass slot hands it the premise's own superclass, states what `all_big` applies of its premise, through which `Doc`'s witness descends. The refusal reads the premise's `mark`, a record holding a function, as a value and hands it on, where it may be applied wherever it goes.
+#[test]
+fn a_definition_that_applies_nothing_of_its_parameter_states_so_to_its_callers() {
+    control(
+        r#"
+        use /std/{Nat, List};
+        use /std/Bool/{True};
+
+        induct Doc: Type | leaf() | arr(List(Doc)) end
+
+        concept Mark(A: Type): pub Type { mark: Nat }
+
+        concept Big(A: Type): pub Type { use Mark(A), big(A) -> True }
+
+        satisfy Mark(Doc) { mark = 0 }
+
+        satisfy (@T: Type, use Mark(T)) => Mark(List(T)) { mark = 1 }
+
+        let all_big(@T: Type, use Big(T), xs: List(T)) -> True =
+            match xs | [] => True/qed() | [x, ..rest] => match Big/big(x) | qed() => all_big(rest) end end;
+
+        satisfy (@T: Type, use Big(T)) => Big(List(T)) { big = all_big }
+
+        satisfy Big(Doc) { big(d) = match d | leaf() => True/qed() | arr(xs) => Big/big(xs) end }
+
+        let _ = Big/big(Doc/arr([Doc/leaf()]));
+        /std/print(Nat/to_str(Mark/mark(@List(Doc))))
+        "#,
+        b"1",
+    )
+    .refused(&[
+        ("concept Mark(A: Type): pub Type { mark: Nat }", "struct Box: Type { f: (Nat) -> Nat }\n\n        concept Mark(A: Type): pub Type { mark: Box }"),
+        ("satisfy Mark(Doc) { mark = 0 }", "satisfy Mark(Doc) { mark = Box { f(n) = n } }"),
+        ("{ mark = 1 }", "{ mark = Mark/mark(@T) }"),
+        ("/std/print(Nat/to_str(Mark/mark(@List(Doc))))", "/std/print(Nat/to_str(Mark/mark(@List(Doc)).f(1)))"),
+    ])
+    .by_elaborator_in("/witness~/Big(/Doc)", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    });
+}

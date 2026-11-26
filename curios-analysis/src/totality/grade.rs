@@ -475,7 +475,7 @@ pub enum Answer {
 ///
 /// The parts are read off the path as a member's are ([`part_calls`]): the part the path reaches, with the leading lambdas where the path follows a field, since they answer the record the field is read from; and where the path reaches no field lambda and the record it stands at escapes, every field lambda under where it stands, at arguments nothing is known of past the ones the path hands it. A path that stops at a field no part lies at is a call of the leading lambdas alone, whose summary states what they put there.
 ///
-/// `None` at a position a part the call runs summarizes nothing at or no part applies, and at every position where nothing is filed of `callee`.
+/// `None` at a position a part the call runs summarizes nothing at, and at every position where nothing is filed of `callee`; an [`Applied`] holding nothing at one every part the call runs states and none applies.
 pub fn handed<D: Driver>(
     driver: &mut D,
     context: &SizeContext,
@@ -523,6 +523,19 @@ pub fn handed<D: Driver>(
                         .any(|(_, applied)| !applied.is_empty()))
         })
     };
+    // A position every part the call runs states, and none applies, is handed as applied nowhere, with no call to grade.
+    for (position, handed) in handed.iter_mut().enumerate() {
+        let mut running = runs
+            .iter()
+            .filter(|(_, count)| position < *count)
+            .peekable();
+        if !applies(position)
+            && running.peek().is_some()
+            && running.all(|(part, _)| part.of(position).is_some())
+        {
+            *handed = Some(Applied::default());
+        }
+    }
     if !(0..arguments.len()).any(applies) {
         return Ok(handed);
     }

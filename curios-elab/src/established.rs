@@ -107,7 +107,7 @@ impl<'a> Standing<'a> {
         let totality = classified.map_or(Totality::Partial, |classified| classified.totality);
         let applications = classified
             .map(|classified| &classified.applications)
-            .filter(|applications| !applications.is_empty());
+            .filter(|applications| !applications.states_nothing());
         let vectors = classified.map(|classified| &classified.vectors);
         let variances = vectors.map_or(&[][..], |vectors| &vectors.variances);
         let field_variances = vectors.map_or(&[][..], |vectors| &vectors.field_variances);

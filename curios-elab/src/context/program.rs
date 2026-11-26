@@ -293,7 +293,7 @@ impl<'s> Program<'s> {
 
     /// Record how a definition applies its parameters the moment its group is classified, where it applies one every use of which is seen.
     pub fn record_definition_applications(&mut self, name: &Global, applications: Applications) {
-        match applications.is_empty() {
+        match applications.states_nothing() {
             true => {
                 self.applications.remove(name);
             }

@@ -555,9 +555,9 @@ impl Revision {
         self.variances.remove(name);
     }
 
-    /// File how `name` applies its parameters, or take out what was filed where it applies none ([`Applications::is_empty`]).
+    /// File how `name` applies its parameters, or take out what was filed where it states nothing of any ([`Applications::states_nothing`]).
     fn applied(&mut self, name: Global, applications: Applications) {
-        match applications.is_empty() {
+        match applications.states_nothing() {
             true => {
                 self.applications.remove(&name);
             }

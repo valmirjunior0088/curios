@@ -65,6 +65,7 @@ fn graded_in(group: &RecGroup, n: Free, body: &Term) -> Vec<Call> {
         arities: &arities,
         caller: 0,
         params: &params,
+        types: &[],
         context: SizeContext::default(),
         entered: Vec::new(),
         walked: HashMap::new(),
@@ -74,6 +75,7 @@ fn graded_in(group: &RecGroup, n: Free, body: &Term) -> Vec<Call> {
     walk.walk(&Part {
         shape: parts[0].clone(),
         params: params.to_vec(),
+        types: Vec::new(),
         runs: vec![body.clone()],
         answers: Vec::new(),
         held: None,
@@ -263,6 +265,7 @@ fn a_body_nested_deeper_than_an_unguarded_recursion_survives_is_walked() {
         arities: &arities,
         caller: 0,
         params: &params,
+        types: &[],
         context: SizeContext::default(),
         entered: Vec::new(),
         walked: HashMap::new(),
@@ -272,6 +275,7 @@ fn a_body_nested_deeper_than_an_unguarded_recursion_survives_is_walked() {
     walk.walk(&Part {
         shape: parts[0].clone(),
         params: params.to_vec(),
+        types: Vec::new(),
         runs: vec![body.clone()],
         answers: Vec::new(),
         held: None,

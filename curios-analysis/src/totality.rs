@@ -49,7 +49,7 @@ use {
     crate::Driver,
     curios_common::recurse,
     curios_core::{
-        Advance, Applications, Arity, Bound, CallMatrix, Carrier, Cases, FieldApplications,
+        Advance, Applications, Arity, Bound, CallMatrix, Carrier, Cases, Field, FieldApplications,
         Foreign, Free, Func, FuncType, Global, InductType, Intrinsic, Many, Match, One,
         PartApplications, Probe, Proj, RecGroup, Scope, Size, Struct, StructType, Subterm,
         Telescope, Term, Totality, Tuple, TupleType, Two, Variant,
@@ -82,6 +82,7 @@ pub fn group_totality<D: Driver>(driver: &mut D, group: &RecGroup) -> Result<Tot
             arities: &arities,
             caller: index,
             params: &part.params,
+            types: &part.types,
             context: SizeContext::default(),
             entered: Vec::new(),
             walked: HashMap::new(),
@@ -110,7 +111,7 @@ pub fn group_applications<D: Driver>(
     summaries(driver, Some(group), parts, group.length())
 }
 
-/// How a definition that is no recursive group applies its parameters, as [`group_applications`] reads a member's: `None` where it applies none, and where no parameter of its leading lambdas is of a type that is applied or projected, whose body is not walked.
+/// How a definition that is no recursive group applies its parameters, as [`group_applications`] reads a member's: `None` where it states nothing of any parameter ([`Applications::states_nothing`]), and where no parameter of its leading lambdas is of a type that is applied or projected, whose body is not walked.
 pub fn definition_applications<D: Driver>(
     driver: &mut D,
     body: &Term,
@@ -123,7 +124,7 @@ pub fn definition_applications<D: Driver>(
     Ok(applications
         .into_iter()
         .next()
-        .filter(|applications| !applications.is_empty()))
+        .filter(|applications| !applications.states_nothing()))
 }
 
 /// The summaries of `members` members whose parts are `parts`, walked as parts of `group` where there is one, and as parts of no group otherwise ([`group_applications`]).
@@ -149,6 +150,7 @@ fn summaries<D: Driver>(
             arities: &arities,
             caller: index,
             params: &part.params,
+            types: &part.types,
             context: SizeContext::default(),
             entered: Vec::new(),
             walked: HashMap::new(),
@@ -217,7 +219,7 @@ fn summaries<D: Driver>(
                         })
                         .collect();
                     let summary = PartApplications::new(shapes[part].path.clone(), applied, fields);
-                    (leading || !summary.is_empty()).then_some(summary)
+                    (leading || !summary.states_nothing()).then_some(summary)
                 })
                 .collect();
             Applications::new(summaries)
@@ -324,6 +326,8 @@ struct Walk<'a, D: Driver> {
     /// The part whose runs are walked, and its parameters: its member's, and a field lambda's after them.
     caller: usize,
     params: &'a [Free],
+    /// The declared types of the leading lambdas' parameters, the first of `params`.
+    types: &'a [Term],
     /// What the arms enclosing the position being walked have established, entered on the way into an arm and left on the way out.
     context: SizeContext,
     /// The nested groups whose bodies the walk is currently inside, entered and left with them. A group reached from within itself would regenerate its own bodies without end, since every member reference materializes as a projection carrying the whole group.
@@ -453,6 +457,49 @@ impl<D: Driver> Walk<'_, D> {
         }
     }
 
+    /// Whether the field at `path` of the parameter at `position`, read as a value, holds nothing that can be applied: its type, read off the parameter's declared type field by field, is a carrier that holds no other value. Any other type, or one the walk cannot read, may hold a function, and the read is a use.
+    fn reads_no_function(&mut self, position: usize, path: &[usize]) -> Result<bool, D::Error> {
+        let (Some(declared), Some(param)) = (self.types.get(position), self.params.get(position))
+        else {
+            return Ok(false);
+        };
+        let mut type_ = declared.clone();
+        let mut value = Term::free_var(param);
+        for &slot in path {
+            let forced = self.driver.force(&type_)?;
+            let Subterm::StructType(StructType {
+                name,
+                universes,
+                params,
+            }) = &*forced
+            else {
+                return Ok(false);
+            };
+            let field = Field::Struct(*name, slot);
+            let Some(declaration) = self.driver.struct_decl(name) else {
+                return Ok(false);
+            };
+            let Ok(Some(read)) = declaration.at(universes).field_type(params, &value, &field)
+            else {
+                return Ok(false);
+            };
+            type_ = read;
+            value = Term::from(Subterm::Proj(Proj { head: value, field }));
+        }
+        let forced = self.driver.force(&type_)?;
+        Ok(matches!(
+            &*forced,
+            Subterm::Intrinsic(
+                Intrinsic::NatType
+                    | Intrinsic::IntType
+                    | Intrinsic::BoolType
+                    | Intrinsic::ByteType
+                    | Intrinsic::FltType
+                    | Intrinsic::BytesType
+            )
+        ))
+    }
+
     /// Record a use of `name` the walk does not follow, where it is a parameter a summarizing walk keeps a record of.
     fn escaped(&mut self, name: Option<&Free>) {
         if let Some(position) = self.tracked_position(name)
@@ -488,9 +535,16 @@ impl<D: Driver> Walk<'_, D> {
         argument: &Term,
         applied: Option<&Applied>,
     ) -> Result<(), D::Error> {
-        let Some(applied) = applied.filter(|applied| !applied.is_empty()) else {
+        let Some(applied) = applied else {
             return self.walk_term(argument);
         };
+        if applied.is_empty() {
+            // A parameter, or a field of one, handed where the callee applies it nowhere, every use of it seen there, is no use of it; any other argument is walked as a term.
+            return match self.tracked_path(argument) {
+                Some(_) => Ok(()),
+                None => self.walk_term(argument),
+            };
+        }
         // A parameter handed whole, or a field of one, is applied where the callee applies what it is handed, as its summary states, through this call: those applications are this member's own, already graded against its parameters ([`handed`]), of the parameter at the path the argument projects, and of its fields at that path continued.
         if let Some((position, projected)) = self.tracked_path(argument) {
             let at = |path: &[usize]| {
@@ -1124,6 +1178,12 @@ impl<D: Driver> Walk<'_, D> {
                         .cloned()
                         .collect::<Vec<_>>();
                     return self.walks(&arguments);
+                }
+                // A field of a parameter read as a value is no use where nothing read there can be applied.
+                if let Some((position, path)) = self.tracked_path(term)
+                    && self.reads_no_function(position, &path)?
+                {
+                    return Ok(());
                 }
                 self.walk_term(head)
             }

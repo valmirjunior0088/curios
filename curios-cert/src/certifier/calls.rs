@@ -511,7 +511,7 @@ impl Certifier<'_> {
         let summarized = self
             .globals
             .applications(callee)
-            .is_some_and(|applications| !applications.is_empty());
+            .is_some_and(|applications| !applications.states_nothing());
         if !summarized {
             return Ok(vec![None; count]);
         }
@@ -534,8 +534,9 @@ impl Certifier<'_> {
         for (frame, params) in &callers {
             match handed(self, &context, params, callee, &steps, answer) {
                 Ok(positions) => {
+                    // An argument applied nowhere is handed nothing to record: the call records it as any argument.
                     for (position, applied) in positions.into_iter().enumerate() {
-                        if let Some(applied) = applied {
+                        if let Some(applied) = applied.filter(|applied| !applied.is_empty()) {
                             by_position[position]
                                 .get_or_insert_with(Vec::new)
                                 .push((*frame, applied));
