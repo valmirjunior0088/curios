@@ -5,6 +5,7 @@ use {
     curios_core::{
         Applications, CallMatrix, Free, Global, InductDecl, Polarity, Size, StructDecl, Term,
     },
+    std::cell::Cell,
 };
 
 /// An [`Driver`] that reduces nothing, for the two probes below that build a [`Walk`] by hand.
@@ -14,7 +15,9 @@ use {
 /// They cannot be integration tests: [`Walk`] is an internal whose fields they set directly, and making it constructible from outside would mean publishing every one of them.
 #[derive(Default)]
 pub struct Unreducing {
-    pub minted: std::cell::Cell<u32>,
+    pub minted: Cell<u32>,
+    /// The summary a probe files for each definition it names, as a checker's record states one ([`Driver::applications`]).
+    pub filed: Vec<(Global, Applications)>,
 }
 
 impl Driver for Unreducing {
@@ -62,8 +65,11 @@ impl Driver for Unreducing {
         false
     }
 
-    fn applications(&self, _: &Global) -> Option<Applications> {
-        None
+    fn applications(&self, name: &Global) -> Option<Applications> {
+        self.filed
+            .iter()
+            .find(|(filed, _)| filed == name)
+            .map(|(_, applications)| applications.clone())
     }
 
     fn refined(&self) -> Vec<(Term, Term)> {

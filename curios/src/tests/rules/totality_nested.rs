@@ -1,4 +1,4 @@
-//! The size-change obligation through a witness handed on inside another's application: a family nested two witnesses deep, and one nested through a witness that recurses.
+//! The size-change obligation through a witness handed on inside another's application: a family nested two witnesses deep, one nested through a witness that recurses, and a definition held at a field, by the parts it is called through and the arguments it is handed.
 //!
 //! The rule is the totality decision's, *A call in a callback is graded where its callee applies it* (`documentation/design/soundness/totality-of-the-erased-program.md`). The witnesses are `Spell`'s, a concept with one method and no law, so a refusal is derived by editing the method alone.
 
@@ -726,6 +726,73 @@ fn a_definition_held_at_a_slot_and_called_beside_it_is_graded_by_each_call() {
         matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
     })
     .by_certifier_in("/w", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A member handed to a definition held at a field of its own record is a call of each of its parts: `hold`'s field lambda applies what it is handed where it runs, which no part of `m` grades, so the argument is read as it stands where `m`'s record is answered. Handed `leaf`, no member, `m` calls nothing; each refusal hands it `m` itself, named bare or in a lambda calling it, so `m` does not descend and the proof reaching it is refused.
+#[test]
+fn a_member_handed_to_a_definition_held_at_its_field_is_a_call_of_each_of_its_parts() {
+    let control = control(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{True};
+
+        struct Inner: Type { step: (Nat) -> True }
+
+        struct Outer: Type { a: Inner }
+
+        let hold(g: (Nat) -> Outer) -> Inner = Inner { step(k) = g(k).a.step(k) };
+
+        let leaf(n: Nat) -> Outer = Outer { a = Inner { step(_) = True/qed() } };
+
+        let m(n: Nat) -> Outer = Outer { a = hold(leaf) };
+
+        let _ = m(0).a.step(0);
+        /std/print("ok")
+        "#,
+        b"ok",
+    );
+    for handed in ["hold(m)", "hold((j) => m(j))"] {
+        control
+            .refused(&[("hold(leaf)", handed)])
+            .by_elaborator_in("entry", |error| {
+                matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+            })
+            .by_certifier_in("entry", |error| {
+                matches!(error, curios_cert::Error::NotTotal { .. })
+            });
+    }
+}
+
+// A lambda handed to a definition held at a field is walked as it stands where the record is answered: `hold`'s field lambda applies it, so the callback `f` that `m`'s lambda applies is applied wherever `m(k, c).a.step(k)` runs, at an argument nothing is known of, and `spin`'s callback calls `spin` there. Calling it at `p`, below `k`, `spin` descends; the refusal calls it at the callback's own binder, which is below nothing.
+#[test]
+fn a_lambda_handed_to_a_definition_held_at_a_field_is_walked_as_it_stands() {
+    control(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{True};
+
+        struct Inner: Type { step: (Nat) -> True }
+
+        struct Outer: Type { a: Inner }
+
+        let hold(g: (Nat) -> True) -> Inner = Inner { step(k) = g(k) };
+
+        let m(n: Nat, f: (Nat) -> True) -> Outer = Outer { a = hold((j) => f(j)) };
+
+        let spin(k: Nat) -> True = match k | 0 => True/qed() | p + 1 => m(k, (x) => spin(p)).a.step(k) end;
+
+        let _ = spin(3);
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("(x) => spin(p)", "(x) => spin(x)")])
+    .by_elaborator_in("/spin", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/spin", |error| {
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }

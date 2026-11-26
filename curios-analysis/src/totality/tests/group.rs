@@ -1,9 +1,13 @@
-//! A group judged by the closure of its calls: a descent on either argument, a nullary self call, mutual recursion, a closure past its limit, a ring, and the bodies and towers the walk reads or passes over.
+//! A group judged by the closure of its calls: a descent on either argument, a nullary self call, mutual recursion, a closure past its limit, a ring, the bodies and towers the walk reads or passes over, and what a definition held at a field is handed.
 
 use {
     super::test_support::*,
     crate::totality::*,
-    curios_core::{Atom, CallMatrix, Free, Intrinsic, Size, Subterm, Term},
+    curios_common::Qualifier,
+    curios_core::{
+        Applications, Atom, CallMatrix, Free, Global, Intrinsic, PartApplications, Size, Subterm,
+        Term,
+    },
     curios_num::Binary,
 };
 
@@ -417,4 +421,144 @@ fn a_walked_value_is_forgotten_past_its_tail() {
     ]);
 
     assert_eq!(calls_in(&group, n, &body), 3);
+}
+
+/// `hold(g)`, as the summary filed of it states it: its leading lambdas apply `g` nowhere, and the field lambda its record holds at slot `0` applies `g` at its own argument `k`, which stands where `k` does.
+fn hold() -> (Global, Applications) {
+    let mut at_k = CallMatrix::unknown(2, 1);
+    at_k.set(1, 0, SAME);
+    (
+        Global::Authored(Qualifier::from(["hold"])),
+        Applications::new(vec![
+            PartApplications::new(Vec::new(), vec![Some(Vec::new())], Vec::new()),
+            PartApplications::new(vec![0], vec![Some(vec![at_k]), None], Vec::new()),
+        ]),
+    )
+}
+
+/// The parts of a member of `arity` parameters whose record holds [`hold`] applied at slot `0`: its leading lambdas, and `hold`'s field lambda at `[0, 0]`, which takes one more.
+fn holding_parts(arity: usize) -> Vec<PartShape> {
+    vec![
+        PartShape {
+            member: 0,
+            path: Vec::new(),
+            arity,
+        },
+        PartShape {
+            member: 0,
+            path: vec![0, 0],
+            arity: arity + 1,
+        },
+    ]
+}
+
+/// A member named bare and handed to a definition held at a field of its own record is walked as it stands where the record is answered: `hold`'s leading lambdas apply `g` nowhere and its field lambda applies it, which no part of `m` grades, so `m`'s record escapes there and each of its parts is called.
+///
+/// Mutation-checked: with the member handed what `hold`'s leading lambdas apply of it, the walk records no call.
+#[test]
+fn a_member_named_bare_handed_to_a_definition_held_at_its_field_is_a_call_of_each_of_its_parts() {
+    let m = Free::local(1, Some("m"));
+    let n = Free::local(2, Some("n"));
+    let nat = || Term::intrinsic(Intrinsic::NatType);
+    let rec = Term::rec(
+        vec![(
+            m,
+            Term::func_type([(n, nat())], nat()),
+            Term::func([(n, nat())], Term::free_var(&n)),
+        )],
+        Term::free_var(&m),
+    );
+    let Subterm::Rec(block) = &*rec else {
+        panic!("the fixture changed shape");
+    };
+    let group = block.group();
+    let (callee, applications) = hold();
+    let mut driver = Unreducing {
+        filed: vec![(callee, applications)],
+        ..Unreducing::default()
+    };
+    let parts = holding_parts(1);
+    let arities = parts.iter().map(|part| part.arity).collect::<Vec<_>>();
+    let params = [n];
+    let mut walk = Walk {
+        driver: &mut driver,
+        group: Some(group),
+        parts: &parts,
+        arities: &arities,
+        caller: 0,
+        params: &params,
+        types: &[],
+        context: SizeContext::default(),
+        entered: Vec::new(),
+        walked: HashMap::new(),
+        calls: Vec::new(),
+        tracked: None,
+    };
+    let Ok(()) = walk.walk(&Part {
+        shape: parts[0].clone(),
+        params: params.to_vec(),
+        types: Vec::new(),
+        runs: Vec::new(),
+        answers: vec![(callee, vec![Term::rec_proj(group.clone(), 0)])],
+        held: None,
+    });
+
+    let callees = walk
+        .calls
+        .iter()
+        .map(|call| call.callee)
+        .collect::<Vec<_>>();
+    assert_eq!(callees, [0, 1]);
+}
+
+/// A lambda handed to a definition held at a field is walked as it stands where the record is answered: `hold`'s leading lambdas apply `g` nowhere and its field lambda applies it, so the callback `f` that the lambda applies is applied wherever that field runs, and `m`'s summary states it applied, not applied nowhere.
+///
+/// Mutation-checked: with the lambda handed what `hold`'s leading lambdas apply of it, its body is never walked, and the summary states `f` applied nowhere.
+#[test]
+fn a_lambda_handed_to_a_definition_held_at_a_field_is_walked_as_it_stands() {
+    let n = Free::local(1, Some("n"));
+    let f = Free::local(2, Some("f"));
+    let j = Free::local(3, Some("j"));
+    let k = Free::local(4, Some("k"));
+    let nat = || Term::intrinsic(Intrinsic::NatType);
+    let lambda = Term::func(
+        [(j, nat())],
+        Term::apply(Term::free_var(&f), [Term::free_var(&j)]),
+    );
+    let (callee, applications) = hold();
+    let mut driver = Unreducing {
+        filed: vec![(callee, applications)],
+        ..Unreducing::default()
+    };
+    let shapes = holding_parts(2);
+    let parts = vec![
+        Part {
+            shape: shapes[0].clone(),
+            params: vec![n, f],
+            types: Vec::new(),
+            runs: Vec::new(),
+            answers: vec![(callee, vec![lambda.clone()])],
+            held: None,
+        },
+        Part {
+            shape: shapes[1].clone(),
+            params: vec![n, f, k],
+            types: Vec::new(),
+            runs: Vec::new(),
+            answers: Vec::new(),
+            held: Some(Held {
+                callee,
+                given: vec![lambda],
+                path: vec![0],
+                own: 1,
+            }),
+        },
+    ];
+
+    let Ok(summaries) = summaries(&mut driver, None, parts, 1);
+    let applied = summaries[0]
+        .part(&[])
+        .and_then(|leading| leading.of(1))
+        .expect("every use of `f` is seen");
+    assert!(!applied.is_empty(), "`f` is stated applied nowhere");
 }

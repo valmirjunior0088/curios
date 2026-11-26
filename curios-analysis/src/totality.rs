@@ -673,7 +673,7 @@ impl<D: Driver> Walk<'_, D> {
         Ok(())
     }
 
-    /// Walk `callee` applied to `given`, held at a field of the record this part answers: the leading lambdas answer it held, each argument handed what they apply of it, and its parts are this member's ([`Held`]). A parameter, or a field of one, their summary states and applies nothing of is applied by those parts alone; any other argument is walked as it stands, a member among them, which every call reaching one of those parts reaches here too.
+    /// Walk `callee` applied to `given`, held at a field of the record this part answers: the leading lambdas answer it held, and its parts are this member's ([`Held`]). A parameter, or a field of one, is handed what the leading lambdas apply of it, and what those parts apply of it is graded where they run ([`Walk::walk_held`]). Any other argument is walked as it stands, a member among them: those parts apply it where their field lambdas run, which no part of this member grades, so every call it can make is recorded here, where the record is answered, which every call reaching one of those parts reaches too.
     fn walk_answering(&mut self, callee: &Global, given: &[Term]) -> Result<(), D::Error> {
         let steps = [Segment::Arguments(given.to_vec())];
         let handed = handed(
@@ -685,6 +685,7 @@ impl<D: Driver> Walk<'_, D> {
             Answer::Held,
         )?;
         for (argument, applied) in given.iter().zip(handed) {
+            let applied = applied.filter(|_| self.tracked_path(argument).is_some());
             recurse(|| self.walk_argument(argument, applied.as_ref()))?;
         }
         Ok(())

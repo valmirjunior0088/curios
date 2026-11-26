@@ -1,5 +1,5 @@
 title = "An argument of a definition held at a field is applied where the definition's field lambda runs, and neither checker grades the application"
-status = "open"
+status = "fixed"
 
 [[witness]]
 what = "a recursion through `/m` named bare and handed to `/hold`, held at `a`, whose field lambda applies it at its own argument"

@@ -248,15 +248,17 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
             }
 
             // A definition applying a parameter as its summary states hands a lambda there bounds for its binders, a member there the calls it makes, and a definition applied there what its own arguments are handed in turn, over its spine's every list: this list's positions taken here, and the rest left for the applications around this one.
+            let held = certifier.calls.take_held(term);
             let (mut handed, rest) = match &*apply.head {
+                // Held at a field of the record a part answers, the call hands its arguments nothing: its parts apply them where their field lambdas run, which the shared walk grades of a parameter alone, and a parameter is no call, so each is typed as it stands, recording every call it can make where the record is answered, as the shared walk reads it.
+                Subterm::Instance(_) if held && within.is_none() => (Vec::new(), Vec::new()),
                 Subterm::Instance(instance) => {
                     let mut steps = vec![Segment::Arguments(apply.params().cloned().collect())];
                     steps.extend(later.iter().cloned());
-                    // What the call answers is held where it is handed to a definition that states its uses, or held at a field of the record a part answers, and escapes elsewhere.
-                    let held = certifier.calls.take_held(term);
-                    let answer = match (&within, held) {
-                        (Some(_), _) | (None, true) => Answer::Held,
-                        (None, false) => Answer::Escapes,
+                    // What the call answers is held where it is handed to a definition that states its uses, and escapes elsewhere.
+                    let answer = match within {
+                        Some(_) => Answer::Held,
+                        None => Answer::Escapes,
                     };
                     let mut handed = certifier.handed_to(&instance.name, &steps, answer)?;
                     let rest = handed.split_off(apply.arguments.len().min(handed.len()));

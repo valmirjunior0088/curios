@@ -1,4 +1,4 @@
-//! A call in a callback, graded where its callee applies it: modules built by hand and put to the certifier alone, each claim beside the program `curios`'s `tests::rules::totality_callback` or `totality_callback_binder` puts to both checkers.
+//! A call in a callback, graded where its callee applies it: modules built by hand and put to the certifier alone, each claim beside the program `curios`'s `tests::rules::totality_callback`, `totality_callback_binder` or `totality_nested` puts to both checkers.
 
 use {super::test_support::*, crate::*, curios_common::fill};
 
@@ -338,6 +338,46 @@ fn a_member_whose_lambdas_are_not_its_types_telescope_is_refused_before_its_call
                 Error::Mismatch { .. }
             )),
             "`{lambdas}`: a member whose lambdas are not its type's telescope was not refused as a mismatch: {refused:?}",
+        );
+    }
+}
+
+/// `hold`, whose leading lambdas apply its `g` nowhere and whose field lambda applies it at its own argument, held at `a` of the record `m` answers, `m` handing it `${handed}`; closed by `m(0).a.step(0)`, which loops wherever `${handed}` calls `m`.
+const HANDED_TO_A_DEFINITION_HELD_AT_ITS_FIELD: &str = r#"
+struct /Inner: Type {
+    step: (#NatType) -> #{node = InductType} /std/Bool/False(),
+}
+
+struct /Outer: Type {
+    a: #{node = StructType} /Inner(),
+}
+
+let /hold: (g: (#NatType) -> #{node = StructType} /Outer()) -> #{node = StructType} /Inner() =
+    (g: (#NatType) -> #{node = StructType} /Outer()) =>
+        /Inner {
+            (k: #NatType) =>
+                (#{field = Struct(/Inner, 0)} (#{field = Struct(/Outer, 0)} g(k).0).0)(k) };
+
+#{node = Rec}
+let /m: (n: #NatType) -> #{node = StructType} /Outer() =
+    (n: #NatType) => /Outer { /hold(${handed}) };
+
+(#{field = Struct(/Inner, 0)} (#{field = Struct(/Outer, 0)} /m(0).0).0)(0)
+"#;
+
+// A member handed to a definition held at a field of its own record is a call of each of its parts: `hold`'s field lambda applies what it is handed where it runs, which no part of `m` grades, so the application is typed as it stands where the record is answered, `m` named bare escaping and a lambda calling it recording its call, and the closing term at `False` reaches a member that does not descend. `curios`'s `tests::rules::totality_nested` puts the program to both checkers under this name, beside a control; the term at `False` has none.
+#[test]
+fn a_member_handed_to_a_definition_held_at_its_field_is_a_call_of_each_of_its_parts() {
+    for handed in ["/m", "(j: #NatType) => /m(j)"] {
+        let module = fill!(HANDED_TO_A_DEFINITION_HELD_AT_ITS_FIELD, handed);
+        let verdicts =
+            core_text_refusals(&fill!("${PROPOSITIONS}\n${module}", PROPOSITIONS, module));
+        assert!(
+            refuses(&verdicts, None, |error| matches!(
+                error,
+                Error::NotTotal { .. }
+            )),
+            "`{handed}`: the term at `False` was not refused as reaching a member not known to terminate: {verdicts:?}",
         );
     }
 }
