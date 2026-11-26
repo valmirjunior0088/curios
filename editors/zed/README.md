@@ -60,7 +60,7 @@ cargo xtask zed build
 
 Install it with **zed: install dev extension** from the command palette, pointing at this directory. Zed builds the extension and its grammar itself, so `extension.wasm` and `grammars/` appear here as build products and are not committed.
 
-The grammar is fetched from the `rev` named in `extension.toml`, not from your working tree: a grammar change is published by committing `editors/tree-sitter/curios/src/` or `editors/tree-sitter/curios_core/src/` beside the `grammar.js` that produced it, pushing, and moving that `rev`, and the grammar's `path` with it where its directory moved.
+The grammar is fetched from the `rev` named in `extension.toml`, not from your working tree: a grammar change is published by committing `editors/tree-sitter/curios/src/` or `editors/tree-sitter/curios-core/src/` beside the `grammar.js` that produced it, pushing, and moving that `rev`, and the grammar's `path` with it where its directory moved.
 
 ## Design
 

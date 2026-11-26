@@ -11,7 +11,7 @@
       "name": "curios_core",
       "camelcase": "CuriosCore",
       "scope": "source.curios.core",
-      "path": "curios_core",
+      "path": "curios-core",
       "file-types": ["crsc"]
     }
   ],

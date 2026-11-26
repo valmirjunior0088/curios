@@ -15,7 +15,7 @@ use {
 /// The tree-sitter grammars, each by its directory.
 const TREE_SITTER: [&str; 2] = [
     "editors/tree-sitter/curios",
-    "editors/tree-sitter/curios_core",
+    "editors/tree-sitter/curios-core",
 ];
 
 /// The TextMate grammar of a program, which states every word, and Curios/Core's, which includes it and states the words its own forms begin with.
@@ -28,7 +28,7 @@ const TABLE: &str = "editors/textmate/classes.json";
 /// The Zed queries, Curios/Core's opening with the program's.
 const QUERIES: [&str; 2] = [
     "editors/zed/languages/curios/highlights.scm",
-    "editors/zed/languages/curios_core/highlights.scm",
+    "editors/zed/languages/curios-core/highlights.scm",
 ];
 
 /// What each capture the queries write stands for, by the class's name: a capture Zed's themes paint, or one falling back by its prefix to the key they paint the class's text by today.

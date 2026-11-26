@@ -2,14 +2,14 @@ what = "The Zed extension, a workspace of its own"
 
 # Each grammar `extension.toml` pins, by the revision Zed installs it from and the directory at that revision, read where the manifest states them; and the script that holds the pins to the tree.
 scripts.pins = "xtask/tasks/zed/pins.sh"
-curios_rev.read = "editors/zed/extension.toml"
-curios_rev.key = "grammars.curios.rev"
-curios_path.read = "editors/zed/extension.toml"
-curios_path.key = "grammars.curios.path"
-curios_core_rev.read = "editors/zed/extension.toml"
-curios_core_rev.key = "grammars.curios_core.rev"
-curios_core_path.read = "editors/zed/extension.toml"
-curios_core_path.key = "grammars.curios_core.path"
+curios-rev.read = "editors/zed/extension.toml"
+curios-rev.key = "grammars.curios.rev"
+curios-path.read = "editors/zed/extension.toml"
+curios-path.key = "grammars.curios.path"
+curios-core-rev.read = "editors/zed/extension.toml"
+curios-core-rev.key = "grammars.curios_core.rev"
+curios-core-path.read = "editors/zed/extension.toml"
+curios-core-path.key = "grammars.curios_core.path"
 
 [lint]
 what = "Hold the Zed extension's Rust to its formatting and its lints"
@@ -35,7 +35,7 @@ run = [
 [check]
 what = "Hold the grammar revisions the Zed extension pins to the grammars this tree holds: each publishes, at its revision, the directory on disk"
 # The directory on disk is read after the parsers there are generated. The extension's two other copies, Curios/Core's highlight query opening with the program's and the lint table restating the workspace's, are kept equal by hand.
-consumes = [".tree-sitter.build.curios.produces.parser", ".tree-sitter.build.curios_core.produces.parser"]
+consumes = [".tree-sitter.build.curios.produces.parser", ".tree-sitter.build.curios-core.produces.parser"]
 run = [
-    ["sh", "{.zed.scripts.pins}", "{.zed.curios_rev}", "{.zed.curios_path}", "{.zed.curios_core_rev}", "{.zed.curios_core_path}"],
+    ["sh", "{.zed.scripts.pins}", "{.zed.curios-rev}", "{.zed.curios-path}", "{.zed.curios-core-rev}", "{.zed.curios-core-path}"],
 ]

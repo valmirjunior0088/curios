@@ -13,7 +13,7 @@
       "editors/vscode/**/*.json",
       "!**/package-lock.json",
       "!editors/tree-sitter/curios/src",
-      "!editors/tree-sitter/curios_core/src"
+      "!editors/tree-sitter/curios-core/src"
     ]
   },
   "formatter": { "indentStyle": "space", "indentWidth": 2 }

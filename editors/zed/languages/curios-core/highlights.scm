@@ -112,7 +112,7 @@
 
 "," @punctuation.delimiter
 
-; Curios/Core's own forms, the `curios_core` grammar in `editors/tree-sitter/curios_core`, beneath the program's captures above, which this file opens with verbatim, as `zed check` holds: a later pattern refines an earlier one.
+; Curios/Core's own forms, the `curios_core` grammar in `editors/tree-sitter/curios-core`, beneath the program's captures above, which this file opens with verbatim, as `zed check` holds: a later pattern refines an earlier one.
 
 ; A decorator states the fields of the node it decorates, as an attribute does.
 (decorator
