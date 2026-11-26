@@ -237,10 +237,17 @@ pub fn insert_implicits_on_check(
     Ok((Term::func(binders, body), func_type))
 }
 
-/// Whether `reduct`, what a bound reduced to, is the empty proposition: a bound no proof discharges, whatever the facts in scope.
+/// Whether `reduct`, what a bound reduced to, is a family with no constructors: `/std/Bool/False`, or one a library states its refusal by, as `/std/Cli/Refused` names a declaration's problems. A bound no proof discharges, whatever the facts in scope, so its report advises writing none.
 pub fn reduces_to_false(context: &Context, reduct: &Term) -> bool {
+    let Subterm::InductType(induct) = &**reduct else {
+        return false;
+    };
     let empty = Global::Authored(context.syntax().proof.false_type.qualifier());
-    matches!(&**reduct, Subterm::InductType(induct) if induct.name == empty)
+
+    induct.name == empty
+        || context
+            .induct_decl(&induct.name)
+            .is_some_and(|family| family.constructors().is_empty())
 }
 
 /// The canonical inhabitant of `type_`, when it has exactly one and no argument is needed to build it.

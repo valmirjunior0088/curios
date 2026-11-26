@@ -56,7 +56,7 @@ fn a_misspelled_command_is_refused_rather_than_answered() {
     );
 }
 
-/// A fixed declaration with two options answering to `--port` is refused where it is written, by the problem `checked` would report, so the reason is the declaration's and not a guard's.
+/// A fixed declaration with two options answering to `--port` is refused where it is written, by the problem `checked` would report, so the reason is the declaration's and not a guard's; `Refused` has no constructor, so the report advises supplying no proof of it.
 #[test]
 fn a_duplicate_name_is_refused_where_it_is_written_by_its_problem() {
     let refused = error(
@@ -80,6 +80,7 @@ fn a_duplicate_name_is_refused_where_it_is_written_by_its_problem() {
         refused.contains(r#"which reduces to `Cli/Refused([Cli/Problem/duplicate_name(Cli/Spelled/long("port"))])`"#),
         "{refused}"
     );
+    assert!(!refused.contains("supply it explicitly"), "{refused}");
 }
 
 /// A problem beneath a group refuses the group where it is written, within the command that holds it: a command beside the one a line chooses is checked as much as that one.
