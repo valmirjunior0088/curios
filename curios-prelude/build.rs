@@ -4,7 +4,9 @@
 
 use {
     curios_package::MANIFEST,
-    curios_prelude_build::{Images, Settled, compile, key, std_directory},
+    curios_prelude_build::{
+        Images, Settled, compile, image_files, key, prelude_roots, std_directory,
+    },
     std::{
         env,
         path::{Path, PathBuf},
@@ -44,6 +46,14 @@ fn main() {
     // `curios-prelude-build`, the work, is a build-dependency, so an edit of it runs this script again as an edit of any crate it links does.
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-env-changed={ASKED}");
+
+    // The restorer includes each root's image and pack by the names the build files them under, and names each root by its word, every one read off what the prelude's build answers, by the root's place in the fold, so the restorer spells none of them.
+    for (place, root) in prelude_roots().into_iter().enumerate() {
+        let [image, pack] = image_files(root);
+        println!("cargo:rustc-env=CURIOS_PRELUDE_ROOT_{place}={root}");
+        println!("cargo:rustc-env=CURIOS_PRELUDE_IMAGE_{place}={image}");
+        println!("cargo:rustc-env=CURIOS_PRELUDE_PACK_{place}={pack}");
+    }
 
     // Filed under `OUT_DIR`, where Cargo keeps a build script's outputs, because the library that includes them is their one reader: nothing outside the build opens an image.
     let out = PathBuf::from(

@@ -10,22 +10,34 @@ use {
     std::{cell::LazyCell, sync::OnceLock},
 };
 
-// From `OUT_DIR`, where the build script files them.
+// From `OUT_DIR`, where the build script files them, by the names it sets for each root's place in the fold (`curios_prelude_build::image_files`).
 //
 // Two images rather than one paired file, because each is framed as a unit the cabinet keeps is: a pair would be a second framing beside the one `curios-unit` defines, and the fold that consumes these wants them separately anyway.
-const SYS_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/sys.rkyv"));
-const STD_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/std.rkyv"));
+const SYS_BYTES: &[u8] = include_bytes!(concat!(
+    env!("OUT_DIR"),
+    "/",
+    env!("CURIOS_PRELUDE_IMAGE_0")
+));
+const STD_BYTES: &[u8] = include_bytes!(concat!(
+    env!("OUT_DIR"),
+    "/",
+    env!("CURIOS_PRELUDE_IMAGE_1")
+));
 
 // The blobs each image's index names, one pack beside each, as a cabinet keeps an object's packs beside its unit file.
-const SYS_PACK: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/sys.pack"));
-const STD_PACK: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/std.pack"));
+const SYS_PACK: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/", env!("CURIOS_PRELUDE_PACK_0")));
+const STD_PACK: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/", env!("CURIOS_PRELUDE_PACK_1")));
 
 /// The documentation record of each root, in the fold's order: an image of its own, which nothing that compiles reads.
 const DOCUMENTATION_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/documentation.rkyv"));
 
-/// The prelude's roots in dependency order, as the build script folded them: `/sys` is lowered against nothing and `/std` against `/sys`, so restoring them in any other order would hand a successor a scope its own names were never resolved in.
-const ROOTS: [(&str, &[u8], &[u8]); 2] =
-    [("sys", SYS_BYTES, SYS_PACK), ("std", STD_BYTES, STD_PACK)];
+/// The prelude's roots in dependency order, as the build script folded them, each by the word the build script names it by (`curios_prelude_build::prelude_roots`): `/sys` is lowered against nothing and `/std` against `/sys`, so restoring them in any other order would hand a successor a scope its own names were never resolved in.
+const ROOTS: [(&str, &[u8], &[u8]); 2] = [
+    (env!("CURIOS_PRELUDE_ROOT_0"), SYS_BYTES, SYS_PACK),
+    (env!("CURIOS_PRELUDE_ROOT_1"), STD_BYTES, STD_PACK),
+];
 
 /// One image validated: its record and its unit, each as the zero-copy view bytecheck confirmed, what the unit stores apart from itself as the bytes it is, which nothing here reads, and the pack of the blobs its index names.
 type Validated = Result<
@@ -128,7 +140,7 @@ pub fn documentation() -> Vec<Documentation> {
         .unwrap_or_else(|error| panic!("the prelude's documentation failed to restore: {error}"))
 }
 
-/// The prefix each of the prelude's roots claims, in the fold's order — `/sys`, then `/std` — read off the roots' names, so a caller asking which root a unit takes the place of restores none of them. A root claims the one prefix its name spells, which the crate's tests hold to the mounts of the unit restored for it.
+/// The prefix each of the prelude's roots claims, in the fold's order — `/sys`, then `/std` — read off the words the build script names the roots by, so a caller asking which root a unit takes the place of restores none of them. A root claims the one prefix its word spells, which the crate's tests hold to the mounts of the unit restored for it and to the registry's roots.
 pub fn root_prefixes() -> [Qualifier; 2] {
     ROOTS.map(|(root, _, _)| Qualifier::from([root]))
 }

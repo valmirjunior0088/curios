@@ -26,15 +26,23 @@ use {
     },
 };
 
+/// The prelude's roots in the fold's order, each by the word the registry mounts it at: `/sys`, which nothing precedes, then `/std`, compiled against it. What [`compile`] lowers, images and documents in that order, and what the prelude's restorer names each image by.
+pub fn prelude_roots() -> [&'static str; 2] {
+    let RootSyntax { sys, std, test: _ } = SYNTAX.roots;
+
+    [sys, std]
+}
+
+/// The files the image of `root` is filed in, under the directory [`compile`] is handed: its unit, framed as a stored unit is, then the pack of the blobs its index names.
+pub fn image_files(root: &str) -> [String; 2] {
+    [format!("{root}.rkyv"), format!("{root}.pack")]
+}
+
 /// Compile the prelude's two roots and file their images, with the documentation's records, in `out`. Answers each source file the lowering of `/std` read: what a build that ran this is run again for.
 pub fn compile(out: &Path) -> Vec<PathBuf> {
     let sys_modules = sys_source();
     let std_modules = std_source();
-    let RootSyntax {
-        sys: sys_root,
-        std: std_root,
-        test: _,
-    } = SYNTAX.roots;
+    let [sys_root, std_root] = prelude_roots();
 
     // Both roots lowered before either is elaborated, because the registry spans them: a target check over `/sys` alone would miss every `/std` slot and one over `/std` alone every `/sys` slot, so the check runs once over the union and there is no half to pass by being asked the wrong question.
     let sys_text = lower(sys_root, &sys_modules, &[]);
@@ -325,7 +333,7 @@ fn certified(
     (stated, anf)
 }
 
-/// Serialize one certified unit, as the fixed prelude images one ([`Unit::imaged`]), to `<root>.rkyv`, framed as a stored unit is — its record, of `reads` and of what each root before it contained, `after`, ahead of its index — and the blobs its index names to `<root>.pack`, one pack as a cabinet keeps beside an object's unit file, serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the digest of the unit's index, which is what the next root's record names it by.
+/// Serialize one certified unit, as the fixed prelude images one ([`Unit::imaged`]), to the first of `root`'s [`image_files`], framed as a stored unit is — its record, of `reads` and of what each root before it contained, `after`, ahead of its index — and the blobs its index names to the second, one pack as a cabinet keeps beside an object's unit file, serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the digest of the unit's index, which is what the next root's record names it by.
 ///
 /// The image carries no version and is no stable interchange format: it is made again, or taken from the images the checkout keeps under the same key (`images.rs`), whenever what the build links changes — the sources, this script, or any crate whose representation it serializes — so two incompatible images can never meet, and a schema beside the bytes could only ever compare one state of the sources against itself.
 ///
@@ -362,7 +370,8 @@ fn write_image(
     let recorded = curios_archive::to_bytes(&record)
         .unwrap_or_else(|error| panic!("/{root} record serialization failed: {error}"));
 
-    let path = directory.join(format!("{root}.rkyv"));
+    let [image_file, pack_file] = image_files(root);
+    let path = directory.join(image_file);
     println!(
         "/{root} archived to {} bytes, its blobs to {}",
         first.index().len(),
@@ -370,7 +379,7 @@ fn write_image(
     );
     fs::write(&path, framed(&recorded, first.index()))
         .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
-    let path = directory.join(format!("{root}.pack"));
+    let path = directory.join(pack_file);
     fs::write(&path, blobs)
         .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
 
@@ -388,8 +397,9 @@ fn write_documentation(directory: &Path, records: &Vec<Documentation>) {
     assert_eq!(&*first, &*second, "the documentation is not deterministic");
 
     let path = directory.join("documentation.rkyv");
+    let [sys, std] = prelude_roots();
     println!(
-        "/sys and /std documentation archived to {} bytes",
+        "/{sys} and /{std} documentation archived to {} bytes",
         first.len()
     );
     fs::write(&path, &first)
