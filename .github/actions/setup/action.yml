@@ -1,0 +1,28 @@
+name: Set up
+description: Install the toolchain `rust-toolchain.toml` pins and restore the Rust cache a job names, with the directories its builds keep fetched data in.
+
+# Every job checks the repository out first, which this action needs to be found, and then names this one step: what differs between jobs is the cache's key, the workspaces it caches and the directories beside Cargo's.
+inputs:
+  key:
+    description: The cache's key beside the job's own, where jobs of one machine and target share a build.
+    required: false
+    default: ""
+  workspaces:
+    description: The Cargo workspaces whose targets are cached, one a line.
+    required: false
+    default: "."
+  cache-directories:
+    description: The directories the builds keep fetched data in, one a line, cached beside Cargo's.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install the pinned toolchain
+      shell: bash
+      run: rustup toolchain install
+    - uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ inputs.key }}
+        workspaces: ${{ inputs.workspaces }}
+        cache-directories: ${{ inputs.cache-directories }}

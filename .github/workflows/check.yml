@@ -24,11 +24,8 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
-      - name: Install the pinned toolchain
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/setup
         with:
-          workspaces: .
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
@@ -49,12 +46,9 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - name: Install the pinned toolchain
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/setup
         with:
           key: runtime-macos
-          workspaces: .
           cache-directories: |
             xtask/.artifacts
       - name: Lint the runtime
@@ -68,12 +62,9 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - name: Install the pinned toolchain
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/setup
         with:
           key: distribution
-          workspaces: .
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
@@ -91,12 +82,9 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - name: Install the pinned toolchain
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/setup
         with:
           key: docs
-          workspaces: .
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
@@ -111,12 +99,9 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - name: Install the pinned toolchain
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/setup
         with:
           key: wasm32-unknown-unknown
-          workspaces: .
           cache-directories: |
             xtask/.artifacts
       - name: Build
@@ -130,12 +115,9 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - name: Install the pinned toolchain
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/setup
         with:
           key: conformance
-          workspaces: .
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
@@ -151,12 +133,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - name: Install the pinned toolchain
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/setup
         with:
           key: xtask
-          workspaces: .
           cache-directories: |
             xtask/.artifacts
       - name: Lint
@@ -168,12 +147,9 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - name: Install the pinned toolchain
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/setup
         with:
           key: xtask
-          workspaces: .
           cache-directories: |
             xtask/.artifacts
       - name: Test
@@ -185,12 +161,9 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - name: Install the pinned toolchain
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/setup
         with:
           key: xtask
-          workspaces: .
           cache-directories: |
             xtask/.artifacts
             ~/.npm
@@ -203,12 +176,9 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - name: Install the pinned toolchain
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/setup
         with:
           key: xtask
-          workspaces: .
           cache-directories: |
             xtask/.artifacts
             ~/.npm
@@ -221,9 +191,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - name: Install the pinned toolchain
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/setup
         with:
           key: wasm32-wasip2
           workspaces: |
@@ -244,12 +212,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - name: Install the pinned toolchain
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/setup
         with:
           key: jig
-          workspaces: .
           cache-directories: |
             xtask/.artifacts
       - name: Lint

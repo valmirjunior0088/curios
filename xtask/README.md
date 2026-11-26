@@ -155,7 +155,7 @@ A build reads what is kept beside its crate because that is the one place a buil
 
 ### The check workflow is held to the task files
 
-**Decision.** `.github/workflows/check.yml` is written by hand and thin: a job sets up a machine and runs `cargo xtask` lines, and `every_step_the_handoff_runs_has_a_job` reads the file and holds that every line is a task the command line parses and that the lines together run every step the handoff runs. A job installs the Rust toolchain and nothing else, since a run fetches the tools its steps name, and it caches `xtask/.artifacts`, where they are kept.
+**Decision.** `.github/workflows/check.yml` is written by hand and thin: a job checks the repository out, sets up the machine through the one local action both workflows share, `.github/actions/setup`, naming only its cache's key and directories, and runs `cargo xtask` lines, and `every_step_the_handoff_runs_has_a_job` reads the file and holds that every line is a task the command line parses and that the lines together run every step the handoff runs. A job installs the Rust toolchain and nothing else, since a run fetches the tools its steps name, and it caches `xtask/.artifacts`, where they are kept.
 
 **Rationale.** A workflow that restates the steps drifts from them silently, and one generated from the files would put runner images, caches and action versions — GitHub's vocabulary — in this crate. Held by a test, the file stays where GitHub reads it and cannot leave a step out.
 
