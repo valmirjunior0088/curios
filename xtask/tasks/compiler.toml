@@ -11,7 +11,7 @@ programs.run = ["git", "ls-files", "--", "programs/*.crs", "xtask/tasks/conforma
 package.flag = ["-p", "--package"]
 package.help = "The packages whose tests are built and run, one flag each; every shipped member's when omitted"
 expression.flag = ["-E", "--filterset"]
-expression.help = "Which of the built tests run, by name, as `test(~name)`; every one when omitted"
+expression.help = "Which of the built tests run, one expression over every package named, as `test(~name)`, several joined by `|`; every one when omitted"
 
 [launcher]
 what = "Build the slim launcher in a cargo invocation of its own and file it where the compiler embeds it: the one build of the launcher's crate as it ships, handing rustc the target directory, Cargo's home and the toolchain's root remapped, so no directory of the machine it is built on is in an executable it is part of"
