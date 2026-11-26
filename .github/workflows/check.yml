@@ -16,7 +16,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
 
-# A job sets up a machine and runs tasks of one subject, each a `cargo xtask` line, which runs first what its steps require and consume. Which steps there are, and what each runs, is the task files' in `xtask/tasks.toml` and `xtask/tasks/`; `every_step_the_handoff_runs_has_a_job` there holds that these lines parse and together run every step the handoff runs. A subject's `lint` holds its formatting, so no line writes or checks it apart. The toolchain is the one `rust-toolchain.toml` pins, so no job names a version of it, and it is the one thing a job installs: every other tool a step runs is fetched by the run at the digest the task files state and kept in `xtask/.artifacts`, which a job caches.
+# A job sets up a machine and runs tasks of one subject, each a `cargo xtask` line, which runs first what its steps require and consume. Which steps there are, and what each runs, is the task files' in `xtask/tasks.toml` and `xtask/tasks/`; `every_step_the_handoff_runs_has_a_job` there holds that these lines parse and together run every step the handoff runs. A subject's `lint` holds its formatting, so no line writes or checks it apart. The toolchain is the one `rust-toolchain.toml` pins, so no job names a version of it, and it is the one thing a job installs: every other tool a step runs is fetched by the run at the digest the task files state and kept in `xtask/.artifacts`, which a job caches, and the data a build fetches at its digest, the Unicode tables and Perfetto's trace schema, is kept in its crate's `.artifacts`, which a job that builds the compiler caches beside the launcher's and Binaryen's.
 jobs:
   compiler:
     name: Compiler
@@ -32,6 +32,8 @@ jobs:
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
+            curios-profile/.artifacts
+            curios-unicode/.artifacts
             xtask/.artifacts
       - name: Lint
         run: cargo xtask compiler lint
@@ -75,6 +77,8 @@ jobs:
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
+            curios-profile/.artifacts
+            curios-unicode/.artifacts
             xtask/.artifacts
       - name: Build
         run: cargo xtask distribution build
@@ -96,6 +100,8 @@ jobs:
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
+            curios-profile/.artifacts
+            curios-unicode/.artifacts
       - name: Build
         run: cargo xtask docs build
 
@@ -133,6 +139,8 @@ jobs:
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
+            curios-profile/.artifacts
+            curios-unicode/.artifacts
             xtask/.artifacts
       - name: Decode the corpora
         run: cargo xtask conformance
