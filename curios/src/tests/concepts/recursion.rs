@@ -2,6 +2,8 @@
 //!
 //! A witness declaration registers before its body elaborates, so a body may resolve the very entry it is defining. That makes the definition name itself, which no `let` can express: cross-definition value recursion exists only inside a `rec` item, so such a witness becomes a group of one and its self-reference is bound by that group rather than left free for the certifier to refuse.
 //!
+//! While its body elaborates, a witness read through its own entry is read as any group's member is: through its slot, once its turn finds it known to terminate, so a law stated over its superclasses reads them there as the registered witnesses, and a member not known to terminate stands for nothing, a read through it refused naming it.
+//!
 //! A cycle between *two* witnesses has no such binding unless the source declares it: one witness naming a later one is ordinary and works, because a declaration elaborates after what it reads, wherever each is written; two naming each other are declared as one `satisfy … and …` group, whose members register before any body elaborates and are bound in one another, and an undeclared pair is refused here, in the language's own terms, rather than reaching the certifier as an unbound internal name.
 
 use {crate::test_support::*, curios_common::fill};
@@ -338,5 +340,129 @@ fn a_read_through_a_member_not_known_to_terminate_is_refused_naming_the_member()
             )
             && report.contains("its recursion is here"),
         "expected the read named by its member and that member's recursion:\n{report}"
+    );
+}
+
+// A lone witness reads its own entry as a group's member is read, once its turn finds it known to terminate: a written key whose arms recurse through its own `mono` state that law over the entry's `Ord` and `Hash`, which read there as the registered ones, so each part converts with the derived order and encoding, and a map of its keys walks them in their order.
+#[test]
+fn a_written_key_recurses_through_its_own_entry_over_its_superclasses() {
+    let source = r#"
+        use /std/{Nat, Str, Hash, Map, Ord, Ordering, Eq, print};
+        use /std/ops/{Eql};
+        induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
+        satisfy Eql(Tree) { .. }
+        satisfy Ord(Tree) { .. }
+        satisfy Hash(Tree) { .. }
+        satisfy Hash/Key(Tree) {
+            mono(a, b) =
+                match a
+                | leaf(n) =>
+                    match b
+                    | leaf(m) => Hash/Key/last(Ordering/eq(), Ord/ord(n, m), Hash/hash(n), Hash/hash(m), Hash/Key/mono(n, m))
+                    | node(_, _) => Eq/refl()
+                    end
+                | node(l, r) =>
+                    match b
+                    | leaf(_) => Eq/refl()
+                    | node(s, u) =>
+                        Hash/Key/then(
+                            Ordering/eq(),
+                            Ord/ord(l, s),
+                            Hash/hash(l),
+                            Hash/hash(s),
+                            Hash/hash(r),
+                            Hash/hash(u),
+                            Hash/Key/mono(l, s),
+                            Ordering/then(Ordering/then(Ordering/eq(), Ord/ord(l, s)), Ord/ord(r, u)),
+                            Hash/Key/last(
+                                Ordering/then(Ordering/eq(), Ord/ord(l, s)),
+                                Ord/ord(r, u),
+                                Hash/hash(r),
+                                Hash/hash(u),
+                                Hash/Key/mono(r, u)))
+                    end
+                end,
+        }
+        let m = Map/of_list([
+            (Tree/node(Tree/leaf(1), Tree/leaf(0)), "3"),
+            (Tree/node(Tree/leaf(0), Tree/leaf(9)), "2"),
+            (Tree/leaf(5), "1")]);
+        print(Str/join(" ", Map/values(m)))
+        "#;
+
+    assert_eq!(run(source), b"1 2 3");
+}
+
+// A method that names no member of its witness reads through the entry as it is written: `lt` and `le` read `Ord/ord` through the entry, which is `reversed` there, so the laws that tie them to it close by reduction.
+#[test]
+fn a_witness_reads_its_own_method_through_its_entry_as_written() {
+    let source = r#"
+        use /std/{Ord, Ordering, Eq, print};
+        use /std/ops/{Eql};
+        induct Two: pub Type | low() | high() end
+        satisfy Eql(Two) { .. }
+        let reversed(x: Two, y: Two) -> Ordering =
+            match x
+            | low() => match y | low() => Ordering/eq() | high() => Ordering/gt() end
+            | high() => match y | low() => Ordering/lt() | high() => Ordering/eq() end
+            end;
+        satisfy Ord(Two) {
+            ord = reversed,
+            lt(x, y) = Ordering/is_lt(Ord/ord(x, y)),
+            le(x, y) = Ordering/is_le(Ord/ord(x, y)),
+            flips(x, y) =
+                match x
+                | low() => match y | low() => Eq/refl() | high() => Eq/refl() end
+                | high() => match y | low() => Eq/refl() | high() => Eq/refl() end
+                end,
+            trans(x, y, z, p, q) =
+                match x
+                | high() => match z | low() => /std/Bool/True/qed() | high() => /std/Bool/True/qed() end
+                | low() =>
+                    match z
+                    | low() => /std/Bool/True/qed()
+                    | high() => match y | low() => match q end | high() => match p end end
+                    end
+                end,
+            eq(x, y, h) =
+                match x
+                | low() => match y | low() => Eq/refl() | high() => match h end end
+                | high() => match y | low() => match h end | high() => Eq/refl() end
+                end,
+            is_lt(_, _) = Eq/refl(),
+            is_le(_, _) = Eq/refl(),
+        }
+        print(match Ord/lt(Two/high(), Two/low()) | true => "reversed" | false => "declared" end)
+        "#;
+
+    assert_eq!(run(source), b"reversed");
+}
+
+// A lone witness whose recursion does not descend stands for nothing through its own entry, as a group's member does, so a law reading its superclass through it is refused naming the witness.
+#[test]
+fn a_lone_witness_not_known_to_terminate_reads_nothing_through_its_entry() {
+    let source = r#"
+        use /std/{Nat, Eq, print};
+        induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
+        pub concept Base(A: Type): pub Type { size(a: A) -> Nat, }
+        pub concept Law(A: Type): pub Type { use Base(A), same(a: A) -> Eq()(Base/size(a), Base/size(a)), }
+        satisfy Base(Tree) { size(t) = match t | leaf(n) => n | node(l, r) => Base/size(l) + Base/size(r) end, }
+        satisfy Law(Tree) {
+            same(t) =
+                match t
+                | leaf(_) => Eq/refl()
+                | node(_, _) =>
+                    let _: Eq()(Base/size(t), Base/size(t)) = Law/same(t);
+                    Eq/refl()
+                end,
+        }
+        print("no")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("read through a member not known to terminate")
+            && report.contains("the witness of `Law(Tree)` is read here"),
+        "expected the read named by the witness:\n{report}"
     );
 }

@@ -547,7 +547,7 @@ fn elaborate_module_let(
 
     context.enter_value(&def.kind);
     let (solved_from, checked_from) = (context.solutions_committed(), context.checked_mark());
-    // A witness may resolve through its own table entry — the registration above exists to let it — so while its body elaborates its own name is a local, which a body that names itself names it by and is bound over below, as a group's members are ([`Context::within_group`]). What it parked drains there, while the local still stands for it.
+    // A witness may resolve through its own table entry — the registration above exists to let it — so while its body elaborates it is a group of one, as `elaborate_members` elaborates a group: its own name is a local, which a body that names itself names it by and is bound over below, defined as its slot, read through once its turn finds it known to terminate ([`Context::within_group`], [`Turns`]). A read of its superclasses through the entry waits on the slot and is retried once the slot is filled, so it reads the registered witnesses there; what it parked drains while the local still stands for it.
     let own = context
         .is_witness_declaration(&def.name)
         .then(|| context.fresh(def.name.qualifier().map(Qualifier::last)));
@@ -559,13 +559,20 @@ fn elaborate_module_let(
         }
         Some(own) => context.with_frame(|context| {
             context.assume(&own, &type_);
+            let (slot, read) = context.fresh_rec_slot(&own, type_.clone());
+            context.define(&own, &read, Some(&def.kind));
+            let mut turns = Turns::new(vec![own], vec![type_.clone()], vec![slot]);
+            let site = |_: &[usize]| ErasedSite::Recursive(vec![def.name]);
             context.within_group(vec![(def.name, own)], |context| {
                 let body = check(context, &def.body, type_.clone())?;
+                turns.take(context, 0, &body, &site)?;
+                context.fill_rec_slot(slot, body.substitute(&[(own, read.clone())]));
                 context.sweep_parked()?;
                 // A witness that reads one of its own methods reads that method's term, so its body names itself only where a method reaches itself.
                 let body =
                     own_methods_read(context, def.name, &zonk_solved_term_metas(context, &body));
                 context.drain_parked()?;
+                turns.close(context, &site)?;
                 Ok::<_, Error>(zonk_solved_term_metas(context, &body))
             })
         })?,

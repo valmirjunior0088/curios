@@ -1,4 +1,4 @@
-//! Derived `Hash/Key`: a key's law proved of the derived order and the derived encoding, a struct's, an inductive's and a key's under a premise, a payload's own key, and the refusal of a key whose order or encoding is not the one a derivation writes.
+//! Derived `Hash/Key`: a key's law proved of the derived order and the derived encoding, a struct's, an inductive's and a key's under a premise, a payload's own key, a family's that holds itself, and the refusal of a key whose order or encoding is not the one a derivation writes.
 
 use crate::test_support::*;
 
@@ -65,6 +65,53 @@ fn a_key_derives_under_a_premise_on_its_payloads_type() {
         "#;
 
     assert_eq!(run(source), b"1 2");
+}
+
+/// A family that holds itself derives its key: a recursive payload's part is the key's own law, read through the witness's own entry, whose superclasses read there as the registered order and encoding.
+#[test]
+fn an_inductive_that_holds_itself_derives_its_key() {
+    let source = r#"
+        use /std/{Nat, Str, Hash, Map, Ord, print};
+        use /std/ops/{Eql};
+        induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
+        satisfy Eql(Tree) { .. }
+        satisfy Ord(Tree) { .. }
+        satisfy Hash(Tree) { .. }
+        satisfy Hash/Key(Tree) { .. }
+        let m = Map/of_list([
+            (Tree/node(Tree/leaf(1), Tree/leaf(0)), "3"),
+            (Tree/node(Tree/leaf(0), Tree/leaf(9)), "2"),
+            (Tree/leaf(5), "1")]);
+        print(Str/join(" ", Map/values(m)))
+        "#;
+
+    assert_eq!(run(source), b"1 2 3");
+}
+
+/// And so does one that holds itself through another key's type: the payload's part is `Box`'s key at the family, its premise the witness's own entry.
+#[test]
+fn a_family_holding_itself_through_another_keys_type_derives_its_key() {
+    let source = r#"
+        use /std/{Nat, Str, Hash, Map, Ord, print};
+        use /std/ops/{Eql};
+        induct Box(A: Type): pub Type | wrap(A) end
+        satisfy (@A: Type, use Eql(A)) => Eql(Box(A)) { .. }
+        satisfy (@A: Type, use Ord(A)) => Ord(Box(A)) { .. }
+        satisfy (@A: Type, use Hash(A)) => Hash(Box(A)) { .. }
+        satisfy (@A: Type, use Hash/Key(A)) => Hash/Key(Box(A)) { .. }
+        induct Tree: pub Type | leaf(Nat) | node(Box(Tree)) end
+        satisfy Eql(Tree) { .. }
+        satisfy Ord(Tree) { .. }
+        satisfy Hash(Tree) { .. }
+        satisfy Hash/Key(Tree) { .. }
+        let m = Map/of_list([
+            (Tree/node(Box/wrap(Tree/leaf(1))), "3"),
+            (Tree/node(Box/wrap(Tree/leaf(0))), "2"),
+            (Tree/leaf(5), "1")]);
+        print(Str/join(" ", Map/values(m)))
+        "#;
+
+    assert_eq!(run(source), b"1 2 3");
 }
 
 // --- Refusals. ---
