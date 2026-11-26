@@ -15,7 +15,7 @@ mod parse;
 --- What a line parses into: the slots a command's options and positionals fill, the values they hold, and the reads of them by name.
 pub mod Parsed;
 pub use Parsed/{let Parsed, Slot, Carrier, option_slots, slots, Slots, Values, Chosen, Lookup, Has,
-    get, HasIn, NamedIn, HasCommand, Named, command};
+    Unknown, get, HasIn, NamedIn, HasCommand, Named, command};
 
 use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Map, Io, Show, Fmt, Proc,
     Path, print, print_err};

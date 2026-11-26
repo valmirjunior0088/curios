@@ -28,7 +28,7 @@ fn against(body: &str) -> String {
     ))
 }
 
-/// A name the declaration lacks is refused where it is written: `Has` reduces to `False`, and the bound holding `get` up is discharged by nothing. The binding is unannotated so the bound is what fails — an expected type would report `Lookup`'s `{}` first and say nothing about why.
+/// A name the declaration lacks is refused where it is written: `Has` reduces to `Unknown` of it, with the name there nearest to it and the names there are, and the bound holding `get` up is discharged by nothing. The binding is unannotated so the bound is what fails — an expected type would report `Lookup`'s `{}` first and say nothing about why.
 #[test]
 fn a_misspelled_name_is_refused_rather_than_answered() {
     let refused = against(
@@ -37,12 +37,13 @@ fn a_misspelled_name_is_refused_rather_than_answered() {
     );
 
     assert!(
-        refused.contains("Cli/Has(") && refused.contains("which reduces to `Bool/False`"),
+        refused.contains("Cli/Has(")
+            && refused.contains(r#"which reduces to `Cli/Unknown("prot", Option/some("port"), ["port"])`"#),
         "the refusal names the bound nothing discharged and what it came to:\n{refused}"
     );
 }
 
-/// A command the group lacks is refused the same way, by `HasCommand`.
+/// A command the group lacks is refused the same way, by `HasCommand`, naming the group's command nearest to it.
 #[test]
 fn a_misspelled_command_is_refused_rather_than_answered() {
     let refused = against(
@@ -51,7 +52,8 @@ fn a_misspelled_command_is_refused_rather_than_answered() {
     );
 
     assert!(
-        refused.contains("Cli/HasCommand(") && refused.contains("which reduces to `Bool/False`"),
+        refused.contains("Cli/HasCommand(")
+            && refused.contains(r#"which reduces to `Cli/Unknown("ad", Option/some("add"), ["add"])`"#),
         "{refused}"
     );
 }

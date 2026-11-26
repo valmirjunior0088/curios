@@ -1,6 +1,6 @@
 use /std/{Str, Nat, Bool, List, Option, Cli};
 use /std/Cli/{Field, Kind, Presence, Positional, Positionals, Command};
-use /std/Bool/{False, Holds};
+use /std/Bool/{True, False, Holds};
 
 --- What a parse fills and `get` reads by name.
 pub struct Slot: pub Type {
@@ -111,15 +111,36 @@ pub let Lookup(spec: List(Slot), name: Str) -> Type =
     | [s, ..rest] => match s.name == name | true => s.T | false => Lookup(rest, name) end
     end;
 
---- That `name` is one of `spec`'s, decided by reduction: a name the declaration lacks is refused where it is written.
+--- That no option or positional, or no command, is named `name`: what a read of a name the declaration lacks reduces to, with the name there nearest to it, as the line's own refusal names one, and the names there are. Nothing proves it, so the read is refused where it is written.
+pub induct Unknown: (name: Str, nearest: Option(Str), names: List(Str)) -> pub Prop
+end
+
+-- What a search that found no `name` among `names` reduces to.
+let missing(name: Str, names: List(Str)) -> Prop =
+    Unknown(name, Cli/scan/closest(name, names), names);
+
+--- That `name` is one of `spec`'s, decided by reduction: a name the declaration lacks reduces to `Unknown` of it, refused where it is written.
 pub let Has(spec: List(Slot), name: Str) -> Prop =
+    match List/any(spec, (s) => s.name == name)
+    | true => True
+    | false => missing(name, List/map(spec, (s) => s.name))
+    end;
+
+-- The search a read hands down the list, which a known name holds.
+let Present(spec: List(Slot), name: Str) -> Prop =
     Holds(List/any(spec, (s) => s.name == name));
+
+let present(@spec: List(Slot), name: Str, @ok: Has(spec, name)) -> Present(spec, name) =
+    match List/any(spec, (s) => s.name == name)
+    | true => True/qed()
+    | false => match ok end
+    end;
 
 let read(
     @spec: List(Slot),
     v: Values(spec),
     name: Str,
-    @ok: Has(spec, name),
+    @ok: Present(spec, name),
 ) -> Lookup(spec, name) =
     match v
     | nil() => match ok end
@@ -137,11 +158,28 @@ pub let get(
     name: Str,
     @ok: Has(Slots(c), name),
 ) -> Lookup(Slots(c), name) =
-    read(values(p), name, @ok);
+    read(values(p), name, @present(name, @ok));
 
---- That `name` is one of `commands`', decided by reduction.
+--- That `name` is one of `commands`', decided by reduction: a name the group lacks reduces to `Unknown` of it.
 pub let HasIn(commands: List(Command), name: Str) -> Prop =
+    match List/any(commands, (c) => /std/Cli/name(c) == name)
+    | true => True
+    | false => missing(name, List/map(commands, /std/Cli/name))
+    end;
+
+-- The search a pick hands down the list, which a known name holds.
+let PresentIn(commands: List(Command), name: Str) -> Prop =
     Holds(List/any(commands, (c) => /std/Cli/name(c) == name));
+
+let present_in(
+    @commands: List(Command),
+    name: Str,
+    @ok: HasIn(commands, name),
+) -> PresentIn(commands, name) =
+    match List/any(commands, (c) => /std/Cli/name(c) == name)
+    | true => True/qed()
+    | false => match ok end
+    end;
 
 --- The first of `commands` named `name`.
 pub let NamedIn(commands: List(Command), name: Str) -> Command =
@@ -172,7 +210,7 @@ let pick(
     @commands: List(Command),
     chosen: Chosen(commands),
     name: Str,
-    @ok: HasIn(commands, name),
+    @ok: PresentIn(commands, name),
 ) -> Option(Parsed(NamedIn(commands, name))) =
     match chosen
     | here(@c, @_, parsed) =>
@@ -196,5 +234,5 @@ pub let command(
 ) -> Option(Parsed(Named(c, name))) =
     match p
     | leaf(_) => match ok end
-    | group(_, chosen) => pick(chosen, name, @ok)
+    | group(_, chosen) => pick(chosen, name, @present_in(name, @ok))
     end;
