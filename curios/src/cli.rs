@@ -5,8 +5,8 @@ mod tests;
 
 use {
     crate::{
-        CLASSES, COMPILE, DIAGNOSTICS, DOCUMENT, Drawing, FALSE, FOOTPRINT, FORMAT, LINT, NAME,
-        PORT, RUN, STAGE, TEST, TESTS, WITNESSES,
+        CHECK, CLASSES, COMPILE, DOCUMENT, Drawing, FALSE, FOOTPRINT, FORMAT, NAME, PORT, RUN,
+        STAGE, TEST, TESTS, WITNESSES, WONDER,
     },
     clap::{
         Arg, ArgAction, ArgGroup, ArgMatches, Args, Command, CommandFactory, Error, FromArgMatches,
@@ -258,13 +258,16 @@ pub enum Mode {
         directory: PathBuf,
     },
 
-    /// The gate over what `wonder` reports: every diagnostic, goal and lint of each subject, and — for the package entire — the dependencies nothing reached, with the exit code turning on them. Each subject is admitted alone, as `format`'s are, and what they report is one report. The reasoning is `documentation/usage.md`'s Linting.
+    /// The one command that checks: every diagnostic, goal and lint of each subject, and — for the package entire — the dependencies nothing reached, with the exit code turning on them. Each subject is admitted alone, as `format`'s are, and what they report is one report. The reasoning is `documentation/usage.md`'s Linting.
     #[command(
-        about = "Report every unused import, binder, declaration and dependency; exit 1 when any"
+        about = "Report every error, goal and lint of each subject; exit 1 on an error or a lint, 2 on goals alone"
     )]
-    Lint {
-        #[arg(value_name = "SUBJECT", help = LINT.subject_help())]
+    Check {
+        #[arg(value_name = "SUBJECT", help = CHECK.subject_help())]
         subjects: Vec<String>,
+
+        #[command(flatten)]
+        core: CoreFlag,
 
         #[command(flatten)]
         elaboration: Elaboration,
@@ -292,13 +295,13 @@ pub enum Mode {
         manifest: ManifestFlag,
     },
 
-    /// Questions about a program, answered by the compilation that would build it. The subject is the one argument, read by the rule every command's is, and the query an option, so no word is ever both: an executable may be named as a query is, and a query added later takes no executable's name. With no query, the check — every diagnostic, goal and lint ([`Query::Check`]); with `--server`, the same questions asked by an editor over a protocol, of the documents it hands over, so with no subject.
-    #[command(about = "Ask what the compiler knows about a program; with no query, check it")]
+    /// Questions about a program, answered by the compilation that would build it. The subject is the one argument, read by the rule every command's is, and the query an option, so no word is ever both: an executable may be named as a query is, and a query added later takes no executable's name. A query is always asked, since checking is `check`'s; with `--server`, the questions are asked by an editor over a protocol, of the documents it hands over, so with no subject.
+    #[command(about = "Ask what the compiler knows about a program")]
     Wonder {
         #[command(flatten)]
         query: Query,
 
-        #[arg(value_name = "SUBJECT", help = DIAGNOSTICS.subject_help())]
+        #[arg(value_name = "SUBJECT", help = WONDER.subject_help())]
         subject: Option<String>,
 
         #[command(flatten)]
@@ -458,8 +461,6 @@ pub struct CheckFlag {
 /// What `wonder` is asked of its subject: the check where no query is named, and otherwise the one its option names. At most one: the options form one group, so two are refused where the line is parsed, and this is the one value the parse leaves. A subject takes the four forms `run` takes, with the one difference `documentation/usage.md`'s Asking about a program states; the placement itself is `curios_package::Selection`'s.
 #[derive(Debug, Clone)]
 pub enum Query {
-    /// Every diagnostic, goal and lint, located; exit 0 once answered, whatever the answer.
-    Check,
     Tests,
     /// A rung of the pipeline, by its name ([`Stage::NAMES`]).
     Stage(String),
@@ -484,6 +485,9 @@ impl Query {
 
     /// The group the views of a selection form, which holds them to one.
     const VIEWS: &str = "view";
+
+    /// The group of every option that asks a question, `--stage` alone among them, of which a run names one at least: checking is `check`'s, so `wonder` always asks. A view stands in it too, so a view without `--name` is refused for wanting the name rather than a query.
+    const ASKED: &str = "asked";
 
     /// `argument` as a view of the selection `--name` makes: it requires the selection, and conflicts with every other query by name, since clap waives a requirement whose target conflicts with an argument present, which the group makes `--name` do with each of them.
     fn view(argument: Arg) -> Arg {
@@ -612,6 +616,16 @@ impl Args for Query {
                     .args(["witnesses", "footprint", "stage"])
                     .multiple(false),
             )
+            .group(
+                ArgGroup::new(Self::ASKED)
+                    .args(
+                        Self::QUERIES
+                            .into_iter()
+                            .chain(["stage", "witnesses", "footprint"]),
+                    )
+                    .multiple(true)
+                    .required(true),
+            )
             // The heading ends with the queries, so the flags flattened after them stand under the command's own.
             .next_help_heading(None::<&str>)
     }
@@ -645,10 +659,8 @@ impl FromArgMatches for Query {
             Query::Stage(name.clone())
         } else if matches.get_flag("false") {
             Query::False
-        } else if matches.get_flag("server") {
-            Query::Server
         } else {
-            Query::Check
+            Query::Server
         })
     }
 

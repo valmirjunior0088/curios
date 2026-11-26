@@ -1,4 +1,4 @@
-//! What `curios lint` does at the command line: the report on stdout, the exit code it turns on, and the one lint decided over a package rather than a unit.
+//! What `curios check` does at the command line: the report on stdout, the exit code it turns on, and the one lint decided over a package rather than a unit.
 
 use {
     curios::CABINET,
@@ -14,7 +14,7 @@ use {
 
 /// A directory of its own, shared with no other test and gone with it.
 fn temporary(name: &str) -> Temporary {
-    Temporary::new("cli-lint", name)
+    Temporary::new("cli-check", name)
 }
 
 fn write(root: &Path, path: &str, contents: &str) {
@@ -47,7 +47,7 @@ fn stdout(output: &Output) -> String {
     String::from_utf8_lossy(&output.stdout).into_owned()
 }
 
-/// A file a package holds and no `mod` declares is linted on its own, with nothing said of that: a clean one exits 0 and reports nothing.
+/// A file a package holds and no `mod` declares is checked on its own, with nothing said of that: a clean one exits 0 and reports nothing.
 #[test]
 fn a_clean_file_no_mod_declares_lints_clean_on_its_own() {
     let root = temporary("unreached");
@@ -63,39 +63,39 @@ fn a_clean_file_no_mod_declares_lints_clean_on_its_own() {
     write(&root, "lib.crs", "");
     write(&root, "stray.crs", "pub let word : /std/Str = \"clean\";\n");
 
-    let linted = curios(&root, &["lint", "stray.crs"], "");
-    let text = stdout(&linted);
-    assert_eq!(linted.status.code(), Some(0), "{text}");
+    let checked = curios(&root, &["check", "stray.crs"], "");
+    let text = stdout(&checked);
+    assert_eq!(checked.status.code(), Some(0), "{text}");
     assert!(text.is_empty(), "{text}");
 }
 
-/// A lint is reported on stdout as `wonder` reports it, and turns the exit into 1; a clean program exits 0 with nothing on stdout. Standard error narrates the check either way, and ends on the count.
+/// A lint is reported on stdout as `run` reports an error, and turns the exit into 1; a clean program exits 0 with nothing on stdout. Standard error narrates the check either way, and ends on the count.
 #[test]
 fn a_lint_is_reported_on_stdout_with_exit_one_and_a_clean_program_exits_zero() {
     let root = temporary("stdin");
     fs::create_dir_all(&root).unwrap();
 
-    let linted = curios(
+    let checked = curios(
         &root,
-        &["lint", "-"],
+        &["check", "-"],
         "use /std/{Bool};\n/std/print(\"\")\n",
     );
-    assert_eq!(linted.status.code(), Some(1));
-    let text = stdout(&linted);
+    assert_eq!(checked.status.code(), Some(1));
+    let text = stdout(&checked);
     assert!(
         text.starts_with("unused import\n│  `Bool` is never used\n│  delete it"),
         "{text}"
     );
     assert!(text.contains("└─ [lint] <stdin>:1:11"), "{text}");
     // The program is checked under its own name, a blank line parts the narration from the report, and the count closes.
-    let narrated = String::from_utf8_lossy(&linted.stderr);
+    let narrated = String::from_utf8_lossy(&checked.stderr);
     assert!(
         narrated.starts_with("Checking `<stdin>`\nChecked `<stdin>` in "),
         "{narrated}"
     );
     assert!(narrated.ends_with("s\n\n1 lint\n"), "{narrated}");
 
-    let clean = curios(&root, &["lint", "-"], "/std/print(\"\")\n");
+    let clean = curios(&root, &["check", "-"], "/std/print(\"\")\n");
     assert!(clean.status.success());
     assert!(clean.stdout.is_empty());
     let narrated = String::from_utf8_lossy(&clean.stderr);
@@ -106,21 +106,25 @@ fn a_lint_is_reported_on_stdout_with_exit_one_and_a_clean_program_exits_zero() {
     assert!(narrated.ends_with("s\n0 lints\n"), "{narrated}");
 }
 
-/// Several subjects are one report: each file checked under its own name in the order named, their lints together on stdout, one count over all of them closing the narration, and the exit any one of them turns.
+/// Several subjects are one report: each file checked under its own name in the order named, their lints together on stdout, one count over all of them closing the narration, and the exit any one of them turns. One fact reached by several subjects is one finding.
 #[test]
-fn several_subjects_are_linted_into_one_report() {
+fn several_subjects_are_checked_into_one_report() {
     let root = temporary("several");
     write(&root, "clean.crs", "/std/print(\"\")\n");
     write(&root, "first.crs", "use /std/{Bool};\n/std/print(\"\")\n");
     write(&root, "second.crs", "use /std/{Nat};\n/std/print(\"\")\n");
 
-    let linted = curios(&root, &["lint", "first.crs", "clean.crs", "second.crs"], "");
-    assert_eq!(linted.status.code(), Some(1));
-    let text = stdout(&linted);
+    let checked = curios(
+        &root,
+        &["check", "first.crs", "clean.crs", "second.crs"],
+        "",
+    );
+    assert_eq!(checked.status.code(), Some(1));
+    let text = stdout(&checked);
     let first = text.find("└─ [lint] first.crs:1:11").expect(&text);
     let second = text.find("└─ [lint] second.crs:1:11").expect(&text);
     assert!(first < second, "{text}");
-    let narrated = String::from_utf8_lossy(&linted.stderr);
+    let narrated = String::from_utf8_lossy(&checked.stderr);
     let checked = ["first.crs", "clean.crs", "second.crs"].map(|file| {
         narrated
             .find(&format!("Checking `{file}`"))
@@ -129,9 +133,19 @@ fn several_subjects_are_linted_into_one_report() {
     assert!(checked.is_sorted(), "{narrated}");
     assert!(narrated.ends_with("s\n\n2 lints\n"), "{narrated}");
 
-    let clean = curios(&root, &["lint", "clean.crs", "clean.crs"], "");
+    let clean = curios(&root, &["check", "clean.crs", "clean.crs"], "");
     assert!(clean.status.success(), "{}", stdout(&clean));
     assert!(clean.stdout.is_empty());
+
+    // One fact is one finding however many subjects reach it, as a library's is reached by every executable compiled against it.
+    let twice = curios(&root, &["check", "first.crs", "first.crs"], "");
+    assert_eq!(
+        stdout(&twice).matches("└─ [lint] first.crs:1:11").count(),
+        1,
+        "{}",
+        stdout(&twice)
+    );
+    assert!(String::from_utf8_lossy(&twice.stderr).ends_with("\n1 lint\n"));
 }
 
 /// Goals alone are the incomplete state every subcommand exits 2 on; a goal beside a lint is 1, since the lint is what there is to act on.
@@ -142,14 +156,14 @@ fn goals_alone_exit_two_and_a_lint_beside_one_exits_one() {
 
     let goals = curios(
         &root,
-        &["lint", "-"],
+        &["check", "-"],
         "pub let m : /std/Nat = ?;\n/std/print(\"\")\n",
     );
     assert_eq!(goals.status.code(), Some(2), "{}", stdout(&goals));
 
     let both = curios(
         &root,
-        &["lint", "-"],
+        &["check", "-"],
         "let m : /std/Nat = ?;\n/std/print(\"\")\n",
     );
     assert_eq!(both.status.code(), Some(1));
@@ -202,7 +216,7 @@ fn an_unused_dependency_is_reported_for_the_package_entire() {
     write(&root, "app/exe.crs", "/std/print(\"\")\n");
     let app = root.join("app");
 
-    let entire = curios(&app, &["lint"], "");
+    let entire = curios(&app, &["check"], "");
     assert_eq!(entire.status.code(), Some(1), "{}", stdout(&entire));
     let text = stdout(&entire);
     assert!(
@@ -211,8 +225,8 @@ fn an_unused_dependency_is_reported_for_the_package_entire() {
     );
     assert!(!text.contains("`shape`"), "{text}");
 
-    // A file is linted as its unit and says nothing about the package's rows.
-    let one = curios(&app, &["lint", "lib.crs"], "");
+    // A file is checked as its unit and says nothing about the package's rows.
+    let one = curios(&app, &["check", "lib.crs"], "");
     assert!(one.status.success(), "{}", stdout(&one));
     assert!(one.stdout.is_empty());
 }
@@ -262,7 +276,7 @@ fn a_dependency_is_reached_by_the_path_written_and_not_by_what_it_resolves_into(
     write(&root, "app/exe.crs", "/std/print(\"\")\n");
     let app = root.join("app");
 
-    let entire = curios(&app, &["lint"], "");
+    let entire = curios(&app, &["check"], "");
     let text = stdout(&entire);
     assert!(
         text.contains("unused dependency\n│  `json` is never used\n│  delete its row"),
@@ -271,7 +285,7 @@ fn a_dependency_is_reached_by_the_path_written_and_not_by_what_it_resolves_into(
     assert!(!text.contains("`shape`"), "{text}");
 }
 
-/// A cabinet that cannot be written costs the reuse and never the answer: `lint` reports and exits as it would have, each unit's store says it was refused, and why is said once, beneath the first of them, however many subjects the package has.
+/// A cabinet that cannot be written costs the reuse and never the answer: `check` reports and exits as it would have, each unit's store says it was refused, and why is said once, beneath the first of them, however many subjects the package has.
 #[test]
 fn a_cabinet_that_cannot_be_written_is_said_once_and_changes_nothing() {
     let package = |name: &str| {
@@ -291,7 +305,7 @@ fn a_cabinet_that_cannot_be_written_is_said_once_and_changes_nothing() {
     };
 
     let taken = package("stored");
-    let stored = curios(&taken, &["lint"], "");
+    let stored = curios(&taken, &["check"], "");
     assert_eq!(stored.status.code(), Some(0), "{}", stdout(&stored));
     let filed = String::from_utf8_lossy(&stored.stderr);
     assert!(
@@ -304,7 +318,7 @@ fn a_cabinet_that_cannot_be_written_is_said_once_and_changes_nothing() {
     let objects = Cabinet::of(&refused, None).objects();
     fs::create_dir_all(objects.parent().unwrap()).unwrap();
     fs::write(&objects, "").unwrap();
-    let unstored = curios(&refused, &["lint"], "");
+    let unstored = curios(&refused, &["check"], "");
     let narrated = String::from_utf8_lossy(&unstored.stderr);
 
     assert_eq!(unstored.status.code(), stored.status.code(), "{narrated}");

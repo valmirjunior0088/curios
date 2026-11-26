@@ -224,7 +224,7 @@ fn a_refused_program_answers_its_places_from_its_check() {
     let refused = CHECKED.replace("let two: /std/Nat = one;", "let two: /std/Bool = one;");
 
     assert!(
-        !check(&refused).diagnostics.is_empty(),
+        !diagnosed(&refused).diagnostics.is_empty(),
         "the check refuses the program"
     );
     assert_eq!(named(&refused, &refused, "one", 1).as_deref(), Some("/one"));

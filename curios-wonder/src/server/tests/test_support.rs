@@ -20,8 +20,8 @@ pub fn overlay(text: &str) -> BTreeMap<PathBuf, String> {
     BTreeMap::from([(scratch(), text.to_string())])
 }
 
-/// A check of `program`, the program standing for a document: what the server's check answers and leaves behind it.
-pub fn check(program: &str) -> Diagnosed {
+/// The server's diagnosis of `program`, the program standing for a document: what the server's check answers and leaves behind it.
+pub fn diagnosed(program: &str) -> Diagnosed {
     crate::checked(
         DEFAULT_BUDGET,
         Subject::Entry {
@@ -42,7 +42,7 @@ pub fn check(program: &str) -> Diagnosed {
 
 /// What a check of `program` leaves for a place to be answered from.
 pub fn checked_program(program: &str) -> Placed {
-    check(program).placed.expect("the program lowers")
+    diagnosed(program).placed.expect("the program lowers")
 }
 
 /// The declaration named at the `nth` occurrence of `written` in `buffer`, by what a check of `program` left: by the path it is answered by.

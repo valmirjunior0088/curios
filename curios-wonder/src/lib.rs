@@ -47,15 +47,15 @@ mod ask;
 use ask::*;
 pub use ask::{
     Ended, Place, Scope, Staged, Telling, answer, file_subject, not_a_program, wonder_at,
-    wonder_classes, wonder_diagnostics, wonder_false, wonder_footprint, wonder_name,
-    wonder_named_stage, wonder_stage, wonder_tests, wonder_witnesses,
+    wonder_classes, wonder_false, wonder_footprint, wonder_name, wonder_named_stage, wonder_stage,
+    wonder_tests, wonder_witnesses,
 };
 
 mod server;
 pub use server::{SETTLE, serve};
 
-mod lint;
-pub use lint::{Linted, lint};
+mod check;
+pub use check::{Checked, check};
 
 // A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_wonder::test_support` says at its use site that the caller reached for scaffolding rather than product API.
 #[cfg(any(test, feature = "test-support"))]

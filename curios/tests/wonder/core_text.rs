@@ -38,7 +38,7 @@ fn the_module_core_elab_prints_for_a_program_reads_back_and_checks_clean() {
 
         let file = format!("{program}.crsc");
         write(&root, &file, &dump);
-        let checked = curios(&root, &["wonder", &file], "");
+        let checked = curios(&root, &["check", &file], "");
         let (stdout, stderr, code) = said(&checked);
         assert_eq!(code, Some(0), "{program}: {stderr}");
         assert!(!stdout.contains("[error]"), "{program}:\n{stdout}");
@@ -55,9 +55,9 @@ fn a_declaration_the_certifier_refuses_is_reported_where_its_text_writes_it() {
         "let /proof/one : #NatType = 1;\nlet /proof/bad : #NatType = #BoolType;\n",
     );
 
-    let checked = curios(&root, &["wonder", "proof.crsc"], "");
+    let checked = curios(&root, &["check", "proof.crsc"], "");
     let (stdout, stderr, code) = said(&checked);
-    assert_eq!(code, Some(0), "{stderr}");
+    assert_eq!(code, Some(1), "{stderr}");
     assert!(stdout.contains("certifier refusal"), "{stdout}");
     assert!(stdout.contains("proof.crsc:2:5"), "{stdout}");
 }
@@ -68,17 +68,17 @@ fn core_reads_standard_input_as_a_crsc_is_read() {
     let root = temporary("stdin-core");
     write(&root, "proof.crsc", "0\n");
 
-    let checked = curios(&root, &["wonder", "--core", "-"], "0\n");
+    let checked = curios(&root, &["check", "--core", "-"], "0\n");
     let (stdout, stderr, code) = said(&checked);
-    assert_eq!(code, Some(0), "{stderr}");
+    assert_eq!(code, Some(1), "{stderr}");
     assert!(stdout.contains("certifier refusal"), "{stdout}");
     assert!(stdout.contains("<stdin>:1:1"), "{stdout}");
 
-    let as_a_program = curios(&root, &["wonder", "-"], "let /x : #NatType = 0;\n0\n");
+    let as_a_program = curios(&root, &["check", "-"], "let /x : #NatType = 0;\n0\n");
     let (stdout, _, _) = said(&as_a_program);
     assert!(stdout.contains("syntax error"), "{stdout}");
 
-    let beside_a_file = curios(&root, &["wonder", "--core", "proof.crsc"], "");
+    let beside_a_file = curios(&root, &["check", "--core", "proof.crsc"], "");
     let (_, stderr, code) = said(&beside_a_file);
     assert_eq!(code, Some(1), "{stderr}");
     assert!(stderr.contains("surplus flag"), "{stderr}");
@@ -231,9 +231,9 @@ fn a_closing_term_stating_another_type_is_refused_where_it_states_it() {
     let root = temporary("stated-type");
     write(&root, "proof.crsc", "0\n: /sys/Bool/False\n");
 
-    let checked = curios(&root, &["wonder", "proof.crsc"], "");
+    let checked = curios(&root, &["check", "proof.crsc"], "");
     let (stdout, stderr, code) = said(&checked);
-    assert_eq!(code, Some(0), "{stderr}");
+    assert_eq!(code, Some(1), "{stderr}");
     assert!(stdout.contains("put at"), "{stdout}");
     assert!(stdout.contains("proof.crsc:2:3"), "{stdout}");
 }

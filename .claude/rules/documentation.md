@@ -50,6 +50,7 @@ A word the project renamed is not written again for what it named, in a document
 | the core language, for the representation both checkers judge | Curios/Core, written in prose and never in backticks, and Core where Curios/Core is already the subject; Core text for its text | `curios-core`, and `--stage core` |
 | the erased IR, the erased first-order IR | Curios/ANF | `curios-anf`, `--stage anf`, and A-normal form as a form |
 | the continuation IR, the continuation-passing IR, high-CPS | Curios/CPS | `curios-cps`, `--stage cps`, and continuation-passing style as a style |
+| `lint`, for the command that checks a subject, and `wonder` with no query | `check`, `curios check` | a lint, the finding `check` reports; xtask's `lint` groups, `compiler lint` and `jig lint` |
 | kernel, for `curios-cert`'s checker | the certifier | the operating system, and another system's checker — Lean's kernel, Rocq's kernel |
 | soundness perimeter, the perimeter | the soundness board | nothing |
 | cell, for what one stage makes of one declaration | facet | a write-once cell below erasure, `curios_anf::CellOperation` |

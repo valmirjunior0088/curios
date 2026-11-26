@@ -11,7 +11,7 @@ use {
     std::fs::read_to_string,
 };
 
-/// **Every site the four corpora hold is classified inside [`LINT_ALLOWANCE`]**: the programs under `programs/`, the examples of `documentation/language.md`, and `/std`, its library and its test modules — compiled whole, since a fold handed no cabinet declines the archived unit as a baseline — each asked about as `curios lint` asks, all of them one phase whose fold is read. A classification that ran out would answer no class and leave its site unreported, so the allowance is the least power of ten above the largest figure here.
+/// **Every site the four corpora hold is classified inside [`LINT_ALLOWANCE`]**: the programs under `programs/`, the examples of `documentation/language.md`, and `/std`, its library and its test modules — compiled whole, since a fold handed no cabinet declines the archived unit as a baseline — each asked about as `curios check` asks, all of them one phase whose fold is read. A classification that ran out would answer no class and leave its site unreported, so the allowance is the least power of ten above the largest figure here.
 ///
 /// `cargo xbench measure classification_allowance_measurements` takes it: `<sample>/sites` how many sites a sample observed, and `<sample>/most` the most units one spent. Counted, in units of the elaborator's budget, taken on top of `62915760a`: `classify` is what reducing a site's type to its class spent, `column` what inferring the type of a column a match pattern's `_` stands at spent.
 ///

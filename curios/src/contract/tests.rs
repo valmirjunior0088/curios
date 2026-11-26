@@ -84,10 +84,9 @@ const COMMANDS: &[&[&str]] = &[
     &["pin", "dependency", "json", "--rev", "abc"],
     &["pin", "dependency", "json", "--refresh"],
     &["new", "fresh"],
-    &["lint", SUBJECT],
+    &["check", SUBJECT],
     &["format", SUBJECT],
     &["format", "--core", SUBJECT],
-    &["wonder", SUBJECT],
     &["wonder", "--tests", SUBJECT],
     &["wonder", "--stage", "core", SUBJECT],
     &["wonder", "--stage", "anf", SUBJECT],
@@ -458,7 +457,7 @@ const EXPECTED: &str = r#"run SUBJECT — Program (its own file), cabinet Write,
   work/app: lib.crs → refused: not a program: `run` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/lib.crs
   work/app: util.crs → refused: not a program: `run` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/util.crs
   work/app: stray.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/work/app/stray.crs
-  work/app: proof.crsc → refused: core text: `run` reads no Core text · a `.crsc` file is Core text, which `wonder` checks and `format` formats · try; curios wonder <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
+  work/app: proof.crsc → refused: core text: `run` reads no Core text · a `.crsc` file is Core text, which `check` checks and `format` formats · try; curios check <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → refused: not a program: `run` takes a program · this file belongs to the library of `/nested` · name an executable or a program file → <root>/work/app/nested/lib.crs
   work/app: <root>/scratch.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
@@ -479,7 +478,7 @@ compile SUBJECT — Program (its own file), cabinet Write, leaves Executable, op
   work/app: lib.crs → refused: not a program: `compile` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/lib.crs
   work/app: util.crs → refused: not a program: `compile` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/util.crs
   work/app: stray.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/work/app/stray.crs
-  work/app: proof.crsc → refused: core text: `compile` reads no Core text · a `.crsc` file is Core text, which `wonder` checks and `format` formats · try; curios wonder <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
+  work/app: proof.crsc → refused: core text: `compile` reads no Core text · a `.crsc` file is Core text, which `check` checks and `format` formats · try; curios check <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → refused: not a program: `compile` takes a program · this file belongs to the library of `/nested` · name an executable or a program file → <root>/work/app/nested/lib.crs
   work/app: <root>/scratch.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
@@ -500,7 +499,7 @@ compile SUBJECT --output out — Program (its own file), cabinet Write, leaves E
   work/app: lib.crs → refused: not a program: `compile` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/lib.crs
   work/app: util.crs → refused: not a program: `compile` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/util.crs
   work/app: stray.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/work/app/stray.crs
-  work/app: proof.crsc → refused: core text: `compile` reads no Core text · a `.crsc` file is Core text, which `wonder` checks and `format` formats · try; curios wonder <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
+  work/app: proof.crsc → refused: core text: `compile` reads no Core text · a `.crsc` file is Core text, which `check` checks and `format` formats · try; curios check <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → refused: not a program: `compile` takes a program · this file belongs to the library of `/nested` · name an executable or a program file → <root>/work/app/nested/lib.crs
   work/app: <root>/scratch.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
@@ -521,7 +520,7 @@ document SUBJECT — Library, cabinet Write, leaves Pages, options --std --outpu
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
   work/app: stray.crs → refused: not a library: `document` takes a library · this file is a module no package declares · a `mod` line in a package's `lib.crs` puts it in that library → <root>/work/app/stray.crs
-  work/app: proof.crsc → refused: core text: `document` reads no Core text · a `.crsc` file is Core text, which `wonder` checks and `format` formats · try; curios wonder <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
+  work/app: proof.crsc → refused: core text: `document` reads no Core text · a `.crsc` file is Core text, which `check` checks and `format` formats · try; curios check <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → refused: not a library: `document` takes a library · this file is a module no package declares · a `mod` line in a package's `lib.crs` puts it in that library → <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
@@ -544,7 +543,7 @@ test SUBJECT — Any, cabinet Write, leaves Nothing, options --target --port --f
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
   work/app: stray.crs → module stray.crs
-  work/app: proof.crsc → refused: core text: `test` reads no Core text · a `.crsc` file is Core text, which `wonder` checks and `format` formats · try; curios wonder <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
+  work/app: proof.crsc → refused: core text: `test` reads no Core text · a `.crsc` file is Core text, which `check` checks and `format` formats · try; curios check <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → module <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
@@ -576,7 +575,7 @@ pin dependency json --refresh — Nothing, cabinet None, leaves Manifest, option
   takes no subject
 new fresh — Nothing, cabinet None, leaves Package, options none
   takes no subject
-lint SUBJECT — Any, cabinet Write, leaves Nothing, options --budget --manifest
+check SUBJECT — Any, cabinet Write, leaves Nothing, options --core --budget --manifest
   work/app: (none) → entire app
   work/app: serve → program serve
   work/app: absent → refused: unknown executable: `app` declares no executable named `absent` · it declares: `bench`, `serve` → <root>/work/app/curios.toml
@@ -587,7 +586,7 @@ lint SUBJECT — Any, cabinet Write, leaves Nothing, options --budget --manifest
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
   work/app: stray.crs → module stray.crs
-  work/app: proof.crsc → refused: core text: `lint` reads no Core text · a `.crsc` file is Core text, which `wonder` checks and `format` formats · try; curios wonder <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
+  work/app: proof.crsc → loose proof.crsc
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → module <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
@@ -639,27 +638,6 @@ format --core SUBJECT — Files, cabinet None, leaves Rewritten, options --check
   work/app/helper: bench → refused: surplus flag: `--core` says the text on standard input is Core text · `bench` names an executable, a program → --core
   work/app/nested: (none) → refused: surplus flag: `--core` says the text on standard input is Core text · with no subject nothing reads standard input; `-` does → --core
   .: (none) → refused: surplus flag: `--core` says the text on standard input is Core text · with no subject nothing reads standard input; `-` does → --core
-wonder SUBJECT — Any, cabinet Write, leaves Nothing, options --tests --stage --at --classes --name --false --witnesses --footprint --server --core --budget --manifest
-  work/app: (none) → entire app
-  work/app: serve → program serve
-  work/app: absent → refused: unknown executable: `app` declares no executable named `absent` · it declares: `bench`, `serve` → <root>/work/app/curios.toml
-  work/app: - → loose -
-  work/app: serve.crs → program serve
-  work/app: helper.crs → program serve through helper.crs
-  work/app: bench.crs → program bench
-  work/app: lib.crs → library app through lib.crs
-  work/app: util.crs → library app through util.crs
-  work/app: stray.crs → module stray.crs
-  work/app: proof.crsc → loose proof.crsc
-  work/app: nested/lib.crs → library nested through nested/lib.crs
-  work/app: <root>/scratch.crs → module <root>/scratch.crs
-  work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
-  work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
-  work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
-  work/app/helper: (none) → entire app
-  work/app/helper: bench → program bench
-  work/app/nested: (none) → entire nested
-  .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
 wonder --tests SUBJECT — Any, cabinet Write, leaves Nothing, options --tests --stage --at --classes --name --false --witnesses --footprint --server --core --budget --manifest
   work/app: (none) → entire app
   work/app: serve → program serve
@@ -733,7 +711,7 @@ wonder --at SUBJECT:1:1 — ProgramOrLibrary, cabinet Write, leaves Nothing, opt
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
   work/app: stray.crs → module stray.crs
-  work/app: proof.crsc → refused: core text: `wonder --at` reads no Core text · a `.crsc` file is Core text, which `wonder` checks and `format` formats · try; curios wonder <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
+  work/app: proof.crsc → refused: core text: `wonder --at` reads no Core text · a `.crsc` file is Core text, which `check` checks and `format` formats · try; curios check <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → module <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
@@ -750,7 +728,7 @@ wonder --classes SUBJECT — ProgramOrLibrary, cabinet Write, leaves Nothing, op
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
   work/app: stray.crs → module stray.crs
-  work/app: proof.crsc → refused: core text: `wonder --classes` reads no Core text · a `.crsc` file is Core text, which `wonder` checks and `format` formats · try; curios wonder <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
+  work/app: proof.crsc → refused: core text: `wonder --classes` reads no Core text · a `.crsc` file is Core text, which `check` checks and `format` formats · try; curios check <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → module <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
@@ -927,10 +905,9 @@ compile SUBJECT: refused: not a program: this text is written as a module · it 
 compile SUBJECT --output out: refused: not a program: this text is written as a module · it has no final term to compile a program from → <stdin>
 document SUBJECT: refused: not a library: `document` takes a library · this text is a module no package declares → <stdin>
 test SUBJECT: module -
-lint SUBJECT: module -
+check SUBJECT: module -
 format SUBJECT: standard input within 100
 format --core SUBJECT: standard input within 100 as Core text
-wonder SUBJECT: module -
 wonder --tests SUBJECT: module -
 wonder --stage core SUBJECT: module -
 wonder --stage anf SUBJECT: refused: not a program: this text is written as a module · it has no final term to compile a program from → <stdin>
@@ -970,10 +947,10 @@ fn a_flag_written_before_its_command_is_an_argument_nothing_reads() {
     let parsed =
         |words: &[&str]| Cli::try_parse_from(iter::once("curios").chain(words.iter().copied()));
 
-    assert!(parsed(&["wonder", "--manifest", "curios.toml"]).is_ok());
+    assert!(parsed(&["check", "--manifest", "curios.toml"]).is_ok());
     assert!(parsed(&["run", "--budget", "5", "serve"]).is_ok());
     for words in [
-        &["--manifest", "curios.toml", "wonder"][..],
+        &["--manifest", "curios.toml", "check"][..],
         &["--budget", "5", "run", "serve"],
         &["--budget", "5", "new", "fresh"],
     ] {

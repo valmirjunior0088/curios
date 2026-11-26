@@ -1,4 +1,4 @@
-//! `curios lint`: the gate over what `wonder` reports.
+//! `curios check`: the one command that checks.
 //!
 //! The same subjects, the same records, the same rendering: a lint is a diagnostic the compilation reports and nothing stops on, and this subcommand is where it turns into an exit code. What it adds is the one lint no unit can decide alone — a declared dependency nothing in the package wrote, decided here off the union of the prefixes every unit spelled ([`unused_dependencies`]), the one lint whose last fact is the package's — and it asks only when the subject is the package entire, because a dependency is a fact of the package and a file asked about alone reaches what it reaches.
 
@@ -14,24 +14,24 @@ use {
     std::collections::BTreeSet,
 };
 
-/// What `curios lint` found, each distinct fact counted once: its lints, an unused dependency among them, the errors beside them, and the written goals. A lint or an error is exit 1, goals and nothing else the incomplete state `run` exits 2 on, and none of the three exit 0.
+/// What `curios check` found, each distinct fact counted once: its lints, an unused dependency among them, the errors beside them, and the written goals. A lint or an error is exit 1, goals and nothing else the incomplete state `run` exits 2 on, and none of the three exit 0.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct Linted {
+pub struct Checked {
     pub lints: usize,
     pub errors: usize,
     pub goals: usize,
 }
 
-/// `curios lint [SUBJECT]...`: every diagnostic, goal and lint of what each of `selections` selects, in their order, rendered to stdout as one report, each distinct fact once, and for the package entire every dependency nothing reached. `telling` is told of each subject's compile as it goes and why, where a cabinet took nothing of what the lint compiled, which changes neither the report nor what is returned.
-pub fn lint(
+/// `curios check [SUBJECT]...`: every diagnostic, goal and lint of what each of `selections` selects, in their order, rendered to stdout as one report, each distinct fact once, and for the package entire every dependency nothing reached. `telling` is told of each subject's compile as it goes and why, where a cabinet took nothing of what the check compiled, which changes neither the report nor what is returned.
+pub fn check(
     budget: u64,
     selections: Vec<Selection>,
     telling: &mut dyn Telling,
-) -> Result<Linted, Box<Report>> {
+) -> Result<Checked, Box<Report>> {
     let overlay = Overlay::default();
     let mut seen = Renderings::default();
     let reader = telling.reader();
-    let mut linted = Linted::default();
+    let mut checked = Checked::default();
 
     for selection in selections {
         // A dependency is a fact of the package, so only the package entire is asked which of its dependencies nothing reached.
@@ -59,9 +59,9 @@ pub fn lint(
             for diagnostic in diagnostics {
                 if seen.insert_rendered(diagnostic.rendered(&reader)) {
                     match diagnostic.severity {
-                        Severity::Lint => linted.lints += 1,
-                        Severity::Error => linted.errors += 1,
-                        Severity::Goal => linted.goals += 1,
+                        Severity::Lint => checked.lints += 1,
+                        Severity::Error => checked.errors += 1,
+                        Severity::Goal => checked.goals += 1,
                     }
                 }
             }
@@ -71,7 +71,7 @@ pub fn lint(
             for lint in unused_dependencies(&dependencies, &reached) {
                 let rendered = lint.report(&[]).rendered(Kind::Lint, &reader);
                 if seen.insert_rendered(rendered) {
-                    linted.lints += 1;
+                    checked.lints += 1;
                 }
             }
         }
@@ -81,7 +81,7 @@ pub fn lint(
         telling.answering();
         answer(format_args!("{}\n", seen.rendered.join("\n\n")));
     }
-    Ok(linted)
+    Ok(checked)
 }
 
 /// Renderings in the order they arrived, each distinct one once — the collapse `wonder` applies, since the subjects of a package overlap on their library.

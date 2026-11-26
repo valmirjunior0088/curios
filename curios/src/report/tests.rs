@@ -564,7 +564,7 @@ fn a_tree_is_parted_from_what_stands_above_it_by_one_blank_line() {
         "/app\n└─ check; refused in 0.1s\n\ntype mismatch\n└─ [error] lib.crs:1:1\n\napp\n└─ write; app.wasm\n\n1 written\n"
     );
 
-    // As `lint` parts its trees from the answer it writes on standard output, then counts it.
+    // As `check` parts its trees from the answer it writes on standard output, then counts it.
     let mut trees = Trees::default();
     let unit = Opened::minted();
     let linted = [

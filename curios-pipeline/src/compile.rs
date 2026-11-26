@@ -688,7 +688,7 @@ pub enum EntryTail {
     False,
     /// The synthesized `/test/main([...])` over the tests in scope at or under any of `under`, a whole segment at a time, replacing an executable's authored tail, or a library's absence of one, where the entry is an empty program, closed over `runner`, the compiled `/test`, after every unit and the entry's own declarations. Only the unit compiled tested holds tests ([`curios_module::RootSource::tested`]), so they are that unit's, wherever it stands in the fold. A tail selecting none is `/test/main([])`, which runs nothing and reports nothing.
     ///
-    /// **Which tests is the program's, never the unit's.** The unit holds every test it declares whatever is selected, so one tested unit serves every selection, `wonder` and `lint`; what the tail does not reach is linked into nothing, so a selection narrows the program's back end, where most of a test program's cost is.
+    /// **Which tests is the program's, never the unit's.** The unit holds every test it declares whatever is selected, so one tested unit serves every selection, `wonder` and `check`; what the tail does not reach is linked into nothing, so a selection narrows the program's back end, where most of a test program's cost is.
     ///
     /// **`/test` is in scope for the tail alone.** No unit is compiled over `runner`, the entry's declarations included, so no name written in a test compilation reaches it and every name that resolves there resolves in a build.
     Test { under: Vec<Qualifier>, runner: Unit },

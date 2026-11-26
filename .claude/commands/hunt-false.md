@@ -78,7 +78,7 @@ let f(n: Nat, h: Holds(n == 2)) -> False =
 f(2, True/qed())
 ```
 
-is put by `<snapshot>/binaries/xboard probe <snapshot>/hunters/hunter-<n>/f.crs`. What it shows admitted is what `cargo xboard report` then shows `OPEN`, and the checker and error it names for a refusal are what a fixed ticket expects. The snapshot's compiler, `<snapshot>/binaries/curios`, answers `run -` and `wonder -` on standard input as CLAUDE.md probes.
+is put by `<snapshot>/binaries/xboard probe <snapshot>/hunters/hunter-<n>/f.crs`. What it shows admitted is what `cargo xboard report` then shows `OPEN`, and the checker and error it names for a refusal are what a fixed ticket expects. The snapshot's compiler, `<snapshot>/binaries/curios`, answers `run -` and `check -` on standard input as CLAUDE.md probes.
 
 ## A refusal met on the way
 

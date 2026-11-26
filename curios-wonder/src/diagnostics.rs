@@ -21,7 +21,7 @@ use {
     },
 };
 
-/// What one compilation of a subject reports, and what it reached: every diagnostic, goal and lint, and the prefix of every mount some reference of the subject was *written* under — what `curios lint` reads a package's unused dependencies off.
+/// What one compilation of a subject reports, and what it reached: every diagnostic, goal and lint, and the prefix of every mount some reference of the subject was *written* under — what `curios check` reads a package's unused dependencies off.
 pub struct Diagnosed {
     pub diagnostics: Vec<Diagnosis>,
     pub reached: BTreeSet<Qualifier>,

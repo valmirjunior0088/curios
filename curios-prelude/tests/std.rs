@@ -110,7 +110,7 @@ fn library() -> TestSubject {
     subjects.remove(0)
 }
 
-/// **The standard library's test modules lint clean**, decided as `curios lint` decides the package: the library's declarations kept from the archive with the records they were elaborated to, and each test module elaborated over it — or the unit restored from the cabinet the claims file into, whose lints are the ones a compile decides. `curios-prelude`'s `every_authored_source_is_lint_clean` holds the library by its archive alone, which elaborates no test, so what a test module's site binds is held here.
+/// **The standard library's test modules lint clean**, decided as `curios check` decides the package: the library's declarations kept from the archive with the records they were elaborated to, and each test module elaborated over it — or the unit restored from the cabinet the claims file into, whose lints are the ones a compile decides. `curios-prelude`'s `every_authored_source_is_lint_clean` holds the library by its archive alone, which elaborates no test, so what a test module's site binds is held here.
 #[test]
 fn every_test_module_lints_clean() {
     let found = diagnostics(

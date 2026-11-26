@@ -21,7 +21,6 @@ use {
     curios_surface::WrittenIn,
     curios_verdict::{Session, Verdicts},
     std::{
-        collections::BTreeSet,
         fmt::Display,
         fs,
         io::{self, Write},
@@ -486,24 +485,7 @@ impl Asked {
     }
 }
 
-/// `wonder [SUBJECT]`: render every diagnostic of what `selection` selects to stdout, a blank line between each, `telling` told of each subject's compile as it goes.
-pub fn wonder_diagnostics(
-    budget: u64,
-    selection: Selection,
-    telling: &mut dyn Telling,
-) -> Result<(), Box<Report>> {
-    let overlay = Overlay::default();
-
-    let answers = Asked::every(selection)?;
-    let reports = rendered(answers, budget, &overlay, telling);
-    if !reports.is_empty() {
-        telling.answering();
-        answer(format_args!("{}\n", reports.join("\n\n")));
-    }
-    Ok(())
-}
-
-/// `wonder --tests [SUBJECT]`: every test `selection` declares, one path per line, in declaration order — the library's, then each executable's, when it is the governing package entire. Nothing executes, and a package with no tests answers with nothing and exit 0. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --tests [SUBJECT]`: every test `selection` declares, one path per line, in declaration order — the library's, then each executable's, when it is the governing package entire. Nothing executes, and a package with no tests answers with nothing and exit 0. `telling` is told as [`check()`](crate::check())'s is.
 pub fn wonder_tests(
     budget: u64,
     selection: Selection,
@@ -530,28 +512,6 @@ pub fn wonder_tests(
         }
     }
     listed
-}
-
-/// Every answer's diagnostics, rendered, each distinct fact once.
-///
-/// **The subjects of a whole package overlap, and one fact is still one fact.** Every executable is compiled against the library, so a diagnostic in the library is reached by the library's own subject and again by each executable's — one unbound variable printed three times in a package declaring two programs, which is what an agent's one-error-at-a-time loop then walks through. Collapsing is safe because a rendering carries the source, the line and the column beneath the message: two that compare equal say the same thing about the same place, and two about different places never compare equal.
-///
-/// The subjects themselves are still compiled apart, which is what keeps this a report about a package rather than about one compilation of it. What that costs — the library folded once per subject, answered from the cabinet when there is one and recompiled when there is not — is the price of the same independence.
-pub fn rendered(
-    answers: Vec<Asked>,
-    budget: u64,
-    overlay: &Overlay,
-    telling: &mut dyn Telling,
-) -> Vec<String> {
-    let mut seen = BTreeSet::new();
-    let reader = telling.reader();
-
-    answers
-        .into_iter()
-        .flat_map(|asked| asked.diagnosed(budget, overlay, telling).diagnostics)
-        .map(|diagnostic| diagnostic.rendered(&reader))
-        .filter(|rendered| seen.insert(rendered.clone()))
-        .collect()
 }
 
 /// What `wonder --stage` reprints a rung of: a program, at any rung, or a library through one of its files or a loose module, at the rungs a unit has.
@@ -581,7 +541,7 @@ impl Scope {
     }
 }
 
-/// `wonder --stage STAGE [SUBJECT]`: the rung of what `staged` is, reprinted by the driver's own rendering, to stdout. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --stage STAGE [SUBJECT]`: the rung of what `staged` is, reprinted by the driver's own rendering, to stdout. `telling` is told as [`check()`](crate::check())'s is.
 ///
 /// What stopped the compilation past the rung comes back, for the caller to say beside the rendering: a rung the driver emitted is an answer, a later failure does not unmake it, and a pipeline reading the rendering is unaffected by what is said beside it.
 pub fn wonder_stage(
@@ -631,7 +591,7 @@ fn no_lowering(name: &str) -> CompileError {
         .into()
 }
 
-/// `wonder --name PATH --stage STAGE [SUBJECT]`: the declaration `path` names in `scope`, at a rung a unit has, to stdout — the block `--name` answers with, without the source it holds there, then, a blank line before, its part of the rung, printed as the rung prints its whole (`named_stage`). A path that names nothing in scope is refused, as `core` is of a unit in scope's declaration, with the command that asks it of the file that holds it. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --name PATH --stage STAGE [SUBJECT]`: the declaration `path` names in `scope`, at a rung a unit has, to stdout — the block `--name` answers with, without the source it holds there, then, a blank line before, its part of the rung, printed as the rung prints its whole (`named_stage`). A path that names nothing in scope is refused, as `core` is of a unit in scope's declaration, with the command that asks it of the file that holds it. `telling` is told as [`check()`](crate::check())'s is.
 pub fn wonder_named_stage(
     budget: u64,
     scope: Scope,
@@ -824,7 +784,7 @@ impl FromStr for Place {
     }
 }
 
-/// `wonder --at FILE:LINE:COLUMN`: what stands at `place`, `staged` being what its file is admitted as, to stdout ([`placed`]) — for a name, the block a declaration is answered with, its source the one entry on it, opened on the path it is exposed at; for a term no name stands at, a block of what is written there, quoted at its place — and refused where nothing stands there, as a path that names nothing is. The block names the command that lists a declaration's witnesses where it has any, asked in the scope of the place's file. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --at FILE:LINE:COLUMN`: what stands at `place`, `staged` being what its file is admitted as, to stdout ([`placed`]) — for a name, the block a declaration is answered with, its source the one entry on it, opened on the path it is exposed at; for a term no name stands at, a block of what is written there, quoted at its place — and refused where nothing stands there, as a path that names nothing is. The block names the command that lists a declaration's witnesses where it has any, asked in the scope of the place's file. `telling` is told as [`check()`](crate::check())'s is.
 pub fn wonder_at(
     budget: u64,
     staged: Staged,
@@ -904,7 +864,7 @@ pub fn wonder_at(
     Ok(())
 }
 
-/// `wonder --classes [SUBJECT]`: every span of the file the subject is asked through that the compiler classes, `staged` being what its file is admitted as, to stdout, a row a line in the order they are written ([`classed`]), four fields joined by tabs: its place as a report closes on one, its length in scalar values as a column counts them, its class by its name, and its modifiers, a space between them — `declaration` where the span is where what it names is declared, and `default-library` where what it names lies in the library the compiler was built with — or `-` where it has none, so every row splits alike. What no row covers is left to a grammar. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --classes [SUBJECT]`: every span of the file the subject is asked through that the compiler classes, `staged` being what its file is admitted as, to stdout, a row a line in the order they are written ([`classed`]), four fields joined by tabs: its place as a report closes on one, its length in scalar values as a column counts them, its class by its name, and its modifiers, a space between them — `declaration` where the span is where what it names is declared, and `default-library` where what it names lies in the library the compiler was built with — or `-` where it has none, so every row splits alike. What no row covers is left to a grammar. `telling` is told as [`check()`](crate::check())'s is.
 pub fn wonder_classes(
     budget: u64,
     staged: Staged,
@@ -950,7 +910,7 @@ pub fn wonder_classes(
     Ok(())
 }
 
-/// `wonder --name PATH [SUBJECT]`: what `path` names in `scope`, to stdout — a declaration by a block holding its source as one entry, the block naming the command that lists its witnesses where it has any, `subject` as the command line wrote it, and one whose source no block shows, Core text's, by its block and then its whole text; a module by a block holding an entry for each thing it exposes ([`Report::listing`]); and a facade's path, which names both, by the declaration and then the module, a blank line between, the module's block listing what it exposes beside that declaration. A path that names nothing in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --name PATH [SUBJECT]`: what `path` names in `scope`, to stdout — a declaration by a block holding its source as one entry, the block naming the command that lists its witnesses where it has any, `subject` as the command line wrote it, and one whose source no block shows, Core text's, by its block and then its whole text; a module by a block holding an entry for each thing it exposes ([`Report::listing`]); and a facade's path, which names both, by the declaration and then the module, a blank line between, the module's block listing what it exposes beside that declaration. A path that names nothing in scope is refused. `telling` is told as [`check()`](crate::check())'s is.
 pub fn wonder_name(
     budget: u64,
     scope: Scope,
@@ -1006,7 +966,7 @@ pub fn wonder_name(
     Ok(())
 }
 
-/// `wonder --name PATH --witnesses [SUBJECT]`: the witnesses in scope the declaration `path` names takes part in, to stdout — the block `--name` answers with, an entry on it for each witness ([`Report::listing`]): its head as its author wrote it, closed as a block closes a further place, behind `;`, by where it is written, or by the module that declares it where no file holds it. A path that names nothing in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --name PATH --witnesses [SUBJECT]`: the witnesses in scope the declaration `path` names takes part in, to stdout — the block `--name` answers with, an entry on it for each witness ([`Report::listing`]): its head as its author wrote it, closed as a block closes a further place, behind `;`, by where it is written, or by the module that declares it where no file holds it. A path that names nothing in scope is refused. `telling` is told as [`check()`](crate::check())'s is.
 pub fn wonder_witnesses(
     budget: u64,
     scope: Scope,
@@ -1248,7 +1208,7 @@ fn no_such_stage(asked: &str) -> CompileError {
         .into()
 }
 
-/// `wonder --name PATH --footprint [SUBJECT]`: what the program holds of each function of the text of the declaration `path` names, to stdout — the block `--name` answers with, without the source it holds there, then a row for each function in the order the declaration writes them, each heap twin under its function: its hint (`-` for none), what became of it, the bytes its bodies weigh in the emitted module and the values they rebuild in place, `-` for a function with no body of its own ([`Row`]). Four tab-separated fields a row, so `awk -F'\t' '$2 == "absorbed"'` is a whole question and a diff of two runs a diff of two files. A path that names nothing in scope is refused, as a subject written as a module is, which has no program. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --name PATH --footprint [SUBJECT]`: what the program holds of each function of the text of the declaration `path` names, to stdout — the block `--name` answers with, without the source it holds there, then a row for each function in the order the declaration writes them, each heap twin under its function: its hint (`-` for none), what became of it, the bytes its bodies weigh in the emitted module and the values they rebuild in place, `-` for a function with no body of its own ([`Row`]). Four tab-separated fields a row, so `awk -F'\t' '$2 == "absorbed"'` is a whole question and a diff of two runs a diff of two files. A path that names nothing in scope is refused, as a subject written as a module is, which has no program. `telling` is told as [`check()`](crate::check())'s is.
 pub fn wonder_footprint(
     budget: u64,
     program: Program,

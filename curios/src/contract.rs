@@ -191,11 +191,11 @@ pub const NEW: Contract = Contract {
     product: Product::Package,
 };
 
-pub const LINT: Contract = Contract {
-    command: "lint",
+pub const CHECK: Contract = Contract {
+    command: "check",
     accepts: Accepts::Any,
     own_file_only: false,
-    core_text: false,
+    core_text: true,
     access: Access::Write,
     product: Product::Nothing,
 };
@@ -219,7 +219,8 @@ pub const PROFILE: Contract = Contract {
     product: Product::Nothing,
 };
 
-pub const DIAGNOSTICS: Contract = Contract {
+/// What `wonder`'s one SUBJECT takes where a query's own contract says nothing narrower, which its help is read off ([`Contract::query_help`]).
+pub const WONDER: Contract = Contract {
     command: "wonder",
     accepts: Accepts::Any,
     own_file_only: false,
@@ -358,10 +359,9 @@ impl Mode {
             Mode::Curate { .. } => &CURATE,
             Mode::Pin { .. } => &PIN,
             Mode::New { .. } => &NEW,
-            Mode::Lint { .. } => &LINT,
+            Mode::Check { .. } => &CHECK,
             Mode::Format { .. } => &FORMAT,
             Mode::Wonder { query, .. } => match query {
-                Query::Check => &DIAGNOSTICS,
                 Query::Tests => &TESTS,
                 Query::Stage(name) if Stage::of_a_unit(name) => &STAGE_OF_A_UNIT,
                 Query::Stage(_) => &STAGE,
@@ -381,7 +381,7 @@ impl Mode {
         }
     }
 
-    /// The argument the contract resolves: the subject, for a command that takes one — for `format` and `lint`, the first of their subjects, each of which is admitted alone the same way.
+    /// The argument the contract resolves: the subject, for a command that takes one — for `format` and `check`, the first of their subjects, each of which is admitted alone the same way.
     pub fn subject(&self) -> Option<&str> {
         match self {
             Mode::Run { subject, .. }
@@ -394,7 +394,7 @@ impl Mode {
                 ..
             } => Some(place.subject()),
             Mode::Wonder { subject, .. } => subject.as_deref(),
-            Mode::Format { subjects, .. } | Mode::Lint { subjects, .. } => {
+            Mode::Format { subjects, .. } | Mode::Check { subjects, .. } => {
                 subjects.first().map(String::as_str)
             }
             // A directory to create is an argument, and no subject. So is a filed stream to read.
@@ -406,15 +406,16 @@ impl Mode {
     /// Whether the command was told standard input is Core text — `false` for a command that reads none.
     pub fn core(&self) -> bool {
         match self {
-            Mode::Wonder { core, .. } | Mode::Format { core, .. } => core.core,
+            Mode::Wonder { core, .. } | Mode::Format { core, .. } | Mode::Check { core, .. } => {
+                core.core
+            }
             Mode::Run { .. }
             | Mode::Compile { .. }
             | Mode::Document { .. }
             | Mode::Test { .. }
             | Mode::Curate { .. }
             | Mode::Pin { .. }
-            | Mode::New { .. }
-            | Mode::Lint { .. } => false,
+            | Mode::New { .. } => false,
             Mode::Profile { .. } => false,
         }
     }
@@ -435,7 +436,7 @@ impl Mode {
             | Mode::Curate { .. }
             | Mode::New { .. }
             | Mode::Pin { .. }
-            | Mode::Lint { .. }
+            | Mode::Check { .. }
             | Mode::Format { .. }
             | Mode::Wonder { .. } => None,
             Mode::Profile { .. } => None,
@@ -462,7 +463,7 @@ impl Mode {
             | Mode::Compile { elaboration, .. }
             | Mode::Document { elaboration, .. }
             | Mode::Test { elaboration, .. }
-            | Mode::Lint { elaboration, .. }
+            | Mode::Check { elaboration, .. }
             | Mode::Wonder { elaboration, .. } => Some(elaboration),
             Mode::Curate { .. } | Mode::New { .. } | Mode::Pin { .. } | Mode::Format { .. } => None,
             Mode::Profile { .. } => None,
@@ -479,9 +480,9 @@ pub enum Rewritten {
 }
 
 impl Contract {
-    /// A `wonder` query's help: what it answers, and what no subject is for it where that is not what it is for the check, whose contract ([`DIAGNOSTICS`]) the one SUBJECT's help is read off.
+    /// A `wonder` query's help: what it answers, and what no subject is for it where that is not what it is for the command's one SUBJECT, whose help is read off [`WONDER`].
     pub fn query_help(&self, answers: &str) -> String {
-        match self.no_subject() == DIAGNOSTICS.no_subject() {
+        match self.no_subject() == WONDER.no_subject() {
             true => answers.to_string(),
             false => format!("{answers}; with no subject, {}", self.no_subject()),
         }
@@ -559,10 +560,10 @@ impl Contract {
             (false, WrittenIn::CoreText) => Err(Refused::of("core text")
                 .stating(format_args!("`{}` reads no Core text", self.command))
                 .stating(format_args!(
-                    "a `.{}` file is Core text, which `wonder` checks and `format` formats",
+                    "a `.{}` file is Core text, which `check` checks and `format` formats",
                     WrittenIn::CoreText.extension()
                 ))
-                .trying(format!("curios wonder {}", path.display()))
+                .trying(format!("curios check {}", path.display()))
                 .about_path(&path)),
             _ => Ok(path),
         }

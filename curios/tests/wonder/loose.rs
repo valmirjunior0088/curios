@@ -7,13 +7,17 @@ use {super::test_support::*, std::fs};
 fn a_file_is_placed_in_its_unit() {
     let root = project("placed");
 
-    let executable = curios(&root, &["wonder", "app.crs"], "");
+    let executable = curios(&root, &["check", "app.crs"], "");
     assert!(executable.status.success());
     assert_eq!(stdout(&executable), "", "the executable sees its library");
 
     write(&root, "util.crs", "pub let word : /std/Str = 1;\n");
-    let module = curios(&root, &["wonder", "util.crs"], "");
-    assert!(module.status.success(), "an error is still an answer");
+    let module = curios(&root, &["check", "util.crs"], "");
+    assert_eq!(
+        module.status.code(),
+        Some(1),
+        "an error is reported, and exits as a refusal"
+    );
     let text = stdout(&module);
     assert!(text.contains("type mismatch"), "{text}");
     assert!(text.contains("util.crs:1:27"), "{text}");
@@ -25,8 +29,8 @@ fn a_file_no_mod_declares_is_checked_on_its_own() {
     let root = project("undeclared");
     write(&root, "stray.crs", "pub let w : /std/Str = 1;\n");
 
-    let cold = curios(&root, &["wonder", "stray.crs"], "");
-    assert!(cold.status.success());
+    let cold = curios(&root, &["check", "stray.crs"], "");
+    assert_eq!(cold.status.code(), Some(1));
     let text = stdout(&cold);
     assert!(
         text.starts_with("type mismatch"),
@@ -41,11 +45,11 @@ fn a_file_no_mod_declares_is_checked_on_its_own() {
         "{}",
         String::from_utf8_lossy(&built.stderr)
     );
-    let warm = curios(&root, &["wonder", "stray.crs"], "");
+    let warm = curios(&root, &["check", "stray.crs"], "");
     assert_eq!(stdout(&warm), text);
 
     write(&root, "lib.crs", "pub mod util;\npub mod stray;\n");
-    let declared = curios(&root, &["wonder", "stray.crs"], "");
+    let declared = curios(&root, &["check", "stray.crs"], "");
     assert!(
         stdout(&declared).contains("stray.crs:1:24"),
         "its own error, read as the library's: {}",
@@ -60,8 +64,8 @@ fn a_module_on_standard_input_is_checked_as_a_unit_of_its_own() {
     fs::create_dir_all(&root).unwrap();
     let module = "pub let w : /std/Str = 1;\n";
 
-    let answered = curios(&root, &["wonder", "-"], module);
-    assert!(answered.status.success());
+    let answered = curios(&root, &["check", "-"], module);
+    assert_eq!(answered.status.code(), Some(1));
     let text = stdout(&answered);
     assert!(text.contains("└─ [error] <stdin>:1:24"), "{text}");
 
@@ -122,8 +126,8 @@ fn an_entry_of_declarations_alone_is_refused_for_its_term_by_every_reader() {
     write(&root, "app.crs", "pub let w : /std/Str = \"a\";\n");
     let refusal = "a program closes with one term, the description it performs, and this text ends before one";
 
-    let checked = curios(&root, &["wonder", "app.crs"], "");
-    assert!(checked.status.success());
+    let checked = curios(&root, &["check", "app.crs"], "");
+    assert_eq!(checked.status.code(), Some(1));
     let answered = stdout(&checked);
     assert!(answered.contains(refusal), "{answered}");
     assert!(answered.contains("app.crs:2:1"), "{answered}");
@@ -144,7 +148,7 @@ fn a_module_file_whose_stem_is_no_name_is_refused_for_it() {
     write(&root, "myfile.crs", module);
 
     for command in [
-        &["wonder", "my-file.crs"][..],
+        &["check", "my-file.crs"][..],
         &["test", "my-file.crs"],
         &["wonder", "--name", "/std/Nat/succ", "my-file.crs"],
     ] {
@@ -158,6 +162,6 @@ fn a_module_file_whose_stem_is_no_name_is_refused_for_it() {
         );
     }
 
-    let named = stdout(&curios(&root, &["wonder", "myfile.crs"], ""));
+    let named = stdout(&curios(&root, &["check", "myfile.crs"], ""));
     assert_eq!(named, "");
 }

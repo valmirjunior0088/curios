@@ -19,7 +19,7 @@ What a text is written in is its name's: a file ending in `.crsc` is Core text a
 
 - **A meaning per command for one argument**, the inconsistency itself; **a manifest always required**, which a heredoc probe cannot afford.
 - **Membership by location**, as Go and Agda decide it, which lets a scratch file beside a package acquire its scope; **running a module's owning program when a module is named**, which executes something nobody asked for.
-- **Narrowing `lint` or a question to the named file alone**: elaboration withholds a declaration's diagnostics when something it depends on is refused, so a file-only answer could be falsely clean.
+- **Narrowing `check` or a question to the named file alone**: elaboration withholds a declaration's diagnostics when something it depends on is refused, so a file-only answer could be falsely clean.
 - **Every flag global, refused at run time where unread**, which brings back tracking which flags were read; **git's `-C DIR`**, a second spelling of `--manifest`.
 - **Writing a loose program's executable to `./<stem>` by default**: nothing is filed where the command was not pointed, and standard input has no stem.
 - **A note where a package's directory holds a file no unit declares**, rust-analyzer's unlinked-file warning: it is said by every command that takes such a file, whether or not anything went wrong, and the subject line already tells a file taken on its own from a unit.

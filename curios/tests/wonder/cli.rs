@@ -80,25 +80,26 @@ fn a_reader_that_leaves_early_ends_the_question_with_nothing_said() {
     assert!(!said.contains("panicked"), "{said}");
 }
 
-/// A goal on standard input is an answer: located, rendered as `run` reports it, on stdout, exit 0.
+/// A goal on standard input is reported: located, rendered as `run` reports it, on stdout, and the incomplete state, exit 2.
 #[test]
-fn a_goal_is_answered_on_stdout_with_exit_zero() {
+fn a_goal_is_reported_on_stdout_with_exit_two() {
     let root = temporary("stdin");
     fs::create_dir_all(&root).unwrap();
 
     let answered = curios(
         &root,
-        &["wonder", "-"],
-        "let m : /std/Nat = ?;\n/std/print(\"\")\n",
+        &["check", "-"],
+        "let _m : /std/Nat = ?;\n/std/print(\"\")\n",
     );
 
-    assert!(
-        answered.status.success(),
+    assert_eq!(
+        answered.status.code(),
+        Some(2),
         "{}",
         String::from_utf8_lossy(&answered.stderr)
     );
     let text = stdout(&answered);
-    assert!(text.contains("└─ [goal] <stdin>:1:20"), "{text}");
+    assert!(text.contains("└─ [goal] <stdin>:1:21"), "{text}");
     // The check is narrated beside the answer, closed by what stopped it.
     let narrated = String::from_utf8_lossy(&answered.stderr);
     assert!(
@@ -114,11 +115,11 @@ fn the_check_says_nothing_of_a_texts_layout() {
     write(&root, "lib.crs", "pub   mod util;\n");
     write(&root, "app.crs", "/std/print(  /app/util/word)\n");
 
-    let entire = curios(&root, &["wonder"], "");
+    let entire = curios(&root, &["check"], "");
     assert!(entire.status.success());
     assert_eq!(stdout(&entire), "");
 
-    let read = curios(&root, &["wonder", "-"], "/std/print(  \"\")\n");
+    let read = curios(&root, &["check", "-"], "/std/print(  \"\")\n");
     assert!(read.status.success());
     assert_eq!(stdout(&read), "");
 }
@@ -128,7 +129,7 @@ fn the_check_says_nothing_of_a_texts_layout() {
 fn a_bare_manifest_override_names_the_working_directory() {
     let root = project("manifest-override");
 
-    let answered = curios(&root, &["wonder", "--manifest", "curios.toml"], "");
+    let answered = curios(&root, &["check", "--manifest", "curios.toml"], "");
 
     assert!(
         answered.status.success(),
@@ -188,7 +189,7 @@ fn a_place_answers_the_name_written_there() {
 #[test]
 fn a_place_answers_over_a_library_a_check_filed() {
     let root = project("at-filed");
-    let checked = curios(&root, &["wonder"], "");
+    let checked = curios(&root, &["check"], "");
     assert!(
         checked.status.success(),
         "{}",
@@ -273,7 +274,7 @@ fn a_refusals_place_is_asked_as_it_was_printed() {
         "use /std/{Nat, Str};\n\npub let count: Nat = 1;\n\npub let shown: Str = count;\n",
     );
 
-    let checked = stdout(&curios(&root, &["wonder"], ""));
+    let checked = stdout(&curios(&root, &["check"], ""));
     let place = checked
         .lines()
         .find_map(|line| line.strip_prefix("└─ [error] "))
@@ -761,16 +762,16 @@ fn an_unreached_stage_leaves_stdout_empty() {
     assert!(String::from_utf8_lossy(&refused.stderr).contains("type mismatch"));
 }
 
-/// A question stopped before it could answer exits as a build would, so written goals alone are the incomplete state that exits 2 — for `--stage`, `--footprint` and `--tests` alike — while the check, whose answer the goals are, exits 0.
+/// A question stopped before it could answer exits as a build would, so written goals alone are the incomplete state that exits 2 — for `--stage`, `--footprint` and `--tests` alike — and so does `check`, which reports them.
 #[test]
 fn a_question_stopped_by_goals_alone_exits_two() {
     let root = temporary("goals");
     fs::create_dir_all(&root).unwrap();
-    let program = "let n : /std/Nat = ?;\n/std/print(\"\")\n";
+    let program = "let _n : /std/Nat = ?;\n/std/print(\"\")\n";
 
     for query in [
         &["wonder", "--stage", "wasm", "-"][..],
-        &["wonder", "--name", "/n", "--footprint", "-"],
+        &["wonder", "--name", "/_n", "--footprint", "-"],
         &["wonder", "--tests", "-"],
     ] {
         let stopped = curios(&root, query, program);
@@ -784,8 +785,8 @@ fn a_question_stopped_by_goals_alone_exits_two() {
         assert!(stopped.stdout.is_empty(), "{}", query.join(" "));
     }
 
-    let answered = curios(&root, &["wonder", "-"], program);
-    assert_eq!(answered.status.code(), Some(0));
+    let answered = curios(&root, &["check", "-"], program);
+    assert_eq!(answered.status.code(), Some(2));
 }
 
 /// A check of a package compiles its library twice where an executable stands on it, with its tests, which the check reads, and as the executable is built over it: the transcript says which the first is, so the two compiles of one unit are told apart.
@@ -793,7 +794,7 @@ fn a_question_stopped_by_goals_alone_exits_two() {
 fn a_library_checked_with_its_tests_is_narrated_as_that() {
     let root = project("tested-narrated");
 
-    let checked = curios(&root, &["wonder"], "");
+    let checked = curios(&root, &["check"], "");
 
     let narrated = String::from_utf8_lossy(&checked.stderr);
     assert!(checked.status.success(), "{narrated}");
@@ -815,6 +816,7 @@ fn a_library_checked_with_its_tests_is_narrated_as_that() {
             "Stored `/app`",
             "Checking `app`",
             "Checked `app`",
+            "0 lints",
         ],
         "{narrated}"
     );

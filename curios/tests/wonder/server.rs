@@ -858,7 +858,7 @@ fn a_module_of_the_standard_library_is_answered_against_the_prelude_it_is_part_o
 
     let answered = curios(
         module.parent().unwrap(),
-        &["wonder", module.to_str().unwrap()],
+        &["check", module.to_str().unwrap()],
         "",
     );
 
@@ -876,12 +876,13 @@ fn diagnostics_on_a_broken_file_lists_every_refusal() {
 
     let answered = curios(
         &root,
-        &["wonder", "-"],
+        &["check", "-"],
         "let _a : /std/Nat = true;\nlet _b : /std/Nat = _a;\nlet _c : /std/Nat = false;\n/std/print(\"\")\n",
     );
 
-    assert!(
-        answered.status.success(),
+    assert_eq!(
+        answered.status.code(),
+        Some(1),
         "{}",
         String::from_utf8_lossy(&answered.stderr)
     );
@@ -1022,8 +1023,8 @@ fn a_loose_file_and_standard_input_leave_nothing_generated() {
     write(&root, "scratch.crs", program);
 
     for arguments in [
-        &["wonder", "scratch.crs"][..],
-        &["wonder", "-"],
+        &["check", "scratch.crs"][..],
+        &["check", "-"],
         &[
             "wonder",
             "--name",
@@ -1040,9 +1041,6 @@ fn a_loose_file_and_standard_input_leave_nothing_generated() {
             String::from_utf8_lossy(&asked.stderr)
         );
     }
-    let linted = curios(&root, &["lint", "scratch.crs"], "");
-    assert_eq!(linted.status.code(), Some(0), "{}", stdout(&linted));
-
     assert!(
         !root.join(".curios").exists(),
         "a question with no project wrote beside its file"

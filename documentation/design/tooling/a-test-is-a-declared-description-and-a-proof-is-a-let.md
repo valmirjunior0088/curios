@@ -46,4 +46,4 @@ A test lowers to a definition of kind `Test` and type `() -> /std/Test({})`, and
 - **A test-only module**, `test mod`: a module is a namespace, and what it holds is no property of it.
 - **Leaving out what only tests reach**, by liveness: whether a build checks a declaration would follow from who reads it.
 - **A test named within its subtree**, as a private definition is: a reference from anything a build holds would resolve in a test compilation and not in a build.
-- **A filter in the unit**, its tests outside the selection left out as a build leaves every test out: a command-line argument would be part of what a unit is, the cabinet would hold one tested unit per filter, and a filtered run would share none with `wonder` and `lint`.
+- **A filter in the unit**, its tests outside the selection left out as a build leaves every test out: a command-line argument would be part of what a unit is, the cabinet would hold one tested unit per filter, and a filtered run would share none with `wonder` and `check`.

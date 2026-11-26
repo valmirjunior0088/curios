@@ -29,4 +29,4 @@
 - **Every other layout choice as a setting**: each has one answer, and a parameter with one setting is scaffolding.
 - **Tabs**: a tab's width is the reader's, so the formatter could hold no line within `line-width`.
 - **Any indentation but two and four**: one no law is held at, where two already serves every page four is too wide for.
-- **`wonder`'s check saying which texts are not canonical**: a text's layout is no finding of its compilation, so the check would hold a second answer to `format --check`'s question, one no exit code turns on, the server would not publish and a probe typed on standard input would carry nearly every time.
+- **`check` saying which texts are not canonical**: a text's layout is no finding of its compilation, so the check would hold a second answer to `format --check`'s question, one no exit code turns on, the server would not publish and a probe typed on standard input would carry nearly every time.

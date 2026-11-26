@@ -1,6 +1,6 @@
 # curios-wonder
 
-What the compiler knows about a program, handed out as records: the `wonder` engine, which runs the compiler as far as a question needs and reads the answer off what it already decided, and the two transports that ask it — the command line (`ask`) and the language server (`server`) — with the `lint` gate that turns one of those answers into an exit code. What each query means at the command line belongs to [usage.md](../documentation/usage.md)'s `wonder` and `lint` sections; what a record carries, and how a transport converts it, belongs to the crate rustdoc.
+What the compiler knows about a program, handed out as records: the `wonder` engine, which runs the compiler as far as a question needs and reads the answer off what it already decided, and the two transports that ask it — the command line (`ask`) and the language server (`server`) — with `check`, the command that turns what they report into an exit code. What each query means at the command line belongs to [usage.md](../documentation/usage.md)'s `wonder` and `check` sections; what a record carries, and how a transport converts it, belongs to the crate rustdoc.
 
 ## Design
 

@@ -256,18 +256,17 @@ pub let f(X: Type, c: Code(X), x: X) -> X =
 test f_is_declared = /std/Test/assert(\"it holds\", true);
 ";
 
-/// Every command that runs, builds, tests, documents, checks or asks about the package, and whether it exits 0 on a refusal, as a question answered with a list of refusals does.
-const COMMANDS: &[(&[&str], bool)] = &[
-    (&["run"], false),
-    (&["compile"], false),
-    (&["compile", "--target", "browser"], false),
-    (&["test"], false),
-    (&["lint"], false),
-    (&["document"], false),
-    (&["wonder"], true),
-    (&["wonder", "--tests"], false),
-    (&["wonder", "--name", "/app/f", "--footprint"], false),
-    (&["wonder", "--stage", "wasm"], false),
+/// Every command that runs, builds, tests, documents, checks or asks about the package: each exits nonzero on a refusal, a check's as much as a build's.
+const COMMANDS: &[&[&str]] = &[
+    &["run"],
+    &["compile"],
+    &["compile", "--target", "browser"],
+    &["test"],
+    &["check"],
+    &["document"],
+    &["wonder", "--tests"],
+    &["wonder", "--name", "/app/f", "--footprint"],
+    &["wonder", "--stage", "wasm"],
 ];
 
 /// A cabinet holds what every command filed of a package while its dependency let `f` check, and the dependency's edit leaves `f`'s text as it was and refuses it: every command is refused, none answered from what the cabinet holds for the text it was filed for.
@@ -297,7 +296,7 @@ fn a_dependency_edit_that_refuses_a_declaration_stops_every_command_over_a_warm_
     write(&root, "lib.crs", ON_CODE);
     write(&root, "app.crs", "/std/print(\"ran\")\n");
 
-    for (command, _) in COMMANDS {
+    for command in COMMANDS {
         let warmed = curios(&root, command);
         assert!(
             warmed.status.success(),
@@ -312,14 +311,14 @@ fn a_dependency_edit_that_refuses_a_declaration_stops_every_command_over_a_warm_
     );
 
     write(&dep, "lib.crs", &code("/std/Bool"));
-    for (command, answers) in COMMANDS {
+    for command in COMMANDS {
         let refused = curios(&root, command);
         let said = format!(
             "{}{}",
             String::from_utf8_lossy(&refused.stdout),
             String::from_utf8_lossy(&refused.stderr)
         );
-        assert_eq!(refused.status.success(), *answers, "{command:?}: {said}");
+        assert!(!refused.status.success(), "{command:?}: {said}");
         // `dep` is reused once the first command after the edit has filed it; `app`'s library and its payload never are, which is what refuses each command again.
         assert!(
             said.contains("wanted: `/std/ops/Add(/std/Bool)`"),

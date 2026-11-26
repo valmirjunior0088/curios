@@ -57,12 +57,12 @@ run = [
     ["cargo", "run", "--quiet", "--package", "curios", "--", "format", "--check", "{.compiler.variables.sources}"],
 ]
 
-# One `curios lint` over every program, which takes several subjects into one report; `programs/` stays no package, since the corpus is loose by design, compiled against `/std` alone.
-[lint.curios-lint]
-description = "Fail on a lint in the programs the tree ships, as this tree's `curios lint` reports each, loose as it places a file no unit declares: a lint is exact and always on, so one is fixed in the program rather than excused"
+# One `curios check` over every program, which takes several subjects into one report; `programs/` stays no package, since the corpus is loose by design, compiled against `/std` alone.
+[lint.curios-check]
+description = "Fail on a lint in the programs the tree ships, as this tree's `curios check` reports each, loose as it places a file no unit declares: a lint is exact and always on, so one is fixed in the program rather than excused"
 consumes = [".compiler.launcher.produces.binary"]
 run = [
-    ["cargo", "run", "--quiet", "--package", "curios", "--", "lint", "{.compiler.variables.programs}"],
+    ["cargo", "run", "--quiet", "--package", "curios", "--", "check", "{.compiler.variables.programs}"],
 ]
 
 [lint.clippy]

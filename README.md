@@ -42,7 +42,7 @@ pub let single: Vec(Nat, 1) =
     empty;
 ```
 
-Then ask what it makes of that, with `curios wonder vector.crs`:
+Then ask what it makes of that, with `curios check vector.crs`:
 
 ```text
 type mismatch

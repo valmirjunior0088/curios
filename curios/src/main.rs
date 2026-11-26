@@ -43,9 +43,9 @@ use {
     curios_profile::{CountingAllocator, Destination, fold_at, install},
     curios_surface::Formatted,
     curios_wonder::{
-        Linted, Scope, Staged, answer, lint, serve, std_documentation, wonder_at, wonder_classes,
-        wonder_diagnostics, wonder_false, wonder_footprint, wonder_name, wonder_named_stage,
-        wonder_stage, wonder_tests, wonder_witnesses,
+        Checked, Scope, Staged, answer, check, serve, std_documentation, wonder_at, wonder_classes,
+        wonder_false, wonder_footprint, wonder_name, wonder_named_stage, wonder_stage,
+        wonder_tests, wonder_witnesses,
     },
     std::{
         collections::BTreeSet,
@@ -89,9 +89,9 @@ enum Failure {
     Concluded(Concluded),
 }
 
-/// How a command that ran to its end ends the process where something it found failed, having reported what itself: a test run its failing tests, `lint` its findings, `pin --check` what it would write. A running program's own exit code passes through untouched, so 0 always means "compiled, ran, and exited 0".
+/// How a command that ran to its end ends the process where something it found failed, having reported what itself: a test run its failing tests, `check` its findings, `pin --check` what it would write. A running program's own exit code passes through untouched, so 0 always means "compiled, ran, and exited 0".
 enum Concluded {
-    /// Exit 2: written goals and nothing worse, as `lint` finds them.
+    /// Exit 2: written goals and nothing worse, as `check` finds them.
     Incomplete,
     /// Exit 1: a test that did not pass, a lint, a row `pin --check` would change.
     Failed,
@@ -382,9 +382,10 @@ fn dispatch() -> Result<(), Failure> {
             }
         }
         // The tri-state `run` exits with, read off what was reported: a lint is as much a finding as an error, and a goal batch alone is the incomplete state it is everywhere else.
-        Mode::Lint {
+        Mode::Check {
             subjects,
             elaboration,
+            ..
         } => {
             let directory = here()?;
             // No subject is the package entire, as for every command that takes one; several are each admitted before any is compiled, so a refusal compiles nothing.
@@ -403,7 +404,7 @@ fn dispatch() -> Result<(), Failure> {
                 .iter()
                 .filter_map(|selection| selection.root().map(Path::to_path_buf))
                 .collect::<BTreeSet<_>>();
-            let linted = lint(
+            let checked = check(
                 elaboration.budget,
                 selections,
                 &mut Asking::checking(answered.clone()),
@@ -411,11 +412,11 @@ fn dispatch() -> Result<(), Failure> {
             for root in &roots {
                 contract.access.collect(Some(root), cabinet);
             }
-            let Linted {
+            let Checked {
                 lints,
                 errors,
                 goals,
-            } = linted?;
+            } = checked?;
             // The count of lints always, since it is what the command is asked for, and of what else was reported where anything was.
             let counted = |count: usize, one: &str| match count {
                 1 => format!("1 {one}"),
@@ -868,11 +869,6 @@ fn dispatch() -> Result<(), Failure> {
             query, elaboration, ..
         } => {
             match query {
-                Query::Check => wonder_diagnostics(
-                    elaboration.budget,
-                    contract.admit_any(subject, manifest, &here()?, cabinet, &stdin)?,
-                    &mut Asking::checking(answered.clone()),
-                )?,
                 Query::Tests => wonder_tests(
                     elaboration.budget,
                     contract.admit_any(subject, manifest, &here()?, cabinet, &stdin)?,

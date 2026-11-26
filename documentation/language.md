@@ -58,7 +58,7 @@ Every comma-separated list — parameters, arguments, tuple and structure fields
 
 An identifier is a non-empty run of alphanumeric characters and `_` whose first is alphabetic or `_`: a character is alphabetic where the Unicode Character Database the toolchain pins calls it `Alphabetic`, and alphanumeric where it is alphabetic or a number, of the general category `Nd`, `Nl` or `No` ([`curios-unicode`](../curios-unicode/README.md)). A word that begins with a digit is a number wherever a term stands, so it is no name: `let 5 = 3;` is refused.
 
-A declaration whose name begins with `_` is kept unused on purpose: [`curios lint`](usage.md#lint) never reports it, and what it reads counts as used. `_` alone is a binder that names nothing, and `@_` is its implicit form, for a slot nothing reads. A binder has no kept form: a binder with any other name is reported where nothing reads it, whatever it begins with.
+A declaration whose name begins with `_` is kept unused on purpose: [`curios check`](usage.md#check) never reports it, and what it reads counts as used. `_` alone is a binder that names nothing, and `@_` is its implicit form, for a slot nothing reads. A binder has no kept form: a binder with any other name is reported where nothing reads it, whatever it begins with.
 
 These words are reserved, and no path segment may be one:
 
@@ -870,7 +870,7 @@ pub let or_zero(option: Option(Nat)) -> Nat =
     match option | some(value) => value | _ => 0 end;
 ```
 
-After arms that each take the scrutinee itself apart — constructors, `true` and `false`, `Nat` shapes, runs under `[` and `0x[` — a final arm may bind a name, which names the value those arms leave: under a head that is an expression, `match n + 1 | 0 => … | m => … end`, it is that value's one name. A name that is a constructor of the family the arms take apart is refused there, since it binds every value they leave where the case was likely meant: `| none =>` after `| some(x) =>` is written `| none() =>`. A literal's dispatch names no constructor, so over one any name binds. Under a head that is itself a name, the final arm's name only renames it, which `renaming-binder` reports ([`curios lint`](usage.md#lint)). A lone `_` with no other arm binds rather than matches.
+After arms that each take the scrutinee itself apart — constructors, `true` and `false`, `Nat` shapes, runs under `[` and `0x[` — a final arm may bind a name, which names the value those arms leave: under a head that is an expression, `match n + 1 | 0 => … | m => … end`, it is that value's one name. A name that is a constructor of the family the arms take apart is refused there, since it binds every value they leave where the case was likely meant: `| none =>` after `| some(x) =>` is written `| none() =>`. A literal's dispatch names no constructor, so over one any name binds. Under a head that is itself a name, the final arm's name only renames it, which `renaming-binder` reports ([`curios check`](usage.md#check)). A lone `_` with no other arm binds rather than matches.
 
 ### A match with no head
 

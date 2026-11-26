@@ -45,9 +45,9 @@ pub fn authored() -> Vec<PathBuf> {
     sources
 }
 
-/// **The standard library lints clean**, lowered with its tests, as `curios lint` lints a package: a declaration only a test reads is read, and an import only a test reads is used.
+/// **The standard library lints clean**, lowered with its tests, as `curios check` checks a package: a declaration only a test reads is read, and an import only a test reads is used.
 ///
-/// The lints are exact and always on, so the honest test of them is the largest corpus in the tree: an import nothing resolves through, a binder nothing reads or a private declaration nothing reaches in `/std` is a finding to fix there, not a rule to relax. The lowering's lints are this lowering's, and the binder lints are what the build's elaboration filed with each declaration's record, the test modules', which the build does not elaborate, being `tests/std.rs`'s to hold (`every_test_module_lints_clean`). Lowering and restoring are the whole cost, so this belongs in the ordinary suite. A failure renders each lint as `curios lint` would.
+/// The lints are exact and always on, so the honest test of them is the largest corpus in the tree: an import nothing resolves through, a binder nothing reads or a private declaration nothing reaches in `/std` is a finding to fix there, not a rule to relax. The lowering's lints are this lowering's, and the binder lints are what the build's elaboration filed with each declaration's record, the test modules', which the build does not elaborate, being `tests/std.rs`'s to hold (`every_test_module_lints_clean`). Lowering and restoring are the whole cost, so this belongs in the ordinary suite. A failure renders each lint as `curios check` would.
 #[test]
 fn every_authored_source_is_lint_clean() {
     // Both roots, in the order the build script folds them: `/std`'s imports resolve only against a lowered `/sys`, and an unresolved import is not a lint but a lowering failure.

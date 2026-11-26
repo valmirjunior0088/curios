@@ -43,7 +43,7 @@ curios-prelude-build = { workspace = true }
 curios-surface = { workspace = true }
 # The scratch cabinet the claims file what they compiled into.
 curios-verdict = { workspace = true }
-# The diagnostics `curios lint` reports of a package, which the test modules are held lint clean by.
+# The diagnostics `curios check` reports of a package, which the test modules are held lint clean by.
 curios-wonder = { workspace = true }
 # The conformance cases `/std/Str/graphemes` is held to, and the lookups `/std/Char`'s answers are compared with.
 curios-unicode = { workspace = true, features = ["test-support"] }

@@ -10,7 +10,7 @@ use {
     std::fmt,
 };
 
-/// The kinds, each named as `curios lint` documents it.
+/// The kinds, each named as `curios check` documents it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[curios_archive::archived]
 pub enum LintKind {
