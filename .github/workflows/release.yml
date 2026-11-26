@@ -139,7 +139,7 @@ jobs:
       - name: Archive grammars
         run: tar -czf .artifacts/curios-grammars.tar.gz -C editors/textmate curios.tmLanguage.json curios-core.tmLanguage.json classes.json
 
-      # The installer's version is baked in here rather than discovered at run time, so the script a release ships installs that release's binary and a pinned URL stays pinned. The recipe renders the template to a fresh file under xtask/.artifacts rather than editing it in place: what ships is a build product, never a mutated checkout.
+      # The installer's version is baked in here rather than discovered at run time, so the script a release ships installs that release's binary and a pinned URL stays pinned. The recipe renders the template to a fresh file under .artifacts, beside the assets it is published with, rather than editing it in place: what ships is a build product, never a mutated checkout.
       - name: Prepare installer
         run: |
           (cd .artifacts && sha256sum curios-linux-x86_64 curios-linux-aarch64 curios-macos-aarch64 > checksums.txt)
@@ -159,4 +159,4 @@ jobs:
             .artifacts/curios-docs.tar.gz \
             .artifacts/curios-grammars.tar.gz \
             .artifacts/checksums.txt \
-            xtask/.artifacts/install.sh
+            .artifacts/install.sh

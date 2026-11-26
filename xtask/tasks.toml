@@ -157,8 +157,8 @@ run = [
 
 # The version is baked in when the script is rendered rather than discovered when it runs, so the script a release ships installs that release's binary and a pinned URL stays pinned; what ships is a build product, never a mutated checkout.
 [installer]
-what = "Render the install script a release attaches, its version baked in, under xtask/.artifacts/install.sh"
-produces.script = "xtask/.artifacts/install.sh"
+what = "Render the install script a release attaches, its version baked in, under .artifacts/install.sh beside the release's other assets"
+produces.script = ".artifacts/install.sh"
 run = [
     { write = "{.installer.produces.script}", template = "xtask/tasks/install.sh" },
 ]
