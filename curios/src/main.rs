@@ -34,6 +34,7 @@ use {
     curios_common::{Code, Kind, OsError, Report, Source, SourceName, Style},
     curios_cranelift::module_exports,
     curios_document::write_documentation,
+    curios_module::SYNTAX,
     curios_native::{Bundle, Compiled, GuestMap, OsHost, Stop, start_engine},
     curios_package::{
         Entry, Fetch, Pinning, Products, Refused, Repoint, Spelling, Target, Transport, curate,
@@ -798,6 +799,7 @@ fn dispatch() -> Result<(), Failure> {
                             &Source::named(SourceName::stdin(), supplied.text.as_str()),
                             supplied.written,
                             format,
+                            &SYNTAX,
                         )?;
 
                         match (check, formatted) {
@@ -825,8 +827,8 @@ fn dispatch() -> Result<(), Failure> {
                             .filter(|path| rewritten.insert(path.clone()))
                         {
                             let subject = Subject::File(PathBuf::from(from_here(&path)));
-                            let formatted =
-                                Formatted::from_path(&path, format).inspect_err(|_| {
+                            let formatted = Formatted::from_path(&path, format, &SYNTAX)
+                                .inspect_err(|_| {
                                     // A file that cannot be formatted is refused, its tree said ahead of why.
                                     let mut tree = Tree::of(&subject, None);
                                     tree.stood(Step::Format, true, troubled("refused"), Vec::new());

@@ -26,7 +26,7 @@ use {
     },
     crate::{ELIDED, Entrypoint, FlatMatch, Module, Writer, op_precedence, written_intrinsic},
     curios_abi::{NEVER, ResultShape, WireResults, WireReturn, WireSignature, WireType},
-    curios_common::{Keyword, Plicity, recurse},
+    curios_common::{Keyword, Plicity, SyntaxRegistry, recurse},
     curios_num::Natural,
     curios_parse::unseen,
     curios_print::{
@@ -581,8 +581,10 @@ fn format_radix(n: &Natural, radix: Radix) -> String {
     }
 }
 
-/// `/sys`'s own trees as they stand: each operand as it is, and each declaration of `/sys` a form names by the path a reader writes it by ([`intrinsic_path`]) — `/sys/Bool`, a carrier by the name `/sys` hoists it to. Absolute, because `/sys` imports nothing, so it is the name a page resolves to link it and spells below `/sys` to show it.
-struct Quoted;
+/// `/sys`'s own trees as they stand: each operand as it is, and each declaration of `/sys` a form names by the path a reader writes it by ([`intrinsic_path`]) under the root `sys` — `/sys/Bool`, a carrier by the name `/sys` hoists it to. Absolute, because `/sys` imports nothing, so it is the name a page resolves to link it and spells below `/sys` to show it.
+struct Quoted {
+    sys: &'static str,
+}
 
 impl<D: Dialect> Writer<Term<D>, D> for Quoted {
     fn operand(&self, operand: Term<D>) -> Option<Term<D>> {
@@ -590,7 +592,7 @@ impl<D: Dialect> Writer<Term<D>, D> for Quoted {
     }
 
     fn sys(&self, path: &str) -> Option<Term<D>> {
-        Some(Subterm::Name(Name::new(true, intrinsic_path(path))).into())
+        Some(Subterm::Name(Name::new(true, intrinsic_path(self.sys, path))).into())
     }
 }
 
@@ -783,6 +785,8 @@ struct TreePrinter<D: Layout> {
     options: D::Options,
     /// How much of a match one line keeps: a file's format's, where the formatter prints, and the default everywhere else.
     flat_match: FlatMatch,
+    /// The root every intrinsic node of the tree is written under ([`Quoted`]), the one an entry is handed.
+    sys: &'static str,
 }
 
 impl<D: Layout> Clone for TreePrinter<D> {
@@ -793,17 +797,12 @@ impl<D: Layout> Clone for TreePrinter<D> {
 
 impl<D: Layout> Copy for TreePrinter<D> {}
 
-/// The printer of a program.
-const PROGRAM: TreePrinter<Program> = TreePrinter {
-    options: (),
-    flat_match: FlatMatch::DEFAULT,
-};
-
-/// The printer of a program a file is formatted as, keeping what `flat_match` says of a match on one line.
-fn program(flat_match: FlatMatch) -> TreePrinter<Program> {
+/// The printer of a program a file is formatted as, keeping what `flat_match` says of a match on one line, and writing each intrinsic under `sys`.
+fn program(flat_match: FlatMatch, sys: &'static str) -> TreePrinter<Program> {
     TreePrinter {
         options: (),
         flat_match,
+        sys,
     }
 }
 
@@ -1094,9 +1093,10 @@ impl<D: Layout> TreePrinter<D> {
         // A `/sys` declaration's body is the operation over its own parameters, the proof among them: it reads by the operator or the bare call a program writes.
         match intrinsic_form(intrinsic, true, |_| false) {
             IntrinsicForm::Handle(token) => pure(format!("Handle({token})")),
-            form => {
-                self.term(written_intrinsic(form, &Quoted).expect("a quoted form is written whole"))
-            }
+            form => self.term(
+                written_intrinsic(form, &Quoted { sys: self.sys })
+                    .expect("a quoted form is written whole"),
+            ),
         }
     }
 
@@ -2156,70 +2156,85 @@ impl<D: CoreWritten> TreePrinter<D> {
     }
 }
 
-/// The printer of Curios/Core.
-const CORE_TEXT: TreePrinter<CoreText> = TreePrinter {
-    options: (),
-    flat_match: FlatMatch::DEFAULT,
-};
-
-/// One item of a `.crsc`, as the formatter writes it, keeping what `flat_match` says of a match on one line.
-pub fn print_core_item(item: CoreItem, flat_match: FlatMatch) -> Printer {
-    TreePrinter::<CoreText> {
+/// The printer of Curios/Core, keeping what `flat_match` says of a match on one line, and writing each intrinsic under `sys`.
+fn core_text(flat_match: FlatMatch, sys: &'static str) -> TreePrinter<CoreText> {
+    TreePrinter {
         options: (),
         flat_match,
+        sys,
     }
-    .core_item(item)
 }
 
-/// The entry a `.crsc` closes with, as the formatter writes it, keeping what `flat_match` says of a match on one line.
-pub fn print_core_entry(entry: CoreEntry, flat_match: FlatMatch) -> Printer {
-    TreePrinter::<CoreText> {
-        options: (),
-        flat_match,
-    }
-    .core_entry(entry)
+/// One item of a `.crsc`, as the formatter writes it, keeping what `flat_match` says of a match on one line, each intrinsic under `sys`.
+pub fn print_core_item(item: CoreItem, flat_match: FlatMatch, sys: &'static str) -> Printer {
+    core_text(flat_match, sys).core_item(item)
 }
 
-/// A term of Curios/Core, as the formatter writes one.
-pub fn print_core_term(term: Term<CoreText>) -> Printer {
-    CORE_TEXT.term(term)
+/// The entry a `.crsc` closes with, as the formatter writes it, keeping what `flat_match` says of a match on one line, each intrinsic under `sys`.
+pub fn print_core_entry(entry: CoreEntry, flat_match: FlatMatch, sys: &'static str) -> Printer {
+    core_text(flat_match, sys).core_entry(entry)
 }
 
-/// A program's whole term, keeping what `flat_match` says of a match on one line: a body, which writes a chain as it stands.
-pub fn print_term(term: Term, flat_match: FlatMatch) -> Printer {
-    program(flat_match).body(term)
+/// A term of Curios/Core, as the formatter writes one, each intrinsic under `sys`.
+pub fn print_core_term(term: Term<CoreText>, sys: &'static str) -> Printer {
+    core_text(FlatMatch::DEFAULT, sys).term(term)
 }
 
-/// A tree of a program as it is printed back, unbounded and at the formatter's indent step: what the program's dump at its first rung shows, and what a suite reads back to hold a print to its parse. A view, as a spelled term is ([`Spelled`](crate::Spelled)), so each render builds the printer anew from the tree it borrows.
+/// A program's whole term, keeping what `flat_match` says of a match on one line, each intrinsic under `sys`: a body, which writes a chain as it stands.
+pub fn print_term(term: Term, flat_match: FlatMatch, sys: &'static str) -> Printer {
+    program(flat_match, sys).body(term)
+}
+
+/// A tree of a program as it is printed back, unbounded and at the formatter's indent step, each intrinsic under the root the registry it was asked under mounts `/sys` at: what the program's dump at its first rung shows, what a report names a row by, and what a suite reads back to hold a print to its parse. A view, as a spelled term is ([`Spelled`](crate::Spelled)), so each render builds the printer anew from the tree it borrows.
 pub struct Printed<'t, T> {
     tree: &'t T,
+    sys: &'static str,
 }
 
 impl Term {
-    /// This term as it is printed back ([`Printed`]).
-    pub fn printed(&self) -> Printed<'_, Self> {
-        Printed { tree: self }
+    /// This term as it is printed back under `syntax` ([`Printed`]).
+    pub fn printed(&self, syntax: &SyntaxRegistry) -> Printed<'_, Self> {
+        Printed {
+            tree: self,
+            sys: syntax.roots.sys,
+        }
     }
 }
 
 impl Module {
-    /// This module's items as they are printed back ([`Printed`]).
-    pub fn printed(&self) -> Printed<'_, Self> {
-        Printed { tree: self }
+    /// This module's items as they are printed back under `syntax` ([`Printed`]).
+    pub fn printed(&self, syntax: &SyntaxRegistry) -> Printed<'_, Self> {
+        Printed {
+            tree: self,
+            sys: syntax.roots.sys,
+        }
     }
 }
 
 impl Entrypoint {
-    /// This program as it is printed back ([`Printed`]): its items, then its tail on a line of its own, or its tail alone where it has none.
-    pub fn printed(&self) -> Printed<'_, Self> {
-        Printed { tree: self }
+    /// This program as it is printed back under `syntax` ([`Printed`]): its items, then its tail on a line of its own, or its tail alone where it has none.
+    pub fn printed(&self, syntax: &SyntaxRegistry) -> Printed<'_, Self> {
+        Printed {
+            tree: self,
+            sys: syntax.roots.sys,
+        }
+    }
+}
+
+impl MatchPattern {
+    /// This match-arm pattern as it is printed back under `syntax` ([`Printed`]).
+    pub fn printed(&self, syntax: &SyntaxRegistry) -> Printed<'_, Self> {
+        Printed {
+            tree: self,
+            sys: syntax.roots.sys,
+        }
     }
 }
 
 impl fmt::Display for Printed<'_, Term> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         run_printer(
-            print_term(self.tree.clone(), FlatMatch::DEFAULT),
+            print_term(self.tree.clone(), FlatMatch::DEFAULT, self.sys),
             formatter,
             4,
         )
@@ -2229,7 +2244,7 @@ impl fmt::Display for Printed<'_, Term> {
 impl fmt::Display for Printed<'_, Module> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         run_printer(
-            print_module_items(self.tree.items.clone(), FlatMatch::DEFAULT),
+            print_module_items(self.tree.items.clone(), FlatMatch::DEFAULT, self.sys),
             formatter,
             4,
         )
@@ -2239,11 +2254,11 @@ impl fmt::Display for Printed<'_, Module> {
 impl fmt::Display for Printed<'_, Entrypoint> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Entrypoint { module, tail } = self.tree.clone();
-        let tail = print_term(tail, FlatMatch::DEFAULT);
+        let tail = print_term(tail, FlatMatch::DEFAULT, self.sys);
         let printer = match module.items.is_empty() {
             true => tail,
             false => flat([
-                print_module_items(module.items, FlatMatch::DEFAULT),
+                print_module_items(module.items, FlatMatch::DEFAULT, self.sys),
                 pure("\n"),
                 tail,
             ]),
@@ -2252,34 +2267,55 @@ impl fmt::Display for Printed<'_, Entrypoint> {
     }
 }
 
-/// A program's match-arm pattern alone, as a report names a row by it.
-pub fn print_match_pattern(pattern: MatchPattern) -> Printer {
-    PROGRAM.match_pattern(pattern)
+impl fmt::Display for Printed<'_, MatchPattern> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        run_printer(
+            print_match_pattern(self.tree.clone(), self.sys),
+            formatter,
+            4,
+        )
+    }
+}
+
+/// A program's match-arm pattern alone, as a report names a row by it, each intrinsic under `sys`.
+pub fn print_match_pattern(pattern: MatchPattern, sys: &'static str) -> Printer {
+    program(FlatMatch::DEFAULT, sys).match_pattern(pattern)
 }
 
 /// A shown term, laid out as `options` say.
-pub fn print_shown(term: Term<Shown>, options: ShownOptions) -> Printer {
+pub fn print_shown(term: Term<Shown>, options: ShownOptions, sys: &'static str) -> Printer {
     TreePrinter::<Shown> {
         options,
         flat_match: FlatMatch::DEFAULT,
+        sys,
     }
     .term(term)
 }
 
 /// One item of a shown module, laid out as `options` say.
-pub fn print_shown_item(item: CoreItem<Shown>, options: ShownOptions) -> Printer {
+pub fn print_shown_item(
+    item: CoreItem<Shown>,
+    options: ShownOptions,
+    sys: &'static str,
+) -> Printer {
     TreePrinter::<Shown> {
         options,
         flat_match: FlatMatch::DEFAULT,
+        sys,
     }
     .core_item(item)
 }
 
 /// The entry a shown program closes with, laid out as `options` say.
-pub fn print_shown_entry(entry: CoreEntry<Shown>, options: ShownOptions) -> Printer {
+pub fn print_shown_entry(
+    entry: CoreEntry<Shown>,
+    options: ShownOptions,
+    sys: &'static str,
+) -> Printer {
     TreePrinter::<Shown> {
         options,
         flat_match: FlatMatch::DEFAULT,
+        sys,
     }
     .core_entry(entry)
 }
@@ -2320,7 +2356,7 @@ fn use_line(vis_pub: bool, path: Printer, names: Vec<Printer>) -> Printer {
     ])
 }
 
-fn print_top_mod(item: TopMod, flat_match: FlatMatch) -> Printer {
+fn print_top_mod(item: TopMod, flat_match: FlatMatch, sys: &'static str) -> Printer {
     match item.module {
         None => flat([
             print_doc(item.doc),
@@ -2335,7 +2371,10 @@ fn print_top_mod(item: TopMod, flat_match: FlatMatch) -> Printer {
             lead(&[Keyword::Mod]),
             pure(item.label),
             hard_line(),
-            indent(flat([print_module_items(module.items, flat_match), ends()])),
+            indent(flat([
+                print_module_items(module.items, flat_match, sys),
+                ends(),
+            ])),
             hard_line(),
             keyword(Keyword::End),
         ]),
@@ -2367,14 +2406,18 @@ pub fn between_items(
     }
 }
 
-/// A module's items, each apart from the one before as [`between_items`] says, keeping what `flat_match` says of a match on one line.
-pub fn print_module_items(items: Vec<TopItem>, flat_match: FlatMatch) -> Printer {
+/// A module's items, each apart from the one before as [`between_items`] says, keeping what `flat_match` says of a match on one line, each intrinsic under `sys`.
+pub fn print_module_items(
+    items: Vec<TopItem>,
+    flat_match: FlatMatch,
+    sys: &'static str,
+) -> Printer {
     let mut parts = Vec::with_capacity(items.len() * 2);
     let mut previous: Option<&TopItem> = None;
 
     for item in &items {
         parts.push(between_items(previous, item, None));
-        parts.push(print_top_item(item.clone(), flat_match));
+        parts.push(print_top_item(item.clone(), flat_match, sys));
         previous = Some(item);
     }
 
@@ -2494,10 +2537,10 @@ fn print_witness_entry(printer: TreePrinter<Program>, field: WitnessField) -> Pr
 }
 
 /// A module's item, keeping what `flat_match` says of a match on one line.
-pub fn print_top_item(item: TopItem, flat_match: FlatMatch) -> Printer {
-    let printer = program(flat_match);
+pub fn print_top_item(item: TopItem, flat_match: FlatMatch, sys: &'static str) -> Printer {
+    let printer = program(flat_match, sys);
     match item {
-        TopItem::Mod(m) => print_top_mod(m, flat_match),
+        TopItem::Mod(m) => print_top_mod(m, flat_match, sys),
         TopItem::Use(u) => print_top_use(u),
         TopItem::Let(l) => printer.top_let(l),
         TopItem::Induct(group) => printer.top_induct(group),
@@ -2513,17 +2556,18 @@ pub fn print_top_item(item: TopItem, flat_match: FlatMatch) -> Printer {
 
 // === Declaration heads ==========================================================
 //
-// What a page shows of a declaration: everything before its body, printed from the same tree and by the same printers the formatter uses, so a signature on a page is the signature in the file. Each takes a reference and clones what it prints, since the printers consume what they are handed and a record is built beside the tree rather than from it.
+// What a page shows of a declaration: everything before its body, printed from the same tree and by the same printers the formatter uses, so a signature on a page is the signature in the file. Each takes a reference and clones what it prints, since the printers consume what they are handed and a record is built beside the tree rather than from it; and each that prints a term takes the root its intrinsics are written under.
 
 /// The head of a `let` member: its visibility, name and signature, without the body.
-pub fn print_let_head(item: &TopLet) -> Printer {
+pub fn print_let_head(item: &TopLet, sys: &'static str) -> Printer {
+    let printer = program(FlatMatch::DEFAULT, sys);
     let signature = match &item.signature {
         LetSignature::Name {
             type_: Some(type_), ..
-        } => flat([pure(": "), PROGRAM.term(type_.clone())]),
+        } => flat([pure(": "), printer.term(type_.clone())]),
         LetSignature::Name { type_: None, .. } => pure(""),
         LetSignature::Func { params, output, .. } => {
-            PROGRAM.signature(params.clone(), output.clone())
+            printer.signature(params.clone(), output.clone())
         }
     };
     flat([
@@ -2535,62 +2579,68 @@ pub fn print_let_head(item: &TopLet) -> Printer {
 }
 
 /// The head of an `induct` member: its visibility, name, parameters and arity, without the cases.
-pub fn print_induct_head(item: &TopInduct) -> Printer {
+pub fn print_induct_head(item: &TopInduct, sys: &'static str) -> Printer {
+    let printer = program(FlatMatch::DEFAULT, sys);
     flat([
         print_pub(item.vis_pub),
         lead(&[Keyword::Induct]),
         pure(item.label.to_string()),
-        PROGRAM.top_induct_params(item.params.clone()),
-        PROGRAM.top_induct_arity(item.indices.clone(), item.rep_pub, item.result_sort.clone()),
+        printer.top_induct_params(item.params.clone()),
+        printer.top_induct_arity(item.indices.clone(), item.rep_pub, item.result_sort.clone()),
     ])
 }
 
 /// One constructor as a page lists it: its label, payload and target, without the bar that introduces it in a declaration.
-pub fn print_case_head(case: &TopCase) -> Printer {
+pub fn print_case_head(case: &TopCase, sys: &'static str) -> Printer {
+    let printer = program(FlatMatch::DEFAULT, sys);
     flat([
         pure(case.label.clone()),
-        PROGRAM.payload(case.payload.clone()),
-        PROGRAM.target(case.target.clone()),
+        printer.payload(case.payload.clone()),
+        printer.target(case.target.clone()),
     ])
 }
 
 /// The head of a `struct` member: its visibility, name, parameters and sort, without the fields.
-pub fn print_struct_head(item: &TopStruct) -> Printer {
+pub fn print_struct_head(item: &TopStruct, sys: &'static str) -> Printer {
+    let printer = program(FlatMatch::DEFAULT, sys);
     flat([
         print_pub(item.vis_pub),
         lead(&[Keyword::Struct]),
         pure(item.label.to_string()),
-        PROGRAM.top_induct_params(item.params.clone()),
+        printer.top_induct_params(item.params.clone()),
         pure(": "),
         print_pub(item.rep_pub),
-        PROGRAM.term(item.result_sort.clone()),
+        printer.term(item.result_sort.clone()),
     ])
 }
 
 /// One struct field as a page lists it.
-pub fn print_struct_field_head(field: &StructField) -> Printer {
+pub fn print_struct_field_head(field: &StructField, sys: &'static str) -> Printer {
+    let printer = program(FlatMatch::DEFAULT, sys);
     flat([
         print_plicity(field.plicity),
-        PROGRAM.field(field.param.clone()),
+        printer.field(field.param.clone()),
     ])
 }
 
 /// The head of a `concept` member: its visibility, name, parameters and sort, without the fields.
-pub fn print_concept_head(item: &TopConcept) -> Printer {
+pub fn print_concept_head(item: &TopConcept, sys: &'static str) -> Printer {
+    let printer = program(FlatMatch::DEFAULT, sys);
     flat([
         print_pub(item.vis_pub),
         lead(&[Keyword::Concept]),
         pure(item.label.to_string()),
-        PROGRAM.top_induct_params(item.params.clone()),
+        printer.top_induct_params(item.params.clone()),
         pure(": "),
         print_pub(item.rep_pub),
-        PROGRAM.term(item.result_sort.clone()),
+        printer.term(item.result_sort.clone()),
     ])
 }
 
 /// One concept field as a page lists it: a superclass as `use T`, a method as written, sugar included.
-pub fn print_concept_field_head(field: &ConceptField) -> Printer {
-    PROGRAM.concept_field_written(field.clone())
+pub fn print_concept_field_head(field: &ConceptField, sys: &'static str) -> Printer {
+    let printer = program(FlatMatch::DEFAULT, sys);
+    printer.concept_field_written(field.clone())
 }
 
 /// The line by which a module exposes the members `names` of the declaration it writes `owner`, as the formatter writes a `pub use`, by the printer it writes one with: what a page shows of a constructor or a method a module exposes beside its owner, the owner and each member set apart as names.
@@ -2603,14 +2653,15 @@ pub fn print_exposure_head(owner: &str, names: &[String]) -> Printer {
 }
 
 /// The head of a `satisfy` member: the keyword, its telescope and the concept application it witnesses, without the body.
-pub fn print_witness_head(item: &TopWitness) -> Printer {
+pub fn print_witness_head(item: &TopWitness, sys: &'static str) -> Printer {
+    let printer = program(FlatMatch::DEFAULT, sys);
     let params = item
         .params
         .iter()
         .cloned()
-        .map(|param| PROGRAM.func_sugar_param(param))
+        .map(|param| printer.func_sugar_param(param))
         .collect();
-    let app = witnessed(PROGRAM, &item.concept, item.args.clone());
+    let app = witnessed(printer, &item.concept, item.args.clone());
     flat([lead(&[Keyword::Satisfy]), witness_signature(params, app)])
 }
 

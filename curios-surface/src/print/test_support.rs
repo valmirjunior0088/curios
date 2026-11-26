@@ -3,6 +3,7 @@
 use {
     super::*,
     crate::*,
+    curios_module::SYNTAX,
     curios_print::{Printer, run_printer_within},
     std::{cell::Cell, fmt},
 };
@@ -18,7 +19,7 @@ pub fn render(source: &str, width: usize) -> String {
         }
     }
     Within(Cell::new(Some((
-        print_term(term, FlatMatch::DEFAULT),
+        print_term(term, FlatMatch::DEFAULT, SYNTAX.roots.sys),
         width,
     ))))
     .to_string()

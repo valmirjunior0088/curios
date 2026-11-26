@@ -3,6 +3,7 @@
 use {
     super::{test_support::*, *},
     curios_common::Source,
+    curios_module::SYNTAX,
 };
 
 #[test]
@@ -107,6 +108,7 @@ fn every_source_in_the_tree_formats_at_every_width_and_holds_there() {
                     &Source::held(path.clone(), text),
                     WrittenIn::of(&path),
                     format,
+                    &SYNTAX,
                 ) {
                     Ok(Formatted::Unchanged(text) | Formatted::Changed(text)) => text,
                     Err(refusal) => {
@@ -121,6 +123,7 @@ fn every_source_in_the_tree_formats_at_every_width_and_holds_there() {
                     &Source::held(path.clone(), once.as_str()),
                     WrittenIn::of(&path),
                     format,
+                    &SYNTAX,
                 ) {
                     Ok(Formatted::Unchanged(_)) => None,
                     Ok(Formatted::Changed(_)) => {

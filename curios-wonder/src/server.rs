@@ -30,7 +30,7 @@ use {
     },
     curios_common::{Class, Source, Span, Style, is_identifier_char},
     curios_core::Declared,
-    curios_module::Overlay,
+    curios_module::{Overlay, SYNTAX},
     curios_package::{EXTENSION, FormatSettings, MANIFEST, Named, Selection, Spelling},
     curios_surface::{Formatted, WrittenIn},
     curios_verdict::{Session, Verdicts, collect_project},
@@ -529,6 +529,7 @@ impl Server {
             &Source::held(&path, text.as_str()),
             WrittenIn::of(&path),
             format,
+            &SYNTAX,
         )
         .map_err(|report| report.listed())?
         {

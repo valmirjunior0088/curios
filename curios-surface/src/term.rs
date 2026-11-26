@@ -4,14 +4,12 @@ mod tests;
 use {
     super::{
         Dialect, Intrinsic, Label, Literal, Name, NatLiteral, Program, Radix, parse_whole_term,
-        print_match_pattern,
     },
     curios_common::{InfixOp, Plicity, Source, Span, recurse},
     curios_core::Numeral,
     curios_num::Floating,
     curios_parse::ParserError,
-    curios_print::run_printer,
-    std::{fmt, mem, ops::Deref, rc::Rc, str::FromStr, sync::Arc},
+    std::{mem, ops::Deref, rc::Rc, str::FromStr, sync::Arc},
 };
 
 /// The unit of the surface syntax tree: a [`Subterm`] plus an optional source span. The span is deliberately excluded from `PartialEq` — tests build spanless expected trees and compare structure — and is readable only crate-internally; `Deref<Target = Subterm>` lets consumers match on the structure directly.
@@ -106,12 +104,6 @@ impl FromStr for Term {
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         parse_whole_term(&Source::inline(input))
-    }
-}
-
-impl fmt::Display for MatchPattern {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        run_printer(print_match_pattern(self.clone()), formatter, 4)
     }
 }
 

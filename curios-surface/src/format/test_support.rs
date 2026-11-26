@@ -5,6 +5,7 @@
 use {
     super::*,
     curios_common::Source,
+    curios_module::SYNTAX,
     std::path::{Path, PathBuf},
 };
 
@@ -15,7 +16,7 @@ pub fn formatted(source: &str) -> String {
 
 /// [`formatted`] within `format`.
 pub fn formatted_within(source: &str, format: Format) -> String {
-    match Formatted::from_source(&Source::inline(source), WrittenIn::Program, format)
+    match Formatted::from_source(&Source::inline(source), WrittenIn::Program, format, &SYNTAX)
         .expect("fixture formats")
     {
         Formatted::Unchanged(text) | Formatted::Changed(text) => text,

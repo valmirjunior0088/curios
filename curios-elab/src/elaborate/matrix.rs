@@ -24,7 +24,7 @@ use {
         Context, Entailed, Error, HeldFrames, PatternShape, Refusal, Resolved, WrittenLiteral,
         check, entail, expect_as, pending, reduce_with, resolved_for_display, stuck_on_metavar,
     },
-    curios_common::{Plicity, recurse},
+    curios_common::{Plicity, SyntaxRegistry, recurse},
     curios_core::{
         Arm, Atom, Elements, Ending, Free, Global, Guard, InductArm, Intrinsic, IntrinsicHead,
         Keyed, Keys, Label, Matrix, Mention, Nat, NumLit, Numeral, Pattern, Row, Slot, StructType,
@@ -34,6 +34,7 @@ use {
     curios_surface::written_pattern,
     std::{
         collections::{BTreeMap, BTreeSet},
+        convert,
         rc::Rc,
         sync::OnceLock,
     },
@@ -69,6 +70,7 @@ pub fn elaborate_matrix(
         covers: vec![None; rows],
         seen: vec![Seen::Any],
         texts: BTreeSet::new(),
+        syntax: context.syntax(),
     };
 
     compiler.whole(context, mode)
@@ -497,6 +499,8 @@ struct Compiler<'m> {
     seen: Vec<Seen>,
     /// The places that hold a `Str` its bytes were read apart at, which a value prints as the string they spell, or `_` where they spell none yet.
     texts: BTreeSet<usize>,
+    /// The registry the match is elaborated under, which a row's pattern is printed under where a report names it ([`Compiler::written`]).
+    syntax: SyntaxRegistry,
 }
 
 /// The contradiction the facts prove where a match stands, bound once around it for the cases it closes.
@@ -961,7 +965,9 @@ impl<'m> Compiler<'m> {
             curios_surface::Label::from(label.as_ref().and_then(Label::hint).unwrap_or("_")).into()
         });
 
-        written_pattern(&self.row(row).pattern, &mut names, std::convert::identity).to_string()
+        written_pattern(&self.row(row).pattern, &mut names, convert::identity)
+            .printed(&self.syntax)
+            .to_string()
     }
 
     /// The rows that reach a place where every column is read: the first written is the arm a value there takes, and it is a case of every other, since nothing else orders two arms that match one value. No two of them are alternatives of one arm, which match no value in common. Where the first has guards, it takes the value only where they pass ([`Compiler::guarded`]).

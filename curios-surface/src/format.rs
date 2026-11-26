@@ -15,7 +15,7 @@ use {
         CoreFormatInput, FormatInput, TopItem, WrittenIn, between_items, parse_core_for_format,
         parse_for_format, print_core_entry, print_core_item, print_term, print_top_item,
     },
-    curios_common::{About, MAX_LINE_WIDTH, OsError, Report, Said, Source, Span},
+    curios_common::{About, MAX_LINE_WIDTH, OsError, Report, Said, Source, Span, SyntaxRegistry},
     curios_parse::is_blank,
     curios_print::{Original, Owed, Printer, flat, hard_line, reached, run_printer_placing},
     std::{cell::RefCell, fmt, path::Path, str::FromStr, sync::Arc},
@@ -239,15 +239,17 @@ pub enum Formatted {
 }
 
 impl Formatted {
-    /// Format `source`, written in `written`, canonically within `format`. `Err` is the report of a refusal: a parse failure, where the text stops being one, or a verification failure — the output failing to reparse to the same file with the same comments — in which case nothing should be written.
+    /// Format `source`, written in `written`, canonically within `format`, each intrinsic under the root `syntax` mounts `/sys` at. `Err` is the report of a refusal: a parse failure, where the text stops being one, or a verification failure — the output failing to reparse to the same file with the same comments — in which case nothing should be written.
     pub fn from_source(
         source: &Arc<Source>,
         written: WrittenIn,
         format: Format,
+        syntax: &SyntaxRegistry,
     ) -> Result<Self, Box<Report>> {
+        let sys = syntax.roots.sys;
         let output = match written {
-            WrittenIn::CoreText => core_text_formatted(source, format)?,
-            WrittenIn::Program => program_formatted(source, format)?,
+            WrittenIn::CoreText => core_text_formatted(source, format, sys)?,
+            WrittenIn::Program => program_formatted(source, format, sys)?,
         };
 
         Ok(match output == source.text() {
@@ -257,7 +259,11 @@ impl Formatted {
     }
 
     /// [`Formatted::from_source`] for the file at `path`, written in what its name says ([`WrittenIn::of`]), which a refusal is about. Writing a `Changed` result back is the caller's policy.
-    pub fn from_path(path: &Path, format: Format) -> Result<Self, Box<Report>> {
+    pub fn from_path(
+        path: &Path,
+        format: Format,
+        syntax: &SyntaxRegistry,
+    ) -> Result<Self, Box<Report>> {
         let source = Source::read(path).map_err(|error| {
             let mut said = Said::line("unreadable file");
             said.stating(OsError(&error));
@@ -265,7 +271,7 @@ impl Formatted {
             Report::about(About::Path(path.to_path_buf()), said)
         })?;
 
-        Self::from_source(&source, WrittenIn::of(path), format)
+        Self::from_source(&source, WrittenIn::of(path), format, syntax)
     }
 }
 
@@ -280,24 +286,32 @@ fn original<'a>(source: &'a Source, comments: &[Span]) -> Original<'a> {
     }
 }
 
-/// A program or a module, formatted within `format` and verified.
-fn program_formatted(source: &Arc<Source>, format: Format) -> Result<String, Box<Report>> {
+/// A program or a module, formatted within `format`, each intrinsic under `sys`, and verified.
+fn program_formatted(
+    source: &Arc<Source>,
+    format: Format,
+    sys: &'static str,
+) -> Result<String, Box<Report>> {
     let input = parse_for_format(source).map_err(|error| error.report())?;
     // Every comment goes to the renderer with the text it was written in, which is all that decides its place — see `Original`.
     let original = original(source, &input.comments);
     let expected_comments = original.comments.len();
-    let output = emit(&input, &original, format);
+    let output = emit(&input, &original, format, sys);
 
     verify(&input, expected_comments, &output).map_err(|words| unverified(source, &words))?;
     Ok(output)
 }
 
 /// A file of Curios/Core, formatted within `format` and verified as a program is. It is read and not checked: a file its reader would refuse — a field its node does not hold, a form Curios/Core refuses — is formatted all the same.
-fn core_text_formatted(source: &Arc<Source>, format: Format) -> Result<String, Box<Report>> {
+fn core_text_formatted(
+    source: &Arc<Source>,
+    format: Format,
+    sys: &'static str,
+) -> Result<String, Box<Report>> {
     let input = parse_core_for_format(source).map_err(|error| error.report())?;
     let original = original(source, &input.comments);
     let expected_comments = original.comments.len();
-    let output = emit_core_text(&input, &original, format);
+    let output = emit_core_text(&input, &original, format, sys);
 
     verify_core_text(&input, expected_comments, &output)
         .map_err(|words| unverified(source, &words))?;
@@ -379,7 +393,12 @@ fn render(printer: Printer, original: &Original<'_>, format: Format) -> String {
 /// The parsed file as one document: items separated by exactly one blank line — except a `use` following a `use` or a `mod X;`, which keeps the separation it was written with, stacked as the corpus writes its import heads and its `mod X; use X/{…}` pairs, or one blank line apart however many were written — and the tail last.
 ///
 /// **One document for the whole file, rendered once.** Every comment is placed by that single run, which is what lets a comment between two items be placed at all: rendering each item separately would give each its own renderer, and a comment belonging to neither would have to be spliced in as text by this function. Nothing here handles comments.
-pub fn emit(input: &FormatInput, original: &Original<'_>, format: Format) -> String {
+pub fn emit(
+    input: &FormatInput,
+    original: &Original<'_>,
+    format: Format,
+    sys: &'static str,
+) -> String {
     let mut parts: Vec<Printer> = Vec::new();
     let mut previous: Option<&TopItem> = None;
 
@@ -389,7 +408,7 @@ pub fn emit(input: &FormatInput, original: &Original<'_>, format: Format) -> Str
 
         // Marked at both ends, as a term is — see `print_term`.
         parts.push(reached(span.start));
-        parts.push(print_top_item(item.clone(), format.flat_match));
+        parts.push(print_top_item(item.clone(), format.flat_match, sys));
         parts.push(reached(span.end));
         previous = Some(item);
     }
@@ -398,14 +417,19 @@ pub fn emit(input: &FormatInput, original: &Original<'_>, format: Format) -> Str
         if previous.is_some() {
             parts.extend([hard_line(), hard_line()]);
         }
-        parts.push(print_term(tail.clone(), format.flat_match));
+        parts.push(print_term(tail.clone(), format.flat_match, sys));
     }
 
     format!("{}\n", render(flat(parts), original, format))
 }
 
 /// A file of Curios/Core as one document, as a program's is ([`emit`]): its items a blank line apart, each marked at both ends, and the entry last.
-fn emit_core_text(input: &CoreFormatInput, original: &Original<'_>, format: Format) -> String {
+fn emit_core_text(
+    input: &CoreFormatInput,
+    original: &Original<'_>,
+    format: Format,
+    sys: &'static str,
+) -> String {
     let mut parts: Vec<Printer> = Vec::new();
 
     for (item, span) in input.file.items.iter().zip(&input.item_spans) {
@@ -413,7 +437,7 @@ fn emit_core_text(input: &CoreFormatInput, original: &Original<'_>, format: Form
             parts.extend([hard_line(), hard_line()]);
         }
         parts.push(reached(span.start));
-        parts.push(print_core_item(item.clone(), format.flat_match));
+        parts.push(print_core_item(item.clone(), format.flat_match, sys));
         parts.push(reached(span.end));
     }
 
@@ -421,7 +445,7 @@ fn emit_core_text(input: &CoreFormatInput, original: &Original<'_>, format: Form
         if !parts.is_empty() {
             parts.extend([hard_line(), hard_line()]);
         }
-        parts.push(print_core_entry(entry.clone(), format.flat_match));
+        parts.push(print_core_entry(entry.clone(), format.flat_match, sys));
     }
 
     format!("{}\n", render(flat(parts), original, format))

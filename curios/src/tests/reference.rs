@@ -4,7 +4,7 @@ use {
     crate::test_support::*,
     curios_common::{Kind, Source, SourceName, Style},
     curios_elab::DEFAULT_BUDGET,
-    curios_module::Overlay,
+    curios_module::{Overlay, SYNTAX},
     curios_surface::{Format, Formatted, WrittenIn},
     curios_wonder::{diagnostics, test_support::*},
     std::{fs, path::Path},
@@ -20,7 +20,7 @@ fn every_crs_example_reports_nothing() {
     let mut wrong = Vec::new();
     for (line, example) in examples {
         let source = Source::named(SourceName::stdin(), example.as_str());
-        match Formatted::from_source(&source, WrittenIn::Program, Format::default()) {
+        match Formatted::from_source(&source, WrittenIn::Program, Format::default(), &SYNTAX) {
             Ok(Formatted::Unchanged(_)) => {}
             Ok(Formatted::Changed(canonical)) => wrong.push(format!(
                 "the example at language.md:{line} is not canonical; the formatter writes it\n{canonical}"

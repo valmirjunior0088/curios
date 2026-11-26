@@ -1,6 +1,9 @@
 //! Inductive and matrix matches, and patterns.
 
-use {crate::*, curios_common::Plicity, curios_core::Numeral, curios_num::Natural};
+use {
+    crate::*, curios_common::Plicity, curios_core::Numeral, curios_module::SYNTAX,
+    curios_num::Natural,
+};
 
 #[test]
 fn inductive_match_nullary_and_unary() {
@@ -71,7 +74,7 @@ fn pattern_binders_round_trip() {
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
-            term.printed().to_string().parse::<Term>().unwrap(),
+            term.printed(&SYNTAX).to_string().parse::<Term>().unwrap(),
             term,
             "term round-trip failed for {source:?}"
         );
@@ -106,7 +109,7 @@ fn inductive_match_round_trips() {
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
-            term.printed().to_string().parse::<Term>().unwrap(),
+            term.printed(&SYNTAX).to_string().parse::<Term>().unwrap(),
             term,
             "match arm round-trip failed for {source:?}"
         );
@@ -156,7 +159,7 @@ fn matrix_match_round_trips() {
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
-            term.printed().to_string().parse::<Term>().unwrap(),
+            term.printed(&SYNTAX).to_string().parse::<Term>().unwrap(),
             term,
             "matrix match round-trip failed for {source:?}"
         );
@@ -198,10 +201,10 @@ fn a_successor_pattern_takes_a_step_of_one_or_more() {
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
-            term.printed().to_string().parse::<Term>().unwrap(),
+            term.printed(&SYNTAX).to_string().parse::<Term>().unwrap(),
             term,
             "{source:?} printed back as {}",
-            term.printed()
+            term.printed(&SYNTAX)
         );
     }
 }
@@ -256,10 +259,10 @@ fn a_numeral_pattern_keeps_its_sign_and_radix() {
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
-            term.printed().to_string().parse::<Term>().unwrap(),
+            term.printed(&SYNTAX).to_string().parse::<Term>().unwrap(),
             term,
             "{source:?} printed back as {}",
-            term.printed()
+            term.printed(&SYNTAX)
         );
     }
 }
@@ -302,7 +305,7 @@ fn a_string_literal_is_a_pattern_printed_as_written() {
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
-            term.printed().to_string(),
+            term.printed(&SYNTAX).to_string(),
             source,
             "{source:?} printed back"
         );
@@ -385,7 +388,7 @@ fn a_dispatch_case_keeps_a_numeral_wider_than_the_erased_carrier() {
         .parse::<Term>()
         .expect("a wide dispatch case parses");
     let Subterm::Match(matched) = term.as_subterm() else {
-        panic!("expected a match, got {}", term.printed());
+        panic!("expected a match, got {}", term.printed(&SYNTAX));
     };
     let [first, ..] = matched.arms.as_slice() else {
         panic!("expected arms");
@@ -426,7 +429,7 @@ fn a_match_takes_operators_and_suffixes_bare() {
         .parse::<Term>()
         .expect("a match is an operand");
     let Subterm::Infix(infix) = sum.as_subterm() else {
-        panic!("expected a sum, got {}", sum.printed());
+        panic!("expected a sum, got {}", sum.printed(&SYNTAX));
     };
     assert!(matches!(infix.right.as_subterm(), Subterm::Match(_)));
 
@@ -434,7 +437,7 @@ fn a_match_takes_operators_and_suffixes_bare() {
         .parse::<Term>()
         .expect("a match is a callee");
     let Subterm::Apply(apply) = call.as_subterm() else {
-        panic!("expected a call, got {}", call.printed());
+        panic!("expected a call, got {}", call.printed(&SYNTAX));
     };
     assert!(matches!(apply.head.as_subterm(), Subterm::Match(_)));
 
@@ -442,7 +445,7 @@ fn a_match_takes_operators_and_suffixes_bare() {
         .parse::<Term>()
         .expect("a match with no head is an action");
     let Subterm::Bang(action) = performed.as_subterm() else {
-        panic!("expected a bang, got {}", performed.printed());
+        panic!("expected a bang, got {}", performed.printed(&SYNTAX));
     };
     assert!(matches!(action.as_subterm(), Subterm::HeadlessMatch(_)));
 }
@@ -454,7 +457,7 @@ fn an_arm_writes_each_alternative_after_a_bar() {
         .parse::<Term>()
         .unwrap();
     let Subterm::Match(matched) = term.as_subterm() else {
-        panic!("expected a match, got {}", term.printed());
+        panic!("expected a match, got {}", term.printed(&SYNTAX));
     };
     let patterns = matched.arms[0]
         .alternatives
@@ -509,6 +512,6 @@ fn an_arm_of_alternatives_round_trips() {
         "match o | some(x) | other(_, x) => x | _ => 0 end",
     ] {
         let term = source.parse::<Term>().unwrap();
-        assert_eq!(term.printed().to_string(), source);
+        assert_eq!(term.printed(&SYNTAX).to_string(), source);
     }
 }

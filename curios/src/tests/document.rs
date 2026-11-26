@@ -4,7 +4,7 @@ use {
     curios_common::{Class, Qualifier, Source, test_support::*},
     curios_document::{Block, Entry, Kind, Marked, Signature, Totality},
     curios_elab::DEFAULT_BUDGET,
-    curios_module::{Overlay, written},
+    curios_module::{Overlay, SYNTAX, written},
     curios_package::{Governing, order},
     curios_surface::{Format, Formatted, WrittenIn},
     curios_wonder::{std_documentation, test_support::*},
@@ -950,6 +950,7 @@ fn a_declaration_written_out_is_as_the_formatter_writes_it() {
                 &Source::inline(text.as_str()),
                 WrittenIn::Program,
                 Format::default(),
+                &SYNTAX,
             ) {
                 Ok(Formatted::Unchanged(_)) => {}
                 Ok(Formatted::Changed(formatted)) => wrong.push(format!(

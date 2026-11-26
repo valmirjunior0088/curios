@@ -4,7 +4,7 @@ use {
     crate::test_support::*,
     curios_common::{Source, Style},
     curios_elab::DEFAULT_BUDGET,
-    curios_module::Overlay,
+    curios_module::{Overlay, SYNTAX},
     curios_surface::{Format, Formatted, WrittenIn},
     curios_wonder::{diagnostics, test_support::*},
     std::{
@@ -32,6 +32,7 @@ fn every_crs_block_is_written_as_format_writes_it() {
             &Source::inline(example),
             WrittenIn::Program,
             Format::default(),
+            &SYNTAX,
         ) {
             Ok(Formatted::Unchanged(_)) => {}
             Ok(Formatted::Changed(text)) => {

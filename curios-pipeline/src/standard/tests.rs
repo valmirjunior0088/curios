@@ -950,7 +950,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
                         vec![declared(printed, type_, body), declared(same, stated, by)]
                     });
 
-                    ((*path).clone(), tree.printed().to_string())
+                    ((*path).clone(), tree.printed(&SYNTAX).to_string())
                 })
                 .collect::<Vec<_>>();
 

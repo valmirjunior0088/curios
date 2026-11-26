@@ -3,7 +3,10 @@
 #[cfg(test)]
 mod tests;
 
-use curios_surface::{ListEntry, Literal, ProofLiteral, StructLitEntry, Subterm, Term};
+use {
+    curios_module::SYNTAX,
+    curios_surface::{ListEntry, Literal, ProofLiteral, StructLitEntry, Subterm, Term},
+};
 
 /// What a test found: each check that failed, in the order the test met them, and none where the test held.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,14 +54,14 @@ impl FailedCheck {
 /// The elements of the list literal `term` is.
 fn listed(term: &Term) -> Result<Vec<&Term>, String> {
     let Subterm::Literal(Literal::List(entries)) = term.as_subterm() else {
-        return Err(format!("`{}` is no list", term.printed()));
+        return Err(format!("`{}` is no list", term.printed(&SYNTAX)));
     };
 
     entries
         .iter()
         .map(|entry| match entry {
             ListEntry::Elem(element) => Ok(element),
-            ListEntry::Spread(_) => Err(format!("`{}` spreads a list", term.printed())),
+            ListEntry::Spread(_) => Err(format!("`{}` spreads a list", term.printed(&SYNTAX))),
         })
         .collect()
 }
@@ -67,7 +70,7 @@ fn listed(term: &Term) -> Result<Vec<&Term>, String> {
 fn text(term: &Term) -> Result<String, String> {
     match term.as_subterm() {
         Subterm::ProofLiteral(ProofLiteral::Str(literal)) => Ok(literal.value.clone()),
-        _ => Err(format!("`{}` is no text", term.printed())),
+        _ => Err(format!("`{}` is no text", term.printed(&SYNTAX))),
     }
 }
 
@@ -78,16 +81,16 @@ fn pair(term: &Term) -> Result<(String, String), String> {
             [label, value] if label.label.is_none() && value.label.is_none() => {
                 Ok((text(&label.value)?, text(&value.value)?))
             }
-            _ => Err(format!("`{}` is no pair", term.printed())),
+            _ => Err(format!("`{}` is no pair", term.printed(&SYNTAX))),
         },
-        _ => Err(format!("`{}` is no pair", term.printed())),
+        _ => Err(format!("`{}` is no pair", term.printed(&SYNTAX))),
     }
 }
 
 /// The failed check the structure literal `term` is, read by its fields' labels.
 fn failed_check(term: &Term) -> Result<FailedCheck, String> {
     let Subterm::StructLit(literal) = term.as_subterm() else {
-        return Err(format!("`{}` is no failed check", term.printed()));
+        return Err(format!("`{}` is no failed check", term.printed(&SYNTAX)));
     };
     let field = |label: &str| {
         literal
@@ -99,7 +102,7 @@ fn failed_check(term: &Term) -> Result<FailedCheck, String> {
                 }
                 _ => None,
             })
-            .ok_or_else(|| format!("`{}` has no `{label}`", term.printed()))
+            .ok_or_else(|| format!("`{}` has no `{label}`", term.printed(&SYNTAX)))
     };
 
     Ok(FailedCheck {

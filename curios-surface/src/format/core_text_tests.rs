@@ -4,6 +4,7 @@ use {
     super::{test_support::*, *},
     crate::{CoreFile, to_core},
     curios_common::Source,
+    curios_module::SYNTAX,
     std::path::{Path, PathBuf},
 };
 
@@ -13,6 +14,7 @@ fn core_formatted(text: &str) -> String {
         &Source::held("a.crsc", text),
         WrittenIn::CoreText,
         Format::default(),
+        &SYNTAX,
     )
     .expect("the file formats")
     {
@@ -47,6 +49,7 @@ let /m/witness~/std/ops/Add(Nat)#1 : (use w: /C()) -> #BoolType = /m/witness~3;
             &Source::held("a.crsc", EVERY_FORM),
             WrittenIn::CoreText,
             Format::default(),
+            &SYNTAX,
         ),
         Ok(Formatted::Unchanged(EVERY_FORM.to_string()))
     );
@@ -117,6 +120,7 @@ fn core_text_is_read_where_the_path_says_so() {
         &Source::held("a.crs", "#{a = 1} x\n"),
         WrittenIn::Program,
         Format::default(),
+        &SYNTAX,
     )
     .expect_err("a program writes no decorator")
     .render();
@@ -151,15 +155,17 @@ fn every_file_of_core_text_the_tree_holds_is_canonically_formatted() {
     );
     let wrong = files
         .iter()
-        .filter_map(|path| match Formatted::from_path(path, Format::default()) {
-            Ok(Formatted::Unchanged(_)) => None,
-            Ok(Formatted::Changed(_)) => Some(format!("{}: not canonical", path.display())),
-            Err(refusal) => Some(format!(
-                "{}: {refusal}",
-                path.display(),
-                refusal = refusal.render()
-            )),
-        })
+        .filter_map(
+            |path| match Formatted::from_path(path, Format::default(), &SYNTAX) {
+                Ok(Formatted::Unchanged(_)) => None,
+                Ok(Formatted::Changed(_)) => Some(format!("{}: not canonical", path.display())),
+                Err(refusal) => Some(format!(
+                    "{}: {refusal}",
+                    path.display(),
+                    refusal = refusal.render()
+                )),
+            },
+        )
         .collect::<Vec<_>>();
 
     assert!(!files.is_empty(), "the tree holds Curios/Core");

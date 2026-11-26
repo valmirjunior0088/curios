@@ -1,6 +1,6 @@
 //! Inductives and structs: their variants and `and` chains, their visibility and representation spellings, and the function sugar of a field.
 
-use {crate::*, curios_common::Plicity};
+use {crate::*, curios_common::Plicity, curios_module::SYNTAX};
 
 #[test]
 fn top_inductive_single_variant() {
@@ -118,7 +118,7 @@ fn inductive_visibility_spellings() {
         );
         assert_eq!(
             entrypoint
-                .printed()
+                .printed(&SYNTAX)
                 .to_string()
                 .parse::<Entrypoint>()
                 .unwrap(),
@@ -140,7 +140,7 @@ fn indexed_mutual_inductive_representation_sorts_round_trip() {
     assert_eq!((group[1].vis_pub, group[1].rep_pub), (true, false));
     assert_eq!(
         entrypoint
-            .printed()
+            .printed(&SYNTAX)
             .to_string()
             .parse::<Entrypoint>()
             .unwrap(),
@@ -170,7 +170,7 @@ fn struct_round_trips() {
         let entrypoint = source.parse::<Entrypoint>().unwrap();
         assert_eq!(
             entrypoint
-                .printed()
+                .printed(&SYNTAX)
                 .to_string()
                 .parse::<Entrypoint>()
                 .unwrap(),
@@ -192,7 +192,7 @@ fn struct_round_trips() {
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
-            term.printed().to_string().parse::<Term>().unwrap(),
+            term.printed(&SYNTAX).to_string().parse::<Term>().unwrap(),
             term,
             "literal round-trip failed for {source:?}"
         );
@@ -305,7 +305,7 @@ fn function_field_sugar_round_trips() {
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
-            term.printed().to_string().parse::<Term>().unwrap(),
+            term.printed(&SYNTAX).to_string().parse::<Term>().unwrap(),
             term,
             "term round-trip failed for {source:?}"
         );
@@ -320,7 +320,7 @@ fn function_field_sugar_round_trips() {
         let entrypoint = source.parse::<Entrypoint>().unwrap();
         assert_eq!(
             entrypoint
-                .printed()
+                .printed(&SYNTAX)
                 .to_string()
                 .parse::<Entrypoint>()
                 .unwrap(),

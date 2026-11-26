@@ -543,6 +543,7 @@ fn every_unit_of_the_prelude_is_written_as_curios_format_writes_it() {
                 &Source::held("unit.crsc", text.as_str()),
                 WrittenIn::CoreText,
                 Format::default(),
+                &SYNTAX,
             ) {
                 Ok(Formatted::Unchanged(_)) => {}
                 Ok(Formatted::Changed(formatted)) => {

@@ -950,7 +950,7 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
                     member.label.span(),
                     Kind::Definition,
                     member.vis_pub,
-                    print_let_head(member),
+                    print_let_head(member, SYNTAX.roots.sys),
                     &member.doc,
                 )
             })
@@ -964,7 +964,7 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
                         case.label.span(),
                         Kind::Definition,
                         false,
-                        print_case_head(case),
+                        print_case_head(case, SYNTAX.roots.sys),
                         &case.doc,
                     )
                 });
@@ -979,7 +979,7 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
                         member.label.span(),
                         Kind::Inductive,
                         member.vis_pub,
-                        print_induct_head(member),
+                        print_induct_head(member, SYNTAX.roots.sys),
                         &member.doc,
                     )
                 }
@@ -997,7 +997,7 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
                             None,
                             Kind::Definition,
                             false,
-                            print_struct_field_head(field),
+                            print_struct_field_head(field, SYNTAX.roots.sys),
                             &field.doc,
                         )
                     })
@@ -1012,7 +1012,7 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
                         member.label.span(),
                         Kind::Structure,
                         member.vis_pub,
-                        print_struct_head(member),
+                        print_struct_head(member, SYNTAX.roots.sys),
                         &member.doc,
                     )
                 }
@@ -1032,7 +1032,7 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
                         field.label.as_ref().and_then(|label| label.span()),
                         Kind::Definition,
                         false,
-                        print_concept_field_head(field),
+                        print_concept_field_head(field, SYNTAX.roots.sys),
                         &field.doc,
                     )
                 });
@@ -1047,7 +1047,7 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
                         member.label.span(),
                         Kind::Concept,
                         member.vis_pub,
-                        print_concept_head(member),
+                        print_concept_head(member, SYNTAX.roots.sys),
                         &member.doc,
                     )
                 }
@@ -1062,7 +1062,7 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
                     member.head.as_ref(),
                     Kind::Witness,
                     true,
-                    print_witness_head(member),
+                    print_witness_head(member, SYNTAX.roots.sys),
                     &member.doc,
                 )
             })

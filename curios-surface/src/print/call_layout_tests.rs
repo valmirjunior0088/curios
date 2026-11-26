@@ -1,6 +1,6 @@
 //! How a call prints: flat where it fits, an argument a line where it overflows, a trailing literal or lambda hugging it, and a curried call or a ladder breaking at its seams.
 
-use {super::test_support::*, crate::*};
+use {super::test_support::*, crate::*, curios_module::SYNTAX};
 
 #[test]
 fn a_fitting_application_stays_flat() {
@@ -74,7 +74,7 @@ fn a_ladders_call_participates_in_its_flat_layout() {
         );
         let source = format!("{ladder}(p)");
         assert_eq!(
-            source.parse::<Term>().unwrap().printed().to_string(),
+            source.parse::<Term>().unwrap().printed(&SYNTAX).to_string(),
             source
         );
     }

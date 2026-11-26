@@ -1,6 +1,6 @@
 //! How a ladder keeps one line: within the columns a decision is read in, as part of whatever holds it, and never with a headed arm's guards where a width lays it out.
 
-use {super::test_support::*, crate::*};
+use {super::test_support::*, crate::*, curios_module::SYNTAX};
 
 /// A ladder past the columns a decision is read in and short of a line of 100.
 const LONG: &str =
@@ -54,7 +54,7 @@ fn a_headed_arms_guard_breaks_a_ladder_at_any_width() {
 fn with_no_width_every_ladder_keeps_its_line() {
     for source in [LONG, "match n | 0 => 1 | k + 1 => 2 end"] {
         assert_eq!(
-            source.parse::<Term>().unwrap().printed().to_string(),
+            source.parse::<Term>().unwrap().printed(&SYNTAX).to_string(),
             source
         );
     }

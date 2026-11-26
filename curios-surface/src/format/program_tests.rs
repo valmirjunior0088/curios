@@ -3,6 +3,7 @@
 use {
     super::{test_support::*, *},
     curios_common::Source,
+    curios_module::SYNTAX,
 };
 
 #[test]
@@ -40,6 +41,7 @@ fn a_garbled_tail_is_refused_where_the_compiler_refuses_it() {
         &Source::inline("let x = (\n"),
         WrittenIn::Program,
         Format::default(),
+        &SYNTAX,
     )
     .expect_err("garbled tail")
     .render();
@@ -189,6 +191,7 @@ fn every_source_in_the_tree_formats_without_refusal() {
                 &Source::held(path.clone(), text),
                 WrittenIn::of(&path),
                 Format::default(),
+                &SYNTAX,
             )
             .err()
             .map(|refusal| format!("{}: {refusal}", path.display(), refusal = refusal.render()))

@@ -1,6 +1,6 @@
 //! `let` and its `and` groups, `test` declarations, and the span each declaration's label takes.
 
-use {crate::*, curios_common::Plicity};
+use {crate::*, curios_common::Plicity, curios_module::SYNTAX};
 
 #[test]
 fn top_let_without_pub() {
@@ -119,7 +119,7 @@ fn a_test_declaration_parses_and_round_trips() {
         panic!("expected one test item, got {:?}", module.items);
     };
     assert_eq!(test.label, "the_answer_holds");
-    let printed = module.printed().to_string();
+    let printed = module.printed(&SYNTAX).to_string();
     assert_eq!(
         printed.trim(),
         "test the_answer_holds =\n    Test/assert(42 == 42);"
@@ -253,7 +253,7 @@ fn a_let_tells_a_constructor_pattern_from_a_local_function_at_its_arrow() {
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
-            term.printed().to_string().parse::<Term>().unwrap(),
+            term.printed(&SYNTAX).to_string().parse::<Term>().unwrap(),
             term,
             "round-trip failed for {source:?}"
         );

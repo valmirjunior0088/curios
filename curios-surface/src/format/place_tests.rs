@@ -3,6 +3,7 @@
 use {
     super::{test_support::*, *},
     curios_common::Source,
+    curios_module::SYNTAX,
     std::path::PathBuf,
 };
 
@@ -146,6 +147,7 @@ fn misplaced(
         &Source::held(file, perturbed.as_str()),
         WrittenIn::of(Path::new(file)),
         format,
+        &SYNTAX,
     ) {
         Ok(Formatted::Unchanged(text) | Formatted::Changed(text)) => text,
         Err(refusal) => {
@@ -175,6 +177,7 @@ fn misplaced(
         &Source::held(file, once.as_str()),
         WrittenIn::of(Path::new(file)),
         format,
+        &SYNTAX,
     ) {
         Ok(Formatted::Unchanged(_)) => None,
         Ok(Formatted::Changed(twice)) => Some(format!(
@@ -296,9 +299,12 @@ fn assert_every_comment_keeps_its_place(sources: &[(PathBuf, String)], format: F
             let (item, within) = item_at(&whole, index);
             // An item cut where the source does not divide is tried in its whole file instead.
             let alone = format!("{}\n", item.join("\n").trim_end());
-            let divides =
-                Formatted::from_source(&Source::inline(&alone), WrittenIn::Program, format)
-                    == Ok(Formatted::Unchanged(alone.clone()));
+            let divides = Formatted::from_source(
+                &Source::inline(&alone),
+                WrittenIn::Program,
+                format,
+                &SYNTAX,
+            ) == Ok(Formatted::Unchanged(alone.clone()));
             let fault = match divides {
                 true => misplaced("a.crs", &item, (within, rides), format),
                 false => misplaced("a.crs", &whole, (index, rides), format),
@@ -324,7 +330,7 @@ fn a_comment_keeps_its_place_in_the_sources_of_the_tree_at_every_width() {
             .into_iter()
             .map(|(path, source)| {
                 let held = Source::held(path.clone(), source.as_str());
-                match Formatted::from_source(&held, WrittenIn::of(&path), format) {
+                match Formatted::from_source(&held, WrittenIn::of(&path), format, &SYNTAX) {
                     Ok(Formatted::Unchanged(text) | Formatted::Changed(text)) => (path, text),
                     Err(refusal) => {
                         panic!("{}: {refusal}", path.display(), refusal = refusal.render())

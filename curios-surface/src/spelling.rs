@@ -1261,12 +1261,9 @@ pub enum IntrinsicForm<T = Term> {
     Handle(u32),
 }
 
-/// The root an intrinsic is declared under.
-const SYS: &str = "sys";
-
 /// The absolute path a reader writes an intrinsic's `path` by: an operation at its own path, and a carrier's type at the root, where `/sys` hoists it — `/sys/Bool`.
-pub fn intrinsic_path(path: &str) -> Qualifier {
-    Qualifier::from(iter::once(SYS).chain(path.split('/')))
+pub fn intrinsic_path(sys: &str, path: &str) -> Qualifier {
+    Qualifier::from(iter::once(sys).chain(path.split('/')))
 }
 
 /// The segments below `/sys` of the declaration an intrinsic's `path` names: a carrier's type `X` at `X/X`, below the carrier `/sys` hoists to its root, and an operation at its own path.
@@ -1933,13 +1930,16 @@ fn print_core(term: Term, spelling: &Rc<Spelling>) -> Printer {
 fn print_minting(term: Term, spelling: &Rc<Spelling>, mint: &Minting) -> Printer {
     if spelling.writes_whole() && mint.recorded.is_none() {
         mint.allow(&term);
-        return print_core_term(core_written(term, Frame::<CoreText>::new(spelling, mint)));
+        return print_core_term(
+            core_written(term, Frame::<CoreText>::new(spelling, mint)),
+            spelling.sys,
+        );
     }
     // The translation is tried on a mint of its own, taken up where it prints the term: one it declines is printed here as it would have been untranslated.
     if spelling.translated {
         let attempt = mint.attempt(&term);
-        if let Some(printed) =
-            from_core(&term, spelling, &attempt).map(|term| print_term(term, FlatMatch::DEFAULT))
+        if let Some(printed) = from_core(&term, spelling, &attempt)
+            .map(|term| print_term(term, FlatMatch::DEFAULT, spelling.sys))
         {
             mint.adopt(attempt);
             return printed;
@@ -1951,6 +1951,7 @@ fn print_minting(term: Term, spelling: &Rc<Spelling>, mint: &Minting) -> Printer
     print_shown(
         core_written(term, Frame::new(spelling, mint)),
         shown_options(spelling),
+        spelling.sys,
     )
 }
 
@@ -2124,8 +2125,16 @@ impl fmt::Display for Spelled<'_, Program> {
             formatter.write_str("\n\n")?;
         }
         let printer = match spelling.writes_whole() {
-            true => print_core_entry(entry_written(program, spelling), FlatMatch::DEFAULT),
-            false => print_shown_entry(entry_written(program, spelling), shown_options(spelling)),
+            true => print_core_entry(
+                entry_written(program, spelling),
+                FlatMatch::DEFAULT,
+                spelling.sys,
+            ),
+            false => print_shown_entry(
+                entry_written(program, spelling),
+                shown_options(spelling),
+                spelling.sys,
+            ),
         };
 
         write_printer(printer, formatter, spelling)
@@ -2198,10 +2207,16 @@ fn print_items(
     };
     match spelling.writes_whole() {
         true => items_written::<CoreText>(definitions, spelling, |item| {
-            write(formatter, print_core_item(item, FlatMatch::DEFAULT))
+            write(
+                formatter,
+                print_core_item(item, FlatMatch::DEFAULT, spelling.sys),
+            )
         })?,
         false => items_written::<Shown>(definitions, spelling, |item| {
-            write(formatter, print_shown_item(item, shown_options(spelling)))
+            write(
+                formatter,
+                print_shown_item(item, shown_options(spelling), spelling.sys),
+            )
         })?,
     }
 

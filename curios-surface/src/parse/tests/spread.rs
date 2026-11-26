@@ -1,6 +1,9 @@
 //! List and binary literals and the spread and atom segments inside them.
 
-use {crate::parse::test_support::*, crate::*, curios_common::Sign, curios_core::Numeral};
+use {
+    crate::parse::test_support::*, crate::*, curios_common::Sign, curios_core::Numeral,
+    curios_module::SYNTAX,
+};
 
 #[test]
 fn spread_entries_are_struct_literal_only() {
@@ -263,7 +266,7 @@ fn list_and_bytes_spreads_round_trip() {
         "0x[0x48, 0x69]",
     ] {
         assert_eq!(
-            source.parse::<Term>().unwrap().printed().to_string(),
+            source.parse::<Term>().unwrap().printed(&SYNTAX).to_string(),
             source
         );
     }

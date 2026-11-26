@@ -2,6 +2,7 @@
 
 use {
     curios_common::SyntaxRegistry,
+    curios_module::SYNTAX,
     curios_surface::{Entrypoint, FormScope, Spellable, Spelling},
     curios_unit::Predecessors,
     std::{fmt, rc::Rc},
@@ -88,7 +89,7 @@ impl<'a> Stage<'a> {
 impl fmt::Display for Stage<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Stage::Text(entrypoint) => write!(f, "{}", entrypoint.printed()),
+            Stage::Text(entrypoint) => write!(f, "{}", entrypoint.printed(&SYNTAX)),
             Stage::Core(program, scope) | Stage::CoreElab(program, scope) => {
                 write!(f, "{}", program.spelled(&Rc::new(scope.spelling())))
             }

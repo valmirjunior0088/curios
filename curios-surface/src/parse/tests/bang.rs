@@ -1,6 +1,6 @@
 //! The postfix `!`: where it may stand, how tightly it binds, and that it reads back.
 
-use {crate::parse::test_support::*, crate::*, curios_common::Plicity};
+use {crate::parse::test_support::*, crate::*, curios_common::Plicity, curios_module::SYNTAX};
 
 #[test]
 fn let_bang_is_no_longer_grammar() {
@@ -125,7 +125,7 @@ fn bang_round_trips() {
     for source in ["f(x!, y!)", "p.0!", "x!.0", "let x = e!; x"] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
-            term.printed().to_string().parse::<Term>().unwrap(),
+            term.printed(&SYNTAX).to_string().parse::<Term>().unwrap(),
             term,
             "round-trip failed for {source:?}"
         );

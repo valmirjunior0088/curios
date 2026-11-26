@@ -1,6 +1,6 @@
 //! Concept and witness declarations, their parameter forms, and the separator syntax a parameterized witness prints.
 
-use {crate::*, curios_common::Plicity};
+use {crate::*, curios_common::Plicity, curios_module::SYNTAX};
 
 #[test]
 fn parse_concept_item() {
@@ -211,7 +211,7 @@ fn witness_use_round_trip() {
         let entrypoint = source.parse::<Entrypoint>().unwrap();
         assert_eq!(
             entrypoint
-                .printed()
+                .printed(&SYNTAX)
                 .to_string()
                 .parse::<Entrypoint>()
                 .unwrap(),
@@ -239,7 +239,7 @@ fn a_declaration_parameter_may_be_a_use_premise() {
     assert_eq!(params[2].plicity, Plicity::Implicit);
     assert_eq!(params[2].label.as_deref(), Some("V"));
     assert_eq!(
-        entrypoint.printed().to_string(),
+        entrypoint.printed(&SYNTAX).to_string(),
         "struct Slot(K: Type, use Key(K), @V: Type): Type {\n    key: K,\n}\nu"
     );
 }
@@ -289,7 +289,7 @@ fn a_literal_head_and_a_witness_head_keep_an_empty_list() {
             panic!("expected a struct literal");
         };
         assert_eq!(literal.params.is_some(), applied, "{source}");
-        assert_eq!(term.printed().to_string(), source);
+        assert_eq!(term.printed(&SYNTAX).to_string(), source);
     }
 
     for (source, applied) in [
@@ -301,7 +301,7 @@ fn a_literal_head_and_a_witness_head_keep_an_empty_list() {
             panic!("expected a witness declaration");
         };
         assert_eq!(witnesses[0].args.is_some(), applied, "{source}");
-        assert_eq!(entrypoint.printed().to_string(), source);
+        assert_eq!(entrypoint.printed(&SYNTAX).to_string(), source);
     }
 }
 
@@ -333,7 +333,7 @@ fn parameterized_witness_prints_separator_syntax() {
     let source = "satisfy (@A : Type, use Show(A)) => Show(List(A)) { show = g }\nu";
     let entrypoint = source.parse::<Entrypoint>().unwrap();
     assert_eq!(
-        entrypoint.printed().to_string(),
+        entrypoint.printed(&SYNTAX).to_string(),
         "satisfy (@A: Type, use Show(A)) => Show(List(A)) {\n    show = g,\n}\nu"
     );
 }
@@ -364,7 +364,7 @@ fn a_derived_witness_records_no_entries_and_prints_the_dots_on_their_own_line() 
     assert!(witnesses[0].body.is_none());
     assert_eq!(witnesses[0].params.len(), 2);
     assert_eq!(
-        entrypoint.printed().to_string(),
+        entrypoint.printed(&SYNTAX).to_string(),
         "satisfy (@A: Type, use Show(A)) => Show(List(A)) {\n    ..\n}\nu"
     );
 }
@@ -385,7 +385,7 @@ fn a_witness_group_mixes_derived_and_written_members() {
         [false, true, false]
     );
     assert_eq!(
-        entrypoint.printed().to_string(),
+        entrypoint.printed(&SYNTAX).to_string(),
         "satisfy Show(Nat) {\n    ..\n}\nand Show(Bool) {\n    show = g,\n}\nand Show(Str) {\n    ..\n}\nu"
     );
 }
@@ -414,7 +414,7 @@ fn a_witness_group_prints_each_member_on_its_own_and_line() {
     let source = "satisfy Show(Nat) { show = f } and Show(Bool) { show = g }\nu";
     let entrypoint = source.parse::<Entrypoint>().unwrap();
     assert_eq!(
-        entrypoint.printed().to_string(),
+        entrypoint.printed(&SYNTAX).to_string(),
         "satisfy Show(Nat) {\n    show = f,\n}\nand Show(Bool) {\n    show = g,\n}\nu"
     );
 }
