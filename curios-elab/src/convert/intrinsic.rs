@@ -127,6 +127,10 @@ struct Elaborating<'a, 's> {
 }
 
 impl Reducer for Elaborating<'_, '_> {
+    fn unfold_kept(&mut self, term: Term) -> Result<Term, ReduceError> {
+        Reducer::unfold_kept(self.context, term)
+    }
+
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         Reducer::reduce(self.context, term)
     }

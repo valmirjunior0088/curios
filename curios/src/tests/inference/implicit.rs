@@ -200,6 +200,35 @@ fn a_solution_whose_reduct_does_not_recheck_is_committed_as_written() {
     assert_eq!(output, b"1");
 }
 
+/// A solution met at an operand of a stuck intrinsic is the call the problem writes there. `pick`'s implicit meets `Holds(a != 3)` against `Holds(f(k) != 3)`, whose `==` is stuck where `f(k)` unfolds to a `match` on `k`, and is solved to `f(k)`: reduction keeps a call whose unfolding is a stuck `match` as its weak-head form, at the root and at the operand a fold forces, so the pair the comparison is taken apart into holds the call and not the `match` `f`'s body is. Both checkers accept the call as the solution.
+#[test]
+fn a_solution_met_at_a_stuck_operand_is_the_call_as_written() {
+    let program = r#"
+        use /std/{Nat, Io};
+        use /std/Bool/{Holds};
+
+        let f(k: Nat) -> Nat =
+            match k
+            | 0 => 7
+            | n + 1 => n
+            end;
+
+        let pick(@a: Nat, h: Holds(a != 3)) -> Nat = a;
+
+        pub let row(k: Nat, h: Holds(f(k) != 3)) -> Nat = pick(h);
+
+        Io/pure(())
+        "#;
+    typecheck(program).expect("both checkers accept the call as the solution");
+    let elaborated = core_elab(program);
+    let row = elaborated
+        .split("let /row")
+        .nth(1)
+        .expect("the row is printed");
+
+    assert!(unlaid(row).contains(&unlaid("/pick(@/f(k), h)")), "{row}");
+}
+
 /// A solution that holds a call of a recursive function names the function: `Eq/refl`'s implicit is solved to `f(n).count`, as the row states it. A candidate arrives reduced, a stuck call headed by its member's group, and committed so the solution would hold a copy of the callee, which its re-validation elaborates again and the certifier checks again.
 #[test]
 fn a_solution_holding_a_call_of_a_recursive_function_names_the_function() {

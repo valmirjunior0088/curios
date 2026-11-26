@@ -12,6 +12,10 @@ use {
 pub struct Inert;
 
 impl Reducer for Inert {
+    fn unfold_kept(&mut self, term: Term) -> Result<Term, ReduceError> {
+        Ok(term)
+    }
+
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         Ok(term)
     }
@@ -55,6 +59,10 @@ pub struct Budgeted {
 }
 
 impl Reducer for Budgeted {
+    fn unfold_kept(&mut self, term: Term) -> Result<Term, ReduceError> {
+        Ok(term)
+    }
+
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         match &*term {
             Subterm::Intrinsic(intrinsic) => Ok(reduce_intrinsic(self, intrinsic)?.into()),

@@ -9,9 +9,9 @@ use {
         hold_spines, mismatch, no_witness_error, numeral_default, obligation_shown, pending,
         probe_open_sort, problem_outcome, reduce_forced, reduces_to_false, region_flex,
         resolved_for_display, retry_discharge, retry_witness, shallow_scrutinee, subsume_outcome,
-        synth_neutral, terms_differ, waits_as_reference, zonk_solved_term_metas,
+        synth_neutral, terms_differ, unfold_kept_call, waits_as_reference, zonk_solved_term_metas,
     },
-    crate::{declared_quality, is_prop_to, sort_of, sort_of_in},
+    crate::{declared_quality, is_call, is_prop_to, sort_of, sort_of_in},
     curios_analysis::{
         Invert, RESOLVED_SPELLING_LAYERS, another_case, records_case_equation, scrutinee_solution,
         solve_indices,
@@ -45,6 +45,15 @@ pub fn check_as(
 
 pub fn reduce_with(context: &mut Context, term: &Term) -> Result<Term, Error> {
     reduce_forced(context, term.clone()).map_err(|error| {
+        Error::from_reduce(error, |refusal| {
+            Error::reduce_exhausted(term.clone(), refusal)
+        })
+    })
+}
+
+/// `term` past every call reduction kept, its unfolding stuck ([`unfold_kept_call`]), for a reader of a stuck `match`'s inside, with an exhausted budget mapped to an error as [`reduce_with`] maps it.
+pub fn unfolded_with(context: &mut Context, term: &Term) -> Result<Term, Error> {
+    unfold_kept_call(context, term.clone()).map_err(|error| {
         Error::from_reduce(error, |refusal| {
             Error::reduce_exhausted(term.clone(), refusal)
         })
@@ -274,8 +283,8 @@ pub fn expect_as(
 ///
 /// The four shapes are one fact: reduction cannot proceed until some metavariable is solved, so nothing about the term is decided yet. Conversion already treats each of them as [`Outcome::Blocked`](crate::Outcome) rather than as a mismatch; this is the same reading for the checked-only introduction forms, which otherwise refuse a program one step before the turnaround that would have solved the blocker. `Count(?L)` is the case that motivates the `Match` arm: the payload type of a description-indexed constructor, stuck until the index is known.
 pub fn stuck_on_metavar(context: &Context, reduced: &Term) -> bool {
-    // A folded recursive call is the fourth shape, and it does not wear its blocker on its head: `force_rec` hands the call itself back when unfolding cannot choose an arm, so what reduction is waiting for sits in an *argument* — any of the call's ([`Subterm::call_arguments`]), a member's own, one applied past them, or one a field of it is applied to. `Count(?L)` is that term — a description-indexed payload type before its index is known. The argument is read as unfolding reads it, after reduction, which its unreduced shape does not foretell, so one mentioning an unsolved metavariable blocks the call; one that mentions none blocks on nothing a solution could change, and rightly refuses.
-    if reduced.called_member().is_some() {
+    // A folded recursive call is the fourth shape, and a call of a definition reduction kept is the same one: neither wears its blocker on its head, since `force_rec` hands the call itself back when unfolding cannot choose an arm, so what reduction is waiting for sits in an *argument* — any of the call's ([`Subterm::call_arguments`]), a member's own, one applied past them, or one a field of it is applied to. `Count(?L)` is that term — a description-indexed payload type before its index is known. The argument is read as unfolding reads it, after reduction, which its unreduced shape does not foretell, so one mentioning an unsolved metavariable blocks the call; one that mentions none blocks on nothing a solution could change, and rightly refuses.
+    if reduced.called_member().is_some() || is_call(reduced) {
         return reduced.call_arguments().into_iter().any(|argument| {
             argument
                 .metavars()

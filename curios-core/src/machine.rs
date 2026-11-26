@@ -395,6 +395,10 @@ struct Tap<'a, H: Reducer> {
 }
 
 impl<H: Reducer> Reducer for Tap<'_, H> {
+    fn unfold_kept(&mut self, term: Term) -> Result<Term, ReduceError> {
+        self.host.unfold_kept(term)
+    }
+
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         match self.values.get(&term) {
             Some(value) => Ok(value.clone()),

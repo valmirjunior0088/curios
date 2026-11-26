@@ -105,6 +105,9 @@ pub trait Reducer {
     /// Reduce to weak-head normal form and then force a `rec` head, for a position that demands a value rather than a normal form.
     fn reduce_forced(&mut self, term: Term) -> Result<Term, ReduceError>;
 
+    /// `term`, a weak-head form, past a call this strategy keeps as its own weak-head form where the call's unfolding is a stuck `match`: that `match`, for a reader that reads a value rather than a spelling, as a `Bool` formula's leaf is read. A strategy that keeps no call hands `term` back.
+    fn unfold_kept(&mut self, term: Term) -> Result<Term, ReduceError>;
+
     /// Charge `cost` before constructing what it prices, failing when the budget cannot afford it.
     ///
     /// A saturated cost is refused outright rather than compared, so a size that overflowed can never be handed to an allocator; [`Cost`]'s module documentation carries the argument. Charging nothing is still a call — a site that computes [`Cost::NOTHING`] because it shares rather than builds is saying so, and saying so is what the audit checks.

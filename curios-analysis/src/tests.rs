@@ -9,6 +9,10 @@ use {
 struct Inert;
 
 impl Reducer for Inert {
+    fn unfold_kept(&mut self, term: Term) -> Result<Term, ReduceError> {
+        Ok(term)
+    }
+
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         Ok(term)
     }

@@ -20,6 +20,10 @@ fn fresh(hint: Option<&str>) -> Free {
 pub struct Inert;
 
 impl Reducer for Inert {
+    fn unfold_kept(&mut self, term: Term) -> Result<Term, ReduceError> {
+        Ok(term)
+    }
+
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         Ok(term)
     }
@@ -42,6 +46,10 @@ impl Reducer for Inert {
 pub struct Folding;
 
 impl Reducer for Folding {
+    fn unfold_kept(&mut self, term: Term) -> Result<Term, ReduceError> {
+        Ok(term)
+    }
+
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         match &*term {
             Subterm::Intrinsic(intrinsic) => Ok(reduce_intrinsic(self, intrinsic)?.into()),

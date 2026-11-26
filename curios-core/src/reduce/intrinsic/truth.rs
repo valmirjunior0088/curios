@@ -39,6 +39,11 @@ impl Table {
                 .reduce_forced(term.clone())
                 .probed()?
                 .unwrap_or_else(|| term.clone());
+            // A call the strategy keeps as its weak-head form is a spelling of the `match` it unfolds to, so the leaf is read at that `match`.
+            let forced = reducer
+                .unfold_kept(forced.clone())
+                .probed()?
+                .unwrap_or(forced);
             if let Some(&position) = self.positions.get(&forced) {
                 self.positions.insert(term, position);
                 return Ok(position);

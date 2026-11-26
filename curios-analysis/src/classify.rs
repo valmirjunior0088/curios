@@ -1156,6 +1156,10 @@ fn collapsed(
 struct Standing<'a, R>(&'a mut R);
 
 impl<R: Reducer> Reducer for Standing<'_, R> {
+    fn unfold_kept(&mut self, term: Term) -> Result<Term, ReduceError> {
+        Ok(term)
+    }
+
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         Ok(term)
     }

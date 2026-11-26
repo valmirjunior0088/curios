@@ -320,6 +320,52 @@ fn a_guard_answers_its_definition_one_unfolding_down() {
     }
 }
 
+/// A call of a definition whose unfolding is a stuck `match` is its own weak-head form in both strategies, reached plainly and under a forced demand: `pred(n)`, with `pred(x) = match x | 0 => 0 | p + 1 => p end`, is that call, as a recursive member's call stays folded where its unfolding sticks again, and `pred(4)` is the `3` it computes. Mutation-checked at each strategy's statement alone, the elaborator's `kept_call` and the certifier's: unfolding the call there hands back the `match`.
+#[test]
+fn a_call_whose_unfolding_is_stuck_is_its_weak_head_form_in_both_strategies() {
+    let mut context = context();
+    let mut certifier = certifier();
+    let n = context.fresh(Some("n"));
+    let x = context.fresh(Some("x"));
+    let p = context.fresh(Some("p"));
+    let pred = Global::Authored(Qualifier::from(["pred"]));
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+
+    let pred_type = Term::func_type([(x, nat_type.clone())], nat_type.clone());
+    let pred_body = Term::func(
+        [(x, nat_type.clone())],
+        Term::nat_match(
+            Term::free_var(&x),
+            nat_type.clone(),
+            nat(0),
+            &p,
+            Term::free_var(&p),
+        ),
+    );
+    certifier
+        .define(&pred, &pred_type, &pred_body, &UniverseContext::default())
+        .expect("a name is declared once");
+    certifier.assume(&n, &nat_type);
+    context.define_declaring(&pred, &pred_type, &pred_body, &DefinitionKind::Authored);
+    context.assume(&n, &nat_type);
+
+    let call = |argument: Term| Term::apply(Term::instance(pred, Universes::default()), [argument]);
+    let stuck = call(Term::free_var(&n));
+    assert_eq!(
+        super::reduce(&mut context, stuck.clone()),
+        Ok(stuck.clone())
+    );
+    assert_eq!(
+        super::reduce_forced(&mut context, stuck.clone()),
+        Ok(stuck.clone())
+    );
+    assert_eq!(certifier.reduce(stuck.clone()), Ok(stuck.clone()));
+    assert_eq!(certifier.reduce_forced(stuck.clone()), Ok(stuck));
+
+    assert_eq!(super::reduce_forced(&mut context, call(nat(4))), Ok(nat(3)));
+    assert_eq!(certifier.reduce_forced(call(nat(4))), Ok(nat(3)));
+}
+
 /// A match on data that turns closed under a beta step stands in both strategies where its scrutinee unfolds to nothing: `((x) => match loop | c() => 7 end)(n)` is open, so neither checker hands it to the closed machine, and the step makes the match closed with `loop`, a name of `F(1)` declared with no value, as a definition whose recursion does not descend is. A match reads nothing of its scrutinee only where it states the proposition it eliminates, and one on data is taken by its scrutinee's value. Mutation-checked at each strategy's statement, the elaborator's `reduce` and the certifier's `whnf`, each alone: firing on data by its shape reads `7` past `loop`.
 #[test]
 fn a_match_on_data_over_a_name_with_no_value_stands_in_both_strategies() {

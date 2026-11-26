@@ -14,6 +14,7 @@ mod test_support;
 use {
     super::{
         Certifier, Converted, Error, Sort, canonical_operands, proof_parts, resolved_spelling,
+        unfold_kept_call,
     },
     curios_analysis::{Classification, Driver, Erased, ReadsProofs},
     curios_core::{
@@ -181,6 +182,12 @@ pub fn bears_proof(certifier: &mut Certifier, type_: &Term) -> Result<bool, Erro
 
 /// The doors to reduction, for typing and for a shared analysis typing started: each term read by value, then reduced in a reading, by [`ByValue`]'s `Reducer`.
 impl Reducer for Certifier<'_> {
+    fn unfold_kept(&mut self, term: Term) -> Result<Term, ReduceError> {
+        self.read_by_value([&term], |certifier, [term]| {
+            unfold_kept_call(certifier, term)
+        })
+    }
+
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         self.read_by_value([&term], |certifier, [term]| certifier.whnf(term))
     }
@@ -500,9 +507,12 @@ impl ByValue<'_, '_> {
 impl Driver for ByValue<'_, '_> {
     type Error = Error;
 
-    /// Plain reduction, as the seam asks, over this reading.
+    /// Plain reduction, as the seam asks, over this reading, a call the main loop kept unfolded to the stuck `match` its unfolding is, the form every analysis reads a type in.
     fn force(&mut self, term: &Term) -> Result<Term, Self::Error> {
-        Ok(self.plainly(|certifier| certifier.reduce_forced(term.clone()))?)
+        Ok(self.plainly(|certifier| {
+            let forced = certifier.reduce_forced(term.clone())?;
+            unfold_kept_call(certifier, forced)
+        })?)
     }
 
     fn assumption(&self, name: &Free) -> Option<&Term> {
@@ -570,14 +580,20 @@ impl Driver for Certifier<'_> {
     /// Plain reduction, as the seam asks: a shared analysis borrows no opinion of the certifier's conversion through the term it reads. A door, so the term is read by value, in a reading whose reduction is plain.
     fn force(&mut self, term: &Term) -> Result<Term, Self::Error> {
         Ok(self.read_by_value([term], |certifier, [term]| {
-            certifier.plainly(|certifier| certifier.reduce_forced(term))
+            certifier.plainly(|certifier| {
+                let forced = certifier.reduce_forced(term)?;
+                unfold_kept_call(certifier, forced)
+            })
         })?)
     }
 
     /// Plain reduction of the term as a graded call reads it: a door, the term read by value but for a variable an arm's index inversion solved, so a guard's operand and a call's argument read through a witness are read as the call names them.
     fn force_graded(&mut self, term: &Term) -> Result<Term, Self::Error> {
         Ok(self.read_graded([term], |certifier, [term]| {
-            certifier.plainly(|certifier| certifier.reduce_forced(term))
+            certifier.plainly(|certifier| {
+                let forced = certifier.reduce_forced(term)?;
+                unfold_kept_call(certifier, forced)
+            })
         })?)
     }
 

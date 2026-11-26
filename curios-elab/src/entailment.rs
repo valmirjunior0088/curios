@@ -40,7 +40,7 @@ mod tests;
 use {
     crate::{
         Context, Error, Expectation, Mode, elaborate, named_members, reduce_with, same_uncommitted,
-        trivially_inhabited, zonk_solved_term_metas,
+        trivially_inhabited, unfolded_with, zonk_solved_term_metas,
     },
     curios_algebra::{LinearForm, Monomial},
     curios_analysis::Classes,
@@ -82,13 +82,14 @@ fn is_empty(context: &Context, reduced: &Term) -> bool {
             .is_some_and(|decl| decl.constructor_order().next().is_none()))
 }
 
-/// The decision `reduced` states is `true`, or `None` for a proposition the procedure reads nothing in. `/sys` states `Holds(b)` as `match b | true => True | false => False end`, so a bound it did not decide reduces to that match stuck on its decision. A weak head normal form leaves a match's arms as elaborated, so the true arm is reduced before it is compared with the truth.
+/// The decision `reduced` states is `true`, or `None` for a proposition the procedure reads nothing in. `/sys` states `Holds(b)` as `match b | true => True | false => False end`, so a bound it did not decide reduces to `Holds(b)` kept, a call whose unfolding is that match stuck on its decision, and the match is read through the call. A weak head normal form leaves a match's arms as elaborated, so the true arm is reduced before it is compared with the truth.
 fn decision_of(context: &mut Context, reduced: &Term) -> Result<Option<Term>, Error> {
+    let reduced = unfolded_with(context, reduced)?;
     let Subterm::Match(Match {
         head,
         cases: Cases::Bool { true_case, .. },
         ..
-    }) = &**reduced
+    }) = &*reduced
     else {
         return Ok(None);
     };
@@ -106,6 +107,8 @@ pub fn entail(context: &mut Context, bound: &Term, reduced: &Term) -> Result<Ent
     if context.entailing() {
         return Ok(Entailed::Refused(Refusal::default()));
     }
+    // The bound's reduct is read at the stuck `match` it unfolds to where reduction kept a call — `Holds(b)`, or a definition of a proposition as `Valid(…)` is — so its decision, its emptiness and a conjunct's bound (`over`) are read off that `match`.
+    let reduced = &unfolded_with(context, reduced)?;
     // What the search reads in the bound, where it reads anything: a fact that states the bound proves it either way.
     let goal = goal_of(context, reduced)?;
     // The decision as the bound spells it, which the proof is written over where the bound's reduct is only read.

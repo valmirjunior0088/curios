@@ -142,6 +142,10 @@ pub type Relation = fn(Term, Term) -> Intrinsic;
 pub struct Folding;
 
 impl Reducer for Folding {
+    fn unfold_kept(&mut self, term: Term) -> Result<Term, ReduceError> {
+        Ok(term)
+    }
+
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         match &*term {
             Subterm::Intrinsic(intrinsic) => Ok(reduce_intrinsic(self, intrinsic)?.into()),

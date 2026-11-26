@@ -767,7 +767,7 @@ fn an_arm_its_scrutinees_constructor_rules_out_holds_no_call() {
     .saying("is kept folded");
 }
 
-// A law closed by reflexivity has its implicit argument inferred as the literal's own `same` applied to `(leaf(), leaf())`, a redex whose binders stand for their arguments, so its `node` arms are of another case than their scrutinees and hold no call: the witness descends, and the law checks against the method it unfolds. The refusal picks a node, whose arm the redex takes and whose call of the witness descends from no parameter.
+// A law closed by reflexivity has its implicit argument inferred as the literal's own `same` applied to `(leaf(), leaf())`, a redex whose binders stand for their arguments, so its `node` arms are of another case than their scrutinees and hold no call: the witness descends, and the law checks against the method it unfolds. The refusal picks a node, whose arm the redex takes and whose call of the witness descends from no parameter: the law reads `same(leaf(), leaf())` through the witness its turn has not found known to terminate, and is refused at that read.
 #[test]
 fn a_law_closed_by_reflexivity_holds_no_call_of_an_arm_its_arguments_rule_out() {
     control(

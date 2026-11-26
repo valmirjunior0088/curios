@@ -28,7 +28,7 @@ use {
     super::{crossed, crossing_in_scope, decision_of, global, in_scope, is_empty, stated},
     crate::{
         Binders, Context, Error, answered_guard, classing_among, distributed, open_layer,
-        reduce_with, same_uncommitted, synth_neutral, zonk_solved_term_metas,
+        reduce_with, same_uncommitted, synth_neutral, unfolded_with, zonk_solved_term_metas,
     },
     curios_algebra::{Carrier, Half, Lattice, LinearForm, Monomial, Operation},
     curios_analysis::{Classes, RESOLVED_SPELLING_LAYERS, atoms_in, classed_in, is_node},
@@ -478,6 +478,7 @@ impl<'a> Reader<'a> {
             None => {}
         }
         let reduced = reduce_with(context, decision)?;
+        let reduced = unfolded_with(context, &reduced)?;
         match &*reduced {
             Subterm::Intrinsic(Intrinsic::BoolAnd(first, second)) => {
                 self.conjunction(context, first, second, stated, proof, origin)

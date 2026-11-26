@@ -554,6 +554,10 @@ fn produces(intrinsic: &Intrinsic) -> Option<Carrier> {
 struct Reduced<'a, D>(&'a mut D);
 
 impl<D: IntrinsicDriver> Reducer for Reduced<'_, D> {
+    fn unfold_kept(&mut self, term: Term) -> Result<Term, ReduceError> {
+        Ok(term)
+    }
+
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         Ok(term)
     }

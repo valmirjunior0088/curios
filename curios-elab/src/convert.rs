@@ -31,7 +31,8 @@ mod tests;
 
 use {
     super::{
-        Context, applied_head, check, reduce, reduce_forced, restuck, unfold_rec, unfold_rec_apply,
+        Context, applied_head, check, kept_unfolding, reduce, reduce_forced, restuck,
+        unfold_kept_call, unfold_rec, unfold_rec_apply,
     },
     crate::{
         Declined, Error, Occurrence, Scoped, locals_outside_spines, metavar_origins,
@@ -2847,6 +2848,15 @@ impl Convert {
             // Two calls of one definition whose spines may yet agree are decided by what they reduce to as a run of its own. What that forces is solved; where it leaves the pair undecided the pair waits whole, under its raw spelling, and what the run left blocked goes with it: a residue alone — `Pick(?b)` against `Nat`, of `Shelf(?b)` against `Shelf(true)` — holds nothing of the two calls, and the term that awaits it would have no spines to hold where it completes.
             //
             // A pair whose spines agree by what that would solve waits the same way where its reduction finds the two apart: they are equal at that solution, so the refusal is reduction's, which reads a fold stuck on `?a % 28` as no `1`, and what the run solved on its way there is withdrawn with it.
+            //
+            // What they reduce to is what their unfoldings do: a call reduction kept, its unfolding stuck, is that call still, and the spines above have already asked what it shares with the other.
+            let (this, that) = match open {
+                Some(_) => (
+                    unfold_kept_call(context, this)?,
+                    unfold_kept_call(context, that)?,
+                ),
+                None => (this, that),
+            };
             if let Some(solvable) = open
                 && (this != this_raw || that != that_raw)
             {
@@ -3071,6 +3081,20 @@ impl Convert {
                     continue;
                 }
                 Some(Solved::Failed) | None => {}
+            }
+
+            // A call reduction kept, its unfolding stuck, meeting another shape: every rule above that reads it as the atom it is has had the pair, so it is unfolded one step and the pair posed again, as a recursive member's folded call is forced against another shape below.
+            let (this_unfolded, that_unfolded) = (
+                kept_unfolding(context, &this)?,
+                kept_unfolding(context, &that)?,
+            );
+            if this_unfolded.is_some() || that_unfolded.is_some() {
+                self.enqueue(
+                    type_,
+                    this_unfolded.unwrap_or(this),
+                    that_unfolded.unwrap_or(that),
+                );
+                continue;
             }
 
             let ok = match (Term::unwrap_or_clone(this), Term::unwrap_or_clone(that)) {

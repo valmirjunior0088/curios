@@ -77,6 +77,11 @@ pub fn normalize_bool(
             .reduce_forced(term.clone())
             .probed()?
             .unwrap_or(term);
+        // A call the strategy keeps as its weak-head form is a spelling of the `match` it unfolds to, so the leaf is read at that `match`.
+        let forced = reducer
+            .unfold_kept(forced.clone())
+            .probed()?
+            .unwrap_or(forced);
         if !met.insert(forced.clone()) {
             continue;
         }

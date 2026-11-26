@@ -33,6 +33,10 @@ impl MachineHost {
 }
 
 impl Reducer for MachineHost {
+    fn unfold_kept(&mut self, term: Term) -> Result<Term, ReduceError> {
+        Ok(term)
+    }
+
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         reduce_closed(self, term, Demand::Whnf)
     }

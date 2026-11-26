@@ -26,7 +26,7 @@ use {
     },
     crate::{
         Binders, Error, apply_param_types, classing, is_prop, reduce_with, same_uncommitted,
-        sort_of,
+        sort_of, unfolded_with,
     },
     curios_analysis::{
         Answered, Classes, Driver, IntrinsicDriver, Judge, ReadsProofs, ScrutineeRead, Within,
@@ -132,6 +132,10 @@ fn solved_through(context: &Context, term: &Term) -> bool {
 ///
 /// **A reduct is handed over with its solved metavariables substituted.** A fold pairs by identity — a summand with a summand, a remainder with its quotient's dividend — and reduction opens nothing inside a stuck call, where an operator still reaches its concept through a witness metavariable of its own, solved and not yet spliced: two occurrences of `f(a + b)` are two terms until both are substituted. The certifier is handed substituted terms, so read as they stand the elaborator alone would refuse what a fold decides.
 impl Reducer for Context<'_> {
+    fn unfold_kept(&mut self, term: Term) -> Result<Term, ReduceError> {
+        unfold_kept_call(self, term)
+    }
+
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         let reduct = reduce(self, term)?;
         Ok(zonk_solved_term_metas(self, &reduct))
@@ -157,9 +161,12 @@ impl Reducer for Context<'_> {
 impl Driver for Context<'_> {
     type Error = Error;
 
-    /// Plain reduction, as the seam asks: a shared analysis borrows no opinion of the elaborator's conversion through the term it reads.
+    /// Plain reduction, as the seam asks: a shared analysis borrows no opinion of the elaborator's conversion through the term it reads. A call reduction kept is unfolded to the stuck `match` its unfolding is, the form every analysis reads a type in.
     fn force(&mut self, term: &Term) -> Result<Term, Self::Error> {
-        self.plainly(|context| reduce_with(context, term))
+        self.plainly(|context| {
+            let reduced = reduce_with(context, term)?;
+            unfolded_with(context, &reduced)
+        })
     }
 
     fn assumption(&self, name: &Free) -> Option<&Term> {
@@ -559,6 +566,10 @@ fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
             Subterm::Rec(rec) => {
                 let tail = unfold_rec(context, rec)?;
                 term = reduce(context, tail)?;
+            }
+            // A call of a definition reduction kept is neutral as the stuck `match` it unfolds to is: plain reduction has unfolded it already, so unfolding it again here would only reach the call once more, at the cost of an unfolding at every demand.
+            Subterm::Apply(apply) if is_call(&Subterm::Apply(apply.clone()).into()) => {
+                return finished(context, folded, Subterm::Apply(apply).into());
             }
             // An application no unfolding opens is neutral as a `match` on a variable is, and kept by the same test.
             Subterm::Apply(apply) => match unfold_rec_apply(context, apply.clone())? {
@@ -1433,6 +1444,10 @@ fn asked_scrutinee(
 struct Reading<'a, 's>(&'a mut Context<'s>);
 
 impl Reducer for Reading<'_, '_> {
+    fn unfold_kept(&mut self, term: Term) -> Result<Term, ReduceError> {
+        Reducer::unfold_kept(self.0, term)
+    }
+
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         Reducer::reduce(self.0, term)
     }
@@ -1624,9 +1639,11 @@ fn settle_at(
 ///
 /// The certifier's `canonical_operands`, gated the same way, on a `head_key` rather than on every intrinsic.
 fn reduct_spelling(context: &mut Context, term: &Term) -> Result<Term, ReduceError> {
-    let spelled = match (&**term, term.head_key()) {
+    // A call reduction kept is read at the stuck form its unfolding is, the form a probe reaches before the call is kept, so a key spelled through one definition meets a probe spelled through another where their unfoldings are one.
+    let term = unfold_kept_call(context, term.clone())?;
+    let spelled = match (&*term, term.head_key()) {
         (Subterm::Intrinsic(intrinsic), Some(_)) => canonical_operands(context, intrinsic)?,
-        _ => term.clone(),
+        _ => term,
     };
 
     // A variable an arm in force refined is spelled as its value, as a key is ([`shallow_scrutinee`]): reduction reads one through its refinement only where it meets it at a head.
@@ -1678,9 +1695,23 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
     let declined = context.declined();
     // Whether the loop is continuing from an answer the reduced spellings gave. See the `Reduce::Break` arm below.
     let mut answered = false;
+    // The call the loop has unfolded since it last made progress, handed back where what it unfolds to is a stuck `match` ([`kept_call`]).
+    let mut call = None;
 
     loop {
         context.spend(Cost::STEP)?;
+        if call.is_none() && is_call(&term) {
+            call = Some(term.clone());
+        }
+        // Whether a step from here only unfolds what stands — a call's head, a `let`, a name — rather than taking an arm or a field, which is progress past the call.
+        let unfolds = matches!(
+            &*term,
+            Subterm::Apply(_)
+                | Subterm::Let(_)
+                | Subterm::Instance(_)
+                | Subterm::Var(_)
+                | Subterm::Metavar(_)
+        );
 
         let step = 'step: {
             // Index refinement for stuck applications (convertibility-keyed). Gated cheaply — store non-empty, then a refined applied-head symbol — before keying the candidate and looking it up.
@@ -1792,24 +1823,35 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
         };
 
         match step {
-            Reduce::Continue(next) => term = next,
+            Reduce::Continue(next) => {
+                if !unfolds {
+                    call = None;
+                }
+                term = next;
+            }
             // A stuck form standing under an arm's equation *is* that case's value, and the written spellings have all been asked by now: the one probe left is the entries' reduced spellings, the certifier's second point.
             //
             // **An answer is final.** What it hands back is a case value — a constructor or a literal, a normal form — so there is nothing left for an equation to say about it, and it is not asked again. That is a rule rather than an observation: a reduced spelling can itself be a case value, where equations outside an entry decide its key, whose spelling then settles to that value. Asked again, such a value would answer itself, which the loop would take for progress until the budget ran out, and two entries spelled as each other's values would trade it back and forth the same way.
             Reduce::Break(result) => match answered {
                 true => {
+                    let result = kept_call(call.as_ref(), result);
                     remember(context, declined, entry, &result);
                     return Ok(result);
                 }
                 false => match refined_reduct(context, &result)? {
                     Some(value) => {
                         answered = true;
+                        call = None;
                         term = value;
                     }
                     // No equation answers it: a fold the elaborator's own conversion decides is reduced on. Asked after every equation, where the certifier's reducer asks, so the two take one answer where an equation and a fold both have one — which only an arm no value reaches can make differ.
                     None => match refolded(context, &result)? {
-                        Some(value) => term = value,
+                        Some(value) => {
+                            call = None;
+                            term = value;
+                        }
                         None => {
+                            let result = kept_call(call.as_ref(), result);
                             remember(context, declined, entry, &result);
                             return Ok(result);
                         }
@@ -1818,6 +1860,51 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
             },
         }
     }
+}
+
+/// What reduction hands back for a `call` it unfolded to `reduct` since it last made progress: `call` itself where `reduct` is the stuck `match` its unfolding ends on, and `reduct` otherwise. A recursive member's call is kept folded where its unfolding sticks again ([`finished`]); this is that rule for every definition, so what reduction hands back of a call follows neither whether its definition names itself nor whether the call was reached at the root, past a field or an arm, or as an operand a fold forces, and a pair a stuck term is taken apart into holds the call the problem wrote. The call kept is the first one unfolded since the last arm, field or answer: one its unfolding makes on the way is a helper the problem never wrote. The certifier's `whnf` keeps one by the same test.
+///
+/// A definition whose unfolding names it again — a witness whose method recurses through the witness — is unfolded as before: its recursion is no group's, so the unfolding of a pair against itself, which ends a recursive member's ([`restuck`]), has nothing to end it by.
+fn kept_call(call: Option<&Term>, reduct: Term) -> Term {
+    match (call, &*reduct) {
+        (Some(call), Subterm::Match(_)) if !names_itself(call, &reduct) => call.clone(),
+        _ => reduct,
+    }
+}
+
+/// Whether `reduct`, what the call `call` unfolds to, names the definition `call` is a call of.
+fn names_itself(call: &Term, reduct: &Term) -> bool {
+    match &**call.call_root() {
+        Subterm::Instance(Instance { name, .. }) => reduct.mentions_declaration(name),
+        _ => false,
+    }
+}
+
+/// Whether `term` is a call of a global definition, the one shape [`kept_call`] keeps, and which a reader of what a stuck form waits on reads as it reads a folded recursive call.
+pub fn is_call(term: &Term) -> bool {
+    matches!(&**term, Subterm::Apply(_)) && matches!(&**term.call_root(), Subterm::Instance(_))
+}
+
+/// One unfolding of a call [`kept_call`] kept, reduced: `None` for any other term, a call of a global no value stands for among them. Taken where the call meets a reader of what its unfolding is — conversion against another shape, a reader of a stuck `match`'s inside — as a recursive member's folded call is forced there.
+pub fn kept_unfolding(context: &mut Context, term: &Term) -> Result<Option<Term>, ReduceError> {
+    let Subterm::Apply(apply) = &**term else {
+        return Ok(None);
+    };
+    if !is_call(term) {
+        return Ok(None);
+    }
+    match unfold_rec_apply(context, apply.clone())? {
+        Some(unfolded) => Ok(Some(reduce(context, unfolded)?)),
+        None => Ok(None),
+    }
+}
+
+/// `term` past every call [`kept_call`] kept, each unfolded ([`kept_unfolding`]) until the form its unfolding reduces to: the stuck `match` a reader of its inside reads.
+pub fn unfold_kept_call(context: &mut Context, mut term: Term) -> Result<Term, ReduceError> {
+    while let Some(unfolded) = kept_unfolding(context, &term)? {
+        term = unfolded;
+    }
+    Ok(term)
 }
 
 /// Remember `result` as `entry`'s reduct, unless a question was declined for a commit since `declined` was read, where the reduction began.

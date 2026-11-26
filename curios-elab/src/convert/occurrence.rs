@@ -1,7 +1,7 @@
 //! Reading a term for the shapes solving branches on: an abstraction of a subject's occurrences, and the three metavariable tests that decide whether a problem can be attempted at all.
 
 use {
-    crate::{Context, zonk_solved_term_metas},
+    crate::{Context, is_call, zonk_solved_term_metas},
     curios_core::{Apply, Bound, Free, Metavar, Subterm, Term, Visit},
 };
 
@@ -75,8 +75,8 @@ pub fn blocked_on_unsolved_metavar(context: &Context, term: &Term) -> bool {
             .any(|id| context.metavar_solution(*id).is_none())
     };
 
-    // A folded recursive call does not wear its blocker on its head: unfolding hands the call itself back where it cannot choose an arm, so what reduction waits for sits in an argument — any of the call's ([`Subterm::call_arguments`]) — as [`stuck_on_metavar`](crate::stuck_on_metavar) reads it where a form is checked. An argument is read as unfolding reads it, after reduction, which its unreduced shape does not foretell — `measure(?c % 3)` is an application of a lambda — so one that mentions an unsolved metavariable blocks the call.
-    if term.called_member().is_some() {
+    // A folded recursive call, and a call of a definition reduction kept, does not wear its blocker on its head: unfolding hands the call itself back where it cannot choose an arm, so what reduction waits for sits in an argument — any of the call's ([`Subterm::call_arguments`]) — as [`stuck_on_metavar`](crate::stuck_on_metavar) reads it where a form is checked. An argument is read as unfolding reads it, after reduction, which its unreduced shape does not foretell — `measure(?c % 3)` is an application of a lambda — so one that mentions an unsolved metavariable blocks the call.
+    if term.called_member().is_some() || is_call(term) {
         return term.call_arguments().into_iter().any(has_unsolved);
     }
 
