@@ -1,2 +1,2 @@
-editors/tree-sitter/base/src/** linguist-generated
-editors/tree-sitter/core/src/** linguist-generated
+editors/tree-sitter/curios/src/** linguist-generated
+editors/tree-sitter/curios_core/src/** linguist-generated

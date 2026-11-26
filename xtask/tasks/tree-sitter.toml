@@ -7,66 +7,66 @@ curios_core.run = ["git", "ls-files", "--", "xboard/tickets/*.crsc"]
 what = "Generate each grammar's parser where the repository commits it, and compile it for the steps that parse with it"
 
 # A grammar is JavaScript, evaluated by the Node every other step's JavaScript runs under. Its parser is written just before it is compiled into the checkout, a file the steps that parse with it load by its path: tree-sitter keeps parsers by the grammar's name in a cache every checkout of the machine shares, and hands one back in place of compiling sources older than it, so a parser read through that cache may be another checkout's.
-[build.base]
-what = "Generate the program's parser into `base/src/`, where the repository commits it, and compile it for the steps that parse with it"
-produces.parser = "editors/tree-sitter/base/src"
+[build.curios]
+what = "Generate the program's parser into `curios/src/`, where the repository commits it, and compile it for the steps that parse with it"
+produces.parser = "editors/tree-sitter/curios/src"
 produces.library = "editors/tree-sitter/.artifacts/curios.so"
 run = [
     [
-        "{.tools.tree-sitter}", "generate", "editors/tree-sitter/base/grammar.js",
-        "--output", "{.tree-sitter.build.base.produces.parser}", "--js-runtime", "{.tools.node}",
+        "{.tools.tree-sitter}", "generate", "editors/tree-sitter/curios/grammar.js",
+        "--output", "{.tree-sitter.build.curios.produces.parser}", "--js-runtime", "{.tools.node}",
     ],
-    ["{.tools.tree-sitter}", "build", "editors/tree-sitter/base", "--output", "{.tree-sitter.build.base.produces.library}"],
+    ["{.tools.tree-sitter}", "build", "editors/tree-sitter/curios", "--output", "{.tree-sitter.build.curios.produces.library}"],
 ]
 
-[build.core]
-what = "Generate Curios/Core's parser into `core/src/`, where the repository commits it, and compile it for the steps that parse with it"
-produces.parser = "editors/tree-sitter/core/src"
+[build.curios_core]
+what = "Generate Curios/Core's parser into `curios_core/src/`, where the repository commits it, and compile it for the steps that parse with it"
+produces.parser = "editors/tree-sitter/curios_core/src"
 produces.library = "editors/tree-sitter/.artifacts/curios_core.so"
 run = [
     [
-        "{.tools.tree-sitter}", "generate", "editors/tree-sitter/core/grammar.js",
-        "--output", "{.tree-sitter.build.core.produces.parser}", "--js-runtime", "{.tools.node}",
+        "{.tools.tree-sitter}", "generate", "editors/tree-sitter/curios_core/grammar.js",
+        "--output", "{.tree-sitter.build.curios_core.produces.parser}", "--js-runtime", "{.tools.node}",
     ],
-    ["{.tools.tree-sitter}", "build", "editors/tree-sitter/core", "--output", "{.tree-sitter.build.core.produces.library}"],
+    ["{.tools.tree-sitter}", "build", "editors/tree-sitter/curios_core", "--output", "{.tree-sitter.build.curios_core.produces.library}"],
 ]
 
 [test]
 what = "Hold each grammar to its corpus of trees, and the tree's sources and Zed's queries to the grammars"
 
 # A grammar's corpus of trees is read where the test stands.
-[test.base]
+[test.curios]
 what = "Hold the program's grammar to its corpus of trees"
-consumes = [".tree-sitter.build.base.produces.library"]
+consumes = [".tree-sitter.build.curios.produces.library"]
 run = [
-    { in = "editors/tree-sitter/base", do = ["{.tools.tree-sitter}", "test", "--lib-path", "{.tree-sitter.build.base.produces.library}", "--lang-name", "curios"] },
+    { in = "editors/tree-sitter/curios", do = ["{.tools.tree-sitter}", "test", "--lib-path", "{.tree-sitter.build.curios.produces.library}", "--lang-name", "curios"] },
 ]
 
-[test.core]
+[test.curios_core]
 what = "Hold Curios/Core's grammar to its corpus of trees"
-consumes = [".tree-sitter.build.core.produces.library"]
+consumes = [".tree-sitter.build.curios_core.produces.library"]
 run = [
-    { in = "editors/tree-sitter/core", do = ["{.tools.tree-sitter}", "test", "--lib-path", "{.tree-sitter.build.core.produces.library}", "--lang-name", "curios_core"] },
+    { in = "editors/tree-sitter/curios_core", do = ["{.tools.tree-sitter}", "test", "--lib-path", "{.tree-sitter.build.curios_core.produces.library}", "--lang-name", "curios_core"] },
 ]
 
 [test.sources]
 what = "Parse the standard library, the corpus and the board's Curios/Core without an error, and compile each Zed highlight query against its grammar, so a renamed node cannot orphan a capture silently"
-consumes = [".tree-sitter.build.base.produces.library", ".tree-sitter.build.core.produces.library"]
+consumes = [".tree-sitter.build.curios.produces.library", ".tree-sitter.build.curios_core.produces.library"]
 run = [
     [
-        "{.tools.tree-sitter}", "parse", "-q", "--lib-path", "{.tree-sitter.build.base.produces.library}", "--lang-name", "curios",
+        "{.tools.tree-sitter}", "parse", "-q", "--lib-path", "{.tree-sitter.build.curios.produces.library}", "--lang-name", "curios",
         "{.tree-sitter.programs}",
     ],
     [
-        "{.tools.tree-sitter}", "parse", "-q", "--lib-path", "{.tree-sitter.build.core.produces.library}", "--lang-name", "curios_core",
+        "{.tools.tree-sitter}", "parse", "-q", "--lib-path", "{.tree-sitter.build.curios_core.produces.library}", "--lang-name", "curios_core",
         "{.tree-sitter.curios_core}",
     ],
     [
-        "{.tools.tree-sitter}", "query", "-q", "--lib-path", "{.tree-sitter.build.base.produces.library}", "--lang-name", "curios",
+        "{.tools.tree-sitter}", "query", "-q", "--lib-path", "{.tree-sitter.build.curios.produces.library}", "--lang-name", "curios",
         "editors/zed/languages/curios/highlights.scm", "{.tree-sitter.programs}",
     ],
     [
-        "{.tools.tree-sitter}", "query", "-q", "--lib-path", "{.tree-sitter.build.core.produces.library}", "--lang-name", "curios_core",
+        "{.tools.tree-sitter}", "query", "-q", "--lib-path", "{.tree-sitter.build.curios_core.produces.library}", "--lang-name", "curios_core",
         "editors/zed/languages/curios_core/highlights.scm", "{.tree-sitter.curios_core}",
     ],
 ]

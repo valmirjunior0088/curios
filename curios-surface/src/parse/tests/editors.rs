@@ -13,7 +13,10 @@ use {
 };
 
 /// The tree-sitter grammars, each by its directory.
-const TREE_SITTER: [&str; 2] = ["editors/tree-sitter/base", "editors/tree-sitter/core"];
+const TREE_SITTER: [&str; 2] = [
+    "editors/tree-sitter/curios",
+    "editors/tree-sitter/curios_core",
+];
 
 /// The TextMate grammar of a program, which states every word, and Curios/Core's, which includes it and states the words its own forms begin with.
 const TEXTMATE: &str = "editors/textmate/curios.tmLanguage.json";

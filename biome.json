@@ -12,8 +12,8 @@
       "editors/vscode/**/*.js",
       "editors/vscode/**/*.json",
       "!**/package-lock.json",
-      "!editors/tree-sitter/base/src",
-      "!editors/tree-sitter/core/src"
+      "!editors/tree-sitter/curios/src",
+      "!editors/tree-sitter/curios_core/src"
     ]
   },
   "formatter": { "indentStyle": "space", "indentWidth": 2 }

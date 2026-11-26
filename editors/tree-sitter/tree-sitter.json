@@ -5,13 +5,13 @@
       "camelcase": "Curios",
       "scope": "source.curios",
       "file-types": ["crs"],
-      "path": "base"
+      "path": "curios"
     },
     {
       "name": "curios_core",
       "camelcase": "CuriosCore",
       "scope": "source.curios.core",
-      "path": "core",
+      "path": "curios_core",
       "file-types": ["crsc"]
     }
   ],

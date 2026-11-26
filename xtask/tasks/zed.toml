@@ -35,7 +35,7 @@ run = [
 [check]
 what = "Hold the grammar revisions the Zed extension pins to the grammars this tree holds: each publishes, at its revision, the directory on disk"
 # The directory on disk is read after the parsers there are generated. The extension's two other copies, Curios/Core's highlight query opening with the program's and the lint table restating the workspace's, are kept equal by hand.
-consumes = [".tree-sitter.build.base.produces.parser", ".tree-sitter.build.core.produces.parser"]
+consumes = [".tree-sitter.build.curios.produces.parser", ".tree-sitter.build.curios_core.produces.parser"]
 run = [
     ["sh", "{.zed.scripts.pins}", "{.zed.curios_rev}", "{.zed.curios_path}", "{.zed.curios_core_rev}", "{.zed.curios_core_path}"],
 ]

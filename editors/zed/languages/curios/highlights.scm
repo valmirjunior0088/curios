@@ -1,4 +1,4 @@
-; Captures for the `curios` grammar in `editors/tree-sitter/base`. Zed reads a language's queries from its own directory alone — the grammar ships no `queries/` — so this is the one statement of them, which `curios_core/highlights.scm` opens with verbatim, and `cargo xtask tree-sitter test` compiles each against its grammar so a renamed node cannot orphan a capture silently.
+; Captures for the `curios` grammar in `editors/tree-sitter/curios`. Zed reads a language's queries from its own directory alone — the grammar ships no `queries/` — so this is the one statement of them, which `curios_core/highlights.scm` opens with verbatim, and `cargo xtask tree-sitter test` compiles each against its grammar so a renamed node cannot orphan a capture silently.
 
 (comment) @comment
 ; A documentation comment is a comment the grammar reads like any other, opening with `---`.
