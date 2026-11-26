@@ -216,7 +216,7 @@ fn a_family_nested_through_a_law_that_infers_its_answers_descends() {
             head: Eq()(fx, Ordering/flip(x)),
             rest: (Eq()(x, Ordering/eq())) -> Eq()(fy, Ordering/flip(y)),
         ) -> Eq()(Ordering/then(fx, fy), Ordering/flip(Ordering/then(x, y))) =
-            Ordering/then/flips(x, y, fx, fy, head, rest);
+            Ordering/then/flips(head, rest);
 
         let seq(@T: Type, use Order(T), a: List(T), b: List(T)) -> Ordering =
             match a

@@ -814,28 +814,13 @@ satisfy (@A: Type, @B: Type, use Ord(A), use Ord(B)) => Ord({A, B}) {
     ord = ord2,
     lt(a, b) = Ordering/is_lt(ord2(a, b)),
     le(a, b) = Ordering/is_le(ord2(a, b)),
-    flips(a, b) =
-        Ordering/then/flips(
-            Ord/ord(a.0, b.0),
-            Ord/ord(a.1, b.1),
-            Ord/ord(b.0, a.0),
-            Ord/ord(b.1, a.1),
-            Ord/flips(a.0, b.0),
-            (_) => Ord/flips(a.1, b.1)),
+    flips(a, b) = Ordering/then/flips(Ord/flips(a.0, b.0), (_) => Ord/flips(a.1, b.1)),
     trans(a, b, c, p, q) =
         Ordering/chains/le(
             ord2(a, b),
             ord2(b, c),
             ord2(a, c),
-            Ordering/chains/then(
-                Ord/ord(a.0, b.0),
-                Ord/ord(b.0, c.0),
-                Ord/ord(a.0, c.0),
-                Ord/ord(a.1, b.1),
-                Ord/ord(b.1, c.1),
-                Ord/ord(a.1, c.1),
-                Ord/chains(a.0, b.0, c.0),
-                (_, _) => Ord/chains(a.1, b.1, c.1)),
+            Ordering/chains/then(Ord/chains(a.0, b.0, c.0), (_, _) => Ord/chains(a.1, b.1, c.1)),
             p,
             q),
     eq(a, b, h) =
@@ -869,40 +854,17 @@ satisfy (@A: Type, @B: Type, @C: Type, use Ord(A), use Ord(B), use Ord(C)) => Or
     le(a, b) = Ordering/is_le(ord3(a, b)),
     flips(a, b) =
         Ordering/then/flips(
-            Ord/ord(a.0, b.0),
-            Ordering/then(Ord/ord(a.1, b.1), Ord/ord(a.2, b.2)),
-            Ord/ord(b.0, a.0),
-            Ordering/then(Ord/ord(b.1, a.1), Ord/ord(b.2, a.2)),
             Ord/flips(a.0, b.0),
-            (_) =>
-                Ordering/then/flips(
-                    Ord/ord(a.1, b.1),
-                    Ord/ord(a.2, b.2),
-                    Ord/ord(b.1, a.1),
-                    Ord/ord(b.2, a.2),
-                    Ord/flips(a.1, b.1),
-                    (_) => Ord/flips(a.2, b.2))),
+            (_) => Ordering/then/flips(Ord/flips(a.1, b.1), (_) => Ord/flips(a.2, b.2))),
     trans(a, b, c, p, q) =
         Ordering/chains/le(
             ord3(a, b),
             ord3(b, c),
             ord3(a, c),
             Ordering/chains/then(
-                Ord/ord(a.0, b.0),
-                Ord/ord(b.0, c.0),
-                Ord/ord(a.0, c.0),
-                Ordering/then(Ord/ord(a.1, b.1), Ord/ord(a.2, b.2)),
-                Ordering/then(Ord/ord(b.1, c.1), Ord/ord(b.2, c.2)),
-                Ordering/then(Ord/ord(a.1, c.1), Ord/ord(a.2, c.2)),
                 Ord/chains(a.0, b.0, c.0),
                 (_, _) =>
                     Ordering/chains/then(
-                        Ord/ord(a.1, b.1),
-                        Ord/ord(b.1, c.1),
-                        Ord/ord(a.1, c.1),
-                        Ord/ord(a.2, b.2),
-                        Ord/ord(b.2, c.2),
-                        Ord/ord(a.2, c.2),
                         Ord/chains(a.1, b.1, c.1),
                         (_, _) => Ord/chains(a.2, b.2, c.2))),
             p,
@@ -966,62 +928,23 @@ satisfy (
     le(a, b) = Ordering/is_le(ord4(a, b)),
     flips(a, b) =
         Ordering/then/flips(
-            Ord/ord(a.0, b.0),
-            Ordering/then(Ord/ord(a.1, b.1), Ordering/then(Ord/ord(a.2, b.2), Ord/ord(a.3, b.3))),
-            Ord/ord(b.0, a.0),
-            Ordering/then(Ord/ord(b.1, a.1), Ordering/then(Ord/ord(b.2, a.2), Ord/ord(b.3, a.3))),
             Ord/flips(a.0, b.0),
             (_) =>
                 Ordering/then/flips(
-                    Ord/ord(a.1, b.1),
-                    Ordering/then(Ord/ord(a.2, b.2), Ord/ord(a.3, b.3)),
-                    Ord/ord(b.1, a.1),
-                    Ordering/then(Ord/ord(b.2, a.2), Ord/ord(b.3, a.3)),
                     Ord/flips(a.1, b.1),
-                    (_) =>
-                        Ordering/then/flips(
-                            Ord/ord(a.2, b.2),
-                            Ord/ord(a.3, b.3),
-                            Ord/ord(b.2, a.2),
-                            Ord/ord(b.3, a.3),
-                            Ord/flips(a.2, b.2),
-                            (_) => Ord/flips(a.3, b.3)))),
+                    (_) => Ordering/then/flips(Ord/flips(a.2, b.2), (_) => Ord/flips(a.3, b.3)))),
     trans(a, b, c, p, q) =
         Ordering/chains/le(
             ord4(a, b),
             ord4(b, c),
             ord4(a, c),
             Ordering/chains/then(
-                Ord/ord(a.0, b.0),
-                Ord/ord(b.0, c.0),
-                Ord/ord(a.0, c.0),
-                Ordering/then(
-                    Ord/ord(a.1, b.1),
-                    Ordering/then(Ord/ord(a.2, b.2), Ord/ord(a.3, b.3))),
-                Ordering/then(
-                    Ord/ord(b.1, c.1),
-                    Ordering/then(Ord/ord(b.2, c.2), Ord/ord(b.3, c.3))),
-                Ordering/then(
-                    Ord/ord(a.1, c.1),
-                    Ordering/then(Ord/ord(a.2, c.2), Ord/ord(a.3, c.3))),
                 Ord/chains(a.0, b.0, c.0),
                 (_, _) =>
                     Ordering/chains/then(
-                        Ord/ord(a.1, b.1),
-                        Ord/ord(b.1, c.1),
-                        Ord/ord(a.1, c.1),
-                        Ordering/then(Ord/ord(a.2, b.2), Ord/ord(a.3, b.3)),
-                        Ordering/then(Ord/ord(b.2, c.2), Ord/ord(b.3, c.3)),
-                        Ordering/then(Ord/ord(a.2, c.2), Ord/ord(a.3, c.3)),
                         Ord/chains(a.1, b.1, c.1),
                         (_, _) =>
                             Ordering/chains/then(
-                                Ord/ord(a.2, b.2),
-                                Ord/ord(b.2, c.2),
-                                Ord/ord(a.2, c.2),
-                                Ord/ord(a.3, b.3),
-                                Ord/ord(b.3, c.3),
-                                Ord/ord(a.3, c.3),
                                 Ord/chains(a.2, b.2, c.2),
                                 (_, _) => Ord/chains(a.3, b.3, c.3)))),
             p,
@@ -1112,43 +1035,15 @@ satisfy (
     le(a, b) = Ordering/is_le(ord5(a, b)),
     flips(a, b) =
         Ordering/then/flips(
-            Ord/ord(a.0, b.0),
-            Ordering/then(
-                Ord/ord(a.1, b.1),
-                Ordering/then(
-                    Ord/ord(a.2, b.2),
-                    Ordering/then(Ord/ord(a.3, b.3), Ord/ord(a.4, b.4)))),
-            Ord/ord(b.0, a.0),
-            Ordering/then(
-                Ord/ord(b.1, a.1),
-                Ordering/then(
-                    Ord/ord(b.2, a.2),
-                    Ordering/then(Ord/ord(b.3, a.3), Ord/ord(b.4, a.4)))),
             Ord/flips(a.0, b.0),
             (_) =>
                 Ordering/then/flips(
-                    Ord/ord(a.1, b.1),
-                    Ordering/then(
-                        Ord/ord(a.2, b.2),
-                        Ordering/then(Ord/ord(a.3, b.3), Ord/ord(a.4, b.4))),
-                    Ord/ord(b.1, a.1),
-                    Ordering/then(
-                        Ord/ord(b.2, a.2),
-                        Ordering/then(Ord/ord(b.3, a.3), Ord/ord(b.4, a.4))),
                     Ord/flips(a.1, b.1),
                     (_) =>
                         Ordering/then/flips(
-                            Ord/ord(a.2, b.2),
-                            Ordering/then(Ord/ord(a.3, b.3), Ord/ord(a.4, b.4)),
-                            Ord/ord(b.2, a.2),
-                            Ordering/then(Ord/ord(b.3, a.3), Ord/ord(b.4, a.4)),
                             Ord/flips(a.2, b.2),
                             (_) =>
                                 Ordering/then/flips(
-                                    Ord/ord(a.3, b.3),
-                                    Ord/ord(a.4, b.4),
-                                    Ord/ord(b.3, a.3),
-                                    Ord/ord(b.4, a.4),
                                     Ord/flips(a.3, b.3),
                                     (_) => Ord/flips(a.4, b.4))))),
     trans(a, b, c, p, q) =
@@ -1157,57 +1052,15 @@ satisfy (
             ord5(b, c),
             ord5(a, c),
             Ordering/chains/then(
-                Ord/ord(a.0, b.0),
-                Ord/ord(b.0, c.0),
-                Ord/ord(a.0, c.0),
-                Ordering/then(
-                    Ord/ord(a.1, b.1),
-                    Ordering/then(
-                        Ord/ord(a.2, b.2),
-                        Ordering/then(Ord/ord(a.3, b.3), Ord/ord(a.4, b.4)))),
-                Ordering/then(
-                    Ord/ord(b.1, c.1),
-                    Ordering/then(
-                        Ord/ord(b.2, c.2),
-                        Ordering/then(Ord/ord(b.3, c.3), Ord/ord(b.4, c.4)))),
-                Ordering/then(
-                    Ord/ord(a.1, c.1),
-                    Ordering/then(
-                        Ord/ord(a.2, c.2),
-                        Ordering/then(Ord/ord(a.3, c.3), Ord/ord(a.4, c.4)))),
                 Ord/chains(a.0, b.0, c.0),
                 (_, _) =>
                     Ordering/chains/then(
-                        Ord/ord(a.1, b.1),
-                        Ord/ord(b.1, c.1),
-                        Ord/ord(a.1, c.1),
-                        Ordering/then(
-                            Ord/ord(a.2, b.2),
-                            Ordering/then(Ord/ord(a.3, b.3), Ord/ord(a.4, b.4))),
-                        Ordering/then(
-                            Ord/ord(b.2, c.2),
-                            Ordering/then(Ord/ord(b.3, c.3), Ord/ord(b.4, c.4))),
-                        Ordering/then(
-                            Ord/ord(a.2, c.2),
-                            Ordering/then(Ord/ord(a.3, c.3), Ord/ord(a.4, c.4))),
                         Ord/chains(a.1, b.1, c.1),
                         (_, _) =>
                             Ordering/chains/then(
-                                Ord/ord(a.2, b.2),
-                                Ord/ord(b.2, c.2),
-                                Ord/ord(a.2, c.2),
-                                Ordering/then(Ord/ord(a.3, b.3), Ord/ord(a.4, b.4)),
-                                Ordering/then(Ord/ord(b.3, c.3), Ord/ord(b.4, c.4)),
-                                Ordering/then(Ord/ord(a.3, c.3), Ord/ord(a.4, c.4)),
                                 Ord/chains(a.2, b.2, c.2),
                                 (_, _) =>
                                     Ordering/chains/then(
-                                        Ord/ord(a.3, b.3),
-                                        Ord/ord(b.3, c.3),
-                                        Ord/ord(a.3, c.3),
-                                        Ord/ord(a.4, b.4),
-                                        Ord/ord(b.4, c.4),
-                                        Ord/ord(a.4, c.4),
                                         Ord/chains(a.3, b.3, c.3),
                                         (_, _) => Ord/chains(a.4, b.4, c.4))))),
             p,
@@ -1327,62 +1180,18 @@ satisfy (
     le(a, b) = Ordering/is_le(ord6(a, b)),
     flips(a, b) =
         Ordering/then/flips(
-            Ord/ord(a.0, b.0),
-            Ordering/then(
-                Ord/ord(a.1, b.1),
-                Ordering/then(
-                    Ord/ord(a.2, b.2),
-                    Ordering/then(
-                        Ord/ord(a.3, b.3),
-                        Ordering/then(Ord/ord(a.4, b.4), Ord/ord(a.5, b.5))))),
-            Ord/ord(b.0, a.0),
-            Ordering/then(
-                Ord/ord(b.1, a.1),
-                Ordering/then(
-                    Ord/ord(b.2, a.2),
-                    Ordering/then(
-                        Ord/ord(b.3, a.3),
-                        Ordering/then(Ord/ord(b.4, a.4), Ord/ord(b.5, a.5))))),
             Ord/flips(a.0, b.0),
             (_) =>
                 Ordering/then/flips(
-                    Ord/ord(a.1, b.1),
-                    Ordering/then(
-                        Ord/ord(a.2, b.2),
-                        Ordering/then(
-                            Ord/ord(a.3, b.3),
-                            Ordering/then(Ord/ord(a.4, b.4), Ord/ord(a.5, b.5)))),
-                    Ord/ord(b.1, a.1),
-                    Ordering/then(
-                        Ord/ord(b.2, a.2),
-                        Ordering/then(
-                            Ord/ord(b.3, a.3),
-                            Ordering/then(Ord/ord(b.4, a.4), Ord/ord(b.5, a.5)))),
                     Ord/flips(a.1, b.1),
                     (_) =>
                         Ordering/then/flips(
-                            Ord/ord(a.2, b.2),
-                            Ordering/then(
-                                Ord/ord(a.3, b.3),
-                                Ordering/then(Ord/ord(a.4, b.4), Ord/ord(a.5, b.5))),
-                            Ord/ord(b.2, a.2),
-                            Ordering/then(
-                                Ord/ord(b.3, a.3),
-                                Ordering/then(Ord/ord(b.4, a.4), Ord/ord(b.5, a.5))),
                             Ord/flips(a.2, b.2),
                             (_) =>
                                 Ordering/then/flips(
-                                    Ord/ord(a.3, b.3),
-                                    Ordering/then(Ord/ord(a.4, b.4), Ord/ord(a.5, b.5)),
-                                    Ord/ord(b.3, a.3),
-                                    Ordering/then(Ord/ord(b.4, a.4), Ord/ord(b.5, a.5)),
                                     Ord/flips(a.3, b.3),
                                     (_) =>
                                         Ordering/then/flips(
-                                            Ord/ord(a.4, b.4),
-                                            Ord/ord(a.5, b.5),
-                                            Ord/ord(b.4, a.4),
-                                            Ord/ord(b.5, a.5),
                                             Ord/flips(a.4, b.4),
                                             (_) => Ord/flips(a.5, b.5)))))),
     trans(a, b, c, p, q) =
@@ -1391,84 +1200,18 @@ satisfy (
             ord6(b, c),
             ord6(a, c),
             Ordering/chains/then(
-                Ord/ord(a.0, b.0),
-                Ord/ord(b.0, c.0),
-                Ord/ord(a.0, c.0),
-                Ordering/then(
-                    Ord/ord(a.1, b.1),
-                    Ordering/then(
-                        Ord/ord(a.2, b.2),
-                        Ordering/then(
-                            Ord/ord(a.3, b.3),
-                            Ordering/then(Ord/ord(a.4, b.4), Ord/ord(a.5, b.5))))),
-                Ordering/then(
-                    Ord/ord(b.1, c.1),
-                    Ordering/then(
-                        Ord/ord(b.2, c.2),
-                        Ordering/then(
-                            Ord/ord(b.3, c.3),
-                            Ordering/then(Ord/ord(b.4, c.4), Ord/ord(b.5, c.5))))),
-                Ordering/then(
-                    Ord/ord(a.1, c.1),
-                    Ordering/then(
-                        Ord/ord(a.2, c.2),
-                        Ordering/then(
-                            Ord/ord(a.3, c.3),
-                            Ordering/then(Ord/ord(a.4, c.4), Ord/ord(a.5, c.5))))),
                 Ord/chains(a.0, b.0, c.0),
                 (_, _) =>
                     Ordering/chains/then(
-                        Ord/ord(a.1, b.1),
-                        Ord/ord(b.1, c.1),
-                        Ord/ord(a.1, c.1),
-                        Ordering/then(
-                            Ord/ord(a.2, b.2),
-                            Ordering/then(
-                                Ord/ord(a.3, b.3),
-                                Ordering/then(Ord/ord(a.4, b.4), Ord/ord(a.5, b.5)))),
-                        Ordering/then(
-                            Ord/ord(b.2, c.2),
-                            Ordering/then(
-                                Ord/ord(b.3, c.3),
-                                Ordering/then(Ord/ord(b.4, c.4), Ord/ord(b.5, c.5)))),
-                        Ordering/then(
-                            Ord/ord(a.2, c.2),
-                            Ordering/then(
-                                Ord/ord(a.3, c.3),
-                                Ordering/then(Ord/ord(a.4, c.4), Ord/ord(a.5, c.5)))),
                         Ord/chains(a.1, b.1, c.1),
                         (_, _) =>
                             Ordering/chains/then(
-                                Ord/ord(a.2, b.2),
-                                Ord/ord(b.2, c.2),
-                                Ord/ord(a.2, c.2),
-                                Ordering/then(
-                                    Ord/ord(a.3, b.3),
-                                    Ordering/then(Ord/ord(a.4, b.4), Ord/ord(a.5, b.5))),
-                                Ordering/then(
-                                    Ord/ord(b.3, c.3),
-                                    Ordering/then(Ord/ord(b.4, c.4), Ord/ord(b.5, c.5))),
-                                Ordering/then(
-                                    Ord/ord(a.3, c.3),
-                                    Ordering/then(Ord/ord(a.4, c.4), Ord/ord(a.5, c.5))),
                                 Ord/chains(a.2, b.2, c.2),
                                 (_, _) =>
                                     Ordering/chains/then(
-                                        Ord/ord(a.3, b.3),
-                                        Ord/ord(b.3, c.3),
-                                        Ord/ord(a.3, c.3),
-                                        Ordering/then(Ord/ord(a.4, b.4), Ord/ord(a.5, b.5)),
-                                        Ordering/then(Ord/ord(b.4, c.4), Ord/ord(b.5, c.5)),
-                                        Ordering/then(Ord/ord(a.4, c.4), Ord/ord(a.5, c.5)),
                                         Ord/chains(a.3, b.3, c.3),
                                         (_, _) =>
                                             Ordering/chains/then(
-                                                Ord/ord(a.4, b.4),
-                                                Ord/ord(b.4, c.4),
-                                                Ord/ord(a.4, c.4),
-                                                Ord/ord(a.5, b.5),
-                                                Ord/ord(b.5, c.5),
-                                                Ord/ord(a.5, c.5),
                                                 Ord/chains(a.4, b.4, c.4),
                                                 (_, _) => Ord/chains(a.5, b.5, c.5)))))),
             p,
@@ -1622,85 +1365,21 @@ satisfy (
     le(a, b) = Ordering/is_le(ord7(a, b)),
     flips(a, b) =
         Ordering/then/flips(
-            Ord/ord(a.0, b.0),
-            Ordering/then(
-                Ord/ord(a.1, b.1),
-                Ordering/then(
-                    Ord/ord(a.2, b.2),
-                    Ordering/then(
-                        Ord/ord(a.3, b.3),
-                        Ordering/then(
-                            Ord/ord(a.4, b.4),
-                            Ordering/then(Ord/ord(a.5, b.5), Ord/ord(a.6, b.6)))))),
-            Ord/ord(b.0, a.0),
-            Ordering/then(
-                Ord/ord(b.1, a.1),
-                Ordering/then(
-                    Ord/ord(b.2, a.2),
-                    Ordering/then(
-                        Ord/ord(b.3, a.3),
-                        Ordering/then(
-                            Ord/ord(b.4, a.4),
-                            Ordering/then(Ord/ord(b.5, a.5), Ord/ord(b.6, a.6)))))),
             Ord/flips(a.0, b.0),
             (_) =>
                 Ordering/then/flips(
-                    Ord/ord(a.1, b.1),
-                    Ordering/then(
-                        Ord/ord(a.2, b.2),
-                        Ordering/then(
-                            Ord/ord(a.3, b.3),
-                            Ordering/then(
-                                Ord/ord(a.4, b.4),
-                                Ordering/then(Ord/ord(a.5, b.5), Ord/ord(a.6, b.6))))),
-                    Ord/ord(b.1, a.1),
-                    Ordering/then(
-                        Ord/ord(b.2, a.2),
-                        Ordering/then(
-                            Ord/ord(b.3, a.3),
-                            Ordering/then(
-                                Ord/ord(b.4, a.4),
-                                Ordering/then(Ord/ord(b.5, a.5), Ord/ord(b.6, a.6))))),
                     Ord/flips(a.1, b.1),
                     (_) =>
                         Ordering/then/flips(
-                            Ord/ord(a.2, b.2),
-                            Ordering/then(
-                                Ord/ord(a.3, b.3),
-                                Ordering/then(
-                                    Ord/ord(a.4, b.4),
-                                    Ordering/then(Ord/ord(a.5, b.5), Ord/ord(a.6, b.6)))),
-                            Ord/ord(b.2, a.2),
-                            Ordering/then(
-                                Ord/ord(b.3, a.3),
-                                Ordering/then(
-                                    Ord/ord(b.4, a.4),
-                                    Ordering/then(Ord/ord(b.5, a.5), Ord/ord(b.6, a.6)))),
                             Ord/flips(a.2, b.2),
                             (_) =>
                                 Ordering/then/flips(
-                                    Ord/ord(a.3, b.3),
-                                    Ordering/then(
-                                        Ord/ord(a.4, b.4),
-                                        Ordering/then(Ord/ord(a.5, b.5), Ord/ord(a.6, b.6))),
-                                    Ord/ord(b.3, a.3),
-                                    Ordering/then(
-                                        Ord/ord(b.4, a.4),
-                                        Ordering/then(Ord/ord(b.5, a.5), Ord/ord(b.6, a.6))),
                                     Ord/flips(a.3, b.3),
                                     (_) =>
                                         Ordering/then/flips(
-                                            Ord/ord(a.4, b.4),
-                                            Ordering/then(Ord/ord(a.5, b.5), Ord/ord(a.6, b.6)),
-                                            Ord/ord(b.4, a.4),
-                                            Ordering/then(Ord/ord(b.5, a.5), Ord/ord(b.6, a.6)),
                                             Ord/flips(a.4, b.4),
                                             (_) =>
                                                 Ordering/then/flips(
-                                                    Ord/ord(a.5, b.5),
-                                                    Ord/ord(a.6, b.6),
-                                                    Ord/ord(b.5, a.5),
-                                                    Ord/ord(b.6, a.6),
                                                     Ord/flips(a.5, b.5),
                                                     (_) => Ord/flips(a.6, b.6))))))),
     trans(a, b, c, p, q) =
@@ -1709,117 +1388,21 @@ satisfy (
             ord7(b, c),
             ord7(a, c),
             Ordering/chains/then(
-                Ord/ord(a.0, b.0),
-                Ord/ord(b.0, c.0),
-                Ord/ord(a.0, c.0),
-                Ordering/then(
-                    Ord/ord(a.1, b.1),
-                    Ordering/then(
-                        Ord/ord(a.2, b.2),
-                        Ordering/then(
-                            Ord/ord(a.3, b.3),
-                            Ordering/then(
-                                Ord/ord(a.4, b.4),
-                                Ordering/then(Ord/ord(a.5, b.5), Ord/ord(a.6, b.6)))))),
-                Ordering/then(
-                    Ord/ord(b.1, c.1),
-                    Ordering/then(
-                        Ord/ord(b.2, c.2),
-                        Ordering/then(
-                            Ord/ord(b.3, c.3),
-                            Ordering/then(
-                                Ord/ord(b.4, c.4),
-                                Ordering/then(Ord/ord(b.5, c.5), Ord/ord(b.6, c.6)))))),
-                Ordering/then(
-                    Ord/ord(a.1, c.1),
-                    Ordering/then(
-                        Ord/ord(a.2, c.2),
-                        Ordering/then(
-                            Ord/ord(a.3, c.3),
-                            Ordering/then(
-                                Ord/ord(a.4, c.4),
-                                Ordering/then(Ord/ord(a.5, c.5), Ord/ord(a.6, c.6)))))),
                 Ord/chains(a.0, b.0, c.0),
                 (_, _) =>
                     Ordering/chains/then(
-                        Ord/ord(a.1, b.1),
-                        Ord/ord(b.1, c.1),
-                        Ord/ord(a.1, c.1),
-                        Ordering/then(
-                            Ord/ord(a.2, b.2),
-                            Ordering/then(
-                                Ord/ord(a.3, b.3),
-                                Ordering/then(
-                                    Ord/ord(a.4, b.4),
-                                    Ordering/then(Ord/ord(a.5, b.5), Ord/ord(a.6, b.6))))),
-                        Ordering/then(
-                            Ord/ord(b.2, c.2),
-                            Ordering/then(
-                                Ord/ord(b.3, c.3),
-                                Ordering/then(
-                                    Ord/ord(b.4, c.4),
-                                    Ordering/then(Ord/ord(b.5, c.5), Ord/ord(b.6, c.6))))),
-                        Ordering/then(
-                            Ord/ord(a.2, c.2),
-                            Ordering/then(
-                                Ord/ord(a.3, c.3),
-                                Ordering/then(
-                                    Ord/ord(a.4, c.4),
-                                    Ordering/then(Ord/ord(a.5, c.5), Ord/ord(a.6, c.6))))),
                         Ord/chains(a.1, b.1, c.1),
                         (_, _) =>
                             Ordering/chains/then(
-                                Ord/ord(a.2, b.2),
-                                Ord/ord(b.2, c.2),
-                                Ord/ord(a.2, c.2),
-                                Ordering/then(
-                                    Ord/ord(a.3, b.3),
-                                    Ordering/then(
-                                        Ord/ord(a.4, b.4),
-                                        Ordering/then(Ord/ord(a.5, b.5), Ord/ord(a.6, b.6)))),
-                                Ordering/then(
-                                    Ord/ord(b.3, c.3),
-                                    Ordering/then(
-                                        Ord/ord(b.4, c.4),
-                                        Ordering/then(Ord/ord(b.5, c.5), Ord/ord(b.6, c.6)))),
-                                Ordering/then(
-                                    Ord/ord(a.3, c.3),
-                                    Ordering/then(
-                                        Ord/ord(a.4, c.4),
-                                        Ordering/then(Ord/ord(a.5, c.5), Ord/ord(a.6, c.6)))),
                                 Ord/chains(a.2, b.2, c.2),
                                 (_, _) =>
                                     Ordering/chains/then(
-                                        Ord/ord(a.3, b.3),
-                                        Ord/ord(b.3, c.3),
-                                        Ord/ord(a.3, c.3),
-                                        Ordering/then(
-                                            Ord/ord(a.4, b.4),
-                                            Ordering/then(Ord/ord(a.5, b.5), Ord/ord(a.6, b.6))),
-                                        Ordering/then(
-                                            Ord/ord(b.4, c.4),
-                                            Ordering/then(Ord/ord(b.5, c.5), Ord/ord(b.6, c.6))),
-                                        Ordering/then(
-                                            Ord/ord(a.4, c.4),
-                                            Ordering/then(Ord/ord(a.5, c.5), Ord/ord(a.6, c.6))),
                                         Ord/chains(a.3, b.3, c.3),
                                         (_, _) =>
                                             Ordering/chains/then(
-                                                Ord/ord(a.4, b.4),
-                                                Ord/ord(b.4, c.4),
-                                                Ord/ord(a.4, c.4),
-                                                Ordering/then(Ord/ord(a.5, b.5), Ord/ord(a.6, b.6)),
-                                                Ordering/then(Ord/ord(b.5, c.5), Ord/ord(b.6, c.6)),
-                                                Ordering/then(Ord/ord(a.5, c.5), Ord/ord(a.6, c.6)),
                                                 Ord/chains(a.4, b.4, c.4),
                                                 (_, _) =>
                                                     Ordering/chains/then(
-                                                        Ord/ord(a.5, b.5),
-                                                        Ord/ord(b.5, c.5),
-                                                        Ord/ord(a.5, c.5),
-                                                        Ord/ord(a.6, b.6),
-                                                        Ord/ord(b.6, c.6),
-                                                        Ord/ord(a.6, c.6),
                                                         Ord/chains(a.5, b.5, c.5),
                                                         (_, _) => Ord/chains(a.6, b.6, c.6))))))),
             p,
@@ -2012,120 +1595,24 @@ satisfy (
     le(a, b) = Ordering/is_le(ord8(a, b)),
     flips(a, b) =
         Ordering/then/flips(
-            Ord/ord(a.0, b.0),
-            Ordering/then(
-                Ord/ord(a.1, b.1),
-                Ordering/then(
-                    Ord/ord(a.2, b.2),
-                    Ordering/then(
-                        Ord/ord(a.3, b.3),
-                        Ordering/then(
-                            Ord/ord(a.4, b.4),
-                            Ordering/then(
-                                Ord/ord(a.5, b.5),
-                                Ordering/then(Ord/ord(a.6, b.6), Ord/ord(a.7, b.7))))))),
-            Ord/ord(b.0, a.0),
-            Ordering/then(
-                Ord/ord(b.1, a.1),
-                Ordering/then(
-                    Ord/ord(b.2, a.2),
-                    Ordering/then(
-                        Ord/ord(b.3, a.3),
-                        Ordering/then(
-                            Ord/ord(b.4, a.4),
-                            Ordering/then(
-                                Ord/ord(b.5, a.5),
-                                Ordering/then(Ord/ord(b.6, a.6), Ord/ord(b.7, a.7))))))),
             Ord/flips(a.0, b.0),
             (_) =>
                 Ordering/then/flips(
-                    Ord/ord(a.1, b.1),
-                    Ordering/then(
-                        Ord/ord(a.2, b.2),
-                        Ordering/then(
-                            Ord/ord(a.3, b.3),
-                            Ordering/then(
-                                Ord/ord(a.4, b.4),
-                                Ordering/then(
-                                    Ord/ord(a.5, b.5),
-                                    Ordering/then(Ord/ord(a.6, b.6), Ord/ord(a.7, b.7)))))),
-                    Ord/ord(b.1, a.1),
-                    Ordering/then(
-                        Ord/ord(b.2, a.2),
-                        Ordering/then(
-                            Ord/ord(b.3, a.3),
-                            Ordering/then(
-                                Ord/ord(b.4, a.4),
-                                Ordering/then(
-                                    Ord/ord(b.5, a.5),
-                                    Ordering/then(Ord/ord(b.6, a.6), Ord/ord(b.7, a.7)))))),
                     Ord/flips(a.1, b.1),
                     (_) =>
                         Ordering/then/flips(
-                            Ord/ord(a.2, b.2),
-                            Ordering/then(
-                                Ord/ord(a.3, b.3),
-                                Ordering/then(
-                                    Ord/ord(a.4, b.4),
-                                    Ordering/then(
-                                        Ord/ord(a.5, b.5),
-                                        Ordering/then(Ord/ord(a.6, b.6), Ord/ord(a.7, b.7))))),
-                            Ord/ord(b.2, a.2),
-                            Ordering/then(
-                                Ord/ord(b.3, a.3),
-                                Ordering/then(
-                                    Ord/ord(b.4, a.4),
-                                    Ordering/then(
-                                        Ord/ord(b.5, a.5),
-                                        Ordering/then(Ord/ord(b.6, a.6), Ord/ord(b.7, a.7))))),
                             Ord/flips(a.2, b.2),
                             (_) =>
                                 Ordering/then/flips(
-                                    Ord/ord(a.3, b.3),
-                                    Ordering/then(
-                                        Ord/ord(a.4, b.4),
-                                        Ordering/then(
-                                            Ord/ord(a.5, b.5),
-                                            Ordering/then(Ord/ord(a.6, b.6), Ord/ord(a.7, b.7)))),
-                                    Ord/ord(b.3, a.3),
-                                    Ordering/then(
-                                        Ord/ord(b.4, a.4),
-                                        Ordering/then(
-                                            Ord/ord(b.5, a.5),
-                                            Ordering/then(Ord/ord(b.6, a.6), Ord/ord(b.7, a.7)))),
                                     Ord/flips(a.3, b.3),
                                     (_) =>
                                         Ordering/then/flips(
-                                            Ord/ord(a.4, b.4),
-                                            Ordering/then(
-                                                Ord/ord(a.5, b.5),
-                                                Ordering/then(
-                                                    Ord/ord(a.6, b.6),
-                                                    Ord/ord(a.7, b.7))),
-                                            Ord/ord(b.4, a.4),
-                                            Ordering/then(
-                                                Ord/ord(b.5, a.5),
-                                                Ordering/then(
-                                                    Ord/ord(b.6, a.6),
-                                                    Ord/ord(b.7, a.7))),
                                             Ord/flips(a.4, b.4),
                                             (_) =>
                                                 Ordering/then/flips(
-                                                    Ord/ord(a.5, b.5),
-                                                    Ordering/then(
-                                                        Ord/ord(a.6, b.6),
-                                                        Ord/ord(a.7, b.7)),
-                                                    Ord/ord(b.5, a.5),
-                                                    Ordering/then(
-                                                        Ord/ord(b.6, a.6),
-                                                        Ord/ord(b.7, a.7)),
                                                     Ord/flips(a.5, b.5),
                                                     (_) =>
                                                         Ordering/then/flips(
-                                                            Ord/ord(a.6, b.6),
-                                                            Ord/ord(a.7, b.7),
-                                                            Ord/ord(b.6, a.6),
-                                                            Ord/ord(b.7, a.7),
                                                             Ord/flips(a.6, b.6),
                                                             (_) => Ord/flips(a.7, b.7)))))))),
     trans(a, b, c, p, q) =
@@ -2134,174 +1621,24 @@ satisfy (
             ord8(b, c),
             ord8(a, c),
             Ordering/chains/then(
-                Ord/ord(a.0, b.0),
-                Ord/ord(b.0, c.0),
-                Ord/ord(a.0, c.0),
-                Ordering/then(
-                    Ord/ord(a.1, b.1),
-                    Ordering/then(
-                        Ord/ord(a.2, b.2),
-                        Ordering/then(
-                            Ord/ord(a.3, b.3),
-                            Ordering/then(
-                                Ord/ord(a.4, b.4),
-                                Ordering/then(
-                                    Ord/ord(a.5, b.5),
-                                    Ordering/then(Ord/ord(a.6, b.6), Ord/ord(a.7, b.7))))))),
-                Ordering/then(
-                    Ord/ord(b.1, c.1),
-                    Ordering/then(
-                        Ord/ord(b.2, c.2),
-                        Ordering/then(
-                            Ord/ord(b.3, c.3),
-                            Ordering/then(
-                                Ord/ord(b.4, c.4),
-                                Ordering/then(
-                                    Ord/ord(b.5, c.5),
-                                    Ordering/then(Ord/ord(b.6, c.6), Ord/ord(b.7, c.7))))))),
-                Ordering/then(
-                    Ord/ord(a.1, c.1),
-                    Ordering/then(
-                        Ord/ord(a.2, c.2),
-                        Ordering/then(
-                            Ord/ord(a.3, c.3),
-                            Ordering/then(
-                                Ord/ord(a.4, c.4),
-                                Ordering/then(
-                                    Ord/ord(a.5, c.5),
-                                    Ordering/then(Ord/ord(a.6, c.6), Ord/ord(a.7, c.7))))))),
                 Ord/chains(a.0, b.0, c.0),
                 (_, _) =>
                     Ordering/chains/then(
-                        Ord/ord(a.1, b.1),
-                        Ord/ord(b.1, c.1),
-                        Ord/ord(a.1, c.1),
-                        Ordering/then(
-                            Ord/ord(a.2, b.2),
-                            Ordering/then(
-                                Ord/ord(a.3, b.3),
-                                Ordering/then(
-                                    Ord/ord(a.4, b.4),
-                                    Ordering/then(
-                                        Ord/ord(a.5, b.5),
-                                        Ordering/then(Ord/ord(a.6, b.6), Ord/ord(a.7, b.7)))))),
-                        Ordering/then(
-                            Ord/ord(b.2, c.2),
-                            Ordering/then(
-                                Ord/ord(b.3, c.3),
-                                Ordering/then(
-                                    Ord/ord(b.4, c.4),
-                                    Ordering/then(
-                                        Ord/ord(b.5, c.5),
-                                        Ordering/then(Ord/ord(b.6, c.6), Ord/ord(b.7, c.7)))))),
-                        Ordering/then(
-                            Ord/ord(a.2, c.2),
-                            Ordering/then(
-                                Ord/ord(a.3, c.3),
-                                Ordering/then(
-                                    Ord/ord(a.4, c.4),
-                                    Ordering/then(
-                                        Ord/ord(a.5, c.5),
-                                        Ordering/then(Ord/ord(a.6, c.6), Ord/ord(a.7, c.7)))))),
                         Ord/chains(a.1, b.1, c.1),
                         (_, _) =>
                             Ordering/chains/then(
-                                Ord/ord(a.2, b.2),
-                                Ord/ord(b.2, c.2),
-                                Ord/ord(a.2, c.2),
-                                Ordering/then(
-                                    Ord/ord(a.3, b.3),
-                                    Ordering/then(
-                                        Ord/ord(a.4, b.4),
-                                        Ordering/then(
-                                            Ord/ord(a.5, b.5),
-                                            Ordering/then(Ord/ord(a.6, b.6), Ord/ord(a.7, b.7))))),
-                                Ordering/then(
-                                    Ord/ord(b.3, c.3),
-                                    Ordering/then(
-                                        Ord/ord(b.4, c.4),
-                                        Ordering/then(
-                                            Ord/ord(b.5, c.5),
-                                            Ordering/then(Ord/ord(b.6, c.6), Ord/ord(b.7, c.7))))),
-                                Ordering/then(
-                                    Ord/ord(a.3, c.3),
-                                    Ordering/then(
-                                        Ord/ord(a.4, c.4),
-                                        Ordering/then(
-                                            Ord/ord(a.5, c.5),
-                                            Ordering/then(Ord/ord(a.6, c.6), Ord/ord(a.7, c.7))))),
                                 Ord/chains(a.2, b.2, c.2),
                                 (_, _) =>
                                     Ordering/chains/then(
-                                        Ord/ord(a.3, b.3),
-                                        Ord/ord(b.3, c.3),
-                                        Ord/ord(a.3, c.3),
-                                        Ordering/then(
-                                            Ord/ord(a.4, b.4),
-                                            Ordering/then(
-                                                Ord/ord(a.5, b.5),
-                                                Ordering/then(
-                                                    Ord/ord(a.6, b.6),
-                                                    Ord/ord(a.7, b.7)))),
-                                        Ordering/then(
-                                            Ord/ord(b.4, c.4),
-                                            Ordering/then(
-                                                Ord/ord(b.5, c.5),
-                                                Ordering/then(
-                                                    Ord/ord(b.6, c.6),
-                                                    Ord/ord(b.7, c.7)))),
-                                        Ordering/then(
-                                            Ord/ord(a.4, c.4),
-                                            Ordering/then(
-                                                Ord/ord(a.5, c.5),
-                                                Ordering/then(
-                                                    Ord/ord(a.6, c.6),
-                                                    Ord/ord(a.7, c.7)))),
                                         Ord/chains(a.3, b.3, c.3),
                                         (_, _) =>
                                             Ordering/chains/then(
-                                                Ord/ord(a.4, b.4),
-                                                Ord/ord(b.4, c.4),
-                                                Ord/ord(a.4, c.4),
-                                                Ordering/then(
-                                                    Ord/ord(a.5, b.5),
-                                                    Ordering/then(
-                                                        Ord/ord(a.6, b.6),
-                                                        Ord/ord(a.7, b.7))),
-                                                Ordering/then(
-                                                    Ord/ord(b.5, c.5),
-                                                    Ordering/then(
-                                                        Ord/ord(b.6, c.6),
-                                                        Ord/ord(b.7, c.7))),
-                                                Ordering/then(
-                                                    Ord/ord(a.5, c.5),
-                                                    Ordering/then(
-                                                        Ord/ord(a.6, c.6),
-                                                        Ord/ord(a.7, c.7))),
                                                 Ord/chains(a.4, b.4, c.4),
                                                 (_, _) =>
                                                     Ordering/chains/then(
-                                                        Ord/ord(a.5, b.5),
-                                                        Ord/ord(b.5, c.5),
-                                                        Ord/ord(a.5, c.5),
-                                                        Ordering/then(
-                                                            Ord/ord(a.6, b.6),
-                                                            Ord/ord(a.7, b.7)),
-                                                        Ordering/then(
-                                                            Ord/ord(b.6, c.6),
-                                                            Ord/ord(b.7, c.7)),
-                                                        Ordering/then(
-                                                            Ord/ord(a.6, c.6),
-                                                            Ord/ord(a.7, c.7)),
                                                         Ord/chains(a.5, b.5, c.5),
                                                         (_, _) =>
                                                             Ordering/chains/then(
-                                                                Ord/ord(a.6, b.6),
-                                                                Ord/ord(b.6, c.6),
-                                                                Ord/ord(a.6, c.6),
-                                                                Ord/ord(a.7, b.7),
-                                                                Ord/ord(b.7, c.7),
-                                                                Ord/ord(a.7, c.7),
                                                                 Ord/chains(a.6, b.6, c.6),
                                                                 (_, _) =>
                                                                     Ord/chains(

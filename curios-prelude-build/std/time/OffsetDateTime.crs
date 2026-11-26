@@ -35,19 +35,7 @@ satisfy Ord(OffsetDateTime) {
     le(a, b) = Ordering/is_le(ord(a, b)),
     flips(a, b) =
         Ordering/then/flips(
-            Ordering/then(
-                Ord/ord(to_timestamp(a), to_timestamp(b)),
-                Ord/ord(a.date_time, b.date_time)),
-            Ord/ord(a.offset, b.offset),
-            Ordering/then(
-                Ord/ord(to_timestamp(b), to_timestamp(a)),
-                Ord/ord(b.date_time, a.date_time)),
-            Ord/ord(b.offset, a.offset),
             Ordering/then/flips(
-                Ord/ord(to_timestamp(a), to_timestamp(b)),
-                Ord/ord(a.date_time, b.date_time),
-                Ord/ord(to_timestamp(b), to_timestamp(a)),
-                Ord/ord(b.date_time, a.date_time),
                 Ord/flips(to_timestamp(a), to_timestamp(b)),
                 (_) => Ord/flips(a.date_time, b.date_time)),
             (_) => Ord/flips(a.offset, b.offset)),
@@ -57,25 +45,7 @@ satisfy Ord(OffsetDateTime) {
             ord(b, c),
             ord(a, c),
             Ordering/chains/then(
-                Ordering/then(
-                    Ord/ord(to_timestamp(a), to_timestamp(b)),
-                    Ord/ord(a.date_time, b.date_time)),
-                Ordering/then(
-                    Ord/ord(to_timestamp(b), to_timestamp(c)),
-                    Ord/ord(b.date_time, c.date_time)),
-                Ordering/then(
-                    Ord/ord(to_timestamp(a), to_timestamp(c)),
-                    Ord/ord(a.date_time, c.date_time)),
-                Ord/ord(a.offset, b.offset),
-                Ord/ord(b.offset, c.offset),
-                Ord/ord(a.offset, c.offset),
                 Ordering/chains/then(
-                    Ord/ord(to_timestamp(a), to_timestamp(b)),
-                    Ord/ord(to_timestamp(b), to_timestamp(c)),
-                    Ord/ord(to_timestamp(a), to_timestamp(c)),
-                    Ord/ord(a.date_time, b.date_time),
-                    Ord/ord(b.date_time, c.date_time),
-                    Ord/ord(a.date_time, c.date_time),
                     Ord/chains(to_timestamp(a), to_timestamp(b), to_timestamp(c)),
                     (_, _) => Ord/chains(a.date_time, b.date_time, c.date_time)),
                 (_, _) => Ord/chains(a.offset, b.offset, c.offset)),

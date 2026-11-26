@@ -27,14 +27,7 @@ let flips(
     | [x, ..xs] =>
         match b
         | [] => Eq/refl()
-        | [y, ..ys] =>
-            Ordering/then/flips(
-                Ord/ord(x, y),
-                ord(xs, ys),
-                Ord/ord(y, x),
-                ord(ys, xs),
-                Ord/flips(x, y),
-                (_) => flips(xs, ys))
+        | [y, ..ys] => Ordering/then/flips(Ord/flips(x, y), (_) => flips(xs, ys))
         end
     end;
 
@@ -59,16 +52,7 @@ let chains(
         | [y, ..ys] =>
             match c
             | [] => Bool/True/qed()
-            | [z, ..zs] =>
-                Ordering/chains/then(
-                    Ord/ord(x, y),
-                    Ord/ord(y, z),
-                    Ord/ord(x, z),
-                    ord(xs, ys),
-                    ord(ys, zs),
-                    ord(xs, zs),
-                    Ord/chains(x, y, z),
-                    (_, _) => chains(xs, ys, zs))
+            | [z, ..zs] => Ordering/chains/then(Ord/chains(x, y, z), (_, _) => chains(xs, ys, zs))
             end
         end
     end;

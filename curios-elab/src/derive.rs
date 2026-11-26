@@ -1508,25 +1508,15 @@ impl<'c> Pieces<'c> {
             return reflexive(context, site);
         }
 
-        let [this, that] = sides;
         let own = |context: &mut Context, index: usize| {
             let operands = self.read(index, sides).to_vec();
             self.applied(context, site, laws.flips, index, operands)
         };
         let mut proof = own(context, 0);
         for index in 1..count {
-            let answers = vec![
-                self.folded(context, site, index, [this, that]),
-                self.piece(context, site, index, [this, that]),
-                self.folded(context, site, index, [that, this]),
-                self.piece(context, site, index, [that, this]),
-            ];
             let next = own(context, index);
             let rest = ignoring(context, 1, next);
-            proof = site.at(syn_call(
-                laws.then_flips,
-                answers.into_iter().chain([proof, rest]),
-            ));
+            proof = site.at(syn_call(laws.then_flips, [proof, rest]));
         }
 
         proof
@@ -1542,8 +1532,6 @@ impl<'c> Pieces<'c> {
             return site.at(syn_call(context.syntax().proof.true_qed, []));
         }
 
-        let [first, middle, last] = sides;
-        let pairs = [[first, middle], [middle, last], [first, last]];
         let own = |context: &mut Context, index: usize| {
             let (classified, premise) = self.values[index];
             let operands = self.read(index, sides).to_vec();
@@ -1558,19 +1546,9 @@ impl<'c> Pieces<'c> {
         };
         let mut proof = own(context, 0);
         for index in 1..count {
-            let mut answers = Vec::new();
-            for pair in pairs {
-                answers.push(self.folded(context, site, index, pair));
-            }
-            for pair in pairs {
-                answers.push(self.piece(context, site, index, pair));
-            }
             let next = own(context, index);
             let rest = ignoring(context, 2, next);
-            proof = site.at(syn_call(
-                row.laws.chains_then,
-                answers.into_iter().chain([proof, rest]),
-            ));
+            proof = site.at(syn_call(row.laws.chains_then, [proof, rest]));
         }
 
         proof
@@ -1856,12 +1834,6 @@ fn flipped_with_operands(
         }
         Subject::Induct { name, decl, params } => {
             let family = (name, decl, params.as_slice());
-            let arguments = vec![
-                ordinal(context, site, family, &left),
-                ordinal(context, site, family, &right),
-                lockstep(context, site, family, row, &left, &right)?,
-                lockstep(context, site, family, row, &right, &left)?,
-            ];
             let tie = context.fresh(None);
             let payloads = facing(
                 context,
@@ -1872,10 +1844,7 @@ fn flipped_with_operands(
                 &mut |context, pieces, sides| pieces.flipped(context, site, sides),
             )?;
             let tied = Term::func([(tie, Term::hole(context.mint_metavar()))], payloads);
-            site.at(syn_call(
-                row.laws.by_tag_flips,
-                arguments.into_iter().chain([tied]),
-            ))
+            site.at(syn_call(row.laws.by_tag_flips, [tied]))
         }
     };
 
@@ -1912,14 +1881,6 @@ fn carried_across(
         }
         Subject::Induct { name, decl, params } => {
             let family = (name, decl, params.as_slice());
-            let arguments = vec![
-                ordinal(context, site, family, &first),
-                ordinal(context, site, family, &middle),
-                ordinal(context, site, family, &last),
-                lockstep(context, site, family, row, &first, &middle)?,
-                lockstep(context, site, family, row, &middle, &last)?,
-                lockstep(context, site, family, row, &first, &last)?,
-            ];
             let ties = [context.fresh(None), context.fresh(None)];
             let payloads = facing(
                 context,
@@ -1933,10 +1894,7 @@ fn carried_across(
                 ties.map(|tie| (tie, Term::hole(context.mint_metavar()))),
                 payloads,
             );
-            site.at(syn_call(
-                row.laws.by_tag_chains,
-                arguments.into_iter().chain([tied]),
-            ))
+            site.at(syn_call(row.laws.by_tag_chains, [tied]))
         }
     };
     let compared = [

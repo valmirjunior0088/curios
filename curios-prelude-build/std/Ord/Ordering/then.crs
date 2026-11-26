@@ -9,15 +9,15 @@ pub let then(first: Ordering, second: Ordering) -> Ordering =
     | gt() => Ordering/gt()
     end;
 
--- By cases on the first answer, once each swapped answer is read as the flip it equals. The second's equation is asked for in the one case that reads it. The four answers are written at a call, where the two proofs would give them: an answer left to inference under `Ordering/flip` is solved as the comparison it names unfolded, a recursion written out where the call was, and the totality check follows no witness into one, so a law that recurses through a container's witness would be refused.
+-- By cases on the first answer, once each swapped answer is read as the flip it equals. The second's equation is asked for in the one case that reads it.
 --- A step with its operands swapped is the step flipped: `then` of two flipped answers is the flip of `then` of the two.
 ---
 --- The second answer's flip is owed only where the first is `eq`, which is where `then` consults the second.
 pub let flips(
-    x: Ordering,
-    y: Ordering,
-    fx: Ordering,
-    fy: Ordering,
+    @x: Ordering,
+    @y: Ordering,
+    @fx: Ordering,
+    @fy: Ordering,
     head: Eq()(fx, Ordering/flip(x)),
     rest: (Eq()(x, Ordering/eq())) -> Eq()(fy, Ordering/flip(y)),
 ) -> Eq()(then(fx, fy), Ordering/flip(then(x, y))) =
