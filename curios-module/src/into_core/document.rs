@@ -37,29 +37,21 @@ use {
 /// Where a name is written: the name and the file of the source it lies in, and its byte range there — what a name a signature prints is found by among the unit's mentions.
 pub type Written = (Option<SourceName>, Option<PathBuf>, usize, usize);
 
-/// The mounts whose declarations reach a consumer only through the documented one, each with the word a page chips onto them.
+/// The mounts whose declarations reach a consumer only through the documented one.
 ///
 /// **Decided here, from the prefixes this unit may name.** A root is adopted because a consumer cannot name it, this unit can, and it is not the one being documented — a fact about what this compilation mounts, not about the source the documented unit was read from. That distinction is what the prelude's split forces: the adopted root is a *different unit's* mount, so no source could claim it and no assertion against its own bases could hold.
 ///
 /// **`mounts` is what this unit declared, not the whole compilation.** Every unit in a fold has `/sys` mounted, so the internal-root test alone makes every package adopt it — and a package that merely depends on `/std` would then show the intrinsics on its own pages as if it wrapped them. Adoption belongs to the facade in front of a closed root, and the facade is the one unit that declared a dependency on it.
-fn adopted_mounts(mounts: &[Mount], documented: &Qualifier) -> Vec<(Qualifier, Option<String>)> {
+fn adopted_mounts(mounts: &[Mount], documented: &Qualifier) -> Vec<Qualifier> {
     mounts
         .iter()
         .filter(|mount| mount.kind == RootKind::Internal && &mount.prefix != documented)
-        .map(|mount| (mount.prefix, chip(&mount.prefix)))
+        .map(|mount| mount.prefix)
         .collect()
 }
 
-/// The word a page shows on every declaration it adopts out of `prefix`, where there is one to show.
-///
-/// Spelled here because this crate holds the registry of the names the compiler knows in `/sys` (`registry.rs`), so the word for what that root holds is this crate's to know. A root with no entry is still adopted and merely says nothing about itself.
-fn chip(prefix: &Qualifier) -> Option<String> {
-    // Compared as a qualifier, not as text: `join` writes a canonical identity, which is absolute, so the text `"sys"` would match nothing it is handed.
-    match *prefix == Qualifier::from(["sys"]) {
-        true => Some("intrinsic".to_string()),
-        false => None,
-    }
-}
+/// The word a page shows on every declaration it adopts. An adopted root is internal ([`adopted_mounts`]), the compiler's own, and what the compiler holds in a root of its own is its intrinsics, so the word is read off the root's kind and no root is named.
+const ADOPTED_CHIP: &str = "intrinsic";
 
 /// What the checks of a unit established of its declarations: its checked module, where each of its items stands in it, and the certifier's record of it. The one thing a page shows that the surface tree does not state: that a declaration is a proof, and whether it is proven total.
 pub struct Checked<'a> {
@@ -164,7 +156,7 @@ pub fn document(
         .collect::<Vec<_>>();
     let mounts = &unit.visible;
     let adopted = adopted_mounts(mounts, prefix);
-    for (root, _) in &adopted {
+    for root in &adopted {
         assert!(
             records.iter().any(|record| record.prefix == *root),
             "'{}' adopts '{}', whose record it was not handed",
@@ -212,7 +204,7 @@ struct Reader<'a> {
     mentions: &'a HashMap<Written, Qualifier>,
     prefix: &'a Qualifier,
     /// The unit's own roots that no consumer may name — its internal mounts. Their declarations reach a consumer only through a `pub use` in the documented mount, so a page shows them and no page names where they were written.
-    adopted: &'a [(Qualifier, Option<String>)],
+    adopted: &'a [Qualifier],
     /// Every root this unit mounts that no consumer may name, the documented one among them where it is one: what a path the compiler wrote into is shown below ([`Reader::shown`]). `/sys` documents itself under this rule, which is what spells the declarations `/std` adopts out of its record.
     internal: &'a [Qualifier],
     /// The records of the units this one adopts a root of, which is where an adopted declaration is read from.
@@ -377,8 +369,8 @@ impl Reader<'_> {
     }
 
     /// The adopted root `name` lies within, when it lies within one.
-    fn adopted_root(&self, name: &Qualifier) -> Option<&(Qualifier, Option<String>)> {
-        self.adopted.iter().find(|(root, _)| name.is_within(root))
+    fn adopted_root(&self, name: &Qualifier) -> Option<&Qualifier> {
+        self.adopted.iter().find(|root| name.is_within(root))
     }
 
     /// The file-backed module `qualifier` names, then its public children after it.
@@ -558,7 +550,7 @@ impl Reader<'_> {
                     true => None,
                     false => self
                         .adopted_root(&entry.target)
-                        .and_then(|(_, chip)| chip.clone()),
+                        .map(|_| ADOPTED_CHIP.to_string()),
                 };
                 (found, chip)
             }
@@ -567,7 +559,7 @@ impl Reader<'_> {
                 Some(found) => (
                     found,
                     self.adopted_root(&entry.target)
-                        .and_then(|(_, chip)| chip.clone()),
+                        .map(|_| ADOPTED_CHIP.to_string()),
                 ),
                 None => return,
             },
