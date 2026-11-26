@@ -17,7 +17,7 @@
 - **The budget is an assumption about engines, with its margin.** No stage reads an engine's frame size, so the weight is a model and the budget is calibrated. Counted at `f9322f1f9`, Node 26.4.0:
   - a recursion a million deep, thin or holding sixteen live values, compiled as an optimized page, finishes under `--stack-size=60` (kB) on V8's default tiers and on Liftoff alone;
   - JSON nested a hundred thousand deep, decoded and encoded, compiled by the bundle and run by its harness, finishes under `--stack-size=250` and stops under `160`;
-  - natively, counted at `994ea2c54` under `curios run`, the thin and the fat recursion, a tree read through a map of its children and a recursion through a closure, each a million deep, and the JSON, finish with the engine's limit set to 64 KiB.
+  - natively, counted at `bbcccfa56` under `curios run`, the thin and the fat recursion, a tree read through a map of its children and a recursion through a closure, each a million deep, and the JSON, finish with the engine's limit set to 64 KiB.
 
   The fattest of these leaves a page's stack about four times what the budget's frames take, and the native stack more than a hundred times. Where an engine's stack holds less, a recursion stops on that engine's own trap, as before.
 - **The heap path is the stand-in for a stack segment.** It is what an engine that cannot switch stacks offers, and it has the shape a switch would take: the guard, the budget and the native code stay as they are.
