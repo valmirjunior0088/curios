@@ -1475,6 +1475,23 @@ pub let sym(@A: Type, @x: A, @y: A, proof: Eq()(x, y)) -> Eq()(y, x) =
     match proof | refl() => Eq/refl() end;
 ```
 
+`a == b` and `Eq()(a, b)` are two things. `a == b` is a `Bool` the program computes as it runs, so it is written only at a type with an `Eql` witness, which says how two of its values are compared. `Eq()(a, b)` is a proposition the compiler checks and erases before the program runs, so nothing is compared at run time and it is stated at any type, functions and types among them. `twice == ((n: Nat) => n + n)` is refused, for want of an `Eql((n: Nat) -> Nat)` witness, yet `Eq/refl()` proves the same two equal, both reducing to one term, and a function may take an equation between two functions as an argument its caller proves:
+
+```crs
+use /std/{Eq, Nat};
+
+pub let twice(n: Nat) -> Nat =
+    n + n;
+
+pub let unfolded: Eq()(twice, (n: Nat) => n + n) =
+    Eq/refl();
+
+pub let agree(f: (Nat) -> Nat, g: (Nat) -> Nat, same: Eq()(f, g), n: Nat) -> Eq()(f(n), g(n)) =
+    Eq/cong((h: (Nat) -> Nat) => h(n), same);
+```
+
+Against `(n: Nat) => n + 1`, the same `Eq/refl()` is refused, the two reducing to different terms. Where a type has an `Eql` witness, its decision proves the equation too ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)).
+
 
 ### Bounds from the facts in scope
 
