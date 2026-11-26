@@ -125,17 +125,36 @@ impl Refusal {
     /// The refusal as a reader is told it, written by `notation` ([`Error::rendered`]), and, where the declaration was refused at one assignment of the sorts it leaves to its caller, the type `definitions` holds under the verdict's name restated at that assignment.
     pub fn rendered(&self, definitions: &Definitions, notation: &dyn Notation) -> String {
         let stated = match (&self.error, self.name) {
-            (Error::AtSorts { .. }, Some(name)) => definitions
-                .items
-                .iter()
-                .flat_map(Item::definitions)
-                .find(|definition| definition.name == name)
-                .map(|definition| definition.type_),
+            (Error::AtSorts { .. }, Some(name)) => declared_type(definitions, name),
             _ => None,
         };
 
         self.error.rendered_stating(stated.as_ref(), notation)
     }
+
+    /// What the refusal is about, as a reader names it, or `None` where it is about no declaration: a declaration by its path, and a witness, which has none a program writes, by the type it is declared at, written by `notation` as the elaborator's refusals name one.
+    pub fn named(&self, definitions: &Definitions, notation: &dyn Notation) -> Option<String> {
+        let name = self.name?;
+        let witness = match name {
+            Global::Witness(_) => declared_type(definitions, name),
+            Global::Authored(_) => None,
+        };
+
+        Some(match witness {
+            Some(type_) => format!("the witness of `{}`", notation.term(&type_)),
+            None => format!("`{}`", name.faithful()),
+        })
+    }
+}
+
+/// The type `name` is declared at among `definitions`' items.
+fn declared_type(definitions: &Definitions, name: Global) -> Option<Term> {
+    definitions
+        .items
+        .iter()
+        .flat_map(Item::definitions)
+        .find(|definition| definition.name == name)
+        .map(|definition| definition.type_)
 }
 
 /// What one whole-module walk answered: the module it accepted, with the record of what it concluded, or every refusal it reached and nothing else.

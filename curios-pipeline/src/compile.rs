@@ -469,16 +469,13 @@ pub fn certifier_refusal(
     anchors: &[&Anchors],
     syntax: &SyntaxRegistry,
 ) -> CompileError {
-    let refusal = verdict.rendered(
-        definitions,
-        &Spelling::for_refusal(definitions, scope, syntax),
-    );
+    let spelling = Spelling::for_refusal(definitions, scope, syntax);
+    let refusal = verdict.rendered(definitions, &spelling);
 
     certifier_refused(
-        match &verdict.name {
-            Some(name) => format!("`{}`", name.faithful()),
-            None => "a unit".to_string(),
-        },
+        verdict
+            .named(definitions, &spelling)
+            .unwrap_or_else(|| "a unit".to_string()),
         refusal,
         refused_at(anchors, verdict.name.as_ref()),
     )
@@ -492,15 +489,13 @@ pub fn program_refusal(
     anchors: &[&Anchors],
     syntax: &SyntaxRegistry,
 ) -> CompileError {
+    let spelling = Spelling::for_refusal(definitions, lexicons, syntax);
+
     certifier_refused(
-        match &verdict.name {
-            Some(name) => format!("`{}`", name.faithful()),
-            None => "the entrypoint".to_string(),
-        },
-        verdict.rendered(
-            definitions,
-            &Spelling::for_refusal(definitions, lexicons, syntax),
-        ),
+        verdict
+            .named(definitions, &spelling)
+            .unwrap_or_else(|| "the entrypoint".to_string()),
+        verdict.rendered(definitions, &spelling),
         refused_at(anchors, verdict.name.as_ref()),
     )
 }

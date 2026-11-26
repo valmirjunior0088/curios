@@ -45,6 +45,30 @@ fn the_module_core_elab_prints_for_a_program_reads_back_and_checks_clean() {
     }
 }
 
+/// A witness the certifier refuses is named as a refusal of the elaborator's names one, by the type it is declared at, and not by the path it is held under: the dump's witness, its byte field written a type, is one only the certifier is put to.
+#[test]
+fn a_witness_the_certifier_refuses_is_named_by_the_type_it_is_declared_at() {
+    let root = temporary("refused-witness");
+    fs::create_dir_all(&root).unwrap();
+    let program = "use /std/{Nat, Show, print};\n\nstruct S: Type {\n    n: Nat,\n}\n\nsatisfy Show(S) {\n    show(_) = \"s\",\n}\n\nprint(Show/show(S { n = 1 }))\n";
+    let dumped = curios(&root, &["wonder", "--stage", "core-elab", "-"], program);
+    let (dump, stderr, code) = said(&dumped);
+    assert_eq!(code, Some(0), "{stderr}");
+    let broken = dump.replacen("0x[0x73]", "#BoolType", 1);
+    assert_ne!(broken, dump, "the witness writes its text's byte: {dump}");
+    write(&root, "witness.crsc", &broken);
+
+    let checked = curios(&root, &["check", "witness.crsc"], "");
+    let (stdout, stderr, code) = said(&checked);
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(
+        stdout.contains("refused: the witness of `")
+            && stdout.contains("Show(")
+            && !stdout.contains("refused: `/witness~"),
+        "{stdout}"
+    );
+}
+
 /// A declaration the certifier refuses is reported where the text writes its name, in the certifier's own words.
 #[test]
 fn a_declaration_the_certifier_refuses_is_reported_where_its_text_writes_it() {
