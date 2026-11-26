@@ -18,8 +18,8 @@ satisfy Spell(Failure) {
 --- A computation that succeeds with an `A` or ends the current test with what it found: the checks that failed, one at least.
 pub induct Test(A: Type): Type
 | success(A)
-| failed(List(Failure))
-| action(Io(Test(A)))
+| failure(List(Failure))
+| perform(Io(Test(A)))
 end
 
 --- Succeed with `a` without performing an effect.
@@ -28,7 +28,7 @@ pub let pure(@A: Type, a: A) -> Test(A) =
 
 -- End the current test with a check that failed, stating `statement` beside the values `facts` spell.
 let failing(@A: Type, statement: Str, facts: List({Str, Str})) -> Test(A) =
-    Test/failed([Failure { steps = [], statement = statement, facts = facts }]);
+    Test/failure([Failure { steps = [], statement = statement, facts = facts }]);
 
 --- End the current test with `message`, skipping its remaining continuations.
 pub let fail(@A: Type, message: Str) -> Test(A) =
@@ -38,8 +38,8 @@ pub let fail(@A: Type, message: Str) -> Test(A) =
 pub let bind(@A: Type, @B: Type, test: Test(A), next: (A) -> Test(B)) -> Test(B) =
     match test
     | success(a) => next(a)
-    | failed(failures) => Test/failed(failures)
-    | action(io) => Test/action(Io/bind(io, (inner) => Io/pure(bind(inner, next))))
+    | failure(failures) => Test/failure(failures)
+    | perform(io) => Test/perform(Io/bind(io, (inner) => Io/pure(bind(inner, next))))
     end;
 
 satisfy Monad(Test) {
@@ -48,7 +48,7 @@ satisfy Monad(Test) {
 }
 
 satisfy Monad/Lift(Io, Test) {
-    lift(@_, action) = Test/action(Io/bind(action, (a) => Io/pure(pure(a)))),
+    lift(@_, action) = Test/perform(Io/bind(action, (a) => Io/pure(pure(a)))),
 }
 
 satisfy Monad/Lift(Test, Test) {
@@ -94,11 +94,11 @@ pub let try(@E: Type, @A: Type, use Show(E), thunk: () -> Try(Io, E, Test(A))) -
 pub let step(@A: Type, label: Str, test: Test(A)) -> Test(A) =
     match test
     | success(_) => test
-    | failed(failures) =>
-        Test/failed(
+    | failure(failures) =>
+        Test/failure(
             List/map(failures, (failure) =>
                 Failure { ..failure, steps = [label, ..failure.steps] }))
-    | action(io) => Test/action(Io/bind(io, (inner) => Io/pure(step(label, inner))))
+    | perform(io) => Test/perform(Io/bind(io, (inner) => Io/pure(step(label, inner))))
     end;
 
 -- The failures `found` holds, then those `next` ends with: `next` runs whatever `found` held, after its actions.
@@ -107,11 +107,11 @@ let gathered(found: Test(List(Failure)), next: Test({})) -> Test(List(Failure)) 
     | success(failures) =>
         match next
         | success(()) => found
-        | failed(more) => Test/success([..failures, ..more])
-        | action(io) => Test/action(Io/bind(io, (inner) => Io/pure(gathered(found, inner))))
+        | failure(more) => Test/success([..failures, ..more])
+        | perform(io) => Test/perform(Io/bind(io, (inner) => Io/pure(gathered(found, inner))))
         end
-    | failed(_) => found
-    | action(io) => Test/action(Io/bind(io, (inner) => Io/pure(gathered(inner, next))))
+    | failure(_) => found
+    | perform(io) => Test/perform(Io/bind(io, (inner) => Io/pure(gathered(inner, next))))
     end;
 
 --- Check each test in order, reporting every one that fails under its zero-based case index: the cases are independent, so each runs whatever the others found, where `bind` stops at the first failure of steps that depend on one another.
@@ -127,20 +127,20 @@ pub let all(tests: List(Test({}))) -> Test({}) =
                             state.found,
                             step(Str/concat("case ", Nat/to_str(state.index)), next)),
                     index = state.index + 1)).found;
-    bind(found, (failures) => match failures | [] => pure(()) | _ => Test/failed(failures) end);
+    bind(found, (failures) => match failures | [] => pure(()) | _ => Test/failure(failures) end);
 
 -- Keeping an outcome inside Io lets a scope release before the failure resumes propagating through Test.
 let finish(@A: Type, test: Test(A)) -> Io(Result(List(Failure), A)) =
     match test
     | success(a) => Io/pure(Result/success(a))
-    | failed(failures) => Io/pure(Result/failure(failures))
-    | action(io) => Io/bind(io, (inner) => finish(inner))
+    | failure(failures) => Io/pure(Result/failure(failures))
+    | perform(io) => Io/bind(io, (inner) => finish(inner))
     end;
 
 let from_result(@A: Type, result: Result(List(Failure), A)) -> Test(A) =
     match result
     | success(a) => pure(a)
-    | failure(failures) => Test/failed(failures)
+    | failure(failures) => Test/failure(failures)
     end;
 
 --- `body` run with a scope, as `Io/scope` runs one: its children cancelled and its releases run after a success or an assertion failure, and when a suspended body is cancelled.
