@@ -87,6 +87,115 @@ fn a_file_under_an_entry_whose_name_begins_with_a_dot_leaves_the_key() {
     assert_eq!(key_of(&root), before);
 }
 
+/// A file no build the script links compiles leaves the key: a Rust file at each of a test's places, and a crate's `README.md`.
+#[test]
+fn a_rust_file_at_a_tests_place_or_a_readme_leaves_the_key() {
+    let root = workspace("tests-place");
+    let before = key_of(&root);
+    for path in [
+        "b/src/tests.rs",
+        "b/src/walk_tests.rs",
+        "b/src/test_support.rs",
+        "b/src/walk/tests/case.rs",
+        "b/src/test_support/fixture.rs",
+        "b/tests/end_to_end.rs",
+        "b/README.md",
+    ] {
+        written(&root, path, "// edited\n");
+    }
+
+    assert_eq!(key_of(&root), before);
+}
+
+/// Beside them, a production module and a `.crs` under a `tests` directory, which is `/std`'s source, each move it.
+#[test]
+fn a_production_module_or_a_library_test_module_moves_the_key() {
+    for (at, path) in ["b/src/walk.rs", "p/std/Walk/tests/case.crs"]
+        .into_iter()
+        .enumerate()
+    {
+        let root = workspace(&format!("moved-{at}"));
+        let before = key_of(&root);
+        written(&root, path, "// edited\n");
+
+        assert_ne!(key_of(&root), before, "{path}");
+    }
+}
+
+/// What the place leaves out holds what no link compiles: every Rust file at a test's place under the `src` of a crate the prelude's script links is declared beneath a `#[cfg(test)]` or `test-support` gate, or beneath a module that is itself at a test's place, so it reaches no build of the script.
+#[test]
+fn every_rust_file_at_a_tests_place_is_reached_only_through_a_test_gate() {
+    let workspace = canonical(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("the crate sits in the workspace"),
+    );
+    let prelude = workspace.join("curios-prelude");
+    let mut ungated = Vec::new();
+    for crate_root in linked(&workspace, &prelude) {
+        let source = crate_root.join("src");
+        for file in rust_files(&source) {
+            if tests_place(&crate_root, &file) && !gated(&crate_root, &source, &file) {
+                ungated.push(file);
+            }
+        }
+    }
+
+    assert!(
+        ungated.is_empty(),
+        "at a test's place and declared under no test gate: {ungated:?}"
+    );
+}
+
+/// Every Rust file under `directory`, its own subdirectories' among them.
+fn rust_files(directory: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = fs::read_dir(directory) else {
+        return Vec::new();
+    };
+    let mut found = Vec::new();
+    for entry in entries {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            found.extend(rust_files(&path));
+        } else if path.extension().is_some_and(|extension| extension == "rs") {
+            found.push(path);
+        }
+    }
+
+    found
+}
+
+/// Whether `file`, under the crate's `source`, is declared beneath a test gate in the module above it, or that module is itself at a test's place; a file no module declares is compiled by nothing.
+fn gated(crate_root: &Path, source: &Path, file: &Path) -> bool {
+    let directory = file.parent().expect("a file sits in a directory");
+    let parent = match directory == source {
+        true => ["lib.rs", "main.rs"]
+            .iter()
+            .map(|root| source.join(root))
+            .find(|root| root.exists())
+            .expect("a crate holds a root module"),
+        false => directory.with_extension("rs"),
+    };
+    if tests_place(crate_root, &parent) {
+        return true;
+    }
+    let name = file.file_stem().and_then(|stem| stem.to_str()).unwrap();
+    let text = fs::read_to_string(&parent).unwrap_or_default();
+    let lines = text.lines().collect::<Vec<_>>();
+    let Some(at) = lines.iter().position(|line| {
+        let line = line.trim();
+        line == format!("mod {name};") || line == format!("pub mod {name};")
+    }) else {
+        return true;
+    };
+
+    lines[..at]
+        .iter()
+        .rev()
+        .take_while(|line| line.trim_start().starts_with("#["))
+        .any(|line| line.contains("cfg(test)") || line.contains("test-support"))
+}
+
 #[test]
 fn a_build_dependency_a_target_table_adds_takes_its_crate_into_the_key() {
     let root = workspace("target");

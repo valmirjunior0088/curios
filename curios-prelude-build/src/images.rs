@@ -23,7 +23,7 @@ const ROOT_FILES: [&str; 3] = ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml"
 /// The file that names the images' key, each image and the files the lowering read in, written last.
 const MARKER: &str = "marker";
 
-/// What the build script links, as one digest: `rustc`, the compiler's own account of itself, the files at the workspace's root that every build reads, and every file of `prelude`'s crate and of each workspace crate it links, each by its path under the root and then its bytes.
+/// What the build script links, as one digest: `rustc`, the compiler's own account of itself, the files at the workspace's root that every build reads, and every file of `prelude`'s crate and of each workspace crate it links that a build of the script may read, as `files` walks them, each by its path under the root and then its bytes.
 ///
 /// Nothing of the configuration that runs the script is in it — no profile, feature, target or `OUT_DIR` — so every unit of one state of the sources reads one key. A path is read under the root, so a checkout elsewhere holding the same files reads the same key, and images copied into it are right there.
 pub fn key(workspace: &Path, prelude: &Path, rustc: &str) -> String {
@@ -126,10 +126,10 @@ fn canonical(path: &Path) -> PathBuf {
         .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
 }
 
-/// Every file under `directory` but those under an entry whose name begins with a dot, in the order of their paths: what a tool keeps beside a crate, its `.artifacts/`, or beside a package, its `.curios/` cabinet, is no source of either.
-fn files(directory: &Path) -> Vec<PathBuf> {
+/// Every file under `crate_root` a build of the script may read, in the order of their paths. Left out are what lies under an entry whose name begins with a dot — what a tool keeps beside a crate, its `.artifacts/`, or beside a package, its `.curios/` cabinet, is no source of either — and what no build the script links compiles ([`compiled_by_no_link`]).
+fn files(crate_root: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
-    let mut pending = vec![directory.to_path_buf()];
+    let mut pending = vec![crate_root.to_path_buf()];
     while let Some(directory) = pending.pop() {
         let found = fs::read_dir(&directory)
             .unwrap_or_else(|error| panic!("read {}: {error}", directory.display()));
@@ -144,7 +144,7 @@ fn files(directory: &Path) -> Vec<PathBuf> {
                 .unwrap_or_else(|error| panic!("read {}: {error}", found.path().display()));
             if kind.is_dir() {
                 pending.push(found.path());
-            } else {
+            } else if !compiled_by_no_link(crate_root, &found.path()) {
                 files.push(found.path());
             }
         }
@@ -152,6 +152,35 @@ fn files(directory: &Path) -> Vec<PathBuf> {
     files.sort();
 
     files
+}
+
+/// Whether `file`, under the crate at `crate_root`, is one no build the script links compiles: a crate's `README.md`, which none includes, and a Rust file at a test's place — `tests.rs`, a name ending `_tests.rs`, `test_support.rs`, or one under a `tests` or `test_support` directory — which `.claude/rules/rust.md`'s layout gives no production module and which reaches a build only through `#[cfg(test)]` or `test-support`, on nowhere the script's graph reaches. A `.crs` file under a `tests` directory is `/std`'s, a source its lowering reads, and stays. What holds the place to its premise is `every_rust_file_at_a_tests_place_is_reached_only_through_a_test_gate`, and an image a key gone stale would keep is refused by `compiler caches prelude`'s `compare`, which the handoff runs.
+fn compiled_by_no_link(crate_root: &Path, file: &Path) -> bool {
+    file.ends_with("README.md")
+        || (file.extension().is_some_and(|extension| extension == "rs")
+            && tests_place(crate_root, file))
+}
+
+/// Whether the Rust file `file`, under `crate_root`, stands at a test's place: what [`compiled_by_no_link`] reads, and what the premise's test holds to its gates.
+fn tests_place(crate_root: &Path, file: &Path) -> bool {
+    let name = file
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("");
+    let beneath = file
+        .strip_prefix(crate_root)
+        .ok()
+        .and_then(Path::parent)
+        .into_iter()
+        .flat_map(Path::components)
+        .any(|component| {
+            matches!(
+                component.as_os_str().to_str(),
+                Some("tests" | "test_support")
+            )
+        });
+
+    beneath || matches!(name, "tests.rs" | "test_support.rs") || name.ends_with("_tests.rs")
 }
 
 /// The checkout's images, held: those one state of the sources made, beside the marker that names the state's key, each image's digest and the files the lowering read. The marker is written last, so images cut short anywhere hold none and are no hit. The lock is taken where the images are opened and let go where it is dropped, so no two units of the checkout fill or read it at once.
