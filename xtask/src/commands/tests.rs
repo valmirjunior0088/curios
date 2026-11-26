@@ -27,3 +27,19 @@ fn a_program_that_is_not_there_is_an_error_naming_it() {
         "{missing}"
     );
 }
+
+/// A command's rows open and close on its written form, each with one guillemet's direction, and a step's row is drawn apart from both: what a reader scrolling either way and the handoff's monitor find the edges of work by.
+#[test]
+fn a_commands_rows_face_its_output_and_a_steps_row_stands_apart() {
+    let took = std::time::Duration::from_millis(440);
+
+    assert_eq!(opener("cargo fmt --all"), "««« `cargo fmt --all`");
+    assert_eq!(
+        closer("cargo fmt --all", &ending(true, took)),
+        "»»» `cargo fmt --all`: ✓ 0.4s"
+    );
+    assert_eq!(
+        concluded("compiler lint", &ending(false, took)),
+        "=== `compiler lint`: ✗ 0.4s"
+    );
+}

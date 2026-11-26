@@ -6,8 +6,8 @@
 
 use {
     crate::{
-        GivenValues, Instruction, Name, Tree, Values, Word, directories, fetch, launch, launch_in,
-        root, schedule, spelled,
+        GivenValues, Instruction, Name, Tree, Values, Word, concluded, directories, ending, fetch,
+        launch, launch_in, root, say_apart, schedule, spelled,
     },
     std::{env, fs, path::PathBuf, time::Instant},
 };
@@ -15,13 +15,7 @@ use {
 #[cfg(test)]
 mod tests;
 
-/// The mark of a step that passed, on the line that closes it: the one `curios test` prints for a test that passed (`curios/src/report/tree.rs`), so the two transcripts read alike.
-const PASSED: &str = "✓";
-
-/// The mark of a step that did not pass, as `curios test` marks a test that did not.
-const UNPASSED: &str = "✗";
-
-/// Run `asked` and what it runs after, as `given` narrows it, and close each step with a line naming it, `»»» <step> «««`, how it ended and in how long: whether every step passed, and a refusal where a tool the steps name could not be had and nothing ran.
+/// Run `asked` and what it runs after, as `given` narrows it, and close each step with a line naming it, `` === `<step>`: ✓ 58.7s ``, how it ended and in how long, or that it was not run and which step before it did not pass: whether every step passed, and a refusal where a tool the steps name could not be had and nothing ran.
 pub fn perform(tree: &Tree, asked: &Name, given: &GivenValues) -> Result<bool, String> {
     let values = Values::new(tree, given);
     let scheduled = schedule(tree, asked, given);
@@ -36,26 +30,26 @@ pub fn perform(tree: &Tree, asked: &Name, given: &GivenValues) -> Result<bool, S
             .into_iter()
             .find(|other| failed.contains(other) || unrun.contains(other));
         if let Some(other) = blocked {
-            eprintln!(
-                "{name} not run: {} did not pass",
-                spelled(&tree.steps[other].name)
-            );
+            say_apart(&concluded(
+                &name,
+                &format!(
+                    "not run, `{}` did not pass",
+                    spelled(&tree.steps[other].name)
+                ),
+            ));
             unrun.push(step);
             continue;
         }
 
         let started = Instant::now();
         let outcome = run(tree, &values, step);
-        let took = started.elapsed().as_secs_f64();
+        let took = started.elapsed();
 
-        match outcome {
-            Ok(()) => eprintln!("»»» {name} ««« {PASSED} {took:.1}s"),
-            Err(message) => {
-                eprintln!("{message}");
-                eprintln!("»»» {name} ««« {UNPASSED} {took:.1}s");
-                failed.push(step);
-            }
+        if let Err(message) = &outcome {
+            eprintln!("{message}");
+            failed.push(step);
         }
+        say_apart(&concluded(&name, &ending(outcome.is_ok(), took)));
     }
 
     Ok(failed.is_empty() && unrun.is_empty())
