@@ -1042,6 +1042,7 @@ impl<'m> Compiler<'m> {
         }
         if !self.strays[line.row] {
             let row = line.row;
+            self.watch_lone(context, row);
             let leaf = self.body_of(context, line);
 
             return elaborate(context, &leaf, mode)
@@ -1053,6 +1054,27 @@ impl<'m> Compiler<'m> {
         };
 
         Ok((self.walked(context, &line)?, expected.type_))
+    }
+
+    /// Watch the row at `row` where it is its match's one arm, written as one alternative with no guard and taking something apart: the frames that stand at its leaf, above the match's own, are the cases it states, which the `unused-case` lint asks whether its body read ([`Context::watch_lone_arm`]). A match written nowhere, or a row whose binders the lowering did not write, is no written arm a lint can name.
+    fn watch_lone(&self, context: &mut Context, row: usize) {
+        let written = self.row(row);
+        if self.rows.len() != 1 || !written.guards.is_empty() || refutations(&written.pattern) == 0
+        {
+            return;
+        }
+        let Some(at) = self.matrix.head.extent() else {
+            return;
+        };
+        let Some(places) = self.labels[row]
+            .iter()
+            .map(|label| label.as_ref().and_then(Label::written))
+            .collect::<Option<Vec<_>>>()
+        else {
+            return;
+        };
+
+        context.watch_lone_arm(&self.held, at, places);
     }
 
     /// The first candidate at a leaf when it has guards to run, and `rest`, the candidates after it: what a value there takes where one of its guards fails.

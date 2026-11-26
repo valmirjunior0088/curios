@@ -86,6 +86,7 @@ pub struct ItemMark {
     checked: usize,
     resolved: usize,
     site: Option<Global>,
+    lone_arms: usize,
 }
 
 impl ItemMark {
@@ -95,13 +96,15 @@ impl ItemMark {
             checked: context.checked_mark(),
             resolved: context.resolved_mark(),
             site: context.checked_site(),
+            lone_arms: context.lone_arms_mark(),
         }
     }
 
-    /// What a refusal and a void attempt alike take back before their declarations: the terms recorded for the erasure obligations, the words resolved, and the parked work.
+    /// What a refusal and a void attempt alike take back before their declarations: the terms recorded for the erasure obligations, the words resolved, the rows of matches of one arm watched, and the parked work.
     fn unwind(self, context: &mut Context) {
         context.truncate_checked(self.checked);
         context.truncate_resolved(self.resolved);
+        context.truncate_lone_arms(self.lone_arms);
         context.restore_checked_site(self.site);
         context.take_parked();
         // The wake signals the item's solutions raised, now that nothing is parked to wake.

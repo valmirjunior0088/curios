@@ -1,4 +1,4 @@
-//! `unused-binder` and `unused-let` once elaboration has credited them: a binder only a proof the elaborator writes reads is used wherever that proof is written, `_` among them, and a credit names the declaration whose binder was read and no other.
+//! The lints elaboration decides as it files a declaration's record: `unused-binder` and `unused-let` once it has credited them — a binder only a proof the elaborator writes reads is used wherever that proof is written, `_` among them, and a credit names the declaration whose binder was read and no other — and `unused-case`, a match of one arm whose body reads nothing its case states.
 
 use {super::test_support::*, crate::*, curios_common::About, curios_core::LintKind};
 
@@ -394,5 +394,93 @@ let pick(o: Option(Nat)) -> Nat =
             .all(|lint| lint.kind != LintKind::UnusedBinder),
         "{:?}",
         entry.lints
+    );
+}
+
+/// A match of one arm the facts left of `n > 20`, the `true` case refuted, whose body reads nothing the `false` case states: reported at its head, in a record a check over the kept unit reuses.
+#[test]
+fn a_match_whose_one_arm_reads_nothing_its_case_states_is_reported_at_its_head() {
+    let source = "use /std/{Nat};
+use /std/Bool/{Holds};
+
+pub let capped(n: Nat, ok: Holds(n <= 10)) -> Nat =
+    match n > 20
+    | false => n
+    end;
+
+/std/print(\"x\")
+";
+    let cache = Keeping::default();
+    for round in ["first", "over the kept unit"] {
+        let Checked { entry, verdict } = checked_through(source, &cache);
+        let reports = entry
+            .lints
+            .iter()
+            .map(|lint| lint.report(&[&entry.anchors]))
+            .collect::<Vec<_>>();
+
+        assert!(verdict.is_ok(), "{round}");
+        assert_eq!(
+            reports
+                .iter()
+                .map(|report| report.message())
+                .collect::<Vec<_>>(),
+            [
+                "unused case\n  this match decides nothing its body reads\n  write the body without the match"
+            ],
+            "{round}"
+        );
+        assert_eq!(
+            reports
+                .iter()
+                .map(|report| report.span().expect("a lint is placed").line_column())
+                .collect::<Vec<_>>(),
+            [(5, 11)],
+            "{round}"
+        );
+    }
+}
+
+/// A match of one arm is no `unused-case` where its body reads what its case states: a type that rests on the case, as `/std/Nat/ord`'s does, or the binder the case binds.
+#[test]
+fn a_lone_arm_whose_body_rests_on_its_case_or_reads_its_binder_is_kept() {
+    let unit = unit_of(
+        "use /std/{Nat, Eq};
+use /std/Bool/{Holds};
+
+pub let less(a: Nat, b: Nat, ok: Holds(a < b)) -> Eq()(a < b, true) =
+    match a < b
+    | true => Eq/refl()
+    end;
+
+pub let pred(n: Nat, ok: Holds(0 < n)) -> Nat =
+    match n
+    | m + 1 => m
+    end;
+",
+    );
+
+    assert_eq!(lints_of(&unit), Vec::<String>::new());
+}
+
+/// The binder of a lone arm reported is none of `unused-binder`'s: the way out deletes the match, and the binder with it.
+#[test]
+fn a_lone_arm_reported_reports_none_of_its_binders() {
+    let unit = unit_of(
+        "use /std/{Nat};
+use /std/Bool/{Holds};
+
+pub let one(n: Nat, ok: Holds(0 < n)) -> Nat =
+    match n
+    | m + 1 => 1
+    end;
+",
+    );
+
+    assert_eq!(
+        lints_of(&unit),
+        [
+            "unused-case: unused case\n  this match decides nothing its body reads\n  write the body without the match"
+        ]
     );
 }

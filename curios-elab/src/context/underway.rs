@@ -4,7 +4,8 @@
 
 use {
     super::{
-        Attempt, CheckedTerms, Credits, DeclaredWitnesses, EmbeddingSite, Needs, Posture, Sites,
+        Attempt, CheckedTerms, Credits, DeclaredWitnesses, EmbeddingSite, LoneArm, Needs, Posture,
+        Sites,
     },
     crate::{Resolved, SettledPlace, Traces},
     curios_common::Qualifier,
@@ -59,6 +60,8 @@ pub struct Underway<'s> {
     pub credits: Credits,
     // The written sites opened and not yet classified, each with the type it was opened at; see [`Sites`].
     pub sites: Sites,
+    // The rows of matches of one arm watched and not yet decided; see [`LoneArm`].
+    pub lone_arms: Vec<LoneArm>,
     /// The binder lints of every declaration the walk's traces hold — elaborated now, adopted from a cabinet or kept from a baseline — taken where the walk ends (`Context::hold_lints`), whatever it concluded: what `Context::observed` hands out beside the final term's.
     pub held: Vec<Lint>,
     /// The type each written place settled at, of the items published since the declaration they belong to was last filed ([`SettledPlace`]): taken into its record where it is filed (`Context::take_settled`).
@@ -104,6 +107,7 @@ impl Default for Underway<'_> {
             witnesses: DeclaredWitnesses::default(),
             credits: Credits::default(),
             sites: Sites::default(),
+            lone_arms: Vec::new(),
             held: Vec::new(),
             settled: Vec::new(),
             resolved: Vec::new(),

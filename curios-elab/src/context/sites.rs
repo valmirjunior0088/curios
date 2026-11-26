@@ -7,8 +7,8 @@
 use {
     super::Spend,
     crate::{
-        Context, LINT_ALLOWANCE, Mode, Resolved, SettledPlace, SiteClass, Traces, binder_lints,
-        elaborate, reduce_with, zonk_solved_term_metas,
+        Context, HeldFrames, LINT_ALLOWANCE, Mode, Resolved, SettledPlace, SiteClass, Traces,
+        binder_lints, elaborate, reduce_with, zonk_solved_term_metas,
     },
     curios_core::{
         Definitions, Extent, FieldLabel, Global, HeadKey, Lint, Subterm, Term, WitnessKey,
@@ -26,6 +26,19 @@ pub struct Observed {
     pub lints: Vec<Lint>,
     /// The declarations that elaborated, where the walk refused: each as it was published, zonked, a refused declaration and every one reaching it left out, and over a baseline the ones it kept beside them; with the walk's traces, which hold what elaboration concluded of each. None where the walk did not refuse, whose module is what it hands back, and where elaboration never ran.
     pub elaborated: Option<(Definitions, Traces)>,
+}
+
+/// The row of a match of one arm, its one alternative, which takes something apart and has no guard, as elaboration reached its body: what [`binder_lints`] asks whether the body read the case the row states, by its frames and its binders.
+#[derive(Debug, Clone)]
+pub struct LoneArm {
+    /// Its declaration, `None` for an entry's final term.
+    pub declaration: Option<Global>,
+    /// Where it is reported: the match's head.
+    pub at: Extent,
+    /// The frames of the cases its row states, by the numbers they were entered as (`Frames::watch_above`).
+    pub frames: Vec<u64>,
+    /// The written binders its pattern writes.
+    pub binders: Vec<WrittenBinder>,
 }
 
 /// How many structs of one field a class reads through to the action one holds: `Try(Io, E, A)` holds `Io(Result(E, A))` one deep.
@@ -79,6 +92,50 @@ impl Sites {
 }
 
 impl Context<'_> {
+    /// Watch the row of a match of one arm whose head stands at `at`, its binders written at `places`, as its body is elaborated over the frames that stand above `held`, the frames the match was entered under: those are the frames of the cases the row states ([`LoneArm`]).
+    pub(crate) fn watch_lone_arm(&mut self, held: &HeldFrames, at: Extent, places: Vec<u32>) {
+        let declaration = self.underway.declaration;
+        let frames = self.typing.frames.watch_above(held);
+        self.underway.lone_arms.push(LoneArm {
+            declaration,
+            at,
+            frames,
+            binders: places
+                .into_iter()
+                .map(|ordinal| WrittenBinder {
+                    declaration,
+                    ordinal,
+                })
+                .collect(),
+        });
+    }
+
+    /// How many rows of matches of one arm stand watched: the watermark a refused or void attempt, and a rollback, takes them back to.
+    pub(crate) fn lone_arms_mark(&self) -> usize {
+        self.underway.lone_arms.len()
+    }
+
+    /// Take back every row watched since `mark`: one watched inside what is undone is no body that stands.
+    pub(crate) fn truncate_lone_arms(&mut self, mark: usize) {
+        self.underway.lone_arms.truncate(mark);
+    }
+
+    /// Take out every row watched whose declaration `of` holds of.
+    fn take_lone_arms(&mut self, of: impl Fn(&Option<Global>) -> bool) -> Vec<LoneArm> {
+        let (taken, kept) = std::mem::take(&mut self.underway.lone_arms)
+            .into_iter()
+            .partition(|arm| of(&arm.declaration));
+        self.underway.lone_arms = kept;
+        taken
+    }
+
+    /// Watch no frame once every row watched is decided.
+    fn forget_watched_once_decided(&mut self) {
+        if self.underway.lone_arms.is_empty() {
+            self.typing.frames.forget_watched();
+        }
+    }
+
     /// Note that the written binder at `place` is a match pattern's, which the matrix compiler binds by a `let` of its own.
     pub(crate) fn note_pattern_site(&mut self, place: Option<u32>) {
         if let Some(place) = place {
@@ -237,9 +294,14 @@ impl Context<'_> {
         let mints = names.first().map(|name| minted.of(name));
         let sites = mints.map_or(&[][..], |mints| mints.unread.as_slice());
         let lowered = mints.map_or(&[][..], |mints| mints.lints.as_slice());
+        let lone = self.take_lone_arms(|declaration| {
+            declaration.is_some_and(|declaration| names.contains(&declaration))
+        });
 
-        binder_lints(
+        let lints = binder_lints(
             sites,
+            &lone,
+            |arm| self.typing.frames.read_any(&arm.frames),
             |binder| {
                 binder
                     .declaration
@@ -249,7 +311,10 @@ impl Context<'_> {
         )
         .into_iter()
         .chain(lowered.iter().cloned())
-        .collect()
+        .collect();
+        self.forget_watched_once_decided();
+
+        lints
     }
 
     /// Hold `elaborated`, the declarations a refused walk elaborated, with `traces`, the walk's, for [`Context::observed`] to hand out.
@@ -275,8 +340,11 @@ impl Context<'_> {
             .collect::<BTreeMap<_, _>>();
         let credited = self.credited();
         let minted = Rc::clone(&self.underway.minted);
+        let lone = self.take_lone_arms(Option::is_none);
         let entry = binder_lints(
             &minted.entry.unread,
+            &lone,
+            |arm| self.typing.frames.read_any(&arm.frames),
             |binder| credited.contains(&(binder.declaration, binder.ordinal)),
             |binder| {
                 binder

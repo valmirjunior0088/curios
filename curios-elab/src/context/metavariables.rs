@@ -701,6 +701,7 @@ impl<'s> Context<'s> {
             universe: self.underway.attempt.universe_solver.mark(),
             credited_len: self.underway.credits.mark(),
             sites_len: self.underway.sites.mark(),
+            lone_arms_len: self.lone_arms_mark(),
             checked_len: self.underway.checked.mark(),
             questions: self.typing.asking.questions(),
             filed: self.typing.caches.filings(),
@@ -748,6 +749,8 @@ impl<'s> Context<'s> {
         self.underway.credits.truncate(mark.credited_len);
         // Nor does a site opened inside it bind anything that stands.
         self.underway.sites.truncate(mark.sites_len);
+        // Nor is a row watched inside it a body that stands.
+        self.truncate_lone_arms(mark.lone_arms_len);
         // Nor does a term settled inside it settle anything. It belonged to a candidate that is discarded, and the type it settled at may be a metavariable whose solution has just been unwound: left recorded, the totality obligations would zonk it at the item's end and report an implicit argument of a call the program never kept.
         self.truncate_checked(mark.checked_len);
 

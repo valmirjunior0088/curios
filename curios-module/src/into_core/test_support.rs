@@ -11,6 +11,7 @@ use {
         collections::{BTreeSet, HashSet},
         fs,
         path::Path,
+        ptr,
         rc::Rc,
     },
 };
@@ -44,10 +45,10 @@ pub fn lints(src: &str) -> Vec<String> {
     let mut read = HashSet::new();
     let unread = minted
         .each()
-        .filter(|(_, mints)| read.insert(std::ptr::from_ref(*mints)))
+        .filter(|(_, mints)| read.insert(ptr::from_ref(*mints)))
         .flat_map(|(_, mints)| &mints.unread)
         .chain(&minted.entry.unread);
-    let binders = curios_elab::binder_lints(unread, |_| false, |_| None);
+    let binders = curios_elab::binder_lints(unread, &[], |_| false, |_| false, |_| None);
 
     curios_core::Lint::ordered(
         text.lints().iter().cloned().chain(binders).collect(),

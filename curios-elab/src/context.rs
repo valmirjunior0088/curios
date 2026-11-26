@@ -19,7 +19,7 @@ use credits::*;
 
 mod sites;
 use sites::*;
-pub use sites::{Binding, Observed};
+pub use sites::{Binding, LoneArm, Observed};
 
 mod declared;
 pub use declared::Declared;
@@ -157,6 +157,8 @@ pub struct SolutionMark {
     credited_len: usize,
     /// How many written sites had been opened ([`Sites::mark`]).
     sites_len: usize,
+    /// How many rows of matches of one arm stood watched ([`Context::lone_arms_mark`]).
+    lone_arms_len: usize,
     /// How many settled terms the totality obligations had been handed ([`Context::record_checked`]).
     checked_len: usize,
     /// How many questions reduction had put to conversion ([`Context::note_question`]).

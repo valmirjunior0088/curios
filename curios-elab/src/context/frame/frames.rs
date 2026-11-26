@@ -66,6 +66,16 @@ pub struct Frames<'s> {
     entered: u64,
     /// The deepest frame each settlement under way has read, the innermost settlement last ([`Frames::begin_reads`]).
     reads: RefCell<Vec<usize>>,
+    /// The frames whose reads a lint watches, each beside whether a lookup has answered from it since ([`Frames::watch_above`]).
+    watched: RefCell<Vec<Watched>>,
+}
+
+/// A frame whose reads a lint watches: the depth it stands at and the number it was entered as, beside whether a lookup has answered from it since it was watched.
+#[derive(Debug, Clone, Copy)]
+struct Watched {
+    depth: usize,
+    number: u64,
+    read: bool,
 }
 
 impl<'s> Frames<'s> {
@@ -129,6 +139,7 @@ impl<'s> Frames<'s> {
             masked: None,
             entered: 0,
             reads: RefCell::new(Vec::new()),
+            watched: RefCell::new(Vec::new()),
         }
     }
 
@@ -148,16 +159,78 @@ impl<'s> Frames<'s> {
         deepest
     }
 
-    /// Count a read of the frame at `depth` for the settlement under way, where one is.
+    /// Count a read of the frame at `depth` for the settlement under way, where one is, and mark the frame read where it is watched ([`Frames::watch_above`]).
     fn read(&self, depth: usize) {
+        self.count(depth);
+        let watched = self
+            .watched
+            .borrow()
+            .iter()
+            .any(|watched| watched.depth == depth && !watched.read);
+        if watched && let Some(frame) = self.frame_at(depth) {
+            self.mark(frame.number);
+        }
+    }
+
+    /// Count a read of the frame at `depth` for the settlement under way, where one is.
+    fn count(&self, depth: usize) {
         if let Some(deepest) = self.reads.borrow_mut().last_mut() {
             *deepest = (*deepest).max(depth);
         }
     }
 
-    /// Count a read of the whole scope: the innermost frame.
+    /// Count a read of the whole scope: the innermost frame. A question put to the scope as a whole reads nothing a watched frame holds, so it marks none.
     fn read_scope(&self) {
-        self.read(self.top.as_ref().map_or(0, |top| top.depth));
+        self.count(self.top.as_ref().map_or(0, |top| top.depth));
+    }
+
+    /// Watch the frames that stand above `held`, the frames a match was entered under, answering their numbers: from here on, a lookup answered from a binding, a definition or a refinement one of them holds marks it read ([`Frames::read_any`]).
+    pub fn watch_above(&self, held: &HeldFrames) -> Vec<u64> {
+        let floor = held.innermost().map_or(0, |frame| frame.depth);
+        let mut watched = self.watched.borrow_mut();
+        let mut numbers = Vec::new();
+        let mut frame = self.top.as_ref();
+        while let Some(standing) = frame.filter(|standing| standing.depth > floor) {
+            if !watched
+                .iter()
+                .any(|watched| watched.number == standing.number)
+            {
+                watched.push(Watched {
+                    depth: standing.depth,
+                    number: standing.number,
+                    read: false,
+                });
+            }
+            numbers.push(standing.number);
+            frame = standing.beneath.as_ref();
+        }
+
+        numbers
+    }
+
+    /// Whether a lookup has answered from one of the frames numbered `numbers` since [`Frames::watch_above`] watched them.
+    pub fn read_any(&self, numbers: &[u64]) -> bool {
+        self.watched
+            .borrow()
+            .iter()
+            .any(|watched| watched.read && numbers.contains(&watched.number))
+    }
+
+    /// Watch no frame from here on.
+    pub fn forget_watched(&mut self) {
+        self.watched.get_mut().clear();
+    }
+
+    /// Mark the frame numbered `number` read, where it is watched.
+    fn mark(&self, number: u64) {
+        if let Some(watched) = self
+            .watched
+            .borrow_mut()
+            .iter_mut()
+            .find(|watched| watched.number == number)
+        {
+            watched.read = true;
+        }
     }
 
     /// Read through to `scope` where no frame holds a name.
@@ -657,8 +730,13 @@ impl<'s> Frames<'s> {
     /// The whole entry rather than its value, for the reason [`Frames::scrutinee_entry`] gives: the key cannot decide a universe instance, so the read above compares the unerased bases instead.
     pub fn projection_entry(&self, base: &Term, index: usize) -> Option<&ProjectionEntry> {
         let projected = Keyed::new((project_erased_universes(base), index));
-        self.refined_in_view()
-            .find_map(|frame| frame.refinement_projections.get(&projected))
+        self.refined_in_view().find_map(|frame| {
+            let entry = frame.refinement_projections.get(&projected);
+            if entry.is_some() {
+                self.mark(frame.number);
+            }
+            entry
+        })
     }
 
     /// Register a counterfactual match-arm refinement of a variable. Unlike a definition, this is the arm's alone: a judgment made for a metavariable born outside the arm stands on frames that hold none of it. The façade clears the caches first.
@@ -854,7 +932,10 @@ impl<'s> Frames<'s> {
                 .refinement_scrutinees
                 .get(canonical)
                 .filter(|entry| !self.withholds(frame.depth, entry))
-                .map(|entry| (frame.depth, entry))
+                .map(|entry| {
+                    self.mark(frame.number);
+                    (frame.depth, entry)
+                })
         })?;
 
         (!self.withheld_inside(depth, canonical)).then_some(entry)
@@ -874,7 +955,10 @@ impl<'s> Frames<'s> {
                         && !self.withholds(frame.depth, entry)
                         && !self.withheld_inside(frame.depth, key)
                 })
-                .map(move |(key, entry)| (frame.depth, key, entry))
+                .map(move |(key, entry)| {
+                    self.mark(frame.number);
+                    (frame.depth, key, entry)
+                })
         })
     }
 
@@ -888,17 +972,26 @@ impl<'s> Frames<'s> {
                     .filter(move |(key, entry)| {
                         !entry.withheld && !self.withheld_inside(frame.depth, key)
                     })
-                    .map(|(key, entry)| (frame.depth, key.clone(), entry.clone()))
+                    .map(|(key, entry)| {
+                        self.mark(frame.number);
+                        (frame.depth, key.clone(), entry.clone())
+                    })
             })
             .collect()
     }
 
     /// The equation the entry `key` registered in the frame at depth `frame` spells ([`ScrutineeEntry::equation`]).
     pub fn scrutinee_equation(&self, frame: usize, key: &Term) -> Option<usize> {
-        self.frame_at(frame)?
+        let registering = self.frame_at(frame)?;
+        let equation = registering
             .refinement_scrutinees
             .get(key)
-            .map(|entry| entry.equation)
+            .map(|entry| entry.equation);
+        if equation.is_some() {
+            self.mark(registering.number);
+        }
+
+        equation
     }
 
     /// Every equation an arm in the window withholds, as the entry withholding it, innermost frame first.
@@ -944,8 +1037,13 @@ impl<'s> Frames<'s> {
 
     /// The value the innermost arm in the window refines `name` to, where one refines it.
     pub fn refinement_of(&self, name: &Free) -> Option<&Term> {
-        self.refined_in_view()
-            .find_map(|frame| frame.refinements.get(name))
+        self.refined_in_view().find_map(|frame| {
+            let value = frame.refinements.get(name);
+            if value.is_some() {
+                self.mark(frame.number);
+            }
+            value
+        })
     }
 
     /// Whether an arm in the window refines any variable.
@@ -958,6 +1056,9 @@ impl<'s> Frames<'s> {
     pub fn refined_variables(&self) -> Vec<(Free, Term)> {
         let mut variables = BTreeMap::new();
         for frame in self.refined_in_view() {
+            if !frame.refinements.is_empty() {
+                self.mark(frame.number);
+            }
             for (name, value) in frame.refinements.iter() {
                 variables.entry(*name).or_insert_with(|| value.clone());
             }
@@ -969,10 +1070,10 @@ impl<'s> Frames<'s> {
     pub fn projection_refinements(&self) -> Vec<(Term, Term)> {
         self.refined_in_view()
             .flat_map(|frame| {
-                frame
-                    .refinement_projections
-                    .iter()
-                    .map(|(_, entry)| (entry.original.clone(), entry.value.clone()))
+                frame.refinement_projections.iter().map(|(_, entry)| {
+                    self.mark(frame.number);
+                    (entry.original.clone(), entry.value.clone())
+                })
             })
             .collect()
     }

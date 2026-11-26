@@ -39,7 +39,7 @@ mod context;
 use context::*;
 pub use context::{
     Answered, ArchivedAnswered, ArchivedQuestion, AwaitId, Context, DEFAULT_BUDGET, HeldFrames,
-    LINT_ALLOWANCE, Observed, Question, ReaderWrites, WalkListener, Walked,
+    LINT_ALLOWANCE, LoneArm, Observed, Question, ReaderWrites, WalkListener, Walked,
 };
 
 mod convert;

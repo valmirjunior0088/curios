@@ -475,7 +475,7 @@ curios check a.crs b.crs # each file, placed in its unit, in one report
 curios check -           # the program on standard input
 ```
 
-`check` is the one command that checks: it reports every error, goal and lint of each subject and turns them into an exit code. A lint is an exact finding the compilation already has and nothing stops on: `run`, `compile` and `test` never mention one, and the language server publishes them beside the errors and goals. There are seven, every one always on, and there is nothing to configure — what keeps a name is spelled in the program, and each message says how.
+`check` is the one command that checks: it reports every error, goal and lint of each subject and turns them into an exit code. A lint is an exact finding the compilation already has and nothing stops on: `run`, `compile` and `test` never mention one, and the language server publishes them beside the errors and goals. There are eight, every one always on, and there is nothing to configure — what keeps a name is spelled in the program, and each message says how.
 
 | Lint | Reports | Kept by |
 | --- | --- | --- |
@@ -486,6 +486,7 @@ curios check -           # the program on standard input
 | `unused-declaration` | a non-`pub` `let`, `foreign`, `induct`, `struct` or `concept` unreachable from the unit's roots — its exported surface, its tests, its witnesses, the declarations a `_` keeps unused and its program's tail; a private `mod` none of whose declarations is reached is reported once, at the `mod` | deleting it, `pub`, or naming it `_x` |
 | `unused-dependency` | a `[dependencies]` row whose package no reference in the library or any executable names; decided over the package, so reported only by the package-entire form | deleting the row |
 | `renaming-binder` | a final arm's name after arms that each take the scrutinee apart, or a match's one arm that binds the whole value, under a head written as a name: it names again what the head already names | reading the head, and writing `_` after arms, or nothing for the lone arm |
+| `unused-case` | a match of one arm — one alternative taking something apart, under no guard — whose body reads nothing its case states: no refinement or index solution the case makes, and no binder its pattern writes, what a match whose other arms the facts refute can come to; a body that asks the refinements in force reads its case, and a reported arm's binders are no `unused-binder`'s | writing the body without the match |
 
 Output is each diagnostic, goal and lint rendered as `run` reports it, a blank line between — and the exit is the tri-state: 1 when a lint or an error was reported, 2 when only goals were, 0 when nothing was. A program that does not lower reports its error alone; one that lowers and is then refused reports its lints beside the refusal. Each unit is checked as `curios test` compiles it, its tests included, so a declaration only a test reads is reached.
 
