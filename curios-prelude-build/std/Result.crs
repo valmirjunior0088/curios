@@ -1,4 +1,4 @@
-pub use Result/{success, failure};
+pub use Result/{failure, success};
 
 use /std/{Bool, Eq, Show, Spell, Fmt, Option, Ordering, Ord, Monad};
 use /std/ops/{Eql};
@@ -6,10 +6,10 @@ use /std/Bool/{True};
 
 --- Success or failure, the failure's type first.
 pub induct Result(E: Type, A: Type): pub Type
+--- It did not work, carrying the error.
+| failure(E)
 --- It worked, carrying the value.
 | success(A)
---- It did not, carrying the error.
-| failure(E)
 end
 
 --- `a` as a success.
