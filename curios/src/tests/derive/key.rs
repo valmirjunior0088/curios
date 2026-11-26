@@ -120,9 +120,13 @@ fn a_family_holding_itself_through_another_keys_type_derives_its_key() {
 #[test]
 fn a_payload_with_no_key_is_reported_against_the_payload() {
     let source = r#"
-        use /std/{Nat, Option, Hash, Ord};
+        use /std/{Nat, Hash, Ord};
         use /std/ops/{Eql};
-        struct Held: pub Type { kept: Option(Nat) }
+        struct Inner: pub Type { n: Nat }
+        satisfy Eql(Inner) { .. }
+        satisfy Ord(Inner) { .. }
+        satisfy Hash(Inner) { .. }
+        struct Held: pub Type { kept: Inner }
         satisfy Eql(Held) { .. }
         satisfy Ord(Held) { .. }
         satisfy Hash(Held) { .. }

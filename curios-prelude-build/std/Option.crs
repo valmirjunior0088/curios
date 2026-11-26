@@ -1,7 +1,7 @@
 pub use /sys/{let Option};
 pub use /sys/Option/{some, none};
 
-use /std/{Nat, Bool, Eq, Show, Spell, Fmt, Monad, Result, Ordering, Ord, Hash};
+use /std/{Bool, Eq, Show, Spell, Fmt, Monad, Result, Ord, Hash};
 use /std/ops/{Eql};
 
 --- `f` on the value, or `none`.
@@ -91,59 +91,14 @@ satisfy Monad(Option) {
 }
 
 --- `none` below `some`, and two values by `A`'s order.
-pub let ord(@A: Type, use Ord(A), a: Option(A), b: Option(A)) -> Ordering =
-    match a
-    | none() => match b | none() => Ordering/eq() | some(_) => Ordering/lt() end
-    | some(x) => match b | none() => Ordering/gt() | some(y) => Ord/ord(x, y) end
-    end;
-
--- Each law by the cases of its values: two `some`s by `A`'s own law, and any other pair by what `ord` answers there.
 satisfy (@A: Type, use Ord(A)) => Ord(Option(A)) {
-    ord = ord,
-    lt(a, b) = Ordering/is_lt(ord(a, b)),
-    le(a, b) = Ordering/is_le(ord(a, b)),
-    flips(a, b) =
-        match a
-        | none() => match b | none() => Eq/refl() | some(_) => Eq/refl() end
-        | some(x) => match b | none() => Eq/refl() | some(y) => Ord/flips(x, y) end
-        end,
-    trans(a, b, c, p, q) =
-        match a
-        | none() => match c | none() => Bool/True/qed() | some(_) => Bool/True/qed() end
-        | some(x) =>
-            match b
-            | none() => match p end
-            | some(y) =>
-                match c
-                | none() => match q end
-                | some(z) => Ord/trans(x, y, z, p, q)
-                end
-            end
-        end,
-    eq(a, b, h) =
-        match a
-        | none() =>
-            match b
-            | none() => Eq/refl()
-            | some(_) => match h end
-            end
-        | some(x) =>
-            match b
-            | none() => match h end
-            | some(y) =>
-                let refl() = Ord/eq(x, y, h);
-                Eq/refl()
-            end
-        end,
-    is_lt(_, _) = Eq/refl(),
-    is_le(_, _) = Eq/refl(),
+    ..
 }
 
---- As a derived witness writes one: the constructor's position as a natural encodes it, then the payload's encoding, so `none` encodes first and a `some` as its payload orders.
 satisfy (@A: Type, use Hash(A)) => Hash(Option(A)) {
-    hash(value) =
-        match value
-        | none() => Nat/hash(0)
-        | some(inner) => 0x[..Nat/hash(1), ..Hash/hash(inner)]
-        end,
+    ..
+}
+
+satisfy (@A: Type, use Hash/Key(A)) => Hash/Key(Option(A)) {
+    ..
 }

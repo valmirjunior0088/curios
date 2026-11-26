@@ -1,4 +1,4 @@
-use /std/{List, Bool, Eq, Ord, Ordering};
+use /std/{List, Bool, Bytes, Eq, Hash, Ord, Ordering};
 
 --- Lexicographic, a proper prefix first.
 pub let ord(@T: Type, use Ord(T), a: List(T), b: List(T)) -> Ordering =
@@ -102,4 +102,58 @@ satisfy (@T: Type, use Ord(T)) => Ord(List(T)) {
     eq = eq,
     is_lt(_, _) = Eq/refl(),
     is_le(_, _) = Eq/refl(),
+}
+
+-- The empty list's encoding, nothing, before one beginning with a delimited run, which begins with a byte whatever it delimits.
+let empty_first(
+    x: Bytes,
+    rest: Bytes,
+) -> Eq()(Bytes/ord(0x[], 0x[..Hash/delimited(x), ..rest]), Ordering/lt()) =
+    match x
+    | 0x[] => Eq/refl()
+    | 0x[0, .._] => Eq/refl()
+    | 0x[_, .._] => Eq/refl()
+    end;
+
+-- The same two the other way round.
+let empty_last(
+    x: Bytes,
+    rest: Bytes,
+) -> Eq()(Bytes/ord(0x[..Hash/delimited(x), ..rest], 0x[]), Ordering/gt()) =
+    match x
+    | 0x[] => Eq/refl()
+    | 0x[0, .._] => Eq/refl()
+    | 0x[_, .._] => Eq/refl()
+    end;
+
+-- A recursion over both lists. At two conses the order is a step and the encodings are two delimited runs with the tails' after them, which `Hash/delimited/ord` orders as the runs and then the tails: the heads' law, and the tails' by the recursion.
+let mono(
+    @T: Type,
+    use Hash/Key(T),
+    a: List(T),
+    b: List(T),
+) -> Eq()(ord(a, b), Bytes/ord(Hash/hash(a), Hash/hash(b))) =
+    match a
+    | [] =>
+        match b
+        | [] => Eq/refl()
+        | [y, ..ys] => Eq/sym(empty_first(Hash/hash(y), Hash/hash(ys)))
+        end
+    | [x, ..xs] =>
+        match b
+        | [] => Eq/sym(empty_last(Hash/hash(x), Hash/hash(xs)))
+        | [y, ..ys] =>
+            Eq/trans(
+                Eq/trans(
+                    Eq/cong((o: Ordering) => Ordering/then(o, ord(xs, ys)), Hash/Key/mono(x, y)),
+                    Eq/cong(
+                        (o: Ordering) => Ordering/then(Bytes/ord(Hash/hash(x), Hash/hash(y)), o),
+                        mono(xs, ys))),
+                Eq/sym(
+                    Hash/delimited/ord(Hash/hash(x), Hash/hash(y), Hash/hash(xs), Hash/hash(ys))))
+        end
+    end;
+
+satisfy (@T: Type, use Hash/Key(T)) => Hash/Key(List(T)) {
+    mono = mono,
 }
