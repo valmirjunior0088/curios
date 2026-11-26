@@ -1175,6 +1175,10 @@ pub enum Error {
     GroupApart {
         parts: Vec<Vec<CycleMember>>,
     },
+    /// A value of no parameters that reads itself outside a lambda, reached by a position erasure deletes: evaluating it evaluates itself as it is initialized, the evaluation cycle erasure refuses (`curios-erase`'s `EvaluationCycle`), so the refusal says that, in erasure's words and at the read, rather than that the value is not known to terminate.
+    EvaluatesItself {
+        name: Global,
+    },
     /// A family's parameter or index, or a record's or a concept's parameter, that names `member`, declared in the same group as `name`. Positivity walks no index binder type, which is sound only because nothing a declaration's own group declares stands there, and a family indexed by a family it is declared with is induction-induction, which no decision admits.
     IndexedByItsGroup {
         name: Global,
@@ -1406,6 +1410,7 @@ variants!(Error {
     NoWitness,
     DeclarationCycle,
     GroupApart,
+    EvaluatesItself,
     IndexedByItsGroup,
     Goal,
     Goals,
@@ -2717,6 +2722,12 @@ impl Error {
                     )
                 })
                 .collect(),
+            Self::EvaluatesItself { name } => note(
+                Anchors::label(anchors, name),
+                format!("`{}` is declared here", spelling.symbol(name)),
+            )
+            .into_iter()
+            .collect(),
             Self::IndexedByItsGroup { member, .. } => note(
                 Anchors::label(anchors, member),
                 format!("`{}` is declared here", spelling.symbol(member)),

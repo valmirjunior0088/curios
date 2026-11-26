@@ -78,6 +78,53 @@ fn occurrence(term: &Term, name: &Global) -> Option<Extent> {
     }
 }
 
+/// The refusal of a position erasure deletes, `site`, that reaches `offender`, a definition not known to terminate: in erasure's words where `offender` is a value that reads itself outside a lambda ([`reads_itself`]), since what it breaks is that rule, and as not known to terminate otherwise. Placed by the caller at the read that reaches it, as erasure places its own beside the declaration's note.
+fn reaching(context: &Context, erased: Erased, site: ErasedSite, offender: Global) -> Error {
+    match reads_itself(context, &offender) {
+        true => Error::EvaluatesItself { name: offender },
+        false => Error::PartialInErasedPosition {
+            erased,
+            site,
+            offender: Some(offender),
+        },
+    }
+}
+
+/// Whether `name` reads itself outside a lambda: what evaluating it evaluates before it is initialized. Not where it reads itself only under a lambda, a function's body among them, where it is computed the first time it is read. A definition that names itself is a group of one, so it reads itself as its group's member; one that does not is read by its name.
+fn reads_itself(context: &Context, name: &Global) -> bool {
+    let Some(term) = context.declaration_term(name).cloned() else {
+        return false;
+    };
+    let member = term
+        .as_rec_proj()
+        .map(|(group, index)| (group.clone(), index));
+    let body = match &member {
+        Some((group, index)) => group.member_body(*index),
+        None => term,
+    };
+    let itself = |term: &Term| match (&**term, &member) {
+        (Subterm::Instance(instance), _) => instance.name == *name,
+        (_, Some((group, index))) => term
+            .as_rec_proj()
+            .is_some_and(|(of, at)| at == *index && of == group),
+        _ => false,
+    };
+    let found = body.try_walk(
+        &mut HashSet::new(),
+        |seen: &mut HashSet<Term>, term| match &**term {
+            Subterm::Func(_) => ControlFlow::Continue(Enter::Skip(())),
+            _ if itself(term) => ControlFlow::Break(()),
+            // Another member of the group, which holds every member's body: a read of it is no read of this one.
+            _ if term.as_rec_proj().is_some() => ControlFlow::Continue(Enter::Skip(())),
+            _ if seen.insert(term.clone()) => ControlFlow::Continue(Enter::Descend),
+            _ => ControlFlow::Continue(Enter::Skip(())),
+        },
+        |_, _, _| (),
+    );
+
+    found.is_break()
+}
+
 /// The first declaration `term` references whose recorded totality is not total, first as written ([`Term::first_declaration`]): the name a bound's refusal is re-read by.
 fn partial_offender(context: &Context, term: &Term) -> Option<Global> {
     term.first_declaration(|name| {
@@ -96,11 +143,7 @@ pub fn exhausted_bound(
 ) -> Error {
     match (&error, partial_offender(context, proposition)) {
         (Error::ReduceExhausted { .. } | Error::ConvertExhausted { .. }, Some(offender)) => {
-            Error::PartialInErasedPosition {
-                erased: Erased::Proof,
-                site,
-                offender: Some(offender),
-            }
+            reaching(context, Erased::Proof, site, offender)
         }
         _ => error,
     }
@@ -110,11 +153,8 @@ pub fn exhausted_bound(
 ///
 /// No checker unfolds a definition whose recursion does not descend, so a bound over one is decided by none, whether or not the definition would have returned at that input, and any proof of it would reach the definition, which proof totality refuses. A bound whose reduction carried it past every such definition is reported as the undischarged bound it is.
 pub fn bound_over_a_loop(context: &Context, reduced: &Term, site: ErasedSite) -> Option<Error> {
-    partial_offender(context, reduced).map(|offender| Error::PartialInErasedPosition {
-        erased: Erased::Proof,
-        site,
-        offender: Some(offender),
-    })
+    partial_offender(context, reduced)
+        .map(|offender| reaching(context, Erased::Proof, site, offender))
 }
 
 /// Classify a published item and record each of its definitions' verdict: the one every other declaration reads, and the one the unit files ([`crate::Classified::totality`]).
@@ -480,13 +520,13 @@ fn report(
         .next()
     {
         None => Ok(()),
-        Some((site, fault, extent)) => Err(Error::PartialInErasedPosition {
+        Some((site, Fault::Named(name), extent)) => {
+            Err(reaching(context, erased, site, name).at_opt(extent))
+        }
+        Some((site, Fault::Inline, extent)) => Err(Error::PartialInErasedPosition {
             erased,
             site,
-            offender: match fault {
-                Fault::Named(name) => Some(name),
-                Fault::Inline => None,
-            },
+            offender: None,
         }
         .at_opt(extent)),
     }

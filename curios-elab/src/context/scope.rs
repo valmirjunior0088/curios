@@ -486,6 +486,18 @@ impl<'s> Context<'s> {
         body
     }
 
+    /// [`Frames::declaration_term`](super::Frames::declaration_term), and a need as [`Context::declaration_body`] records one.
+    pub(crate) fn declaration_term(&self, name: &Global) -> Option<&Term> {
+        self.asks(name, Question::Body);
+        let term = self.typing.frames.declaration_term(name);
+        match term {
+            Some(term) => self.opens(name, term),
+            None => self.absent(&Mention::Declaration(*name)),
+        }
+
+        term
+    }
+
     /// [`Frames::var_reduct`](super::Frames::var_reduct), and a name to unstick as [`Context::definition_body`] records one.
     pub(crate) fn var_reduct(&self, name: &Free) -> Option<&Term> {
         let reduct = self.typing.frames.var_reduct(name);

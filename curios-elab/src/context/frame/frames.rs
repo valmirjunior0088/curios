@@ -575,6 +575,14 @@ impl<'s> Frames<'s> {
         }
     }
 
+    /// What the declaration `name` is written as, here or in a unit in scope, whether or not reduction may unfold it: what a refusal reads to say where a definition not known to terminate reads itself. Nothing unfolds it through here; reduction reads [`Frames::declaration_body`], which withholds it.
+    pub fn declaration_term(&self, name: &Global) -> Option<&Term> {
+        match self.declarations.definitions.get(name) {
+            Some(entry) => Some(entry.body()),
+            None => self.in_scope(name).and_then(|defined| defined.body),
+        }
+    }
+
     /// Every top-level `rec` group defined so far, each with its members' global names in member order. A member's definition is the group with a projecting tail, so the groups are read off the members and their names gathered by index; a group read only partially — a member never defined — is dropped, since a spelling with a gap is no spelling.
     pub fn rec_definitions(&self) -> Vec<DefinedGroup> {
         let mut groups: Vec<(RecGroup, Vec<Option<Global>>)> = Vec::new();

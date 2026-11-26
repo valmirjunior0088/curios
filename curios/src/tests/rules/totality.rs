@@ -1,6 +1,8 @@
 //! A partial definition at an erased position, however it is reached, and what does not count as descent.
 
-use {super::test_support::*, curios_analysis::Erased, curios_common::fill};
+use {
+    super::test_support::*, crate::test_support::*, curios_analysis::Erased, curios_common::fill,
+};
 
 /// A proof read off a `Type`-sorted carrier `build` makes, reached four ways: directly, through a witness, through a higher-order argument and through a field. Each refusal has `build` call itself, the box at `False`; the certifier's local gate does not fire there — `Box` is neither a proposition nor a sort — so these are the class the erasure obligations in `curios-cert` exist for.
 const BUILT_DIRECT: &str = r#"
@@ -124,7 +126,7 @@ fn a_proof_resting_on_a_partial_definition_is_refused_however_it_is_reached() {
     }
 }
 
-// A non-descending `rec` written *inline*, at a `Type`-sorted type so the certifier's local descent gate does not apply, inside a definition that is not itself a proof position. Nothing but the classification walk can see it: `make` has no name-level partiality to inherit and no proof-typed member to gate, so it is partial only if `locally_partial` descends into the `rec` group's member scopes rather than stopping at the node. The proof position is `bad`, which merely mentions `make`. The control binds `r` to a box it builds.
+// A non-descending `rec` written *inline*, at a `Type`-sorted type so the certifier's local descent gate does not apply, inside a definition that is not itself a proof position. Nothing but the classification walk can see it: `make` has no name-level partiality to inherit and no proof-typed member to gate, so it is partial only if `locally_partial` descends into the `rec` group's member scopes rather than stopping at the node. The proof position is `bad`, which merely mentions `make`, refused as the evaluation cycle `make`'s term is, since `r` reads itself outside a lambda. The control binds `r` to a box it builds.
 #[test]
 fn a_recursion_written_inline_under_a_carrier_is_still_partial() {
     control(
@@ -147,7 +149,7 @@ fn a_recursion_written_inline_under_a_carrier_is_still_partial() {
         ("let r : Box = Box { p = True/qed() };", "let r : Box = r;"),
     ])
     .by_elaborator_in("/bad", |error| {
-        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+        matches!(error, curios_elab::Error::EvaluatesItself { name } if *name == global("/make"))
     })
     .by_certifier_in("/bad", |error| {
         matches!(error, curios_cert::Error::NotTotal { .. })
@@ -261,6 +263,60 @@ fn a_field_applied_off_a_structure_is_not_descent() {
     ])
     .by_elaborator_in("/f", |error| matches!(error, curios_elab::Error::PartialInErasedPosition { offender: Some(offender), .. } if *offender == global("/f")))
     .by_certifier_in("/f", |error| matches!(error, curios_cert::Error::NotDescending { .. }));
+}
+
+/// A value that reads itself outside a lambda, reached by a proof: `w` hands itself to `each`, whose answer's method reads `o.inner`, and `r` proves by its method.
+const KNOT: &str = r#"
+        use /std/{List, print};
+        use /std/Bool/{True};
+
+        struct Inner(A: Type): Type {
+            step: (A) -> True,
+        }
+
+        struct Outer(A: Type): Type {
+            inner: Inner(A),
+            more: Inner(List(A)),
+        }
+
+        induct Doc: Type
+        | leaf()
+        end
+
+        let all(@T: Type, i: Inner(T), s: List(T)) -> True =
+            match s
+            | [] => True/qed()
+            | [x, ..rest] => match i.step(x) | qed() => all(i, rest) end
+            end;
+
+        let each(@T: Type, o: Outer(T)) -> Inner(List(T)) =
+            Inner { step(s) = all(o.inner, s) };
+
+        let w: Outer(Doc) = Outer { inner = Inner { step(_) = True/qed() }, more = each(w) };
+
+        print("ok")
+        "#;
+
+/// A value that reads itself outside a lambda is refused, where a proof reaches it, as the evaluation cycle it is, in erasure's words: erasure refuses the twin whose method answers a `Nat` in the same words, so the rule reads alike whichever stage meets it first. Mutation-checked: with `reads_itself` answering no, `r` is refused as reaching a definition not known to terminate.
+#[test]
+fn a_value_reading_itself_outside_a_lambda_is_refused_as_an_evaluation_cycle() {
+    let proof = (
+        r#"print("ok")"#,
+        r#"let r: True = w.more.step([Doc/leaf()]);
+
+        print("ok")"#,
+    );
+    control(KNOT, b"ok")
+        .refused(&[proof])
+        .by_elaborator_in("/r", |error| matches!(error, curios_elab::Error::EvaluatesItself { name } if *name == global("/w")));
+
+    let report = error(&KNOT.replacen(proof.0, proof.1, 1));
+
+    assert!(
+        report.contains("evaluation cycle")
+            && report.contains("`w` evaluates itself as it is initialized"),
+        "{report}"
+    );
 }
 
 // An application of a payload is a child of its constructor, which is true of a value that is a finite tree (`curios-analysis`'s `totality`), the premise the paradox of trees breaks: `down` descends by it and is admitted, and `x`, whose payload hands back `x` itself, is a tree with no bottom for the descent to reach. A recursive binding is not known to terminate, so the proof that reaches it is refused at `x`, and the descent is never asked of it. The control applies `down` to nothing in particular.

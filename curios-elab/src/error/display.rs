@@ -2200,6 +2200,16 @@ impl Displayed<'_> {
                 f.stating("a declaration reads any other wherever it is written");
                 f.stating(format_args!("declare each part on its own: {each}"));
             }
+            // Erasure's words for the same cycle (`curios-erase`'s `EvaluationCycle`), so the rule reads alike whichever stage meets it first.
+            Error::EvaluatesItself { name } => {
+                f.text("evaluation cycle");
+                f.stating(format_args!(
+                    "`{}` evaluates itself as it is initialized",
+                    spelling.symbol(name)
+                ));
+                f.stating("a value may mention itself only under a lambda");
+                f.stating("there it is computed the first time it is read");
+            }
             Error::IndexedByItsGroup { name, member } => {
                 f.text("indexed by its group");
                 f.stating(format_args!(
