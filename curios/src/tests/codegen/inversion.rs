@@ -21,7 +21,8 @@ const PROGRAM: &str = r#"
         let _ = Fmt/print("%\n")(Bytes/to_nat(bytes) % 1000003)!;
         let _ = Fmt/print("%\n")(Flt/to_str(Flt/pow10(n)))!;
         let cropped = View/crop(View/text(Style/plain, s), n / 2, 0);
-        let _ = Fmt/print("%\n")(Str/join("/", Frame/to_lines(Frame/of_view(cropped))))!;
+        let fitted = View/fit(cropped, View/width(cropped), View/height(cropped));
+        let _ = Fmt/print("%\n")(Str/join("/", Frame/to_lines(Frame/of_view(fitted))))!;
         let escaped = Url/escaped(s);
         let _ = Fmt/print("%\n")(Option/unwrap_or(Field/Value/to_str(Field/Value/append(escaped, escaped)), ""))!;
         Try/pure(());
