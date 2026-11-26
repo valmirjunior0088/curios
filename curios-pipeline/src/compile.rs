@@ -46,7 +46,7 @@ pub struct Findings {
 }
 
 impl Findings {
-    /// A unit's, decided where it was made ([`Unit::lints`]): none of a unit read from Core text, which no lowering made ([`Unit::text`]).
+    /// A unit's, decided where it was made ([`Unit::lints`]): none of a unit read from Curios/Core, which no lowering made ([`Unit::text`]).
     pub fn of_unit(unit: &Unit) -> Self {
         unit.text()
             .map(|text| Self {
@@ -533,7 +533,7 @@ fn refused_at(anchors: &[&Anchors], name: Option<&Global>) -> Option<curios_comm
     }
 }
 
-/// What erasure refused a unit read from Core text with, as the one report each of its refusals is: in erasure's words, placed by `anchors` alone, since no lowering's tables spell its names.
+/// What erasure refused a unit read from Curios/Core with, as the one report each of its refusals is: in erasure's words, placed by `anchors` alone, since no lowering's tables spell its names.
 pub fn erasure_reported(
     error: &curios_erase::Error,
     definitions: &curios_core::Definitions,
@@ -1421,7 +1421,7 @@ fn close_over(
     })
 }
 
-/// What a refusal of the term a program closes with, or of the unit of its declarations, is spelled and placed by: the program's lowering, whose tables spell a name and place a declaration, or, for a program read from Core text, where its text writes each declaration and that term, with no lowering to spell a name by.
+/// What a refusal of the term a program closes with, or of the unit of its declarations, is spelled and placed by: the program's lowering, whose tables spell a name and place a declaration, or, for a program read from Curios/Core, where its text writes each declaration and that term, with no lowering to spell a name by.
 #[derive(Clone, Copy)]
 pub enum Placing<'a> {
     Lowered(&'a PreparedText),
@@ -1855,7 +1855,7 @@ where
         let (hit, baseline) = held(source, *offered, cache);
         if let Some(unit) = hit {
             progress(Progress::Reused(&source.prefix()));
-            // A unit read from Core text holds no lowering to tell of.
+            // A unit read from Curios/Core holds no lowering to tell of.
             if let Some(text) = unit.text() {
                 told(text);
                 if let Some(tell) = told_elaborated {
@@ -2005,7 +2005,7 @@ fn lower_program(
         source,
         &predecessors.text(),
         syntax,
-        // A unit read from Core text offers no lowering to lower over, so a program is lowered whole over one.
+        // A unit read from Curios/Core offers no lowering to lower over, so a program is lowered whole over one.
         earlier.and_then(|(unit, settled)| unit.text().map(|text| (text, settled))),
     )
     .map_err(|error| CompileError::Failure(vec![error.report()]))
@@ -2041,7 +2041,7 @@ pub fn lower_subject<T>(
     }
 
     let text = predecessors.text();
-    // A unit read from Core text holds no lowering, so where one is held or offered the source is lowered whole.
+    // A unit read from Curios/Core holds no lowering, so where one is held or offered the source is lowered whole.
     let hit = hit.filter(|unit| unit.text().is_some());
     let baseline = baseline.filter(|earlier| earlier.unit.text().is_some());
     Ok(match (hit.as_ref().and_then(Unit::text), baseline) {

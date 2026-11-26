@@ -36,11 +36,11 @@ pub struct Stopped {
 pub enum Unbuilt {
     /// A program, refused as a build reports it.
     Compiled(CompileError),
-    /// Core text that does not parse, or that closes with a term, which a unit's text does not.
+    /// Curios/Core that does not parse, or that closes with a term, which a unit's text does not.
     Unparsed(String),
-    /// Core text the reader refused.
+    /// Curios/Core the reader refused.
     Read(Box<ReadError>),
-    /// Core text read to a module the certifier or erasure refused.
+    /// Curios/Core read to a module the certifier or erasure refused.
     Unmade(Unmade),
     /// What the history's cabinet held or did not, and what its directory would not take.
     Stored(String),
@@ -183,7 +183,7 @@ fn roots<'u>(prelude: &[&'u Unit], stood_in: Option<usize>) -> impl Iterator<Ite
         .into_iter()
 }
 
-/// The unit `source` is, `text` being the Core text it is written in: the one the cabinet holds for it where its record agrees, and otherwise read over `predecessors`, compiled over the unit the cabinet offers for its earlier text, and filed.
+/// The unit `source` is, `text` being the Curios/Core it is written in: the one the cabinet holds for it where its record agrees, and otherwise read over `predecessors`, compiled over the unit the cabinet offers for its earlier text, and filed.
 fn read(
     verdicts: &Verdicts,
     predecessors: Predecessors<'_>,
@@ -206,7 +206,7 @@ fn read(
         )?;
     if read.entry.is_some() {
         return Err(Unbuilt::Unparsed(
-            "a unit's Core text closes with no term".to_string(),
+            "a unit's Curios/Core closes with no term".to_string(),
         ));
     }
     let baseline = verdicts.baseline(source, None);

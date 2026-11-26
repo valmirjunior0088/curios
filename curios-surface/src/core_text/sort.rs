@@ -92,7 +92,7 @@ fn reader_level(level: &Level) -> String {
     }
 }
 
-/// A level as `spelling` writes it: as the term it is in Core text proper, and as a reader is shown it otherwise.
+/// A level as `spelling` writes it: as the term it is in Curios/Core proper, and as a reader is shown it otherwise.
 pub fn level_spelled(level: &Level, spelling: &Spelling) -> String {
     match spelling.writes_core_text() {
         true => level_text(level),

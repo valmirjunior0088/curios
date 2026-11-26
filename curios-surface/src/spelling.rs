@@ -1,4 +1,4 @@
-//! How Core is spelled: the naming policy a term is written by ([`Spelling`]), which the writer of Core text (`core_text`) builds every term's tree through — as Core text proper for a dump and a certifier's refusal, and in its reader's spelling for every term a reader is shown, a term the translation to the surface tree declines among them. A report's term is translated back to the surface tree ([`from_core()`]) and printed as source is, through the same policy.
+//! How Core is spelled: the naming policy a term is written by ([`Spelling`]), which the writer of Curios/Core (`core_text`) builds every term's tree through — as Curios/Core proper for a dump and a certifier's refusal, and in its reader's spelling for every term a reader is shown, a term the translation to the surface tree declines among them. A report's term is translated back to the surface tree ([`from_core()`]) and printed as source is, through the same policy.
 
 use {
     crate::{
@@ -37,7 +37,7 @@ use {
 //
 // axis (a) — local binders: a *rename map* (built by `build_rename` over `display_names`) alpha-renames the whole fragment — free vars *and* binder labels. A source hint is used bare when unique; distinct names sharing a hint, or shadowing a global's displayed rendering — whatever axis (b) spells it as — take minimal `hint2`, `hint3`, … suffixes, so no two binders ever read alike. A hintless (compiler-minted) binder spells `_` — or is elided — at its label site when nothing references it, and borrows the fallback hint `x` when something does: `_` in a reference position would read as a hole and could not co-spell with its binder.
 //
-// axis (b) — globals. A report spells each one as name resolution would find it from where its reader stands ([`ReaderNames`]): the shortest of a declaration of the reader's module by its label, a path into one of its child modules, an import in scope at the reader's definition as it was written, and an absolute path whose audience includes the reader — the text stage's [`Spellings`], since only it sees re-exports and visibility — each past one whose head a local in scope there is written as, which resolution meets first ([`ReaderPosition`]). Where none reaches it this printer writes it in full, and the reader's printer declines the term ([`Spelling::reached`]). A suffix unique among the unit's symbols is not the same thing: `Ord` is such a suffix and resolves nowhere `/std/Ord` was not imported. A dump writes every global by its absolute path, as Core text proper does. Renders without a reader — the certifier's refusals, and a report a caller could hand no spellings — take a *shorten map* instead ([`Shorten`], over the symbols of the unit a reader wrote and then of the units around it, [`Spelling::with_lexicons`]), each qualified path's shortest unambiguous `/`-suffix, the reader's unit first, so its declarations settle their own spelling before what surrounds them competes for it. Why reports spell for a reader is `documentation/design/tooling/a-diagnostic-spells-what-its-reader-can-write.md`.
+// axis (b) — globals. A report spells each one as name resolution would find it from where its reader stands ([`ReaderNames`]): the shortest of a declaration of the reader's module by its label, a path into one of its child modules, an import in scope at the reader's definition as it was written, and an absolute path whose audience includes the reader — the text stage's [`Spellings`], since only it sees re-exports and visibility — each past one whose head a local in scope there is written as, which resolution meets first ([`ReaderPosition`]). Where none reaches it this printer writes it in full, and the reader's printer declines the term ([`Spelling::reached`]). A suffix unique among the unit's symbols is not the same thing: `Ord` is such a suffix and resolves nowhere `/std/Ord` was not imported. A dump writes every global by its absolute path, as Curios/Core proper does. Renders without a reader — the certifier's refusals, and a report a caller could hand no spellings — take a *shorten map* instead ([`Shorten`], over the symbols of the unit a reader wrote and then of the units around it, [`Spelling::with_lexicons`]), each qualified path's shortest unambiguous `/`-suffix, the reader's unit first, so its declarations settle their own spelling before what surrounds them competes for it. Why reports spell for a reader is `documentation/design/tooling/a-diagnostic-spells-what-its-reader-can-write.md`.
 //
 // axis (c) — universe instances: a flag suppressing the `.{…}` an instantiated nominal head carries. Curios has no spelling for an instance — solved (`Option.{0}`) or unsolved (`Eq.{?u271}`) alike — so a diagnostic that shows one asks the reader to decode elaboration state. This is the display twin of `project_erased_universes`, which the goal-report path applies structurally; errors carry raw terms all the way to the formatter, so they suppress at the printer instead. Diagnostics set it; `wonder --stage`'s dumps deliberately do not, because a dump is read *about* the compiler and its levels are the point.
 //
@@ -84,11 +84,11 @@ pub struct Spelling {
     translated: bool,
     /// Whether the reader's printer declined a term this spelling rendered. Shared by a spelling's copies and begun anew where a reader is placed ([`Spelling::for_reader`]), so it is one report's to read.
     declined: Rc<Cell<bool>>,
-    /// Whether a term is written as Core text proper, every field it holds stated, or in its reader's spelling: what a dump and a certifier's refusal are read as, and what reads back as the term ([`Spelling::core_text`]).
+    /// Whether a term is written in Curios/Core proper, every field it holds stated, or in its reader's spelling: what a dump and a certifier's refusal are read as, and what reads back as the term ([`Spelling::core_text`]).
     core_text: bool,
-    /// Whether a term is written whole, however far its tree outgrows its graph: Core text a reader reads back, where a dump and a report are bounded and elide what is past their bound ([`Minting::elides`]).
+    /// Whether a term is written whole, however far its tree outgrows its graph: Curios/Core a reader reads back, where a dump and a report are bounded and elide what is past their bound ([`Minting::elides`]).
     whole: bool,
-    /// Whether Core text is written as a text of its own — a file, a dump — rather than as a term inside a sentence: a decorated term on its line where it fits there whole, and otherwise its decorator on a line of its own above it, at the workspace's line width ([`Spelling::written_as_text`]).
+    /// Whether Curios/Core is written as a text of its own — a file, a dump — rather than as a term inside a sentence: a decorated term on its line where it fits there whole, and otherwise its decorator on a line of its own above it, at the workspace's line width ([`Spelling::written_as_text`]).
     as_text: bool,
     /// Whether a whole write names each node it meets again rather than writing it again ([`Spelling::with_sharing`]).
     shares: bool,
@@ -104,7 +104,7 @@ pub struct Spelling {
     only: Option<Rc<BTreeSet<Global>>>,
 }
 
-/// What a form that implies a definition is made against beside its own text: the syntax registry its terms name the compiler's declarations through, and the entries of the units it is read over, by their formers' names. A printer handed one writes a test and a foreign row in their forms, `test /t = …;` and `foreign /f(Bytes) -> Bytes;`, and a reader of Core text is handed the same to make their definitions from ([`Definition::test`], [`Definition::foreign`]).
+/// What a form that implies a definition is made against beside its own text: the syntax registry its terms name the compiler's declarations through, and the entries of the units it is read over, by their formers' names. A printer handed one writes a test and a foreign row in their forms, `test /t = …;` and `foreign /f(Bytes) -> Bytes;`, and a reader of Curios/Core is handed the same to make their definitions from ([`Definition::test`], [`Definition::foreign`]).
 pub struct FormScope {
     pub syntax: SyntaxRegistry,
     pub entries: HashMap<Global, Rc<Nominal>>,
@@ -453,17 +453,17 @@ impl Spelling {
         self.anonymous_metavars
     }
 
-    /// Whether a term is written as Core text proper, every field it holds stated, rather than in its reader's spelling ([`Spelling::core_text`]).
+    /// Whether a term is written in Curios/Core proper, every field it holds stated, rather than in its reader's spelling ([`Spelling::core_text`]).
     pub fn writes_core_text(&self) -> bool {
         self.core_text
     }
 
-    /// Whether a term is written whole, eliding nothing, as Core text a reader reads back is.
+    /// Whether a term is written whole, eliding nothing, as Curios/Core a reader reads back is.
     pub fn writes_whole(&self) -> bool {
         self.whole
     }
 
-    /// Whether Core text is written as a text of its own, a decorator above what it decorates where the two do not fit one line.
+    /// Whether Curios/Core is written as a text of its own, a decorator above what it decorates where the two do not fit one line.
     pub fn writes_as_text(&self) -> bool {
         self.as_text
     }
@@ -473,7 +473,7 @@ impl Spelling {
         self.as_text.then_some(MAX_LINE_WIDTH)
     }
 
-    /// The spelling Core text proper is written in: every global by its absolute path and every field a node holds stated, so what it writes reads back as the term. A spelling a reader is handed writes a term in that reader's spelling instead: no decorator, an intrinsic by its surface name, a level metavariable as `?u1`.
+    /// The spelling Curios/Core proper is written in: every global by its absolute path and every field a node holds stated, so what it writes reads back as the term. A spelling a reader is handed writes a term in that reader's spelling instead: no decorator, an intrinsic by its surface name, a level metavariable as `?u1`.
     pub fn core_text() -> Self {
         Self {
             core_text: true,
@@ -481,9 +481,9 @@ impl Spelling {
         }
     }
 
-    /// This spelling writing every term whole, eliding nothing, as Core text a reader reads back is written: a dump is read about the compiler and bounded as a report is, since a term's tree can outgrow any print — a tower of sixty pairs is a type of 2⁶⁰ leaves.
+    /// This spelling writing every term whole, eliding nothing, as Curios/Core a reader reads back is written: a dump is read about the compiler and bounded as a report is, since a term's tree can outgrow any print — a tower of sixty pairs is a type of 2⁶⁰ leaves.
     ///
-    /// Core text a reader reads back is Core text proper written as a text of its own, so this spelling is one too, and what it writes is Core text's own tree ([`CoreText`]), which holds no form a reader does not read: no `…`, no reader's token, nothing a print shows alone.
+    /// Curios/Core a reader reads back is Curios/Core proper written as a text of its own, so this spelling is one too, and what it writes is Curios/Core's own tree ([`CoreText`]), which holds no form a reader does not read: no `…`, no reader's token, nothing a print shows alone.
     pub fn written_whole(mut self) -> Self {
         self.whole = true;
         self.core_text = true;
@@ -522,7 +522,7 @@ impl Spelling {
         self.keys.set(0);
     }
 
-    /// This spelling writing Core text as a text of its own — a `.crsc`, a dump — rather than a term a sentence quotes, as a certifier's refusal does: a decorated term stays on the line it is reached on where it fits there whole, and otherwise its decorator takes a line of its own and what it decorates the line beneath at its indentation, a level deeper where the decorator follows something else on its line; the text is rendered at [`MAX_LINE_WIDTH`], which decides what fits.
+    /// This spelling writing Curios/Core as a text of its own — a `.crsc`, a dump — rather than a term a sentence quotes, as a certifier's refusal does: a decorated term stays on the line it is reached on where it fits there whole, and otherwise its decorator takes a line of its own and what it decorates the line beneath at its indentation, a level deeper where the decorator follows something else on its line; the text is rendered at [`MAX_LINE_WIDTH`], which decides what fits.
     pub fn written_as_text(mut self) -> Self {
         self.as_text = true;
         self
@@ -540,7 +540,7 @@ impl Spelling {
         self
     }
 
-    /// How a certifier refusal of `definitions` is written: as Core text proper ([`Spelling::core_text`]), a refusal being read about the compiler, with globals shortened against the lexicons of its unit and of `scope` (axis (b)), a nominal family's implicit parameters marked (axis (d)), a `Str` literal as its text (axis (f)) — and every universe shown, unlike an elaboration diagnostic, since a certifier refusal is often about the universes.
+    /// How a certifier refusal of `definitions` is written: as Curios/Core proper ([`Spelling::core_text`]), a refusal being read about the compiler, with globals shortened against the lexicons of its unit and of `scope` (axis (b)), a nominal family's implicit parameters marked (axis (d)), a `Str` literal as its text (axis (f)) — and every universe shown, unlike an elaboration diagnostic, since a certifier refusal is often about the universes.
     pub fn for_refusal(
         definitions: &Definitions,
         scope: &[&Lexicon],
@@ -1862,7 +1862,7 @@ fn print_core(term: Term, spelling: &Rc<Spelling>) -> Printer {
 
 /// [`print_core`] under `mint`: a fresh one for a render, a recording one for [`build_rename`]'s dry run — which is allowed what the render is, so the two elide at the same subterms and open the same binders in the same order.
 ///
-/// Written whole, a render builds Core text's own tree, and its dry run the shown tree, which alone holds a binder's label before the rename the dry run is for.
+/// Written whole, a render builds Curios/Core's own tree, and its dry run the shown tree, which alone holds a binder's label before the rename the dry run is for.
 fn print_minting(term: Term, spelling: &Rc<Spelling>, mint: &Minting) -> Printer {
     if spelling.writes_whole() && mint.recorded.is_none() {
         mint.allow(&term);
@@ -1887,7 +1887,7 @@ fn print_minting(term: Term, spelling: &Rc<Spelling>, mint: &Minting) -> Printer
     )
 }
 
-/// What a render under `spelling` tells the printer of a shown term: a decorator above its operand where the two do not fit their line where Core text is written as a text of its own, and beside it where a sentence quotes one.
+/// What a render under `spelling` tells the printer of a shown term: a decorator above its operand where the two do not fit their line where Curios/Core is written as a text of its own, and beside it where a sentence quotes one.
 fn shown_options(spelling: &Spelling) -> ShownOptions {
     ShownOptions {
         decorators_above: spelling.writes_as_text(),
@@ -1923,7 +1923,7 @@ impl Spellable for WitnessKey {}
 
 impl Spellable for UniverseError {}
 
-/// A module's dump is Core text proper.
+/// A module's dump is Curios/Core proper.
 impl Spellable for Definitions {
     fn faithful(&self) -> Spelled<'_, Self> {
         Spelled::new(self, &Rc::new(Spelling::core_text()))
@@ -2048,7 +2048,7 @@ fn entry_written<D: Rendered>(program: &Program, spelling: &Rc<Spelling>) -> Cor
 }
 
 impl Spelled<'_, Definitions> {
-    /// The tree of Core text these definitions are written whole as, which [`to_core`](crate::to_core) reads with no parse between: the print is the reader's inverse by its type, since the tree holds no form the reader does not read.
+    /// The tree of Curios/Core these definitions are written whole as, which [`to_core`](crate::to_core) reads with no parse between: the print is the reader's inverse by its type, since the tree holds no form the reader does not read.
     pub fn written(&self) -> CoreFile {
         let spelling = Rc::new((**self.spelling()).clone().written_whole());
         spelling.begun();
@@ -2086,7 +2086,7 @@ impl Notation for Spelling {
     }
 }
 
-/// The items, one per declaration, each as Core text declares it and a blank line apart, answering how many it wrote — built and printed one item at a time by *iterating* the flat items (never re-folding into a nested term), so `wonder --stage core` stays O(N) and never builds the nested term a deep module overflows on. A definition a `foreign` row implies is written nowhere where it is the one the row makes, which a reader makes again where it reads the row.
+/// The items, one per declaration, each as Curios/Core declares it and a blank line apart, answering how many it wrote — built and printed one item at a time by *iterating* the flat items (never re-folding into a nested term), so `wonder --stage core` stays O(N) and never builds the nested term a deep module overflows on. A definition a `foreign` row implies is written nowhere where it is the one the row makes, which a reader makes again where it reads the row.
 fn print_items(
     definitions: &Definitions,
     formatter: &mut fmt::Formatter<'_>,
@@ -2292,7 +2292,7 @@ fn test_declared<D: Rendered>(
     })
 }
 
-/// A head's decorator: its fields in Core text proper, and none in a reader's spelling, which writes no decorator.
+/// A head's decorator: its fields in Curios/Core proper, and none in a reader's spelling, which writes no decorator.
 fn decorated_fields<D: Rendered>(
     spelling: &Spelling,
     fields: Vec<Decoration<D>>,
@@ -2321,7 +2321,7 @@ fn island_field<D: Rendered>(
         .then(|| ("island", module_written(&definition.island, spelling)))
 }
 
-/// One definition of an item, as Core text declares it: with what its item holds beside it, and its place in a group where it is a member of one, with the group's size.
+/// One definition of an item, as Curios/Core declares it: with what its item holds beside it, and its place in a group where it is a member of one, with the group's size.
 struct Member<'a> {
     definition: &'a Definition,
     proof: bool,

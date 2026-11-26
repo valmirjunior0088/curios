@@ -82,7 +82,7 @@ impl<'a> Frame<'a> {
 pub trait Writer<T, D: Dialect = Program> {
     fn operand(&self, operand: T) -> Option<Term<D>>;
 
-    /// Whether `operand`, standing at a hidden position under `mark`, is a place held for elaboration to fill, which a reader leaves out ([`hidden_run`]). Only the program's writer holds one: Core text and a quoted term write every operand as it stands.
+    /// Whether `operand`, standing at a hidden position under `mark`, is a place held for elaboration to fill, which a reader leaves out ([`hidden_run`]). Only the program's writer holds one: Curios/Core and a quoted term write every operand as it stands.
     fn held(&self, _mark: Plicity, _operand: &T) -> bool {
         false
     }

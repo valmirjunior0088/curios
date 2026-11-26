@@ -46,7 +46,7 @@ pub enum Subject {
     },
     /// A unit: the last of `units`, compiled against the ones before it. Its verdicts are the answer.
     Unit { units: Vec<RootSource> },
-    /// A loose text of Core text, which no lowering made: read over the prelude through the pipeline's door and compiled as a unit, the term it closes with, where it closes with one, judged as a program's is ([`Fold::check_core_text`]).
+    /// A loose text of Curios/Core, which no lowering made: read over the prelude through the pipeline's door and compiled as a unit, the term it closes with, where it closes with one, judged as a program's is ([`Fold::check_core_text`]).
     CoreText { origin: Origin },
 }
 
@@ -224,7 +224,7 @@ fn diagnosed_reading(
                 placed: None,
             },
         },
-        // Core text is lowered by nothing: the check reads it through the pipeline's door.
+        // Curios/Core is lowered by nothing: the check reads it through the pipeline's door.
         Subject::CoreText { origin } => match origin.read(overlay) {
             Ok((source, module)) => {
                 match Fold::new(budget, &[], through).check_core_text(

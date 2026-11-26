@@ -1,4 +1,4 @@
-//! The field's paradoxes put to the certifier alone, as Core text no elaborator writes: a sort at its own level, a universe context with no model, an instance its scheme does not admit, Hurkens' carrier at one level, a proposition over its own sort, an instance's sorts out of place, a proposition taken apart into data, a family reaching itself non-strictly, a level read through a family declared later, and an ordinal applied at its own universe.
+//! The field's paradoxes put to the certifier alone, as Curios/Core no elaborator writes: a sort at its own level, a universe context with no model, an instance its scheme does not admit, Hurkens' carrier at one level, a proposition over its own sort, an instance's sorts out of place, a proposition taken apart into data, a family reaching itself non-strictly, a level read through a family declared later, and an ordinal applied at its own universe.
 
 use {super::test_support::*, crate::*, curios_common::fill, curios_core::Polarity};
 

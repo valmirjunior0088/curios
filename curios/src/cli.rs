@@ -442,7 +442,7 @@ pub enum Pinned {
 pub struct CoreFlag {
     #[arg(
         long,
-        help = "Read standard input as Core text, as a `.crsc` file is read"
+        help = "Read standard input as Curios/Core, as a `.crsc` file is read"
     )]
     pub core: bool,
 }
@@ -470,7 +470,7 @@ pub enum Query {
     Classes,
     /// A declaration by the absolute path a program outside every module writes it by, answered off the unit that declares it, or, under a view, what the view answers of what the path names.
     Name(Qualifier, Option<View>),
-    /// Whether the checkers admit the subject's closing term at `False`: the soundness board's question, asked of a program or a text of Core text by the put the board asks it through.
+    /// Whether the checkers admit the subject's closing term at `False`: the soundness board's question, asked of a program or a text of Curios/Core by the put the board asks it through.
     False,
     /// Every query, asked by an editor over the language server protocol of the documents it hands over: no subject, which the option refuses beside it where the line is parsed.
     Server,

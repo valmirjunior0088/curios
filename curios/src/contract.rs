@@ -99,7 +99,7 @@ impl Product {
     }
 }
 
-/// What an invocation states of standard input: whether `--core` says it is Core text, and the read that drains it, which admission draws on only where `-` asks for it.
+/// What an invocation states of standard input: whether `--core` says it is Curios/Core, and the read that drains it, which admission draws on only where `-` asks for it.
 pub struct StandardInput<'a> {
     pub core: bool,
     pub read: &'a dyn Fn() -> Result<String, Box<Report>>,
@@ -112,7 +112,7 @@ pub struct Contract {
     pub accepts: Accepts,
     /// Whether a program must be named by its own file rather than through one of its modules: a command that runs or builds a program performs it, and a module is not what performs.
     pub own_file_only: bool,
-    /// Whether the command reads Core text: a file whose name says it is Core text ([`WrittenIn::of`]) is refused, naming the cause, by a command that does not, before anything reads it.
+    /// Whether the command reads Curios/Core: a file whose name says it is Curios/Core ([`WrittenIn::of`]) is refused, naming the cause, by a command that does not, before anything reads it.
     pub core_text: bool,
     pub access: Access,
     pub product: Product,
@@ -317,7 +317,7 @@ pub const NAMED_STAGE: Contract = Contract {
     product: Product::Nothing,
 };
 
-/// A closing term is a program's, so the question takes a program, written as one or as Core text.
+/// A closing term is a program's, so the question takes a program, written as one or as Curios/Core.
 pub const FALSE: Contract = Contract {
     command: "wonder --false",
     accepts: Accepts::Program,
@@ -403,7 +403,7 @@ impl Mode {
         }
     }
 
-    /// Whether the command was told standard input is Core text — `false` for a command that reads none.
+    /// Whether the command was told standard input is Curios/Core — `false` for a command that reads none.
     pub fn core(&self) -> bool {
         match self {
             Mode::Wonder { core, .. } | Mode::Format { core, .. } | Mode::Check { core, .. } => {
@@ -523,7 +523,7 @@ impl Contract {
         }
     }
 
-    /// What `subject` selects standing in `directory`, before any kind of subject is refused — the same for every contract, since a file is placed one way whichever command asks — save Core text, which a command that reads none refuses first, and `--core` beside any subject but `-`. Standard input is drained here, by `stdin`'s read, where `-` is the subject, and nowhere else.
+    /// What `subject` selects standing in `directory`, before any kind of subject is refused — the same for every contract, since a file is placed one way whichever command asks — save Curios/Core, which a command that reads none refuses first, and `--core` beside any subject but `-`. Standard input is drained here, by `stdin`'s read, where `-` is the subject, and nowhere else.
     fn selection(
         &self,
         subject: Option<&str>,
@@ -554,13 +554,13 @@ impl Contract {
         )
     }
 
-    /// `path`, where the command reads what its name says it is written in: a command that reads no Core text refuses a `.crsc` before anything reads it, rather than reading it as the program it is not.
+    /// `path`, where the command reads what its name says it is written in: a command that reads no Curios/Core refuses a `.crsc` before anything reads it, rather than reading it as the program it is not.
     fn read_here(&self, path: PathBuf) -> Result<PathBuf, Box<Report>> {
         match (self.core_text, WrittenIn::of(&path)) {
-            (false, WrittenIn::CoreText) => Err(Refused::of("core text")
-                .stating(format_args!("`{}` reads no Core text", self.command))
+            (false, WrittenIn::CoreText) => Err(Refused::of("not read here")
+                .stating(format_args!("`{}` reads no Curios/Core", self.command))
                 .stating(format_args!(
-                    "a `.{}` file is Core text, which `check` checks and `format` formats",
+                    "a `.{}` file is Curios/Core, which `check` checks and `format` formats",
                     WrittenIn::CoreText.extension()
                 ))
                 .trying(format!("curios check {}", path.display()))
@@ -569,16 +569,16 @@ impl Contract {
         }
     }
 
-    /// What standard input is written in where `core` says it is Core text, refused beside any subject but standard input, whose text alone the flag speaks of: a file says what it is written in by its name.
+    /// What standard input is written in where `core` says it is Curios/Core, refused beside any subject but standard input, whose text alone the flag speaks of: a file says what it is written in by its name.
     fn stdin_written_in(core: bool, subject: Option<&str>) -> Result<WrittenIn, Box<Report>> {
         match (core, Spelling::of(subject)) {
             (false, _) => Ok(WrittenIn::Program),
             (true, Spelling::Stdin) => Ok(WrittenIn::CoreText),
             (true, spelling) => Err(Refused::of("surplus flag")
-                .stating("`--core` says the text on standard input is Core text")
+                .stating("`--core` says the text on standard input is Curios/Core")
                 .stating(match spelling {
                     Spelling::File(_) => format!(
-                        "a file says what it is written in by its name: a `.{}` is Core text",
+                        "a file says what it is written in by its name: a `.{}` is Curios/Core",
                         WrittenIn::CoreText.extension()
                     ),
                     Spelling::Name(name) => format!("`{name}` names an executable, a program"),
@@ -781,7 +781,7 @@ impl Contract {
     }
 
     /// What `subject` rewrites, and within which format: every file a package or program it names declares, a file itself whatever declares it — formatting reads no unit, so placement is not its question — or what standard input holds. A file takes the format of the package that governs it, and `settings`, the command line's, reach only a file no package governs and standard input ([`FormatSettings::format_under`]).
-    /// Standard input is read as Core text where `stdin` says so, which is refused beside any other subject.
+    /// Standard input is read as Curios/Core where `stdin` says so, which is refused beside any other subject.
     pub fn admit_files(
         &self,
         subject: Option<&str>,

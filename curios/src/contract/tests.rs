@@ -140,7 +140,7 @@ const ROWS: &[(&str, Option<&str>)] = &[
     (".", None),
 ];
 
-/// An umbrella enumerating one package, and beside the umbrella a file no manifest governs. The package declares a library with a module, two executables — the `default` one with a module its entry declares beside it, which declares one of its own in its stem directory — and holds a file nothing declares, a file of Core text and a package nothing enumerates.
+/// An umbrella enumerating one package, and beside the umbrella a file no manifest governs. The package declares a library with a module, two executables — the `default` one with a module its entry declares beside it, which declares one of its own in its stem directory — and holds a file nothing declares, a file of Curios/Core and a package nothing enumerates.
 fn tree() -> Temporary {
     let root = Temporary::new("contract", "table");
 
@@ -312,7 +312,7 @@ impl Standing<'_> {
             Rewritten::Stdin(within, stdin) => {
                 let read = match stdin.written {
                     WrittenIn::Program => "",
-                    WrittenIn::CoreText => " as Core text",
+                    WrittenIn::CoreText => " as Curios/Core",
                 };
                 format!(
                     "standard input within {}{read}",
@@ -457,7 +457,7 @@ const EXPECTED: &str = r#"run SUBJECT — Program (its own file), cabinet Write,
   work/app: lib.crs → refused: not a program: `run` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/lib.crs
   work/app: util.crs → refused: not a program: `run` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/util.crs
   work/app: stray.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/work/app/stray.crs
-  work/app: proof.crsc → refused: core text: `run` reads no Core text · a `.crsc` file is Core text, which `check` checks and `format` formats · try; curios check <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
+  work/app: proof.crsc → refused: not read here: `run` reads no Curios/Core · a `.crsc` file is Curios/Core, which `check` checks and `format` formats · try; curios check <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → refused: not a program: `run` takes a program · this file belongs to the library of `/nested` · name an executable or a program file → <root>/work/app/nested/lib.crs
   work/app: <root>/scratch.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
@@ -478,7 +478,7 @@ compile SUBJECT — Program (its own file), cabinet Write, leaves Executable, op
   work/app: lib.crs → refused: not a program: `compile` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/lib.crs
   work/app: util.crs → refused: not a program: `compile` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/util.crs
   work/app: stray.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/work/app/stray.crs
-  work/app: proof.crsc → refused: core text: `compile` reads no Core text · a `.crsc` file is Core text, which `check` checks and `format` formats · try; curios check <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
+  work/app: proof.crsc → refused: not read here: `compile` reads no Curios/Core · a `.crsc` file is Curios/Core, which `check` checks and `format` formats · try; curios check <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → refused: not a program: `compile` takes a program · this file belongs to the library of `/nested` · name an executable or a program file → <root>/work/app/nested/lib.crs
   work/app: <root>/scratch.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
@@ -499,7 +499,7 @@ compile SUBJECT --output out — Program (its own file), cabinet Write, leaves E
   work/app: lib.crs → refused: not a program: `compile` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/lib.crs
   work/app: util.crs → refused: not a program: `compile` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/util.crs
   work/app: stray.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/work/app/stray.crs
-  work/app: proof.crsc → refused: core text: `compile` reads no Core text · a `.crsc` file is Core text, which `check` checks and `format` formats · try; curios check <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
+  work/app: proof.crsc → refused: not read here: `compile` reads no Curios/Core · a `.crsc` file is Curios/Core, which `check` checks and `format` formats · try; curios check <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → refused: not a program: `compile` takes a program · this file belongs to the library of `/nested` · name an executable or a program file → <root>/work/app/nested/lib.crs
   work/app: <root>/scratch.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
@@ -520,7 +520,7 @@ document SUBJECT — Library, cabinet Write, leaves Pages, options --std --outpu
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
   work/app: stray.crs → refused: not a library: `document` takes a library · this file is a module no package declares · a `mod` line in a package's `lib.crs` puts it in that library → <root>/work/app/stray.crs
-  work/app: proof.crsc → refused: core text: `document` reads no Core text · a `.crsc` file is Core text, which `check` checks and `format` formats · try; curios check <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
+  work/app: proof.crsc → refused: not read here: `document` reads no Curios/Core · a `.crsc` file is Curios/Core, which `check` checks and `format` formats · try; curios check <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → refused: not a library: `document` takes a library · this file is a module no package declares · a `mod` line in a package's `lib.crs` puts it in that library → <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
@@ -543,7 +543,7 @@ test SUBJECT — Any, cabinet Write, leaves Nothing, options --target --port --f
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
   work/app: stray.crs → module stray.crs
-  work/app: proof.crsc → refused: core text: `test` reads no Core text · a `.crsc` file is Core text, which `check` checks and `format` formats · try; curios check <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
+  work/app: proof.crsc → refused: not read here: `test` reads no Curios/Core · a `.crsc` file is Curios/Core, which `check` checks and `format` formats · try; curios check <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → module <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
@@ -618,26 +618,26 @@ format SUBJECT — Files, cabinet None, leaves Rewritten, options --check --line
   work/app/nested: (none) → files lib.crs within 100
   .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
 format --core SUBJECT — Files, cabinet None, leaves Rewritten, options --check --line-width --indent-width --flat-match-width --flat-match-arms --core --manifest
-  work/app: (none) → refused: surplus flag: `--core` says the text on standard input is Core text · with no subject nothing reads standard input; `-` does → --core
-  work/app: serve → refused: surplus flag: `--core` says the text on standard input is Core text · `serve` names an executable, a program → --core
-  work/app: absent → refused: surplus flag: `--core` says the text on standard input is Core text · `absent` names an executable, a program → --core
-  work/app: - → standard input within 100 as Core text
-  work/app: serve.crs → refused: surplus flag: `--core` says the text on standard input is Core text · a file says what it is written in by its name: a `.crsc` is Core text → --core
-  work/app: helper.crs → refused: surplus flag: `--core` says the text on standard input is Core text · a file says what it is written in by its name: a `.crsc` is Core text → --core
-  work/app: bench.crs → refused: surplus flag: `--core` says the text on standard input is Core text · a file says what it is written in by its name: a `.crsc` is Core text → --core
-  work/app: lib.crs → refused: surplus flag: `--core` says the text on standard input is Core text · a file says what it is written in by its name: a `.crsc` is Core text → --core
-  work/app: util.crs → refused: surplus flag: `--core` says the text on standard input is Core text · a file says what it is written in by its name: a `.crsc` is Core text → --core
-  work/app: stray.crs → refused: surplus flag: `--core` says the text on standard input is Core text · a file says what it is written in by its name: a `.crsc` is Core text → --core
-  work/app: proof.crsc → refused: surplus flag: `--core` says the text on standard input is Core text · a file says what it is written in by its name: a `.crsc` is Core text → --core
-  work/app: nested/lib.crs → refused: surplus flag: `--core` says the text on standard input is Core text · a file says what it is written in by its name: a `.crsc` is Core text → --core
-  work/app: <root>/scratch.crs → refused: surplus flag: `--core` says the text on standard input is Core text · a file says what it is written in by its name: a `.crsc` is Core text → --core
-  work/app: missing.crs → refused: surplus flag: `--core` says the text on standard input is Core text · a file says what it is written in by its name: a `.crsc` is Core text → --core
-  work: (none) → refused: surplus flag: `--core` says the text on standard input is Core text · with no subject nothing reads standard input; `-` does → --core
-  work: serve → refused: surplus flag: `--core` says the text on standard input is Core text · `serve` names an executable, a program → --core
-  work/app/helper: (none) → refused: surplus flag: `--core` says the text on standard input is Core text · with no subject nothing reads standard input; `-` does → --core
-  work/app/helper: bench → refused: surplus flag: `--core` says the text on standard input is Core text · `bench` names an executable, a program → --core
-  work/app/nested: (none) → refused: surplus flag: `--core` says the text on standard input is Core text · with no subject nothing reads standard input; `-` does → --core
-  .: (none) → refused: surplus flag: `--core` says the text on standard input is Core text · with no subject nothing reads standard input; `-` does → --core
+  work/app: (none) → refused: surplus flag: `--core` says the text on standard input is Curios/Core · with no subject nothing reads standard input; `-` does → --core
+  work/app: serve → refused: surplus flag: `--core` says the text on standard input is Curios/Core · `serve` names an executable, a program → --core
+  work/app: absent → refused: surplus flag: `--core` says the text on standard input is Curios/Core · `absent` names an executable, a program → --core
+  work/app: - → standard input within 100 as Curios/Core
+  work/app: serve.crs → refused: surplus flag: `--core` says the text on standard input is Curios/Core · a file says what it is written in by its name: a `.crsc` is Curios/Core → --core
+  work/app: helper.crs → refused: surplus flag: `--core` says the text on standard input is Curios/Core · a file says what it is written in by its name: a `.crsc` is Curios/Core → --core
+  work/app: bench.crs → refused: surplus flag: `--core` says the text on standard input is Curios/Core · a file says what it is written in by its name: a `.crsc` is Curios/Core → --core
+  work/app: lib.crs → refused: surplus flag: `--core` says the text on standard input is Curios/Core · a file says what it is written in by its name: a `.crsc` is Curios/Core → --core
+  work/app: util.crs → refused: surplus flag: `--core` says the text on standard input is Curios/Core · a file says what it is written in by its name: a `.crsc` is Curios/Core → --core
+  work/app: stray.crs → refused: surplus flag: `--core` says the text on standard input is Curios/Core · a file says what it is written in by its name: a `.crsc` is Curios/Core → --core
+  work/app: proof.crsc → refused: surplus flag: `--core` says the text on standard input is Curios/Core · a file says what it is written in by its name: a `.crsc` is Curios/Core → --core
+  work/app: nested/lib.crs → refused: surplus flag: `--core` says the text on standard input is Curios/Core · a file says what it is written in by its name: a `.crsc` is Curios/Core → --core
+  work/app: <root>/scratch.crs → refused: surplus flag: `--core` says the text on standard input is Curios/Core · a file says what it is written in by its name: a `.crsc` is Curios/Core → --core
+  work/app: missing.crs → refused: surplus flag: `--core` says the text on standard input is Curios/Core · a file says what it is written in by its name: a `.crsc` is Curios/Core → --core
+  work: (none) → refused: surplus flag: `--core` says the text on standard input is Curios/Core · with no subject nothing reads standard input; `-` does → --core
+  work: serve → refused: surplus flag: `--core` says the text on standard input is Curios/Core · `serve` names an executable, a program → --core
+  work/app/helper: (none) → refused: surplus flag: `--core` says the text on standard input is Curios/Core · with no subject nothing reads standard input; `-` does → --core
+  work/app/helper: bench → refused: surplus flag: `--core` says the text on standard input is Curios/Core · `bench` names an executable, a program → --core
+  work/app/nested: (none) → refused: surplus flag: `--core` says the text on standard input is Curios/Core · with no subject nothing reads standard input; `-` does → --core
+  .: (none) → refused: surplus flag: `--core` says the text on standard input is Curios/Core · with no subject nothing reads standard input; `-` does → --core
 wonder --tests SUBJECT — Any, cabinet Write, leaves Nothing, options --tests --stage --at --classes --name --false --witnesses --footprint --server --core --budget --manifest
   work/app: (none) → entire app
   work/app: serve → program serve
@@ -711,7 +711,7 @@ wonder --at SUBJECT:1:1 — ProgramOrLibrary, cabinet Write, leaves Nothing, opt
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
   work/app: stray.crs → module stray.crs
-  work/app: proof.crsc → refused: core text: `wonder --at` reads no Core text · a `.crsc` file is Core text, which `check` checks and `format` formats · try; curios check <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
+  work/app: proof.crsc → refused: not read here: `wonder --at` reads no Curios/Core · a `.crsc` file is Curios/Core, which `check` checks and `format` formats · try; curios check <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → module <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
@@ -728,7 +728,7 @@ wonder --classes SUBJECT — ProgramOrLibrary, cabinet Write, leaves Nothing, op
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
   work/app: stray.crs → module stray.crs
-  work/app: proof.crsc → refused: core text: `wonder --classes` reads no Core text · a `.crsc` file is Core text, which `check` checks and `format` formats · try; curios check <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
+  work/app: proof.crsc → refused: not read here: `wonder --classes` reads no Curios/Core · a `.crsc` file is Curios/Core, which `check` checks and `format` formats · try; curios check <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → module <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
@@ -907,7 +907,7 @@ document SUBJECT: refused: not a library: `document` takes a library · this tex
 test SUBJECT: module -
 check SUBJECT: module -
 format SUBJECT: standard input within 100
-format --core SUBJECT: standard input within 100 as Core text
+format --core SUBJECT: standard input within 100 as Curios/Core
 wonder --tests SUBJECT: module -
 wonder --stage core SUBJECT: module -
 wonder --stage anf SUBJECT: refused: not a program: this text is written as a module · it has no final term to compile a program from → <stdin>
@@ -920,7 +920,7 @@ wonder --name /std/Bool/not --stage core SUBJECT: module -
 wonder --name /std/Bool/not --stage anf SUBJECT: refused: not a program: this text is written as a module · it has no final term to compile a program from → <stdin>
 "#;
 
-/// `--core` speaks of standard input alone: beside a file, an executable's name or no subject it is refused, and beside `-` it says the text is Core text.
+/// `--core` speaks of standard input alone: beside a file, an executable's name or no subject it is refused, and beside `-` it says the text is Curios/Core.
 #[test]
 fn core_says_what_standard_input_alone_is_written_in() {
     assert_eq!(

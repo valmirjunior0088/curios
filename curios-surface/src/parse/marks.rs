@@ -176,7 +176,7 @@ pub fn parse_premise<'a, D: Grammar>(start: Mark) -> impl Parser<'a, Read<Term<D
     }
 }
 
-/// What follows `use` where the site declares and its binder may be read by a later member: in Core text the word it binds, under what its decorator states of the binder, and its type, `use d: Show(A)`, or its type alone; in a program its type alone, as [`parse_premise`] reads it.
+/// What follows `use` where the site declares and its binder may be read by a later member: in Curios/Core the word it binds, under what its decorator states of the binder, and its type, `use d: Show(A)`, or its type alone; in a program its type alone, as [`parse_premise`] reads it.
 pub fn parse_named_premise<'a, D: Grammar>(
     start: Mark,
 ) -> impl Parser<'a, Read<(D::Fields, Option<Label>, Term<D>)>> {

@@ -33,7 +33,7 @@ pub struct DumpScope<'a> {
 }
 
 impl DumpScope<'_> {
-    /// What a dump of Core is written under: Core text proper, as a text of its own, a test's and a foreign row's forms made against the units before it.
+    /// What a dump of Core is written under: Curios/Core proper, as a text of its own, a test's and a foreign row's forms made against the units before it.
     pub fn spelling(&self) -> Spelling {
         let units = self.predecessors.placed();
         let scope = FormScope::over(
@@ -65,7 +65,7 @@ impl<'a> Stage<'a> {
         Self::NAMES[..3].contains(&name)
     }
 
-    /// Whether `name` is a rung a program read from Core text has: every rung from its elaborated module on, the two before it being a lowering's, which Core text has none of.
+    /// Whether `name` is a rung a program read from Curios/Core has: every rung from its elaborated module on, the two before it being a lowering's, which Curios/Core has none of.
     pub fn of_core_text(name: &str) -> bool {
         Self::NAMES[2..].contains(&name)
     }

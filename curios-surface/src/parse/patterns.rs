@@ -21,7 +21,7 @@ use {
     std::iter,
 };
 
-// What a plain or `@` member is where the site declares and a name is optional: `label: type`, its word under what Core text's decorator states of its binder, or the type alone. A decorator no word follows is a decorated type's, read as one.
+// What a plain or `@` member is where the site declares and a name is optional: `label: type`, its word under what Curios/Core's decorator states of its binder, or the type alone. A decorator no word follows is a decorated type's, read as one.
 fn parse_declared_member<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, (D::Fields, Option<Label>, Term<D>)> {
@@ -92,7 +92,7 @@ pub fn parse_binder<'a>(state: ParserState<'a>) -> Parsed<'a, Label> {
     parse_binder_label.parse(state)
 }
 
-// A field's label, under the decorator Core text may write before it as before a binder: [`parse_label`], not [`parse_binder`], since a projection reads the label whatever a later field makes of the word — `.Type` reads a field a later field's `Type` never could.
+// A field's label, under the decorator Curios/Core may write before it as before a binder: [`parse_label`], not [`parse_binder`], since a projection reads the label whatever a later field makes of the word — `.Type` reads a field a later field's `Type` never could.
 pub fn parse_decorated_label<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Binder<D>> {
     D::parse_fields
         .and(parse_label)
@@ -100,7 +100,7 @@ pub fn parse_decorated_label<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'
         .parse(state)
 }
 
-// A binder of a pattern: its word, under the decorator Core text may write before it stating the rest of the label Core keeps for the binder (see [`Binder`]); a program's grammar reads no decorator. A decorator no word follows fails back, so whatever else may stand where the binder does is still read.
+// A binder of a pattern: its word, under the decorator Curios/Core may write before it stating the rest of the label Core keeps for the binder (see [`Binder`]); a program's grammar reads no decorator. A decorator no word follows fails back, so whatever else may stand where the binder does is still read.
 pub fn parse_decorated_binder<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Binder<D>> {
     D::parse_fields
         .and(parse_binder)
@@ -652,7 +652,7 @@ fn parse_bound_member<'a, B: 'a, D: Grammar>(
         mark()
             .and(parse_mark)
             .flat_map(move |(start, plicity)| match plicity {
-                // A witness binder Core text writes is the variable its body reads it by, over its domain.
+                // A witness binder Curios/Core writes is the variable its body reads it by, over its domain.
                 Plicity::Witness if D::NAMES_WITNESSES => bound
                     .and(parse_annotation)
                     .and_drop(member_ends)

@@ -337,7 +337,7 @@ fn print_flt(literal: FltLit) -> Printer {
 }
 
 impl<D: Layout> TreePrinter<D> {
-    /// A binder: its word, under what Core text's decorator states of the label Core keeps for it.
+    /// A binder: its word, under what Curios/Core's decorator states of the label Core keeps for it.
     fn binder(self, binder: Binder<D>) -> Printer {
         D::bound(self, binder.core, pure(binder.label))
     }
@@ -711,7 +711,7 @@ pub fn print_wire_signature(signature: &WireSignature) -> Printer {
     ])
 }
 
-/// What a dialect's printer lays out beyond the forms both dialects write: a hook for each production its grammar has of its own ([`Grammar`](crate::Grammar)) — an operand, a binder's decorator, a declaration's head — and none of them in a program, whose tree holds no form of Core text.
+/// What a dialect's printer lays out beyond the forms both dialects write: a hook for each production its grammar has of its own ([`Grammar`](crate::Grammar)) — an operand, a binder's decorator, a declaration's head — and none of them in a program, whose tree holds no form of Curios/Core.
 trait Layout: Dialect {
     /// What a render of this dialect is told beside the tree it prints.
     type Options: Copy;
@@ -778,7 +778,7 @@ impl Layout for Program {
     }
 }
 
-/// The printer of a tree of the dialect `D`, the one every text of the surface grammar is laid out by: a program's, which the formatter writes a file in and a report's term is translated to, Core text's, and a shown term's. It holds what a render of `D` is told beside the tree, and learns nothing while printing.
+/// The printer of a tree of the dialect `D`, the one every text of the surface grammar is laid out by: a program's, which the formatter writes a file in and a report's term is translated to, Curios/Core's, and a shown term's. It holds what a render of `D` is told beside the tree, and learns nothing while printing.
 struct TreePrinter<D: Layout> {
     options: D::Options,
     /// How much of a match one line keeps: a file's format's, where the formatter prints, and the default everywhere else.
@@ -1035,7 +1035,7 @@ impl<D: Layout> TreePrinter<D> {
         flat([print_plicity(plicity), bound])
     }
 
-    /// One entry of a family's index telescope: `label : type`, its word under what Core text's decorator states of its binder, or the type alone.
+    /// One entry of a family's index telescope: `label : type`, its word under what Curios/Core's decorator states of its binder, or the type alone.
     fn index(self, (core, label, ty): InductIndex<D>) -> Printer {
         match label {
             Some(label) => flat([D::bound(self, core, pure(label)), pure(": "), self.term(ty)]),
@@ -1702,7 +1702,7 @@ impl<D: Layout> TreePrinter<D> {
         ])
     }
 
-    /// A concept field as written: a superclass as `use T`, by the word a later field reads it by where Core text names one, `use w: T`, and a method by its name and type, sugar included.
+    /// A concept field as written: a superclass as `use T`, by the word a later field reads it by where Curios/Core names one, `use w: T`, and a method by its name and type, sugar included.
     fn concept_field_written(self, field: ConceptField<D>) -> Printer {
         let edge = field.is_super();
         let ConceptField {
@@ -1716,7 +1716,7 @@ impl<D: Layout> TreePrinter<D> {
             return flat([lead(&[Keyword::Use]), self.term(type_)]);
         };
         let word = D::bound(self, core, pure(label.to_string()));
-        // A superclass edge is a `use` member: the mark and its type, and no label but the word Core text reads it by.
+        // A superclass edge is a `use` member: the mark and its type, and no label but the word Curios/Core reads it by.
         if edge {
             return flat([lead(&[Keyword::Use]), word, pure(": "), self.term(type_)]);
         }
@@ -1791,9 +1791,9 @@ impl<D: Layout> TreePrinter<D> {
     }
 }
 
-/// A dialect that writes Core text's forms over its own terms: a declaration under its decorator and its absolute name, a case under its decorator, and an operand under a decorator, a witness by its identity and an intrinsic node by its variant.
+/// A dialect that writes Curios/Core's forms over its own terms: a declaration under its decorator and its absolute name, a case under its decorator, and an operand under a decorator, a witness by its identity and an intrinsic node by its variant.
 trait CoreWritten: Layout + Dialect<Head = CoreHead<Self>, Fields = Vec<DecoratorField<Self>>> {
-    /// The form of Core text `form` is, where it is one.
+    /// The form of Curios/Core `form` is, where it is one.
     fn as_core(form: &Self::Form) -> Option<&CoreForm<Self>>;
 
     /// Whether a render under `options` writes a decorator above its operand where the two do not fit their line, as a text is written, rather than beside it, as a sentence quotes one.
@@ -1827,12 +1827,12 @@ fn sort_written_bare<D: CoreWritten>(sort: &Term<D>) -> bool {
     bare(sort) || decorated
 }
 
-/// Whether a form of Core text prints as one indivisible piece: all but a decorated term.
+/// Whether a form of Curios/Core prints as one indivisible piece: all but a decorated term.
 fn core_form_is_atom<D: Dialect>(form: &CoreForm<D>) -> bool {
     !matches!(form, CoreForm::Decorated(_))
 }
 
-/// Whether a call chain may follow a form of Core text as it stands: an intrinsic written with no operand list would take a call's arguments as its own.
+/// Whether a call chain may follow a form of Curios/Core as it stands: an intrinsic written with no operand list would take a call's arguments as its own.
 fn core_takes_suffix<D: Dialect>(form: &CoreForm<D>) -> bool {
     match form {
         CoreForm::Decorated(_) => false,
@@ -1841,7 +1841,7 @@ fn core_takes_suffix<D: Dialect>(form: &CoreForm<D>) -> bool {
     }
 }
 
-/// Core text's forms: an operand under a decorator, a witness by its identity, an intrinsic node by its variant, and the decorator before a declaration and a case, with each declaration named by its absolute name ([`CoreText`]). A file is laid out as a text, each decorator above what it decorates where the two do not fit their line.
+/// Curios/Core's forms: an operand under a decorator, a witness by its identity, an intrinsic node by its variant, and the decorator before a declaration and a case, with each declaration named by its absolute name ([`CoreText`]). A file is laid out as a text, each decorator above what it decorates where the two do not fit their line.
 impl Layout for CoreText {
     type Options = ();
 
@@ -1895,7 +1895,7 @@ pub struct ShownOptions {
     pub decorators_above: bool,
 }
 
-/// A shown term's forms: Core text's, and the ones only a bounded print or a reader's spelling writes ([`Shown`]).
+/// A shown term's forms: Curios/Core's, and the ones only a bounded print or a reader's spelling writes ([`Shown`]).
 impl Layout for Shown {
     type Options = ShownOptions;
 
@@ -1987,7 +1987,7 @@ impl CoreWritten for Shown {
 }
 
 impl<D: CoreWritten> TreePrinter<D> {
-    /// A form of Core text: an operand under its decorator, parenthesized where it is larger than an applied atom, a witness by its identity, an intrinsic node by its variant over its operands.
+    /// A form of Curios/Core: an operand under its decorator, parenthesized where it is larger than an applied atom, a witness by its identity, an intrinsic node by its variant over its operands.
     fn core_form(self, form: CoreForm<D>) -> Printer {
         match form {
             CoreForm::Decorated(Decorated { fields, term }) => {
@@ -2072,7 +2072,7 @@ impl<D: CoreWritten> TreePrinter<D> {
         }
     }
 
-    /// One item of Core text: a group of definitions, the first under `let` and a later one after `and`, closed by the `;` the last owes; a nominal group, each form under its own word and a later one after `and` too, a family closed by its own `end`; a foreign row; or a test. A group's members stand a line apart.
+    /// One item of Curios/Core: a group of definitions, the first under `let` and a later one after `and`, closed by the `;` the last owes; a nominal group, each form under its own word and a later one after `and` too, a family closed by its own `end`; a foreign row; or a test. A group's members stand a line apart.
     fn core_item(self, item: CoreItem<D>) -> Printer {
         let words = |own: Keyword, index: usize| match index {
             0 => vec![own],
@@ -2156,7 +2156,7 @@ impl<D: CoreWritten> TreePrinter<D> {
     }
 }
 
-/// The printer of Core text.
+/// The printer of Curios/Core.
 const CORE_TEXT: TreePrinter<CoreText> = TreePrinter {
     options: (),
     flat_match: FlatMatch::DEFAULT,
@@ -2180,7 +2180,7 @@ pub fn print_core_entry(entry: CoreEntry, flat_match: FlatMatch) -> Printer {
     .core_entry(entry)
 }
 
-/// A term of Core text, as the formatter writes one.
+/// A term of Curios/Core, as the formatter writes one.
 pub fn print_core_term(term: Term<CoreText>) -> Printer {
     CORE_TEXT.term(term)
 }

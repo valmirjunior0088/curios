@@ -17,7 +17,7 @@ let spin(n: Nat) -> False =
 spin(0)
 ";
 
-/// A recursion handing its own proof back below the index its target refined: a fixed ticket's Core text witness.
+/// A recursion handing its own proof back below the index its target refined: a fixed ticket's Curios/Core witness.
 const REFINED_INDEX: &str = "induct /Wit: pub Prop
 | base()
 | w(inner: #{node = InductType} /Wit())

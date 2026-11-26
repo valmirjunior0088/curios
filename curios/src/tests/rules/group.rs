@@ -108,7 +108,7 @@ fn a_group_listing_itself_is_refused_for_not_descending() {
     });
 }
 
-// `f` and `g` each read the other's value at an argument below their own, so each member is known at its turn, `f` before `g`'s body is reached: `f`'s reading of `g` waits on `g`'s slot until `g`'s turn finds the two descend. The certifier takes every turn before typing a body, and the run puts the program to it whole, so this one has no Core text twin.
+// `f` and `g` each read the other's value at an argument below their own, so each member is known at its turn, `f` before `g`'s body is reached: `f`'s reading of `g` waits on `g`'s slot until `g`'s turn finds the two descend. The certifier takes every turn before typing a body, and the run puts the program to it whole, so this one has no Curios/Core twin.
 #[test]
 fn two_members_reading_each_other_below_their_arguments_stand() {
     let source = r#"

@@ -16,7 +16,7 @@ fn named(path: &str) -> Global {
     Global::Authored(Qualifier::from(path.split('/')))
 }
 
-/// What the certifier says of `proof`, Core text closing with a term, put at `/std/Bool/False` over the prelude and every unit `history` built, through the walk a compilation puts a program to.
+/// What the certifier says of `proof`, Curios/Core closing with a term, put at `/std/Bool/False` over the prelude and every unit `history` built, through the walk a compilation puts a program to.
 fn put(history: &History, proof: &str) -> Vec<Refusal> {
     history
         .built(|predecessors| {

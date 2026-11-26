@@ -769,7 +769,7 @@ fn a_named_manifest_places_no_file_outside_its_package() {
     assert!(refusal.contains("is outside the package"), "{refusal}");
 }
 
-/// **The form.** A text no package declares is selected as what it is written as, read once, here: a module where no term closes its declarations — a file mounted at its stem and standard input at `/stdin`, Core text as much as a program's text — and a program where one does, a file's text read through the overlay an editor holds before the disk. A module whose stem is no name can be mounted nowhere, and is refused here for it.
+/// **The form.** A text no package declares is selected as what it is written as, read once, here: a module where no term closes its declarations — a file mounted at its stem and standard input at `/stdin`, Curios/Core as much as a program's text — and a program where one does, a file's text read through the overlay an editor holds before the disk. A module whose stem is no name can be mounted nowhere, and is refused here for it.
 #[test]
 fn a_loose_text_is_selected_as_what_it_is_written_as() {
     const MODULE: &str = "pub let one : /std/Nat = 1;\n";

@@ -30,7 +30,7 @@ pub fn function_type_written<D: Rendered>(
     tree(crate::Subterm::FuncType(crate::FuncType { params, output }))
 }
 
-/// A function: its parameters, always between parentheses, each over its domain in Core text, then its body.
+/// A function: its parameters, always between parentheses, each over its domain in Curios/Core, then its body.
 pub fn function_written<D: Rendered>(
     Func { telescope }: Func,
     frame: Frame<'_, D>,

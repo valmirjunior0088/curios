@@ -137,14 +137,14 @@ pub struct TopForeign<D: Dialect = Program> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CasePayloadParam<D: Dialect = Program> {
     pub plicity: Plicity,
-    /// What the decorator before the binder's word states of the label Core keeps for it, as [`FuncTypeParam::core`](crate::FuncTypeParam) does: Core text's, and nothing in a program.
+    /// What the decorator before the binder's word states of the label Core keeps for it, as [`FuncTypeParam::core`](crate::FuncTypeParam) does: Curios/Core's, and nothing in a program.
     pub core: D::Fields,
     /// The binder's word, carrying the span of the word alone, as [`FuncTypeParam::label`](crate::FuncTypeParam) does.
     pub label: Option<Label>,
     pub type_: Term<D>,
 }
 
-/// One entry of an `induct` head's index telescope: what the decorator before its word states of the label Core keeps for its binder (Core text's, and nothing in a program, as [`FuncTypeParam::core`](crate::FuncTypeParam) is), its word where it has one, carrying the span of the word alone, and its type.
+/// One entry of an `induct` head's index telescope: what the decorator before its word states of the label Core keeps for its binder (Curios/Core's, and nothing in a program, as [`FuncTypeParam::core`](crate::FuncTypeParam) is), its word where it has one, carrying the span of the word alone, and its type.
 pub type InductIndex<D = Program> = (<D as Dialect>::Fields, Option<Label>, Term<D>);
 
 /// One value constructor of an `induct` declaration: a tag label, its payload telescope (see [`CasePayloadParam`]), and — for an indexed family — the `target` pinning which indices this constructor produces.
@@ -209,9 +209,9 @@ pub struct ConceptField<D: Dialect = Program> {
     pub doc: Option<Doc>,
     /// Plain for a method, `use` for a superclass edge, which is the field telescope's witness member.
     pub plicity: Plicity,
-    /// What the decorator before the field's word states of the label Core keeps for its binder, as [`FuncTypeParam::core`](crate::FuncTypeParam) does: Core text's, and nothing in a program.
+    /// What the decorator before the field's word states of the label Core keeps for its binder, as [`FuncTypeParam::core`](crate::FuncTypeParam) does: Curios/Core's, and nothing in a program.
     pub core: D::Fields,
-    /// The method's name, carrying the span of the word alone, as [`TopCase::label`] does and for the same reasons — a field is reached as a path segment (`Show/show`). A superclass edge has none in a program, which reaches it by resolution, and the word a later field reads it by in Core text, where a binder is a variable.
+    /// The method's name, carrying the span of the word alone, as [`TopCase::label`] does and for the same reasons — a field is reached as a path segment (`Show/show`). A superclass edge has none in a program, which reaches it by resolution, and the word a later field reads it by in Curios/Core, where a binder is a variable.
     pub label: Option<Label>,
     /// `Some` for the signature sugar `label(params) -> type_` — the written parameter list, kept verbatim so the printer round-trips it. `into_core` undoes the sugar, lowering the field as `label : (params) -> type_` (see `ConceptField::desugared_type`). Never set on a superclass edge.
     pub func_params: Option<Vec<FuncTypeParam<D>>>,

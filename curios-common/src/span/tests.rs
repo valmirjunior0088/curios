@@ -200,8 +200,8 @@ fn the_panes_of_a_report_share_one_gutter() {
 #[test]
 fn a_report_about_a_file_or_a_name_closes_on_it_under_its_ways_out() {
     let said = || {
-        let mut said = Said::line("core text");
-        said.stating("`run` reads no Core text");
+        let mut said = Said::line("not read here");
+        said.stating("`run` reads no Curios/Core");
         said
     };
     let reader = Style {
@@ -214,8 +214,8 @@ fn a_report_about_a_file_or_a_name_closes_on_it_under_its_ways_out() {
             .trying("curios wonder src/lib.crsc")
             .rendered(Kind::Error, &reader),
         concat!(
-            "core text\n",
-            "│  `run` reads no Core text\n",
+            "not read here\n",
+            "│  `run` reads no Curios/Core\n",
             "├─ try; curios wonder src/lib.crsc\n",
             "└─ [error] src/lib.crsc",
         )
@@ -225,8 +225,8 @@ fn a_report_about_a_file_or_a_name_closes_on_it_under_its_ways_out() {
             .trying("curios wonder --core -")
             .rendered(Kind::Error, &reader),
         concat!(
-            "core text\n",
-            "│  `run` reads no Core text\n",
+            "not read here\n",
+            "│  `run` reads no Curios/Core\n",
             "├─ try; curios wonder --core -\n",
             "└─ [error] <stdin>",
         )

@@ -1,10 +1,10 @@
-//! Core text read back into Core: the state a read threads, what it refuses, and the decorator's fields as each node takes them.
+//! Curios/Core read back into Core: the state a read threads, what it refuses, and the decorator's fields as each node takes them.
 //!
 //! **A form builds its template and a decorator sets what differs.** Each node's reader stands beside its writer, in the module of its kind, and builds what its form builds, reading off the decorator each field the node holds where the decorator states one; a field no node takes is refused, by name and where it stands. So the shortest text is the canonical one, and what the printer writes reads back as the term it printed.
 //!
 //! **A word an enclosing binder binds is its variable.** A binder is opened at a free local of its own, minted with its word as its hint, and closed over once its scope is read; a word no binder binds is a free local, one for each word, since a local's number means something only in the declaration that minted it.
 //!
-//! **What Core text refuses is a form whose meaning needs typing or resolution**: an operator through a concept, `!`, a match with no head, a held place or a hole, a string, a name only resolution could place. Each is refused by name, where it stands, unless a decorator states the node it is — an elaboration-only form written to be refused by a checker.
+//! **What Curios/Core refuses is a form whose meaning needs typing or resolution**: an operator through a concept, `!`, a match with no head, a held place or a hole, a string, a name only resolution could place. Each is refused by name, where it stands, unless a decorator states the node it is — an elaboration-only form written to be refused by a checker.
 
 use {
     super::{
@@ -28,7 +28,7 @@ use {
     },
 };
 
-/// Why a text of Core text makes no Core, and where.
+/// Why a text of Curios/Core makes no Core, and where.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReadError {
     pub refusal: Refusal,
@@ -38,7 +38,7 @@ pub struct ReadError {
 /// What a reader refuses.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Refusal {
-    /// A form a program writes and Core text does not: its meaning is the elaborator's to decide.
+    /// A form a program writes and Curios/Core does not: its meaning is the elaborator's to decide.
     ProgramForm(&'static str),
     /// A field the decorator states that the node it attaches to does not hold.
     UnknownField(String),
@@ -56,7 +56,7 @@ pub enum Refusal {
     Malformed(&'static str),
     /// An intrinsic no variant of Core's is named by.
     UnknownIntrinsic(String),
-    /// A name Core text writes by its absolute path, or a binder's word, written relative.
+    /// A name Curios/Core writes by its absolute path, or a binder's word, written relative.
     RelativeName(String),
     /// A form that implies a definition, read with no scope to make it against.
     NoScope(&'static str),
@@ -71,7 +71,7 @@ impl fmt::Display for ReadError {
         match &self.refusal {
             Refusal::ProgramForm(form) => write!(
                 formatter,
-                "{form} is a program's, and Core text writes the node it elaborates to"
+                "{form} is a program's, and Curios/Core writes the node it elaborates to"
             ),
             Refusal::UnknownField(field) => {
                 write!(

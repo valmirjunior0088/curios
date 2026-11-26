@@ -1,4 +1,4 @@
-//! A projection in size-change, put to the certifier alone as Core text no elaborator writes: a field applied is read no further, each claim beside the programs `curios`'s `tests::rules::totality_projection` puts to both checkers.
+//! A projection in size-change, put to the certifier alone as Curios/Core no elaborator writes: a field applied is read no further, each claim beside the programs `curios`'s `tests::rules::totality_projection` puts to both checkers.
 
 use {super::test_support::*, crate::*, curios_common::fill};
 

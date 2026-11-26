@@ -1,4 +1,4 @@
-//! Strict positivity as the certifier judges it, and the premise it rests on, of families the elaborator refuses before a module exists: a family nested in itself through an intrinsic carrier, and a family indexed by a declaration that holds it, written as Core text and put to the certifier with nothing in scope, declaring the propositions it uses.
+//! Strict positivity as the certifier judges it, and the premise it rests on, of families the elaborator refuses before a module exists: a family nested in itself through an intrinsic carrier, and a family indexed by a declaration that holds it, written in Curios/Core and put to the certifier with nothing in scope, declaring the propositions it uses.
 
 use {super::test_support::*, crate::*, curios_common::fill};
 

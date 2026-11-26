@@ -17,11 +17,11 @@ use {
 /// What an elided subterm prints as: no token of the language, so no reader takes an elided print for the term.
 pub const ELIDED: &str = "…";
 
-/// The state a recursive print call threads: the render-constant [`Spelling`] and the render's [`Minting`], and the dialect of the tree it builds — a shown one, or Core text's own where a reader reads the tree back.
+/// The state a recursive print call threads: the render-constant [`Spelling`] and the render's [`Minting`], and the dialect of the tree it builds — a shown one, or Curios/Core's own where a reader reads the tree back.
 pub struct Frame<'a, D: Rendered = Shown> {
     pub spelling: &'a Rc<Spelling>,
     pub mint: &'a Minting,
-    /// The dialect of the tree the render builds; [`Frame::new`] makes a frame, holding Core text's own tree to Core text proper.
+    /// The dialect of the tree the render builds; [`Frame::new`] makes a frame, holding Curios/Core's own tree to Curios/Core proper.
     pub dialect: PhantomData<fn() -> D>,
 }
 
@@ -34,11 +34,11 @@ impl<D: Rendered> Clone for Frame<'_, D> {
 impl<D: Rendered> Copy for Frame<'_, D> {}
 
 impl<'a, D: Rendered> Frame<'a, D> {
-    /// A render's frame over `spelling` and `mint`. Core text's own tree is written in Core text proper, which is all it holds.
+    /// A render's frame over `spelling` and `mint`. Curios/Core's own tree is written in Curios/Core proper, which is all it holds.
     pub fn new(spelling: &'a Rc<Spelling>, mint: &'a Minting) -> Self {
         assert!(
             D::leave().is_some() || spelling.writes_core_text(),
-            "Core text's own tree is written in Core text proper"
+            "Curios/Core's own tree is written in Curios/Core proper"
         );
         Self {
             spelling,
@@ -88,7 +88,7 @@ impl<'a, D: Rendered> Frame<'a, D> {
         word(self.spelling.label(label))
     }
 
-    /// The leave to write a reader's spelling, where this render writes one: Core text proper holds none, and neither does a tree a reader reads back, whatever spelling it is handed.
+    /// The leave to write a reader's spelling, where this render writes one: Curios/Core proper holds none, and neither does a tree a reader reads back, whatever spelling it is handed.
     pub fn reader(&self) -> Option<D::Leave> {
         match self.spelling.writes_core_text() {
             true => None,
@@ -101,7 +101,7 @@ impl<'a, D: Rendered> Frame<'a, D> {
 ///
 /// Every recursive call in this module goes through here, which is what makes this the one place the descent needs guarding: building a term's tree is a recursive function over a recursive structure, so it descends as deep as the term — and a diagnostic that cannot be printed is worse than no diagnostic, since it aborts the compiler while it is trying to *report* something else. [`recurse`] is what makes that depth affordable. Laying the tree out and running the document stay iterative in the printer, for the same reason at a different layer.
 ///
-/// **And the one place a render is bounded.** A term is a graph and its print is that graph's tree: a type sixty lines of `let` built, each naming the one before it twice, has sixty-one nodes and a print no report survives writing. So a report builds a bounded number of children, the bound its [`Minting`] sets, and shows what is left as `…`: an elided report is still a report. Core text a reader reads back is written whole, as Core text's own tree ([`Spelling::written_whole`](crate::Spelling::written_whole)), which has no `…` to write: an elided text reads back as no term. The shown tree a rename's dry run builds for it elides nothing either, so the two meet the same binders.
+/// **And the one place a render is bounded.** A term is a graph and its print is that graph's tree: a type sixty lines of `let` built, each naming the one before it twice, has sixty-one nodes and a print no report survives writing. So a report builds a bounded number of children, the bound its [`Minting`] sets, and shows what is left as `…`: an elided report is still a report. Curios/Core a reader reads back is written whole, as Curios/Core's own tree ([`Spelling::written_whole`](crate::Spelling::written_whole)), which has no `…` to write: an elided text reads back as no term. The shown tree a rename's dry run builds for it elides nothing either, so the two meet the same binders.
 ///
 /// **And the one place a node met again is named**, under [`Spelling::with_sharing`]: its first occurrence under `#{share = k}` and each later one as `#{shared = k} _`, which is not descended into ([`Occurrence`]).
 pub fn sub<D: Rendered>(term: Term, frame: Frame<'_, D>) -> crate::Term<D> {
@@ -148,7 +148,7 @@ pub fn tree<D: Rendered>(node: crate::Subterm<D>) -> crate::Term<D> {
     crate::Term::from(node)
 }
 
-/// A form of Core text, as a tree.
+/// A form of Curios/Core, as a tree.
 pub fn core_form<D: Rendered>(form: CoreForm<D>) -> crate::Term<D> {
     tree(crate::Subterm::Core(D::core(form)))
 }
@@ -180,7 +180,7 @@ pub fn word<D: Rendered>(text: impl Into<String>) -> crate::Term<D> {
         ))),
         false => match D::leave() {
             Some(leave) => verbatim(leave, text),
-            None => panic!("Core text names `{text}`, which no reader reads as a name"),
+            None => panic!("Curios/Core names `{text}`, which no reader reads as a name"),
         },
     }
 }
@@ -292,7 +292,7 @@ pub fn decoration_fields<D: Rendered>(fields: Vec<Decoration<D>>) -> Vec<Decorat
 }
 
 impl<D: Rendered> Frame<'_, D> {
-    /// Whether this render writes Core text proper, every field stated, or its reader's spelling.
+    /// Whether this render writes Curios/Core proper, every field stated, or its reader's spelling.
     pub fn core_text(&self) -> bool {
         self.reader().is_none()
     }
@@ -316,7 +316,7 @@ impl<D: Rendered> Frame<'_, D> {
         decoration_fields(fields)
     }
 
-    /// `node` under a decorator setting each of `fields` in Core text proper, and `node` as it stands in a reader's spelling, which writes no decorator, or where it sets none.
+    /// `node` under a decorator setting each of `fields` in Curios/Core proper, and `node` as it stands in a reader's spelling, which writes no decorator, or where it sets none.
     pub fn decorated(&self, fields: Vec<Decoration<D>>, node: crate::Term<D>) -> crate::Term<D> {
         match self.core_text() && !fields.is_empty() {
             true => decorated(fields, node),
@@ -428,7 +428,7 @@ pub fn parameter_types<D: Rendered>(
     output
 }
 
-/// A lambda's parameters from `cursor` on, each written into `params`, then its body — a witness binder's node in scope for the body (axis (h)). A lambda's witness member is `use _`, as the surface writes it, and keeps a name only where the body still refers to it by one resolution would not restore: a term no source spells, shown as it is rather than with a reference to nothing. In Core text proper each parameter states its domain, under the parameters before it: a reader leaves a lambda's domains to its type, and Core text leaves nothing to an elaborator.
+/// A lambda's parameters from `cursor` on, each written into `params`, then its body — a witness binder's node in scope for the body (axis (h)). A lambda's witness member is `use _`, as the surface writes it, and keeps a name only where the body still refers to it by one resolution would not restore: a term no source spells, shown as it is rather than with a reference to nothing. In Curios/Core proper each parameter states its domain, under the parameters before it: a reader leaves a lambda's domains to its type, and Curios/Core leaves nothing to an elaborator.
 pub fn lambda_parameters<D: Rendered>(
     mut cursor: Cursor<'_, Term>,
     plicities: &[Plicity],

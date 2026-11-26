@@ -330,7 +330,7 @@ fn a_tower_of_negations_is_classified_on_the_default_stack() {
     );
 }
 
-/// A type that unfolds to a list of itself runs the budget out on the levels its classification descends: a list's sort is its element's, `b`'s reduct is `List(b)` again, and every reduction after the first is a memo hit, which spends nothing. Core text meets such a member where a sibling is checked at it (`rec b: Type = #ListType(b) and c: b = #List(b, [])`), which the elaborator's own budget refuses before the certifier sees it.
+/// A type that unfolds to a list of itself runs the budget out on the levels its classification descends: a list's sort is its element's, `b`'s reduct is `List(b)` again, and every reduction after the first is a memo hit, which spends nothing. Curios/Core meets such a member where a sibling is checked at it (`rec b: Type = #ListType(b) and c: b = #List(b, [])`), which the elaborator's own budget refuses before the certifier sees it.
 ///
 /// Mutation-checked: with `Sort::of` entering no level, the walk grows its stack until the process is killed.
 #[test]

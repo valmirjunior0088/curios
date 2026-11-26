@@ -190,7 +190,7 @@ let /boom: #{node = InductType} /False() =
 ///
 /// From there the derivation is the one `check_non_informative`'s own documentation predicts. `Wrap(true)` is `Prop`-sorted, so irrelevance identifies `Wrap(true){0}` with `Wrap(true){1}`, and `refl(Wrap(true), Wrap(true){0})` therefore inhabits `Eq(@Wrap(true))(Wrap(true){0}, Wrap(true){1})` — the indices being compared at a `Prop`-sorted domain, which is the rule working correctly. Transporting along it at the *honest* goal `(Held(Wrap(true) { 0 }.0)) -> Held(Wrap(true) { 1 }.0)`, whose indices the arm reads at its case, yields `(Held(0)) -> Held(1)`, and `Held`'s only constructor targets `0`, so the vacuous elimination coverage licenses proves `False`.
 ///
-/// No surface program reaches it, because `curios-elab` keeps the two clauses apart: `check_telescope_entries` types every declaration domain through `check_is_sort`, and `size_domains` is a separate walk, which returns early only where the result is no sort. So this is written as Core text.
+/// No surface program reaches it, because `curios-elab` keeps the two clauses apart: `check_telescope_entries` types every declaration domain through `check_is_sort`, and `size_domains` is a separate walk, which returns early only where the result is no sort. So this is written in Curios/Core.
 ///
 /// Its control is [`a_proposition_carrying_a_computed_proof_is_still_accepted`], the same computed field type with arms that really are propositions: a fix refusing every `Prop`-sorted declaration, or every field type it could not read off syntactically, would fail it.
 ///

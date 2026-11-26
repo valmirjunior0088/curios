@@ -51,9 +51,9 @@ const MEMO_ATOMIC_TERM: u32 = 1;
 const MEMO_PATTERN: u32 = 2;
 const MEMO_MATCH_PATTERN: u32 = 3;
 
-/// What the grammar reads in one dialect and not the other ([`Dialect`]): the productions of the forms only Core text writes. A program has none, so where Core text reads one the program's grammar fails without consuming, and what stands there is refused as a token it did not expect.
+/// What the grammar reads in one dialect and not the other ([`Dialect`]): the productions of the forms only Curios/Core writes. A program has none, so where Curios/Core reads one the program's grammar fails without consuming, and what stands there is refused as a token it did not expect.
 pub trait Grammar: Dialect {
-    /// Whether a `use` member is written with the word its binder is read by: in Core text, where a witness binder is a variable, and not in a program, where resolution reaches it.
+    /// Whether a `use` member is written with the word its binder is read by: in Curios/Core, where a witness binder is a variable, and not in a program, where resolution reaches it.
     const NAMES_WITNESSES: bool;
 
     /// An operand only this dialect writes, a call chain and all.
@@ -71,7 +71,7 @@ pub trait Grammar: Dialect {
     /// A pattern only this dialect writes, and none in a program.
     fn parse_pattern_form<'a>(state: ParserState<'a>) -> Parsed<'a, MatchPattern<Self>>;
 
-    /// A declaration's name and what follows it, with the head the dialect writes beside the label: a program declares a label, and Core text the absolute path the label ends, under the decorator `fields` read before the declaring word.
+    /// A declaration's name and what follows it, with the head the dialect writes beside the label: a program declares a label, and Curios/Core the absolute path the label ends, under the decorator `fields` read before the declaring word.
     fn declaring<'a, T: 'a>(
         fields: Self::Fields,
         rest: impl Parser<'a, T>,
@@ -82,11 +82,11 @@ impl Grammar for Program {
     const NAMES_WITNESSES: bool = false;
 
     fn parse_form<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
-        fail("a program writes no form of Core text").parse(state)
+        fail("a program writes no form of Curios/Core").parse(state)
     }
 
     fn parse_atom<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
-        fail("a program writes no form of Core text").parse(state)
+        fail("a program writes no form of Curios/Core").parse(state)
     }
 
     fn parse_result_sort<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
@@ -94,7 +94,7 @@ impl Grammar for Program {
     }
 
     fn parse_pattern_form<'a>(state: ParserState<'a>) -> Parsed<'a, MatchPattern> {
-        fail("a pattern only Core text writes").parse(state)
+        fail("a pattern only Curios/Core writes").parse(state)
     }
 
     fn parse_fields<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {

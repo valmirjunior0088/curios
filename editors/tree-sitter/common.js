@@ -1,4 +1,4 @@
-// What the program's grammar and Core text's grammar both read.
+// What the program's grammar and Curios/Core's grammar both read.
 
 // An identifier is a nonempty run of Unicode alphanumerics and `_` whose first is alphabetic or `_` (`curios_common::is_identifier`).
 const IDENTIFIER = /[\p{Alphabetic}_][\p{Alphabetic}\p{N}_]*/u;

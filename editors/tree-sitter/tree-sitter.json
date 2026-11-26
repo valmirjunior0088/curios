@@ -18,7 +18,7 @@
   "metadata": {
     "version": "0.1.0",
     "license": "Apache-2.0",
-    "description": "Curios grammars for tree-sitter: programs, and Core text",
+    "description": "Curios grammars for tree-sitter: programs, and Curios/Core",
     "authors": [
       {
         "name": "Valmir Pretto",

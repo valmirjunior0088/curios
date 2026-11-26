@@ -153,7 +153,7 @@ pub fn footprint(
     Ok(Some((described, rows)))
 }
 
-/// [`footprint`] of a program read from Core text: the declaration as `--name` answers it of the text, and the rows the program the text compiles to holds of its functions, read off the lineage erasure gives each, as a program's are.
+/// [`footprint`] of a program read from Curios/Core: the declaration as `--name` answers it of the text, and the rows the program the text compiles to holds of its functions, read off the lineage erasure gives each, as a program's are.
 fn core_text_footprint(
     budget: u64,
     origin: &Origin,

@@ -1,4 +1,4 @@
-//! `curios wonder` over Core text: a `.crsc` checked as a program is, standard input read as Core text under `--core`, and every refusal placed in the text.
+//! `curios wonder` over Curios/Core: a `.crsc` checked as a program is, standard input read as Curios/Core under `--core`, and every refusal placed in the text.
 
 use {
     super::test_support::*,
@@ -14,7 +14,7 @@ fn said(output: &std::process::Output) -> (String, String, Option<i32>) {
     )
 }
 
-/// The module `wonder --stage core-elab` prints for a program reads back as Core text and checks clean: its declarations under the certifier, and the term it closes with at the type the dump states for it, `Io({})`, judged as it is written.
+/// The module `wonder --stage core-elab` prints for a program reads back as Curios/Core and checks clean: its declarations under the certifier, and the term it closes with at the type the dump states for it, `Io({})`, judged as it is written.
 #[test]
 fn the_module_core_elab_prints_for_a_program_reads_back_and_checks_clean() {
     let root = temporary("dump-read-back");
@@ -62,7 +62,7 @@ fn a_declaration_the_certifier_refuses_is_reported_where_its_text_writes_it() {
     assert!(stdout.contains("proof.crsc:2:5"), "{stdout}");
 }
 
-/// Standard input is Core text under `--core`, read as a `.crsc` is, its refusals placed in `<stdin>`; without the flag the same text is the program it is not, and beside a file the flag is refused, the file's name saying what it is written in.
+/// Standard input is Curios/Core under `--core`, read as a `.crsc` is, its refusals placed in `<stdin>`; without the flag the same text is the program it is not, and beside a file the flag is refused, the file's name saying what it is written in.
 #[test]
 fn core_reads_standard_input_as_a_crsc_is_read() {
     let root = temporary("stdin-core");
@@ -100,7 +100,7 @@ fn dumped(root: &Path) {
     write(root, "p.crsc", &dump);
 }
 
-/// A program read from Core text has every rung from `core-elab` on, each printed as the program the text was dumped from prints it, and the two rungs a lowering makes are refused, Core text being lowered by nothing.
+/// A program read from Curios/Core has every rung from `core-elab` on, each printed as the program the text was dumped from prints it, and the two rungs a lowering makes are refused, Curios/Core being lowered by nothing.
 #[test]
 fn a_dumped_programs_rungs_are_printed_from_its_core_text_as_from_the_program() {
     let root = temporary("rungs");
@@ -123,7 +123,7 @@ fn a_dumped_programs_rungs_are_printed_from_its_core_text_as_from_the_program() 
     }
 }
 
-/// A module of Core text is a unit, reprinted at `core-elab` — the one rung a unit of Core text has — as the loose module it was dumped from prints there; a lowering's rungs are refused, and a rung past a unit's refuses it as written as a module.
+/// A module of Curios/Core is a unit, reprinted at `core-elab` — the one rung a unit of Curios/Core has — as the loose module it was dumped from prints there; a lowering's rungs are refused, and a rung past a unit's refuses it as written as a module.
 #[test]
 fn a_module_of_core_text_is_reprinted_at_core_elab_as_the_module_it_was_dumped_from() {
     let root = temporary("module-rungs");
@@ -207,10 +207,10 @@ fn a_declaration_a_text_writes_is_answered_off_the_unit_it_reads_to() {
 
     let (_, stderr, code) = said(&curios(&root, &["wonder", "--at", "p.crsc:1:5"], ""));
     assert_eq!(code, Some(1), "{stderr}");
-    assert!(stderr.contains("reads no Core text"), "{stderr}");
+    assert!(stderr.contains("reads no Curios/Core"), "{stderr}");
 }
 
-/// The tests a module of Core text writes are listed as the unit it reads to holds them.
+/// The tests a module of Curios/Core writes are listed as the unit it reads to holds them.
 #[test]
 fn the_tests_a_text_writes_are_listed() {
     let root = temporary("tests");

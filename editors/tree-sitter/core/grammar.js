@@ -1,4 +1,4 @@
-// Core text, the `.crsc` language: Core in the program's grammar with nothing left to an elaborator (`curios-surface`'s README), mirrored from `curios-surface/src/parse/core_text.rs`. It is the program's grammar with what only Core text writes — a decorator, an intrinsic, a witness by its identity, a declaration by its absolute name, nominal declarations each under its own word in a group, and the type the entry states — as the compiler reads both by one grammar under a dialect. Looser than the compiler where a highlighter would not notice, as the program's grammar is.
+// Curios/Core, the `.crsc` language: Core in the program's grammar with nothing left to an elaborator (`curios-surface`'s README), mirrored from `curios-surface/src/parse/core_text.rs`. It is the program's grammar with what only Curios/Core writes — a decorator, an intrinsic, a witness by its identity, a declaration by its absolute name, nominal declarations each under its own word in a group, and the type the entry states — as the compiler reads both by one grammar under a dialect. Looser than the compiler where a highlighter would not notice, as the program's grammar is.
 
 const curios = require("../base/grammar");
 const { IDENTIFIER, commaList } = require("../common");
@@ -34,7 +34,7 @@ module.exports = grammar(curios, {
     ]),
 
   rules: {
-    // Core text spells a block wherever Core holds one, so a `let` chain is a term here, and a body is any term.
+    // Curios/Core spells a block wherever Core holds one, so a `let` chain is a term here, and a body is any term.
     _term: ($, original) => choice($.let_term, original),
 
     _body: ($) => $._term,
@@ -45,7 +45,7 @@ module.exports = grammar(curios, {
     entry: ($) =>
       seq(field("body", $._term), optional(seq(":", field("type", $._term)))),
 
-    // A program's `mod`, `use` and `satisfy` are no Core text, read here so every capture of the program's highlight query names a node of this grammar too, and Core text's query opens with that one verbatim.
+    // A program's `mod`, `use` and `satisfy` are no Curios/Core, read here so every capture of the program's highlight query names a node of this grammar too, and Curios/Core's query opens with that one verbatim.
     _core_item: ($) =>
       choice(
         $.test_item,

@@ -1,4 +1,4 @@
-//! What Core text reads back: every node and module as itself, a member, a local and a node met again, and the forms refused where they stand.
+//! What Curios/Core reads back: every node and module as itself, a member, a local and a node met again, and the forms refused where they stand.
 
 use {
     super::test_support::*,
@@ -22,7 +22,7 @@ fn unsigned(value: usize) -> Pattern {
     Pattern::Literal(NumLit::Number(Numeral::Natural(value.into())))
 }
 
-/// The module `definitions`' Core text reads back as.
+/// The module `definitions`' Curios/Core reads back as.
 fn module_read_back(definitions: &Definitions) -> Definitions {
     let text = definitions.faithful().to_string();
     let file = text
@@ -34,7 +34,7 @@ fn module_read_back(definitions: &Definitions) -> Definitions {
     read
 }
 
-/// A constructor is its family's, made of the family's entry, and no kind a definition states: a definition stating itself one is refused where Core text reads it, by the kinds a definition does state.
+/// A constructor is its family's, made of the family's entry, and no kind a definition states: a definition stating itself one is refused where Curios/Core reads it, by the kinds a definition does state.
 #[test]
 fn a_definition_stating_itself_a_constructor_is_refused_where_it_is_read() {
     let text = "induct /Bit: pub Type\n| one()\nend\n#{kind = InductiveConstructor { owner = /Bit, tag = two }} let /Bit/two: /Bit = 1;\n";

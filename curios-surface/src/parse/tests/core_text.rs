@@ -1,4 +1,4 @@
-//! What Core text writes beside a program's grammar, and that a program's grammar reads none of it: the decorator and what it attaches to, the values it states, a witness by its identity, an intrinsic node, a witness binder's word, and the file a `.crsc` is.
+//! What Curios/Core writes beside a program's grammar, and that a program's grammar reads none of it: the decorator and what it attaches to, the values it states, a witness by its identity, an intrinsic node, a witness binder's word, and the file a `.crsc` is.
 
 use {
     crate::*,
@@ -7,12 +7,12 @@ use {
     curios_parse::ParserError,
 };
 
-/// A term of Core text.
+/// A term of Curios/Core.
 fn core(source: &str) -> Term<CoreText> {
     parse_whole_term::<CoreText>(&Source::inline(source)).unwrap()
 }
 
-/// The name `label` as a term of Core text.
+/// The name `label` as a term of Curios/Core.
 fn core_name(label: &str) -> Term<CoreText> {
     Subterm::Name(Name::from([label.to_string()])).into()
 }
@@ -185,7 +185,7 @@ fn an_intrinsic_reads_its_variant_and_operands() {
     ));
 }
 
-/// A `use` binder is written by its word in Core text, where a later member reads it, and a program's grammar has no word there.
+/// A `use` binder is written by its word in Curios/Core, where a later member reads it, and a program's grammar has no word there.
 #[test]
 fn a_witness_binder_takes_its_word_in_core_text_alone() {
     match core("(use d: Show(A)) -> P(d)").as_subterm() {
@@ -204,7 +204,7 @@ fn a_witness_binder_takes_its_word_in_core_text_alone() {
     assert!("(use d, x) => d".parse::<Term>().is_err());
 }
 
-/// A program's grammar reads none of Core text's forms — a decorator, a declaration's absolute name, a witness by its identity, an intrinsic node — and refuses each where it stands, at the token it does not expect; `%` between two operands is the remainder still.
+/// A program's grammar reads none of Curios/Core's forms — a decorator, a declaration's absolute name, a witness by its identity, an intrinsic node — and refuses each where it stands, at the token it does not expect; `%` between two operands is the remainder still.
 #[test]
 fn a_program_reads_no_form_of_core_text() {
     let refused_at = |error: ParserError| error.report().span().map(|span| span.start);
@@ -282,7 +282,7 @@ fn a_file_reads_its_items_and_its_entry() {
     assert!(entry.type_.is_some());
 }
 
-/// A declaration of Core text is named by its absolute path, or a witness's identity, never a bare label.
+/// A declaration of Curios/Core is named by its absolute path, or a witness's identity, never a bare label.
 #[test]
 fn a_declaration_of_core_text_is_named_absolutely() {
     assert!("let a : Nat = 1;\n".parse::<CoreFile>().is_err());

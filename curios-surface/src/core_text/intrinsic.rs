@@ -17,7 +17,7 @@ use {
     curios_num::{Binary, Floating, Rounding},
 };
 
-/// `intrinsic` as Core text.
+/// `intrinsic` as Curios/Core.
 pub fn intrinsic_written<D: Rendered>(intrinsic: Intrinsic, frame: Frame<'_, D>) -> crate::Term<D> {
     if let Some(leave) = frame.reader() {
         return reader_intrinsic(intrinsic, frame, leave);
@@ -695,7 +695,7 @@ fn reader_intrinsic<D: Rendered>(
     }
 }
 
-/// An intrinsic node as Core text writes it, `#` and its variant's name over its operands, each read as its variant holds it: a term, a rounding by its name, a list of terms, an instance as a decorator's universes are written; a carrier's value by what it is.
+/// An intrinsic node as Curios/Core writes it, `#` and its variant's name over its operands, each read as its variant holds it: a term, a rounding by its name, a list of terms, an instance as a decorator's universes are written; a carrier's value by what it is.
 pub fn intrinsic_read(
     intrinsic: &CoreIntrinsic,
     reader: &mut Reader<'_>,

@@ -1,6 +1,6 @@
 //! The board read off its records, `xboard/tickets/`: a directory per part holding its `metadata.toml`, and in it a directory per ticket holding the ticket's `metadata.toml` and its witnesses' texts. The archive, `xboard/archive/`, holds a directory for a part the board has, and in it a directory per ticket filed there, whose record states the `reason` it is archived where a live one states its `status`, and of which the loader reads its title and its reason and nothing else.
 //!
-//! The loader holds a record to the words it knows: a ticket's directory is named for the day it was found, one the calendar has, and then its title, its status is `open` or `fixed` or, archived, its reason is stated, a witness on the board states its `source` or the steps of its history, closing with its proof's, every text is a program, `.crs`, or Core text, `.crsc`, every file is one a witness puts, a step mounts a unit at a path of one name and unmounts only a unit an earlier step mounted, and a refusal names a checker the witness is put to, an error that checker's crate states, and where it stands by `entry` or an absolute path. A record that breaks any of them fails the run.
+//! The loader holds a record to the words it knows: a ticket's directory is named for the day it was found, one the calendar has, and then its title, its status is `open` or `fixed` or, archived, its reason is stated, a witness on the board states its `source` or the steps of its history, closing with its proof's, every text is a program, `.crs`, or Curios/Core, `.crsc`, every file is one a witness puts, a step mounts a unit at a path of one name and unmounts only a unit an earlier step mounted, and a refusal names a checker the witness is put to, an error that checker's crate states, and where it stands by `entry` or an absolute path. A record that breaks any of them fails the run.
 
 #[cfg(test)]
 mod tests;
@@ -312,7 +312,7 @@ fn text_of<'f>(
     {
         Some(written) => Ok((written, text)),
         None => Err(format!(
-            "`{source}` is neither a program, `.crs`, nor Core text, `.crsc`"
+            "`{source}` is neither a program, `.crs`, nor Curios/Core, `.crsc`"
         )),
     }
 }

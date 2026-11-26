@@ -198,7 +198,7 @@ fn group_read(
     })
 }
 
-/// A member's label, type and value, as Core text writes one: `let x: T = v`.
+/// A member's label, type and value, as Curios/Core writes one: `let x: T = v`.
 fn member_parts<'t>(
     member: &'t LetBinding<CoreText>,
     tail: &crate::Term<CoreText>,

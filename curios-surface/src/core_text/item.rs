@@ -1,4 +1,4 @@
-//! A file of Core text read back into the module it writes, and the entry a program closes with.
+//! A file of Curios/Core read back into the module it writes, and the entry a program closes with.
 //!
 //! **Each item stands where it is written.** A group's members, a test and a foreign row's definition each make the item the text writes at its place. A nominal declaration's forms make the item that holds their entries, and its formers and a family's constructors are what those entries make of them ([`Item::made`]), so a module neither lacks one nor holds one apart from its declaration, and a definition is never declared one.
 //!

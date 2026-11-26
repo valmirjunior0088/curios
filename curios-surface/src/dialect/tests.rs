@@ -2,7 +2,7 @@
 
 use super::*;
 
-/// A `.crsc` is Core text, and every other name a program, one with no extension among them.
+/// A `.crsc` is Curios/Core, and every other name a program, one with no extension among them.
 #[test]
 fn a_file_is_core_text_by_its_crsc_extension_alone() {
     for (name, written) in [

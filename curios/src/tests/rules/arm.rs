@@ -264,7 +264,7 @@ fn a_literal_dispatch_reads_no_float() {
     );
 }
 
-// `A` and `B` are one group whose parameters share the name `n`, a `Nat` in one and a `Bool` in the other, and `mkA`'s payload states `n == 1` of its own family's. An `A(0)` holds a `Holds(0 == 1)`, so `forged`'s `qed` would fit only where the case were read at its sibling's parameter, or at another instance's, and `f` would hand it on at `False`. The certifier puts the same proposition as Core text under this name, in `curios-cert`'s `recheck::case_tests`. The control is an `A(1)`, which holds a `Holds(1 == 1)` that `qed` inhabits, and its arm runs.
+// `A` and `B` are one group whose parameters share the name `n`, a `Nat` in one and a `Bool` in the other, and `mkA`'s payload states `n == 1` of its own family's. An `A(0)` holds a `Holds(0 == 1)`, so `forged`'s `qed` would fit only where the case were read at its sibling's parameter, or at another instance's, and `f` would hand it on at `False`. The certifier puts the same proposition as Curios/Core under this name, in `curios-cert`'s `recheck::case_tests`. The control is an `A(1)`, which holds a `Holds(1 == 1)` that `qed` inhabits, and its arm runs.
 #[test]
 fn a_case_reads_its_own_familys_parameter_in_a_group() {
     control(

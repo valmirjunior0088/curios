@@ -159,7 +159,7 @@ impl Asked {
         })
     }
 
-    /// A program, asked about as its entry: a file, or what standard input held where the program was admitted — of Core text, read by Core text's own door, a `.crsc` being loose wherever it sits.
+    /// A program, asked about as its entry: a file, or what standard input held where the program was admitted — of Curios/Core, read by Curios/Core's own door, a `.crsc` being loose wherever it sits.
     fn about_program(program: Program) -> Result<Self, Box<Report>> {
         let origin = origin_of(program.entry());
         let verdicts = program.home().map(|home| {
@@ -187,7 +187,7 @@ impl Asked {
         })
     }
 
-    /// A loose module, asked about as the unit it is, mounted at its stem or at `/stdin` — of Core text, read by Core text's own door. No manifest declares it, and no cabinet files it.
+    /// A loose module, asked about as the unit it is, mounted at its stem or at `/stdin` — of Curios/Core, read by Curios/Core's own door. No manifest declares it, and no cabinet files it.
     fn about_module(module: LooseModule) -> Result<Self, Box<Report>> {
         let origin = origin_of(module.entry());
         let subject = match origin.written() {
@@ -580,11 +580,11 @@ pub fn wonder_stage(
     }
 }
 
-/// The refusal of a rung a lowering makes, `text` or `core`, asked of Core text, which is lowered by nothing.
+/// The refusal of a rung a lowering makes, `text` or `core`, asked of Curios/Core, which is lowered by nothing.
 fn no_lowering(name: &str) -> CompileError {
     Refused::of("no such rung")
         .stating(format_args!(
-            "`{name}` is a lowering's rung, and Core text is lowered by nothing"
+            "`{name}` is a lowering's rung, and Curios/Core is lowered by nothing"
         ))
         .stating("its rungs begin at `core-elab`")
         .about_named(name)
@@ -672,7 +672,7 @@ fn library_stage(
     answered_rung(name, reached, telling)
 }
 
-/// [`wonder_stage`] for a loose module: its unit's rung, reprinted, to stdout, as a library's is — its own text the one the `text` rung reprints, a file's or what standard input held — and a module of Core text's at `core-elab`, the one rung it has. No cabinet files a loose module, so nothing is read from one.
+/// [`wonder_stage`] for a loose module: its unit's rung, reprinted, to stdout, as a library's is — its own text the one the `text` rung reprints, a file's or what standard input held — and a module of Curios/Core's at `core-elab`, the one rung it has. No cabinet files a loose module, so nothing is read from one.
 fn module_stage(
     budget: u64,
     name: &str,
@@ -910,7 +910,7 @@ pub fn wonder_classes(
     Ok(())
 }
 
-/// `wonder --name PATH [SUBJECT]`: what `path` names in `scope`, to stdout — a declaration by a block holding its source as one entry, the block naming the command that lists its witnesses where it has any, `subject` as the command line wrote it, and one whose source no block shows, Core text's, by its block and then its whole text; a module by a block holding an entry for each thing it exposes ([`Report::listing`]); and a facade's path, which names both, by the declaration and then the module, a blank line between, the module's block listing what it exposes beside that declaration. A path that names nothing in scope is refused. `telling` is told as [`check()`](crate::check())'s is.
+/// `wonder --name PATH [SUBJECT]`: what `path` names in `scope`, to stdout — a declaration by a block holding its source as one entry, the block naming the command that lists its witnesses where it has any, `subject` as the command line wrote it, and one whose source no block shows, Curios/Core's, by its block and then its whole text; a module by a block holding an entry for each thing it exposes ([`Report::listing`]); and a facade's path, which names both, by the declaration and then the module, a blank line between, the module's block listing what it exposes beside that declaration. A path that names nothing in scope is refused. `telling` is told as [`check()`](crate::check())'s is.
 pub fn wonder_name(
     budget: u64,
     scope: Scope,

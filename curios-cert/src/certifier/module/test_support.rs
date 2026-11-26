@@ -1,4 +1,4 @@
-//! Fixtures the module suites share: the certifier they start from, and the families, structures and names they declare against it, each written as Core text.
+//! Fixtures the module suites share: the certifier they start from, and the families, structures and names they declare against it, each written in Curios/Core.
 //!
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 

@@ -218,7 +218,7 @@ impl<'a> Fold<'a> {
         })
     }
 
-    /// The Core text `source` holds checked on top of the fold, as [`Fold::check`] checks a program: read over the units in scope, compiled as a unit — claiming `module` where the text closes with no term — and the term it closes with judged at the program contract and erased (`enter_core_text`). Nothing is taken from the cache or handed to it: a text of Core text is loose, compiled against the prelude alone and filed nowhere.
+    /// The Curios/Core `source` holds checked on top of the fold, as [`Fold::check`] checks a program: read over the units in scope, compiled as a unit — claiming `module` where the text closes with no term — and the term it closes with judged at the program contract and erased (`enter_core_text`). Nothing is taken from the cache or handed to it: a text of Curios/Core is loose, compiled against the prelude alone and filed nowhere.
     pub fn check_core_text<P>(
         self,
         source: &Arc<Source>,
@@ -242,7 +242,7 @@ impl<'a> Fold<'a> {
         })
     }
 
-    /// [`Fold::check_core_text`] carried through the back half as [`Fold::compile`] carries a program, every rung from `core-elab` on handed to `observe`: the module the program read from Core text compiles to, or `None` for a text closing with no term, which is a module and no program.
+    /// [`Fold::check_core_text`] carried through the back half as [`Fold::compile`] carries a program, every rung from `core-elab` on handed to `observe`: the module the program read from Curios/Core compiles to, or `None` for a text closing with no term, which is a module and no program.
     pub fn compile_core_text<O, P>(
         self,
         source: &Arc<Source>,
@@ -273,7 +273,7 @@ impl<'a> Fold<'a> {
         })
     }
 
-    /// The unit the Core text `source` holds reads to, compiled on top of the fold as [`Fold::check_core_text`] compiles it, handed to `then` with the prelude's roots before it: what a question about what a text declares reads.
+    /// The unit the Curios/Core `source` holds reads to, compiled on top of the fold as [`Fold::check_core_text`] compiles it, handed to `then` with the prelude's roots before it: what a question about what a text declares reads.
     pub fn core_text_unit<P, T>(
         self,
         source: &Arc<Source>,
@@ -436,7 +436,7 @@ impl<'a> Fold<'a> {
                 })
                 .collect::<Vec<_>>();
 
-            // A unit read from Core text holds no lowering, which is what a unit is documented from.
+            // A unit read from Curios/Core holds no lowering, which is what a unit is documented from.
             let Some(written) = unit.text() else {
                 return Err(undocumented());
             };

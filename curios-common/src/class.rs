@@ -46,7 +46,7 @@ classes! {
     Punctuation => "punctuation",
     /// `?`, which the compiler answers with what it knows of the place.
     Goal => "goal",
-    /// A decorator of Core text, `#{…}`, and the fields it states.
+    /// A decorator of Curios/Core, `#{…}`, and the fields it states.
     Decorator => "decorator",
     /// A module: a segment of a path, or the module a `use` line names.
     Module => "module",
@@ -59,7 +59,7 @@ classes! {
     Method => "method",
     /// A declaration whose stated type is a function's ending in no sort — a `foreign`, an operation of `/sys` — and a test.
     Function => "function",
-    /// Any other declaration, a witness's name in Core text among them.
+    /// Any other declaration, a witness's name in Curios/Core among them.
     Value => "value",
     /// A structure's or a tuple type's field, written or projected.
     Field => "field",

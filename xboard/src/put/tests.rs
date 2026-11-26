@@ -218,7 +218,7 @@ fn a_step_the_certifier_refuses_is_reported_in_its_step() {
     );
 }
 
-/// A program a build refuses is reported as text, so the board cannot tell its checker and no expectation meets it: a witness whose fix refuses an earlier unit writes it as Core text.
+/// A program a build refuses is reported as text, so the board cannot tell its checker and no expectation meets it: a witness whose fix refuses an earlier unit writes it as Curios/Core.
 #[test]
 fn a_program_step_refused_stops_the_history_by_no_checker() {
     let witness = Witness {

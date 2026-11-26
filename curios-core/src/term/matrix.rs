@@ -148,7 +148,7 @@ pub enum Pattern {
         fields: Vec<(Plicity, Option<FieldLabel>, Pattern)>,
     },
     Bool(bool),
-    /// `predecessor + step`, `step` successors over the predecessor: one at least, since `p + 0` is the binder `p`, which the parser and Core text's reader refuse to spell this way.
+    /// `predecessor + step`, `step` successors over the predecessor: one at least, since `p + 0` is the binder `p`, which the parser and Curios/Core's reader refuse to spell this way.
     Succ {
         predecessor: Slot,
         step: Natural,

@@ -1,6 +1,6 @@
-//! The modules the recheck suites put to the walk, written as Core text, and the walks they put them through.
+//! The modules the recheck suites put to the walk, written in Curios/Core, and the walks they put them through.
 //!
-//! Written as Core text because a refusal the elaborator reaches first leaves no module behind, so a rule where `curios-elab` is the stricter of the two cannot be put to this crate by any surface program. Reaching it means writing the finished module and putting it to the walk directly.
+//! Written as Curios/Core because a refusal the elaborator reaches first leaves no module behind, so a rule where `curios-elab` is the stricter of the two cannot be put to this crate by any surface program. Reaching it means writing the finished module and putting it to the walk directly.
 //!
 //! `pub(super)` rather than private: consumed by the sibling suites across `recheck`, and nothing outside it.
 
@@ -158,7 +158,7 @@ pub fn written() -> Definitions {
     reading_definitions("#NatType", "x")
 }
 
-/// The propositions a module written as Core text here uses, declared where the registry this crate's suites judge under names them: `False`, `True` and `Holds`, the reflection of a decision a bound states.
+/// The propositions a module written in Curios/Core here uses, declared where the registry this crate's suites judge under names them: `False`, `True` and `Holds`, the reflection of a decision a bound states.
 pub const PROPOSITIONS: &str = r#"
 induct /std/Bool/False: pub Prop
 end
@@ -180,7 +180,7 @@ let /std/Bool/Holds : (b: #BoolType) -> Prop =
         end;
 "#;
 
-/// What `text` writes, Core text read with nothing in scope: the module, and the term it closes with where it closes with one.
+/// What `text` writes, Curios/Core read with nothing in scope: the module, and the term it closes with where it closes with one.
 fn core_text_read(text: &str) -> (Definitions, Option<Entrypoint>) {
     put()
         .read(text)
@@ -197,7 +197,7 @@ let /held: #{goal = Type} match #{node = Variant} /F/mk(3) | ${arm} => #NatType 
     3;
 "#;
 
-/// What the walk says of `text`, Core text read with nothing in scope and walked as it closes: a module, or a program at the type it states.
+/// What the walk says of `text`, Curios/Core read with nothing in scope and walked as it closes: a module, or a program at the type it states.
 pub fn text_certified(text: &str) -> Rechecked<Definitions> {
     text_certified_over(text, &Globals::default())
 }
@@ -253,7 +253,7 @@ pub fn core_text_module(text: &str) -> Definitions {
     definitions
 }
 
-/// What the certifier says of `text`, Core text read with nothing in scope and closing with a term it states no type for, put at `False` as the registry this crate's suites judge under names it, over `globals`.
+/// What the certifier says of `text`, Curios/Core read with nothing in scope and closing with a term it states no type for, put at `False` as the registry this crate's suites judge under names it, over `globals`.
 pub fn core_text_refusals_over(text: &str, globals: &Globals) -> Vec<Refusal> {
     Put {
         globals: Some(globals),
@@ -264,7 +264,7 @@ pub fn core_text_refusals_over(text: &str, globals: &Globals) -> Vec<Refusal> {
     .into_refusals()
 }
 
-/// What the certifier says of `text`, Core text read with nothing in scope and closing with a term it states no type for, put at `False` as the registry this crate's suites judge under names it: how a module built by hand is written, declaring every name it uses.
+/// What the certifier says of `text`, Curios/Core read with nothing in scope and closing with a term it states no type for, put at `False` as the registry this crate's suites judge under names it: how a module built by hand is written, declaring every name it uses.
 pub fn core_text_refusals(text: &str) -> Vec<Refusal> {
     core_text_refusals_over(text, &Globals::default())
 }

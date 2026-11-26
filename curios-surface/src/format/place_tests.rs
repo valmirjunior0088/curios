@@ -123,7 +123,7 @@ fn positions(lines: &[&str]) -> Vec<(usize, bool)> {
     found
 }
 
-/// What goes wrong with the marker written at one position of `lines` — riding the line's end, or above it at its indentation — or `None` where it keeps its place and a second run within `format` agrees. `file` is the path the text is read as held at, which says whether it is a program or Core text.
+/// What goes wrong with the marker written at one position of `lines` — riding the line's end, or above it at its indentation — or `None` where it keeps its place and a second run within `format` agrees. `file` is the path the text is read as held at, which says whether it is a program or Curios/Core.
 fn misplaced(
     file: &str,
     lines: &[&str],
@@ -214,7 +214,7 @@ fn a_comment_keeps_its_place_from_every_position() {
     );
 }
 
-/// The same law over Core text, put to every position of a file that writes every form Core text writes beyond a program's.
+/// The same law over Curios/Core, put to every position of a file that writes every form Curios/Core writes beyond a program's.
 #[test]
 fn a_comment_keeps_its_place_in_core_text_from_every_position() {
     let lines = lines(EVERY_FORM);

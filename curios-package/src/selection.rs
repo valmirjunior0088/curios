@@ -6,7 +6,7 @@
 //!
 //! **What is selected is one of four things.** The package entire — its library and every program it declares, which a command that needs one program narrows to the sole or `default` one; a library; a program; or a loose module. A program is *declared*, with a home in its package's `.curios/` and the units it is compiled against, or *loose*, with neither: a loose program is compiled against the prelude and nothing else, and the type has no field that could carry more. A loose text is a program where a term closes its declarations and a module where none does — a unit of its own, as a library is, mounted at its stem — and which it is is read here, once, so every command is handed what the text is and none reads it again.
 //!
-//! **A file is placed by what declares it, never by where it sits** (law 1). It is an executable's when it is that executable's entry or a module a `mod` chain from the entry reaches, the library's when a chain from `lib.crs` reaches it, and loose otherwise, as a file of Core text always is, no `mod` line reaching one — carrying, when a package's directory holds it, why it is in none of that package's units and what would put it in one, so a question can say so before it answers. Every command places a file this one way; what a command then does with a program or a library is its contract's to decide.
+//! **A file is placed by what declares it, never by where it sits** (law 1). It is an executable's when it is that executable's entry or a module a `mod` chain from the entry reaches, the library's when a chain from `lib.crs` reaches it, and loose otherwise, as a file of Curios/Core always is, no `mod` line reaching one — carrying, when a package's directory holds it, why it is in none of that package's units and what would put it in one, so a question can say so before it answers. Every command places a file this one way; what a command then does with a program or a library is its contract's to decide.
 
 #[cfg(test)]
 mod tests;
@@ -403,7 +403,7 @@ fn placed(
     overlay: &Overlay,
     cabinet: Option<&Path>,
 ) -> Result<Selection, Box<Report>> {
-    // No `mod` line reaches Core text, so a file of it is in no unit, wherever it sits.
+    // No `mod` line reaches Curios/Core, so a file of it is in no unit, wherever it sits.
     if WrittenIn::of(&file) == WrittenIn::CoreText {
         return loose(Entry::File(file), overlay);
     }
@@ -538,7 +538,7 @@ impl LooseModule {
         }
     }
 
-    /// The unit it is mounted as, written as a program's text is: a file at its stem, read as every unit's files are, and standard input's text at [`STDIN_MOUNT`], supplied, refused where the module grammar does not read it. Core text is mounted by its own reader.
+    /// The unit it is mounted as, written as a program's text is: a file at its stem, read as every unit's files are, and standard input's text at [`STDIN_MOUNT`], supplied, refused where the module grammar does not read it. Curios/Core is mounted by its own reader.
     pub fn unit(&self) -> Result<RootSource, Box<Report>> {
         match &self.entry {
             Entry::File(path) => {

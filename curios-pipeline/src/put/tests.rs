@@ -1,4 +1,4 @@
-//! A closing term put at `False`, through the real checkers, over the prelude: a program to both, Core text to the certifier alone, and a subject that does not read put to neither.
+//! A closing term put at `False`, through the real checkers, over the prelude: a program to both, Curios/Core to the certifier alone, and a subject that does not read put to neither.
 
 use {
     super::*, curios_common::Source, curios_elab::DEFAULT_BUDGET, curios_module::SYNTAX,
@@ -33,7 +33,7 @@ let bad(b: Bad) -> False =
 bad(Bad/c((A) => (x) => x))
 ";
 
-/// A recursion handing its own proof back below the index its target refined: the Core text witness of a fixed ticket, which the certifier refuses.
+/// A recursion handing its own proof back below the index its target refined: the Curios/Core witness of a fixed ticket, which the certifier refuses.
 const REFINED_INDEX: &str = "induct /Wit: pub Prop
 | base()
 | w(inner: #{node = InductType} /Wit())
@@ -64,7 +64,7 @@ fn program(text: &str) -> Result<Put, CompileError> {
     })
 }
 
-/// The Core text `text` put at `False` over the prelude.
+/// The Curios/Core `text` put at `False` over the prelude.
 fn core_text(text: &str) -> Result<Option<Put>, CompileError> {
     with_prelude(|prelude| {
         put_core_text(
@@ -109,7 +109,7 @@ fn a_program_refused_while_it_is_built_reaches_no_certifier() {
     );
 }
 
-/// Core text is put to the certifier alone, which names its refusal.
+/// Curios/Core is put to the certifier alone, which names its refusal.
 #[test]
 fn core_text_is_put_to_the_certifier_alone() {
     let put = core_text(REFINED_INDEX)

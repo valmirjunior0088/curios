@@ -446,7 +446,7 @@ fn a_partial_prelude_definition_stays_folded_in_a_user_unit() {
     .saying("`Bad` reaches `/std/Json/decode/value`, which is kept folded");
 }
 
-// The positions a program writes a proof or a type at, each reaching a definition not known to terminate: a `let` at a proposition, a structure's field, a case's payload, an implicit argument, a witness's method and the type a definition states. `curios_cert`'s `recheck::proposition_tests` puts the same positions to the certifier under this name, with the ones only Core text writes. The control states each position at `True` through `Claim`, its definitions answering at once.
+// The positions a program writes a proof or a type at, each reaching a definition not known to terminate: a `let` at a proposition, a structure's field, a case's payload, an implicit argument, a witness's method and the type a definition states. `curios_cert`'s `recheck::proposition_tests` puts the same positions to the certifier under this name, with the ones only Curios/Core writes. The control states each position at `True` through `Claim`, its definitions answering at once.
 #[test]
 fn a_proof_or_type_that_may_not_terminate_is_refused_wherever_it_stands() {
     let refusals = control(

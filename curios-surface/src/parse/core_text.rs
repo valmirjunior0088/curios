@@ -1,4 +1,4 @@
-//! The productions only Core text has: an operand under a decorator and the values a decorator states, a witness named by its identity, an intrinsic node, a declaration named by its absolute name, and the file a `.crsc` is.
+//! The productions only Curios/Core has: an operand under a decorator and the values a decorator states, a witness named by its identity, an intrinsic node, a declaration named by its absolute name, and the file a `.crsc` is.
 //!
 //! **A file is items, then the entry a program closes with.** An item is a `test`, a `foreign` row, or a group: declarations of any kinds joined by `and`, each written as its own keyword writes it — a `let` member after `and` by its name alone, as a program's group writes one — and closed by the `;` a `let` owes where its last member is one. The entry states its type on the line beneath it, `: T`.
 
@@ -312,7 +312,7 @@ fn parse_head_key<'a>(state: ParserState<'a>) -> Parsed<'a, HeadKey> {
         .parse(state)
 }
 
-/// The name a declaration of Core text declares, which is absolute: a path, whose last segment is its label, or a witness's identity, which is its own, its label the identity's own text without the blanks a parse runs on over.
+/// The name a declaration of Curios/Core declares, which is absolute: a path, whose last segment is its label, or a witness's identity, which is its own, its label the identity's own text without the blanks a parse runs on over.
 fn parse_declared_name<'a>(state: ParserState<'a>) -> Parsed<'a, (Global, Label)> {
     spanned(parse_witness_name)
         .map(|(span, id)| {
@@ -328,7 +328,7 @@ fn parse_declared_name<'a>(state: ParserState<'a>) -> Parsed<'a, (Global, Label)
 /// `/a/b/c` where a declaration's name stands: the name it declares and the label `c`, committed once a `/` begins it.
 fn parse_declaring_path<'a>(state: ParserState<'a>) -> Parsed<'a, (Global, Label)> {
     const ABSOLUTE: &str =
-        "a declaration of Core text is named by its absolute path: `let /std/Nat/add …`";
+        "a declaration of Curios/Core is named by its absolute path: `let /std/Nat/add …`";
     look_ahead(take_exact("/"))
         .map_err(ABSOLUTE)
         .and_keep(commit(parse_name.flat_map(|name| match name.leaf_span() {
@@ -342,7 +342,7 @@ fn parse_declaring_path<'a>(state: ParserState<'a>) -> Parsed<'a, (Global, Label
         .parse(state)
 }
 
-/// The words that head an item of Core text, in the order a refusal lists them.
+/// The words that head an item of Curios/Core, in the order a refusal lists them.
 const CORE_ITEM_HEADS: [Keyword; 6] = [
     Keyword::Let,
     Keyword::Induct,
@@ -379,7 +379,7 @@ fn parse_core_item<'a>(state: ParserState<'a>) -> Parsed<'a, CoreItem> {
                 let heads = CORE_ITEM_HEADS.map(|head| format!("'{}'", head.spelling()));
                 curios_parse::fail_from(
                     &start,
-                    format!("Expected an item of Core text: {}", one_of(heads)),
+                    format!("Expected an item of Curios/Core: {}", one_of(heads)),
                 )
                 .boxed()
             }
@@ -451,7 +451,7 @@ pub struct CoreFormatInput {
     pub comments: Vec<Span>,
 }
 
-/// `source` read whole as a file of Core text, for the formatter: each item's span kept beside it, as a module's are ([`parse_for_format`](crate::parse_for_format)), and the comments the parse consumed.
+/// `source` read whole as a file of Curios/Core, for the formatter: each item's span kept beside it, as a module's are ([`parse_for_format`](crate::parse_for_format)), and the comments the parse consumed.
 pub fn parse_core_for_format(source: &Arc<Source>) -> Result<CoreFormatInput, ParserError> {
     clear_comments();
     let (file, item_spans) = CoreFile::parse_spanned(source)?;

@@ -581,10 +581,10 @@ pub fn placed(
     Ok(offset.and_then(|offset| placed.at(offset)))
 }
 
-/// The refusal of a question answered off a lowering, asked of Core text, which is lowered by nothing.
+/// The refusal of a question answered off a lowering, asked of Curios/Core, which is lowered by nothing.
 pub fn unlowered() -> Vec<Diagnosis> {
     let mut said = Said::line("no lowering");
-    said.stating("Core text is lowered by nothing, and this question is answered off a lowering");
+    said.stating("Curios/Core is lowered by nothing, and this question is answered off a lowering");
 
     vec![Diagnosis {
         severity: Severity::Error,
@@ -851,7 +851,7 @@ fn found<'s>(scope: &[&'s Unit], own: &'s PreparedText, name: &Global) -> Option
         });
     }
 
-    // A unit read from Core text holds no lowering, and so declares nothing a name is found by.
+    // A unit read from Curios/Core holds no lowering, and so declares nothing a name is found by.
     let (unit, lowered, declared) = scope.iter().find_map(|unit| {
         let lowered = unit.text()?;
         Some((*unit, lowered, lowered.declared_as(name)?))
@@ -877,7 +877,7 @@ pub struct Described {
     pub public: Option<bool>,
     /// Where it is written, for one a name was written for.
     pub declaration: Option<Declaration>,
-    /// What its source says of it, as a block shows it ([`Stated`]): none for a declaration whose text is no program's, Core text's, and for one no text is held of and no documentation shows.
+    /// What its source says of it, as a block shows it ([`Stated`]): none for a declaration whose text is no program's, Curios/Core's, and for one no text is held of and no documentation shows.
     pub stated: Option<Stated>,
     /// The type it was elaborated at, spelled for a reader standing at it; none where the unit that declares it holds no definition under the name.
     pub type_: Option<String>,
@@ -1121,7 +1121,7 @@ pub fn described(
     }
 }
 
-/// What `asked` names in the scope of a text of Core text, as [`described`] answers it: a declaration the text writes, which Core text names by its own path, answered off the unit it reads to — what it is declared as, its type, its totality as the certifier recorded it, its members, and where the text writes it, the path it is declared at being the one asked, since Core text exports nothing at another — and any other name as the prelude's scope answers it, a text being compiled against the prelude alone.
+/// What `asked` names in the scope of a text of Curios/Core, as [`described`] answers it: a declaration the text writes, which Curios/Core names by its own path, answered off the unit it reads to — what it is declared as, its type, its totality as the certifier recorded it, its members, and where the text writes it, the path it is declared at being the one asked, since Curios/Core exports nothing at another — and any other name as the prelude's scope answers it, a text being compiled against the prelude alone.
 pub fn described_core_text(
     budget: u64,
     origin: &Origin,
@@ -1143,7 +1143,7 @@ pub fn described_core_text(
     }
 }
 
-/// The declaration `asked` names in `unit`, a unit read from Core text over the prelude's roots `prelude`, as [`described`] answers it, where the text declares one at that path: off the unit, placed where the text writes it.
+/// The declaration `asked` names in `unit`, a unit read from Curios/Core over the prelude's roots `prelude`, as [`described`] answers it, where the text declares one at that path: off the unit, placed where the text writes it.
 pub fn described_in_text(prelude: &[&Unit], unit: &Unit, asked: &Qualifier) -> Option<Described> {
     let name = Global::Authored(*asked);
     let place = unit.places().place(&name)?;
@@ -1160,7 +1160,7 @@ pub fn described_in_text(prelude: &[&Unit], unit: &Unit, asked: &Qualifier) -> O
                 label,
                 held: true,
             }),
-        // Its text is Core text, which states no head a program's printer writes.
+        // Its text is Curios/Core, which states no head a program's printer writes.
         stated: None,
         members: members(unit.lexicon(), &name, declared),
         witnesses: None,
@@ -1416,7 +1416,7 @@ pub fn referent(
                 progress,
             );
 
-            // Core text names its declarations by their paths and no resolver reads it, so a path it names nothing at has no step to refuse.
+            // Curios/Core names its declarations by their paths and no resolver reads it, so a path it names nothing at has no step to refuse.
             (declaration, module, None)
         }
     };

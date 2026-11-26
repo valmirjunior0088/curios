@@ -1,6 +1,6 @@
 //! The forms only elaboration builds, each in the surface spelling it was read from under the node it is.
 //!
-//! An operator is `#{node = Infix} (a + b)`, a numeral elaboration has not settled `#{node = NumLit} 3`, a `!` site the rest of its region called over the action's result, `#{node = Bang} (k)((action)!)`, an ascription `#{node = Ascribed, type_ = T} e`, the body a derived witness asks for `#{node = Derive} ?`, a name resolution has not settled `#{node = Name} /path`, a concept's method named by its path `#{node = Method} /Show/show`, and a match before its patterns are compiled `#{node = Matrix} match head | pattern => body … end`, each row's body the function over its pattern's binders it is and each place of the pattern written by the word that function gives its binder, a bare `_` a wildcard, which is no place, and `#{node = Binder} _` a nameless place, each row an arm of its own and `#{node = Matrix, arms = [2, 1]}` counting the rows of each arm where one holds more than one. A program writes none of them in Core text, which no elaborator reads; a witness writes one to see it refused. A reader is shown each as it was written, an operator with its operands parenthesized as a reader reads them, an ascription as the term and its type bracketed, and the derived body as `derive`.
+//! An operator is `#{node = Infix} (a + b)`, a numeral elaboration has not settled `#{node = NumLit} 3`, a `!` site the rest of its region called over the action's result, `#{node = Bang} (k)((action)!)`, an ascription `#{node = Ascribed, type_ = T} e`, the body a derived witness asks for `#{node = Derive} ?`, a name resolution has not settled `#{node = Name} /path`, a concept's method named by its path `#{node = Method} /Show/show`, and a match before its patterns are compiled `#{node = Matrix} match head | pattern => body … end`, each row's body the function over its pattern's binders it is and each place of the pattern written by the word that function gives its binder, a bare `_` a wildcard, which is no place, and `#{node = Binder} _` a nameless place, each row an arm of its own and `#{node = Matrix, arms = [2, 1]}` counting the rows of each arm where one holds more than one. A program writes none of them in Curios/Core, which no elaborator reads; a witness writes one to see it refused. A reader is shown each as it was written, an operator with its operands parenthesized as a reader reads them, an ascription as the term and its type bracketed, and the derived body as `derive`.
 
 use {
     super::{
@@ -47,7 +47,7 @@ pub fn transient_written<D: Rendered>(transient: Transient, frame: Frame<'_, D>)
     transient_written_as_core(transient, frame, node)
 }
 
-/// [`transient_written`] for every form whose reader's spelling is its Core text's without the decorator.
+/// [`transient_written`] for every form whose reader's spelling is its Curios/Core's without the decorator.
 fn transient_written_as_core<D: Rendered>(
     transient: Transient,
     frame: Frame<'_, D>,
@@ -103,7 +103,7 @@ fn transient_written_as_core<D: Rendered>(
         }
         Transient::Matrix(matrix) => {
             let mut fields = node("Matrix");
-            // An arm of one alternative is what the form builds, each arm Core text writes being one row.
+            // An arm of one alternative is what the form builds, each arm Curios/Core writes being one row.
             if matrix.arms.iter().any(|arm| arm.alternatives.len() > 1) {
                 let counts = matrix
                     .arms
@@ -117,7 +117,7 @@ fn transient_written_as_core<D: Rendered>(
     }
 }
 
-/// A match as it was written: its head, then each arm as its alternatives over the names their rows' bodies bind, and the guards and the body the first row's opening is — in Core text, each row an arm of its own, its pattern over places and each guard and its body as the function over its binders it is, each over the domain Core holds for it, the field `arms` saying how many rows each arm holds where one holds more than one. A reader is shown a match over `()` whose rows write an unnamed `_`, every one but the last guarded, as the match with no head it was lowered from.
+/// A match as it was written: its head, then each arm as its alternatives over the names their rows' bodies bind, and the guards and the body the first row's opening is — in Curios/Core, each row an arm of its own, its pattern over places and each guard and its body as the function over its binders it is, each over the domain Core holds for it, the field `arms` saying how many rows each arm holds where one holds more than one. A reader is shown a match over `()` whose rows write an unnamed `_`, every one but the last guarded, as the match with no head it was lowered from.
 fn matrix_written<D: Rendered>(
     Matrix { head, arms }: Matrix,
     frame: Frame<'_, D>,
@@ -210,7 +210,7 @@ fn matrix_written<D: Rendered>(
 }
 
 /// A row as a reader is shown it: its pattern over the names its body binds, each guard over the names written before it, and the body under them all — every binder opened once, under one label, as `lambda_parameters` opens a lambda's, so a guard and the body read one name alike.
-/// The words a row's places are written by in Core text: its function's as the function is written, each parameter's word without its decorator. A function written as no lambda, a node met again under sharing, states none, and the places are written nameless.
+/// The words a row's places are written by in Curios/Core: its function's as the function is written, each parameter's word without its decorator. A function written as no lambda, a node met again under sharing, states none, and the places are written nameless.
 fn row_places<D: Rendered>(body: &crate::Term<D>) -> Vec<crate::Binder<D>> {
     match body.as_subterm() {
         crate::Subterm::Func(crate::Func { params, .. }) => params
@@ -226,7 +226,7 @@ fn row_places<D: Rendered>(body: &crate::Term<D>) -> Vec<crate::Binder<D>> {
     }
 }
 
-/// A pattern's own binder as Core text writes its place: by its word, and a nameless one under `#{node = Binder}`, since a bare `_` there is a wildcard.
+/// A pattern's own binder as Curios/Core writes its place: by its word, and a nameless one under `#{node = Binder}`, since a bare `_` there is a wildcard.
 fn place<D: Rendered>(binder: crate::Binder<D>) -> crate::Binder<D> {
     match binder.label.as_str() {
         "_" => crate::Binder {
@@ -302,7 +302,7 @@ fn row_read_back<D: Rendered>(
     (written, guards, body)
 }
 
-/// An operator, `#{node = Infix} (a + b)`: its operands, each a term of Core text.
+/// An operator, `#{node = Infix} (a + b)`: its operands, each a term of Curios/Core.
 pub fn infix_read(
     operand: &crate::Term<CoreText>,
     reader: &mut Reader<'_>,
@@ -611,11 +611,11 @@ fn function_words(body: &crate::Term<CoreText>) -> Option<Vec<String>> {
     }
 }
 
-/// The refusal of a struct pattern in a row: what its head resolved to is Core's and no form of Core text's.
+/// The refusal of a struct pattern in a row: what its head resolved to is Core's and no form of Curios/Core's.
 fn unresolved(at: &crate::Term<CoreText>) -> ReadError {
     ReadError::at(
         Refusal::Malformed(
-            "a row's pattern other than a struct's, whose resolution Core text writes no form of",
+            "a row's pattern other than a struct's, whose resolution Curios/Core writes no form of",
         ),
         at.span(),
     )

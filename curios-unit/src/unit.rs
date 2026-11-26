@@ -16,18 +16,18 @@ use {
     std::{borrow::Cow, cell::OnceCell, collections::BTreeSet, rc::Rc},
 };
 
-/// What a unit was written in: a program's sources, whose lowering it holds, or Core text, read straight to the module a lowering and an elaboration would have made, which leaves it nothing of a lowering's but the prefixes it claims and the rows it declares.
+/// What a unit was written in: a program's sources, whose lowering it holds, or Curios/Core, read straight to the module a lowering and an elaboration would have made, which leaves it nothing of a lowering's but the prefixes it claims and the rows it declares.
 ///
-/// **A lowering is a program's.** What reads one — a later lowering resolving a name, a recompile keeping what its digests say stands, a lint's findings, a report's anchors, the documentation, the tests a program schedules — reads it of a unit written as a program, and of a unit read from Core text reads nothing, so a later program names nothing such a unit declares.
+/// **A lowering is a program's.** What reads one — a later lowering resolving a name, a recompile keeping what its digests say stands, a lint's findings, a report's anchors, the documentation, the tests a program schedules — reads it of a unit written as a program, and of a unit read from Curios/Core reads nothing, so a later program names nothing such a unit declares.
 #[derive(Clone)]
 #[curios_archive::archived]
 enum Written {
-    /// A program's lowering, and the lints the lint owner decided of the unit where it was made: stored with it, so a unit restored or compiled over reports what it was compiled to report, and a unit read from Core text holds none.
+    /// A program's lowering, and the lints the lint owner decided of the unit where it was made: stored with it, so a unit restored or compiled over reports what it was compiled to report, and a unit read from Curios/Core holds none.
     Program {
         text: Rc<PreparedText>,
         lints: Rc<Vec<Lint>>,
     },
-    /// What a unit read from Core text claims and declares, and where its text writes each declaration: anchored as a lowered unit is, so a report about it is placed in its text. Never stored: a `.crsc` is loose and filed nowhere, and a soundness board's history names what its units declare rather than placing it, so a restored unit holds none.
+    /// What a unit read from Curios/Core claims and declares, and where its text writes each declaration: anchored as a lowered unit is, so a report about it is placed in its text. Never stored: a `.crsc` is loose and filed nowhere, and a soundness board's history names what its units declare rather than placing it, so a restored unit holds none.
     CoreText {
         mounts: Vec<Mount>,
         foreigns: ForeignStore,
@@ -195,7 +195,7 @@ impl Produced {
         };
         let forms = self.erased.items_blobs()?;
         let named = self.elaborated()?;
-        // A unit whose records are as it restored them files them as it restored them, and one read from Core text was elaborated from nothing a candidate could be found by.
+        // A unit whose records are as it restored them files them as it restored them, and one read from Curios/Core was elaborated from nothing a candidate could be found by.
         if let (true, None, Written::Program { text, .. }) =
             (candidates, self.traces.as_stored(), &self.written)
         {
@@ -415,7 +415,7 @@ impl Unit {
         }
     }
 
-    /// Assemble a unit read from Core text: claiming `mounts`, declaring the rows `foreigns` holds, its module the one the certifier's walk accepted beside the record that walk filed of it, erased to `erased`, and its text writing each declaration where `anchors` say. Nothing elaborated it, so it filed no traces, and it holds no lowering ([`Unit::text`]).
+    /// Assemble a unit read from Curios/Core: claiming `mounts`, declaring the rows `foreigns` holds, its module the one the certifier's walk accepted beside the record that walk filed of it, erased to `erased`, and its text writing each declaration where `anchors` say. Nothing elaborated it, so it filed no traces, and it holds no lowering ([`Unit::text`]).
     pub fn read(
         mounts: Vec<Mount>,
         foreigns: ForeignStore,
@@ -472,17 +472,17 @@ impl Unit {
         self.unit.mounts()
     }
 
-    /// This unit's resolution state, as what a later unit's names resolve against: a program's lowering, and nothing for a unit read from Core text ([`Unit::read`]).
+    /// This unit's resolution state, as what a later unit's names resolve against: a program's lowering, and nothing for a unit read from Curios/Core ([`Unit::read`]).
     pub fn text(&self) -> Option<&PreparedText> {
         self.unit.text()
     }
 
-    /// Where this unit's text writes each of its declarations: a program's lowering's anchors, or those a unit read from Core text was read with, which a unit restored from a cabinet holds none of ([`Unit::read`]).
+    /// Where this unit's text writes each of its declarations: a program's lowering's anchors, or those a unit read from Curios/Core was read with, which a unit restored from a cabinet holds none of ([`Unit::read`]).
     pub fn anchors(&self) -> &Anchors {
         self.unit.anchors()
     }
 
-    /// This unit's lints, decided where it was made: none for a unit read from Core text, which no lowering made.
+    /// This unit's lints, decided where it was made: none for a unit read from Curios/Core, which no lowering made.
     pub fn lints(&self) -> &[Lint] {
         self.unit.lints()
     }

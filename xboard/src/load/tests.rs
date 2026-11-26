@@ -21,7 +21,7 @@ const RECORD: &str = r#"
     refused = [{ by = "certifier", error = "Mismatch", within = "entry" }]
 "#;
 
-/// A ticket's record whose one witness is a history: a program mounted at `/lib`, then unmounted, and Core text read over what is left.
+/// A ticket's record whose one witness is a history: a program mounted at `/lib`, then unmounted, and Curios/Core read over what is left.
 const HISTORY: &str = r#"
     title = "A forged proof"
     status = "open"
@@ -189,7 +189,7 @@ fn a_refusal_stands_at_the_entry_or_in_a_declaration_by_its_absolute_path() {
     assert!(refusal(&RECORD.replace(r#""/f""#, r#""f""#)).contains("`f` is neither `entry`"));
 }
 
-/// The board judges by the two checkers, so a refusal by the reader of Core text is a word the loader does not know, refused as any unknown word is.
+/// The board judges by the two checkers, so a refusal by the reader of Curios/Core is a word the loader does not know, refused as any unknown word is.
 #[test]
 fn a_refusal_is_by_the_elaborator_or_the_certifier() {
     let record = RECORD.replace(

@@ -25,7 +25,7 @@ pub enum Answer {
     Stopped(Stop),
 }
 
-/// What kept a witness from the checkers' judgment at `False`, as it was reported. No expectation meets it: on the board it is a text that has rotted, or a fix that refuses an earlier unit by no checker's error, which a witness writes as Core text instead.
+/// What kept a witness from the checkers' judgment at `False`, as it was reported. No expectation meets it: on the board it is a text that has rotted, or a fix that refuses an earlier unit by no checker's error, which a witness writes as Curios/Core instead.
 #[derive(Debug)]
 pub struct Stop {
     /// Where it stopped, as a report names it: `text` for one no checker read, or the step of the unit it stopped at.
@@ -69,7 +69,7 @@ impl Answer {
     }
 }
 
-/// Put `proof` at `False` over `predecessors` through the product's put. `Err` is its text put to no checker, as it was reported: a program that does not parse or lower, or Core text that does not read or closes with no term.
+/// Put `proof` at `False` over `predecessors` through the product's put. `Err` is its text put to no checker, as it was reported: a program that does not parse or lower, or Curios/Core that does not read or closes with no term.
 fn put_proof(predecessors: Predecessors<'_>, proof: &Proof) -> Result<Put, String> {
     let put = match proof {
         Proof::Program(text) => {

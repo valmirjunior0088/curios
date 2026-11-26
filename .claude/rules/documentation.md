@@ -47,7 +47,7 @@ A word the project renamed is not written again for what it named, in a document
 | Retired | Written | Kept for |
 | --- | --- | --- |
 | the surface language, for the language a `.crs` file is written in | Curios | `curios-surface`, the crate that holds its tree |
-| the core language, for the representation both checkers judge | Curios/Core, written in prose and never in backticks, and Core where Curios/Core is already the subject; Core text for its text | `curios-core`, and `--stage core` |
+| the core language, for the representation both checkers judge, and Core text, for its text | Curios/Core, for both, written in prose and never in backticks, and Core where Curios/Core is already the subject | `curios-core`, `--stage core`, and the `core_text` modules and `CoreText` |
 | the erased IR, the erased first-order IR | Curios/ANF | `curios-anf`, `--stage anf`, and A-normal form as a form |
 | the continuation IR, the continuation-passing IR, high-CPS | Curios/CPS | `curios-cps`, `--stage cps`, and continuation-passing style as a style |
 | `lint`, for the command that checks a subject, and `wonder` with no query | `check`, `curios check` | a lint, the finding `check` reports; xtask's `lint` groups, `compiler lint` and `jig lint` |

@@ -876,7 +876,7 @@ impl Made {
 
     /// The value constructors of the family `owner` whose entry is `declaration`, one to a case in declaration order, each spelled from its case's signature: declared over the signature's binders under their marks, each binding a proof where the signature's does, the family's parameters hidden ahead of the payload, ending in the family at the case's indices, and unfolding to the case's injection over them, both at the family's own levels.
     ///
-    /// **The one spelling of a constructor from its family's entry.** A constructor says nothing its family's entry does not, so a family's declaration states its constructors: elaboration makes each one by this, from the entry as elaborated, and a reader of Core text makes it by this too.
+    /// **The one spelling of a constructor from its family's entry.** A constructor says nothing its family's entry does not, so a family's declaration states its constructors: elaboration makes each one by this, from the entry as elaborated, and a reader of Curios/Core makes it by this too.
     pub fn constructors(
         owner: Qualifier,
         island: Qualifier,
@@ -1205,7 +1205,7 @@ impl Definition {
 
     /// The definition a `foreign` row declares under `name`, made from the row: a function of its wire parameters, each explicit and hintless, ahead of which a row that does not return takes the type it yields, hidden, at a level of the definition's own; answering the row's call over them, at the type the row produces ([`foreign_produced`]).
     ///
-    /// **The one spelling of a foreign row's definition.** The lowering writes a `foreign` declaration's definition so, and a reader of Core text makes it so from the row a `foreign` form states.
+    /// **The one spelling of a foreign row's definition.** The lowering writes a `foreign` declaration's definition so, and a reader of Curios/Core makes it so from the row a `foreign` form states.
     pub fn foreign(
         name: Global,
         island: Qualifier,
@@ -1256,7 +1256,7 @@ impl Definition {
 
     /// The definition a `test` declares under `name` with `value` its body: run where it is selected, so a function of nothing answering `value`, at the test family `family`'s type over the unit type at the least instance its entry `declaration` takes, `() -> Test({})`.
     ///
-    /// **The one spelling of a test's definition.** Elaboration closes a test's type at that instance, every level the unit type sets at its least and every sort a type, and a reader of Core text makes a `test` form's definition so.
+    /// **The one spelling of a test's definition.** Elaboration closes a test's type at that instance, every level the unit type sets at its least and every sort a type, and a reader of Curios/Core makes a `test` form's definition so.
     pub fn test(
         name: Global,
         island: Qualifier,

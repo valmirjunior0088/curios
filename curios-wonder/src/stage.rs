@@ -44,7 +44,7 @@ pub enum Refusal {
     Diagnostics(Vec<Diagnosis>),
     /// A declaration's part at `core` is asked of a unit in scope, which keeps no lowering: asked of `file`, the one that holds it where one does, it is the subject's own.
     Kept { file: Option<PathBuf> },
-    /// A rung no lowering made, `text` or `core`, asked of Core text, which is lowered by nothing: its rungs begin at `core-elab`.
+    /// A rung no lowering made, `text` or `core`, asked of Curios/Core, which is lowered by nothing: its rungs begin at `core-elab`.
     Lowered,
 }
 
@@ -182,7 +182,7 @@ pub fn unit_stage(
     rendered.map_err(Refusal::Diagnostics)
 }
 
-/// The rung `name` of a loose module of Core text, read over the prelude, as its rendering: `core-elab`, the unit it reads to — the one rung a unit of Core text has, since a lowering's two make nothing of a text no lowering reads ([`Refusal::Lowered`]), and every rung from `anf` on is a program's ([`Refusal::Unit`]).
+/// The rung `name` of a loose module of Curios/Core, read over the prelude, as its rendering: `core-elab`, the unit it reads to — the one rung a unit of Curios/Core has, since a lowering's two make nothing of a text no lowering reads ([`Refusal::Lowered`]), and every rung from `anf` on is a program's ([`Refusal::Unit`]).
 pub fn core_text_unit_stage(
     budget: u64,
     origin: &Origin,
@@ -500,7 +500,7 @@ fn program_part(
     }
 }
 
-/// [`program_part`] of a program read from Core text: the declaration as `--name` answers it of the text, and its part of the rung the program the text compiles to holds.
+/// [`program_part`] of a program read from Curios/Core: the declaration as `--name` answers it of the text, and its part of the rung the program the text compiles to holds.
 fn core_text_part(
     budget: u64,
     origin: Origin,
@@ -669,7 +669,7 @@ fn narrowed(spelling: Rc<Spelling>, part: BTreeSet<Global>) -> Rc<Spelling> {
     Rc::new(Rc::unwrap_or_clone(spelling).narrowed_to(part))
 }
 
-/// The spelling a dump of a unit's Core is written in: Core text proper, a test's and a foreign row's forms made against `before`, the elaborated modules of the units before it, the prelude's roots first.
+/// The spelling a dump of a unit's Core is written in: Curios/Core proper, a test's and a foreign row's forms made against `before`, the elaborated modules of the units before it, the prelude's roots first.
 fn dumped_over<'a>(before: impl IntoIterator<Item = &'a Definitions>) -> Rc<Spelling> {
     let scope = FormScope::over(SYNTAX, before);
 

@@ -1,14 +1,14 @@
-//! Which language a tree holds: a program, or Core text, which writes what a program leaves to the elaborator.
+//! Which language a tree holds: a program, or Curios/Core, which writes what a program leaves to the elaborator.
 //!
-//! **One tree and one grammar, marked by the dialect.** Every node a program writes is a node Core text writes too, so the tree and the parser are written once, generic over a [`Dialect`], and a dialect states each form only one of them writes as a type: Core text's a node it reads, a program's one no value inhabits. So a program's tree holds no decorator and no declared path, and its grammar has no production for one: what Core text writes and a program does not is refused in a program as the token the grammar did not expect.
+//! **One tree and one grammar, marked by the dialect.** Every node a program writes is a node Curios/Core writes too, so the tree and the parser are written once, generic over a [`Dialect`], and a dialect states each form only one of them writes as a type: Curios/Core's a node it reads, a program's one no value inhabits. So a program's tree holds no decorator and no declared path, and its grammar has no production for one: what Curios/Core writes and a program does not is refused in a program as the token the grammar did not expect.
 //!
-//! **What Core text writes beyond a program.** An operand under a decorator, `#{field = value, …} operand`, a witness named by its identity and an intrinsic node by its variant ([`CoreForm`]); a declaration's head, the decorator before it and the absolute name it declares ([`CoreHead`]); the decorator before a case, and before a binder's word ([`Binder`](crate::Binder)); a `use` binder's word, where a program's witness binder has none; and the file a `.crsc` is ([`CoreFile`]), whose items are joined into groups by `and` whatever their kinds, and whose entry states its type.
+//! **What Curios/Core writes beyond a program.** An operand under a decorator, `#{field = value, …} operand`, a witness named by its identity and an intrinsic node by its variant ([`CoreForm`]); a declaration's head, the decorator before it and the absolute name it declares ([`CoreHead`]); the decorator before a case, and before a binder's word ([`Binder`](crate::Binder)); a `use` binder's word, where a program's witness binder has none; and the file a `.crsc` is ([`CoreFile`]), whose items are joined into groups by `and` whatever their kinds, and whose entry states its type.
 //!
-//! **What a print shows and no grammar reads back is a dialect too**, [`Shown`]: Core text's forms over its own terms, and the forms only a bounded print or a reader's spelling writes ([`ShownForm`]). A dump, a certifier's refusal and a report's term are shown, since each may elide; a tree no parser makes a shown one, so none is ever read as Core text.
+//! **What a print shows and no grammar reads back is a dialect too**, [`Shown`]: Curios/Core's forms over its own terms, and the forms only a bounded print or a reader's spelling writes ([`ShownForm`]). A dump, a certifier's refusal and a report's term are shown, since each may elide; a tree no parser makes a shown one, so none is ever read as Curios/Core.
 //!
-//! **One writer builds either tree** ([`Rendered`]): Core text written whole, the text a reader reads back, is Core text's own tree, and everything else a shown one. What only a shown tree holds is built under a leave Core text's tree has no value of, so a whole print holding `…` or a reader's token is no tree the writer can build, and the print is the reader's inverse by its type.
+//! **One writer builds either tree** ([`Rendered`]): Curios/Core written whole, the text a reader reads back, is Curios/Core's own tree, and everything else a shown one. What only a shown tree holds is built under a leave Curios/Core's tree has no value of, so a whole print holding `…` or a reader's token is no tree the writer can build, and the print is the reader's inverse by its type.
 //!
-//! **What a text is written in is its name's** ([`WrittenIn`]): a file whose name ends in `.crsc` is Core text and any other a program, the one rule every reader of a file asks, and a text with no file states its own. A guess from the text would choose the grammar it is read by, and a closing term alone reads in both.
+//! **What a text is written in is its name's** ([`WrittenIn`]): a file whose name ends in `.crsc` is Curios/Core and any other a program, the one rule every reader of a file asks, and a text with no file states its own. A guess from the text would choose the grammar it is read by, and a closing term alone reads in both.
 
 #[cfg(test)]
 mod tests;
@@ -24,7 +24,7 @@ use {
 pub enum WrittenIn {
     /// A program or a module, a `.crs`.
     Program,
-    /// Core text, a `.crsc`.
+    /// Curios/Core, a `.crsc`.
     CoreText,
 }
 
@@ -32,7 +32,7 @@ impl WrittenIn {
     /// Each dialect, in the order a file's extension is tried.
     pub const EVERY: [WrittenIn; 2] = [WrittenIn::Program, WrittenIn::CoreText];
 
-    /// What the file at `path` is written in, by its name alone: Core text where its extension is a `.crsc`'s, and a program otherwise, a file named with no extension among them.
+    /// What the file at `path` is written in, by its name alone: Curios/Core where its extension is a `.crsc`'s, and a program otherwise, a file named with no extension among them.
     pub fn of(path: &Path) -> Self {
         path.extension()
             .and_then(|extension| extension.to_str())
@@ -67,7 +67,7 @@ pub trait Dialect: Clone + fmt::Debug + PartialEq + 'static {
     /// What a decorator states: before a case, a declaration's word, a group's `and`, or a binder's word. None where nothing is written.
     type Fields: Clone + fmt::Debug + PartialEq + Default;
 
-    /// Whether a `let` chain stands wherever a term does: in Core text, which spells the blocks Core holds wherever they stand, and not in a program, which reads one only as a body, the parser's and the printer's rule alike.
+    /// Whether a `let` chain stands wherever a term does: in Curios/Core, which spells the blocks Core holds wherever they stand, and not in a program, which reads one only as a body, the parser's and the printer's rule alike.
     const CHAINS_ANYWHERE: bool;
 }
 
@@ -99,7 +99,7 @@ impl Dialect for CoreText {
     const CHAINS_ANYWHERE: bool = true;
 }
 
-/// What a print shows and no grammar reads back: Core text's forms, and the ones only a bounded print or a reader's spelling writes. No parser makes a tree of it, so none is read as Core text.
+/// What a print shows and no grammar reads back: Curios/Core's forms, and the ones only a bounded print or a reader's spelling writes. No parser makes a tree of it, so none is read as Curios/Core.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Shown;
 
@@ -111,7 +111,7 @@ impl Dialect for Shown {
     const CHAINS_ANYWHERE: bool = true;
 }
 
-/// A dialect a render of Core builds a tree of: Core text's own, which a reader reads back, or a shown one. Both hold Core text's forms; what no grammar reads is built only under a leave, which a shown tree's render holds and Core text's has no value of, so no walk writes one into a tree a reader reads.
+/// A dialect a render of Core builds a tree of: Curios/Core's own, which a reader reads back, or a shown one. Both hold Curios/Core's forms; what no grammar reads is built only under a leave, which a shown tree's render holds and Curios/Core's has no value of, so no walk writes one into a tree a reader reads.
 pub trait Rendered:
     Dialect<
         Head = CoreHead<Self>,
@@ -125,10 +125,10 @@ pub trait Rendered:
     /// The leave a render of this dialect holds, where the dialect grants one.
     fn leave() -> Option<Self::Leave>;
 
-    /// A form of Core text, as this dialect holds one.
+    /// A form of Curios/Core, as this dialect holds one.
     fn core(form: CoreForm<Self>) -> Self::Form;
 
-    /// The form of Core text `form` is, where it is one.
+    /// The form of Curios/Core `form` is, where it is one.
     fn form_core(form: &Self::Form) -> Option<&CoreForm<Self>>;
 
     /// `…`, what a bounded print leaves out.
@@ -214,7 +214,7 @@ impl Rendered for Shown {
 /// What a shown term writes in an operand's place beyond a program's forms.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ShownForm {
-    /// A form of Core text.
+    /// A form of Curios/Core.
     Core(CoreForm<Shown>),
     /// `…`: what a bounded print leaves out, no token of the language.
     Elided,
@@ -229,7 +229,7 @@ pub enum ShownForm {
     },
 }
 
-/// What Core text writes in an operand's place and a program cannot.
+/// What Curios/Core writes in an operand's place and a program cannot.
 #[derive(Debug, Clone, PartialEq)]
 pub enum CoreForm<D: Dialect = CoreText> {
     /// A decorator and the operand it attaches to.
@@ -240,7 +240,7 @@ pub enum CoreForm<D: Dialect = CoreText> {
     Intrinsic(CoreIntrinsic<D>),
 }
 
-/// An intrinsic node as Core text writes it: what its operands mean is its variant's to say.
+/// An intrinsic node as Curios/Core writes it: what its operands mean is its variant's to say.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CoreIntrinsic<D: Dialect = CoreText> {
     pub variant: Label,
@@ -274,7 +274,7 @@ pub enum CoreValue<D: Dialect = CoreText> {
     Root,
 }
 
-/// What Core text writes in a declaration's head: the decorator before it, and the name it declares, which is absolute.
+/// What Curios/Core writes in a declaration's head: the decorator before it, and the name it declares, which is absolute.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CoreHead<D: Dialect = CoreText> {
     /// What the decorator before the declaration states of it: before its declaring word for a group's first member, before `and` for a later one.
@@ -297,7 +297,7 @@ pub struct CoreEntry<D: Dialect = CoreText> {
     pub type_: Option<Term<D>>,
 }
 
-/// One item of Core text. A group holds definitions or nominal declarations of one kind, so a group of two kinds is no item.
+/// One item of Curios/Core. A group holds definitions or nominal declarations of one kind, so a group of two kinds is no item.
 #[derive(Debug, Clone, PartialEq)]
 pub enum CoreItem<D: Dialect = CoreText> {
     /// One definition, or a group of them joined by `and`.

@@ -26,7 +26,7 @@ pub fn instance_written<D: Rendered>(instance: Instance, frame: Frame<'_, D>) ->
     instance_spelled(instance, genuine, frame)
 }
 
-/// `Instance` as Core text writes it, under `#{node = Instance}` where it is `genuine`: a member of the group being written that the group does not bind.
+/// `Instance` as Curios/Core writes it, under `#{node = Instance}` where it is `genuine`: a member of the group being written that the group does not bind.
 fn instance_spelled<D: Rendered>(
     Instance { name, universes }: Instance,
     genuine: bool,

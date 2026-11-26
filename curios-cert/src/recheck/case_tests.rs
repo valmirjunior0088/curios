@@ -1,4 +1,4 @@
-//! A case read at its scrutinee's own instance: the parameters it opens at, the arms that instance excuses, the variable an arm refines and the goal it is checked at, each of a module the elaborator would not build, written as Core text and put to the certifier with nothing in scope, declaring the propositions it uses.
+//! A case read at its scrutinee's own instance: the parameters it opens at, the arms that instance excuses, the variable an arm refines and the goal it is checked at, each of a module the elaborator would not build, written in Curios/Core and put to the certifier with nothing in scope, declaring the propositions it uses.
 
 use {
     super::test_support::*,

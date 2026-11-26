@@ -1,4 +1,4 @@
-// The surface grammar of `documentation/language.md`, mirrored from `curios-surface/src/parse/*.rs`. It exists for highlighting, so it is deliberately looser than the compiler where looseness costs nothing a highlighter would notice: it does not enforce whitespace around infix operators, the closed wire vocabulary of a `foreign` signature, a guard bind's refutability, or the default a match with no head closes with. Core text's grammar, in `core/`, extends this one, as the compiler reads a program and Core text by one grammar under a dialect.
+// The surface grammar of `documentation/language.md`, mirrored from `curios-surface/src/parse/*.rs`. It exists for highlighting, so it is deliberately looser than the compiler where looseness costs nothing a highlighter would notice: it does not enforce whitespace around infix operators, the closed wire vocabulary of a `foreign` signature, a guard bind's refutability, or the default a match with no head closes with. Curios/Core's grammar, in `core/`, extends this one, as the compiler reads a program and Curios/Core by one grammar under a dialect.
 
 const {
   IDENTIFIER,
@@ -780,10 +780,10 @@ module.exports = grammar({
         ...SORT_WORDS.map((word) => alias(word, $.identifier)),
       ),
 
-    // A name where a binder binds it, which Core text's grammar writes under the decorator stating its label.
+    // A name where a binder binds it, which Curios/Core's grammar writes under the decorator stating its label.
     _binder: ($) => $._name,
 
-    // The name a declaration states, and the sort a declaration's type lands in: a program's are a name and a sort word, and Core text's grammar widens each.
+    // The name a declaration states, and the sort a declaration's type lands in: a program's are a name and a sort word, and Curios/Core's grammar widens each.
     _declared_name: ($) => $._name,
 
     _result_sort: ($) => $.sort,

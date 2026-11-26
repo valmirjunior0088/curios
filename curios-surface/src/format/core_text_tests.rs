@@ -1,4 +1,4 @@
-//! A file of Core text formatted: laid out by the program's printer, its comments kept where they were written, and read without being checked.
+//! A file of Curios/Core formatted: laid out by the program's printer, its comments kept where they were written, and read without being checked.
 
 use {
     super::{test_support::*, *},
@@ -110,7 +110,7 @@ fn a_file_its_reader_refuses_is_formatted_all_the_same() {
     );
 }
 
-/// Core text is told from a program by the path it was read from: the same text read from a `.crs` is a program, which writes no decorator.
+/// Curios/Core is told from a program by the path it was read from: the same text read from a `.crs` is a program, which writes no decorator.
 #[test]
 fn core_text_is_read_where_the_path_says_so() {
     let refusal = Formatted::from_source(
@@ -141,7 +141,7 @@ fn core_text_files(directory: &Path, files: &mut Vec<PathBuf>) {
     }
 }
 
-/// **The Core text the tree holds is written as `curios format` writes it**, as its programs are: the board's witnesses.
+/// **The Curios/Core the tree holds is written as `curios format` writes it**, as its programs are: the board's witnesses.
 #[test]
 fn every_file_of_core_text_the_tree_holds_is_canonically_formatted() {
     let mut files = Vec::new();
@@ -162,7 +162,7 @@ fn every_file_of_core_text_the_tree_holds_is_canonically_formatted() {
         })
         .collect::<Vec<_>>();
 
-    assert!(!files.is_empty(), "the tree holds Core text");
+    assert!(!files.is_empty(), "the tree holds Curios/Core");
     assert!(
         wrong.is_empty(),
         "{} of these files are not as `curios format` writes them:\n  {}\n\nrun `cargo run --package curios -- format <file>` on each",

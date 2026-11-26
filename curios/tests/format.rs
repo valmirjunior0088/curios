@@ -116,10 +116,10 @@ fn a_dash_formats_standard_input_onto_standard_output() {
     );
 }
 
-/// Core text the formatter moves: a definition whose body the canonical form writes on the line of its head.
+/// Curios/Core the formatter moves: a definition whose body the canonical form writes on the line of its head.
 const UNFORMATTED_CORE: &str = "let /one : #NatType =\n    1;\n";
 
-/// `--core` reads standard input as Core text, written onto standard output exactly as the file form rewrites the same text of a `.crsc`; without it the text is read as the program it is not, and beside a file it is refused, the file's name saying what it is written in, with nothing written.
+/// `--core` reads standard input as Curios/Core, written onto standard output exactly as the file form rewrites the same text of a `.crsc`; without it the text is read as the program it is not, and beside a file it is refused, the file's name saying what it is written in, with nothing written.
 #[test]
 fn core_formats_standard_input_as_a_crsc_is_formatted() {
     let root = temporary("core");

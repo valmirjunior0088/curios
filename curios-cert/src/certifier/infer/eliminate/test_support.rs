@@ -1,4 +1,4 @@
-//! The families, goals and opaque type formers the elimination suites eliminate over, each written as Core text.
+//! The families, goals and opaque type formers the elimination suites eliminate over, each written in Curios/Core.
 //!
 //! `pub(super)` rather than private: consumed by the sibling suites across `eliminate`, and nothing outside it.
 

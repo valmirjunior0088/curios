@@ -1,4 +1,4 @@
-//! The puts: a program handed to the checkers with the fixed prelude in scope, and the scope Core text is read over in front of it, for the suites that judge what the checkers judge. Beside them, what a compile answers that only those suites read.
+//! The puts: a program handed to the checkers with the fixed prelude in scope, and the scope Curios/Core is read over in front of it, for the suites that judge what the checkers judge. Beside them, what a compile answers that only those suites read.
 //!
 //! Behind the `test-support` feature, so no build that ships holds it, and compiled for this crate's own tests.
 
@@ -103,7 +103,7 @@ pub fn typecheck_entrypoint(
     })
 }
 
-/// The scope Core text is read over with the fixed prelude in front of it: the entries the prelude's items hold and the foreign rows its declarations state, as a unit's lowering is handed those of the units before it.
+/// The scope Curios/Core is read over with the fixed prelude in front of it: the entries the prelude's items hold and the foreign rows its declarations state, as a unit's lowering is handed those of the units before it.
 pub fn prelude_form_scope() -> FormScope {
     with_prelude(|prelude| FormScope::over(SYNTAX, prelude.iter().map(|unit| unit.core())))
 }

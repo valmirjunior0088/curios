@@ -125,7 +125,7 @@ pub fn skipped(path: &Path) -> bool {
     ) || path.ends_with("xboard/archive")
 }
 
-/// Every form Core text writes beyond a program's, in the layout the program's printer gives it: a decorator beside its operand where the two fit their line and above it otherwise, a declaration under its absolute name, a group of nominal declarations of one kind and one of definitions, each joined by `and`, items a blank line apart, and the entry's type on the line beneath it.
+/// Every form Curios/Core writes beyond a program's, in the layout the program's printer gives it: a decorator beside its operand where the two fit their line and above it otherwise, a declaration under its absolute name, a group of nominal declarations of one kind and one of definitions, each joined by `and`, items a blank line apart, and the entry's type on the line beneath it.
 pub const EVERY_FORM: &str = "\
 induct /Box(A: Type): pub Type
 | mk(x: A)

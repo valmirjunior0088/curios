@@ -37,7 +37,7 @@ pub enum Unread {
 }
 
 impl Put<'_> {
-    /// What `text` writes, Core text read against [`Put::scope`]: the module, and the term it closes with where it closes with one.
+    /// What `text` writes, Curios/Core read against [`Put::scope`]: the module, and the term it closes with where it closes with one.
     pub fn read(&self, text: &str) -> Result<(Definitions, Option<Entrypoint>), Unread> {
         let file = text
             .parse::<CoreFile>()
@@ -46,7 +46,7 @@ impl Put<'_> {
         to_core(&file, self.scope).map_err(Unread::Read)
     }
 
-    /// What the walk says of `text` put as a proof of `False`: Core text closing with a term put at the `False` the registry names, which the text states no other type for, by the reader's rule ([`to_core_at`]).
+    /// What the walk says of `text` put as a proof of `False`: Curios/Core closing with a term put at the `False` the registry names, which the text states no other type for, by the reader's rule ([`to_core_at`]).
     pub fn core_text(&self, text: &str) -> Result<Rechecked<Definitions>, Unread> {
         let file = text
             .parse::<CoreFile>()
@@ -117,7 +117,7 @@ impl Put<'_> {
     }
 }
 
-/// What `text` writes, Core text read with nothing in scope, panicking where it does not read.
+/// What `text` writes, Curios/Core read with nothing in scope, panicking where it does not read.
 fn read_alone(text: &str) -> (Definitions, Option<Entrypoint>) {
     let file = text
         .parse::<CoreFile>()
@@ -126,7 +126,7 @@ fn read_alone(text: &str) -> (Definitions, Option<Entrypoint>) {
     to_core(&file, None).unwrap_or_else(|refusal| panic!("{refusal:?}"))
 }
 
-/// The module `text` writes, Core text read with nothing in scope and closing with no term: what a suite below the walk hands a judgment of a whole item or entry.
+/// The module `text` writes, Curios/Core read with nothing in scope and closing with no term: what a suite below the walk hands a judgment of a whole item or entry.
 ///
 /// # Panics
 ///
@@ -138,7 +138,7 @@ pub fn read_module(text: &str) -> Definitions {
     definitions
 }
 
-/// The term `text` closes with, Core text read with nothing in scope and declaring nothing: a candidate a suite below the walk puts to one judgment.
+/// The term `text` closes with, Curios/Core read with nothing in scope and declaring nothing: a candidate a suite below the walk puts to one judgment.
 ///
 /// # Panics
 ///
@@ -153,7 +153,7 @@ pub fn term(text: &str) -> Term {
     entry.expect("a term's text closes with it").body
 }
 
-/// The term `text` closes with, Core text read with nothing in scope beside the declarations it names, which no judgment is handed: a row a foreign call is made through, and the definition its form implies, which a text read with no scope states.
+/// The term `text` closes with, Curios/Core read with nothing in scope beside the declarations it names, which no judgment is handed: a row a foreign call is made through, and the definition its form implies, which a text read with no scope states.
 ///
 /// # Panics
 ///
@@ -164,7 +164,7 @@ pub fn closing(text: &str) -> Term {
     entry.expect("a term's text closes with it").body
 }
 
-/// Declare in `certifier` what `text` declares, Core text read with nothing in scope, judging none of it: each family's and record's entry, and each definition, a family's constructors among them, at its type with its body. What a suite below the walk reads its declarations from.
+/// Declare in `certifier` what `text` declares, Curios/Core read with nothing in scope, judging none of it: each family's and record's entry, and each definition, a family's constructors among them, at its type with its body. What a suite below the walk reads its declarations from.
 ///
 /// # Panics
 ///
@@ -233,7 +233,7 @@ pub fn components(term: &Term) -> Vec<Term> {
     }
 }
 
-/// The terms the tuple `text` writes, Core text read as [`term`] reads one: several terms over one set of free words, each word one local in every term.
+/// The terms the tuple `text` writes, Curios/Core read as [`term`] reads one: several terms over one set of free words, each word one local in every term.
 ///
 /// # Panics
 ///

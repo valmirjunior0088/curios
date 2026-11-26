@@ -125,7 +125,7 @@ impl Witness {
 pub enum Proof {
     /// A source program whose tail is the term, put to the compiler as a compilation puts it: the elaborator, then the certifier over the module it built.
     Program(String),
-    /// A module built by hand, written as Core text closing with the term and stating no type for it: read over the units in scope, and put to the certifier alone with them in scope, through the walk a compilation puts a program to.
+    /// A module built by hand, written in Curios/Core closing with the term and stating no type for it: read over the units in scope, and put to the certifier alone with them in scope, through the walk a compilation puts a program to.
     Module(String),
 }
 

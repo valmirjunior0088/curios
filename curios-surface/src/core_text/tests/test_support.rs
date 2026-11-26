@@ -15,12 +15,12 @@ pub fn term_to_core(term: &crate::Term<CoreText>) -> Result<Term, ReadError> {
     core_read(term, &mut Reader::new(None))
 }
 
-/// `term` as Core text proper writes it.
+/// `term` as Curios/Core proper writes it.
 pub fn written(term: &Term) -> String {
     term.spelled(&Rc::new(Spelling::core_text())).to_string()
 }
 
-/// The term `term`'s Core text reads back as.
+/// The term `term`'s Curios/Core reads back as.
 pub fn read_back(term: &Term) -> Term {
     let text = written(term);
     let parsed = parse_whole_term::<CoreText>(&Source::inline(&text))

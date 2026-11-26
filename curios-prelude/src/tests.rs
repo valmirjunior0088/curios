@@ -442,7 +442,7 @@ fn written_whole(
     (scope, Rc::new(spelling))
 }
 
-/// Every unit of the prelude reads back, under the whole spelling or the one that shares (`sharing`) and from the tree or the text (`from`), as the unit it is, item for item and by Core's equality, each read over the units before it, from the tree of Core text it is written whole as and from the text that tree prints as, and as again where each node met again is named: the writer is the reader's inverse, and the printer and the parser hold one another to every form the prelude's terms take. What it reads back is written whole as the text it was read from, so each binder's label, which Core's equality does not read, is read as the text states it.
+/// Every unit of the prelude reads back, under the whole spelling or the one that shares (`sharing`) and from the tree or the text (`from`), as the unit it is, item for item and by Core's equality, each read over the units before it, from the tree of Curios/Core it is written whole as and from the text that tree prints as, and as again where each node met again is named: the writer is the reader's inverse, and the printer and the parser hold one another to every form the prelude's terms take. What it reads back is written whole as the text it was read from, so each binder's label, which Core's equality does not read, is read as the text states it.
 ///
 /// The four ways are four tests ([`every_unit_of_the_prelude_reads_back_from_its_core_tree`] and its three siblings), each a walk of the whole prelude, so they run side by side.
 fn every_unit_reads_back(sharing: bool, from: ReadFrom) {
@@ -502,7 +502,7 @@ fn every_unit_reads_back(sharing: bool, from: ReadFrom) {
     });
 }
 
-/// What a unit of the prelude is read back from: the tree of Core text it is written whole as, or the text that tree prints as.
+/// What a unit of the prelude is read back from: the tree of Curios/Core it is written whole as, or the text that tree prints as.
 #[derive(Clone, Copy)]
 enum ReadFrom {
     Tree,

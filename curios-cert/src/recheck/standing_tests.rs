@@ -297,7 +297,7 @@ fn alias(name: &str, body: &str, sort: &str) -> Item {
     declared_item(&fill!(AN_ALIAS, name, body, sort), name)
 }
 
-/// `Type 0`, as Core text writes it.
+/// `Type 0`, as Curios/Core writes it.
 const TYPE_0: &str = "Type";
 
 /// `Type 4`.

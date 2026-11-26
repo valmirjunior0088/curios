@@ -1,6 +1,6 @@
 //! A closing term put at `False`, and what the checkers said of it: the question `wonder --false` asks of a subject and the soundness board asks of every witness, answered by one function, so a ticket's answer is what the product answers of the same text.
 //!
-//! **A program meets both checkers, as a compilation does, and Core text the certifier alone.** A program goes through [`examine_entrypoint`] with its closing term at `False`: the elaborator, its erasure obligations reported rather than raised so that a program only it refuses still reaches the certifier, then the certifier over the module it built. A text of Core text goes through the door ([`read_core_text`]), its closing term put at `False` by the reader's rule, and its module and term to the certifier's walk. Each refusal is its checker's own error, named as its crate names it ([`Variants`]) with where it stood, and reported as a compilation reports it, placed where the text writes the declaration it is about, or the term it closes with ([`program_refusal`]).
+//! **A program meets both checkers, as a compilation does, and Curios/Core the certifier alone.** A program goes through [`examine_entrypoint`] with its closing term at `False`: the elaborator, its erasure obligations reported rather than raised so that a program only it refuses still reaches the certifier, then the certifier over the module it built. A text of Curios/Core goes through the door ([`read_core_text`]), its closing term put at `False` by the reader's rule, and its module and term to the certifier's walk. Each refusal is its checker's own error, named as its crate names it ([`Variants`]) with where it stood, and reported as a compilation reports it, placed where the text writes the declaration it is about, or the term it closes with ([`program_refusal`]).
 //!
 //! **A subject that does not lower, or a text that does not read, was put to no checker**: the question is not answered, and its report is handed back as a compilation's would be — a refusal by the grammar is no refusal by a checker, as the Lean Kernel Arena tells a checker declining an input from one rejecting it.
 
@@ -34,7 +34,7 @@ impl Checker {
     /// What a program is put to: both checkers, the elaborator first.
     pub const PROGRAM: &'static [Checker] = &[Checker::Elaborator, Checker::Certifier];
 
-    /// What a text of Core text is put to: the certifier alone, nothing being left to an elaborator.
+    /// What a text of Curios/Core is put to: the certifier alone, nothing being left to an elaborator.
     pub const CORE_TEXT: &'static [Checker] = &[Checker::Certifier];
 
     /// Every error the checker raises, by the name its crate states for it once, in a match no variant is missing from.
@@ -171,7 +171,7 @@ impl Answer {
         self.refusals().is_empty()
     }
 
-    /// Whether the certifier judged the term: always for Core text, and for a program only where the elaborator built it a module to hand on.
+    /// Whether the certifier judged the term: always for Curios/Core, and for a program only where the elaborator built it a module to hand on.
     pub fn certifier_asked(&self) -> bool {
         matches!(self, Answer::Judged(_))
     }
@@ -313,7 +313,7 @@ pub fn put_program(
     })
 }
 
-/// Put the term the Core text `source` closes with at `False` over `predecessors`, through the door, its module and term to the certifier alone. `Ok(None)` is a text closing with no term, a module and no proof; `Err` a text that does not read, put to no checker.
+/// Put the term the Curios/Core `source` closes with at `False` over `predecessors`, through the door, its module and term to the certifier alone. `Ok(None)` is a text closing with no term, a module and no proof; `Err` a text that does not read, put to no checker.
 pub fn put_core_text(
     budget: u64,
     predecessors: Predecessors<'_>,

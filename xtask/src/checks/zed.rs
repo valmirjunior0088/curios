@@ -1,6 +1,6 @@
-//! `zed check`: the Zed extension held to the tree around it — each grammar `extension.toml` pins is the grammar the tree holds, Core text's highlight query opens with the program's, and the lint table the extension restates is the workspace's.
+//! `zed check`: the Zed extension held to the tree around it — each grammar `extension.toml` pins is the grammar the tree holds, Curios/Core's highlight query opens with the program's, and the lint table the extension restates is the workspace's.
 //!
-//! **Each is a copy the tree cannot spell once.** Zed installs a grammar from a pushed commit rather than from the checkout, reads a language's queries from that language's own directory alone, and builds the extension from its own directory as a workspace of its own, which inherits no lint table. So the pins, the program's query restated at the head of Core text's and the lint table are copies, and nothing else in the tree reads them.
+//! **Each is a copy the tree cannot spell once.** Zed installs a grammar from a pushed commit rather than from the checkout, reads a language's queries from that language's own directory alone, and builds the extension from its own directory as a workspace of its own, which inherits no lint table. So the pins, the program's query restated at the head of Curios/Core's and the lint table are copies, and nothing else in the tree reads them.
 
 use {
     crate::{ask, root, run},
@@ -18,7 +18,7 @@ mod tests;
 /// The extension's directory, from the repository's root.
 const EXTENSION: &str = "editors/zed";
 
-/// The directory the grammars stand in: the program's in `base/` and Core text's in `core/`, each a directory Zed installs one from.
+/// The directory the grammars stand in: the program's in `base/` and Curios/Core's in `core/`, each a directory Zed installs one from.
 const GRAMMARS: &str = "editors/tree-sitter";
 
 /// Every way the extension departs from the tree, a line each, or nothing.
@@ -29,11 +29,11 @@ pub fn zed() -> Result<(), String> {
         wrong.extend(pin.unpublished()?);
     }
 
-    // Core text's grammar extends the program's, so every node the program's query captures is one of Core text's, and its own patterns beneath refine the program's, a later pattern refining an earlier one.
+    // Curios/Core's grammar extends the program's, so every node the program's query captures is one of Curios/Core's, and its own patterns beneath refine the program's, a later pattern refining an earlier one.
     let program = read(&format!("{EXTENSION}/languages/curios/highlights.scm"))?;
     let core = read(&format!("{EXTENSION}/languages/curios_core/highlights.scm"))?;
     if !core.starts_with(&program) {
-        wrong.push(format!("{EXTENSION}/languages/curios_core/highlights.scm does not open with {EXTENSION}/languages/curios/highlights.scm: Zed reads Core text's queries from its own directory alone, so it restates the program's at its head"));
+        wrong.push(format!("{EXTENSION}/languages/curios_core/highlights.scm does not open with {EXTENSION}/languages/curios/highlights.scm: Zed reads Curios/Core's queries from its own directory alone, so it restates the program's at its head"));
     }
 
     let held = lints(&read("Cargo.toml")?, &["workspace", "lints"])?;

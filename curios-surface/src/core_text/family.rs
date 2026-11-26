@@ -63,7 +63,7 @@ pub fn family_written<D: Rendered>(
         .nominal_marks(&name, params.len() + indices.len());
     let offset = params.len();
     let mut written = nominal_name(&name, &universes, frame);
-    // Core text writes the parameters' list even where it is empty, so the indices are the second list wherever there are any.
+    // Curios/Core writes the parameters' list even where it is empty, so the indices are the second list wherever there are any.
     if !params.is_empty() || frame.core_text() {
         written = call(written, nominal_arguments(params, marks, 0, frame));
     }

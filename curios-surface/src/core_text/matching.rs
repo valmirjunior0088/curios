@@ -425,7 +425,7 @@ pub fn match_read(
     })))
 }
 
-/// A dispatch's key as Core text writes it: a numeral, a natural's or an integer's, or a byte's `#Byte(65)`.
+/// A dispatch's key as Curios/Core writes it: a numeral, a natural's or an integer's, or a byte's `#Byte(65)`.
 enum Key {
     Numeral(curios_core::Numeral),
     Byte(u8),
@@ -441,7 +441,7 @@ impl Key {
     }
 }
 
-/// A byte's key as Core text writes it, the value it is: `#Byte(65)`.
+/// A byte's key as Curios/Core writes it, the value it is: `#Byte(65)`.
 fn byte_pattern<D: Rendered>(key: u8) -> MatchPattern<D> {
     MatchPattern::Form(CoreIntrinsic {
         variant: Label::from("Byte"),

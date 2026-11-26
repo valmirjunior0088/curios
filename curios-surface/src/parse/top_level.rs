@@ -46,7 +46,7 @@ const DOC_BEFORE_TEST: &[&str] = &[
     "a test is not part of the interface",
 ];
 
-/// The head of a later member of an `and` group, as [`parse_and_head`] reads it: its documentation comment, what Core text's decorator states, its `pub`, and where the `and` was read.
+/// The head of a later member of an `and` group, as [`parse_and_head`] reads it: its documentation comment, what Curios/Core's decorator states, its `pub`, and where the `and` was read.
 pub struct AndHead<F> {
     pub doc: Option<Doc>,
     pub fields: F,
@@ -699,7 +699,7 @@ fn parse_declaration_params<'a, D: Grammar>(
         .parse(state)
 }
 
-// A head index-telescope entry: `n : Nat`, its word under what Core text's decorator states of its binder, or a bare `Nat`. The name is documentary (and a dependency hook for later entries) — never in scope in the cases — so it is optional, and an index is always written, so a mark is refused where it stands.
+// A head index-telescope entry: `n : Nat`, its word under what Curios/Core's decorator states of its binder, or a bare `Nat`. The name is documentary (and a dependency hook for later entries) — never in scope in the cases — so it is optional, and an index is always written, so a mark is refused where it stands.
 pub fn parse_induct_index<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, InductIndex<D>> {
     mark()
         .and(parse_mark)

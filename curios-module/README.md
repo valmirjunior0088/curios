@@ -32,9 +32,9 @@ The Curios module system, over the tree [`curios-surface`](../curios-surface/REA
 
 **Rationale.** The compiler constructs them without reaching into `/std`, as erasure reads a latch's poll and a host call's optional answer as an `Option`. Anonymous generated occurrences would assign unrelated levels and specialize consumers such as `Cli` wrongly.
 
-### A unit read from Core text is a root source over its file
+### A unit read from Curios/Core is a root source over its file
 
-**Decision.** `RootSource::core_text`, behind `test-support`, is the source of a unit written as Core text, mounted at its prefix: it reads its one `.crsc` file through the loader, so the file is logged as read, and lowers nothing, since the module is read from the text and not lowered from a program.
+**Decision.** `RootSource::core_text`, behind `test-support`, is the source of a unit written in Curios/Core, mounted at its prefix: it reads its one `.crsc` file through the loader, so the file is logged as read, and lowers nothing, since the module is read from the text and not lowered from a program.
 
 **Rationale.** A unit a history steps is filed, verified and offered as a baseline by the cabinet as any unit is, and the cabinet keys a unit by what its source read, so a Core-text unit's source is one that reads its file.
 

@@ -119,7 +119,7 @@ fn a_loose_bound_variable_is_refused_in_every_place_a_module_holds_a_term() {
     assert!(missed.is_empty(), "{}", missed.join("\n"));
 }
 
-/// A program written as Core text closing with its term and the type it states on the line beneath it.
+/// A program written in Curios/Core closing with its term and the type it states on the line beneath it.
 fn stated(text: &str) -> Program {
     let file = text
         .parse::<curios_surface::CoreFile>()

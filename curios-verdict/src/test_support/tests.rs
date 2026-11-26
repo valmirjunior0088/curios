@@ -56,7 +56,7 @@ fn a_core_text_unit_stepped_twice_is_the_unit_its_last_text_is() {
                 let unit = scope.units().last().expect("a unit is mounted");
                 assert!(
                     unit.text().is_none(),
-                    "a unit read from Core text holds no lowering"
+                    "a unit read from Curios/Core holds no lowering"
                 );
                 curios_archive::to_bytes(unit.core())
                     .expect("a module serializes")
@@ -80,7 +80,7 @@ fn a_core_text_unit_stepped_twice_is_the_unit_its_last_text_is() {
     assert_eq!(core(&stepped), core(&whole));
 }
 
-/// A step that rewrites a program's unit as Core text is read from its Core text: the record the program's step filed names the program's file, whose text still stands, and not the one the unit is now written in.
+/// A step that rewrites a program's unit as Curios/Core is read from its Curios/Core: the record the program's step filed names the program's file, whose text still stands, and not the one the unit is now written in.
 ///
 /// Mutation-checked at `Verdicts`' `agrees`: with the record held only to the files it names, the program's unit is mounted and its lowering with it.
 #[test]
@@ -91,7 +91,7 @@ fn a_unit_stepped_from_a_program_to_core_text_is_read_from_its_core_text() {
         .expect("the program step builds");
     history
         .step("lib", WrittenIn::CoreText, "let /lib/one : #NatType = 2;\n")
-        .expect("the Core text step builds");
+        .expect("the Curios/Core step builds");
 
     let lowered = history
         .built(|scope| {
@@ -106,6 +106,6 @@ fn a_unit_stepped_from_a_program_to_core_text_is_read_from_its_core_text() {
 
     assert!(
         !lowered,
-        "the program's unit was mounted for the Core text step"
+        "the program's unit was mounted for the Curios/Core step"
     );
 }

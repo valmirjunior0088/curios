@@ -1,4 +1,4 @@
-//! Core text proper: each node in its form, under the decorator stating every field its form does not build.
+//! Curios/Core proper: each node in its form, under the decorator stating every field its form does not build.
 
 use {
     super::test_support::*,

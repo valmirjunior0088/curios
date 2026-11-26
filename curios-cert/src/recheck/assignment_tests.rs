@@ -1,4 +1,4 @@
-//! A declaration that leaves a sort to its caller, attacked where a use reads it at an assignment: each module written as Core text, put to the certifier with nothing in scope and declaring the propositions it uses, closing on `False` were the refusal it meets not made, or holding a sort no assignment states.
+//! A declaration that leaves a sort to its caller, attacked where a use reads it at an assignment: each module written in Curios/Core, put to the certifier with nothing in scope and declaring the propositions it uses, closing on `False` were the refusal it meets not made, or holding a sort no assignment states.
 
 use {
     super::test_support::*,

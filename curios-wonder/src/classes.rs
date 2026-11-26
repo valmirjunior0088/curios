@@ -101,7 +101,7 @@ fn last_segment(span: &Span) -> Span {
 
 /// Every span of `file` the check of `subject` classes ([`Placed::classes`]), read off that check as [`placed`](crate::placed) reads a place: a file that does not elaborate classes what its lowering answers, as one that does. `overlay` and `cache` behave as they do for `diagnostics`.
 ///
-/// The refusal is a subject that has nothing to read: one that does not parse or lower, Core text among them, or whose scope could not be compiled.
+/// The refusal is a subject that has nothing to read: one that does not parse or lower, Curios/Core among them, or whose scope could not be compiled.
 pub fn classed(
     budget: u64,
     subject: Subject,

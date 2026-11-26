@@ -272,7 +272,7 @@ let /cast: (p: #{node = InductType} /Pin()(0), h: #{node = InductType} /Held()) 
 ///
 /// What it would certify is `vacuous : (x : Held(Two/b())) -> False` — a refutation of a constructor the same declaration states. That is not a closed inhabitant of `False`: construction resolves by first match too, so `let h : Held(Two/b()) = Held/mk()` is a `Mismatch` of `Held(Two/a())` against `Held(Two/b())`, and the shadowed entry has no inhabitant to hand the refutation. Refusing the repeated tag keeps the elimination rule from being sound only because an unrelated rule is lossy in the same direction.
 ///
-/// No `.crs` file reaches it: `curios-module` refuses both spellings with ``` `mk` is already declared in this module ```, whether or not the representation is public. Nor does a module: a family's cases are made under distinct tags ([`curios_core::Constructors`]), so Core text's reader refuses the second `mk` where it stands, and the certifier is never handed the family.
+/// No `.crs` file reaches it: `curios-module` refuses both spellings with ``` `mk` is already declared in this module ```, whether or not the representation is public. Nor does a module: a family's cases are made under distinct tags ([`curios_core::Constructors`]), so Curios/Core's reader refuses the second `mk` where it stands, and the certifier is never handed the family.
 ///
 /// The control is the same shape at two *distinct* tags, both targeting `Two/a()`. It must stay accepted: ruling impossible cases out is what an indexed family's vacuous elimination is for, and a rule that refused every multi-constructor declaration, or every empty elimination over one, would shut this hole with a brick.
 #[test]

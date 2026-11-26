@@ -1,4 +1,4 @@
-//! A text of Core text read through the product's door, and a unit read from Core text: compiled where a program's unit is lowered and elaborated, judged and erased as any unit is, holding no lowering, and placed where its text writes each declaration.
+//! A text of Curios/Core read through the product's door, and a unit read from Curios/Core: compiled where a program's unit is lowered and elaborated, judged and erased as any unit is, holding no lowering, and placed where its text writes each declaration.
 
 use {
     super::test_support::*,
@@ -192,7 +192,7 @@ const FORGED: &str = "#{value_sort = Prop}\nlet /lib/T : Type = #BoolType;\nlet 
 const CROSSED: &str =
     "((h: /lib/H(false)) => h)(((k: /lib/H(true)) => k)(#{node = Variant} /sys/Bool/True/qed()))\n";
 
-/// What the certifier says of the term `text` closes with, read as Core text over the prelude and `units` and put at `False` as a module built by hand is.
+/// What the certifier says of the term `text` closes with, read as Curios/Core over the prelude and `units` and put at `False` as a module built by hand is.
 fn closing_over(units: &[&Unit], text: &str) -> Vec<curios_cert::Refusal> {
     with_prelude(|prelude| {
         let scope = prelude

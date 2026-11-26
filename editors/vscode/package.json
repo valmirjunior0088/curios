@@ -1,7 +1,7 @@
 {
   "name": "curios",
   "displayName": "Curios",
-  "description": "Syntax highlighting and diagnostics for the Curios language, and highlighting for Core text",
+  "description": "Syntax highlighting and diagnostics for the Curios language, and highlighting for Curios/Core",
   "version": "0.1.0",
   "publisher": "valmirjunior0088",
   "license": "Apache-2.0",

@@ -125,7 +125,7 @@ impl fmt::Display for MatchPattern {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FuncTypeParam<D: Dialect = Program> {
     pub plicity: Plicity,
-    /// What the decorator before the binder's word states of the label Core keeps for it: Core text's, and nothing in a program. Written only before a word, so a member with none states nothing here.
+    /// What the decorator before the binder's word states of the label Core keeps for it: Curios/Core's, and nothing in a program. Written only before a word, so a member with none states nothing here.
     pub core: D::Fields,
     /// The binder's word, carrying the span of the word alone, so the binder is answered where it is written.
     pub label: Option<Label>,
@@ -135,7 +135,7 @@ pub struct FuncTypeParam<D: Dialect = Program> {
 /// One Σ-type / struct-declaration field as written: an optional label and the field type. Shared by tuple types and `struct` declarations (the `TopStruct` fields reuse this grammar).
 #[derive(Debug, Clone, PartialEq)]
 pub struct TupleTypeParam<D: Dialect = Program> {
-    /// What the decorator before the label states of the label Core keeps for the field's binder: Core text's, and nothing in a program. Written only before a label.
+    /// What the decorator before the label states of the label Core keeps for the field's binder: Curios/Core's, and nothing in a program. Written only before a label.
     pub core: D::Fields,
     /// The written label, carrying the span of the word alone, or `None` for a positional field. Spanned because a `struct` declaration reuses this grammar and its duplicate-field refusal points at the label that arrived second, as every other duplicate refusal in this stage does.
     pub label: Option<Label>,
@@ -279,7 +279,7 @@ impl<D: Dialect> PartialEq for TuplePattern<D> {
     }
 }
 
-/// A binder's word as written, under what the decorator before it states of the label Core keeps for it — where the binder sits among its declaration's written binders and whether it binds a proof, `#{written = 2, proof = true} h`: Core text's, and nothing in a program, whose binder is its word alone. The word is the label's hint; the decorator states the rest of it, each field by the name Core's label gives it.
+/// A binder's word as written, under what the decorator before it states of the label Core keeps for it — where the binder sits among its declaration's written binders and whether it binds a proof, `#{written = 2, proof = true} h`: Curios/Core's, and nothing in a program, whose binder is its word alone. The word is the label's hint; the decorator states the rest of it, each field by the name Core's label gives it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Binder<D: Dialect = Program> {
     pub core: D::Fields,
@@ -485,7 +485,7 @@ pub enum MatchPattern<D: Dialect = Program> {
     ///
     /// Carries the numeral whole, as every stage down to the lowering that builds a branch table does: a key is as unbounded as the value it is compared with, and one no table indexes is decided by equality there (`curios-anf`'s `lower_switch`).
     Numeral(NumLit),
-    /// A pattern only the dialect writes: Core text's key of a byte's dispatch, `#Byte(65)`, written as the value it is.
+    /// A pattern only the dialect writes: Curios/Core's key of a byte's dispatch, `#Byte(65)`, written as the value it is.
     Form(D::PatternForm),
     /// The `pred + step` leaf, `step` successors over `pred_label`: one at least, and kept with the radix it was written in so it prints back as written. `pred_label` is a binder, never a pattern: one there would spell again what a literal spells, `0 + 1` the `1`.
     Successor {
@@ -758,7 +758,7 @@ pub enum Subterm<D: Dialect = Program> {
     Infix(Infix<D>),
     /// A polymorphic numeric literal (see [`NumLit`]).
     NumLit(NumLit),
-    /// A form one dialect writes and the other does not: Core text's [`CoreForm`](crate::CoreForm), and in a program none.
+    /// A form one dialect writes and the other does not: Curios/Core's [`CoreForm`](crate::CoreForm), and in a program none.
     Core(D::Form),
 }
 

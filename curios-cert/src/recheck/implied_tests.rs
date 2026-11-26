@@ -1,4 +1,4 @@
-//! What a declaration's form implies, as the certifier takes it, written as Core text and put with nothing in scope: a family's former and its constructors are names the form declares, made as its entry makes them, so no definition stands under one and no decorator states one otherwise; and a concept's method is no definition at all.
+//! What a declaration's form implies, as the certifier takes it, written in Curios/Core and put with nothing in scope: a family's former and its constructors are names the form declares, made as its entry makes them, so no definition stands under one and no decorator states one otherwise; and a concept's method is no definition at all.
 
 use {
     super::test_support::*,

@@ -156,7 +156,7 @@ pub enum FlatMatchSetting {
 }
 
 impl FlatMatch {
-    /// What reports, Core text dumps and documentation pages keep of a match on one line, whatever a package states, and what a file is formatted with where nothing states another.
+    /// What reports, Curios/Core dumps and documentation pages keep of a match on one line, whatever a package states, and what a file is formatted with where nothing states another.
     pub const DEFAULT: Self = Self {
         width: DEFAULT_FLAT_MATCH_WIDTH,
         arms: DEFAULT_FLAT_MATCH_ARMS,
@@ -292,7 +292,7 @@ fn program_formatted(source: &Arc<Source>, format: Format) -> Result<String, Box
     Ok(output)
 }
 
-/// A file of Core text, formatted within `format` and verified as a program is. It is read and not checked: a file its reader would refuse — a field its node does not hold, a form Core text refuses — is formatted all the same.
+/// A file of Curios/Core, formatted within `format` and verified as a program is. It is read and not checked: a file its reader would refuse — a field its node does not hold, a form Curios/Core refuses — is formatted all the same.
 fn core_text_formatted(source: &Arc<Source>, format: Format) -> Result<String, Box<Report>> {
     let input = parse_core_for_format(source).map_err(|error| error.report())?;
     let original = original(source, &input.comments);
@@ -404,7 +404,7 @@ pub fn emit(input: &FormatInput, original: &Original<'_>, format: Format) -> Str
     format!("{}\n", render(flat(parts), original, format))
 }
 
-/// A file of Core text as one document, as a program's is ([`emit`]): its items a blank line apart, each marked at both ends, and the entry last.
+/// A file of Curios/Core as one document, as a program's is ([`emit`]): its items a blank line apart, each marked at both ends, and the entry last.
 fn emit_core_text(input: &CoreFormatInput, original: &Original<'_>, format: Format) -> String {
     let mut parts: Vec<Printer> = Vec::new();
 
@@ -467,7 +467,7 @@ fn verify(input: &FormatInput, expected_comments: usize, output: &str) -> Result
     Ok(())
 }
 
-/// [`verify`] for a file of Core text: the output must reparse to the same file, carrying the same number of comments.
+/// [`verify`] for a file of Curios/Core: the output must reparse to the same file, carrying the same number of comments.
 fn verify_core_text(
     input: &CoreFormatInput,
     expected_comments: usize,

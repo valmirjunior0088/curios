@@ -1,5 +1,5 @@
 description = "The tree-sitter grammars"
-# What the grammars are held to parse, as git tracks it, from the repository's root: the standard library's and the corpus's programs, and the board's Core text.
+# What the grammars are held to parse, as git tracks it, from the repository's root: the standard library's and the corpus's programs, and the board's Curios/Core.
 variables.programs.run = ["git", "ls-files", "--", "curios-prelude-build/std/*.crs", "programs/*.crs"]
 variables.core.run = ["git", "ls-files", "--", "xboard/tickets/*.crsc"]
 
@@ -20,7 +20,7 @@ run = [
 ]
 
 [build.core]
-description = "Generate Core text's parser into `core/src/`, where the repository commits it, and compile it for the steps that parse with it"
+description = "Generate Curios/Core's parser into `core/src/`, where the repository commits it, and compile it for the steps that parse with it"
 produces.parser = "editors/tree-sitter/core/src"
 produces.library = "editors/tree-sitter/.artifacts/curios_core.so"
 run = [
@@ -44,7 +44,7 @@ run = [
 ]
 
 [test.core]
-description = "Hold Core text's grammar to its corpus of trees"
+description = "Hold Curios/Core's grammar to its corpus of trees"
 dir = "editors/tree-sitter/core"
 consumes = [".tree-sitter.build.core.produces.library"]
 run = [
@@ -52,7 +52,7 @@ run = [
 ]
 
 [test.sources]
-description = "Parse the standard library, the corpus and the board's Core text without an error, and compile each Zed highlight query against its grammar, so a renamed node cannot orphan a capture silently"
+description = "Parse the standard library, the corpus and the board's Curios/Core without an error, and compile each Zed highlight query against its grammar, so a renamed node cannot orphan a capture silently"
 consumes = [".tree-sitter.build.base.produces.library", ".tree-sitter.build.core.produces.library"]
 run = [
     [

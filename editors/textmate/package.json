@@ -1,7 +1,7 @@
 {
   "name": "curios-textmate",
   "version": "0.1.0",
-  "description": "Curios grammars for TextMate: programs, and Core text, with the table of classes their scopes stand for",
+  "description": "Curios grammars for TextMate: programs, and Curios/Core, with the table of classes their scopes stand for",
   "license": "Apache-2.0",
   "private": true,
   "scripts": {

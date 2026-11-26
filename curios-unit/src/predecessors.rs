@@ -32,7 +32,7 @@ impl<'a> Predecessors<'a> {
         self.units
     }
 
-    /// The resolution state of each predecessor written as a program, for `curios-module`: a unit read from Core text holds no lowering, so a later lowering resolves nothing it declares ([`Unit::text`]).
+    /// The resolution state of each predecessor written as a program, for `curios-module`: a unit read from Curios/Core holds no lowering, so a later lowering resolves nothing it declares ([`Unit::text`]).
     ///
     /// A slice of that crate's own opaque type, not of anything unpacked here — which is what lets its tables stay private while still being layered rather than copied.
     pub fn text(&self) -> Vec<&'a PreparedText> {

@@ -1,6 +1,6 @@
 //! The soundness board, as a cargo subcommand, and the code that reads and runs it. The board itself is its records, `xboard/tickets/`, with the archive's, `xboard/archive/`, embedded when the binary is built (`build.rs`).
 //!
-//! `cargo xboard report` puts every ticket to the checkers, prints the report, and fails if a ticket regressed or was shut without a fix named, or if a record breaks the words the loader knows. `cargo xboard probe` puts one program, one module written as Core text, or one ticket by its `metadata.toml` to them, off the board: what a hunt asks before there is a ticket to commit.
+//! `cargo xboard report` puts every ticket to the checkers, prints the report, and fails if a ticket regressed or was shut without a fix named, or if a record breaks the words the loader knows. `cargo xboard probe` puts one program, one module written in Curios/Core, or one ticket by its `metadata.toml` to them, off the board: what a hunt asks before there is a ticket to commit.
 //!
 //! Why the board is built this way is the README's. Its modules read in the order a run uses them:
 //!
@@ -71,13 +71,13 @@ enum Board {
     Report,
 
     #[command(
-        about = "Put one program, one module written as Core text, or one ticket to the checkers as a proof of False, and say whether it was admitted",
+        about = "Put one program, one module written in Curios/Core, or one ticket to the checkers as a proof of False, and say whether it was admitted",
         after_help = "Exits 0 where a proof was admitted, 1 where it was refused, and 2 where it could not be put: a candidate that cannot be read, or a text no checker reads."
     )]
     Probe {
         #[arg(
             value_name = "CANDIDATE",
-            help = "The file whose final term is the proof, over the standard library alone: a program where its name ends in .crs, and Core text where it ends in .crsc; or a ticket's metadata.toml, every witness of it, its texts read beside it"
+            help = "The file whose final term is the proof, over the standard library alone: a program where its name ends in .crs, and Curios/Core where it ends in .crsc; or a ticket's metadata.toml, every witness of it, its texts read beside it"
         )]
         candidate: PathBuf,
     },
@@ -142,13 +142,13 @@ fn main() -> ExitCode {
 
 /// What a probe is handed, read off the file it is named by.
 enum Candidate {
-    /// A program or a module written as Core text, put over the prelude alone.
+    /// A program or a module written in Curios/Core, put over the prelude alone.
     Proof(Proof),
     /// A ticket, every witness of it, with the name of the part it is filed under.
     Ticket { part: String, ticket: Ticket },
 }
 
-/// The candidate at `path`: a program where its name ends in `.crs`, Core text where it ends in `.crsc`, and a ticket where it is a `metadata.toml`, read with the texts beside it as the board reads one it embeds.
+/// The candidate at `path`: a program where its name ends in `.crs`, Curios/Core where it ends in `.crsc`, and a ticket where it is a `metadata.toml`, read with the texts beside it as the board reads one it embeds.
 fn candidate_at(path: &Path) -> Result<Candidate, String> {
     let text = || fs::read_to_string(path).map_err(|why| format!("{}: {why}", path.display()));
     if path.file_name().is_some_and(|name| name == METADATA) {
@@ -171,7 +171,7 @@ fn candidate_at(path: &Path) -> Result<Candidate, String> {
         Some(WrittenIn::Program) => Ok(Candidate::Proof(Proof::Program(text()?))),
         Some(WrittenIn::CoreText) => Ok(Candidate::Proof(Proof::Module(text()?))),
         None => Err(format!(
-            "{}: a candidate is a program, `.crs`, Core text, `.crsc`, or a ticket's `{METADATA}`",
+            "{}: a candidate is a program, `.crs`, Curios/Core, `.crsc`, or a ticket's `{METADATA}`",
             path.display()
         )),
     }
