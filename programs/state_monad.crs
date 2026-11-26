@@ -7,12 +7,12 @@ let loop(n: Nat) -> State(Nat, {}) =
     match n
     | 0 => State/pure(())
     | m + 1 =>
-        let () = State/modify((s) => s + 3)!;
+        let () = State/update((s) => s + 3)!;
         loop(m)
     end;
 
 let total(n: Nat) -> Nat =
-    State/run(loop(n), 0).1;
+    State/run(loop(n), 0).0;
 
 let execute() -> Try(Io, Str, {}) =
     let arguments = Proc/args()!;

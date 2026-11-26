@@ -123,30 +123,30 @@ fn a_program_cannot_register_a_second_monad_witness_for_io() {
 
 // === `/std/State`: pure, deterministic state threading. ==========================
 
-/// The full vocabulary in one region: `get`, `set`, `modify`, and the `state` constructor, sequenced with `!` and run purely at the boundary.
+/// The full vocabulary in one region: `get`, `set`, `update` and `change`, sequenced with `!` and run purely at the boundary.
 #[test]
 fn state_threads_through_a_bang_region() {
     let source = r#"
         use /std/{Nat, State, print};
-        use /std/State/{state, get, set, modify};
+        use /std/State/{change, get, set, update};
         pub let fresh() -> State(Nat, Nat) =
             let n = get()!;
             let _ = set(n + 1)!;
             State/pure(n);
         pub let steps() -> State(Nat, {Nat, Nat}) =
             let a = fresh()!;
-            let _ = modify((n) => n * 2)!;
-            let b = state((s) => (s, s + 1))!;
+            let _ = update((n) => n * 2)!;
+            let b = change((s) => (s + 1, s))!;
             State/pure((a, b));
         let entry() -> /std/Io({}) =
             let out = State/run(steps(), 3);
-            let _ = print(Nat/to_str(out.0.0))!;
-            let _ = print(Nat/to_str(out.0.1))!;
-            print(Nat/to_str(out.1));
+            let _ = print(Nat/to_str(out.1.0))!;
+            let _ = print(Nat/to_str(out.1.1))!;
+            print(Nat/to_str(out.0));
         entry()
         "#;
 
-    // init 3: fresh yields 3 (state 4), modify doubles to 8, state yields 8 (state 9): (3, 8) with final state 9.
+    // init 3: fresh yields 3 (state 4), update doubles to 8, change yields 8 (state 9): (3, 8) with final state 9.
     assert_eq!(run(source), b"389");
 }
 

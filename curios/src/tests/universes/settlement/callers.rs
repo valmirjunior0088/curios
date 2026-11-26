@@ -437,7 +437,7 @@ fn a_weak_equation_decides_no_level_a_signature_holds() {
 
     let region = r#"
         use /std/{Nat, State};
-        let tick: State(Nat, {}) = State/modify((n) => n + 1);
+        let tick: State(Nat, {}) = State/update((n) => n + 1);
         pub let counted(@A: Type, a: A) -> State(Nat, A) =
             let _ = tick!;
             State/pure(a);

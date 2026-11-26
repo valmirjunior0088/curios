@@ -1,24 +1,24 @@
 use /std/{Monad};
 
---- A computation over a state `S` answering an `A` and the next state.
+--- A computation over a state `S` leaving the next state and answering an `A`.
 pub struct State(S: Type, A: Type): Type {
-    (S) -> {A, S},
+    (S) -> {S, A},
 }
 
---- Any state transformer as a `State` action.
-pub let state(@S: Type, @A: Type, f: (S) -> {A, S}) -> State(S, A) =
+--- What `f` answers beside the state it leaves, given the current one.
+pub let change(@S: Type, @A: Type, f: (S) -> {S, A}) -> State(S, A) =
     State { f };
 
 --- `a`, with the state untouched.
 pub let pure(@S: Type, @A: Type, a: A) -> State(S, A) =
-    State { (s) => (a, s) };
+    State { (s) => (s, a) };
 
 --- `m`, then `f` on its answer from the state it left.
 pub let bind(@S: Type, @A: Type, @B: Type, m: State(S, A), f: (A) -> State(S, B)) -> State(S, B) =
     State {
         (s) =>
-            let r = m.0(s);
-            f(r.0).0(r.1) };
+            let (next, a) = m.0(s);
+            f(a).0(next) };
 
 --- The current state.
 pub let get(@S: Type) -> State(S, S) =
@@ -26,14 +26,14 @@ pub let get(@S: Type) -> State(S, S) =
 
 --- `s` as the state.
 pub let set(@S: Type, s: S) -> State(S, {}) =
-    State { (_) => ((), s) };
+    State { (_) => (s, ()) };
 
---- `f` on the current state.
-pub let modify(@S: Type, f: (S) -> S) -> State(S, {}) =
-    bind(get(), (s) => set(f(s)));
+--- The state left as what `f` makes of it.
+pub let update(@S: Type, f: (S) -> S) -> State(S, {}) =
+    change((s) => (f(s), ()));
 
---- `m` from `init`: its answer and the final state.
-pub let run(@S: Type, @A: Type, m: State(S, A), init: S) -> {A, S} =
+--- `m` from `init`: the final state and its answer.
+pub let run(@S: Type, @A: Type, m: State(S, A), init: S) -> {S, A} =
     m.0(init);
 
 satisfy (@S: Type) => Monad((A: Type) => State(S, A)) {
