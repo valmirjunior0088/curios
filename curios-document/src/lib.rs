@@ -4,7 +4,7 @@ mod record;
 pub use record::{
     ArchivedDeclaration, ArchivedDocumentation, ArchivedEntry, ArchivedExposureLine, ArchivedKind,
     ArchivedMark, ArchivedMarked, ArchivedMember, ArchivedModuleDocumentation, ArchivedSignature,
-    ArchivedTotality, Block, Declaration, Documentation, Entry, ExposureLine, Kind, Mark, Marked,
+    ArchivedTotality, Cut, Declaration, Documentation, Entry, ExposureLine, Kind, Mark, Marked,
     Member, ModuleDocumentation, Signature, Totality,
 };
 

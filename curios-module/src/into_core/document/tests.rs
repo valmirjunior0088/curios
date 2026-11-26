@@ -41,7 +41,7 @@ fn a_private_definition_is_stated_by_its_head_and_the_prose_above_it() {
     );
 }
 
-/// A member is stated within its owner: the head is its owner's, the one member listed is itself as its owner's block lists it, and the prose is its own. So it is written between its owner's head and closing word, its siblings left out, and a block's entry holds its prose above its own line.
+/// A member is stated within its owner: the text is its owner's block, the member is its place among the block's members, and the prose is its own. So it is written between its owner's head and closing word, its siblings left out, and a block's entry holds its prose above its own line.
 #[test]
 fn a_member_is_stated_within_its_owner() {
     let heading_of = |declaration: &str, name: &str| {
@@ -58,15 +58,18 @@ fn a_member_is_stated_within_its_owner() {
     let option = heading_of(OPTION, "Option");
     assert_eq!(
         (option.head.as_str(), option.member),
-        ("pub induct Option(A: Type): pub Type", false)
+        (
+            "pub induct Option(A: Type): pub Type\n| some(A)\n| none()\nend",
+            None
+        )
     );
     let some = heading_of(OPTION, "some");
     assert_eq!(
         (some.head.as_str(), some.prose.as_slice(), some.member),
         (
-            "pub induct Option(A: Type): pub Type",
+            "pub induct Option(A: Type): pub Type\n| some(A)\n| none()\nend",
             &["A value.".to_string()][..],
-            true
+            Some(0)
         )
     );
     assert_eq!(

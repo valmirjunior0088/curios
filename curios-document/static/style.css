@@ -254,14 +254,10 @@ h2 .tally {
   font-weight: 700;
   color: var(--amber-bright);
 }
-/* A member and its notes are one block, so the indent is the block's and a note always sits under its own line: under a constructor's name past its bar, and flush with a field or a method. */
-.signature .member.deep {
-  --note: 0;
-  padding-left: 4ch;
-}
+/* A member and its notes are one block, its lines indented as the printer laid them out, and a note sits under the member's name as written: past a constructor's bar, flush with a field or a method. */
 .signature .note {
   margin: 0 0 6px;
-  padding-left: var(--note, 2ch);
+  padding-left: var(--note, 0);
   font-family: var(--sans);
   font-size: 14px;
   line-height: 1.55;

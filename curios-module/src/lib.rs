@@ -37,7 +37,7 @@ pub use into_core::{
     Heading, Interface, Labelled, Lookup, LookupReaders, LoweredDeclaration, LoweredEntry,
     LoweredItem, Mention, ModuleInfo, Nominal, PreparedText, PublicInterface, Reachability,
     Reached, Revision, Scan, Text, UnitSource, document_unit, heading, into_core_entry,
-    into_core_unit, into_core_unit_over, into_core_with_prelude, prepare_prelude, written,
+    into_core_unit, into_core_unit_over, into_core_with_prelude, prepare_prelude,
 };
 
 mod registry;

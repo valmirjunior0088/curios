@@ -221,6 +221,37 @@ fn a_word_is_annotated_as_one_and_is_no_name() {
     );
 }
 
+/// A part is reported from its first character to its last: the indentation of the line it opens on, the spaces held before it and what trails it on its line are no part of it, and a name inside it is reported as any name is.
+#[test]
+fn a_part_is_reported_from_its_first_character_to_its_last() {
+    let document = flat([
+        pure("Point {"),
+        indent(flat([
+            hard_line(),
+            part(flat([pure("x: "), named("Nat")])),
+            pure(","),
+        ])),
+        hard_line(),
+        pure("}"),
+    ]);
+
+    let (text, annotations) = render_annotated(document, 4, 80);
+    assert_eq!(text, "Point {\n    x: Nat,\n}");
+    assert_eq!(
+        annotations
+            .iter()
+            .map(|annotation| (
+                &text[annotation.start..annotation.end],
+                &annotation.annotated
+            ))
+            .collect::<Vec<_>>(),
+        [
+            ("Nat", &Annotated::Name { written: None }),
+            ("x: Nat", &Annotated::Part),
+        ]
+    );
+}
+
 #[test]
 fn no_line_ends_in_a_space_and_a_document_keeps_the_spaces_it_ends_with() {
     assert_eq!(

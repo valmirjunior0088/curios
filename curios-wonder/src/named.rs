@@ -25,11 +25,10 @@ use {
         Imports, Item, Lexicon, Places, Spellings, StructDecl, Subterm, Term, Totality, UnitPaths,
         Unresolved, WitnessKey, WrittenBinder,
     },
-    curios_document::{Documentation, Kind, ModuleDocumentation},
+    curios_document::{Documentation, Kind, Member, ModuleDocumentation},
     curios_elab::{Resolved, Traces},
     curios_module::{
         Brought, Exposure, Heading, Overlay, PreparedText, RootSource, SYNTAX, heading, identity,
-        written,
     },
     curios_pipeline::{
         Cache, CompileError, EntryTail, Fold, Progress, prelude_documentation, spelling_at,
@@ -914,7 +913,7 @@ impl Stated {
 
         Self {
             entry: heading.entry(),
-            kept: (represented && !heading.member).then_some(heading.opaque),
+            kept: (represented && heading.member.is_none()).then_some(heading.opaque),
             derived: heading.derived,
             adopted: None,
         }
@@ -1558,7 +1557,7 @@ pub struct Exported {
     pub names: usize,
     /// How many public child modules it has.
     pub modules: usize,
-    /// What it exposes, an entry each, as its source writes it with what a body elides left out ([`curios_module::written`]): each name in the order a documentation page lists them where one shows the module, and its body writes them where none does, a run of members it exposes beside their owner as the line that does it; then its witnesses; then its public child modules, each as the `mod` line that declares it with what it exposes ([`exposing`]).
+    /// What it exposes, an entry each, as its source writes it with what a body elides left out ([`Heading::written`]): each name in the order a documentation page lists them where one shows the module, and its body writes them where none does, a run of members it exposes beside their owner as the line that does it; then its witnesses; then its public child modules, each as the `mod` line that declares it with what it exposes ([`exposing`]).
     pub entries: Vec<String>,
 }
 
@@ -1717,7 +1716,7 @@ pub fn exposing(names: usize, modules: usize, more: bool) -> Option<String> {
     (!said.is_empty()).then(|| format!("exposing {}", said.join(" and ")))
 }
 
-/// The entry of the declaration `name` a module exposes as `label`, `found` where it is declared: as `page` shows it where a documentation page lists it, and as its own text states it where none does ([`Declaration::heading`]), each written as its source writes it with what a body elides left out ([`written`]). A declaration no text is held of — one the compiler writes — is the line that exposes it, by the path a reader outside every module writes it at ([`absolute`]).
+/// The entry of the declaration `name` a module exposes as `label`, `found` where it is declared: as `page` shows it where a documentation page lists it, and as its own text states it where none does ([`Declaration::heading`]), each written as its source writes it with what a body elides left out ([`Heading::written`]). A declaration no text is held of — one the compiler writes — is the line that exposes it, by the path a reader outside every module writes it at ([`absolute`]).
 fn entry_of(
     saying: &Saying<'_>,
     page: Option<&ModuleDocumentation>,
@@ -1731,16 +1730,7 @@ fn entry_of(
     });
 
     match shown {
-        Some(declaration) => written(
-            declaration.kind,
-            declaration.opaque,
-            &declaration.signature.text,
-            &declaration
-                .members
-                .iter()
-                .map(|member| member.signature.text.as_str())
-                .collect::<Vec<_>>(),
-        ),
+        Some(declaration) => declaration.signature.text.clone(),
         None => found
             .declaration
             .as_ref()
@@ -2043,21 +2033,18 @@ fn adopted(asked: &str) -> Option<Stated> {
                 prose: declaration.prose.clone().unwrap_or_default(),
                 kind: declaration.kind,
                 opaque: declaration.opaque,
-                members: declaration
-                    .members
-                    .iter()
-                    .map(|member| member.signature.text.clone())
-                    .collect(),
+                members: declaration.members.iter().map(Member::at).collect(),
                 derived: declaration.derived,
-                member: false,
+                member: None,
             },
         ),
         None => {
             let owner = shown(asked.without_last())?;
-            let member = owner
+            let place = owner
                 .members
                 .iter()
-                .find(|member| member.name == asked.last())?;
+                .position(|member| member.name == asked.last())?;
+            let member = &owner.members[place];
 
             (
                 owner,
@@ -2066,9 +2053,9 @@ fn adopted(asked: &str) -> Option<Stated> {
                     prose: member.prose.clone().unwrap_or_default(),
                     kind: owner.kind,
                     opaque: owner.opaque,
-                    members: vec![member.signature.text.clone()],
+                    members: owner.members.iter().map(Member::at).collect(),
                     derived: false,
-                    member: true,
+                    member: Some(place),
                 },
             )
         }

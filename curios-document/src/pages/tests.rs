@@ -9,12 +9,43 @@ fn signature(text: &str) -> Signature {
     }
 }
 
-/// A declaration of `kind` a page shows as `name`, every mark naming it `named`, with the members `members` and a note of two paragraphs.
+/// A declaration of `kind` a page shows as `name`, every mark naming it `named`, with the members `members` written in its block as the formatter writes one — a constructor behind its bar, a field one level in and followed by a comma, an anonymous one as a superclass edge — and a note of two paragraphs.
 fn declaration(kind: Kind, name: &str, named: &[&str], members: &[&str]) -> Declaration {
+    let mut text = format!("{} {name}", keyword(kind));
+    let mut placed = Vec::new();
+    if !members.is_empty() {
+        let inductive = kind == Kind::Inductive;
+        if !inductive {
+            text.push_str(" {");
+        }
+        for member in members {
+            text.push('\n');
+            if !inductive {
+                text.push_str("    ");
+            }
+            let start = text.len();
+            if inductive {
+                text.push_str("| ");
+            }
+            text.push_str(match *member {
+                "" => "use Eql(A)",
+                named => named,
+            });
+            placed.push(start..text.len());
+            if !inductive {
+                text.push(',');
+            }
+        }
+        text.push_str(match inductive {
+            true => "\nend",
+            false => "\n}",
+        });
+    }
+
     Declaration {
         name: name.to_string(),
         kind,
-        signature: signature(&format!("{} {name}", keyword(kind))),
+        signature: signature(&text),
         prose: Some(vec![
             format!("What {name} is."),
             String::new(),
@@ -22,9 +53,11 @@ fn declaration(kind: Kind, name: &str, named: &[&str], members: &[&str]) -> Decl
         ]),
         members: members
             .iter()
-            .map(|member| Member {
+            .zip(placed)
+            .map(|(member, at)| Member {
                 name: member.to_string(),
-                signature: signature(member),
+                start: at.start,
+                end: at.end,
                 prose: Some(vec![format!("What {member} holds.")]),
             })
             .collect(),
@@ -334,7 +367,7 @@ fn a_page_opens_on_the_declaration_at_its_path_and_lists_each_thing_once() {
     );
     assert!(shape.contains("More of Shape."), "{shape}");
     assert!(
-        shape.contains("<div class=\"member\" id=\"/circle\">"),
+        shape.contains("<div class=\"member\" style=\"--note: 2ch\" id=\"/circle\">"),
         "{shape}"
     );
     // What its source does not show is a word on its corner, drawn by what it says.
@@ -374,7 +407,7 @@ fn a_page_opens_on_the_declaration_at_its_path_and_lists_each_thing_once() {
     // A structure that is a module too and declared on its parent's page is whole on its own: its field is anchored as a projection writes it, under the joint alone, and the definition its module holds at the same name keeps the name.
     let corner = pages("Shape/Corner.crs.html");
     assert!(
-        corner.contains("<div class=\"member deep\" id=\".x\">"),
+        corner.contains("<div class=\"member\" style=\"--note: 4ch\" id=\".x\">"),
         "{corner}"
     );
     assert!(
@@ -391,7 +424,10 @@ fn a_name_whole_on_another_page_is_shown_by_its_source_and_the_way_there() {
 
     // A name that is a module too: its head and its block without its members' notes or anchors, the paragraph its note opens with, and the line that declares the module, with what the module exposes beside it, as the way to its page.
     let shape = cluster(&landing, "Shape");
-    assert!(shape.contains("<div class=\"member\">"), "{shape}");
+    assert!(
+        shape.contains("<div class=\"member\" style=\"--note: 2ch\">"),
+        "{shape}"
+    );
     assert!(!shape.contains("What circle holds."), "{shape}");
     assert!(shape.contains("What Shape is."), "{shape}");
     assert!(!shape.contains("More of Shape."), "{shape}");
@@ -406,7 +442,10 @@ fn a_name_whole_on_another_page_is_shown_by_its_source_and_the_way_there() {
     // The same of one declared on this page, from a page beneath the root.
     let corner = pages("Shape.crs.html");
     let corner = cluster(&corner, "Corner");
-    assert!(corner.contains("<div class=\"member deep\">"), "{corner}");
+    assert!(
+        corner.contains("<div class=\"member\" style=\"--note: 4ch\">"),
+        "{corner}"
+    );
     assert!(
         corner.contains("<a class=\"door\" href=\"Shape/Corner.crs.html\">"),
         "{corner}"
@@ -425,7 +464,7 @@ fn a_name_whole_on_another_page_is_shown_by_its_source_and_the_way_there() {
     let area = cluster(&landing, "Area");
     assert!(area.contains("More of Area."), "{area}");
     assert!(
-        area.contains("<div class=\"member deep\" id=\"Area/area\">"),
+        area.contains("<div class=\"member\" style=\"--note: 4ch\" id=\"Area/area\">"),
         "{area}"
     );
     assert!(

@@ -17,18 +17,18 @@ use {
         Class, Keyword, MAX_LINE_WIDTH, Mount, Qualifier, RootKind, Source, SourceName, Span,
     },
     curios_document::{
-        Block, Declaration, Documentation, Entry, ExposureLine, Kind, Mark, Marked, Member,
+        Cut, Declaration, Documentation, Entry, ExposureLine, Kind, Mark, Marked, Member,
         ModuleDocumentation, Signature, Totality,
     },
     curios_print::{Annotated, Printer, each_named, render_annotated},
     curios_surface::{
-        DEFAULT_INDENT_WIDTH, Doc, Module, TopItem, UseGroup, carrier_former, print_case_head,
-        print_concept_field_head, print_concept_head, print_exposure_head, print_foreign_head,
-        print_induct_head, print_let_head, print_struct_field_head, print_struct_head,
-        print_test_head, print_witness_head,
+        DEFAULT_INDENT_WIDTH, Doc, Module, TopItem, UseGroup, carrier_former, print_concept_block,
+        print_exposure_head, print_foreign_head, print_induct_block, print_induct_head,
+        print_let_head, print_struct_block, print_struct_head, print_test_head, print_witness_head,
     },
     std::{
         collections::{HashMap, HashSet},
+        ops::Range,
         path::PathBuf,
         rc::Rc,
         sync::Arc,
@@ -312,14 +312,6 @@ impl Reader<'_> {
     fn adopt(&self, declaration: &Declaration) -> Declaration {
         Declaration {
             signature: self.adopt_signature(&declaration.signature),
-            members: declaration
-                .members
-                .iter()
-                .map(|member| Member {
-                    signature: self.adopt_signature(&member.signature),
-                    ..member.clone()
-                })
-                .collect(),
             ..declaration.clone()
         }
     }
@@ -485,8 +477,9 @@ impl Reader<'_> {
                 unreachable!("an exposure is filed where its line's first member stands");
             };
             let owner = self.spelled_from(module, &exposure.owner);
-            exposure.signature =
-                self.signature(module, None, print_exposure_head(&owner, &exposure.names));
+            exposure.signature = self
+                .signature(module, None, print_exposure_head(&owner, &exposure.names))
+                .signature;
         }
     }
 
@@ -732,13 +725,16 @@ impl Reader<'_> {
         for stated in stated(item).into_iter().filter(|stated| stated.exposed) {
             // The file the item is written in, which its members share: what a written name is looked up in.
             let source = stated.label.map(|label| &label.source);
+            let Signed { signature, parts } = self.signature(home, source, stated.head);
             let members = match stated.shown {
                 true => stated
                     .members
                     .into_iter()
-                    .map(|member| Member {
+                    .zip(parts)
+                    .map(|(member, at)| Member {
                         name: member.name,
-                        signature: self.signature(home, source, member.head),
+                        start: at.start,
+                        end: at.end,
                         prose: member.prose,
                     })
                     .collect(),
@@ -751,7 +747,7 @@ impl Reader<'_> {
 
             out.push(Declaration {
                 kind: stated.kind,
-                signature: self.signature(home, source, stated.head),
+                signature,
                 prose: stated.prose,
                 members,
                 opaque: stated.opaque,
@@ -811,7 +807,7 @@ impl Reader<'_> {
         module: &Qualifier,
         source: Option<&Arc<Source>>,
         mut head: Printer,
-    ) -> Signature {
+    ) -> Signed {
         curios_common::profile!("document::signature");
         let mut referents = Vec::new();
         each_named(&mut head, |text, written| {
@@ -837,10 +833,15 @@ impl Reader<'_> {
         let (text, annotations) = render_annotated(head, DEFAULT_INDENT_WIDTH, MAX_LINE_WIDTH);
 
         let mut referents = referents.into_iter();
+        let mut parts = Vec::new();
         let marks = annotations
             .into_iter()
             .filter_map(|annotation| {
                 let marked = match annotation.annotated {
+                    Annotated::Part => {
+                        parts.push(annotation.start..annotation.end);
+                        return None;
+                    }
                     Annotated::Word => Marked::Word(word_class(&annotation.text)),
                     Annotated::Name { .. } => {
                         let (referent, class) = referents
@@ -866,7 +867,10 @@ impl Reader<'_> {
             "a render emits every name the walk met, once"
         );
 
-        Signature { text, marks }
+        Signed {
+            signature: Signature { text, marks },
+            parts,
+        }
     }
 
     /// What the declaration at `referent` is painted as, read off what the units in scope outline it as: a name's class is what its declaration states, never where it lives.
@@ -893,9 +897,15 @@ impl Reader<'_> {
     }
 }
 
-/// What an item states of one definition it declares: the head it is printed by, the prose above it, and the members stated under it. The one reading of an item's declarations, which a page takes what a consumer sees of ([`Reader::declare`]) and a place is answered from whole ([`heading`]).
+/// A declaration printed for a page: its text and the marks in it, and where each member written in it stands, by the parts the render reported ([`curios_print::part`]).
+struct Signed {
+    signature: Signature,
+    parts: Vec<Range<usize>>,
+}
+
+/// What an item states of one definition it declares: the declaration a page prints it as, the prose above it, and the members stated under it. The one reading of an item's declarations, which a page takes what a consumer sees from and a heading takes one definition from.
 struct Stated<'a> {
-    /// Its name as a page lists it: none for a witness, and none for a member written without one.
+    /// Its name as a page lists it: none for a witness.
     name: String,
     /// Where its name is written, a witness's being its head.
     label: Option<&'a Span>,
@@ -908,9 +918,29 @@ struct Stated<'a> {
     opaque: bool,
     /// Whether it is a witness the compiler writes.
     derived: bool,
+    /// The declaration as a page prints it: whole where its members are shown, and its head alone otherwise.
     head: Printer,
+    /// The declaration whole, its members written in its block, where its kind writes one: what a heading of one of its members shows it within, shown or not.
+    whole: Option<Printer>,
     prose: Option<Vec<String>>,
-    members: Vec<Stated<'a>>,
+    members: Vec<StatedMember<'a>>,
+}
+
+/// A constructor, a field or a method an item states under its owner: its name, or none for a superclass edge, where that name is written, and the prose above it. It is printed in its owner's block, never alone.
+struct StatedMember<'a> {
+    name: String,
+    label: Option<&'a Span>,
+    prose: Option<Vec<String>>,
+}
+
+impl<'a> StatedMember<'a> {
+    fn of(name: String, label: Option<&'a Span>, doc: &Option<Doc>) -> Self {
+        Self {
+            name,
+            label,
+            prose: lines(doc),
+        }
+    }
 }
 
 impl<'a> Stated<'a> {
@@ -932,14 +962,16 @@ impl<'a> Stated<'a> {
             opaque: false,
             derived: false,
             head,
+            whole: None,
             prose: lines(doc),
             members: Vec::new(),
         }
     }
 }
 
-/// What `item` states of each definition it declares, in the order they are written, a type's constructors, a structure's fields and a concept's fields each under their owner. A module and an import declare none, and a broken item is read by nobody.
+/// What `item` states of each definition it declares, in the order they are written, a type's constructors, a structure's fields and a concept's fields each under their owner. A module and an import declare nothing a page lists here.
 fn stated(item: &TopItem) -> Vec<Stated<'_>> {
+    let sys = SYNTAX.roots.sys;
     match item {
         TopItem::Mod(_) | TopItem::Use(_) | TopItem::Broken(_) => Vec::new(),
         TopItem::Let(members) => members
@@ -950,7 +982,7 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
                     member.label.span(),
                     Kind::Definition,
                     member.vis_pub,
-                    print_let_head(member, SYNTAX.roots.sys),
+                    print_let_head(member, sys),
                     &member.doc,
                 )
             })
@@ -959,27 +991,24 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
             .iter()
             .map(|member| {
                 let cases = member.cases.iter().map(|case| {
-                    Stated::plain(
-                        case.label.to_string(),
-                        case.label.span(),
-                        Kind::Definition,
-                        false,
-                        print_case_head(case, SYNTAX.roots.sys),
-                        &case.doc,
-                    )
+                    StatedMember::of(case.label.to_string(), case.label.span(), &case.doc)
                 });
 
                 Stated {
                     // Constructors are the representation: shown exactly when it is public.
                     shown: member.rep_pub,
                     opaque: !member.rep_pub,
+                    whole: Some(print_induct_block(member, sys)),
                     members: cases.collect(),
                     ..Stated::plain(
                         member.label.to_string(),
                         member.label.span(),
                         Kind::Inductive,
                         member.vis_pub,
-                        print_induct_head(member, SYNTAX.roots.sys),
+                        match member.rep_pub {
+                            true => print_induct_block(member, sys),
+                            false => print_induct_head(member, sys),
+                        },
                         &member.doc,
                     )
                 }
@@ -988,31 +1017,28 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
         TopItem::Struct(members) => members
             .iter()
             .map(|member| {
-                let fields = member
-                    .fields
-                    .iter()
-                    .map(|field| {
-                        Stated::plain(
-                            field.param.label.as_deref().unwrap_or_default().to_string(),
-                            None,
-                            Kind::Definition,
-                            false,
-                            print_struct_field_head(field, SYNTAX.roots.sys),
-                            &field.doc,
-                        )
-                    })
-                    .collect();
+                let fields = member.fields.iter().map(|field| {
+                    StatedMember::of(
+                        field.param.label.as_deref().unwrap_or_default().to_string(),
+                        None,
+                        &field.doc,
+                    )
+                });
 
                 Stated {
                     shown: member.rep_pub,
                     opaque: !member.rep_pub,
-                    members: fields,
+                    whole: Some(print_struct_block(member, sys)),
+                    members: fields.collect(),
                     ..Stated::plain(
                         member.label.to_string(),
                         member.label.span(),
                         Kind::Structure,
                         member.vis_pub,
-                        print_struct_head(member, SYNTAX.roots.sys),
+                        match member.rep_pub {
+                            true => print_struct_block(member, sys),
+                            false => print_struct_head(member, sys),
+                        },
                         &member.doc,
                     )
                 }
@@ -1022,17 +1048,14 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
             .iter()
             .map(|member| {
                 let fields = member.fields.iter().map(|field| {
-                    Stated::plain(
-                        // A superclass edge has no name, and a page lists it by its signature alone.
+                    StatedMember::of(
+                        // A superclass edge has no name, and a page lists it by what it writes alone.
                         field
                             .label
                             .as_ref()
                             .map(|label| label.to_string())
                             .unwrap_or_default(),
                         field.label.as_ref().and_then(|label| label.span()),
-                        Kind::Definition,
-                        false,
-                        print_concept_field_head(field, SYNTAX.roots.sys),
                         &field.doc,
                     )
                 });
@@ -1041,13 +1064,14 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
                     // A concept's methods are its interface whether or not its representation is sealed: they are reached by name either way.
                     shown: true,
                     opaque: !member.rep_pub,
+                    whole: Some(print_concept_block(member, sys)),
                     members: fields.collect(),
                     ..Stated::plain(
                         member.label.to_string(),
                         member.label.span(),
                         Kind::Concept,
                         member.vis_pub,
-                        print_concept_head(member, SYNTAX.roots.sys),
+                        print_concept_block(member, sys),
                         &member.doc,
                     )
                 }
@@ -1087,32 +1111,29 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
     }
 }
 
-/// What a declaration states of one definition: its head as the author wrote it, the prose above the definition, a line an entry, what kind of declaration it is, whether its representation is kept from a consumer, and its members, each as its block lists it. A member is stated within its owner: the head, the kind and the representation are its owner's, the one member listed is itself, and the prose is its own.
+/// What a declaration states of one definition: the declaration as a page prints it, the prose above the definition, what kind of declaration it is, whether its representation is kept from a consumer, and where each member stands in it. What a consumer's listing writes it as ([`Heading::written`]) and what an entry shows ([`Heading::entry`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Heading {
+    /// The declaration as a page prints it: whole where its members are shown, or where the definition is one of them, and its head alone otherwise.
     pub head: String,
     pub prose: Vec<String>,
     pub kind: Kind,
     pub opaque: bool,
-    pub members: Vec<String>,
+    /// Where each member written in `head` stands, by the byte range the render reported it at.
+    pub members: Vec<Range<usize>>,
     /// Whether it is a witness whose body the compiler writes.
     pub derived: bool,
-    /// Whether the definition is a member of the declaration `head` is of.
-    pub member: bool,
+    /// The member of the declaration `head` prints the definition is, by its place among `members`, where it is one.
+    pub member: Option<usize>,
 }
 
 impl Heading {
-    /// The declaration as a consumer's listing writes it, with what a body elides left out ([`written`]): its head alone where its representation is kept; a member within its owner's head and closing word, in the block its source writes whether or not a consumer sees it, its siblings left out.
+    /// The declaration as a consumer's listing writes it, with what a body elides left out: as a page prints it, or, where the definition is a member, its owner's head, that member and what closes the block.
     pub fn written(&self) -> String {
-        written(
-            self.kind,
-            self.opaque && !self.member,
-            &self.head,
-            &self.members,
-        )
+        self.lines(&|_| Vec::new()).join("\n")
     }
 
-    /// The definition as a block that answers it shows it, one entry: its prose, each line behind the `---` that opens one, above the declaration as its source writes it with every body left out — a family's constructors and a structure's fields where its representation is public and its head alone where it is kept, as its page shows it ([`Block::of`]), and a concept's methods either way. A member is the entry's subject: it stands within its owner's head and closing word whatever its owner keeps, its prose above its own line.
+    /// The definition as a block that answers it shows it, one entry: its prose, each line behind the `---` that opens one, above the declaration as [`Heading::written`] writes it, or, for a member, above that member at its indentation.
     pub fn entry(&self) -> String {
         let prose = |indent: &str| {
             self.prose
@@ -1123,106 +1144,78 @@ impl Heading {
                 })
                 .collect::<Vec<_>>()
         };
-
-        // The block a declaration of the kind writes where its representation shows one: none for a definition or a witness, which is its head, and none for a family or a structure that keeps its representation. A member is what was asked, so it is shown within its owner either way.
-        let Some(block) = Block::of(self.kind, self.opaque && !self.member) else {
+        if self.member.is_none() {
             let mut lines = prose("");
             lines.push(self.head.clone());
 
             return lines.join("\n");
-        };
-        let indent = indent_of(&block);
-        let (above, within) = match self.member {
-            true => (Vec::new(), prose(&indent)),
-            false => (prose(""), Vec::new()),
-        };
+        }
 
-        let mut lines = above;
-        lines.push(format!("{}{}", self.head, block.opener));
-        lines.extend(within);
-        lines.extend(
-            self.members
-                .iter()
-                .map(|member| member_line(&block, &indent, member)),
-        );
-        lines.push(block.closer.to_string());
+        self.lines(&prose).join("\n")
+    }
 
-        lines.join("\n")
+    /// The lines [`Heading::written`] writes, with what `above` makes of the member's indentation standing above the member, where the definition is one.
+    fn lines(&self, above: &dyn Fn(&str) -> Vec<String>) -> Vec<String> {
+        let Some(member) = self.member else {
+            return vec![self.head.clone()];
+        };
+        let cut = Cut::of(&self.head, &self.members);
+        let written = &self.head[cut.members[member].clone()];
+        let indent = &written[..written.len() - written.trim_start_matches(' ').len()];
+        let closer = &self.head[cut.closer];
+
+        let mut lines = vec![self.head[cut.head].to_string()];
+        lines.extend(above(indent));
+        lines.push(written.to_string());
+        if !closer.is_empty() {
+            lines.push(closer.to_string());
+        }
+        lines
     }
 }
 
-/// The indent `block` writes its members at.
-fn indent_of(block: &Block) -> String {
-    match block.indented {
-        true => " ".repeat(DEFAULT_INDENT_WIDTH),
-        false => String::new(),
-    }
-}
-
-/// One member as `block` writes it at `indent`: behind what leads it and before what trails it, a member that runs over lines keeping the indent on each.
-fn member_line(block: &Block, indent: &str, member: &str) -> String {
-    let member = member.replace('\n', &format!("\n{indent}"));
-
-    format!("{indent}{}{member}{}", block.lead, block.trail)
-}
-
-/// A declaration as its source writes it, with what a body elides left out: `head`, then `members`, the ones its representation shows, in the block a declaration of `kind` writes them in ([`Block`]) — a member that runs over lines keeping the block's indent on each. A declaration that writes no block a consumer sees is its head alone.
-pub fn written(kind: Kind, opaque: bool, head: &str, members: &[impl AsRef<str>]) -> String {
-    let Some(block) = Block::of(kind, opaque) else {
-        return head.to_string();
-    };
-    let indent = indent_of(&block);
-
-    let mut lines = vec![format!("{head}{}", block.opener)];
-    lines.extend(
-        members
-            .iter()
-            .map(|member| member_line(&block, &indent, member.as_ref())),
-    );
-    lines.push(block.closer.to_string());
-
-    lines.join("\n")
-}
-
-/// What `declaration`, the text of one source declaration, states of the definition whose name is written `label` bytes into it: the head a page would print it by, from the printers a page prints by, with the prose above it, whether or not a consumer sees the definition. A member is stated within its owner ([`Heading`]). `None` where the text does not parse as an item, and where no definition it declares is named there.
+/// What `declaration`, the text of one source declaration, states of the definition whose name is written `label` bytes into it: the declaration as a page would print it, from the printers a page prints by, beside the prose above the definition. A member is printed within its owner's block, whether or not the owner shows its members.
 pub fn heading(declaration: &str, label: usize) -> Option<Heading> {
     let module = Module::parse(&Source::inline(declaration)).ok()?;
-    let named = |stated: &Stated| stated.label.is_some_and(|span| span.start == label);
-    let printed = |head: Printer| render_annotated(head, DEFAULT_INDENT_WIDTH, MAX_LINE_WIDTH).0;
+    let rendered = |printer: Printer| {
+        let (text, annotations) = render_annotated(printer, DEFAULT_INDENT_WIDTH, MAX_LINE_WIDTH);
+        let members = annotations
+            .into_iter()
+            .filter(|annotation| annotation.annotated == Annotated::Part)
+            .map(|annotation| annotation.start..annotation.end)
+            .collect::<Vec<_>>();
+
+        (text, members)
+    };
 
     module.items.iter().flat_map(stated).find_map(|stated| {
-        if named(&stated) {
+        if stated.label.is_some_and(|span| span.start == label) {
+            let (head, members) = rendered(stated.head);
+
             return Some(Heading {
+                head,
+                prose: stated.prose.unwrap_or_default(),
                 kind: stated.kind,
                 opaque: stated.opaque,
-                members: stated
-                    .members
-                    .into_iter()
-                    .map(|member| printed(member.head))
-                    .collect(),
-                head: printed(stated.head),
-                prose: stated.prose.unwrap_or_default(),
+                members,
                 derived: stated.derived,
-                member: false,
+                member: None,
             });
         }
-        let Stated {
-            kind,
-            opaque,
-            head,
-            members,
-            ..
-        } = stated;
-        let member = members.into_iter().find(|member| named(member))?;
+        let member = stated
+            .members
+            .iter()
+            .position(|member| member.label.is_some_and(|span| span.start == label))?;
+        let (head, members) = rendered(stated.whole?);
 
         Some(Heading {
-            kind,
-            opaque,
-            members: vec![printed(member.head)],
-            head: printed(head),
-            prose: member.prose.unwrap_or_default(),
+            head,
+            prose: stated.members[member].prose.clone().unwrap_or_default(),
+            kind: stated.kind,
+            opaque: stated.opaque,
+            members,
             derived: false,
-            member: true,
+            member: Some(member),
         })
     })
 }

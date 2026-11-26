@@ -31,8 +31,8 @@ use {
     curios_parse::unseen,
     curios_print::{
         FillItem, Printer, ends, fill, flat, flow, group, group_within, hang, hard_line, if_break,
-        indent, line, named, named_at, own_line_if_broken, pure, reached, run_printer, sep_flat,
-        soft_line, word,
+        indent, line, named, named_at, own_line_if_broken, part, pure, reached, run_printer,
+        sep_flat, soft_line, word,
     },
     std::{fmt, iter},
 };
@@ -1557,14 +1557,17 @@ impl<D: Layout> TreePrinter<D> {
         }
     }
 
+    /// A constructor on a line of its own behind its bar, written as a [`part`], its documentation comment above it and no part of it.
     fn top_induct_case(self, case: TopCase<D>) -> Printer {
         flat([
             hard_line(),
             print_doc(case.doc),
-            pure("| "),
-            pure(case.label.to_string()),
-            self.payload(case.payload),
-            self.target(case.target),
+            part(flat([
+                pure("| "),
+                pure(case.label.to_string()),
+                self.payload(case.payload),
+                self.target(case.target),
+            ])),
         ])
     }
 
@@ -1693,12 +1696,14 @@ impl<D: Layout> TreePrinter<D> {
         )
     }
 
-    /// A struct field: its documentation comment, then the Σ-type field it is written as.
+    /// A struct field: its documentation comment, then the Σ-type field, written as a [`part`].
     fn struct_field(self, field: StructField<D>) -> Printer {
         flat([
             print_doc(field.doc),
-            print_plicity(field.plicity),
-            self.field(field.param),
+            part(flat([
+                print_plicity(field.plicity),
+                self.field(field.param),
+            ])),
         ])
     }
 
@@ -1738,10 +1743,11 @@ impl<D: Layout> TreePrinter<D> {
         }
     }
 
+    /// A concept field: its documentation comment, then the field, written as a [`part`].
     fn concept_field(self, mut field: ConceptField<D>) -> Printer {
         flat([
             print_doc(field.doc.take()),
-            self.concept_field_written(field),
+            part(self.concept_field_written(field)),
         ])
     }
 
@@ -2590,13 +2596,18 @@ pub fn print_induct_head(item: &TopInduct, sys: &'static str) -> Printer {
     ])
 }
 
-/// One constructor as a page lists it: its label, payload and target, without the bar that introduces it in a declaration.
-pub fn print_case_head(case: &TopCase, sys: &'static str) -> Printer {
-    let printer = program(FlatMatch::DEFAULT, sys);
+/// An `induct` member as a page shows it whole, as the formatter writes it with its documentation comments left out: its head, each constructor behind its bar written as a [`part`], and `end`.
+pub fn print_induct_block(item: &TopInduct, sys: &'static str) -> Printer {
+    let mut item = item.clone();
+    item.doc = None;
+    for case in &mut item.cases {
+        case.doc = None;
+    }
+
     flat([
-        pure(case.label.clone()),
-        printer.payload(case.payload.clone()),
-        printer.target(case.target.clone()),
+        program(FlatMatch::DEFAULT, sys).induct_member(item, &[Keyword::Induct]),
+        hard_line(),
+        keyword(Keyword::End),
     ])
 }
 
@@ -2614,33 +2625,24 @@ pub fn print_struct_head(item: &TopStruct, sys: &'static str) -> Printer {
     ])
 }
 
-/// One struct field as a page lists it.
-pub fn print_struct_field_head(field: &StructField, sys: &'static str) -> Printer {
-    let printer = program(FlatMatch::DEFAULT, sys);
-    flat([
-        print_plicity(field.plicity),
-        printer.field(field.param.clone()),
-    ])
+/// A `struct` member as a page shows it whole, as the formatter writes it with its documentation comments left out: its head and its fields, each written as a [`part`], in braces.
+pub fn print_struct_block(item: &TopStruct, sys: &'static str) -> Printer {
+    let mut item = item.clone();
+    for field in &mut item.fields {
+        field.doc = None;
+    }
+
+    program(FlatMatch::DEFAULT, sys).struct_member(item, &[Keyword::Struct])
 }
 
-/// The head of a `concept` member: its visibility, name, parameters and sort, without the fields.
-pub fn print_concept_head(item: &TopConcept, sys: &'static str) -> Printer {
-    let printer = program(FlatMatch::DEFAULT, sys);
-    flat([
-        print_pub(item.vis_pub),
-        lead(&[Keyword::Concept]),
-        pure(item.label.to_string()),
-        printer.top_induct_params(item.params.clone()),
-        pure(": "),
-        print_pub(item.rep_pub),
-        printer.term(item.result_sort.clone()),
-    ])
-}
+/// A `concept` member as a page shows it whole, as the formatter writes it with its documentation comments left out: its head and its fields, each written as a [`part`] — a superclass as `use T`, a method as written, sugar included — in braces.
+pub fn print_concept_block(item: &TopConcept, sys: &'static str) -> Printer {
+    let mut item = item.clone();
+    for field in &mut item.fields {
+        field.doc = None;
+    }
 
-/// One concept field as a page lists it: a superclass as `use T`, a method as written, sugar included.
-pub fn print_concept_field_head(field: &ConceptField, sys: &'static str) -> Printer {
-    let printer = program(FlatMatch::DEFAULT, sys);
-    printer.concept_field_written(field.clone())
+    program(FlatMatch::DEFAULT, sys).concept_member(item, &[Keyword::Concept])
 }
 
 /// The line by which a module exposes the members `names` of the declaration it writes `owner`, as the formatter writes a `pub use`, by the printer it writes one with: what a page shows of a constructor or a method a module exposes beside its owner, the owner and each member set apart as names.

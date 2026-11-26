@@ -2,9 +2,9 @@
 
 use {
     curios_common::{Class, Qualifier, Source, test_support::*},
-    curios_document::{Block, Entry, Kind, Marked, Signature, Totality},
+    curios_document::{Entry, Kind, Marked, Signature, Totality},
     curios_elab::DEFAULT_BUDGET,
-    curios_module::{Overlay, SYNTAX, written},
+    curios_module::{Overlay, SYNTAX},
     curios_package::{Governing, order},
     curios_surface::{Format, Formatted, WrittenIn},
     curios_wonder::{std_documentation, test_support::*},
@@ -150,11 +150,8 @@ fn the_standard_library_documents_from_the_archive() {
         "{:?}",
         ordered.members
     );
-    assert!(
-        ordered.members[0].signature.text.starts_with("use "),
-        "{:?}",
-        ordered.members[0].signature
-    );
+    let edge = &ordered.signature.text[ordered.members[0].at()];
+    assert!(edge.starts_with("use "), "{edge:?}");
 
     // A signature's reference to a declaration of the same unit links within the bundle.
     let flip = ordering
@@ -254,15 +251,15 @@ fn a_concept_method_resolves_the_names_in_its_signature() {
         .find(|member| member.name == "show")
         .expect("the concept Show declares the method show");
 
-    let referents = method
-        .signature
+    let signature = show.signature.within(method.start, method.end);
+    let referents = signature
         .marks
         .iter()
         .filter_map(|mark| match &mark.marked {
             Marked::Name {
                 referent, within, ..
             } => Some((
-                &method.signature.text[mark.start..mark.end],
+                &signature.text[mark.start..mark.end],
                 referent.join(),
                 *within,
             )),
@@ -274,7 +271,7 @@ fn a_concept_method_resolves_the_names_in_its_signature() {
         referents,
         [("Str", "/std/Str/Str".to_string(), true)],
         "the concept's own parameter is a binder and stays plain, and its return type links to the page that shows it — got {:?}",
-        method.signature.text
+        signature.text
     );
 }
 
@@ -419,13 +416,13 @@ fn a_member_a_module_exposes_is_the_line_that_exposes_it() {
     assert_eq!(
         listed,
         [
-            "pub induct Tone: pub Type",
+            "pub induct Tone: pub Type\n| high()\n| low()\nend",
             "pub let pitch: /std/Nat",
             "pub use Tone/{low} of /shades/tone/Tone",
-            "pub induct Shade: pub Type",
+            "pub induct Shade: pub Type\n| dark()\n| light()\nend",
             "pub let other: /std/Nat",
             "pub use Shade/{dark, light} of /shades/Shade",
-            "pub concept Named(A: Type): pub Type",
+            "pub concept Named(A: Type): pub Type {\n    name(A) -> /std/Str,\n}",
             "satisfy Named(Shade)",
             "pub let same(s: Shade) -> /std/Eq()(s, s)",
         ]
@@ -539,7 +536,6 @@ fn an_adopted_signature_spells_its_names_below_their_root() {
         .filter(|(_, declaration)| declaration.chip.as_deref() == Some("intrinsic"))
         .flat_map(|(page, declaration)| {
             std::iter::once(&declaration.signature)
-                .chain(declaration.members.iter().map(|member| &member.signature))
                 .filter(|signature| signature.text.contains("/std/"))
                 .map(move |signature| format!("{}: {}", page.path.join(), signature.text))
         })
@@ -729,14 +725,17 @@ fn a_package_documents_its_interface_for_its_consumers() {
             "Round or square.".to_string()
         ])
     );
-    assert_eq!(shape.signature.text, "pub induct Shape: pub Type");
+    assert_eq!(
+        shape.signature.text,
+        "pub induct Shape: pub Type\n| circle(Nat)\n| square(Nat)\nend"
+    );
     assert_eq!(
         shape
             .members
             .iter()
-            .map(|member| (member.name.as_str(), member.signature.text.as_str()))
+            .map(|member| (member.name.as_str(), &shape.signature.text[member.at()]))
             .collect::<Vec<_>>(),
-        [("circle", "circle(Nat)"), ("square", "square(Nat)")]
+        [("circle", "| circle(Nat)"), ("square", "| square(Nat)")]
     );
     assert_eq!(shape.members[0].prose, Some(vec!["Round.".to_string()]));
     assert!(!shape.opaque);
@@ -927,24 +926,16 @@ fn a_declaration_written_out_is_as_the_formatter_writes_it() {
 
     for page in &documentation.modules {
         for declaration in page.declarations() {
-            if Block::of(declaration.kind, declaration.opaque).is_none() {
+            let block = match declaration.kind {
+                Kind::Inductive | Kind::Structure => !declaration.opaque,
+                Kind::Concept => true,
+                Kind::Definition | Kind::Witness | Kind::Foreign => false,
+            };
+            if !block {
                 continue;
             }
             blocks += 1;
-            let members = declaration
-                .members
-                .iter()
-                .map(|member| member.signature.text.as_str())
-                .collect::<Vec<_>>();
-            let text = format!(
-                "{}\n",
-                written(
-                    declaration.kind,
-                    declaration.opaque,
-                    &declaration.signature.text,
-                    &members
-                )
-            );
+            let text = format!("{}\n", declaration.signature.text);
             let stands = format!("{}/{}", page.path.join(), declaration.name);
             match Formatted::from_source(
                 &Source::inline(text.as_str()),

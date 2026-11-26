@@ -8,7 +8,7 @@
                 {% call sig::line(line) %}{% endcall %}
             {%- endfor %}
             {%- for member in cluster.members %}
-                <div class="member{% if member.deep %} deep{% endif %}"{% if let Some(anchor) = member.anchor %} id="{{ anchor }}"{% endif %}>
+                <div class="member" style="--note: {{ member.note }}ch"{% if let Some(anchor) = member.anchor %} id="{{ anchor }}"{% endif %}>
                     {%- for line in member.lines %}
                         {% call sig::line(line) %}{% endcall %}
                     {%- endfor %}

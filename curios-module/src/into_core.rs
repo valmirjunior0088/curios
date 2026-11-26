@@ -50,7 +50,7 @@ use scoped::*;
 
 mod document;
 use document::*;
-pub use document::{Heading, heading, written};
+pub use document::{Heading, heading};
 
 mod head;
 pub use head::*;

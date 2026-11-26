@@ -19,6 +19,8 @@ struct PrinterState<'a, 'b, 'c> {
     formatter: &'a mut fmt::Formatter<'b>,
     /// Bytes emitted so far, which is what an [`Annotation`] measures its range in.
     written: usize,
+    /// The parts opened and not yet closed, innermost last, each with the byte its first character landed on, or none while it has written nothing — see [`Printer::Opens`].
+    parts: Vec<Option<usize>>,
     /// Every [`Printer::Named`] and [`Printer::Word`] emitted, with where it landed — empty for every renderer but [`render_annotated`].
     annotations: Vec<Annotation>,
     indent_step: usize,
@@ -54,6 +56,7 @@ impl<'a, 'b, 'c> PrinterState<'a, 'b, 'c> {
         Self {
             formatter,
             written: 0,
+            parts: Vec::new(),
             annotations: Vec::new(),
             indent_step,
             indent_by: 0,
@@ -96,6 +99,10 @@ impl<'a, 'b, 'c> PrinterState<'a, 'b, 'c> {
         self.written += leading;
         self.column += leading;
         self.should_indent = false;
+        // A part begins with its first character, past the indentation and the spaces held before it.
+        for part in self.parts.iter_mut().filter(|part| part.is_none()) {
+            *part = Some(self.written);
+        }
 
         self.formatter.write_char(char)?;
         self.written += char.len_utf8();
@@ -180,6 +187,21 @@ impl<'a, 'b, 'c> PrinterState<'a, 'b, 'c> {
             self.following = Some((original, cursor));
             self.arrivals();
         }
+    }
+
+    /// A part closes here — see [`Printer::Opens`]: reported from its first character to the last one written, or as empty where it wrote none.
+    fn closes(&mut self) {
+        let start = self
+            .parts
+            .pop()
+            .expect("a part closes after it opens")
+            .unwrap_or(self.written);
+        self.annotations.push(Annotation {
+            start,
+            end: self.written,
+            text: String::new(),
+            annotated: Annotated::Part,
+        });
     }
 
     /// The members of a block end here — see [`Printer::Ends`]. What was written past the last of them is due and takes its line now, at their indentation; the document offers this line start, so nothing hangs from it.
@@ -461,6 +483,8 @@ pub enum Annotated {
     Name { written: Option<Range<usize>> },
     /// One of the language's words.
     Word,
+    /// A part of the document — see [`Printer::Opens`]: its range is what it covers, and it carries no text of its own.
+    Part,
 }
 
 /// One node of [`fits`]'s walk, with the facts about its surroundings its verdict depends on.
@@ -574,7 +598,11 @@ fn ahead(rest: &[Step]) -> Option<char> {
             | Printer::Hang(inner)
             | Printer::OwnLineIfBroken(inner)
             | Printer::Group { inner, .. } => stack.push((inner, flat)),
-            Printer::Line { .. } | Printer::Mark(_) | Printer::Ends => {}
+            Printer::Line { .. }
+            | Printer::Mark(_)
+            | Printer::Opens
+            | Printer::Closes
+            | Printer::Ends => {}
         }
     }
 }
@@ -734,6 +762,7 @@ fn fits(
             }
             // Zero width, and nothing to measure: what it brings in arrives with the closer the scan reads next.
             Printer::Ends => {}
+            Printer::Opens | Printer::Closes => {}
             // Reversed, because the stack pops last-in first.
             Printer::Concat(parts) => {
                 stack.extend(parts.iter().rev().map(|part| {
@@ -1009,6 +1038,8 @@ fn run<'b, 'c>(
                     state.text(&spelling)?;
                 }
                 Printer::Mark(at) => state.reach(*at),
+                Printer::Opens => state.parts.push(None),
+                Printer::Closes => state.closes(),
                 Printer::Ends => state.ends(&stack)?,
             },
             // A gap is measured after the previous item has actually rendered. Structural items keep their groups even when they start on a fresh line; an atomic fill forces each item flat.
@@ -1147,6 +1178,8 @@ pub fn each_named(
             | Printer::Line { .. }
             | Printer::IfBreak { .. }
             | Printer::Mark(_)
+            | Printer::Opens
+            | Printer::Closes
             | Printer::Ends => {}
         }
     }

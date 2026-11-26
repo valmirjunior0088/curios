@@ -2,7 +2,10 @@
 //!
 //! **A library is documented for its consumers.** That is the one audience this record knows: which modules and declarations appear is the export view the lowering resolved to a fixed point, so a private declaration is absent rather than hidden and a re-export is an entry of the declaration it names, by the path every mark names it by — or, when the declaration's own module has no page, the facade pattern, the declaration itself, documented where the re-export puts it and reached by every mark that names it; a constructor appears only when the representation is public, a field likewise, and a test never. A program has no consumer, so nothing here documents one.
 
-use curios_common::{Class, Keyword, Qualifier};
+use {
+    curios_common::{Class, Qualifier},
+    std::ops::Range,
+};
 
 /// A unit's interface, for its consumers.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,39 +86,6 @@ pub enum Totality {
     Unfounded,
 }
 
-/// How a declaration's source writes the members its representation shows: what follows its head, what leads and trails each member, what closes the block, and whether its members stand indented under the head.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Block {
-    pub opener: &'static str,
-    pub lead: &'static str,
-    pub trail: &'static str,
-    pub closer: &'static str,
-    pub indented: bool,
-}
-
-impl Block {
-    /// The block a declaration of `kind` writes its members in, `opaque` saying its representation is kept: an inductive's constructors each behind a bar and closed by `end`, a structure's fields and a concept's methods in braces, each with its comma. None for a declaration that writes none a consumer sees: a family or a structure whose representation is kept, and every other kind. A sealed concept still writes its methods, which are reached by name either way.
-    pub fn of(kind: Kind, opaque: bool) -> Option<Self> {
-        match (kind, opaque) {
-            (Kind::Inductive, false) => Some(Self {
-                opener: "",
-                lead: "| ",
-                trail: "",
-                closer: Keyword::End.spelling(),
-                indented: false,
-            }),
-            (Kind::Structure, false) | (Kind::Concept, _) => Some(Self {
-                opener: " {",
-                lead: "",
-                trail: ",",
-                closer: "}",
-                indented: true,
-            }),
-            _ => None,
-        }
-    }
-}
-
 /// One declaration a consumer can see: its head as written, its prose, and the members its representation exposes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[curios_archive::archived]
@@ -149,17 +119,82 @@ pub struct Declaration {
 pub struct Member {
     /// The label, or empty for a superclass edge: an anonymous member has no anchor and no address.
     pub name: String,
-    pub signature: Signature,
+    /// Where it is written in its declaration's [`Signature`], which holds the declaration whole: the byte range of `text` the render reported it at, from its first character to its last, its line's indentation and what trails it no part of it.
+    pub start: usize,
+    pub end: usize,
     pub prose: Option<Vec<String>>,
 }
 
-/// A declaration head as printed, and every name in it that resolved.
+impl Member {
+    /// Where it is written in its declaration's signature.
+    pub fn at(&self) -> Range<usize> {
+        self.start..self.end
+    }
+}
+
+/// A declaration as printed, its head and the block of the members its representation shows, and every name in it that resolved.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct Signature {
     pub text: String,
     /// Ascending by position, non-overlapping.
     pub marks: Vec<Mark>,
+}
+
+/// Where a declaration's text is cut for its members, each of which the printer put on lines of its own: the head above the first member's line, each member from the start of the line it begins on to the end of the line it ends on, so what trails it on its line is its own, and the closer below the last. The head is the text whole where no member is shown.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Cut {
+    pub head: Range<usize>,
+    pub members: Vec<Range<usize>>,
+    pub closer: Range<usize>,
+}
+
+impl Cut {
+    /// `text` cut for the members written at `members`, each by the byte range its part covers.
+    pub fn of(text: &str, members: &[Range<usize>]) -> Cut {
+        let begins = |at: usize| text[..at].rfind('\n').map_or(0, |newline| newline + 1);
+        let ends = |at: usize| {
+            text[at..]
+                .find('\n')
+                .map_or(text.len(), |newline| at + newline)
+        };
+        let (Some(first), Some(last)) = (members.first(), members.last()) else {
+            return Cut {
+                head: 0..text.len(),
+                members: Vec::new(),
+                closer: text.len()..text.len(),
+            };
+        };
+        let below = ends(last.end);
+
+        Cut {
+            head: 0..begins(first.start).saturating_sub(1),
+            members: members
+                .iter()
+                .map(|member| begins(member.start)..ends(member.end))
+                .collect(),
+            closer: (below + 1).min(text.len())..text.len(),
+        }
+    }
+}
+
+impl Signature {
+    /// The bytes of `text` from `start` to `end`, with the marks they hold: what a page draws of one part of a declaration.
+    pub fn within(&self, start: usize, end: usize) -> Signature {
+        Signature {
+            text: self.text[start..end].to_string(),
+            marks: self
+                .marks
+                .iter()
+                .filter(|mark| start <= mark.start && mark.end <= end)
+                .map(|mark| Mark {
+                    start: mark.start - start,
+                    end: mark.end - start,
+                    marked: mark.marked.clone(),
+                })
+                .collect(),
+        }
+    }
 }
 
 /// One span of a signature the printer set apart: the byte range of `text` it occupies, and what it is. A name whose declaration a consumer cannot write, or a binder, carries no mark at all and stays plain text.

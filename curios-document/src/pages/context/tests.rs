@@ -128,7 +128,7 @@ fn a_signature_is_laid_out_in_the_lines_its_printer_broke_it_into() {
         ],
     };
 
-    let lines = lines(segments(&bundle, 0, &signature), Some("fold"), " {");
+    let lines = lines(segments(&bundle, 0, &signature), Some("fold"));
 
     assert_eq!(
         lines
@@ -139,7 +139,7 @@ fn a_signature_is_laid_out_in_the_lines_its_printer_broke_it_into() {
             (0, "pub let fold(".to_string()),
             (4, "step: (B, A) -> B,".to_string()),
             (4, "list: List(A),".to_string()),
-            (0, ") -> B {".to_string()),
+            (0, ") -> B".to_string()),
         ]
     );
     let declared = |line: &Line| {
@@ -163,7 +163,7 @@ fn a_signature_is_laid_out_in_the_lines_its_printer_broke_it_into() {
             .collect::<Vec<_>>()
     };
     assert_eq!(texts(&lines[1]), ["step: ", "(B, ", "A) ", "-> ", "B,"]);
-    assert_eq!(texts(&lines[3]), [") ", "-> ", "B {"]);
+    assert_eq!(texts(&lines[3]), [") ", "-> ", "B"]);
 }
 
 /// The name a signature declares is the first text after its keywords and nothing else: a parameter of the same name stays text, on the head's line or on one of its own, and so does a longer name that begins with it.
@@ -177,7 +177,7 @@ fn only_the_name_a_signature_declares_is_set_apart() {
             marks: vec![mark(0, 3, Marked::Word(Class::Keyword))],
         };
 
-        lines(segments(&bundle, 0, &signature), Some(name), "")
+        lines(segments(&bundle, 0, &signature), Some(name))
             .iter()
             .flat_map(|line| &line.segments)
             .filter(|segment| matches!(segment, Segment::Declared(_)))
@@ -254,10 +254,8 @@ fn an_anchor_is_a_name_no_other_thing_of_the_page_takes() {
     let home = Qualifier::from(["m"]);
     let member = Member {
         name: "x".to_string(),
-        signature: Signature {
-            text: String::new(),
-            marks: Vec::new(),
-        },
+        start: 0,
+        end: 0,
         prose: None,
     };
     let family = declaration(&home, "Shape", Kind::Inductive);

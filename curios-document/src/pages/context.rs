@@ -7,11 +7,12 @@
 use {
     super::{Bundle, Paragraph, Span, paragraphs, spans, texts},
     crate::{
-        Block, Declaration, Entry, ExposureLine, Kind, Marked, Member, ModuleDocumentation,
+        Cut, Declaration, Entry, ExposureLine, Kind, Marked, Member, ModuleDocumentation,
         Signature, Totality,
     },
     askama::Template,
     curios_common::{Class, Keyword, Qualifier},
+    std::ops::Range,
 };
 
 /// The version every page's footer names: the compiler's.
@@ -127,8 +128,8 @@ impl Line {
 struct MemberBlock {
     /// The name a link lands on ([`member_anchor`]); none for an anonymous member, and none where the block is shown apart from where its declaration is whole, which is where a member is linked.
     anchor: Option<String>,
-    /// Whether the member stands indented under its head, as a field and a method do.
-    deep: bool,
+    /// The column a note under the member stands at: under its name as written.
+    note: usize,
     lines: Vec<Line>,
     notes: Vec<Paragraph>,
 }
@@ -409,35 +410,19 @@ fn entry(
     }
 }
 
-/// The cluster of a declaration drawn whole: its head, its block with each member's note and anchor, its facts and its note. `subject` says it is what the page opens on, which decides its members' anchors.
+/// The cluster of a declaration drawn whole: its head, its block with each member's note and anchor, its facts and its note. `subject` says it is what the page opens on, which decides its member anchors ([`member_anchor`]).
 fn whole(bundle: &Bundle<'_>, depth: usize, declaration: &Declaration, subject: bool) -> Cluster {
-    let block = Block::of(declaration.kind, declaration.opaque);
+    let drawn = drawn(declaration);
 
     Cluster {
         anchor: Some(declaration.name.clone()),
         exposure: false,
         head: lines(
-            segments(bundle, depth, &declaration.signature),
+            segments(bundle, depth, &drawn.head),
             Some(&declaration.name),
-            block.map_or("", |block| block.opener),
         ),
         members: members(bundle, depth, declaration, Some(subject)),
-        closer: block
-            .map(|block| {
-                // A closer that is a word of the language is set apart as one, and punctuation stays plain.
-                vec![Line {
-                    indent: 0,
-                    segments: vec![match Keyword::read(block.closer) {
-                        Some(keyword) => Segment::Marked {
-                            class: keyword.class().name(),
-                            text: block.closer.to_string(),
-                            href: None,
-                        },
-                        None => Segment::Text(block.closer.to_string()),
-                    }],
-                }]
-            })
-            .unwrap_or_default(),
+        closer: lines(segments(bundle, depth, &drawn.closer), None),
         facts: facts(declaration),
         prose: paragraphs(declaration.prose.as_deref()),
         door: None,
@@ -445,40 +430,57 @@ fn whole(bundle: &Bundle<'_>, depth: usize, declaration: &Declaration, subject: 
     }
 }
 
-/// The members of `declaration`'s block as the source writes them, each behind what leads it and before what trails it: an inductive's constructors each after a bar, a structure's fields and a concept's methods each with its comma. `noted` is whether the block is where the declaration is whole, and then whether that is as what the page opens on: each member carries its note and its anchor there, and neither anywhere else.
+/// A declaration's signature cut where its members' lines begin, as a page draws it ([`Cut`]).
+struct Drawn {
+    head: Signature,
+    members: Vec<Signature>,
+    closer: Signature,
+}
+
+/// [`Drawn`] of `declaration`.
+fn drawn(declaration: &Declaration) -> Drawn {
+    let signature = &declaration.signature;
+    let cut = Cut::of(
+        &signature.text,
+        &declaration
+            .members
+            .iter()
+            .map(Member::at)
+            .collect::<Vec<_>>(),
+    );
+    let within = |range: &Range<usize>| signature.within(range.start, range.end);
+
+    Drawn {
+        head: within(&cut.head),
+        members: cut.members.iter().map(within).collect(),
+        closer: within(&cut.closer),
+    }
+}
+
+/// The members of `declaration`'s block as the source writes them, each on the lines the printer laid it out on, with its anchor and its notes, a note standing under the member's name as written: past a constructor's bar, flush with a field or a method.
 fn members(
     bundle: &Bundle<'_>,
     depth: usize,
     declaration: &Declaration,
     noted: Option<bool>,
 ) -> Vec<MemberBlock> {
-    let Some(block) = Block::of(declaration.kind, declaration.opaque) else {
-        return Vec::new();
-    };
-
     declaration
         .members
         .iter()
-        .map(|member| {
-            let mut lines = lines(
-                segments(bundle, depth, &member.signature),
-                None,
-                block.trail,
-            );
-            if let Some(first) = lines.first_mut()
-                && !block.lead.is_empty()
-            {
-                first
-                    .segments
-                    .insert(0, Segment::Text(block.lead.to_string()));
-            }
+        .zip(drawn(declaration).members)
+        .map(|(member, signature)| {
+            let first = signature.text.lines().next().unwrap_or_default();
+            let named = (!member.name.is_empty())
+                .then(|| first.find(member.name.as_str()))
+                .flatten()
+                .unwrap_or(first.len() - first.trim_start_matches(' ').len());
 
             MemberBlock {
                 anchor: noted
                     .filter(|_| !member.name.is_empty())
                     .map(|subject| member_anchor(declaration, member, subject)),
-                deep: block.indented,
-                lines,
+                note: first[..named].chars().count(),
+                lines: lines(segments(bundle, depth, &signature), None),
                 notes: match noted {
                     Some(_) => paragraphs(member.prose.as_deref()),
                     None => Vec::new(),
@@ -510,7 +512,7 @@ fn exposure(bundle: &Bundle<'_>, depth: usize, line: &ExposureLine) -> Cluster {
     Cluster {
         anchor: None,
         exposure: true,
-        head: lines(segments(bundle, depth, &line.signature), None, ""),
+        head: lines(segments(bundle, depth, &line.signature), None),
         members: Vec::new(),
         closer: Vec::new(),
         facts: Vec::new(),
@@ -569,7 +571,7 @@ fn witness(
 ) -> WitnessRow {
     WitnessRow {
         anchor: witness_anchor(module, declaration),
-        lines: lines(segments(bundle, depth, &declaration.signature), None, ""),
+        lines: lines(segments(bundle, depth, &declaration.signature), None),
         derived: declaration.derived,
         prose: paragraphs(declaration.prose.as_deref()),
         home: None,
@@ -682,8 +684,11 @@ fn segments(bundle: &Bundle<'_>, depth: usize, signature: &Signature) -> Vec<Seg
     segments
 }
 
-/// `segments` as the lines the printer laid them out in, each with the indent it was given, its text beginning past it ([`Line::lead`]), and `trail` after the last. Where `declared` names what the signature declares, the name is set apart: it is the first text of the signature after its keywords. A text ends at each space ([`folding`]), and `trail` joins what it follows, so a line never folds before what closes it.
-fn lines(segments: Vec<Segment>, declared: Option<&str>, trail: &str) -> Vec<Line> {
+/// `segments` as the lines the printer laid them out in, each with the indent it was given, its first among them, and its text beginning past it ([`Line::lead`]); none for no text.
+fn lines(segments: Vec<Segment>, declared: Option<&str>) -> Vec<Line> {
+    if segments.is_empty() {
+        return Vec::new();
+    }
     let mut lines = vec![Line {
         indent: 0,
         segments: Vec::new(),
@@ -699,13 +704,20 @@ fn lines(segments: Vec<Segment>, declared: Option<&str>, trail: &str) -> Vec<Lin
             continue;
         };
         for (index, mut part) in text.split('\n').enumerate() {
+            let indent = part.len() - part.trim_start_matches(' ').len();
             if index > 0 {
-                let indent = part.len() - part.trim_start_matches(' ').len();
                 part = &part[indent..];
                 lines.push(Line {
                     indent,
                     segments: Vec::new(),
                 });
+            } else if let Some(first) = lines
+                .last_mut()
+                .filter(|line| line.indent == 0 && line.segments.is_empty())
+            {
+                // A part of a block cut where its line begins opens on the indent its line was given, as every later line does.
+                part = &part[indent..];
+                first.indent = indent;
             }
             let line = &mut lines.last_mut().expect("a signature has a line").segments;
             let words = part.trim_start_matches(' ');
@@ -723,12 +735,6 @@ fn lines(segments: Vec<Segment>, declared: Option<&str>, trail: &str) -> Vec<Lin
             }
             folding(part, line);
         }
-    }
-    if !trail.is_empty() {
-        plain(
-            trail,
-            &mut lines.last_mut().expect("a signature has a line").segments,
-        );
     }
     lines
 }

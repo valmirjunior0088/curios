@@ -157,6 +157,11 @@ pub fn reached(offset: usize) -> Printer {
     Printer::Mark(offset)
 }
 
+/// `inner` as a part a renderer reports where it landed — see [`Printer::Opens`]: printed exactly as `inner` is.
+pub fn part(inner: Printer) -> Printer {
+    Printer::Concat(vec![Printer::Opens, inner, Printer::Closes])
+}
+
 /// Note that the members of a block end here — see [`Printer::Ends`]. Zero width and no output.
 pub fn ends() -> Printer {
     Printer::Ends
