@@ -198,8 +198,6 @@ pub struct Verdicts {
     executable: Option<(String, String)>,
     /// The packs at each address this handle has read or filed blobs at, by the address: a pack is read once for as long as the handle lives, so a filing after a restore reads no pack the restore read.
     packs: RefCell<BTreeMap<String, Rc<Packs>>>,
-    /// What this compiler's records at each address name, by the address, as [`Verdicts::named`] read them.
-    named: RefCell<BTreeMap<String, Rc<BTreeSet<Digest>>>>,
 }
 
 impl Verdicts {
@@ -213,7 +211,6 @@ impl Verdicts {
             session: None,
             executable: None,
             packs: RefCell::new(BTreeMap::new()),
-            named: RefCell::new(BTreeMap::new()),
         }
     }
 
@@ -229,7 +226,6 @@ impl Verdicts {
             session: Some(session),
             executable: None,
             packs: RefCell::new(BTreeMap::new()),
-            named: RefCell::new(BTreeMap::new()),
         }
     }
 
@@ -475,37 +471,11 @@ impl Verdicts {
         Some(packs)
     }
 
-    /// What the packs at `address` hold of declarations elaborated before that a compile of the object there may take one from (`curios_elab::Candidating`): those a record of this compiler's names ([`Offered`]). `None` for a handle with no cabinet.
+    /// What the packs at `address` hold of declarations elaborated before that a compile of the object there may take one from (`curios_elab::Candidating`): every one they hold ([`Offered`]). `None` for a handle with no cabinet.
     fn candidates(&self, address: &str) -> Option<Rc<dyn Candidates>> {
         let packs = self.packs(address)?;
-        let named = self.named(address);
 
-        Some(Rc::new(Offered { packs, named }))
-    }
-
-    /// Every blob a record of this compiler's at `address` names, read off each record's index once for as long as the handle lives, or until it files there. A record whose index is not the bytes it was written with names nothing.
-    fn named(&self, address: &str) -> Rc<BTreeSet<Digest>> {
-        if let Some(named) = self.named.borrow().get(address) {
-            return Rc::clone(named);
-        }
-        let named = Rc::new(
-            self.records(address)
-                .into_iter()
-                .filter_map(|(opened, record)| {
-                    let index = opened.artifact()?;
-
-                    intact(&record.unit, &index)
-                        .then(|| Unit::named(&index).ok())
-                        .flatten()
-                })
-                .flatten()
-                .collect::<BTreeSet<_>>(),
-        );
-        self.named
-            .borrow_mut()
-            .insert(address.to_string(), Rc::clone(&named));
-
-        named
+        Some(Rc::new(Offered { packs }))
     }
 
     /// The unit whose index the object at `address` holds as `index`, each blob it names found among its packs, restored for `source`: each source of its stored texts holds the file its name resolves to where `source`'s packages stand. `None` where one of the blobs is not found there, or the index holds no unit.
@@ -736,21 +706,16 @@ struct Placement {
     stored: Indexed,
 }
 
-/// The candidates a compile at an address may take ([`Verdicts::candidates`]): the blobs its packs hold under a candidate's name that a record its object keeps names.
+/// The candidates a compile at an address may take ([`Verdicts::candidates`]): every blob its packs hold under a candidate's name.
 ///
-/// **A candidate reaches one filing back.** The packs are this compiler's own, so every candidate in them is one it made, and none is believed on behalf of a compiler that never reached it ([Cached verdicts](../../documentation/design/soundness/cached-verdicts.md)). A compile takes those its object's two records name and never an older blob a pack still holds, so what it reuses follows what was filed, and not when its packs were last collected.
+/// **A candidate reaches what the packs still hold.** A blob neither of the object's records names stays in its pack until the pack is rewritten ([A filing keeps what its object's two records name, with no clock](../README.md#a-filing-keeps-what-its-objects-two-records-name-with-no-clock)), and a candidate is believed on the digests of the parts it read ([Cached verdicts](../../documentation/design/soundness/cached-verdicts.md)), so taking one moves what a compile reuses and never what it answers.
 struct Offered {
     packs: Rc<Packs>,
-    named: Rc<BTreeSet<Digest>>,
 }
 
 impl Candidates for Offered {
     fn candidates(&self, facet: Facet, input: &Digest) -> Vec<Blob> {
-        self.packs
-            .prefixed(&candidate_prefix(facet, input))
-            .into_iter()
-            .filter(|blob| self.named.contains(&blob.digest))
-            .collect()
+        self.packs.prefixed(&candidate_prefix(facet, input))
     }
 
     /// A blob by its name, whoever's record names it: a name a candidate reads is the digest of what it holds, so what it finds is what was filed under it.
@@ -828,9 +793,6 @@ impl Cache for Verdicts {
                 replace(&placement.path, &record, placement.stored.index())
             })
             .and_then(|()| self.collect(&placement.address, &kept));
-        // What this compiler's records name has moved, for whatever asks again in this handle's life.
-        self.named.borrow_mut().remove(&placement.address);
-
         // Best effort: a cabinet that cannot be written costs the next compilation the work it would have saved, and nothing else. What it must never do is cost the verdict — so this unit takes its place below whether or not any of it landed, and the refusal is kept for a caller to report rather than raised here.
         match filed {
             // The session holds this very unit, now the bytes the object holds: a later hit on them is answered with it.

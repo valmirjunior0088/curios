@@ -566,7 +566,7 @@ impl Unit {
         curios_archive::from_bytes::<Unit>(unit)?.with_apart(Bytes::from(apart.to_vec()), &find)
     }
 
-    /// Every blob the index `index` names ([`Unit::stored`]), by its digest: the lists [`Unit::restored`] finds blobs by, read with no unit decoded and no blob found. What a cabinet holds a blob to where it is offered by its name alone. `Err` is bytes that hold no index.
+    /// Every blob the index `index` names ([`Unit::stored`]), by its digest: the lists [`Unit::restored`] finds blobs by, read with no unit decoded and no blob found: what a cabinet keeps a blob for where it collects an object's packs. `Err` is bytes that hold no index.
     pub fn named(index: &[u8]) -> Result<BTreeSet<Digest>, String> {
         let (_, apart) = halves(index).ok_or("not a unit's index")?;
         let apart = Bytes::from(apart.to_vec());

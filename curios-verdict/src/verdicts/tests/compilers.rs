@@ -5,7 +5,7 @@ use {
     crate::verdicts::*,
     curios_archive::Bytes,
     curios_common::{candidate_name, test_support::*},
-    curios_unit::{Pack, pack_name, pack_names, packed},
+    curios_unit::{Pack, Unit, pack_name, pack_names, packed},
     std::{collections::BTreeMap, path::Path},
 };
 
@@ -60,6 +60,22 @@ fn held(root: &Path, compiler: &str, address: &str) -> Vec<Digest> {
         .collect()
 }
 
+/// What the records of the object `compiler` filed at `address` of the project at `root` name, read as a filing reads them to keep a pack's blobs: a record whose index is not the bytes it was written with names nothing.
+fn named(root: &Path, compiler: &str, address: &str) -> BTreeSet<Digest> {
+    filing_as(root, compiler)
+        .records(address)
+        .into_iter()
+        .filter_map(|(opened, record)| {
+            let index = opened.artifact()?;
+
+            intact(&record.unit, &index)
+                .then(|| Unit::named(&index).ok())
+                .flatten()
+        })
+        .flatten()
+        .collect()
+}
+
 /// A compiler change files its unit at the address the last compiler filed it at, under its own name, every blob its record names among its own packs, and takes away what the other filed: the address names no compiler, and a cabinet keeps one compiler's objects.
 #[test]
 fn a_compiler_change_files_the_address_again_and_takes_the_other_compilers_objects_away() {
@@ -78,7 +94,7 @@ fn a_compiler_change_files_the_address_again_and_takes_the_other_compilers_objec
         !own(&root).objects_of("one").exists(),
         "what the first compiler filed is taken away"
     );
-    let named = filing_as(&root, "two").named(&address);
+    let named = named(&root, "two", &address);
     let holds = held(&root, "two", &address);
     assert!(
         !named.is_empty() && named.iter().all(|digest| holds.contains(digest)),
@@ -174,7 +190,7 @@ fn an_object_holds_what_its_records_name_and_under_twice_as_much() {
         write(&root, "shape/lib.crs", &library(&format!("text {at}")));
         folded_by(&root, "one");
         let [address] = addresses(&root).try_into().expect("one object");
-        let named = filing_as(&root, "one").named(&address);
+        let named = named(&root, "one", &address);
         let holds = held(&root, "one", &address);
 
         assert!(
@@ -190,27 +206,30 @@ fn an_object_holds_what_its_records_name_and_under_twice_as_much() {
     }
 }
 
-/// A candidate is offered where a record of the running compiler names its blob, and an object another compiler filed names none for it.
+/// A compile looks among its own compiler's packs at an address, and an object another compiler filed holds none of them.
 #[test]
-fn a_candidate_only_another_compilers_record_names_is_not_offered() {
+fn a_compile_looks_among_its_own_compilers_packs_alone() {
     let root = project("candidates-held");
 
     folded_by(&root, "one");
     let [address] = addresses(&root).try_into().expect("one object");
+    let held = |compiler: &str| {
+        filing_as(&root, compiler)
+            .packs(&address)
+            .expect("a handle on a cabinet")
+            .prefixed(&[])
+    };
 
     assert!(
-        !filing_as(&root, "one").named(&address).is_empty(),
-        "the compiler that filed names its blobs"
+        !held("one").is_empty(),
+        "the compiler that filed holds its blobs"
     );
-    assert!(
-        filing_as(&root, "two").named(&address).is_empty(),
-        "another names none of them"
-    );
+    assert!(held("two").is_empty(), "another holds none of them");
 }
 
-/// What an address offers a compile is what its packs hold under a candidate's name that a record of the running compiler names, and nothing else its packs hold.
+/// What an address offers a compile is every blob its packs hold under a candidate's name, one no record names among them: a blob two filings back stays until its pack is rewritten, and a candidate is believed on the digests of the parts it read. Mutation-checked: with `Offered` handing over any fewer, the unnamed candidate is not found.
 #[test]
-fn an_offered_candidate_is_one_a_record_names() {
+fn every_candidate_the_packs_hold_is_offered_whatever_a_record_names() {
     let directory = Temporary::new("cache", "offered");
     let packs = Rc::new(Packs::at(directory.to_path_buf(), SystemTime::now()));
     let input = Digest::of(b"input");
@@ -223,21 +242,15 @@ fn an_offered_candidate_is_one_a_record_names() {
     packs
         .write(&[named.clone(), unnamed.clone()])
         .expect("a pack is written");
-    let offered = Offered {
-        packs,
-        named: Rc::new(BTreeSet::from([named.digest])),
-    };
+    let offered = Offered { packs };
 
     let found = offered
         .candidates(Facet::Elaboration, &input)
         .into_iter()
         .map(|blob| blob.digest)
-        .collect::<Vec<_>>();
-    assert_eq!(found, [named.digest]);
-    assert!(
-        offered.blob(&unnamed.digest).is_some(),
-        "a blob is still found by its name, which is the digest of what it holds"
-    );
+        .collect::<BTreeSet<_>>();
+
+    assert_eq!(found, BTreeSet::from([named.digest, unnamed.digest]));
 }
 
 /// Every pack the project at `root` holds, written again with its runs unreadable: its table names what it named, and each run members lie in is bytes no layout reads, as a run one compiler archived is to a compiler of another layout.
