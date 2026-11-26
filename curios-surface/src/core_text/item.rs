@@ -15,7 +15,7 @@ use {
         Spellable, Spelling, TopConcept, TopForeign, TopLet, TopTest, concept_supers_read_off,
     },
     curios_abi::ForeignFunction,
-    curios_common::{Qualifier, Span},
+    curios_common::{Qualifier, Span, SyntaxRegistry},
     curios_core::{
         ConceptDecl, Definition, DefinitionKind, Definitions, Entrypoint, Global, Item, Nominal,
         Nominals, RecItem, Term, UniverseContext,
@@ -85,12 +85,13 @@ pub fn to_core_at(
     file: &CoreFile,
     scope: Option<&FormScope>,
     at: &Term,
+    syntax: &SyntaxRegistry,
 ) -> Result<(Definitions, Option<Entrypoint>), ReadError> {
     let (definitions, entry) = to_core(file, scope)?;
     let entry = entry
         .map(|entry| match entry.type_ {
             Some(stated) if stated != *at => Err(ReadError::at(
-                Refusal::PutElsewhere(at.spelled(&Rc::new(Spelling::default())).to_string()),
+                Refusal::PutElsewhere(at.spelled(&Rc::new(Spelling::new(syntax))).to_string()),
                 file.entry
                     .as_ref()
                     .and_then(|written| written.type_.as_ref())

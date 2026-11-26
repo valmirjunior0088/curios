@@ -41,7 +41,7 @@ impl DumpScope<'_> {
             units.iter().map(|(definitions, ..)| *definitions),
         );
 
-        Spelling::core_text()
+        Spelling::core_text(self.syntax)
             .with_form_scope(Rc::new(scope))
             .written_as_text()
     }

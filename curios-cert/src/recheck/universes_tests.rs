@@ -3,6 +3,7 @@
 use {
     super::test_support::*,
     crate::{test_support::*, *},
+    curios_analysis::test_support::*,
     curios_common::fill,
     curios_core::{Item, ReduceError, UniverseError},
     curios_surface::Spelling,
@@ -438,7 +439,7 @@ fn a_bare_occurrence_of_a_universe_scheme_is_refused() {
 
         assert!(
             refuses(&verdicts, Some("user"), |error| error
-                .rendered(&Spelling::default())
+                .rendered(&Spelling::new(&SYNTAX))
                 .contains(refusal)),
             "{label}: the certifier read a universe scheme at the ambient item's parameters: {verdicts:?}",
         );

@@ -5,10 +5,10 @@
 use {
     curios_core::{Definitions, Item, Program, Term},
     curios_elab::DEFAULT_BUDGET,
-    curios_module::RootSource,
+    curios_module::{RootSource, SYNTAX},
     curios_pipeline::test_support::*,
     curios_surface::Entrypoint,
-    curios_surface::Spellable,
+    curios_surface::Faithful,
 };
 
 /// The compile path's walk over one fixture. Mutation edits bodies and sorts, never metavariables, so the zonk evidence re-projects for every mutant — and the certifier, not the wrapper, is what must catch the mutation.
@@ -110,7 +110,7 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
                 !recheck(&mutant, curios_elab::DEFAULT_BUDGET).is_empty(),
                 "{description}: the certifier accepted `{}` at `{}` with a body of another type entirely",
                 definition.name.faithful(),
-                definition.type_.faithful(),
+                definition.type_.faithful(&SYNTAX),
             );
             mutated += 1;
         }

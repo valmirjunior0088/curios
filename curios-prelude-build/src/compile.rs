@@ -85,7 +85,10 @@ fn lower(root: &str, modules: &RootSource, predecessors: &[&PreparedText]) -> Pr
     let prepared = prepare_prelude(modules, predecessors, &SYNTAX)
         .unwrap_or_else(|error| panic!("/{root} failed to lower: {}", error.format()));
     validate_lowered_universe_seeds(prepared.core(), prepared.minted()).unwrap_or_else(|error| {
-        panic!("lowered Text universe seeds of /{root} are invalid: {error}")
+        panic!(
+            "lowered Text universe seeds of /{root} are invalid: {}",
+            error.faithful(&SYNTAX)
+        )
     });
 
     prepared
@@ -203,8 +206,12 @@ fn unit(
     let observed = context.observed();
 
     // Every universe invariant the archive is trusted to satisfy is asserted here, on the value about to be serialized, and nowhere else. Restoration reads exactly the bytes written from this value — a constant of the same build, whose structure bytecheck confirms — so re-deriving the invariants per compilation only re-answers a question already settled.
-    validate_universes(&core)
-        .unwrap_or_else(|error| panic!("elaborated /{root} universes are invalid: {error}"));
+    validate_universes(&core).unwrap_or_else(|error| {
+        panic!(
+            "elaborated /{root} universes are invalid: {}",
+            error.faithful(&SYNTAX)
+        )
+    });
 
     // This is the seam a unit is stored at, so it is where the rule about what a stored unit may carry is enforced: no identity meaningful only in the compilation that assigned it. Two calls rather than one, because the universe half of that rule is what the line above already refuses — an unsolved universe metavariable, named as such — and a rule stated twice is a copy rather than a second opinion.
     validate_stored_identities(&core, prepared.mounts()).unwrap_or_else(|found| {
@@ -270,7 +277,7 @@ fn certified(
                 "/{root} failed the certifier: {} refusals over {} items, first: {name} — {}",
                 verdicts.len(),
                 core.items.len(),
-                verdict.error.rendered(&Spelling::default()),
+                verdict.error.rendered(&Spelling::new(&SYNTAX)),
             );
         }
     };

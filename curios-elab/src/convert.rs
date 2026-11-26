@@ -47,7 +47,7 @@ use {
         Subterm, Telescope, Term, Tuple, TupleType, Two, UniverseConstraintOrigin, UniverseError,
         Universes, Variance, Variant, keys_paired, paired,
     },
-    curios_surface::Spellable,
+    curios_surface::Faithful,
     std::{
         collections::{HashMap, HashSet, VecDeque},
         mem,
@@ -1906,7 +1906,7 @@ impl Convert {
                     .map(|other| {
                         let result = context
                             .metavar_entry(*other)
-                            .map(|entry| entry.result().faithful().to_string())
+                            .map(|entry| entry.result().faithful(&context.syntax()).to_string())
                             .unwrap_or_else(|| "<no birth record>".into());
                         format!("?{} : {result}", other.0)
                     })
@@ -2096,7 +2096,7 @@ impl Convert {
                     curios_common::note!(
                         target: "curios_elab::solve",
                         meta = id.0,
-                        error = %error,
+                        error = %error.faithful(&context.syntax()),
                         "re-validation rejected the candidate",
                     );
 
@@ -2128,7 +2128,7 @@ impl Convert {
                 curios_common::note!(
                     target: "curios_elab::solve",
                     meta = id.0,
-                    against = %result.faithful(),
+                    against = %result.faithful(&context.syntax()),
                     "postponed: re-validation could not judge the candidate yet",
                 );
                 Solved::Postponed
@@ -2137,7 +2137,7 @@ impl Convert {
                 curios_common::note!(
                     target: "curios_elab::solve",
                     meta = id.0,
-                    against = %result.faithful(),
+                    against = %result.faithful(&context.syntax()),
                     "failed: re-validation",
                 );
                 self.rejected = Some(Box::new(Rejected {

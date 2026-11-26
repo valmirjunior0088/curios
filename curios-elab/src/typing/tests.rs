@@ -12,7 +12,10 @@ use {
 #[test]
 fn display_unbound_variable() {
     let err = Error::unbound_variable(Subterm::Intrinsic(Intrinsic::NatType), None);
-    assert_eq!(err.to_string(), "unknown name\n  `Nat` is not in scope");
+    assert_eq!(
+        err.faithful(&SYNTAX).to_string(),
+        "unknown name\n  `Nat` is not in scope"
+    );
 }
 
 #[test]
@@ -22,7 +25,7 @@ fn display_not_a_function() {
         Subterm::Intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
-        err.to_string(),
+        err.faithful(&SYNTAX).to_string(),
         "not a function\n  applied: a term of type `Nat`, which takes no argument"
     );
 }
@@ -33,7 +36,7 @@ fn display_type_mismatch_shows_both_types() {
         Subterm::Intrinsic(Intrinsic::NatType),
         Subterm::Intrinsic(Intrinsic::BoolType),
     );
-    let s = err.to_string();
+    let s = err.faithful(&SYNTAX).to_string();
     assert!(s.contains("Nat"), "should contain inferred Nat: {s}");
     assert!(s.contains("Bool"), "should contain expected Bool: {s}");
 }
@@ -43,7 +46,7 @@ fn display_type_mismatch_shows_both_types() {
 fn display_parameterless_witness_concept_states_the_rule() {
     let err = Error::parameterless_witness_concept(Global::Authored(Qualifier::from(["Nothing"])));
     assert_eq!(
-        err.to_string(),
+        err.faithful(&SYNTAX).to_string(),
         "unkeyed witness\n  the concept `/Nothing` has no parameters to key on\n  a global witness keys on its concept's parameter heads\n  supply a parameterless concept through a local `use` binder"
     );
 }

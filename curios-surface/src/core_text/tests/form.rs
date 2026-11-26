@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{CoreText, Refusal, Spellable, Spelling, parse_whole_term},
+    crate::{CoreText, Faithful, Refusal, Spellable, Spelling, parse_whole_term},
     curios_common::{Qualifier, Source},
     curios_core::{
         Arm, CalleeId, Cases, Definitions, Field, Free, Func, FuncType, Global, HeadKey, Intrinsic,
@@ -10,13 +10,14 @@ use {
         Proj, Quality, QualityParam, Row, Sort, StructDecl, Subterm, Telescope, Term,
         UniverseContext, UniverseParam, Universes, Var, WitnessId, WitnessKey, WitnessOrigin,
     },
+    curios_module::SYNTAX,
     curios_num::{Floating, Integer, Rounding},
     std::rc::Rc,
 };
 
 /// `term` written whole, checked against `expected`, then read back: the term it reads back as, and that term written whole again, which is the same text where everything the text states was read.
 fn whole_round_trip(term: &Term, expected: &str) -> Term {
-    let whole = Rc::new(Spelling::core_text().written_whole());
+    let whole = Rc::new(Spelling::core_text(&SYNTAX).written_whole());
     let text = term.spelled(&whole).to_string();
     assert_eq!(text, expected);
     let parsed = parse_whole_term::<CoreText>(&Source::inline(&text))
@@ -170,7 +171,7 @@ fn a_type_formers_eta_form_is_written_as_its_lambda() {
         written(&lambda),
         "(x: #NatType) => #{node = InductType} /Sign()(x)"
     );
-    assert_eq!(lambda.faithful().to_string(), "/Sign");
+    assert_eq!(lambda.faithful(&SYNTAX).to_string(), "/Sign");
 }
 
 /// A witness is named by what it witnesses, its concept and key after `~`.
@@ -219,7 +220,7 @@ fn a_method_named_by_its_path_is_its_path_under_its_node() {
 #[test]
 fn a_family_is_written_in_its_form() {
     assert_eq!(
-        module(bit(), Vec::new()).faithful().to_string(),
+        module(bit(), Vec::new()).faithful(&SYNTAX).to_string(),
         "induct /Bit: Type\n| zero()\n| one()\nend\n"
     );
 }
@@ -233,7 +234,10 @@ fn a_version_is_written_as_the_module_it_holds() {
     };
 
     assert!(version.items.is_version());
-    assert_eq!(version.faithful().to_string(), made.faithful().to_string());
+    assert_eq!(
+        version.faithful(&SYNTAX).to_string(),
+        made.faithful(&SYNTAX).to_string()
+    );
 }
 
 /// A record is written in its form, each field by its label under the parameters it reads, a lone record's item a `let`.
@@ -262,7 +266,7 @@ fn a_record_is_written_in_its_form() {
     };
 
     assert_eq!(
-        definitions.faithful().to_string(),
+        definitions.faithful(&SYNTAX).to_string(),
         "struct /Pair(A: Type, B: Type): pub Type {\n    fst: A,\n    snd: B,\n}\n"
     );
 }

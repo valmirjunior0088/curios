@@ -55,7 +55,8 @@ impl Put<'_> {
             Global::Authored(self.syntax.proof.false_type.qualifier()),
             Universes::default(),
         );
-        let (definitions, entry) = to_core_at(&file, self.scope, &empty).map_err(Unread::Read)?;
+        let (definitions, entry) =
+            to_core_at(&file, self.scope, &empty, &self.syntax).map_err(Unread::Read)?;
         let entry =
             entry.ok_or_else(|| Unread::Text("the text closes with no term to put".to_string()))?;
 

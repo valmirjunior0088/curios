@@ -54,7 +54,8 @@ impl Unread {
 pub fn read_core_text(source: &Arc<Source>, scope: &FormScope, at: &Term) -> Result<Read, Unread> {
     let (file, spans) =
         CoreFile::parse_spanned(source).map_err(|error| Unread::Parse(Box::new(error.report())))?;
-    let (definitions, entry) = to_core_at(&file, Some(scope), at).map_err(Unread::Read)?;
+    let (definitions, entry) =
+        to_core_at(&file, Some(scope), at, &scope.syntax).map_err(Unread::Read)?;
     let foreigns = rows(&definitions, scope.syntax);
     let anchors = anchored(&file, &spans);
 

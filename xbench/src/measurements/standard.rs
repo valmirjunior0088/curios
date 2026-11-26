@@ -57,8 +57,9 @@ pub fn std_recompile_census() {
                 .expect("lowered over a baseline")
                 .clone();
             let elaboration = phase(&[], || {
-                elaborated_over(predecessors, std, &lowered, &relowered)
-                    .unwrap_or_else(|error| panic!("the edited library elaborates: {error}"))
+                elaborated_over(predecessors, std, &lowered, &relowered).unwrap_or_else(|error| {
+                    panic!("the edited library elaborates: {}", error.faithful(&SYNTAX))
+                })
             });
             elaboration.read(&format!("{label}/elaborate"), None);
             let elaborated = elaboration.answer;
@@ -555,7 +556,7 @@ fn replays(next: &AtomicUsize) -> Share {
                     replay
                         .figures
                         .push((format!("{beside}/refused/{declaration}"), 1));
-                    let refusal = error.to_string().replace('\n', " | ");
+                    let refusal = error.faithful(&SYNTAX).to_string().replace('\n', " | ");
                     replay.said.push(format!(
                         "{beside}: {declaration} is refused: {}",
                         refusal.chars().take(600).collect::<String>()

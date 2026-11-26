@@ -8,12 +8,13 @@ mod tests;
 use {
     crate::{Context, EveryPosition, Structural, reduce},
     curios_analysis::held_pairs,
+    curios_common::SyntaxRegistry,
     curios_core::{
         Argument, Families, Field, Free, FuncType, Instance, Level, Match, Proj, Quality,
         ReduceError, StructType, Subterm, Term, TupleType, UniverseConstraintOrigin,
         instantiate_universes,
     },
-    curios_surface::Spellable,
+    curios_surface::Faithful,
     std::{collections::HashMap, rc::Rc},
 };
 
@@ -514,11 +515,11 @@ pub fn apply_param_types(
 }
 
 /// Report, while a recorder listens, a site that could not determine a universe level and fell back to `Type 0`. Diagnostic only: it changes nothing, and it is what tells a level these fallbacks chose from one a declaration's generalization did.
-pub fn probe_level_fallback(site: &'static str, type_: &Term) {
+pub fn probe_level_fallback(site: &'static str, type_: &Term, syntax: &SyntaxRegistry) {
     curios_common::note!(
         target: "curios_elab::sort",
         site,
-        type_ = %type_.faithful(),
+        type_ = %type_.faithful(syntax),
         "level defaulted to 0",
     );
 }

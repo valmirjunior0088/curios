@@ -6,8 +6,9 @@ use {
         DecoratorField, FlatMatch, Frame, LetSignature, Rendered, Shown, ShownOptions, TopForeign,
         TopLet, TopTest, WordAt, bracketed, core_written, decoration_fields, family_declared,
         from_core, level_spelled, nested, print_core_entry, print_core_item, print_core_term,
-        print_shown, print_shown_entry, print_shown_item, print_term, record_declared,
-        spellings_reaching, string, tree, universe_context_written, value, word_value,
+        print_shown, print_shown_entry, print_shown_item, print_term, reader_level,
+        record_declared, spellings_reaching, string, tree, universe_context_written, value,
+        word_value,
     },
     curios_abi::{ForeignFunction, StdioCodes},
     curios_common::{InfixOp, MAX_LINE_WIDTH, Plicity, Qualifier, Symbol, SyntaxRegistry},
@@ -31,7 +32,7 @@ use {
 
 // === Source-style names (diagnostics) ========================================
 //
-// Core spells names for the certifier's convenience, not the reader's: every binder is opened under a `Context::fresh` gensym (`n#15`, `(n#0 : Nat) -> …`) and every global is its fully-qualified canonical path (`/std/Vec/Vec`, `/sys/Nat/Nat`). A [`Spelling`] rewrites both back toward what the user wrote; the default one changes nothing, so a faithful render ([`Spellable::faithful`]) leaves names untouched.
+// Core spells names for the certifier's convenience, not the reader's: every binder is opened under a `Context::fresh` gensym (`n#15`, `(n#0 : Nat) -> …`) and every global is its fully-qualified canonical path (`/std/Vec/Vec`, `/sys/Nat/Nat`). A [`Spelling`] rewrites both back toward what the user wrote; the one a registry makes ([`Spelling::new`]) changes nothing, so a faithful render ([`Faithful::faithful`]) leaves names untouched.
 //
 // The configuration is threaded, not ambient. `Display::fmt` has no parameter channel, and thread-locals installed around a render would make a term's spelling depend on an enclosing frame nobody could see from the call, and "should this consumer erase universes?" a question answered by accident of where the installer sat rather than by the consumer. [`Spelled`] restores the parameter: `term.spelled(&spelling)` is an ordinary value that implements `Display`, and every printer function threads a `Frame` carrying that spelling beside the binder depth.
 //
@@ -55,9 +56,11 @@ use {
 //
 // `Spelling::label` consults the shorten map first (globals), then the rename map (locals); a name in neither renders verbatim.
 
-/// How a term is spelled for a reader. The default spells nothing differently, which is what a faithful render uses.
-#[derive(Clone, Default)]
+/// How a term is spelled for a reader. The one a registry makes ([`Spelling::new`]) spells nothing differently, which is what a faithful render uses.
+#[derive(Clone)]
 pub struct Spelling {
+    /// The root every intrinsic is written under, read off the registry the spelling is made with ([`RootSyntax::sys`](curios_common::RootSyntax)).
+    sys: &'static str,
     /// axis (a) — local binders to their source-style names.
     pretty: Option<Rc<Rename>>,
     /// axis (b) without a reader — global qualified names to their shortest unambiguous suffix.
@@ -203,6 +206,50 @@ impl ReaderNames {
 }
 
 impl Spelling {
+    /// The faithful spelling under `syntax`: core's own names, every universe shown, and each intrinsic under the root `syntax` mounts `/sys` at. Every other spelling is this one with axes set.
+    pub fn new(syntax: &SyntaxRegistry) -> Self {
+        Self::rooted(syntax.roots.sys)
+    }
+
+    /// The faithful spelling under this one's root: core's own names, nothing abbreviated, every universe shown — what a report falls back to where its reader's spelling would write two different terms alike.
+    pub fn unabbreviated(&self) -> Self {
+        Self::rooted(self.sys)
+    }
+
+    /// The faithful spelling writing each intrinsic under `sys`.
+    fn rooted(sys: &'static str) -> Self {
+        Self {
+            sys,
+            pretty: None,
+            shorten: None,
+            erase_universes: false,
+            nominal_plicities: Vec::new(),
+            anonymous_metavars: false,
+            string_literal: None,
+            grouped: false,
+            stated_proofs: false,
+            names: None,
+            reader: ReaderPosition::default(),
+            members: Vec::new(),
+            translated: false,
+            declined: Rc::default(),
+            core_text: false,
+            whole: false,
+            as_text: false,
+            shares: false,
+            shared: None,
+            group: None,
+            keys: Rc::default(),
+            form_scope: None,
+            only: None,
+        }
+    }
+
+    /// The root every intrinsic is written under.
+    pub fn sys(&self) -> &'static str {
+        self.sys
+    }
+
     /// Rename local binders to source-style names (axis (a)).
     pub fn with_pretty_names(mut self, rename: Rc<Rename>) -> Self {
         self.pretty = Some(rename);
@@ -366,7 +413,7 @@ impl Spelling {
 
     /// A built-in type or operation, named by the path under `/sys` a reader's spelling writes it by — a carrier's type `X` at `X/X`, an operation at its own path — spelled for the reader where one is set and the declaration reaches them, and by that path otherwise.
     pub(crate) fn intrinsic_symbol(&self, path: &str) -> String {
-        self.read(&intrinsic_global(path))
+        self.read(&intrinsic_global(self.sys, path))
             .flatten()
             .unwrap_or_else(|| path.to_string())
     }
@@ -474,10 +521,10 @@ impl Spelling {
     }
 
     /// The spelling Curios/Core proper is written in: every global by its absolute path and every field a node holds stated, so what it writes reads back as the term. A spelling a reader is handed writes a term in that reader's spelling instead: no decorator, an intrinsic by its surface name, a level metavariable as `?u1`.
-    pub fn core_text() -> Self {
+    pub fn core_text(syntax: &SyntaxRegistry) -> Self {
         Self {
             core_text: true,
-            ..Self::default()
+            ..Self::new(syntax)
         }
     }
 
@@ -549,7 +596,7 @@ impl Spelling {
         // A module carries only its own declarations, so the spelling is told what its environment put in scope, which each unit in scope says by the lexicon it keeps.
         let own = definitions.lexicon();
 
-        Self::core_text()
+        Self::core_text(syntax)
             .with_lexicons(&own, scope)
             .with_string_literals(Global::Authored(syntax.string.string.qualifier()))
     }
@@ -561,7 +608,7 @@ impl Spelling {
     }
 }
 
-/// A value paired with the [`Spelling`] it renders under — the parameter channel `Display::fmt` does not have. Produced by [`Spellable::spelled`] and [`Spellable::faithful`].
+/// A value paired with the [`Spelling`] it renders under — the parameter channel `Display::fmt` does not have. Produced by [`Spellable::spelled`] and [`Faithful::faithful`].
 pub struct Spelled<'a, T> {
     value: &'a T,
     spelling: Rc<Spelling>,
@@ -1232,13 +1279,13 @@ fn declared_below(path: &str) -> Vec<&str> {
     segments
 }
 
-/// The declaration under `/sys` an intrinsic's `path` names: a carrier's type `X` at `X/X`, an operation at its own path.
-pub fn intrinsic_global(path: &str) -> Global {
-    Global::Authored(Qualifier::from(iter::once(SYS).chain(declared_below(path))))
+/// The declaration under `/sys` an intrinsic's `path` names, `sys` being the word the registry's roots mount it at (`RootSyntax::sys`): a carrier's type `X` at `X/X`, an operation at its own path.
+pub fn intrinsic_global(sys: &str, path: &str) -> Global {
+    Global::Authored(Qualifier::from(iter::once(sys).chain(declared_below(path))))
 }
 
-/// The declaration under `/sys` that forms the carrier `head` keys on, `/sys/Nat/Nat` for `Nat`, read off the path its former is written at. None for a head no intrinsic former keys: a nominal one, or a tuple's shape.
-pub fn carrier_former(head: &HeadKey) -> Option<Global> {
+/// The declaration under `/sys` that forms the carrier `head` keys on, `/sys/Nat/Nat` for `Nat`, `sys` being the word `/sys` is mounted at, read off the path its former is written at. None for a head no intrinsic former keys: a nominal one, or a tuple's shape.
+pub fn carrier_former(sys: &str, head: &HeadKey) -> Option<Global> {
     let former = match head {
         HeadKey::Nat => Intrinsic::NatType,
         HeadKey::Byte => Intrinsic::ByteType,
@@ -1255,8 +1302,8 @@ pub fn carrier_former(head: &HeadKey) -> Option<Global> {
     };
 
     match intrinsic_form(former, false, |_| false) {
-        IntrinsicForm::Named(path) => Some(intrinsic_global(path)),
-        IntrinsicForm::Call { path, .. } => Some(intrinsic_global(&path)),
+        IntrinsicForm::Named(path) => Some(intrinsic_global(sys, path)),
+        IntrinsicForm::Call { path, .. } => Some(intrinsic_global(sys, &path)),
         _ => None,
     }
 }
@@ -1928,32 +1975,59 @@ pub trait Spellable: Sized {
     fn spelled<'a>(&'a self, spelling: &Rc<Spelling>) -> Spelled<'a, Self> {
         Spelled::new(self, spelling)
     }
+}
 
-    /// The faithful rendering: core's own names, every universe shown.
-    fn faithful(&self) -> Spelled<'_, Self> {
-        Spelled::new(self, &Rc::new(Spelling::default()))
+/// What holds a term, rendered faithfully: core's own names, every universe shown, and every intrinsic under the root `syntax` mounts `/sys` at, which is why it takes the registry.
+pub trait Faithful: Spellable {
+    /// This value under the faithful spelling `syntax` makes ([`Spelling::new`]).
+    fn faithful(&self, syntax: &SyntaxRegistry) -> Spelled<'_, Self> {
+        Spelled::new(self, &Rc::new(Spelling::new(syntax)))
     }
+}
+
+/// What holds no term — a level, a universe error — rendered faithfully: as core holds it, every universe shown, with no spelling made, since nothing in it is a name or an intrinsic a spelling decides.
+pub trait FaithfulUniverse {
+    /// This value as core holds it.
+    fn faithful(&self) -> String;
 }
 
 impl Spellable for Term {}
 
+impl Faithful for Term {}
+
 impl Spellable for Level {}
+
+impl FaithfulUniverse for Level {
+    fn faithful(&self) -> String {
+        reader_level(self)
+    }
+}
 
 impl Spellable for WitnessKey {}
 
 impl Spellable for UniverseError {}
 
-/// A module's dump is Curios/Core proper.
-impl Spellable for Definitions {
-    fn faithful(&self) -> Spelled<'_, Self> {
-        Spelled::new(self, &Rc::new(Spelling::core_text()))
+impl FaithfulUniverse for UniverseError {
+    fn faithful(&self) -> String {
+        universe_error_written(self, reader_level)
     }
 }
 
+impl Spellable for Definitions {}
+
+/// A module's dump is Curios/Core proper.
+impl Faithful for Definitions {
+    fn faithful(&self, syntax: &SyntaxRegistry) -> Spelled<'_, Self> {
+        Spelled::new(self, &Rc::new(Spelling::core_text(syntax)))
+    }
+}
+
+impl Spellable for Program {}
+
 /// A program's dump is spelled as its module's is.
-impl Spellable for Program {
-    fn faithful(&self) -> Spelled<'_, Self> {
-        Spelled::new(self, &Rc::new(Spelling::core_text()))
+impl Faithful for Program {
+    fn faithful(&self, syntax: &SyntaxRegistry) -> Spelled<'_, Self> {
+        Spelled::new(self, &Rc::new(Spelling::core_text(syntax)))
     }
 }
 
@@ -1996,35 +2070,36 @@ impl fmt::Display for Spelled<'_, WitnessKey> {
 
 impl fmt::Display for Spelled<'_, UniverseError> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.value() {
-            UniverseError::OffsetOverflow => formatter.write_str("universe level offset overflow"),
-            UniverseError::EscapingLevel => {
-                formatter.write_str("a universe metavariable or parameter escaped its scope")
-            }
-            UniverseError::InstanceArity { expected, got } => {
-                write!(
-                    formatter,
-                    "universe instance has {got} arguments but its scheme expects {expected}"
-                )
-            }
-            UniverseError::QualityArity { expected, got } => {
-                write!(
-                    formatter,
-                    "universe instance states {got} sorts but its scheme leaves {expected} to its caller"
-                )
-            }
-            UniverseError::UnknownMeta(meta) => write!(formatter, "unknown universe meta {meta}"),
-            UniverseError::MismatchedRecursiveContexts => formatter
-                .write_str("members of one recursive group carry different universe contexts"),
-            // The elaborator words a conflict for its reader itself (`curios-elab`'s `Error::UniverseInconsistency`), from the reasons on its path: this is the inequality alone.
-            UniverseError::Inconsistency { lower, upper, path } => write!(
-                formatter,
-                "this {} would need to be strictly below itself ({} ≤ {})",
-                inconsistent_sort(path),
-                level_spelled(lower, self.spelling()),
-                level_spelled(upper, self.spelling()),
-            ),
+        formatter.write_str(&universe_error_written(self.value(), |level| {
+            level_spelled(level, self.spelling())
+        }))
+    }
+}
+
+/// What `error` says, each level in it written by `level`: a spelling's, or core's own where the error is written faithfully ([`FaithfulUniverse`]).
+fn universe_error_written(error: &UniverseError, level: impl Fn(&Level) -> String) -> String {
+    match error {
+        UniverseError::OffsetOverflow => "universe level offset overflow".to_string(),
+        UniverseError::EscapingLevel => {
+            "a universe metavariable or parameter escaped its scope".to_string()
         }
+        UniverseError::InstanceArity { expected, got } => {
+            format!("universe instance has {got} arguments but its scheme expects {expected}")
+        }
+        UniverseError::QualityArity { expected, got } => format!(
+            "universe instance states {got} sorts but its scheme leaves {expected} to its caller"
+        ),
+        UniverseError::UnknownMeta(meta) => format!("unknown universe meta {meta}"),
+        UniverseError::MismatchedRecursiveContexts => {
+            "members of one recursive group carry different universe contexts".to_string()
+        }
+        // The elaborator words a conflict for its reader itself (`curios-elab`'s `Error::UniverseInconsistency`), from the reasons on its path: this is the inequality alone.
+        UniverseError::Inconsistency { lower, upper, path } => format!(
+            "this {} would need to be strictly below itself ({} ≤ {})",
+            inconsistent_sort(path),
+            level(lower),
+            level(upper),
+        ),
     }
 }
 

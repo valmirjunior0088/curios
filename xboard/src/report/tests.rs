@@ -5,6 +5,7 @@ use {
     crate::*,
     curios_common::Qualifier,
     curios_core::Global,
+    curios_module::SYNTAX,
     curios_pipeline::{Checker, CompileError, Refusal, certifier_said},
     std::slice,
 };
@@ -37,7 +38,7 @@ fn reported(said: impl Into<String>) -> CompileError {
 /// The certifier's refusal by `verdict`, reported in its own words.
 fn refusal_of(verdict: curios_cert::Refusal) -> Refusal {
     Refusal::Certifier {
-        reported: reported(certifier_said(&verdict)),
+        reported: reported(certifier_said(&verdict, &SYNTAX)),
         refusal: verdict,
     }
 }

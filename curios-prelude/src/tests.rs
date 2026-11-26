@@ -434,7 +434,7 @@ fn written_whole(
         SYNTAX,
         prelude[..index].iter().map(|unit| unit.core()),
     ));
-    let spelling = curios_surface::Spelling::core_text()
+    let spelling = curios_surface::Spelling::core_text(&SYNTAX)
         .with_form_scope(Rc::clone(&scope))
         .written_whole();
 

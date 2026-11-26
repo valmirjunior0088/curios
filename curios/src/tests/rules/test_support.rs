@@ -6,7 +6,7 @@ use {
     curios_common::{Qualifier, Variants},
     curios_core::{Global, Polarity, Term, WitnessKey},
     curios_elab::DEFAULT_BUDGET,
-    curios_module::RootSource,
+    curios_module::{RootSource, SYNTAX},
     curios_pipeline::{EntryTail, Examined, Refused, test_support::*},
     curios_surface::{Entrypoint, Spellable, Spelling},
     std::{collections::BTreeMap, fmt, rc::Rc},
@@ -134,17 +134,17 @@ pub fn global(path: &str) -> Global {
 
 /// `term`, a term an elaborator's error holds, as a rule's test pins it: every global by its absolute path, an intrinsic by its surface name, no universe instance and no metavariable's number, so the pin reads the term and not the order elaboration met its levels in, and on one line, each run of whitespace a space.
 pub fn pinned(term: &Term) -> String {
-    on_one_line(term, Spelling::default().with_erased_universes())
+    on_one_line(term, Spelling::new(&SYNTAX).with_erased_universes())
 }
 
 /// `key`, the key a coherence refusal holds, as a rule's test pins it.
 pub fn pinned_key(key: &WitnessKey) -> String {
-    key.faithful().to_string()
+    key.spelled(&Rc::new(Spelling::new(&SYNTAX))).to_string()
 }
 
 /// `term` as [`pinned`] writes it with its universe instances shown, each level metavariable a bare `?u`: for a test whose claim is the instance a term stands at.
 pub fn pinned_with_instances(term: &Term) -> String {
-    let spelled = on_one_line(term, Spelling::default());
+    let spelled = on_one_line(term, Spelling::new(&SYNTAX));
     let mut pinned = String::with_capacity(spelled.len());
     let mut rest = spelled.as_str();
     while let Some(at) = rest.find("?u") {

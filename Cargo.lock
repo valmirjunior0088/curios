@@ -976,6 +976,7 @@ dependencies = [
  "curios-archive",
  "curios-common",
  "curios-core",
+ "curios-module",
  "curios-num",
  "curios-parse",
  "curios-print",

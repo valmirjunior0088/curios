@@ -18,5 +18,7 @@ curios-parse = { workspace = true }
 curios-print = { workspace = true }
 
 [dev-dependencies]
+# The filled registry, which a suite spells a term under: the crate that fills it lowers through this one, a cycle Cargo admits through a dev-dependency.
+curios-module = { workspace = true }
 # The editors' grammars and their node types, which a test holds to the language's words.
 serde_json = { workspace = true }

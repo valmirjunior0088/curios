@@ -18,7 +18,7 @@ use {
         Anchors, ArgumentSite, CalleeId, Free, Global, HeadKey, Intrinsic, Level, Mention, Quality,
         ReduceError, Sort, Subterm, Term, UniverseMetaId, WitnessKey, WitnessRole,
     },
-    curios_surface::{Spellable, Spelling},
+    curios_surface::{FaithfulUniverse, Spellable, Spelling},
     std::{collections::HashMap, fmt, rc::Rc},
 };
 
@@ -214,7 +214,7 @@ fn level_meta_names<'a>(
 
 /// A level under those names, the rest of its spelling left to [`Level`]'s own.
 fn renamed_level(level: &Level, names: &HashMap<UniverseMetaId, String>) -> String {
-    let mut text = level.faithful().to_string();
+    let mut text = level.faithful();
     // Longest first: `?u12` contains `?u1`, and replacing the shorter one first would leave `?u1` followed by a stray `2`.
     let mut metas = names.iter().collect::<Vec<_>>();
     metas.sort_by_key(|(meta, _)| std::cmp::Reverse(meta.to_string().len()));
@@ -744,7 +744,7 @@ impl Displayed<'_> {
                     // Neither grouping nor universes was the axis that collapsed them: fall back to core's own spelling, which abbreviates nothing. Unreadable beside the shortened form, and better than a message that says two things are unequal in identical words.
                     match shown.0 == shown.1 {
                         false => shown,
-                        true => render(Spelling::default()),
+                        true => render(spelling.unabbreviated()),
                     }
                 });
                 let (shown_inferred, shown_expected) = match detailed {

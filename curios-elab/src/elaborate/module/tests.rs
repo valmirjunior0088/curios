@@ -101,9 +101,9 @@ fn refusals(context: &mut Context, definitions: &Definitions) -> Vec<String> {
                         .map(|name| name.faithful().to_string())
                         .collect::<Vec<_>>();
 
-                    format!("{}: {error}", names.join(", "))
+                    format!("{}: {}", names.join(", "), error.faithful(&SYNTAX))
                 }
-                error => error.to_string(),
+                error => error.faithful(&SYNTAX).to_string(),
             })
             .collect(),
     }

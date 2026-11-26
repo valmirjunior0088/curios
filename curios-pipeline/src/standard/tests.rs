@@ -987,7 +987,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
             let failed = refused(error);
             let said = error
                 .each()
-                .map(|member| clipped(&member.to_string()))
+                .map(|member| clipped(&member.faithful(&SYNTAX).to_string()))
                 .collect::<Vec<_>>()
                 .join("\n");
             let of = |proofs: bool| {
@@ -1109,7 +1109,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
                             verdict
                                 .name
                                 .map_or_else(String::new, |name| name.faithful().to_string()),
-                            clipped(&verdict.error.rendered(&Spelling::default()))
+                            clipped(&verdict.error.rendered(&Spelling::new(&SYNTAX)))
                         )
                     })
                     .collect::<Vec<_>>()

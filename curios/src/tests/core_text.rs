@@ -36,7 +36,7 @@ fn a_test_is_written_in_its_form() {
         .program;
     let printed = with_prelude(|prelude| {
         let scope = FormScope::over(SYNTAX, prelude.iter().map(|root| root.core()));
-        let spelling = Spelling::core_text().with_form_scope(Rc::new(scope));
+        let spelling = Spelling::core_text(&SYNTAX).with_form_scope(Rc::new(scope));
 
         program.spelled(&Rc::new(spelling)).to_string()
     });

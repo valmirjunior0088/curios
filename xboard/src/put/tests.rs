@@ -210,7 +210,7 @@ fn a_step_the_certifier_refuses_is_reported_in_its_step() {
     };
     // The report opens on the step and goes on in the certifier's words, as far as their first line.
     let reported = reported.to_string();
-    let said = refusal.said();
+    let said = refusal.said(&SYNTAX);
     let opening = said.lines().next().unwrap_or_default();
     assert!(
         reported.starts_with(&format!("in the step of `/lib`: {opening}")),

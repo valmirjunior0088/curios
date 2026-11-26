@@ -9,7 +9,7 @@ use {
         Bound, Definitions, Entrypoint, Global, InductDecl, Item, Minted, Place, Places,
         StructDecl, Subterm, UniverseMetaId, Visit, rewrite_universe_levels, universe_metas,
     },
-    curios_surface::Spellable,
+    curios_surface::FaithfulUniverse,
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},

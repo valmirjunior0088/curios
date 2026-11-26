@@ -155,7 +155,7 @@ fn halted(Stopped { mount, why }: Stopped) -> Answer {
         Unbuilt::Unmade(Unmade::Certifier(verdict)) => {
             Answer::Put(curios_pipeline::Answer::Judged(vec![Refusal::Certifier {
                 reported: CompileError::Failure(vec![Report::unlocated(at(certifier_said(
-                    &verdict,
+                    &verdict, &SYNTAX,
                 )))]),
                 refusal: *verdict,
             }]))

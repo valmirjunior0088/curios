@@ -1,6 +1,6 @@
 //! The names a print spells: a binder suffixed beside a like-named global or label, a reader's own declaration claiming its bare name, suffixes counted across a scope, and a level a metavariable heads.
 
-use {super::test_support::*, super::*, curios_core::UniverseMetaId};
+use {super::test_support::*, super::*, curios_core::UniverseMetaId, curios_module::SYNTAX};
 
 #[test]
 fn a_binder_hinted_like_a_shortened_global_is_suffixed() {
@@ -15,7 +15,7 @@ fn a_binder_hinted_like_a_shortened_global_is_suffixed() {
     };
     let rename = build_rename(
         &names,
-        &Spelling::default().with_short_names(Rc::new(shorten)),
+        &Spelling::new(&SYNTAX).with_short_names(Rc::new(shorten)),
     );
     assert_eq!(rename.get(&binder).map(String::as_str), Some("helper2"));
 }
@@ -29,7 +29,7 @@ fn a_tuple_label_keeps_its_spelling_and_a_like_named_binder_is_suffixed() {
     let result = Term::tuple_type([(Free::local(1, Some("frame")), nat.clone())]);
     let term = Term::func_type([(Free::local(0, Some("frame")), nat)], result);
 
-    let spelling = Spelling::default();
+    let spelling = Spelling::new(&SYNTAX);
     let rename = Rc::new(build_rename(&display_names(&term), &spelling));
     let rendered = term
         .spelled(&Rc::new(spelling.with_pretty_names(rename)))
@@ -108,7 +108,7 @@ fn a_render_spells_the_binders_its_dry_run_met() {
         Term::func([(inner, nat)], Term::free_var(&inner)),
     );
 
-    let spelling = Spelling::default();
+    let spelling = Spelling::new(&SYNTAX);
     let rename = Rc::new(build_rename(&display_names(&term), &spelling));
     let rendered = term
         .spelled(&Rc::new(spelling.with_pretty_names(rename)))
@@ -136,7 +136,7 @@ fn unnamed_binders_take_the_least_free_numbers() {
     let shorten = build_shorten(&[], std::slice::from_ref(&taken));
     let rename = build_rename(
         &names,
-        &Spelling::default().with_short_names(Rc::new(shorten)),
+        &Spelling::new(&SYNTAX).with_short_names(Rc::new(shorten)),
     );
     let spelled = |index: usize| rename.get(&binders[index]).map(String::as_str);
 
@@ -151,7 +151,7 @@ fn unnamed_binders_take_the_least_free_numbers() {
 /// A sort's own level where instances are suppressed: a concrete one is the node's whole content and prints, and one headed by a metavariable names nothing a reader can act on and does not. Held over terms built by hand, a program's sorts above zero being at levels their declarations leave to a caller, which a report meets still open.
 #[test]
 fn a_concrete_level_prints_where_a_metavariable_headed_one_is_suppressed() {
-    let spelling = Rc::new(Spelling::default().with_erased_universes());
+    let spelling = Rc::new(Spelling::new(&SYNTAX).with_erased_universes());
     let printed = |level: Level| Term::type_at(level).spelled(&spelling).to_string();
     let one = |level: Level| level.succ().expect("a successor is a level");
     let open = Level::meta(UniverseMetaId(7));

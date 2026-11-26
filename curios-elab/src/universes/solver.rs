@@ -24,7 +24,7 @@ use {
         UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseParam,
         UniverseRole, UniverseSeed, Universes,
     },
-    curios_surface::Spellable,
+    curios_surface::FaithfulUniverse,
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, VecDeque},

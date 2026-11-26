@@ -71,7 +71,7 @@ fn reader_quality(quality: &Quality) -> &'static str {
 }
 
 /// A level as a reader is shown it: a constant, a parameter or a metavariable each under its offset, and their `max` where there are several.
-fn reader_level(level: &Level) -> String {
+pub fn reader_level(level: &Level) -> String {
     let mut parts = Vec::new();
     if level.constant != 0 || level.atoms.is_empty() {
         parts.push(level.constant.to_string());

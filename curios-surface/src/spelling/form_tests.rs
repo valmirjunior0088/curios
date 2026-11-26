@@ -9,6 +9,7 @@ use {
         Arm, Guard, Matrix, NumLit, Numeral, Pattern, Row, Telescope, TupleType, UniverseMetaId,
         UniverseParam,
     },
+    curios_module::SYNTAX,
     std::sync::Arc,
 };
 
@@ -24,7 +25,7 @@ fn a_foreign_call_prints_as_a_call_of_its_declaration() {
             Global::Authored(Qualifier::from(["host", label])),
             operands,
         )
-        .faithful()
+        .faithful(&SYNTAX)
         .to_string()
     };
 
@@ -59,7 +60,10 @@ fn a_deep_term_is_printed_without_overflowing() {
         term = Term::apply(term, [argument.clone()]);
     }
 
-    assert_eq!(term.faithful().to_string().matches('(').count(), DEEP);
+    assert_eq!(
+        term.faithful(&SYNTAX).to_string().matches('(').count(),
+        DEEP
+    );
 }
 
 /// A tuple type's unlabeled positions print as source writes them.
@@ -82,7 +86,7 @@ fn an_unlabeled_tuple_type_prints_without_labels() {
         telescope: relabelled,
     })
     .into();
-    assert_eq!(tuple.faithful().to_string(), "{Nat, Bool, Byte}");
+    assert_eq!(tuple.faithful(&SYNTAX).to_string(), "{Nat, Bool, Byte}");
 }
 
 /// The other half of the same rule: a position the source *did* label keeps it through the identical rebuild.
@@ -105,7 +109,7 @@ fn a_labeled_tuple_type_keeps_its_labels_through_a_rebuild() {
         telescope: relabelled,
     })
     .into();
-    assert_eq!(tuple.faithful().to_string(), "{fst: Nat, Bool}");
+    assert_eq!(tuple.faithful(&SYNTAX).to_string(), "{fst: Nat, Bool}");
 }
 
 /// A successor over a symbolic tail prints as `k + 1` without being an operator intrinsic, so as an operand it takes the parentheses an addition would. Printed bare, `n - (k + 1)` read as `n - k + 1`, which is `(n - k) + 1`.
@@ -120,10 +124,10 @@ fn a_symbolic_successor_is_parenthesized_as_an_operand() {
     };
 
     let difference = Term::intrinsic(Intrinsic::nat_sub(n.clone(), successor()));
-    assert_eq!(difference.faithful().to_string(), "n - (k + 1)");
+    assert_eq!(difference.faithful(&SYNTAX).to_string(), "n - (k + 1)");
 
     let product = Term::intrinsic(Intrinsic::nat_mul(successor(), n));
-    assert_eq!(product.faithful().to_string(), "(k + 1) * n");
+    assert_eq!(product.faithful(&SYNTAX).to_string(), "(k + 1) * n");
 }
 
 /// A successor over zero is a numeral, which delimits itself.
@@ -134,7 +138,7 @@ fn a_numeral_operand_prints_bare() {
         n,
         Term::intrinsic(Intrinsic::Nat(Nat::new(3usize))),
     ));
-    assert_eq!(difference.faithful().to_string(), "n - 3");
+    assert_eq!(difference.faithful(&SYNTAX).to_string(), "n - 3");
 }
 
 /// A spelling that shortens `names` to their last segment and marks each as `marks` says, as a diagnostic's would.
@@ -145,7 +149,7 @@ fn spelling_of(names: &[(Global, Vec<Plicity>)]) -> Rc<Spelling> {
         plicities.insert(*name, Rc::new(marks.clone()));
     }
     Rc::new(
-        Spelling::default()
+        Spelling::new(&SYNTAX)
             .with_short_names(Rc::new(build_shorten(&[], &globals)))
             .with_nominal_plicities(Rc::new(plicities)),
     )
@@ -262,7 +266,7 @@ fn a_short_lambda_body_stays_on_the_arrows_line() {
         [(x, Term::intrinsic(Intrinsic::NatType))],
         Term::free_var(&x),
     );
-    assert_eq!(identity.faithful().to_string(), "(x) => x");
+    assert_eq!(identity.faithful(&SYNTAX).to_string(), "(x) => x");
 }
 
 /// A lambda applied where it stands is written in parentheses, the one spelling that reads back as the application: bare, `(x) => x(3)` is a lambda whose body applies `x`.
@@ -277,7 +281,7 @@ fn an_applied_lambda_is_parenthesized() {
         identity,
         [Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)))],
     );
-    assert_eq!(applied.faithful().to_string(), "((x) => x)(3)");
+    assert_eq!(applied.faithful(&SYNTAX).to_string(), "((x) => x)(3)");
 }
 
 /// A `Flt` prints as what reads back as it, bit for bit: the infinities and the default NaN of either sign as their literals, and any other NaN, which no literal spells, as the call building it from its bytes.
@@ -285,7 +289,7 @@ fn an_applied_lambda_is_parenthesized() {
 fn a_non_finite_flt_prints_as_what_reads_back_as_it() {
     let printed = |value: Floating| {
         Term::intrinsic(Intrinsic::Flt(value))
-            .faithful()
+            .faithful(&SYNTAX)
             .to_string()
     };
     let negative = |value: Floating| value.copysign(Floating::infinite(true));
@@ -307,12 +311,14 @@ fn an_append_prints_as_the_literal_that_writes_it() {
         |bytes: Term, element: Term| Term::intrinsic(Intrinsic::BytesAppend { bytes, element });
 
     assert_eq!(
-        append(var(0, "acc"), var(1, "b")).faithful().to_string(),
+        append(var(0, "acc"), var(1, "b"))
+            .faithful(&SYNTAX)
+            .to_string(),
         "0x[..acc, b]"
     );
     assert_eq!(
         append(append(var(0, "acc"), var(1, "b")), var(2, "c"))
-            .faithful()
+            .faithful(&SYNTAX)
             .to_string(),
         "0x[..acc, b, c]"
     );
@@ -322,7 +328,7 @@ fn an_append_prints_as_the_literal_that_writes_it() {
         list: var(0, "xs"),
         item: var(1, "x"),
     });
-    assert_eq!(list.faithful().to_string(), "[..xs, x]");
+    assert_eq!(list.faithful(&SYNTAX).to_string(), "[..xs, x]");
 }
 
 /// `base` paired with itself `depth` times over: a graph of `depth + 1` nodes whose print is a tree of `2^depth` leaves.
@@ -341,7 +347,7 @@ fn paired(base: Term, depth: usize) -> Term {
 fn a_print_is_bounded_by_its_terms_graph() {
     let term = Term::tuple([paired(numeral(7), 60), numeral(0)]);
 
-    let spelling = Spelling::default();
+    let spelling = Spelling::new(&SYNTAX);
     let rename = Rc::new(build_rename(&display_names(&term), &spelling));
     let rendered = term
         .spelled(&Rc::new(spelling.with_pretty_names(rename)))
@@ -362,7 +368,7 @@ fn a_print_is_bounded_by_its_terms_graph() {
 #[test]
 fn a_print_within_its_allowance_is_whole() {
     let wide = Term::tuple((0..6_000).map(|index| Term::tuple([numeral(index), numeral(index)])))
-        .faithful()
+        .faithful(&SYNTAX)
         .to_string();
     assert!(!wide.contains(ELIDED));
     assert!(
@@ -371,7 +377,7 @@ fn a_print_within_its_allowance_is_whole() {
         &wide[wide.len() - 40..]
     );
 
-    let shared = paired(numeral(7), 3).faithful().to_string();
+    let shared = paired(numeral(7), 3).faithful(&SYNTAX).to_string();
     assert!(!shared.contains(ELIDED));
     assert_eq!(shared.matches('7').count(), 8);
 }
@@ -391,7 +397,7 @@ fn an_implicit_binder_and_argument_print_under_their_mark() {
         Term::free_var(&binder_0),
     );
     assert_eq!(
-        function_type.faithful().to_string(),
+        function_type.faithful(&SYNTAX).to_string(),
         "(@T: Type, x: T) -> T"
     );
 
@@ -402,7 +408,7 @@ fn an_implicit_binder_and_argument_print_under_their_mark() {
             (Plicity::Explicit, Term::free_var(&x)),
         ],
     );
-    assert_eq!(call.faithful().to_string(), "foo(@Nat, x)");
+    assert_eq!(call.faithful(&SYNTAX).to_string(), "foo(@Nat, x)");
 }
 
 /// A match's default prints as a trailing `| _ =>` arm, after the enumerated constructors, as `Cases::Switch`'s default does.
@@ -418,7 +424,7 @@ fn a_match_with_a_default_prints_its_catch_all_last() {
         Term::free_var(&b),
     );
 
-    let printed = term.faithful().to_string();
+    let printed = term.faithful(&SYNTAX).to_string();
     assert!(
         printed.contains("| none() =>") && printed.contains("| _ =>"),
         "expected an enumerated arm and a catch-all, got:\n{printed}"
@@ -429,17 +435,17 @@ fn a_match_with_a_default_prints_its_catch_all_last() {
 #[test]
 fn a_metavariable_prints_as_its_id_and_a_variant_as_a_call() {
     let result = Global::Authored(Qualifier::from(["Result"]));
-    assert_eq!(Term::hole(7).faithful().to_string(), "?7");
+    assert_eq!(Term::hole(7).faithful(&SYNTAX).to_string(), "?7");
 
     let value = Term::variant(result, [Term::hole(1)], "success", [Term::hole(2)]);
-    assert_eq!(value.faithful().to_string(), "/Result/success(?2)");
+    assert_eq!(value.faithful(&SYNTAX).to_string(), "/Result/success(?2)");
 
     let type_ = Term::induct_type(
         result,
         [Term::intrinsic(Intrinsic::NatType), Term::hole(3)],
         Vec::<Term>::new(),
     );
-    assert_eq!(type_.faithful().to_string(), "/Result(Nat, ?3)");
+    assert_eq!(type_.faithful(&SYNTAX).to_string(), "/Result(Nat, ?3)");
 }
 
 /// A level prints its normal form: the `max` of its atoms, each under its offset.
@@ -491,7 +497,7 @@ fn a_rows_guards_print_after_its_pattern_and_a_match_over_the_unit_value_prints_
     };
     let x = Free::local(0, Some("x"));
     let flag = Term::intrinsic(Intrinsic::Bool(true));
-    let spelling = Rc::new(Spelling::default());
+    let spelling = Rc::new(Spelling::new(&SYNTAX));
 
     let headed = Term::matrix(Matrix {
         head: numeral(1),

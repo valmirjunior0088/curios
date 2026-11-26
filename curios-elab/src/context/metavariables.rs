@@ -14,7 +14,7 @@ use {
         ArgumentSite, Bound, Extent, Free, Global, Mention, Metavar, MetavarId, MetavarOrigin,
         MetavarSpine, Names, Subterm, Term, WitnessOrigin,
     },
-    curios_surface::Spellable,
+    curios_surface::Faithful,
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -632,7 +632,7 @@ impl<'s> Context<'s> {
         curios_common::note!(
             target: "curios_elab::solve",
             meta = inner.0,
-            stand_in = %stand_in.faithful(),
+            stand_in = %stand_in.faithful(&self.syntax()),
             "restricted",
         );
         self.solve_metavar(inner, stand_in);

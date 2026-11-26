@@ -7,6 +7,7 @@ use {
         Atom, Constructors, Definition, Definitions, Free, Global, InductDecl, InductParam,
         Intrinsic, Item, Nominal, Nominals, Telescope, Term, UniverseContext,
     },
+    curios_module::SYNTAX,
     std::rc::Rc,
 };
 
@@ -17,7 +18,8 @@ pub fn term_to_core(term: &crate::Term<CoreText>) -> Result<Term, ReadError> {
 
 /// `term` as Curios/Core proper writes it.
 pub fn written(term: &Term) -> String {
-    term.spelled(&Rc::new(Spelling::core_text())).to_string()
+    term.spelled(&Rc::new(Spelling::core_text(&SYNTAX)))
+        .to_string()
 }
 
 /// The term `term`'s Curios/Core reads back as.

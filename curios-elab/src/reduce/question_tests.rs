@@ -3,13 +3,14 @@
 use {
     super::test_support::*,
     crate::*,
+    curios_analysis::test_support::*,
     curios_common::Qualifier,
     curios_core::{
         Constructors, Free, InductDecl, Intrinsic, Level, Telescope, Term,
         UniverseConstraintOrigin, UniverseContext, UniverseMetaId, UniverseParam, UniverseRole,
         Variance,
     },
-    curios_surface::Spellable,
+    curios_surface::Faithful,
 };
 
 /// [`scrutinee_refinement_does_not_fire_at_another_ground_universe_instance`] with the level on a nominal node. Where the node's family is irrelevant in the level, the key still keeps the two spellings apart — its guard reads no family's variance, the certifier's key being the scrutinee compared with every level — and the equation answers all the same at the stuck form reduction leaves, where each checker goes by what its conversion holds one: `Wrap.{0}(Nat)` and `Wrap.{1}(Nat)` are one type with nothing required of the two levels, so a call respelled in another argument as well is the scrutinee to a question that commits nothing. Where the family is invariant the two are two types and the call stays stuck. `curios-cert`'s `certifier::convert::tests::variance` holds the answers under this name.
@@ -125,7 +126,7 @@ fn a_self_entry_served_across_spellings_keeps_the_asking_binder_names() {
     let answer = reduce(&mut context, asked.clone()).expect("a Π-type is its own form");
     assert_eq!(answer, asked);
     assert!(
-        answer.faithful().to_string().starts_with("(A: "),
+        answer.faithful(&SYNTAX).to_string().starts_with("(A: "),
         "the asking spelling's binder, not the stored one's: {answer:?}"
     );
 }

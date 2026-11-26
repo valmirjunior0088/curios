@@ -11,6 +11,7 @@ mod tests;
 
 use {
     super::{ModuleInfo, PreparedText, PublicInterface, Scoped, reached_from, visible_path},
+    crate::SYNTAX,
     curios_abi::{NEVER, WireType},
     curios_common::{
         Class, Keyword, MAX_LINE_WIDTH, Mount, Qualifier, RootKind, Source, SourceName, Span,
@@ -695,7 +696,7 @@ impl Reader<'_> {
                 };
                 let heads = key.heads().iter().filter_map(|head| match head {
                     curios_core::HeadKey::Nominal(nominal) => Some(*nominal),
-                    carrier => carrier_former(carrier),
+                    carrier => carrier_former(SYNTAX.roots.sys, carrier),
                 });
 
                 [concept]

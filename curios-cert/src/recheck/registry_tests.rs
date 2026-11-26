@@ -1,6 +1,9 @@
 //! Index targets the walk checks rather than believes, and the scheme a registry may declare apart from its type former.
 
-use {super::test_support::*, crate::*, curios_common::fill, curios_surface::Spelling};
+use {
+    super::test_support::*, crate::*, curios_analysis::test_support::*, curios_common::fill,
+    curios_surface::Spelling,
+};
 
 /// `Indexed(i : Nat) : Type`, whose one case, not defined, targets `${target}`.
 const INDEXED: &str = r#"
@@ -74,7 +77,7 @@ fn a_partial_proof_in_a_registry_index_target_is_refused() {
     assert!(
         refuses(&verdicts, Some("Indexed"), |error| {
             error
-                .rendered(&Spelling::default())
+                .rendered(&Spelling::new(&SYNTAX))
                 .contains("does not descend")
         }),
         "the certifier accepted a non-descending proof standing as a constructor's index target: {verdicts:?}",

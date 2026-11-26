@@ -4,6 +4,7 @@ use {
     crate::{Answer, Witness},
     curios_common::{Qualifier, Variants},
     curios_core::Global,
+    curios_module::SYNTAX,
     curios_pipeline::{Checker, Refusal, standing_at},
     std::fmt,
 };
@@ -83,7 +84,7 @@ fn nearest(answer: &Answer, by: Checker) -> String {
                 .find(|refusal| refusal.by() == by)
                 .or(refusals.first())
             {
-                Some(refusal) => (refusal.named(), refusal.said()),
+                Some(refusal) => (refusal.named(), refusal.said(&SYNTAX)),
                 None => return "admitted".to_string(),
             }
         }

@@ -222,7 +222,7 @@ impl Error {
                 });
                 said.stating(format_args!(
                     "the certifier refused it: {}",
-                    refusal.rendered(&curios_surface::Spelling::default())
+                    refusal.rendered(&spelling.unabbreviated())
                 ));
 
                 said

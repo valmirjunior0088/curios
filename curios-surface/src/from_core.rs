@@ -101,7 +101,7 @@ impl Writer<curios_core::Term> for Frame<'_> {
     }
 
     fn sys(&self, path: &str) -> Option<Term> {
-        global(&intrinsic_global(path), *self)
+        global(&intrinsic_global(self.spelling.sys(), path), *self)
     }
 }
 
@@ -978,7 +978,9 @@ fn writable_former(former: &curios_core::FormerEta, terminal: &curios_core::Term
 /// A type former a lambda eta-expands: the name alone where the binders took every argument, the application to what they left otherwise, each argument under the mark the declaration gives it.
 fn written_former(former: curios_core::FormerEta, frame: Frame) -> Option<Term> {
     match former {
-        curios_core::FormerEta::Intrinsic(path) => global(&intrinsic_global(path), frame),
+        curios_core::FormerEta::Intrinsic(path) => {
+            global(&intrinsic_global(frame.spelling.sys(), path), frame)
+        }
         curios_core::FormerEta::Nominal(name, prefix, arity) => {
             let marks = frame.spelling.nominal_marks(&name, arity);
             let head = global(&name, frame)?;

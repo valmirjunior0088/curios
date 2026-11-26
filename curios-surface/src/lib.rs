@@ -40,9 +40,10 @@ use from_core::*;
 mod spelling;
 use spelling::*;
 pub use spelling::{
-    DisplayNames, FormScope, IntrinsicForm, IntrinsicOperand, Islands, LiteralEntry, ReaderNames,
-    ReaderPosition, Rename, Shorten, Spellable, Spelled, Spelling, build_rename, carrier_former,
-    display_names, intrinsic_form, intrinsic_former, intrinsic_global,
+    DisplayNames, Faithful, FaithfulUniverse, FormScope, IntrinsicForm, IntrinsicOperand, Islands,
+    LiteralEntry, ReaderNames, ReaderPosition, Rename, Shorten, Spellable, Spelled, Spelling,
+    build_rename, carrier_former, display_names, intrinsic_form, intrinsic_former,
+    intrinsic_global,
 };
 
 mod core_text;

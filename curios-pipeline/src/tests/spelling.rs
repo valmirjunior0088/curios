@@ -260,11 +260,11 @@ fn intrinsics_unreached_from_the_root() -> Vec<String> {
                             {
                                 match intrinsic_form(node.clone(), grouped, |_| stated) {
                                     IntrinsicForm::Named(path) => {
-                                        written.insert(intrinsic_global(path));
+                                        written.insert(intrinsic_global(SYNTAX.roots.sys, path));
                                     }
                                     IntrinsicForm::Call { path, .. }
                                     | IntrinsicForm::Proved { path, .. } => {
-                                        written.insert(intrinsic_global(&path));
+                                        written.insert(intrinsic_global(SYNTAX.roots.sys, &path));
                                     }
                                     _ => {}
                                 }

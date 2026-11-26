@@ -83,7 +83,7 @@ fn classify_under(
                 sort_from_universe(context, &result_sort)?
             }
             None => {
-                probe_level_fallback("induct decl missing", &reduced);
+                probe_level_fallback("induct decl missing", &reduced, &context.syntax());
                 Sort::type_at(Level::zero())
             }
         },
@@ -95,7 +95,7 @@ fn classify_under(
                 sort_from_universe(context, &result_sort)?
             }
             None => {
-                probe_level_fallback("struct decl missing", &reduced);
+                probe_level_fallback("struct decl missing", &reduced, &context.syntax());
                 Sort::type_at(Level::zero())
             }
         },
@@ -261,7 +261,7 @@ fn classify_under(
                         level: level.clone(),
                     },
                     _ => {
-                        probe_level_fallback("non-type intrinsic", &reduced);
+                        probe_level_fallback("non-type intrinsic", &reduced, &context.syntax());
                         Sort::type_at(Level::zero())
                     }
                 }
@@ -269,7 +269,7 @@ fn classify_under(
         },
         // A host call is a value, never a type, so it takes the same ground level the non-type intrinsics above do.
         Subterm::Foreign(_) => {
-            probe_level_fallback("host call", &reduced);
+            probe_level_fallback("host call", &reduced, &context.syntax());
             Sort::type_at(Level::zero())
         }
         // Π into a proposition is a proposition.
@@ -300,7 +300,11 @@ fn classify_under(
             match synth_neutral(context, binders, opened, &reduced)? {
                 Some(sort) => sort_from_universe(context, &sort)?,
                 None => {
-                    probe_level_fallback("neutral type unsynthesizable", &reduced);
+                    probe_level_fallback(
+                        "neutral type unsynthesizable",
+                        &reduced,
+                        &context.syntax(),
+                    );
                     Sort::type_at(Level::zero())
                 }
             }
@@ -325,13 +329,13 @@ fn classify_under(
             match stated {
                 Some((quality, level)) => Sort { quality, level },
                 None => {
-                    probe_level_fallback("unsolved metavariable", &reduced);
+                    probe_level_fallback("unsolved metavariable", &reduced, &context.syntax());
                     Sort::type_at(Level::zero())
                 }
             }
         }
         _ => {
-            probe_level_fallback("unclassified shape", &reduced);
+            probe_level_fallback("unclassified shape", &reduced, &context.syntax());
             Sort::type_at(Level::zero())
         }
     })
@@ -421,7 +425,7 @@ fn sort_from_universe(context: &mut Context, universe: &Term) -> Result<Sort, Re
             level: level.clone(),
         },
         _ => {
-            probe_level_fallback("universe term is not a sort", &reduced);
+            probe_level_fallback("universe term is not a sort", &reduced, &context.syntax());
             Sort::type_at(Level::zero())
         }
     })

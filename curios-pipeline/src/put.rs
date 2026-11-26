@@ -71,11 +71,11 @@ pub enum Refusal {
 }
 
 impl Refusal {
-    /// The refusal in its checker's own words: the elaborator's diagnostic, which opens with them, and the certifier's error on no place ([`certifier_said`]).
-    pub fn said(&self) -> String {
+    /// The refusal in its checker's own words: the elaborator's diagnostic, which opens with them, and the certifier's error on no place, spelled under `syntax` ([`certifier_said`]).
+    pub fn said(&self, syntax: &SyntaxRegistry) -> String {
         match self {
             Refusal::Elaborator { reported, .. } => reported.to_string(),
-            Refusal::Certifier { refusal, .. } => certifier_said(refusal),
+            Refusal::Certifier { refusal, .. } => certifier_said(refusal, syntax),
         }
     }
 
@@ -114,9 +114,9 @@ impl Refusal {
     }
 }
 
-/// The certifier's refusal in its own words: its error, on no place, which a report of it places beneath a heading.
-pub fn certifier_said(refusal: &curios_cert::Refusal) -> String {
-    refusal.error.rendered(&Spelling::default()).to_string()
+/// The certifier's refusal in its own words, spelled under `syntax`: its error, on no place, which a report of it places beneath a heading.
+pub fn certifier_said(refusal: &curios_cert::Refusal, syntax: &SyntaxRegistry) -> String {
+    refusal.error.rendered(&Spelling::new(syntax)).to_string()
 }
 
 impl Refusal {

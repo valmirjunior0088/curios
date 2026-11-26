@@ -49,7 +49,7 @@ use name::*;
 
 mod sort;
 use sort::*;
-pub use sort::{level_spelled, universe_context_written};
+pub use sort::{level_spelled, reader_level, universe_context_written};
 
 mod transient;
 use transient::*;

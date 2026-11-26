@@ -1883,7 +1883,7 @@ fn witnesses(saying: &Saying<'_>, found: &Found<'_>, name: &Global) -> Option<Ve
             .iter()
             .map(|head| match head {
                 HeadKey::Nominal(nominal) => absolute(outside, nominal),
-                carrier => carrier_former(carrier)
+                carrier => carrier_former(SYNTAX.roots.sys, carrier)
                     .map_or_else(|| carrier.to_string(), |former| absolute(outside, &former)),
             })
             .collect::<Vec<_>>();

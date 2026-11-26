@@ -4,6 +4,7 @@
 
 use {
     super::*,
+    curios_analysis::test_support::*,
     curios_common::Qualifier,
     curios_core::{Cost, Free, Global, Intrinsic, Level, Term, WitnessRole},
 };
@@ -21,7 +22,7 @@ fn family(name: &str, universes: Vec<Level>) -> Term {
 fn rendered(inferred: Term, expected: Term) -> String {
     let error = Error::type_mismatch(inferred, expected);
     let spelling = Rc::new(
-        Spelling::default()
+        Spelling::new(&SYNTAX)
             .with_erased_universes()
             .with_anonymous_metavars(),
     );
@@ -87,7 +88,7 @@ fn a_mismatch_says_what_was_not_compared() {
         let error = Error::type_mismatch(family("Left", vec![]), family("Right", vec![]))
             .declined(declined);
         let spelling = Rc::new(
-            Spelling::default()
+            Spelling::new(&SYNTAX)
                 .with_erased_universes()
                 .with_anonymous_metavars(),
         );
@@ -110,7 +111,7 @@ fn a_spent_budget_names_what_it_was_spent_on() {
         refusal: ReduceError::exhausted(5, Cost::decision(8)),
     };
     let spelling = Rc::new(
-        Spelling::default()
+        Spelling::new(&SYNTAX)
             .with_erased_universes()
             .with_anonymous_metavars(),
     );
@@ -132,7 +133,7 @@ fn a_rejected_candidate_is_reported_with_the_check_that_refused_it() {
         Error::type_mismatch(family("Left", vec![]), family("Right", vec![])),
     );
     let spelling = Rc::new(
-        Spelling::default()
+        Spelling::new(&SYNTAX)
             .with_erased_universes()
             .with_anonymous_metavars(),
     );
@@ -158,7 +159,7 @@ fn a_watched_slot_with_no_name_is_described_rather_than_quoted() {
             Error::type_mismatch(family("Left", vec![]), family("Right", vec![])),
         );
         let spelling = Rc::new(
-            Spelling::default()
+            Spelling::new(&SYNTAX)
                 .with_erased_universes()
                 .with_anonymous_metavars(),
         );

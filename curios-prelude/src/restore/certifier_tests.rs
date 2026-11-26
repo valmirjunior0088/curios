@@ -10,13 +10,13 @@ use {
     },
     curios_elab::DEFAULT_BUDGET,
     curios_module::SYNTAX,
-    curios_surface::Spellable,
+    curios_surface::{Faithful, FaithfulUniverse},
     std::collections::{BTreeMap, BTreeSet},
 };
 
 /// A term's printed head, clipped — enough to tell one refusal's shape from another's without pasting a standard-library type into a tally.
 fn head(term: &Term) -> String {
-    let rendered = term.faithful().to_string();
+    let rendered = term.faithful(&SYNTAX).to_string();
     let rendered = rendered.split_whitespace().collect::<Vec<_>>().join(" ");
 
     match rendered.char_indices().nth(44) {
@@ -349,7 +349,11 @@ fn universe_parameter_census() {
                     })
                     .collect::<Vec<_>>()
                     .join(", ");
-                let type_ = definition.type_.faithful().to_string().replace('\n', " ");
+                let type_ = definition
+                    .type_
+                    .faithful(&SYNTAX)
+                    .to_string()
+                    .replace('\n', " ");
 
                 println!(
                     "{}\t{}\t{constraints}\t{type_}",

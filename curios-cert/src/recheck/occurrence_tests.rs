@@ -424,7 +424,7 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
     );
     // The faithful rendering keeps the qualified path and drops the mark, which is what makes the axes worth supplying.
     assert_eq!(
-        refusal.rendered(&Spelling::default()),
+        refusal.rendered(&Spelling::new(&SYNTAX)),
         "expected `Nat`, found `/demo/Box/Box(Nat)`"
     );
 }

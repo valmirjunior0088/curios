@@ -676,7 +676,7 @@ fn dumped_over<'a>(before: impl IntoIterator<Item = &'a Definitions>) -> Rc<Spel
     let scope = FormScope::over(SYNTAX, before);
 
     Rc::new(
-        Spelling::core_text()
+        Spelling::core_text(&SYNTAX)
             .with_form_scope(Rc::new(scope))
             .written_as_text(),
     )

@@ -6,7 +6,7 @@ use {
     curios_module::{RootSource, SYNTAX, UnitSource, into_core_entry},
     curios_pipeline::test_support::*,
     curios_prelude::with_prelude,
-    curios_surface::{Entrypoint, Spellable},
+    curios_surface::{Entrypoint, Faithful},
     std::collections::BTreeMap,
 };
 
@@ -116,7 +116,7 @@ pub fn signatures(source: &str) -> BTreeMap<String, String> {
             let described = item.describe();
             declared(item)
                 .into_iter()
-                .map(move |(_, _, type_)| (described.clone(), type_.faithful().to_string()))
+                .map(move |(_, _, type_)| (described.clone(), type_.faithful(&SYNTAX).to_string()))
         })
         .collect()
 }

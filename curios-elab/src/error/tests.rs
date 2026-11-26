@@ -2,6 +2,7 @@
 
 use {
     super::*,
+    curios_analysis::test_support::*,
     curios_common::{Source, Span},
     curios_core::{Anchor, Anchored},
 };
@@ -78,7 +79,7 @@ fn a_batch_renders_one_report_per_member() {
         refusal().at(second),
     ]);
 
-    let reports = batch.located(&Rc::new(Spelling::default()), &[&anchors], &[]);
+    let reports = batch.located(&Rc::new(Spelling::new(&SYNTAX)), &[&anchors], &[]);
 
     assert_eq!(reports.len(), 2);
     assert_eq!(

@@ -17,8 +17,8 @@ use {
         Unresolved, WitnessKey, WitnessRole,
     },
     curios_surface::{
-        DisplayNames, Islands, ReaderNames, ReaderPosition, Rename, Spellable, Spelling,
-        build_rename,
+        DisplayNames, FaithfulUniverse, Islands, ReaderNames, ReaderPosition, Rename, Spellable,
+        Spelling, build_rename,
     },
     std::{collections::BTreeMap, fmt, rc::Rc},
 };
@@ -2871,7 +2871,7 @@ impl From<UniverseError> for Error {
                 path,
                 recursive: false,
             },
-            other => Self::UniverseInvariant(other.faithful().to_string()),
+            other => Self::UniverseInvariant(other.faithful()),
         }
     }
 }
@@ -2898,7 +2898,7 @@ fn report_spelling(
 ) -> Spelling {
     let own = lexicon.cloned().unwrap_or_else(|| definitions.lexicon());
 
-    Spelling::default()
+    Spelling::new(syntax)
         .with_lexicons(&own, scope)
         .with_erased_universes()
         .with_anonymous_metavars()
@@ -2963,10 +2963,10 @@ impl Reading<'_> {
     }
 }
 
-/// The faithful rendering: core's own names, every universe shown. Diagnostics go through [`Error::format`], which supplies a [`Spelling`].
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        Displayed(self, Rc::new(Spelling::default()), &[]).fmt(f)
+impl Error {
+    /// The faithful rendering under `syntax`: core's own names, every universe shown, every intrinsic under the root `syntax` mounts `/sys` at. Diagnostics go through [`Error::format`], which supplies a reader's [`Spelling`].
+    pub fn faithful(&self, syntax: &SyntaxRegistry) -> impl fmt::Display + '_ {
+        Displayed(self, Rc::new(Spelling::new(syntax)), &[])
     }
 }
 

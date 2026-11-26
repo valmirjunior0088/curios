@@ -3,7 +3,8 @@
 use {
     super::test_support::*,
     crate::{
-        CoreFile, CoreText, ReadError, Refusal, Spellable, Spelling, parse_whole_term, to_core,
+        CoreFile, CoreText, Faithful, ReadError, Refusal, Spellable, Spelling, parse_whole_term,
+        to_core,
     },
     curios_common::{Qualifier, Source},
     curios_core::{
@@ -13,6 +14,7 @@ use {
         Row, Slot, Sort, StructDecl, Subterm, Telescope, Term, UniverseContext, UniverseParam,
         Universes, Var, WitnessId, WitnessKey, WitnessOrigin, WrittenAt,
     },
+    curios_module::SYNTAX,
     curios_num::{Floating, Natural},
     std::rc::Rc,
 };
@@ -24,7 +26,7 @@ fn unsigned(value: usize) -> Pattern {
 
 /// The module `definitions`' Curios/Core reads back as.
 fn module_read_back(definitions: &Definitions) -> Definitions {
-    let text = definitions.faithful().to_string();
+    let text = definitions.faithful(&SYNTAX).to_string();
     let file = text
         .parse::<CoreFile>()
         .unwrap_or_else(|error| panic!("{text}\n{}", error.format()));
@@ -330,7 +332,7 @@ fn every_module_written_reads_back_as_itself() {
             module_read_back(&definitions),
             definitions,
             "{}",
-            definitions.faithful()
+            definitions.faithful(&SYNTAX)
         );
     }
 }
@@ -364,7 +366,7 @@ fn a_member_named_at_its_instance_inside_its_group_reads_back_apart_from_its_bin
             module_read_back(&definitions),
             definitions,
             "{}",
-            definitions.faithful()
+            definitions.faithful(&SYNTAX)
         );
     }
 }
@@ -377,7 +379,7 @@ fn a_local_no_binder_binds_reads_back_as_itself() {
         [(Free::local(1, Some("x")), nat_type())],
         Term::free_var(&stray),
     );
-    let whole = Rc::new(Spelling::core_text().written_whole());
+    let whole = Rc::new(Spelling::core_text(&SYNTAX).written_whole());
     let text = term.spelled(&whole).to_string();
     let parsed = parse_whole_term::<CoreText>(&Source::inline(&text))
         .unwrap_or_else(|error| panic!("{text}\n{}", error.format()));
@@ -410,7 +412,7 @@ fn a_node_met_again_is_written_once_and_read_back_as_that_node() {
         }))]
         .into(),
     };
-    let sharing = Rc::new(Spelling::core_text().written_whole().with_sharing());
+    let sharing = Rc::new(Spelling::core_text(&SYNTAX).written_whole().with_sharing());
     let text = definitions.spelled(&sharing).to_string();
     let file = text
         .parse::<CoreFile>()
@@ -426,7 +428,7 @@ fn a_node_met_again_is_written_once_and_read_back_as_that_node() {
     assert_eq!(text.matches("share =").count(), 59, "{text}");
 
     let small = Term::tuple_type([(Free::local(0, Some("x")), nat_type())]);
-    let whole = Rc::new(Spelling::core_text().written_whole());
+    let whole = Rc::new(Spelling::core_text(&SYNTAX).written_whole());
     assert_eq!(
         small.spelled(&sharing).to_string(),
         small.spelled(&whole).to_string()
