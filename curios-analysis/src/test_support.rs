@@ -8,10 +8,10 @@ use {
     crate::*,
     curios_common::{
         CharacterSyntax, ConceptField, ConjunctionSyntax, DerivationSyntax, EntailmentSyntax,
-        EqlSyntax, EqualitySyntax, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax,
-        NaturalSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, OrdLaws, OrderSyntax,
-        ProgramSyntax, ProofSyntax, ReportSyntax, SpellDerivation, StringSyntax, SyntaxName,
-        SyntaxRegistry, TestSyntax,
+        EqlSyntax, EqualitySyntax, HashDerivation, IntegerSyntax, KeyDerivation, LiftSyntax,
+        MonadSyntax, NaturalSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, OrdLaws,
+        OrderSyntax, ProgramSyntax, ProofSyntax, ReportSyntax, SpellDerivation, StringSyntax,
+        SyntaxName, SyntaxRegistry, TestSyntax,
     },
     curios_core::{Applications, Free, Global, InductDecl, Polarity, StructDecl, Term},
     std::{collections::BTreeMap, convert::Infallible},
@@ -124,6 +124,11 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             hash: field(&["std", "Digest", "Digest"], "digest"),
             position: name(&["std", "Nat", "hash", "hash"]),
             delimited: name(&["std", "Digest", "delimited", "delimited"]),
+        },
+        key: KeyDerivation {
+            mono: field(&["std", "Digest", "Key", "Key"], "mono"),
+            then: name(&["std", "Digest", "Key", "then"]),
+            last: name(&["std", "Digest", "Key", "last"]),
         },
     },
     entailment: EntailmentSyntax {

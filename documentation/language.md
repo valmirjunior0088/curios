@@ -1343,7 +1343,7 @@ pub let descending(values: List(Nat)) -> List(Nat) =
 
 A witness whose body is `..` alone is derived: the compiler writes its body from the declaration of the type in its key. `satisfy Spell(Point) { .. }` derives one, and so does `satisfy (@A: Type, use Spell(A)) => Spell(Tree(A)) { .. }` under a telescope; either may stand in an `and` group beside written witnesses. The dots are no entry — nothing stands beside them and they take no comma — so a body is written whole or derived whole. The signature is the author's, and registers, keys and meets the orphan and sealing rules as a written witness does. Why: [A witness body may be written by the compiler](design/surface/a-witness-body-may-be-written-by-the-compiler.md).
 
-`Spell`, `Eql`, `Ord` and `Hash` derive; every other concept refuses the form by name, and a written witness stays the norm.
+`Spell`, `Eql`, `Ord`, `Hash` and `Hash/Key` derive; every other concept refuses the form by name, and a written witness stays the norm. A derived `Hash/Key` proves its law of the order and the encoding a derivation writes, so it is derived beside a derived `Ord` and `Hash`, and its type keys a `Map` and fills a `Set`.
 
 ```crs
 use /std/{Nat, Ord, Spell};

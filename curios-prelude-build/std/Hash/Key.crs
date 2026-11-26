@@ -52,3 +52,38 @@ pub let apart(
     h: Bool/Holds(Bool/not(Hash/hash(a) == Hash/hash(b))),
 ) -> (Eq()(b, a)) -> Bool/False =
     (same) => Eq/subst((y: K) => Bool/Holds(Bool/not(Hash/hash(a) == Hash/hash(y))), same, h);
+
+-- The part's answer read off its encodings, the encodings' delimited order read as their step, and the two steps taken in turn.
+--- A derived key's comparison stepped through a part before its last: where the comparison so far `acc` stepped by the part's answer `o`, which `part` reads off the part's encodings `x` and `y`, and then by what follows, `s` against `u`, is the whole comparison, so is `acc` stepped by the delimited part and what follows it. What a derived `mono` is written through, a part at a time from the last back.
+pub let then(
+    acc: Ordering,
+    o: Ordering,
+    x: Bytes,
+    y: Bytes,
+    s: Bytes,
+    u: Bytes,
+    part: Eq()(o, Bytes/ord(x, y)),
+    whole: Ordering,
+    later: Eq()(whole, Ordering/then(Ordering/then(acc, o), Bytes/ord(s, u))),
+) -> Eq()(
+    whole,
+    Ordering/then(acc, Bytes/ord(0x[..Hash/delimited(x), ..s], 0x[..Hash/delimited(y), ..u]))) =
+    Eq/trans(
+        later,
+        Eq/trans(
+            Eq/cong((p: Ordering) => Ordering/then(Ordering/then(acc, p), Bytes/ord(s, u)), part),
+            Eq/trans(
+                Ordering/then/assoc(acc, Bytes/ord(x, y), Bytes/ord(s, u)),
+                Eq/cong(
+                    (p: Ordering) => Ordering/then(acc, p),
+                    Eq/sym(Hash/delimited/ord(x, y, s, u))))));
+
+--- A derived key's comparison stepped through its last part, which stands undelimited: the comparison so far `acc` stepped by the part's answer `o` is `acc` stepped by its encodings' order, which `part` reads it as.
+pub let last(
+    acc: Ordering,
+    o: Ordering,
+    x: Bytes,
+    y: Bytes,
+    part: Eq()(o, Bytes/ord(x, y)),
+) -> Eq()(Ordering/then(acc, o), Ordering/then(acc, Bytes/ord(x, y))) =
+    Eq/cong((p: Ordering) => Ordering/then(acc, p), part);

@@ -1502,24 +1502,41 @@ impl Displayed<'_> {
                     "`{}` cannot be derived for {key}",
                     spelling.symbol(concept)
                 ));
-                match reason {
+                let advice = match reason {
                     Underivable::NotDeclared => {
                         f.stating(format_args!("{key} is no declared `induct` or `struct`"));
                         f.stating(
                             "a derivation writes out a declaration's constructors and nothing else",
                         );
+                        None
                     }
                     Underivable::Concept => {
                         f.stating(format_args!("{key} is a concept's record"));
+                        None
                     }
                     Underivable::TypeValued {
                         constructor,
                         payload,
-                    } => f.stating(format_args!(
-                        "{payload} of `{constructor}` is a type, which no value spells"
-                    )),
+                    } => {
+                        f.stating(format_args!(
+                            "{payload} of `{constructor}` is a type, which no value spells"
+                        ));
+                        None
+                    }
+                    Underivable::Departs { concept: departing } => {
+                        let departing = spelling.symbol(departing);
+                        f.stating(format_args!(
+                            "its `{departing}` is not the one a derivation writes, which the derived law is proved of"
+                        ));
+                        Some(format!(
+                            "derive its `{departing}` with `{{ .. }}`, or write the body"
+                        ))
+                    }
+                };
+                match advice {
+                    Some(advice) => f.stating(advice),
+                    None => f.stating("write the body"),
                 }
-                f.stating("write the body");
             }
             Error::CtorArityMismatch {
                 atom,

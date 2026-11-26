@@ -2,8 +2,8 @@
 
 use curios_common::{
     CharacterSyntax, ConceptField, ConjunctionSyntax, DerivationSyntax, EntailmentSyntax,
-    EqlSyntax, EqualitySyntax, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax,
-    NaturalSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, OrdLaws, OrderSyntax,
+    EqlSyntax, EqualitySyntax, HashDerivation, IntegerSyntax, KeyDerivation, LiftSyntax,
+    MonadSyntax, NaturalSyntax, OperatorSyntax, OptionSyntax, OrdDerivation, OrdLaws, OrderSyntax,
     ProgramSyntax, ProofSyntax, ReportSyntax, SpellDerivation, StringSyntax, SyntaxName,
     SyntaxRegistry, TestSyntax,
 };
@@ -120,6 +120,11 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             hash: field(&["std", "Hash", "Hash"], "hash"),
             position: name(&["std", "Nat", "hash", "hash"]),
             delimited: name(&["std", "Hash", "delimited", "delimited"]),
+        },
+        key: KeyDerivation {
+            mono: field(&["std", "Hash", "Key", "Key"], "mono"),
+            then: name(&["std", "Hash", "Key", "then"]),
+            last: name(&["std", "Hash", "Key", "last"]),
         },
     },
     entailment: EntailmentSyntax {

@@ -402,7 +402,7 @@ pub enum Watched {
     Goal(Option<Extent>),
 }
 
-/// Why a derivation declined a key. Each is a hard refusal at the `satisfy` extent, decided from the declaration's shape before any body is written; a payload whose witness is merely missing is not among them — that reports through [`Error::NoWitness`] under the derivation's own provenance, since a later item may still register it.
+/// Why a derivation declined a key. Each is a hard refusal at the `satisfy` extent, decided before any body is written, from the declaration's shape or from what the witnesses a derived law is proved of compute; a payload whose witness is merely missing is not among them — that reports through [`Error::NoWitness`] under the derivation's own provenance, since a later item may still register it.
 #[derive(Debug)]
 pub enum Underivable {
     /// Not a registered `induct` or `struct`: an intrinsic carrier, a tuple or function shape, a variable, or a stuck head.
@@ -414,6 +414,8 @@ pub enum Underivable {
         constructor: String,
         payload: String,
     },
+    /// A superclass of the derived concept, `concept` at the key, resolves to a witness that computes otherwise than a derivation writes it, where the derived law is proved of what a derivation writes: a key over an order or an encoding of its own.
+    Departs { concept: Global },
 }
 
 /// A later explicit parameter of a callee whose type is a function type, with its name and its 0-based position among the explicit parameters: the slot a lambda handed where no function is wanted was likely meant for.

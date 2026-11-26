@@ -16,10 +16,11 @@
 
 use {
     super::{Context, Error, Mode, Opened, Underivable, elaborate, method_type, reduce_with},
-    crate::{is_prop_to, sort_of_in},
+    crate::{is_prop_to, same_uncommitted, sort_of_in},
     curios_common::{
-        ConceptField, Derivation, EqlSyntax, HashDerivation, InfixOp, OrdDerivation, Plicity,
-        ProofSyntax, Qualifier, SpellDerivation, StringSyntax, Symbol, SyntaxName, SyntaxRegistry,
+        ConceptField, Derivation, EqlSyntax, HashDerivation, InfixOp, KeyDerivation, OrdDerivation,
+        Plicity, ProofSyntax, Qualifier, SpellDerivation, StringSyntax, Symbol, SyntaxName,
+        SyntaxRegistry,
     },
     curios_core::{
         Atom, CalleeId, Extent, Free, Global, InductDecl, InductParam, InductType, Intrinsic,
@@ -98,6 +99,14 @@ pub fn elaborate_derive(
         Derivation::Eql(row) => eql_body(context, &site, &subject, *row)?,
         Derivation::Ord(row) => ord_body(context, &site, &subject, *row)?,
         Derivation::Hash(row) => hash_body(context, &site, &subject, *row)?,
+        Derivation::Key(row) => key_body(
+            context,
+            &site,
+            &subject,
+            *row,
+            syntax.derivations.ord,
+            syntax.derivations.hash,
+        )?,
     };
     elaborate(context, &body, mode)
 }
@@ -725,6 +734,20 @@ fn hash_body(
     row: HashDerivation,
 ) -> Result<Term, Error> {
     let value = context.fresh(None);
+    let encoded = encoding(context, site, subject, row, &value)?;
+
+    let method = Term::func([(value, Term::hole(context.mint_metavar()))], encoded);
+    Ok(site.at(dictionary(site, [method])))
+}
+
+/// The derived encoding of `value`, as [`hash_body`]'s method writes it.
+fn encoding(
+    context: &mut Context,
+    site: &Site<'_>,
+    subject: &Subject,
+    row: HashDerivation,
+    value: &Free,
+) -> Result<Term, Error> {
     let several = match subject {
         Subject::Struct { .. } => false,
         Subject::Induct { decl, .. } => decl.constructors().len() > 1,
@@ -744,14 +767,13 @@ fn hash_body(
         )),
     };
 
-    let encoded = match subject {
+    Ok(match subject {
         Subject::Struct { name, decl, params } => {
-            let parts = struct_parts(context, site, name, decl, params, &value)?;
+            let parts = struct_parts(context, site, name, decl, params, value)?;
             let pieces = parts
                 .iter()
                 .filter_map(|classified| {
-                    let read =
-                        Term::proj_struct(Term::free_var(&value), *name, classified.position);
+                    let read = Term::proj_struct(Term::free_var(value), *name, classified.position);
                     encode(context, classified, read)
                 })
                 .collect::<Vec<_>>();
@@ -767,7 +789,7 @@ fn hash_body(
                     params,
                 };
                 let binders = constructor.binders(context);
-                let parts = constructor.parts(context, site, &binders, &value)?;
+                let parts = constructor.parts(context, site, &binders, value)?;
                 let pieces = parts
                     .iter()
                     .filter_map(|classified| {
@@ -789,16 +811,13 @@ fn hash_body(
 
             let goal = goal(context);
             site.at(Term::induct_match_marked(
-                Term::free_var(&value),
+                Term::free_var(value),
                 goal,
                 arms,
                 None,
             ))
         }
-    };
-
-    let method = Term::func([(value, Term::hole(context.mint_metavar()))], encoded);
-    Ok(site.at(dictionary(site, [method])))
+    })
 }
 
 /// One shape's encoding: its `position`'s, where it is one of several, then its payloads' `pieces` in order, every one but the last delimited, as a packed literal of spreads. A lone piece is the encoding itself, and no piece is the empty run.
@@ -830,6 +849,160 @@ fn joined(
         1 => operands.remove(0),
         _ => site.at(Term::intrinsic(Intrinsic::bytes_concat(operands))),
     }
+}
+
+/// The `Hash/Key` witness record: `mono`, that the derived order of two values is `Bytes/ord` of their derived encodings, proved of the two as the derived `Ord` and `Hash` write them.
+///
+/// **Over the order and the encoding a derivation writes, or refused.** The law sets the derived `Ord`'s comparison against the derived `Hash`'s encodings, so where the `Ord` or the `Hash` the key's superclasses resolve to computes otherwise ([`departing`]) no proof is written and the derivation refuses, naming it.
+///
+/// **A struct, and a constructor against itself, a payload at a time from the last back** ([`Pieces::in_order`]). **Two constructors apart are closed by reduction**: there each comparison is its two constructors' positions', literals by then, and so is each encoding's first byte, so the law is `Eq/refl()`. That is an arm a pair of constructors, as the derived `Ord`'s laws over two values take.
+fn key_body(
+    context: &mut Context,
+    site: &Site<'_>,
+    subject: &Subject,
+    row: KeyDerivation,
+    ord: OrdDerivation,
+    hash: HashDerivation,
+) -> Result<Term, Error> {
+    if let Some(concept) = departing(context, site, subject, ord, hash)? {
+        return Err(site.refuse(Underivable::Departs { concept }));
+    }
+
+    let left = context.fresh(None);
+    let right = context.fresh(None);
+    let proof = match subject {
+        Subject::Struct { name, decl, params } => {
+            let parts = struct_parts(context, site, name, decl, params, &left)?;
+            let sides: [Side<'_>; 2] = [&projected(&left, name), &projected(&right, name)];
+            Pieces::new(ord, &parts).in_order(context, site, (row, hash), sides)
+        }
+        Subject::Induct { name, decl, params } => paired(
+            context,
+            site,
+            (name, decl, params.as_slice()),
+            (row, ord, hash),
+            [&left, &right],
+        )?,
+    };
+
+    let mono = Term::func(
+        [left, right].map(|binder| (binder, Term::hole(context.mint_metavar()))),
+        proof,
+    );
+    Ok(site.at(dictionary(site, [mono])))
+}
+
+/// `mono` over an inductive: a match on each value, a constructor's arm against itself the law over its payloads ([`Pieces::in_order`]) and against any other `Eq/refl()`.
+fn paired(
+    context: &mut Context,
+    site: &Site<'_>,
+    family: Family<'_>,
+    (key, ord, hash): (KeyDerivation, OrdDerivation, HashDerivation),
+    [left, right]: [&Free; 2],
+) -> Result<Term, Error> {
+    let (_, decl, _) = family;
+    let arm = |constructor: &Constructor<'_>, tag: &Atom, binders: &[Free], body: Term| {
+        (
+            tag.clone(),
+            constructor
+                .plicities()
+                .into_iter()
+                .zip(binders.iter().copied())
+                .collect::<Vec<_>>(),
+            body,
+        )
+    };
+
+    let mut arms = Vec::new();
+    for (tag, signature) in decl.constructors() {
+        let agreed = constructor_of(family, tag, signature);
+        let lefts = agreed.binders(context);
+        let rights = agreed.binders(context);
+        let parts = agreed.parts(context, site, &lefts, left)?;
+        let sides: [Side<'_>; 2] = [&|position| Term::free_var(&lefts[position]), &|position| {
+            Term::free_var(&rights[position])
+        }];
+        let mut ordered =
+            Some(Pieces::new(ord, &parts).in_order(context, site, (key, hash), sides));
+
+        let mut facing = Vec::new();
+        for (other, other_signature) in decl.constructors() {
+            if other == tag {
+                let body = ordered.take().expect("a constructor meets itself once");
+                facing.push(arm(&agreed, tag, &rights, body));
+                continue;
+            }
+            let apart = constructor_of(family, other, other_signature);
+            let payloads = apart.binders(context);
+            facing.push(arm(&apart, other, &payloads, reflexive(context, site)));
+        }
+        let inner = site.at(Term::induct_match_marked(
+            Term::free_var(right),
+            goal(context),
+            facing,
+            None,
+        ));
+        arms.push(arm(&agreed, tag, &lefts, inner));
+    }
+
+    Ok(site.at(Term::induct_match_marked(
+        Term::free_var(left),
+        goal(context),
+        arms,
+        None,
+    )))
+}
+
+/// The superclass of a key that computes otherwise than a derivation writes it, if one does: the `Ord` the key resolves against the comparison [`order`] writes, then its `Hash` against the encoding [`encoding`] writes, each pair elaborated as functions of fresh values and compared committing nothing ([`same_uncommitted`]). The question is what each computes and not how it was declared, so a written witness that computes what a derivation writes agrees.
+fn departing(
+    context: &mut Context,
+    site: &Site<'_>,
+    subject: &Subject,
+    ord: OrdDerivation,
+    hash: HashDerivation,
+) -> Result<Option<Global>, Error> {
+    let left = context.fresh(None);
+    let right = context.fresh(None);
+    let value = context.fresh(None);
+    let over = |context: &mut Context, binders: &[Free], body: Term| -> Result<Term, Error> {
+        let function = Term::func(
+            binders.iter().map(|binder| (*binder, site.key.clone())),
+            body,
+        );
+        Ok(elaborate(context, &function, Mode::Infer)?.0)
+    };
+    let agree = |context: &mut Context, this: &Term, that: &Term| -> Result<bool, Error> {
+        same_uncommitted(context, this, that).map_err(|error| {
+            Error::from_reduce(error, |refusal| {
+                Error::reduce_exhausted(this.clone(), refusal)
+            })
+        })
+    };
+
+    let operands = [Term::free_var(&left), Term::free_var(&right)];
+    let resolved = over(
+        context,
+        &[left, right],
+        Term::apply(Term::registered_method(ord.ord), operands),
+    )?;
+    let written = order(context, site, subject, ord, &left, &right)?;
+    let written = over(context, &[left, right], written)?;
+    if !agree(context, &resolved, &written)? {
+        return Ok(Some(Global::Authored(ord.ord.concept.qualifier())));
+    }
+
+    let resolved = over(
+        context,
+        &[value],
+        Term::apply(Term::registered_method(hash.hash), [Term::free_var(&value)]),
+    )?;
+    let written = encoding(context, site, subject, hash, &value)?;
+    let written = over(context, &[value], written)?;
+    if !agree(context, &resolved, &written)? {
+        return Ok(Some(Global::Authored(hash.hash.concept.qualifier())));
+    }
+
+    Ok(None)
 }
 
 /// The `Eql` witness record: `eql` over the derived comparison, and its two laws, each proved through its payloads' own.
@@ -1527,6 +1700,69 @@ impl<'c> Pieces<'c> {
     /// The whole comparison.
     fn compared(&self, context: &mut Context, site: &Site<'_>, sides: [Side<'_>; 2]) -> Term {
         self.folded(context, site, self.values.len(), sides)
+    }
+
+    /// A proof that the comparison of the two sides is `Bytes/ord` of their encodings, as the derived `Hash` joins them ([`joined`]): from the last value back, the last by `/std/Hash/Key/last` and each before it by `then`, each value's part its own key's `mono` and the encodings after it written out, and `Eq/refl()` where there is nothing to compare.
+    ///
+    /// **Each step's answers are written**, as [`Pieces::flipped`]'s are: the fold so far, the value's answer, its encodings, those after it and the whole comparison, so no answer is left to inference to solve as a recursion written out.
+    fn in_order(
+        &self,
+        context: &mut Context,
+        site: &Site<'_>,
+        (key, hash): (KeyDerivation, HashDerivation),
+        sides: [Side<'_>; 2],
+    ) -> Term {
+        let count = self.values.len();
+        if count == 0 {
+            return reflexive(context, site);
+        }
+
+        let encoded = |context: &mut Context, index: usize| {
+            self.read(index, sides)
+                .map(|operand| self.applied(context, site, hash.hash, index, vec![operand]))
+        };
+        let own = |context: &mut Context, index: usize| {
+            let operands = self.read(index, sides).to_vec();
+            self.applied(context, site, key.mono, index, operands)
+        };
+
+        let last = count - 1;
+        let [x, y] = encoded(context, last);
+        let mut proof = site.at(syn_call(
+            key.last,
+            [
+                self.folded(context, site, last, sides),
+                self.piece(context, site, last, sides),
+                x,
+                y,
+                own(context, last),
+            ],
+        ));
+        for index in (0..last).rev() {
+            let [x, y] = encoded(context, index);
+            let (mut s, mut u) = (Vec::new(), Vec::new());
+            for after in index + 1..count {
+                let [this, that] = encoded(context, after);
+                s.push(this);
+                u.push(that);
+            }
+            proof = site.at(syn_call(
+                key.then,
+                [
+                    self.folded(context, site, index, sides),
+                    self.piece(context, site, index, sides),
+                    x,
+                    y,
+                    joined(site, hash, None, s),
+                    joined(site, hash, None, u),
+                    own(context, index),
+                    self.compared(context, site, sides),
+                    proof,
+                ],
+            ));
+        }
+
+        proof
     }
 
     /// A proof that the comparison with its sides swapped is the comparison flipped: the first value's own law, and for each value after it the step's law over the proof so far and that value's own, and `Eq/refl()` where there is nothing to compare.

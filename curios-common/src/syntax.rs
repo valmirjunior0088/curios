@@ -179,13 +179,19 @@ impl SyntaxRegistry {
 
     /// Every derivation's row, for the concept lookup and the references a derived witness makes: `Eql`'s is the concept's own group, [`SyntaxRegistry::eql`], and the others are [`DerivationSyntax`]'s. Destructures it, so a row added and not yielded here does not compile. Each row is borrowed, so the tag is a reference whatever its row's size.
     pub fn derivation_rows(&self) -> impl Iterator<Item = Derivation<'_>> {
-        let DerivationSyntax { spell, ord, hash } = &self.derivations;
+        let DerivationSyntax {
+            spell,
+            ord,
+            hash,
+            key,
+        } = &self.derivations;
 
         [
             Derivation::Spell(spell),
             Derivation::Eql(&self.eql),
             Derivation::Ord(ord),
             Derivation::Hash(hash),
+            Derivation::Key(key),
         ]
         .into_iter()
     }
@@ -674,6 +680,7 @@ pub struct DerivationSyntax {
     pub spell: SpellDerivation,
     pub ord: OrdDerivation,
     pub hash: HashDerivation,
+    pub key: KeyDerivation,
 }
 
 /// The names specific to a derived `Spell` witness body: the concept's `spell` method, applied to each payload and resolved like any written call; and the renderers the body applies over the spelled pieces — `call` for a constructor over its payloads, `record` for a struct over its fields, and `hidden` for a member written under its mark. The re-parse grammar is spelled once, in `/std/Spell`, where the certifier re-certifies it on every prelude build; the derivation only ever emits an application of one of these.
@@ -774,6 +781,16 @@ pub struct HashDerivation {
     pub delimited: SyntaxName,
 }
 
+/// The names a derived `Hash/Key` witness body is written with: its law, applied at each payload, and the two `/std/Hash/Key` lemmas its proof steps through, a payload at a time from the last back — `then` for a payload before the last, whose encoding the derived `Hash` delimits, and `last` for the last, which it leaves as it stands.
+///
+/// The body also writes what the derived `Ord` and `Hash` write — the fold of the payloads' answers, each payload's comparison and encoding, a delimited part — read off their rows ([`OrdDerivation`], [`HashDerivation`]), as `Spell`'s writer reads [`SyntaxRegistry::string`]; and it closes a pair of constructors on [`SyntaxRegistry::equality`]'s `refl`.
+#[derive(Debug, Clone, Copy)]
+pub struct KeyDerivation {
+    pub mono: ConceptField,
+    pub then: SyntaxName,
+    pub last: SyntaxName,
+}
+
 /// One row of the roster as the lookup yields it: the tag a body writer dispatches on, carrying the names that writer applies.
 #[derive(Debug, Clone, Copy)]
 pub enum Derivation<'r> {
@@ -781,6 +798,7 @@ pub enum Derivation<'r> {
     Eql(&'r EqlSyntax),
     Ord(&'r OrdDerivation),
     Hash(&'r HashDerivation),
+    Key(&'r KeyDerivation),
 }
 
 impl Derivation<'_> {
@@ -791,15 +809,18 @@ impl Derivation<'_> {
             Derivation::Eql(row) => row.eql,
             Derivation::Ord(row) => row.ord,
             Derivation::Hash(row) => row.hash,
+            Derivation::Key(row) => row.mono,
         }
     }
 
-    /// Every concept method a body written by this derivation projects, for the prelude build's field check: the method the lookup keys on, and for `Eql` the two laws its body proves through each payload's own.
+    /// Every concept method a body written by this derivation projects, for the prelude build's field check: the method the lookup keys on, and for `Eql` the two laws its body proves through each payload's own. A key's body projects `Ord`'s and `Hash`'s methods too, which their own rows hold.
     fn concept_fields(self) -> Vec<ConceptField> {
         match self {
             Derivation::Eql(row) => row.concept_fields().collect(),
             Derivation::Ord(row) => vec![row.ord, row.laws.flips, row.laws.eq],
-            Derivation::Spell(_) | Derivation::Hash(_) => vec![self.concept_field()],
+            Derivation::Spell(_) | Derivation::Hash(_) | Derivation::Key(_) => {
+                vec![self.concept_field()]
+            }
         }
     }
 
@@ -870,6 +891,32 @@ impl Derivation<'_> {
                 position,
                 delimited,
             }) => vec![concept, position.qualifier(), delimited.qualifier()],
+            Derivation::Key(&KeyDerivation {
+                mono: _,
+                then,
+                last,
+            }) => {
+                let DerivationSyntax { ord, hash, .. } = registry.derivations;
+                [
+                    concept,
+                    ord.ord.concept.qualifier(),
+                    hash.hash.concept.qualifier(),
+                ]
+                .into_iter()
+                .chain(
+                    [
+                        then,
+                        last,
+                        ord.lexicographic,
+                        hash.delimited,
+                        equality.family,
+                        equality.refl,
+                    ]
+                    .into_iter()
+                    .map(SyntaxName::qualifier),
+                )
+                .collect()
+            }
         }
     }
 
@@ -900,6 +947,7 @@ impl Derivation<'_> {
                 position,
                 delimited,
             }) => vec![hash.concept, position, delimited],
+            Derivation::Key(&KeyDerivation { mono, then, last }) => vec![mono.concept, then, last],
         }
         .into_iter()
     }

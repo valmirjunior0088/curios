@@ -53,3 +53,15 @@ pub let second(
     | eq() => h
     | gt() => match h end
     end;
+
+--- Two steps in turn are the first answer stepped by the other two's step: where it is `eq` each side is the step of the other two, and otherwise each is it.
+pub let assoc(
+    x: Ordering,
+    y: Ordering,
+    z: Ordering,
+) -> Eq()(then(then(x, y), z), then(x, then(y, z))) =
+    match x
+    | lt() => Eq/refl()
+    | eq() => Eq/refl()
+    | gt() => Eq/refl()
+    end;

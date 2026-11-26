@@ -3,5 +3,6 @@
 mod eql;
 mod form;
 mod hash;
+mod key;
 mod ord;
 mod spell;
