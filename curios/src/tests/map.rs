@@ -2,11 +2,11 @@
 
 use crate::test_support::*;
 
-// The trie's identity is the byte string a key's `Hash` produces, so a colliding encoding does not fail a lookup — it silently merges two keys into one entry. `Key/inj` states that obligation where it can be checked, and an encoding that provably collides cannot discharge it: both constructors here hash to the empty byte string, so the law demands `Eq()(a, b)` for values that are not equal. The collision is declared once, in the `Hash` witness — `Key` reaches the encoding through its superclass edge and has no second field to disagree with it — so there is one place for a collision to come from and the law still catches it there. The order ties every pair as the encodings do, so `monotone` holds and `injective` alone is what refuses the witness.
+// The trie's identity is the byte string a key's `Hash` produces, so a colliding encoding does not fail a lookup — it silently merges two keys into one entry. The key's one law refuses it where it is declared: an order holds two values apart unless they are one (`Ord/eq`), and two values of one encoding tie in the encodings' order, so `monotone` is false at any two distinct keys of one encoding, which is why injectivity is a lemma of it (`Map/Key/inj`). Both constructors here hash to the empty byte string, so the law at `left` and `right` asks that `lt` be `eq`. The collision is declared once, in the `Hash` witness — `Key` reaches the encoding through its superclass edge and has no second field to disagree with it — so there is one place for a collision to come from and the law catches it there.
 #[test]
 fn a_colliding_key_witness_is_rejected() {
     let source = r#"
-        use /std/{Bytes, Map, Hash, Eq, Ord, Ordering};
+        use /std/{Bytes, Map, Hash, Eq, Ord};
         use /std/ops/{Eql};
         pub induct Side : pub Type
         | left()
@@ -18,23 +18,28 @@ fn a_colliding_key_witness_is_rejected() {
             hash(s) = 0x[],
         }
         satisfy Map/Key(Side) {
-            inj(a, b, same) = Eq/refl(),
-            monotone(a, b) = Eq/refl(),
+            monotone(a, b) =
+                match a
+                | left() => match b | left() => Eq/refl() | right() => Eq/refl() end
+                | right() => match b | left() => Eq/refl() | right() => Eq/refl() end
+                end,
         }
         /std/print("unreachable")
         "#;
 
     let message = error(source);
     assert!(message.contains("type mismatch"), "{message}");
-    assert!(message.contains("expected: `Eq(@Side)(a, b)`"), "{message}");
+    assert!(
+        message.contains("expected: `Eq(@Ord/Ordering)(Ord/Ordering/lt(), Ord/Ordering/eq())`"),
+        "{message}"
+    );
 }
 
-// A walk of the trie is in the order of the encodings, so an encoding out of its type's order does not fail a lookup either — it enumerates a map's keys in an order no reader of the type expects. `Key/monotone` states that obligation: the order of two keys is `Bytes/ord` of their encodings. `left` is below `right` by their declaration and its byte is above `right`'s, the encodings are distinct so `injective` is discharged, and the law is refused at the one pair it is false of.
+// A walk of the trie is in the order of the encodings, so an encoding out of its type's order does not fail a lookup either — it enumerates a map's keys in an order no reader of the type expects. `Key/monotone` states that obligation: the order of two keys is `Bytes/ord` of their encodings. `left` is below `right` by their declaration and its byte is above `right`'s, and the law is refused at the one pair it is false of.
 #[test]
 fn a_key_witness_out_of_its_order_is_rejected() {
     let source = r#"
-        use /std/{Byte, Bytes, Bool, Map, Hash, Eq, Ord};
-        use /std/Bool/{True, False, Holds};
+        use /std/{Bytes, Map, Hash, Eq, Ord};
         use /std/ops/{Eql};
         pub induct Side : pub Type
         | left()
@@ -45,22 +50,7 @@ fn a_key_witness_out_of_its_order_is_rejected() {
         satisfy Hash(Side) {
             hash(s) = match s | left() => 0x[0x1] | right() => 0x[0x0] end,
         }
-        let apart(e: Eq(@Byte)(0x1, 0x0)) -> False =
-            Eq/subst((m: Byte) => Holds(0x1 == m), e, True/qed());
         satisfy Map/Key(Side) {
-            inj(a, b, same) =
-                match a
-                | left() =>
-                    match b
-                    | left() => Eq/refl()
-                    | right() => match apart(Bytes/cons_inj_head(same)) end
-                    end
-                | right() =>
-                    match b
-                    | left() => match apart(Eq/sym(Bytes/cons_inj_head(same))) end
-                    | right() => Eq/refl()
-                    end
-                end,
             monotone(a, b) =
                 match a
                 | left() => match b | left() => Eq/refl() | right() => Eq/refl() end

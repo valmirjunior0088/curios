@@ -86,14 +86,14 @@ A concept states the operations a form or generic code dispatches through. It ca
 
 ### A key's encoding is in its key's order
 
-**Decision.** `/std/Map`'s `Key(K)` takes `Ord(K)` as a superclass beside `Hash(K)` and holds two laws: `inj`, that distinct keys encode distinctly, and `monotone`, that the order of two keys is `Bytes/ord` of their encodings. A natural encodes as one code (`/std/Nat/hash`): a first byte `0x80 + 16 * rank + top`, where `rank` is how many bytes follow it, below seven, and `top` the number those bytes leave, below sixteen; then the `rank` bytes, most significant first; a rank of seven or more writes a `0xFF` for every seven and then the same. An integer at or above zero encodes as its natural, and one below as the complement, byte by byte, of the code of `-1 - i` (`/std/Int/hash`). The codes' law is stated through `Bytes/ord/below`: two runs part at a byte with the first's the smaller, neither running out. No tuple and no list is a key.
+**Decision.** `/std/Map`'s `Key(K)` takes `Ord(K)` as a superclass beside `Hash(K)` and holds one law, `monotone`, that the order of two keys is `Bytes/ord` of their encodings, of which distinct keys encoding distinctly is a lemma (`Map/Key/inj`). A natural encodes as one code (`/std/Nat/hash`): a first byte `0x80 + 16 * rank + top`, where `rank` is how many bytes follow it, below seven, and `top` the number those bytes leave, below sixteen; then the `rank` bytes, most significant first; a rank of seven or more writes a `0xFF` for every seven and then the same. An integer at or above zero encodes as its natural, and one below as the complement, byte by byte, of the code of `-1 - i` (`/std/Int/hash`). The codes' law is stated through `Bytes/ord/below`: two runs part at a byte with the first's the smaller, neither running out. No tuple and no list is a key.
 
 **Rationale.**
 
 - **The order is put where the bytes are made.** A map's trie meets its keys in the order of their encodings, so a witness whose encoding is out of its type's order enumerates a map in an order no reader of the type expects. As a law of the concept it is refused where the witness is declared, as an encoding that collides is, and every theorem about an ordered walk stands under `use Key(K)` alone; `Hash`'s bytes are the key's by `Key`'s edge, so a key type has one identity as bytes and that identity is in its order.
 - **A type with no order of its own takes its encoding's**, its `monotone` being `Eq/refl()`, and a key's order has its reflexivity, its flip and its transitivity from the order of bytes, each proved once for every key by the order of bytes (`Ord/refl`, `Ord/flips` and `Ord/trans` at `Bytes`).
 - **The code keeps small numbers immediate and spends no byte on a sign.** The first byte holds the length and the top four bits, so a number below 16 is one byte, below 4 096 two and below `2^20` three, a packed immediate, and no code begins another; a natural's code leads with a byte in the upper half and a complement's with one in the lower, so every integer below zero is before every other, the more negative first, `Hash` of `Nat/to_int(n)` is `Hash` of `n`, and an integer within `2^20` of zero is an immediate.
-- **`below` is the form the law is proved in.** It gives `Bytes/ord` its `lt`, stands behind a shared prefix and ahead of any two suffixes, and a complement reverses it, which is the whole of the step from the naturals' law to the integers'; a code's injectivity is its order's corollary, through `Ord/eq` at `Nat` and at `Int`.
+- **`below` is the form the law is proved in.** It gives `Bytes/ord` its `lt`, stands behind a shared prefix and ahead of any two suffixes, and a complement reverses it, which is the whole of the step from the naturals' law to the integers'; and a key's injectivity is its order's corollary, through `Ord/eq`, proved once for every key.
 
 **Rejected.**
 
@@ -119,7 +119,7 @@ A concept states the operations a form or generic code dispatches through. It ca
 
 - **The invariant as a predicate beside the map**, which every theorem would take and every caller prove.
 - **A family restating the invariant that applies no function to the trie**, read back by a lemma each way: two statements of one invariant, which the map needed only while positivity read no definition.
-- **A leaf compared by its key's own order**, which a proof reads through `Key`'s two laws with no rule of the checkers', and which a text key pays for at every lookup as a walk over its bytes.
+- **A leaf compared by its key's own order**, which a proof reads through `Key`'s law and the injectivity it gives with no rule of the checkers', and which a text key pays for at every lookup as a walk over its bytes.
 - **A trie that stores each edge's run**: its invariant is local, and its lookups compare a run a level where a fork reads a digit.
 - **Keys read back from their paths**, a decoder for every key type run at every enumeration.
 - **A digit read by division**, which a proof reads with no table, in the walk an insert spends its time in.

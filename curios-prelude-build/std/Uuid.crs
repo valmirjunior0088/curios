@@ -178,7 +178,6 @@ satisfy Hash(Uuid) {
 
 --- The sixteen bytes, whose order is the UUIDs'.
 satisfy Map/Key(Uuid) {
-    inj(a, b, same) = eq_of_bytes(a, b, same),
     monotone(_, _) = Eq/refl(),
 }
 

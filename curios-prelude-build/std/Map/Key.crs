@@ -1,21 +1,37 @@
-use /std/{Bytes, Bool, Eq, Hash, Ord, proved};
+use /std/{Bytes, Bool, Eq, Hash, Ord, Ordering, proved};
 
--- **`Flt` is deliberately not a key, and the reason is not the proof.** Injectivity holds and is cheap — `Flt/of_le_bytes` inverts `Flt/to_le_bytes`, so the witness is one congruence through a guarded decoder. What stops it is that this concept promises injectivity on *propositional* equality while `/std/ops/Eql`'s `Flt` witness is IEEE `==`, and the two disagree at both ends: `+0.0` and `-0.0` are distinct values with distinct encodings that `==` calls equal, so a map would hold them as two entries; a `NaN` is found by lookup though `==` calls it equal to nothing. Nothing here forbids that, because a key's law says nothing about `Eql` — which is exactly why the witness is withheld until what a map means for such a carrier is decided rather than discovered.
---- How a key type encodes to the byte string that identifies it, with the proofs that distinct keys encode distinctly and that the encodings stand in the keys' own order.
+--- How a key type encodes to the byte string that identifies it, with the proof that the encodings stand in the keys' own order.
 ---
---- The encoding is `/std/Hash`'s and the order `/std/Ord`'s, reached through the concept's parents rather than restated, so a type has one identity as bytes and one order. The concept adds the two proofs neither parent carries: `inj`, so the trie never merges two keys into one entry, and `monotone`, so a walk of the trie, which follows the encodings, follows the keys' order. A witness whose encoding collides or breaks the order is refused where it is declared.
+--- The encoding is `/std/Hash`'s and the order `/std/Ord`'s, reached through the concept's parents rather than restated, so a type has one identity as bytes and one order. The concept adds the one law neither parent carries, `monotone`, so a walk of the trie, which follows the encodings, follows the keys' order; that distinct keys encode distinctly, so the trie never merges two keys into one entry, follows from it ([`inj`]). A witness whose encoding collides or breaks the order is refused where it is declared.
 ---
 --- A type with an encoding and no order of its own takes its encoding's, and its `monotone` is `Eq/refl()`.
 pub concept Key(K: Type): pub Type {
     use Hash(K),
     use Ord(K),
-    --- Distinct keys encode distinctly.
-    inj(a: K, b: K, same: Eq()(Hash/hash(a), Hash/hash(b))) -> Eq()(a, b),
     --- The order of two keys is the order of their encodings, as `Bytes/ord` reads them.
     monotone(a: K, b: K) -> Eq()(Ord/ord(a, b), Bytes/ord(Hash/hash(a), Hash/hash(b))),
 }
 
 pub use Key/*;
+
+-- Two keys of one encoding are `eq` in the encodings' order, so in their own by `monotone`, and two keys their order ties are one.
+--- Distinct keys encode distinctly.
+pub let inj(
+    @K: Type,
+    use Key(K),
+    a: K,
+    b: K,
+    same: Eq()(Hash/hash(a), Hash/hash(b)),
+) -> Eq()(a, b) =
+    Ord/eq(
+        a,
+        b,
+        Eq/trans(
+            monotone(a, b),
+            Eq/subst(
+                (z: Bytes) => Eq()(Bytes/ord(Hash/hash(a), z), Ordering/eq()),
+                same,
+                Ord/refl(Hash/hash(a)))));
 
 --- Two keys whose encodings compare equal are one key: the encodings are one run, and [`inj`] takes that to the keys.
 pub let same(
@@ -25,7 +41,7 @@ pub let same(
     b: K,
     h: Bool/Holds(Hash/hash(a) == Hash/hash(b)),
 ) -> Eq()(a, b) =
-    Key/inj(a, b, proved());
+    inj(a, b, proved());
 
 --- Two keys whose encodings compare unequal are two keys: one key encodes as itself.
 pub let apart(

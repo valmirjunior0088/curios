@@ -74,7 +74,7 @@ let uncons(z: Bytes) -> Option({Byte, Bytes}) =
     | 0x[k, ..p] => Option/some((k, p))
     end;
 
--- Read through the cons taken apart above — what lets an encoding built by consing be taken apart again. `/std/Map`'s `Key` witnesses are where that is needed, which is outside this module's subtree.
+-- Read through the cons taken apart above — what lets an encoding built by consing be taken apart again.
 --- A cons is injective in its head.
 pub let cons_inj_head(
     @k1: Byte,
@@ -328,6 +328,5 @@ satisfy Hash(Bytes) {
 
 --- The identity encoding, in the order of bytes.
 satisfy Map/Key(Bytes) {
-    inj(_, _, same) = same,
     monotone(_, _) = Eq/refl(),
 }

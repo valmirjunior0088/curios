@@ -176,8 +176,7 @@ satisfy Hash(Int) {
     hash = hash,
 }
 
---- The encoding in the order of the numbers, whose injectivity is that order's.
+--- The encoding in the order of the numbers.
 satisfy Map/Key(Int) {
-    inj = hash/inj,
     monotone = hash/monotone,
 }
