@@ -315,6 +315,58 @@ pub let length(_chain: Chain) -> Nat = 0;
     assert_stored_alike(&unit_of(&edited), &incremental);
 }
 
+/// A family elaborated again to the entry it had keeps what read its constructors: `Chain` holds itself through `Wrapped`, so respelling `Wrapped`'s body elaborates `Chain` again, to the entry the baseline holds, and `first`, which reads its constructor `stop`, and `count`, which matches on `link`, are reused, a constructor being its family's by construction and every part of it read off the entry. A reader whose term writes `link`'s payload, by its own type or an argument solved to `link`'s type, reads `Wrapped` itself. Its twin edits `link`'s payload, which moves the family's entry, and `first` is elaborated again: a reader of a constructor reads its family too, so a moved entry reaches it whatever the constructor's note says.
+#[test]
+fn a_family_elaborated_again_to_its_entry_keeps_what_read_its_constructors() {
+    let base = "use /std/{Nat, Bool, Option};
+
+pub let Same(T: Type) -> Type = T;
+
+pub let Wrapped(T: Type) -> Type = T;
+
+pub induct Chain: pub Type
+| stop()
+| link(Wrapped(Option(Chain)), Nat)
+end
+
+pub let first: Chain = Chain/stop();
+
+pub let count(c: Chain) -> Nat =
+    match c | stop() => 0 | link(_, _) => 1 end;
+";
+    let respelled = base.replace(
+        "Wrapped(T: Type) -> Type = T",
+        "Wrapped(T: Type) -> Type = Same(T)",
+    );
+    let repaid = base.replace(
+        "Wrapped(Option(Chain)), Nat)",
+        "Wrapped(Option(Chain)), Bool)",
+    );
+    let baseline = unit_of(base);
+
+    let kept = recompile_over(&respelled, &baseline).unwrap();
+
+    assert!(
+        !reuses_body(&baseline, &kept, "Chain"),
+        "the control stopped holding: a family that unfolded the edited body was reused"
+    );
+    for reader in ["first", "count"] {
+        assert!(
+            reuses_body(&baseline, &kept, reader),
+            "`{reader}`, a reader of a constructor whose family came out as it was, was elaborated again"
+        );
+    }
+    assert_definitions_agree(unit_of(&respelled).core(), kept.core());
+
+    let moved = recompile_over(&repaid, &baseline).unwrap();
+
+    assert!(
+        !reuses_body(&baseline, &moved, "first"),
+        "a reader of a constructor whose family's entry moved was reused"
+    );
+    assert_definitions_agree(unit_of(&repaid).core(), moved.core());
+}
+
 /// A field's mark is part of its declaration: hiding a field changes what a literal of the structure writes and what a position counts. An edit that moves the mark and nothing else therefore recompiles the items that read the structure, against the declaration as it now stands.
 #[test]
 fn an_edit_that_moves_a_fields_mark_alone_recompiles_the_items_that_read_the_struct() {

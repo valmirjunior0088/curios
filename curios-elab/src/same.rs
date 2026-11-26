@@ -133,6 +133,22 @@ impl Same {
         }
     }
 
+    /// Every part alike where `alike` holds, and every part moved where it does not: a name whose every part is read off one entry, as a constructor's are off its family's.
+    pub fn alike(alike: bool) -> Self {
+        Self {
+            signature: alike,
+            body: alike,
+            kind: alike,
+            totality: alike,
+            variances: alike,
+            applications: alike,
+            sort: alike,
+            induct: alike,
+            struct_: alike,
+            concept: alike,
+        }
+    }
+
     /// These parts, with whether each registry entry the name keys is the baseline's.
     pub fn keying(self, induct: bool, struct_: bool, concept: bool) -> Self {
         Self {

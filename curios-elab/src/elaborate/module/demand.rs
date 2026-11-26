@@ -1028,7 +1028,7 @@ impl<'a> Demand<'a> {
         let Some(over) = self.over else {
             return;
         };
-        // A constructor is no definition of the item's, and stands as its family's entry does: none is noted, so each counts as moved wherever its family is made again.
+        // A constructor is no definition of the item's, so the definitions are compared without them, and each is noted below as its family's entry came out.
         let own = made.declared_names().into_iter().zip(made.declared());
         for (member, (name, _)) in own
             .filter(|(_, declared)| *declared != curios_core::Declared::Constructor)
@@ -1064,6 +1064,23 @@ impl<'a> Demand<'a> {
                 ),
             );
             self.same.insert(name, same);
+        }
+        // A constructor is its family's by construction (`Item::constructors`): every part a reader asks of it is read off the family's entry, so it came out as the baseline holds it exactly where that entry did.
+        for constructor in made.constructors() {
+            let Some(owner) = constructor.owner() else {
+                continue;
+            };
+            let family = Global::Authored(owner);
+            let Some(place) = over.places.place(&family) else {
+                continue;
+            };
+            let held = &over.baseline.items[place.item()];
+            let alike = entries_alike(
+                context.induct_decl(&family),
+                held.nominal(&family).and_then(Nominal::inductive),
+                inducts_alike,
+            );
+            self.same.insert(constructor.name, Same::alike(alike));
         }
     }
 
