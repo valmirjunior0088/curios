@@ -2,7 +2,7 @@
 
 **Not refined yet.** It waits for a consumer: no module of `/std` and no program asks for an exact rational. Its stages are drawn below, and are taken as they stand once one does.
 
-This specification reserves `/std/Rat`, a certified exact rational: every finite rational with one canonical representation, exact arithmetic, division under a nonzero bound, binary64 conversion in both directions, exact decimal text, and the representation, arithmetic and decimal laws. The formal binary64 boundary theorems belong to [the binary64 conversion proofs](304-binary64-conversion-proofs.md). The integer facts it consumes are `Nat`'s and `Int`'s own, in `/std/Nat` and `/std/Int` — the certified `gcd` (`Nat/Gcd`), the exact quotient under `Divides`, `Coprime`, Euclid's lemma, the unsigned binary scale (`Nat/Scale`), sign, absolute value, cancellation and the signed scale — over [the declared operations](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md); nothing integer-level is written privately here.
+This specification reserves `/std/Rat`, a certified exact rational: every finite rational with one canonical representation, exact arithmetic, division under a nonzero bound, binary64 conversion in both directions, exact decimal text, and the representation, arithmetic and decimal laws. The formal binary64 boundary theorems are its last stage, which may remain after the others land. The integer facts it consumes are `Nat`'s and `Int`'s own, in `/std/Nat` and `/std/Int` — the certified `gcd` (`Nat/Gcd`), the exact quotient under `Divides`, `Coprime`, Euclid's lemma, the unsigned binary scale (`Nat/Scale`), sign, absolute value, cancellation and the signed scale — over [the declared operations](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md); nothing integer-level is written privately here.
 
 Four stages, each landing alone: the executable core, the executable binary64 boundary, exact decimals, and the laws. The representation and library proofs are required here; only the formal binary64 boundary proofs are deferred. Dependencies on the numeric laws and the declared operations remain dependencies on their actual capabilities, not merely on a crate being present; [the elaborator proves from the facts in scope](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md) the linear steps of the proofs below.
 
@@ -107,6 +107,46 @@ Presentation distinguishes the exact from the general: `to_decimal : Rat -> Opti
 **The field.** Under `NonZero` premises: the reciprocal is nonzero and an involution; left and right inverses; quotient reconstruction; division by one and by itself; the reciprocal of a product; division cancellation; sign and absolute value; and the order under a positive or a negative divisor. Equalities conclude through canonical uniqueness, never by opening a certificate.
 
 **Decimals.** Parsing denotes the written integer times the power of ten; `of_str(to_decimal(x))` is `some(x)` whenever `to_decimal` succeeds; termination is exactly the power-of-five denominator; zero has one spelling.
+
+## Stage 5 — the binary64 boundary's theorems
+
+**Not refined yet.** The formal boundary theorems deferred from stage 2. Their targets are recorded below, but the connection between primitive floating-point results and their exact interpretation still lacks a specified foundation, so this stage is no plan until that foundation and its proof obligations are refined; completing it places the theorem surface in `/std/Rat` and `/std/Flt` documentation and signatures, the model assumptions and evidence with their soundness owners.
+
+### Scope and dependencies
+
+A `/sys/Flt` fold trusts the Rust model in `curios_num::Floating`; the Curios twin in `/std/Flt/exact` is held to it by the rounding tests but does not fold. Folding by the twin, so that a proof about a fold reaches the Curios code rather than the model, waits on these proofs and on exact rationals.
+
+
+Stages 1 to 4 own the rational representation, normalization, arithmetic, executable conversions, decimal behavior and library laws. Those contracts are used here, not restated. The proofs here additionally depend on the exact interpretation of `/std/Flt` primitives and the correctness of the Curios rounding implementation.
+
+The boundary between executable evidence and formal theorems remains explicit. Stages 1 to 4 can land with their proofs and reference tests complete while this stage remains, the specification then rewritten to it alone; this does not weaken its canonicity, ring, order, field or decimal obligations.
+
+### Theorem targets
+
+Stated over `Rat` and `/std/Flt`'s exact layer. The rounding the conversions go through, `Flt/internal/Dyadic/to_flt`, is Curios code, so its correctness is proved here in every direction; the `Flt` primitives beside it are the trusted model. Each statement below reads a primitive's result through its exact value — `Flt/internal/Dyadic/of` goes through `/sys/Flt/mantissa` and `/sys/Flt/exponent` — and so needs a stated tie between a primitive and its exact result. The reflected model that was to state it is no part of the [declared](../../design/arithmetic/flt-is-specified-by-a-model-and-the-runtime-conforms.md) float identities, which hold identities of the model rather than tie it to exact values, so this work waits until that foundation has a specified owner and contract.
+
+- **Round trip.** `to_flt(r, of_flt(f, @ok))` is `f` for every finite `f` but `-0.0`, in every direction; `-0.0` widens to canonical zero and canonical zero narrows to `+0.0`.
+- **The directions.** For `x` narrowing to a finite `f` toward negative, `f ≤ x` and no finite binary64 lies in `(f, x]`; toward positive and toward zero by symmetry.
+- **Nearest value.** For `x` narrowing to a finite `f` to nearest, no finite binary64 `y` is nearer — `abs(f - x) ≤ abs(y - x)` — under the overflow premise `abs(x) < 2¹⁰²⁴ - 2⁹⁷⁰`; ties to even choose the even significand and ties to away the larger magnitude; the half-ulp corollary in the normal range, its absolute-grid form for subnormals, carry into the next exponent and the signed zero follow.
+- **Quotients.** `ratio_to_flt` is the correctly rounded quotient for a nonzero denominator, stated with cleared denominators so no interior quotient is built, and the `div_mod` step's quotient and remainder imply the rounding decision.
+- **The total order.** `Flt/ord(x, y)` is `Nat/ord(Flt/total_key(x), Flt/total_key(y))` at every pattern, so `Ord(Flt)` is IEEE's `totalOrder` in fact: `/std/Flt/total_key_inj` proves the key injective, so its order is total and agrees with `Eq` by `/std/Nat/ord`'s laws, and `ord` leads with `<`, which decides every ordered pair before the key is read. Nothing declared says what `<` answers of two patterns, so not even `ord(x, x)` being `eq` is provable; the tie this needs is the comparison's, to the sign and magnitude it reads, where the theorems above need an operation's, to its exact result.
+
+The proof library isolates the field interpretation, the grid spacing and adjacent representable values, the guard and sticky characterization of below-, at- and above-half remainders, carry, the overflow threshold, and the cleared-denominator comparison. A proof that needs to open the representation beyond the executable-correctness lemmas strengthens those lemmas instead.
+
+### Decisions required before implementation
+
+- Specify the connection between the primitive floating-point model and the exact values the proofs read, identify its owner, and state which facts are trusted and which are proved. A model reflected into Curios is one proposal, not an interface [the declared operations](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md) supply.
+- Give each theorem its precise premises and equality notion, including negative zero, finite results, overflow and all rounding directions. The target descriptions above do not replace elaborated theorem statements.
+- Identify the reusable lemmas for grid spacing, adjacent values, quotient bounds and guard/sticky reasoning. Keep integer facts in `/std/Nat` and `/std/Int`, beside the numeric laws there, and implementation contracts with `/std/Rat`, their permanent owner.
+- Establish proof sequencing, resource bounds and focused validation before implementation. Stronger conversion than [the declared operations](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md) give — [the relational layer](305-conversion-decides-a-linear-formula-by-a-checked-certificate.md), if its consumer appears — is available only when that capability lands.
+
+### Verification to refine
+
+Every boundary theorem must elaborate and certify over symbolic inputs under its stated premises. Keep the executable conversion fixtures of stage 2, and connect the proof surface to the same conversion definitions rather than proving a parallel algorithm. Exercise theorem instantiation at normal and subnormal boundaries, exact halves, significand carry, signed zero and overflow premises. Tests supplement the proofs; they do not establish the missing model connection.
+
+### Non-goals
+
+A new rational representation or conversion algorithm; adding infinities, NaNs or signed zero to `Rat`; elementary floating-point functions; and general laws for native floating-point arithmetic beyond the facts this boundary requires.
 
 ## Non-goals
 

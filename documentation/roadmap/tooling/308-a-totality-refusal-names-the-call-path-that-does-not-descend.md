@@ -6,6 +6,7 @@
 
 - `decide` (`curios-analysis/src/totality.rs`) folds a group's calls into `Totality::Unfounded` alone: the closure (`close`, `curios-analysis/src/totality/matrix.rs`) composes each `Call`, a caller, a callee and a matrix, with no record of the sites a composite is made of, so the idempotent call that fails to descend is found and dropped.
 - The elaborator's refusal (`curios-elab/src/error/display.rs`) names the definition reached and stands at a read of it.
+- Its refusal of a conversion stuck on a read through a group's member whose turn found it not known to terminate, `MemberNotKnownToTerminate` (`curios-elab/src/error.rs`, "read through a member not known to terminate", landed in `f272d26c4`), names that member and notes its declaration, and names no call path either.
 
 ## Goal
 
