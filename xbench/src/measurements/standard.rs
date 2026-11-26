@@ -3,7 +3,7 @@
 use {
     crate::{Measure, phase, read},
     curios_anf::FieldShape,
-    curios_common::{Qualifier, digest},
+    curios_common::digest,
     curios_core::{Certification, DefinitionKind, Definitions, Global, Item, Sharing},
     curios_elab::{DEFAULT_BUDGET, Traces},
     curios_erase::ErasedUnit,
@@ -12,7 +12,7 @@ use {
     },
     curios_pipeline::test_support::*,
     curios_prelude::with_prelude,
-    curios_prelude_build::std_directory,
+    curios_prelude_build::{std_directory, std_source},
     curios_unit::{Pack, Predecessors, Unit, apart_parts, halves, packed, test_support::*},
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -37,8 +37,8 @@ pub fn std_recompile_census() {
         for Edit { label, file, edit } in edits() {
             let path = directory.join(file);
             let text = edit(&fs::read_to_string(&path).expect("an authored source"));
-            let source = std_from_its_tree().with_overlay(Overlay::of([(path, text)]));
-            let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
+            let source = std_source().with_overlay(Overlay::of([(path, text)]));
+            let unit = UnitSource::mounted(&source);
 
             let lowering = phase(&[], || {
                 into_core_unit_over(
@@ -488,8 +488,8 @@ fn replays(next: &AtomicUsize) -> Share {
         };
         let roots = [*sys];
         let predecessors = Predecessors::over(&roots);
-        let source = std_from_its_tree();
-        let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
+        let source = std_source();
+        let unit = UnitSource::mounted(&source);
         let lowered =
             into_core_unit(&unit, &predecessors.text(), &SYNTAX).expect("the library lowers");
         let (whole, lowered_core) = (std.core(), lowered.core());

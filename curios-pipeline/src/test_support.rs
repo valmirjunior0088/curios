@@ -3,9 +3,7 @@
 //! Behind the `test-support` feature, so no build that ships holds it, and compiled for this crate's own tests.
 
 mod standard;
-pub use standard::{
-    Edit, declarations, edits, elaborated_over, recompiled_over, std_from_its_tree,
-};
+pub use standard::{Edit, declarations, edits, elaborated_over, recompiled_over};
 
 mod stored;
 pub use stored::{asked_stored, lowering_stored, traces_stored};

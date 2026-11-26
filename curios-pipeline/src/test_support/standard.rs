@@ -1,31 +1,16 @@
-//! The standard library as its own package, and what its suites and the bench's measurements of it compile it over: the edits measured, and a module's declarations.
+//! What the standard library's suites and the bench's measurements of it compile it over, the library read as `curios_prelude_build::std_source` reads it: the edits measured, and a module's declarations.
 
 use {
     crate::*,
-    curios_common::{Qualifier, RootKind},
     curios_core::{Definitions, Global},
     curios_elab::{
         Context, DEFAULT_BUDGET, Error, Established, Recompile, Recompiled,
         elaborate_and_zonk_unit_over,
     },
-    curios_module::{PreparedText, RootSource, SYNTAX, UnitSource},
-    curios_prelude_build::std_directory,
+    curios_module::{PreparedText, SYNTAX, UnitSource},
     curios_unit::{Predecessors, Unit},
     std::collections::BTreeSet,
 };
-
-/// The standard library's own tree, as the package claiming `/std` from it.
-pub fn std_from_its_tree() -> RootSource {
-    let directory = std_directory();
-
-    RootSource::mounted(
-        "std",
-        RootKind::Ordinary,
-        directory.join("lib.crs"),
-        directory,
-    )
-    .declaring([Qualifier::from(["sys"])])
-}
 
 /// One edit the census measures: what it is, the file it touches, and the text it leaves there.
 pub struct Edit {

@@ -10,7 +10,7 @@ use {
     curios_erase::test_support::*,
     curios_module::{Overlay, RootSource, SYNTAX, UnitSource, into_core_unit, into_core_unit_over},
     curios_prelude::{root_prefixes, with_prelude},
-    curios_prelude_build::std_directory,
+    curios_prelude_build::{std_directory, std_source},
     curios_surface::{
         Label, LetSignature, ReaderPosition, Spellable, Spelling, TopItem, TopLet, TopMod, WordAt,
         build_rename, display_names,
@@ -48,7 +48,7 @@ fn std_unit_reproduction() {
         let roots = [*sys];
         let predecessors = Predecessors::over(&roots);
         let compiled = || {
-            let source = std_from_its_tree();
+            let source = std_source();
             let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
 
             compile_unit(
@@ -121,7 +121,7 @@ fn std_identity_census() {
             panic!("the prelude has two roots")
         };
         let roots = [*sys];
-        let source = std_from_its_tree();
+        let source = std_source();
         let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
         let elaborated = |floor| elaborated_above(&unit, Predecessors::over(&roots), floor);
         let (first, second) = (elaborated(0), elaborated(1_000));
@@ -150,7 +150,7 @@ fn std_memo_census() {
             panic!("the prelude has two roots")
         };
         let roots = [*sys];
-        let source = std_from_its_tree();
+        let source = std_source();
         let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
         let wholesale = elaborated_wholesale(&unit, Predecessors::over(&roots));
         let kept = elaborated_above(&unit, Predecessors::over(&roots), 0);
@@ -186,7 +186,7 @@ fn std_recompile_reproduction() {
         for Edit { file, edit, .. } in edits() {
             let path = directory.join(file);
             let text = edit(&fs::read_to_string(&path).expect("an authored source"));
-            let source = std_from_its_tree().with_overlay(Overlay::of([(path, text)]));
+            let source = std_source().with_overlay(Overlay::of([(path, text)]));
             let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
 
             let whole = compile_unit(
@@ -230,7 +230,7 @@ fn std_undo_reproduction() {
         };
         let roots = [*sys];
         let predecessors = Predecessors::over(&roots);
-        let source = std_from_its_tree();
+        let source = std_source();
         let first = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
         let original = compile_unit(
             DEFAULT_BUDGET,
@@ -247,7 +247,7 @@ fn std_undo_reproduction() {
             cabinet.file(&original);
             let path = directory.join(file);
             let text = edit(&fs::read_to_string(&path).expect("an authored source"));
-            let edited = std_from_its_tree().with_overlay(Overlay::of([(path, text)]));
+            let edited = std_source().with_overlay(Overlay::of([(path, text)]));
             let unit = UnitSource::mounted(&edited).seeing(vec![Qualifier::from(["sys"])]);
             let edited = compile_unit_over(
                 DEFAULT_BUDGET,
@@ -301,7 +301,7 @@ fn std_part_digest_census() {
             panic!("the prelude has two roots")
         };
         let roots = [*sys];
-        let source = std_from_its_tree();
+        let source = std_source();
         let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
         let held = compile_unit(
             DEFAULT_BUDGET,
@@ -382,7 +382,7 @@ fn std_vocabulary_reach_reproduction() {
             1,
         );
         assert_ne!(text, written, "the lemma is written as the edit expects");
-        let source = std_from_its_tree().with_overlay(Overlay::of([(path, text)]));
+        let source = std_source().with_overlay(Overlay::of([(path, text)]));
         let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
 
         let whole = compile_unit(
@@ -442,7 +442,7 @@ fn every_declaration_of_the_library_is_held_to_its_record_and_its_answers() {
         };
         let roots = [*sys];
         let predecessors = Predecessors::over(&roots);
-        let source = std_from_its_tree();
+        let source = std_source();
         let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
         let lowered =
             into_core_unit(&unit, &predecessors.text(), &SYNTAX).expect("the library lowers");
@@ -469,7 +469,7 @@ fn supplied(prefix: &str) -> RootSource {
 #[test]
 fn a_package_named_std_takes_the_archived_roots_place() {
     let roots = root_prefixes();
-    for claim in [std_from_its_tree(), std_from_elsewhere(), supplied("std")] {
+    for claim in [std_source(), std_from_elsewhere(), supplied("std")] {
         let index = stood_in_for(&roots, &[claim]).expect("a package named std");
 
         assert_eq!(index + 1, roots.len(), "the last root, /std");
@@ -497,7 +497,7 @@ fn a_package_named_sys_collides_with_the_compilers_own_root() {
 /// A unit after the first has predecessors the archived unit was never compiled against, so it is not the one that takes the root's place — and it collides, as any later claim does.
 #[test]
 fn only_the_first_unit_can_take_a_roots_place() {
-    assert!(stood_in_for(&root_prefixes(), &[supplied("other"), std_from_its_tree()]).is_none());
+    assert!(stood_in_for(&root_prefixes(), &[supplied("other"), std_source()]).is_none());
 
     let error = compile_with_units(
         &[
@@ -514,7 +514,7 @@ fn only_the_first_unit_can_take_a_roots_place() {
 #[test]
 fn a_withheld_root_is_granted_the_roots_before_it() {
     let roots = root_prefixes();
-    let prefixes = granted_in_place(&roots, roots.len() - 1, &std_from_its_tree());
+    let prefixes = granted_in_place(&roots, roots.len() - 1, &std_source());
 
     assert!(prefixes.contains(&Qualifier::from(["sys"])));
 }
@@ -522,7 +522,7 @@ fn a_withheld_root_is_granted_the_roots_before_it() {
 /// Every unit of a fold whose first unit takes a root's place is compiled over the stand-in, and the first sees what the root could see: the sources a payload's probe and its filing name the units by are the ones the fold compiles, so a package named `std` is found where it was filed.
 #[test]
 fn a_folds_sources_carry_the_stand_in_its_first_unit_takes() {
-    let units = [std_from_its_tree(), supplied("other")];
+    let units = [std_source(), supplied("other")];
     let sources = fold_sources(&units);
     let std = [Qualifier::from(["std"])];
 
@@ -954,7 +954,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
                 })
                 .collect::<Vec<_>>();
 
-            let source = std_from_its_tree().with_overlay(Overlay::of(overlay));
+            let source = std_source().with_overlay(Overlay::of(overlay));
             let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
             let lowered = into_core_unit_over(
                 &unit,
