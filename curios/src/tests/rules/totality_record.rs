@@ -798,6 +798,6 @@ fn a_law_closed_by_reflexivity_holds_no_call_of_an_arm_its_arguments_rule_out() 
     )
     .refused(&[("pick = Tree/leaf()", "pick = Tree/node(Tree/leaf(), Tree/leaf())")])
     .by_elaborator_in("/witness~/Pick(/Tree)", |error| {
-        matches!(error, curios_elab::Error::TypeMismatch { .. })
+        matches!(error, curios_elab::Error::MemberNotKnownToTerminate { .. })
     });
 }
