@@ -22,9 +22,6 @@ use {
     },
 };
 
-#[cfg(feature = "test-support")]
-mod test_support;
-
 #[cfg(test)]
 mod tests;
 

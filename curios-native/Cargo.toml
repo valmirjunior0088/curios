@@ -12,7 +12,7 @@ workspace = true
 # Building `-p curios-native` yields a slim, runtime-only launcher: no feature of this crate reaches a compiler, which is `curios-cranelift`'s to link, so the isolated build `cargo xtask compiler launcher` runs cannot reach one. That property is checked against the shipped bytes by `curios/src/bundle.rs`'s guards, not merely asserted here.
 
 [features]
-# `start_test_engine`, for a test that reaches the engine, which starts it as every test does; `GuestInstance`, for a *test* that drives an emitted module by hand — `curios-js`'s bridge suite — `run_answering_raw`, for one that answers a row as no adapter would, and `collected`, for one that counts the engine's collections. The last listens on the `log` facade, the channel wasmtime reports through, which this crate names for it alone. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to another crate's tests; a dev-dependency carries the crate, not its private test code.
+# `start_test_engine`, for a test that reaches the engine, which starts it as every test does; `GuestInstance`, for a *test* that drives an emitted module by hand — `curios-js`'s bridge suite — and `collected`, for one that counts the engine's collections. The last listens on the `log` facade, the channel wasmtime reports through, which this crate names for it alone. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to another crate's tests; a dev-dependency carries the crate, not its private test code.
 test-support = ["dep:log"]
 
 [dependencies]

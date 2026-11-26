@@ -1,12 +1,14 @@
-//! How a row's outcome reaches a program: `/std` reads the status before any payload, and hands the failure on as the error it names. Every fallible row is scripted to fail, and the program ends with the code its failure maps to; the two failures `/std` absorbs by design are absorbed; and the payload shapes no other suite reaches arrive whole. Each reply is written raw, past the native adapter, as any host could answer it.
+//! How a row's outcome reaches a program: `/std` reads the status before any payload, and hands the failure on as the error it names. Every fallible row is made to fail in turn, and the program ends with the code its failure maps to; the two failures `/std` absorbs by design are absorbed; and the payload shapes no other suite reaches arrive whole. Each failure is answered at its row's type by a front over the mock host, which answers every row before it as a host would, and reaches the program through the adapter every host answers by.
 
 use {
+    super::test_support::*,
     crate::test_support::*,
-    curios_abi::{HostOp, StatusCodes},
+    curios_abi::{ChildExit, Failure, HostFront, HostOp, HostOps, Later},
     curios_native::{ForeignBindings, test_support::*},
+    std::future,
 };
 
-/// The code a program ends with for `permission_denied`, the failure every scripted row answers; `0` is a success, `2` a `not_found` and `1` any other failure.
+/// The code a program ends with for `permission_denied`, the failure each case's row answers; `0` is a success, `2` a `not_found` and `1` any other failure.
 const DENIED: u8 = 3;
 
 /// What every fixture begins with: the imports, and `verdict`, which turns an outcome into the code the program exits with.
@@ -16,11 +18,8 @@ let code(e: Io/Error) -> Byte = match e | permission_denied() => 3 | not_found()
 let verdict(@A: Type, r: Result(Io/Error, A)) -> Byte = match r | success(_) => 0 | failure(e) => code(e) end;
 ";
 
-/// The rows a fixture scripts, each with the raw reply it answers every call with.
-type Replies = Vec<(HostOp, Vec<RawValue>)>;
-
-/// Run `subject`, a `Try` over `Io` with no value inside a scope `s`, against a mock host whose rows in `replies` answer raw, and the code it exits with.
-fn exit_code(subject: &str, replies: Replies) -> u8 {
+/// Run `subject`, a `Try` over `Io` with no value inside a scope `s`, against `host`, and the code it exits with.
+fn exit_code(subject: &str, host: impl HostOps + Send + Sync + 'static) -> u8 {
     let tail = "
 let subject() -> Try(Io, Io/Error, {}) =
     Try/scope((s) => SUBJECT);
@@ -31,38 +30,65 @@ main()
 ";
     let source = format!("{PRELUDE}{}", tail.replace("SUBJECT", subject));
     let compiled = compile(&source).expect("the fixture compiles");
-
-    run_answering_raw(
-        &compiled,
-        MockHost::builder().build().0,
-        replies,
-        ForeignBindings::empty(),
-    )
-    .unwrap_or_else(|error| panic!("the fixture runs to its exit: {error}"))
+    compiled
+        .run(host, ForeignBindings::empty())
+        .unwrap_or_else(|error| panic!("the fixture runs to its exit: {error}"))
 }
 
-fn nat(n: u64) -> RawValue {
-    RawValue::Nat(n)
+/// A mock host scripted with nothing.
+fn bare() -> MockHost {
+    MockHost::builder().build().0
 }
 
-fn bytes(bytes: &[u8]) -> RawValue {
-    RawValue::Bytes(bytes.to_vec())
+/// `host`, every call of `row` answered `permission_denied`.
+fn denying(host: MockHost, row: HostOp) -> Failing {
+    Failing {
+        behind: host,
+        row,
+        failure: Failure::PermissionDenied,
+    }
 }
 
-/// A failure of `permission_denied`, padded with `padding`.
-fn denied(padding: Vec<RawValue>) -> Vec<RawValue> {
-    [vec![nat(StatusCodes::PERMISSION_DENIED)], padding].concat()
+/// A host whose terminal is open: what a terminal row's failure is reached through.
+fn with_terminal() -> MockHost {
+    MockHost::builder().tty_size(80, 24).build().0
 }
 
-/// A success carrying `payload`.
-fn ok(payload: Vec<RawValue>) -> Vec<RawValue> {
-    [vec![nat(StatusCodes::OK)], payload].concat()
+/// A host with a serial port at `/dev/x`.
+fn with_port() -> MockHost {
+    MockHost::builder()
+        .serial([("/dev/x", Vec::<&[u8]>::new())])
+        .build()
+        .0
+}
+
+/// A host serving `h:80`, with `pending` making a connect answer `WouldBlock` before its finish.
+fn with_peer(pending: bool) -> MockHost {
+    let builder = MockHost::builder().net([("h:80", "")]);
+    match pending {
+        true => builder.connect_pending().build().0,
+        false => builder.build().0,
+    }
+}
+
+/// A host that can start `x`, a child exiting `0` at once, or one running until it is killed.
+fn with_child(running: bool) -> MockHost {
+    let builder = MockHost::builder();
+    match running {
+        true => builder.running_children(["x"]).build().0,
+        false => {
+            builder
+                .children([("x", "", "", ChildExit::Code(0))])
+                .build()
+                .0
+        }
+    }
 }
 
 /// Each case's row fails, and the program exits with the code its failure maps to.
-fn each_fails(cases: Vec<(&str, Replies)>) {
-    for (subject, replies) in cases {
-        assert_eq!(exit_code(subject, replies), DENIED, "{subject}");
+fn each_fails(cases: Vec<(&str, Failing)>) {
+    for (subject, host) in cases {
+        assert_eq!(exit_code(subject, host), DENIED, "{subject}");
     }
 }
 
@@ -72,15 +98,15 @@ fn a_stream_row_s_failure_is_the_error_it_names() {
         (
             "let _ = Io/read(/std/Proc/stdin, 8)!;
                  Try/pure(())",
-            vec![(HostOp::HandleRead, denied(vec![bytes(b"")]))],
+            denying(bare(), HostOp::HandleRead),
         ),
         (
             "Io/write(/std/Proc/stdout, 0x[1])",
-            vec![(HostOp::HandleWrite, denied(vec![]))],
+            denying(bare(), HostOp::HandleWrite),
         ),
         (
             "Io/flush(/std/Proc/stdout)",
-            vec![(HostOp::HandleFlush, denied(vec![]))],
+            denying(bare(), HostOp::HandleFlush),
         ),
     ]);
 }
@@ -90,38 +116,35 @@ fn a_filesystem_row_s_failure_is_the_error_it_names() {
     each_fails(vec![
         (
             r#"let _ = File/open(s, Path/of_str("a"), File/Mode/read())!; Try/pure(())"#,
-            vec![(HostOp::FileOpen, denied(vec![bytes(b"")]))],
+            denying(bare(), HostOp::FileOpen),
         ),
         (
             r#"let _ = fs/stat(Path/of_str("a"))!; Try/pure(())"#,
-            vec![(
-                HostOp::FileStat,
-                denied(vec![nat(0), nat(0), nat(0), nat(0)]),
-            )],
+            denying(bare(), HostOp::FileStat),
         ),
         (
             r#"fs/remove_file(Path/of_str("a"))"#,
-            vec![(HostOp::FileRemove, denied(vec![]))],
+            denying(bare(), HostOp::FileRemove),
         ),
         (
             r#"fs/rename(Path/of_str("a"), Path/of_str("b"))"#,
-            vec![(HostOp::FileRename, denied(vec![]))],
+            denying(bare(), HostOp::FileRename),
         ),
         (
             r#"let _ = fs/list(Path/of_str("a"))!; Try/pure(())"#,
-            vec![(HostOp::DirList, denied(vec![RawValue::BytesList(vec![])]))],
+            denying(bare(), HostOp::DirList),
         ),
         (
             r#"fs/create_dir(Path/of_str("a"))"#,
-            vec![(HostOp::DirCreate, denied(vec![]))],
+            denying(bare(), HostOp::DirCreate),
         ),
         (
             r#"fs/remove_dir(Path/of_str("a"))"#,
-            vec![(HostOp::DirRemove, denied(vec![]))],
+            denying(bare(), HostOp::DirRemove),
         ),
         (
             "let _ = Proc/cwd()!; Try/pure(())",
-            vec![(HostOp::ProcCwd, denied(vec![bytes(b"")]))],
+            denying(bare(), HostOp::ProcCwd),
         ),
     ]);
 }
@@ -133,35 +156,23 @@ fn a_device_row_s_failure_is_the_error_it_names() {
     each_fails(vec![
         (
             "let t = Tty/open(s)!; Tty/raw(s, t, 0x[])",
-            vec![
-                (HostOp::FileOpen, ok(vec![bytes(b"tty")])),
-                (HostOp::TtyTake, denied(vec![])),
-            ],
+            denying(with_terminal(), HostOp::TtyTake),
         ),
         (
             "let t = Tty/open(s)!; let _ = Tty/size(t)!; Try/pure(())",
-            vec![
-                (HostOp::FileOpen, ok(vec![bytes(b"tty")])),
-                (HostOp::TtySize, denied(vec![nat(0), nat(0)])),
-            ],
+            denying(with_terminal(), HostOp::TtySize),
         ),
         (
             &format!("let _ = {open}!; Try/pure(())"),
-            vec![(HostOp::SerialOpen, denied(vec![bytes(b"")]))],
+            denying(bare(), HostOp::SerialOpen),
         ),
         (
             "let _ = Serial/list()!; Try/pure(())",
-            vec![(
-                HostOp::SerialList,
-                denied(vec![RawValue::BytesList(vec![])]),
-            )],
+            denying(bare(), HostOp::SerialList),
         ),
         (
             &format!("let port = {open}!; Serial/set_dtr(port, true)"),
-            vec![
-                (HostOp::SerialOpen, ok(vec![bytes(&[7])])),
-                (HostOp::SerialControl, denied(vec![])),
-            ],
+            denying(with_port(), HostOp::SerialControl),
         ),
     ]);
 }
@@ -170,92 +181,66 @@ fn a_device_row_s_failure_is_the_error_it_names() {
 fn a_serial_drain_s_failure_is_the_error_it_names() {
     each_fails(vec![(
         r#"let port = Serial/open(s, Path/of_str("/dev/x"), Serial/config(9600))!; Serial/drain(port)"#,
-        vec![
-            (HostOp::SerialOpen, ok(vec![bytes(&[7])])),
-            // A drain hands on what the host holds of the port's writes before the device's wait.
-            (HostOp::HandleFlush, ok(vec![])),
-            (HostOp::SerialDrain, denied(vec![])),
-        ],
+        // A drain hands on what the host holds of the port's writes before the device's wait, which the port answers.
+        denying(with_port(), HostOp::SerialDrain),
     )]);
 }
 
 #[test]
 fn a_network_row_s_failure_is_the_error_it_names() {
-    let looked_up = || {
-        (
-            HostOp::DnsLookup,
-            ok(vec![RawValue::BytesList(vec![b"a".to_vec()])]),
-        )
-    };
-    let opened = || (HostOp::SocketOpen, ok(vec![bytes(&[8])]));
     let connect = r#"let _ = tcp/Socket/connect(s, "h", 80)!; Try/pure(())"#;
 
     each_fails(vec![
         (
             r#"let _ = tcp/resolve("h", 80)!; Try/pure(())"#,
-            vec![(HostOp::DnsLookup, denied(vec![RawValue::BytesList(vec![])]))],
+            denying(bare(), HostOp::DnsLookup),
         ),
+        (connect, denying(bare(), HostOp::SocketOpen)),
+        (connect, denying(bare(), HostOp::SocketConnect)),
         (
             connect,
-            vec![looked_up(), (HostOp::SocketOpen, denied(vec![bytes(b"")]))],
-        ),
-        (
-            connect,
-            vec![
-                looked_up(),
-                opened(),
-                (HostOp::SocketConnect, denied(vec![])),
-            ],
-        ),
-        (
-            connect,
-            vec![
-                looked_up(),
-                opened(),
-                (HostOp::SocketConnect, vec![nat(StatusCodes::WOULD_BLOCK)]),
-                (HostOp::SocketFinishConnect, denied(vec![])),
-            ],
+            denying(with_peer(true), HostOp::SocketFinishConnect),
         ),
         (
             r#"let _ = tcp/Socket/connect_tls(s, "h", 80)!; Try/pure(())"#,
-            vec![
-                looked_up(),
-                opened(),
-                (HostOp::SocketConnect, ok(vec![])),
-                (HostOp::TlsStart, denied(vec![])),
-            ],
+            denying(with_peer(false), HostOp::TlsStart),
         ),
         (
             r#"let _ = tcp/Listener/listen(s, "h", 80)!; Try/pure(())"#,
-            vec![
-                looked_up(),
-                (HostOp::SocketListen, denied(vec![bytes(b"")])),
-            ],
+            denying(bare(), HostOp::SocketListen),
         ),
         (
             r#"let l = tcp/Listener/listen(s, "h", 80)!;
                    let _ = tcp/Listener/accept(s, l)!;
                    Try/pure(())"#,
-            vec![
-                looked_up(),
-                (HostOp::SocketListen, ok(vec![bytes(&[8])])),
-                (HostOp::SocketAccept, denied(vec![bytes(b"")])),
-            ],
+            denying(bare(), HostOp::SocketAccept),
         ),
         (
             r#"tcp/Listener/serve_tls("h", 80, 0x[], 0x[], (_) => Io/pure(()))"#,
-            vec![(HostOp::TlsServerConfig, denied(vec![bytes(b"")]))],
+            denying(bare(), HostOp::TlsServerConfig),
         ),
         (
             r#"let c = tcp/Socket/connect(s, "h", 80)!; Io/finish(c)"#,
-            vec![
-                looked_up(),
-                opened(),
-                (HostOp::SocketConnect, ok(vec![])),
-                (HostOp::HandleFinish, denied(vec![])),
-            ],
+            denying(with_peer(false), HostOp::HandleFinish),
         ),
     ]);
+}
+
+/// A host whose every lookup resolves to no address, every other row answered as `behind` does.
+struct Unresolved {
+    behind: MockHost,
+}
+
+impl HostFront for Unresolved {
+    type Behind = MockHost;
+
+    fn behind(&self) -> &MockHost {
+        &self.behind
+    }
+
+    fn dns_lookup(&self, _host: Vec<u8>, _port: u64) -> Later<Result<Vec<Vec<u8>>, Failure>> {
+        Later::new(future::ready(Ok(Vec::new())))
+    }
 }
 
 /// A name that resolves to no address names nothing a socket can reach: the resolution is an answer, and `/std` reads it as `not_found`, as it reads a name that resolves to nothing at all.
@@ -264,31 +249,23 @@ fn a_name_resolving_to_no_address_is_not_found() {
     assert_eq!(
         exit_code(
             r#"let _ = tcp/Socket/connect(s, "h", 80)!; Try/pure(())"#,
-            vec![(HostOp::DnsLookup, ok(vec![RawValue::BytesList(vec![])]))],
+            Unresolved { behind: bare() },
         ),
         2
     );
-}
-
-/// A spawn with no stream piped: the child's handle, and the empty token for each stream.
-fn spawned() -> (HostOp, Vec<RawValue>) {
-    (
-        HostOp::ProcSpawn,
-        ok(vec![bytes(&[7]), bytes(b""), bytes(b""), bytes(b"")]),
-    )
 }
 
 #[test]
 fn a_process_row_s_failure_is_the_error_it_names() {
     each_fails(vec![(
         r#"let _ = Proc/Child/spawn(s, Proc/new("x", []))!; Try/pure(())"#,
-        vec![(HostOp::ProcSpawn, denied(vec![bytes(b""); 4]))],
+        denying(bare(), HostOp::ProcSpawn),
     )]);
     each_fails(vec![(
         r#"let c = Proc/Child/spawn(s, Proc/new("x", []))!;
                let _ = Proc/Child/wait(c)!;
                Try/pure(())"#,
-        vec![spawned(), (HostOp::ProcWait, denied(vec![nat(0), nat(0)]))],
+        denying(with_child(false), HostOp::ProcWait),
     )]);
 }
 
@@ -298,16 +275,7 @@ fn the_failures_std_absorbs_by_design_are_absorbed() {
     assert_eq!(
         exit_code(
             r#"let _ = tcp/Socket/connect(s, "h", 80)!; Try/pure(())"#,
-            vec![
-                (
-                    HostOp::DnsLookup,
-                    ok(vec![RawValue::BytesList(vec![b"a".to_vec()])]),
-                ),
-                (HostOp::SocketOpen, ok(vec![bytes(&[8])])),
-                (HostOp::SocketConnect, ok(vec![])),
-                (HostOp::HandleFlush, ok(vec![])),
-                (HostOp::HandleFinish, denied(vec![])),
-            ],
+            denying(with_peer(false), HostOp::HandleFinish),
         ),
         0
     );
@@ -316,7 +284,7 @@ fn the_failures_std_absorbs_by_design_are_absorbed() {
             r#"let c = Proc/Child/spawn(s, Proc/new("x", []))!;
                let _ = Proc/Child/kill(c)!;
                Try/pure(())"#,
-            vec![spawned(), (HostOp::ProcKill, denied(vec![]))],
+            denying(with_child(true), HostOp::ProcKill),
         ),
         0
     );
@@ -343,7 +311,9 @@ fn an_empty_variable_is_set_and_an_absent_one_is_not() {
     )
     .expect("the program compiles");
 
-    run_answering_raw(&compiled, host, vec![], ForeignBindings::empty()).expect("the program runs");
+    compiled
+        .run(host, ForeignBindings::empty())
+        .expect("the program runs");
 
     assert_eq!(io.output(), b"empty unset");
 }
@@ -351,7 +321,7 @@ fn an_empty_variable_is_set_and_an_absent_one_is_not() {
 /// The working directory is the one `Bytes` payload no other suite reads back.
 #[test]
 fn a_bytes_payload_arrives_whole() {
-    let (host, io) = MockHost::builder().build();
+    let (host, io) = MockHost::builder().cwd("/work").build();
     let compiled = compile(
         r#"
         use /std/{Io, Path, Try, Proc};
@@ -363,13 +333,9 @@ fn a_bytes_payload_arrives_whole() {
     )
     .expect("the program compiles");
 
-    run_answering_raw(
-        &compiled,
-        host,
-        vec![(HostOp::ProcCwd, ok(vec![bytes(b"/work")]))],
-        ForeignBindings::empty(),
-    )
-    .expect("the program runs");
+    compiled
+        .run(host, ForeignBindings::empty())
+        .expect("the program runs");
 
     assert_eq!(io.output(), b"/work");
 }

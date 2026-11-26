@@ -10,8 +10,6 @@
 //!
 //! It counts what the engine's collector does while a program runs: [`collected`](crate::test_support::collected) listens to the engine's own announcements, which are wasmtime's strings on wasmtime's channel, the `log` facade, and so are read here beside the pin that decides them. The facade is the process's and a record reaches it from whichever thread wrote it, which matters because the engine runs a module on a thread of its own: a listener bound to the calling thread hears nothing of a run.
 //!
-//! It also runs a compiled program against replies no adapter would write: [`run_answering_raw`](crate::test_support::run_answering_raw) answers chosen rows of the host's, with [`RawValue`](crate::test_support::RawValue)s written into the result slots as they stand. That is how the standard library's reading of a reply is put under test past what a host's types let it answer.
-//!
 //! It starts the engine as every test does, with no map for a sampler ([`start_test_engine`](crate::test_support::start_test_engine)).
 //!
 //! And it holds the mock host the suites run programs against, [`MockHost`](crate::test_support::MockHost): a host made of memory, whose disk, network and devices a test seeds and reads back, and which no build that ships runs a program under.
@@ -29,10 +27,10 @@ pub use screen::Screen;
 
 use {
     super::*,
-    curios_abi::{HostOp, HostOps},
+    curios_abi::HostOps,
     log::{LevelFilter, Log, Metadata, Record, set_logger, set_max_level},
     std::sync::{Arc, Mutex, Once},
-    wasmtime::{Caller, Instance, Linker, Memory, Store, Val},
+    wasmtime::{Instance, Linker, Memory, Store, Val},
 };
 
 /// Start the engine as a test runs it, without the guest's map: what a test that reaches the engine asks first, since nothing uses the engine unstarted ([`start_engine`]).
@@ -263,52 +261,6 @@ pub fn collected<T>(operation: impl FnOnce() -> T) -> (T, Collected) {
     (result, collected)
 }
 
-/// One value of a raw host reply, written into the guest's result slot as it stands. No reply's type is consulted, so one can hold what no adapter would write: a status its row never answers, a code outside its table, an empty handle beside `ok`.
-#[derive(Debug, Clone)]
-pub enum RawValue {
-    /// A `Nat` or a status, as the unsigned bits it crosses as.
-    Nat(u64),
-    Int(i64),
-    /// A `Bool` or a `Byte`, as the word it crosses as — any word at all.
-    Word(i32),
-    /// A `Bytes`, or a handle as its token.
-    Bytes(Vec<u8>),
-    BytesList(Vec<Vec<u8>>),
-    /// A `List(Bool)`, as the words it crosses as.
-    Words(Vec<i32>),
-}
-
-/// Write `values` into an import's result slots, one each, through the plain encodings and nothing else.
-fn write_raw(
-    caller: &mut Caller<'_, Guest>,
-    values: &[RawValue],
-    results: &mut [Val],
-) -> wasmtime::Result<()> {
-    for (value, slot) in values.iter().zip(results.iter_mut()) {
-        let slot = std::slice::from_mut(slot);
-
-        match value {
-            RawValue::Nat(value) => value.lower(caller, slot)?,
-            RawValue::Int(value) => value.lower(caller, slot)?,
-            RawValue::Word(word) => slot[0] = Val::I32(*word),
-            RawValue::Bytes(bytes) => bytes.clone().lower(caller, slot)?,
-            RawValue::BytesList(list) => list.clone().lower(caller, slot)?,
-            RawValue::Words(words) => {
-                let array_type = words_array_type(caller.engine());
-
-                lower_scalars(
-                    caller,
-                    array_type,
-                    words.iter().map(|word| Val::I32(*word)),
-                    slot,
-                )?
-            }
-        }
-    }
-
-    Ok(())
-}
-
 /// Run `compiled` under `host` in a store whose heap grows to `heap` bytes and no further, where [`Compiled::run`] gives it the bound every program has: what a program whose live set grows without end meets, met at a size a test can reach.
 pub fn run_within_heap<H: HostOps + Send + Sync + 'static>(
     compiled: &Compiled,
@@ -323,23 +275,4 @@ pub fn run_within_heap<H: HostOps + Send + Sync + 'static>(
         host_rows(Arc::clone(&host)),
         host,
     )
-}
-
-/// Run `compiled` under `host`, except that each of the host's rows in `raw` answers its values on every call, raw — the adapter's lowering bypassed, so what reaches the guest is exactly what the test wrote. `bindings` implements the program's own `foreign` declarations, as [`Compiled::run`]'s does.
-pub fn run_answering_raw<H: HostOps + Send + Sync + 'static>(
-    compiled: &Compiled,
-    host: H,
-    raw: Vec<(HostOp, Vec<RawValue>)>,
-    bindings: ForeignBindings,
-) -> Result<u8, Stop> {
-    let host = Arc::new(host);
-    let mut answers = host_rows(Arc::clone(&host));
-
-    for (op, values) in raw {
-        answers.replace_raw(&op.declared(), move |caller, _, results| {
-            write_raw(caller, &values, results)
-        });
-    }
-
-    compiled.run_in(GUEST_HEAP, bindings, answers, host)
 }

@@ -17,4 +17,5 @@ mod reader;
 mod serial;
 mod stream;
 mod suspension;
+mod test_support;
 mod tty;
