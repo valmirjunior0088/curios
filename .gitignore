@@ -9,6 +9,7 @@ node_modules/
 /.codex
 /.claude/worktrees
 /.claude/snapshots
+/.claude/scratchpads
 /.antigravitycli
 /.learn
 /editors/zed/grammars
