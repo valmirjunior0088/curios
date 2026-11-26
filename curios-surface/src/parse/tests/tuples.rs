@@ -132,7 +132,7 @@ fn the_tuple_of_no_fields_is_a_pattern() {
         "match u | () => 1 end",
     ] {
         let term = source.parse::<Term>().unwrap();
-        let printed = term.to_string();
+        let printed = term.printed().to_string();
         assert!(printed.contains("()"), "{source}: {printed}");
         assert_eq!(
             printed.parse::<Term>().unwrap(),
@@ -151,7 +151,7 @@ fn a_field_definition_takes_patterns() {
         ("(g(@A, (x, y)) = x)", "g(@A, (x, y))"),
     ] {
         let term = source.parse::<Term>().unwrap();
-        let printed = term.to_string();
+        let printed = term.printed().to_string();
         assert!(printed.contains(written), "{source}: {printed}");
         assert_eq!(
             printed.parse::<Term>().unwrap(),

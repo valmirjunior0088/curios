@@ -262,7 +262,10 @@ fn list_and_bytes_spreads_round_trip() {
         "0x[h, ..t]",
         "0x[0x48, 0x69]",
     ] {
-        assert_eq!(source.parse::<Term>().unwrap().to_string(), source);
+        assert_eq!(
+            source.parse::<Term>().unwrap().printed().to_string(),
+            source
+        );
     }
 
     for removed in [r"\00", r"\0", r"\\", r"\..xs", r"[\00]"] {

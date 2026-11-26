@@ -24,17 +24,17 @@ use {
         TupleField, TuplePattern, TupleType, TupleTypeParam, UseGroup, WitnessField,
         intrinsic_form, intrinsic_path,
     },
-    crate::{ELIDED, FlatMatch, Writer, op_precedence, written_intrinsic},
+    crate::{ELIDED, Entrypoint, FlatMatch, Module, Writer, op_precedence, written_intrinsic},
     curios_abi::{NEVER, ResultShape, WireResults, WireReturn, WireSignature, WireType},
     curios_common::{Keyword, Plicity, recurse},
     curios_num::Natural,
     curios_parse::unseen,
     curios_print::{
         FillItem, Printer, ends, fill, flat, flow, group, group_within, hang, hard_line, if_break,
-        indent, line, named, named_at, own_line_if_broken, pure, reached, sep_flat, soft_line,
-        word,
+        indent, line, named, named_at, own_line_if_broken, pure, reached, run_printer, sep_flat,
+        soft_line, word,
     },
-    std::iter,
+    std::{fmt, iter},
 };
 
 /// `written` as the printer writes it, set apart as one of the language's words ([`word`]): what a renderer that paints the words reads, rather than the text again, so a name spelled as a word stays a name.
@@ -2188,6 +2188,68 @@ pub fn print_core_term(term: Term<CoreText>) -> Printer {
 /// A program's whole term, keeping what `flat_match` says of a match on one line: a body, which writes a chain as it stands.
 pub fn print_term(term: Term, flat_match: FlatMatch) -> Printer {
     program(flat_match).body(term)
+}
+
+/// A tree of a program as it is printed back, unbounded and at the formatter's indent step: what the program's dump at its first rung shows, and what a suite reads back to hold a print to its parse. A view, as a spelled term is ([`Spelled`](crate::Spelled)), so each render builds the printer anew from the tree it borrows.
+pub struct Printed<'t, T> {
+    tree: &'t T,
+}
+
+impl Term {
+    /// This term as it is printed back ([`Printed`]).
+    pub fn printed(&self) -> Printed<'_, Self> {
+        Printed { tree: self }
+    }
+}
+
+impl Module {
+    /// This module's items as they are printed back ([`Printed`]).
+    pub fn printed(&self) -> Printed<'_, Self> {
+        Printed { tree: self }
+    }
+}
+
+impl Entrypoint {
+    /// This program as it is printed back ([`Printed`]): its items, then its tail on a line of its own, or its tail alone where it has none.
+    pub fn printed(&self) -> Printed<'_, Self> {
+        Printed { tree: self }
+    }
+}
+
+impl fmt::Display for Printed<'_, Term> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        run_printer(
+            print_term(self.tree.clone(), FlatMatch::DEFAULT),
+            formatter,
+            4,
+        )
+    }
+}
+
+impl fmt::Display for Printed<'_, Module> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        run_printer(
+            print_module_items(self.tree.items.clone(), FlatMatch::DEFAULT),
+            formatter,
+            4,
+        )
+    }
+}
+
+impl fmt::Display for Printed<'_, Entrypoint> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Entrypoint { module, tail } = self.tree.clone();
+        let tail = print_term(tail, FlatMatch::DEFAULT);
+        let printer = match module.items.is_empty() {
+            true => tail,
+            false => flat([
+                print_module_items(module.items, FlatMatch::DEFAULT),
+                pure("\n"),
+                tail,
+            ]),
+        };
+        run_printer(printer, formatter, 4)
+    }
 }
 
 /// A program's match-arm pattern alone, as a report names a row by it.

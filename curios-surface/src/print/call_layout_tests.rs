@@ -73,7 +73,10 @@ fn a_ladders_call_participates_in_its_flat_layout() {
             format!("{broken}({past})")
         );
         let source = format!("{ladder}(p)");
-        assert_eq!(source.parse::<Term>().unwrap().to_string(), source);
+        assert_eq!(
+            source.parse::<Term>().unwrap().printed().to_string(),
+            source
+        );
     }
 }
 

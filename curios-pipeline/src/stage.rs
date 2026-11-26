@@ -88,7 +88,7 @@ impl<'a> Stage<'a> {
 impl fmt::Display for Stage<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Stage::Text(entrypoint) => write!(f, "{entrypoint}"),
+            Stage::Text(entrypoint) => write!(f, "{}", entrypoint.printed()),
             Stage::Core(program, scope) | Stage::CoreElab(program, scope) => {
                 write!(f, "{}", program.spelled(&Rc::new(scope.spelling())))
             }

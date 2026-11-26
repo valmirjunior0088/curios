@@ -51,14 +51,14 @@ impl FailedCheck {
 /// The elements of the list literal `term` is.
 fn listed(term: &Term) -> Result<Vec<&Term>, String> {
     let Subterm::Literal(Literal::List(entries)) = term.as_subterm() else {
-        return Err(format!("`{term}` is no list"));
+        return Err(format!("`{}` is no list", term.printed()));
     };
 
     entries
         .iter()
         .map(|entry| match entry {
             ListEntry::Elem(element) => Ok(element),
-            ListEntry::Spread(_) => Err(format!("`{term}` spreads a list")),
+            ListEntry::Spread(_) => Err(format!("`{}` spreads a list", term.printed())),
         })
         .collect()
 }
@@ -67,7 +67,7 @@ fn listed(term: &Term) -> Result<Vec<&Term>, String> {
 fn text(term: &Term) -> Result<String, String> {
     match term.as_subterm() {
         Subterm::ProofLiteral(ProofLiteral::Str(literal)) => Ok(literal.value.clone()),
-        _ => Err(format!("`{term}` is no text")),
+        _ => Err(format!("`{}` is no text", term.printed())),
     }
 }
 
@@ -78,16 +78,16 @@ fn pair(term: &Term) -> Result<(String, String), String> {
             [label, value] if label.label.is_none() && value.label.is_none() => {
                 Ok((text(&label.value)?, text(&value.value)?))
             }
-            _ => Err(format!("`{term}` is no pair")),
+            _ => Err(format!("`{}` is no pair", term.printed())),
         },
-        _ => Err(format!("`{term}` is no pair")),
+        _ => Err(format!("`{}` is no pair", term.printed())),
     }
 }
 
 /// The failed check the structure literal `term` is, read by its fields' labels.
 fn failed_check(term: &Term) -> Result<FailedCheck, String> {
     let Subterm::StructLit(literal) = term.as_subterm() else {
-        return Err(format!("`{term}` is no failed check"));
+        return Err(format!("`{}` is no failed check", term.printed()));
     };
     let field = |label: &str| {
         literal
@@ -99,7 +99,7 @@ fn failed_check(term: &Term) -> Result<FailedCheck, String> {
                 }
                 _ => None,
             })
-            .ok_or_else(|| format!("`{term}` has no `{label}`"))
+            .ok_or_else(|| format!("`{}` has no `{label}`", term.printed()))
     };
 
     Ok(FailedCheck {

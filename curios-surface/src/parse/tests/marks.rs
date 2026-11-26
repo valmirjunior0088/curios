@@ -16,7 +16,11 @@ fn a_signature_member_is_a_type_under_its_mark() {
     ] {
         let entrypoint = source.parse::<Entrypoint>().unwrap();
         assert_eq!(
-            entrypoint.to_string().parse::<Entrypoint>().unwrap(),
+            entrypoint
+                .printed()
+                .to_string()
+                .parse::<Entrypoint>()
+                .unwrap(),
             entrypoint,
             "round-trip failed for {source:?}"
         );
@@ -58,7 +62,7 @@ fn a_binding_member_is_a_binder_under_its_mark() {
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
-            term.to_string().parse::<Term>().unwrap(),
+            term.printed().to_string().parse::<Term>().unwrap(),
             term,
             "round-trip failed for {source:?}"
         );
@@ -114,7 +118,7 @@ fn a_structures_field_and_its_entry_are_written_under_their_mark() {
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
-            term.to_string().parse::<Term>().unwrap(),
+            term.printed().to_string().parse::<Term>().unwrap(),
             term,
             "round-trip failed for {source:?}"
         );
@@ -161,7 +165,7 @@ fn a_structures_pattern_writes_a_hidden_field_under_its_mark() {
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
-            term.to_string().parse::<Term>().unwrap(),
+            term.printed().to_string().parse::<Term>().unwrap(),
             term,
             "round-trip failed for {source:?}"
         );

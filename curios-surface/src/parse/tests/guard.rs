@@ -13,15 +13,15 @@ fn an_arm_writes_guards_after_its_patterns() {
         .parse::<Term>()
         .unwrap();
     let Subterm::Match(matched) = term.as_subterm() else {
-        panic!("expected a match, got {term}");
+        panic!("expected a match, got {}", term.printed());
     };
     let [Guard::Holds(condition), Guard::Binds { pattern, value }] =
         matched.arms[0].guards.as_slice()
     else {
-        panic!("expected a condition and a bind, got {term}");
+        panic!("expected a condition and a bind, got {}", term.printed());
     };
 
-    assert_eq!(condition.to_string(), "n > 1");
+    assert_eq!(condition.printed().to_string(), "n > 1");
     assert_eq!(
         pattern.pattern,
         MatchPattern::Variant {
@@ -29,7 +29,7 @@ fn an_arm_writes_guards_after_its_patterns() {
             args: vec![(Plicity::Explicit, MatchPattern::Binder("m".into()))],
         }
     );
-    assert_eq!(value.to_string(), "f(n)");
+    assert_eq!(value.printed().to_string(), "f(n)");
     assert!(matched.arms[1].guards.is_empty());
 }
 
@@ -40,7 +40,7 @@ fn a_match_with_no_head_is_its_guards_and_its_default() {
         .parse::<Term>()
         .unwrap();
     let Subterm::HeadlessMatch(headless) = term.as_subterm() else {
-        panic!("expected a match with no head, got {term}");
+        panic!("expected a match with no head, got {}", term.printed());
     };
 
     assert_eq!(headless.arms.len(), 2);
@@ -154,6 +154,6 @@ fn guards_round_trip() {
         "match | cons(h, t) = xs => h | ready => 1 | _ => 0 end",
     ] {
         let term = source.parse::<Term>().unwrap();
-        assert_eq!(term.to_string(), source);
+        assert_eq!(term.printed().to_string(), source);
     }
 }

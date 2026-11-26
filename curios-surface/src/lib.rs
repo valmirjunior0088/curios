@@ -59,7 +59,7 @@ pub use format::{
 mod print;
 use print::*;
 pub use print::{
-    print_case_head, print_concept_field_head, print_concept_head, print_exposure_head,
+    Printed, print_case_head, print_concept_field_head, print_concept_head, print_exposure_head,
     print_foreign_head, print_induct_head, print_let_head, print_struct_field_head,
     print_struct_head, print_test_head, print_witness_head,
 };

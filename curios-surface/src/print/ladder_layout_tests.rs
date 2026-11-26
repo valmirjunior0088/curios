@@ -53,6 +53,9 @@ fn a_headed_arms_guard_breaks_a_ladder_at_any_width() {
 #[test]
 fn with_no_width_every_ladder_keeps_its_line() {
     for source in [LONG, "match n | 0 => 1 | k + 1 => 2 end"] {
-        assert_eq!(source.parse::<Term>().unwrap().to_string(), source);
+        assert_eq!(
+            source.parse::<Term>().unwrap().printed().to_string(),
+            source
+        );
     }
 }

@@ -117,7 +117,11 @@ fn inductive_visibility_spellings() {
             "for {source:?}"
         );
         assert_eq!(
-            entrypoint.to_string().parse::<Entrypoint>().unwrap(),
+            entrypoint
+                .printed()
+                .to_string()
+                .parse::<Entrypoint>()
+                .unwrap(),
             entrypoint,
             "round-trip failed for {source:?}"
         );
@@ -135,7 +139,11 @@ fn indexed_mutual_inductive_representation_sorts_round_trip() {
     assert_eq!((group[0].vis_pub, group[0].rep_pub), (true, true));
     assert_eq!((group[1].vis_pub, group[1].rep_pub), (true, false));
     assert_eq!(
-        entrypoint.to_string().parse::<Entrypoint>().unwrap(),
+        entrypoint
+            .printed()
+            .to_string()
+            .parse::<Entrypoint>()
+            .unwrap(),
         entrypoint
     );
 }
@@ -161,7 +169,11 @@ fn struct_round_trips() {
     ] {
         let entrypoint = source.parse::<Entrypoint>().unwrap();
         assert_eq!(
-            entrypoint.to_string().parse::<Entrypoint>().unwrap(),
+            entrypoint
+                .printed()
+                .to_string()
+                .parse::<Entrypoint>()
+                .unwrap(),
             entrypoint,
             "declaration round-trip failed for {source:?}"
         );
@@ -180,7 +192,7 @@ fn struct_round_trips() {
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
-            term.to_string().parse::<Term>().unwrap(),
+            term.printed().to_string().parse::<Term>().unwrap(),
             term,
             "literal round-trip failed for {source:?}"
         );
@@ -293,7 +305,7 @@ fn function_field_sugar_round_trips() {
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
-            term.to_string().parse::<Term>().unwrap(),
+            term.printed().to_string().parse::<Term>().unwrap(),
             term,
             "term round-trip failed for {source:?}"
         );
@@ -307,7 +319,11 @@ fn function_field_sugar_round_trips() {
     ] {
         let entrypoint = source.parse::<Entrypoint>().unwrap();
         assert_eq!(
-            entrypoint.to_string().parse::<Entrypoint>().unwrap(),
+            entrypoint
+                .printed()
+                .to_string()
+                .parse::<Entrypoint>()
+                .unwrap(),
             entrypoint,
             "item round-trip failed for {source:?}"
         );

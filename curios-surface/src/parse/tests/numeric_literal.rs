@@ -14,7 +14,7 @@ fn integer_literals_are_polymorphic_num_lits() {
     // The integer zero is `+0`, which prints back as written; a float's negative zero is a decimal.
     let zero = "+0".parse::<Term>().unwrap();
     assert_eq!(zero, num_lit(0, Sign::Positive));
-    assert_eq!(zero.to_string(), "+0");
+    assert_eq!(zero.printed().to_string(), "+0");
     assert!(matches!(
         "-0.0".parse::<Term>().unwrap().as_subterm(),
         Subterm::Literal(Literal::Flt(_))
@@ -229,7 +229,10 @@ fn bytes_literal_is_num_lit() {
 #[test]
 fn nat_radix_round_trips_through_the_printer() {
     for source in ["0xC2", "0xF4", "0b1010", "127"] {
-        assert_eq!(source.parse::<Term>().unwrap().to_string(), source);
+        assert_eq!(
+            source.parse::<Term>().unwrap().printed().to_string(),
+            source
+        );
     }
 }
 
@@ -246,6 +249,9 @@ fn a_padded_numeral_keeps_the_width_it_was_written_at() {
         "007",
         "0x[0x00, 0x48, 0x69, 0x0A]",
     ] {
-        assert_eq!(source.parse::<Term>().unwrap().to_string(), source);
+        assert_eq!(
+            source.parse::<Term>().unwrap().printed().to_string(),
+            source
+        );
     }
 }

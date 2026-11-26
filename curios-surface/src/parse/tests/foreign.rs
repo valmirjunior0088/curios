@@ -395,7 +395,7 @@ fn foreign_declaration_round_trips() {
         let module = source.parse::<Module>().unwrap();
 
         assert_eq!(
-            module.to_string().parse::<Module>().unwrap(),
+            module.printed().to_string().parse::<Module>().unwrap(),
             module,
             "round-trip failed for {source:?}"
         );
@@ -434,6 +434,7 @@ fn top_foreign_is_written_as_a_function_with_no_body() {
         "foreign clock() -> Nat;"
             .parse::<Module>()
             .unwrap()
+            .printed()
             .to_string()
             .contains("foreign clock() -> Nat;")
     );

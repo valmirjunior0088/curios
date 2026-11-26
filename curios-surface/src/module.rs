@@ -1,10 +1,9 @@
 use {
     super::{
-        Argument, CoreFile, Dialect, FlatMatch, FuncParam, FuncSugarParam, FuncTypeParam,
-        ITEM_HEADS, Intrinsic, Label, LetSignature, Name, Program, Subterm, Term, Tuple, TupleType,
+        Argument, CoreFile, Dialect, FuncParam, FuncSugarParam, FuncTypeParam, ITEM_HEADS,
+        Intrinsic, Label, LetSignature, Name, Program, Subterm, Term, Tuple, TupleType,
         TupleTypeParam, WordAt, WrittenIn, clear_comments, parse_body, parse_file_head,
-        parse_optional_term, parse_program_end, parse_top_item, print_module_items, print_term,
-        signature_type, take_comments,
+        parse_optional_term, parse_program_end, parse_top_item, signature_type, take_comments,
     },
     curios_abi::WireSignature,
     curios_common::{Keyword, Plicity, Report, Source, Span, is_identifier_char},
@@ -12,8 +11,7 @@ use {
         Parsed, Parser, ParserError, ParserState, Recovered, commit, fail, is_blank, many0, raise,
         recover, run_parser, settled, spanned, take_eof,
     },
-    curios_print::{flat, pure, run_printer},
-    std::{fmt, path::Path, str::FromStr, sync::Arc},
+    std::{path::Path, str::FromStr, sync::Arc},
 };
 
 /// A documentation comment: the `---` block written on the lines immediately above a declaration, a constructor, a field or a concept method, attached by the parser to what it documents. A plain `-- ` comment is not syntax and lives beside the module; this is syntax and lives in it, which is what lets the formatter print it back where it was written and a generator read it off the tree.
@@ -506,16 +504,6 @@ impl FromStr for Module {
     }
 }
 
-impl fmt::Display for Module {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        run_printer(
-            print_module_items(self.clone().items, FlatMatch::DEFAULT),
-            formatter,
-            4,
-        )
-    }
-}
-
 /// A whole program as written: a module of top-level items followed by one tail expression — the value the program computes. Parsed via `FromStr` (inline source) or read from a file by `curios-module`'s `read_entrypoint`. It carries no type: the grammar has no position for one, and what an entry is judged at is whoever compiles it's to state.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entrypoint {
@@ -659,22 +647,6 @@ impl FromStr for Entrypoint {
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         Entrypoint::parse_reading(&Source::inline(input), true).map(|(entrypoint, _)| entrypoint)
-    }
-}
-
-impl fmt::Display for Entrypoint {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let entrypoint = self.clone();
-        let printer = if entrypoint.module.items.is_empty() {
-            print_term(entrypoint.tail, FlatMatch::DEFAULT)
-        } else {
-            flat([
-                print_module_items(entrypoint.module.items, FlatMatch::DEFAULT),
-                pure("\n"),
-                print_term(entrypoint.tail, FlatMatch::DEFAULT),
-            ])
-        };
-        run_printer(printer, formatter, 4)
     }
 }
 

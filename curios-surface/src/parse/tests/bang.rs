@@ -125,7 +125,7 @@ fn bang_round_trips() {
     for source in ["f(x!, y!)", "p.0!", "x!.0", "let x = e!; x"] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
-            term.to_string().parse::<Term>().unwrap(),
+            term.printed().to_string().parse::<Term>().unwrap(),
             term,
             "round-trip failed for {source:?}"
         );

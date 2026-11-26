@@ -23,7 +23,10 @@ fn char_literals_round_trip_unicode_and_supported_escapes() {
     for source in [
         "'a'", "'λ'", "'😀'", "'\\n'", "'\\t'", "'\\r'", "'\\''", "'\\\\'",
     ] {
-        assert_eq!(source.parse::<Term>().unwrap().to_string(), source);
+        assert_eq!(
+            source.parse::<Term>().unwrap().printed().to_string(),
+            source
+        );
     }
 }
 
@@ -73,7 +76,7 @@ fn a_character_literal_is_a_dispatch_pattern() {
         "{:?}",
         match_.arms[1].alternatives[0].pattern
     );
-    assert_eq!(term.to_string(), source);
+    assert_eq!(term.printed().to_string(), source);
 }
 
 #[test]
@@ -121,15 +124,17 @@ fn a_braced_unicode_escape_names_a_scalar_in_a_character() {
     );
     // A literal read from text prints as it was written, its escape among it, and one the compiler built writes a visible scalar itself.
     assert_eq!(
-        "'\\u{65}'".parse::<Term>().unwrap().to_string(),
+        "'\\u{65}'".parse::<Term>().unwrap().printed().to_string(),
         "'\\u{65}'"
     );
     assert_eq!(
-        "\"\\u{65}\"".parse::<Term>().unwrap().to_string(),
+        "\"\\u{65}\"".parse::<Term>().unwrap().printed().to_string(),
         "\"\\u{65}\""
     );
     assert_eq!(
-        Term::from(Subterm::ProofLiteral(ProofLiteral::Char('e'.into()))).to_string(),
+        Term::from(Subterm::ProofLiteral(ProofLiteral::Char('e'.into())))
+            .printed()
+            .to_string(),
         "'e'"
     );
 }
@@ -147,15 +152,20 @@ fn a_control_character_prints_as_its_braced_escape() {
         "\"a\\u{8}b\\u{C}\"",
         "match 8 | '\\u{8}' => 0 | _ => 1 end",
     ] {
-        assert_eq!(source.parse::<Term>().unwrap().to_string(), source);
+        assert_eq!(
+            source.parse::<Term>().unwrap().printed().to_string(),
+            source
+        );
     }
     // An escape read from text keeps the case its digits were written in, and one the compiler built prints them in the numerals' case.
     assert_eq!(
-        "'\\u{1b}'".parse::<Term>().unwrap().to_string(),
+        "'\\u{1b}'".parse::<Term>().unwrap().printed().to_string(),
         "'\\u{1b}'"
     );
     assert_eq!(
-        Term::from(Subterm::ProofLiteral(ProofLiteral::Char('\u{1b}'.into()))).to_string(),
+        Term::from(Subterm::ProofLiteral(ProofLiteral::Char('\u{1b}'.into())))
+            .printed()
+            .to_string(),
         "'\\u{1B}'"
     );
 }
@@ -296,7 +306,7 @@ fn a_block_string_prints_as_a_block_that_reads_back() {
         // A control character prints as its braced escape, as in the one-line form.
         ("a\u{8}b", "\"\"\"\na\\u{8}b\n\"\"\""),
     ] {
-        assert_eq!(block(value).to_string(), printed, "{value:?}");
+        assert_eq!(block(value).printed().to_string(), printed, "{value:?}");
         assert_eq!(printed.parse::<Term>().unwrap(), block(value), "{printed}");
     }
 }

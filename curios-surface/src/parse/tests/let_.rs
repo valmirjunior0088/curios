@@ -119,7 +119,7 @@ fn a_test_declaration_parses_and_round_trips() {
         panic!("expected one test item, got {:?}", module.items);
     };
     assert_eq!(test.label, "the_answer_holds");
-    let printed = module.to_string();
+    let printed = module.printed().to_string();
     assert_eq!(
         printed.trim(),
         "test the_answer_holds =\n    Test/assert(42 == 42);"
@@ -253,7 +253,7 @@ fn a_let_tells_a_constructor_pattern_from_a_local_function_at_its_arrow() {
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
-            term.to_string().parse::<Term>().unwrap(),
+            term.printed().to_string().parse::<Term>().unwrap(),
             term,
             "round-trip failed for {source:?}"
         );

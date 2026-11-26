@@ -159,12 +159,14 @@ pub fn unit_stage(
                 }
             };
 
-            parsed.map(|module| module.to_string()).map_err(|report| {
-                vec![Diagnosis {
-                    severity: Severity::Error,
-                    report,
-                }]
-            })
+            parsed
+                .map(|module| module.printed().to_string())
+                .map_err(|report| {
+                    vec![Diagnosis {
+                        severity: Severity::Error,
+                        report,
+                    }]
+                })
         }
         "core" => Fold::new(budget, &units, cached)
             .lowered_unit(&mut *progress, |scope, lowered| {
@@ -590,7 +592,7 @@ fn text_part(described: &Described) -> Result<String, Refusal> {
     let file = declaration.text.source.file().unwrap_or(path);
 
     Module::overlaid(file, declaration.written())
-        .map(|module| module.to_string())
+        .map(|module| module.printed().to_string())
         .map_err(|error| {
             Refusal::Diagnostics(vec![Diagnosis {
                 severity: Severity::Error,
