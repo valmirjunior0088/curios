@@ -10,7 +10,7 @@
 //!
 //! **An instance lives in the store of the program that calls it.** A module is resolved once — compiled or read back, refused if no plugin can be made of it, each export held to the declaration it answers — and instantiated where a program is run, in that program's own store, ahead of the program itself. It is still an instance and a memory of its own, which the program cannot name; what the two share is the engine's accounting, so the stack limit set where the program is entered bounds a module's frames too, and a recursion with no end inside one stops on the engine's trap wherever in the program it was called from. A store of its own would be handed the whole limit again below the frame that called it, of a stack that holds it once.
 //!
-//! The ABI is the raw one every wasm toolchain already emits: a scalar crosses as itself, a byte string as a `(ptr, len)` pair into the plugin's memory, and a byte-string result comes back as the same pair through wasm's multi-value return. The plugin exports its `memory` and an allocator; what it is called and what it takes are [`ALLOC`] and the conformance check below.
+//! The ABI is the raw one every wasm toolchain already emits: a scalar crosses as itself, a byte string as a `(ptr, len)` pair into the plugin's memory, and a byte-string result comes back as the same pair through wasm's multi-value return. A plugin exports its `memory` and an allocator where a row it answers crosses through them — the memory where a row takes or answers a byte string or answers several results, the allocator where a row takes a byte string or answers more than one scalar, its name saying which convention that answer follows — and a plugin answering scalars alone exports neither; what the allocator is called and what it takes are [`ALLOC`] and [`REALLOC`].
 
 use {
     super::{
@@ -46,6 +46,15 @@ pub struct DeclaredModule {
 
 /// The allocator of a module that follows the canonical ABI, by the name that ABI gives it: the old offset and size, an alignment and the new size in, an offset out.
 const REALLOC: &str = "cabi_realloc";
+
+/// Which conventions a module's exports follow, as the name of the allocator it exports says.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Convention {
+    /// The module exports [`ALLOC`], whose conventions [`Allocator::Own`] states.
+    Own,
+    /// The module exports [`REALLOC`], whose conventions [`Allocator::Canonical`] states.
+    Canonical,
+}
 
 /// How a module hands out the memory a byte string crossing to it is written in, which is also which conventions its exports follow.
 #[derive(Clone)]
@@ -110,8 +119,10 @@ impl Subject {
 pub struct Plugin {
     subject: Subject,
     compiled: MachineCode,
-    /// Whether the module follows the canonical ABI's conventions, which its allocator's name says.
-    canonical: bool,
+    /// Whether the module exports a [`MEMORY`], which a byte string, or an answer of several results, crosses through.
+    memory: bool,
+    /// The conventions its allocator's name says it follows, where it exports one a byte string can reach its memory through.
+    convention: Option<Convention>,
     rows: Vec<Row>,
 }
 
@@ -166,34 +177,35 @@ impl Plugin {
                 ));
         }
 
-        if !matches!(compiled.get_export(MEMORY), Some(ExternType::Memory(_))) {
-            return Err(subject
-                .refused("missing export")
-                .stating(format_args!("{subject} exports no `{MEMORY}`"))
-                .stating("a byte string crossing to it is written there"));
-        }
-
-        let canonical = if exported(compiled, REALLOC)
-            == Some((spelled(&["i32"; 4]), spelled(&["i32"])))
-        {
-            true
-        } else if exported(compiled, ALLOC) == Some((spelled(&["i32"]), spelled(&["i32"]))) {
-            false
-        } else {
-            return Err(subject
-                .refused("missing export")
-                .stating(format_args!(
-                    "{subject} exports neither `{REALLOC}` nor an `{ALLOC}` taking a size and answering an offset"
-                ))
-                .stating("that is how a byte string reaches its memory"));
-        };
+        // What a module must export beside its rows is each row's to say, by what it crosses (`Row::of`): one answering scalars alone needs neither a memory nor an allocator.
+        let memory = matches!(compiled.get_export(MEMORY), Some(ExternType::Memory(_)));
+        let convention =
+            if exported(compiled, REALLOC) == Some((spelled(&["i32"; 4]), spelled(&["i32"]))) {
+                Some(Convention::Canonical)
+            } else if exported(compiled, ALLOC) == Some((spelled(&["i32"]), spelled(&["i32"]))) {
+                Some(Convention::Own)
+            } else {
+                None
+            };
 
         Ok(Self {
             subject,
             compiled: module.code.clone(),
-            canonical,
+            memory,
+            convention,
             rows: Vec::new(),
         })
+    }
+
+    /// The refusal of a row that needs an allocator, `why` saying what of the row needs one, where the module exports none.
+    fn lacks_allocator(&self, why: fmt::Arguments<'_>) -> Unlinked {
+        let subject = &self.subject;
+        subject
+            .refused("missing export")
+            .stating(format_args!(
+                "{subject} exports neither `{REALLOC}` nor an `{ALLOC}` taking a size and answering an offset"
+            ))
+            .stating(why)
     }
 
     /// The rows the module was resolved for, each as the program declares it.
@@ -240,22 +252,27 @@ impl Plugin {
                 format_args!("{subject} lost its `{what}` between its types and its instance"),
             )
         };
-        let memory = instance
-            .get_memory(&mut *store, MEMORY)
-            .ok_or_else(|| missing(MEMORY))?;
-        let allocator = match self.canonical {
-            true => Allocator::Canonical(
-                instance
-                    .get_typed_func(&mut *store, REALLOC)
-                    .map_err(|_| missing(REALLOC))?,
-            ),
-            false => Allocator::Own(
-                instance
-                    .get_typed_func(&mut *store, ALLOC)
-                    .map_err(|_| missing(ALLOC))?,
-            ),
+        // A module that exports no memory, or no allocator to write one through, answers rows of scalars alone, as `Row::of` held each of its rows to.
+        let instantiated = match (self.memory, self.convention) {
+            (true, Some(convention)) => Some(Instantiated {
+                memory: instance
+                    .get_memory(&mut *store, MEMORY)
+                    .ok_or_else(|| missing(MEMORY))?,
+                allocator: match convention {
+                    Convention::Canonical => Allocator::Canonical(
+                        instance
+                            .get_typed_func(&mut *store, REALLOC)
+                            .map_err(|_| missing(REALLOC))?,
+                    ),
+                    Convention::Own => Allocator::Own(
+                        instance
+                            .get_typed_func(&mut *store, ALLOC)
+                            .map_err(|_| missing(ALLOC))?,
+                    ),
+                },
+            }),
+            _ => None,
         };
-        let instantiated = Instantiated { memory, allocator };
 
         for (index, row) in self.rows.iter().enumerate() {
             let entry = Entry {
@@ -269,7 +286,7 @@ impl Plugin {
             let entered: Trampoline = Arc::new(move |caller, given, answered| {
                 plugin.rows[index].call(
                     &plugin.subject,
-                    &instantiated,
+                    instantiated.as_ref(),
                     entry,
                     caller,
                     given,
@@ -376,6 +393,20 @@ impl Instantiated {
 
         Ok(bytes)
     }
+}
+
+/// The memory and the allocator of `instantiated`, which a module holds wherever a row it answers crosses a byte string or several results, as `Row::of` resolved each row: a call without them is this file's own fault.
+fn reached<'a>(
+    instantiated: Option<&'a Instantiated>,
+    subject: &Subject,
+    export: &str,
+) -> wasmtime::Result<&'a Instantiated> {
+    instantiated.ok_or_else(|| {
+        raised(
+            "compiler fault",
+            format_args!("{subject} answers `{export}` across a memory it was resolved without"),
+        )
+    })
 }
 
 /// What one wire type costs a plugin's signature, and how a value of it crosses.
@@ -513,6 +544,12 @@ impl Row {
             .iter()
             .map(|wire| crossing(*wire, subject, declaration))
             .collect::<Result<Vec<_>, _>>()?;
+        let takes_bytes = params.contains(&Crossing::Bytes);
+        if takes_bytes && plugin.convention.is_none() {
+            return Err(plugin.lacks_allocator(format_args!(
+                "`{declaration}` takes a byte string, which reaches its memory through one"
+            )));
+        }
 
         // Ending the instance is the host's to do, or an embedder's: a module reaches no environment, and its own trap is a failure of the call.
         let WireReturn::Answers(results) = &signature.returns else {
@@ -532,13 +569,18 @@ impl Row {
             .map(|wire| crossing(*wire, subject, declaration))
             .collect::<Result<Vec<_>, _>>()?;
 
-        let returns = match (fields.as_slice(), plugin.canonical) {
+        let returns = match (fields.as_slice(), plugin.convention) {
             ([], _) => Returns::Nothing,
-            ([Crossing::Bytes], false) => Returns::Pair,
             ([scalar], _) if *scalar != Crossing::Bytes => Returns::Scalar(*scalar),
-            (fields, true) => Returns::Area(fields.to_vec()),
+            (_, None) => {
+                return Err(plugin.lacks_allocator(format_args!(
+                    "`{declaration}` answers a byte string or several results, whose convention its allocator's name says"
+                )));
+            }
+            ([Crossing::Bytes], Some(Convention::Own)) => Returns::Pair,
+            (fields, Some(Convention::Canonical)) => Returns::Area(fields.to_vec()),
             // Several results at once have no spelling in a multi-value return a toolchain emits, which is what the canonical ABI's area is for.
-            (_, false) => {
+            (_, Some(Convention::Own)) => {
                 return Err(subject
                     .refused("unsupported signature")
                     .stating(format_args!(
@@ -552,6 +594,17 @@ impl Row {
                     )));
             }
         };
+
+        if (takes_bytes || !matches!(returns, Returns::Nothing | Returns::Scalar(_)))
+            && !plugin.memory
+        {
+            return Err(subject
+                .refused("missing export")
+                .stating(format_args!("{subject} exports no `{MEMORY}`"))
+                .stating(format_args!(
+                    "`{declaration}` crosses a byte string or several results, and each crosses through it"
+                )));
+        }
 
         let found = exported(plugin.compiled.module(), export).ok_or_else(|| {
             subject.refused("invalid export").stating(format_args!(
@@ -597,7 +650,7 @@ impl Row {
     fn call(
         &self,
         subject: &Subject,
-        instantiated: &Instantiated,
+        instantiated: Option<&Instantiated>,
         entry: Entry,
         caller: &mut Caller<'_, Guest>,
         given: &[Val],
@@ -619,7 +672,8 @@ impl Row {
                 Crossing::Float => arguments.push(Val::F64(f64::lift(caller, slot)?.to_bits())),
                 Crossing::Bytes => {
                     let bytes = Vec::<u8>::lift(caller, slot)?;
-                    let offset = instantiated.write(subject, caller, &bytes)?;
+                    let offset =
+                        reached(instantiated, subject, export)?.write(subject, caller, &bytes)?;
 
                     arguments.push(Val::I32(offset as i32));
                     arguments.push(Val::I32(bytes.len() as i32));
@@ -643,12 +697,13 @@ impl Row {
                 let offset = returned[0].unwrap_i32() as u32;
                 let length = returned[1].unwrap_i32() as u32;
 
-                instantiated
+                reached(instantiated, subject, export)?
                     .read(subject, export, caller, offset, length)?
                     .lower(caller, answers)
             }
             // Each field where the canonical ABI lays it: after the ones before it, at its own alignment. The module is told once every field is read, so it may release what the area holds.
             Returns::Area(fields) => {
+                let instantiated = reached(instantiated, subject, export)?;
                 let area = returned[0].unwrap_i32() as u32;
                 let mut offset = 0;
 

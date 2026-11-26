@@ -174,13 +174,60 @@ fn plugin() -> Vec<u8> {
     to_bytes(&module, &Names::default())
 }
 
+/// A plugin answering `double`, a row of scalars, and `echo`, a row crossing byte strings, that exports a `memory` and an `alloc` only where asked: a row's crossings are what demand either of its module.
+fn lean_plugin(memory: bool, alloc: bool) -> Vec<u8> {
+    let mut module = Module::new("lean");
+
+    if memory {
+        let name = MemName::from("memory");
+        module.add_memory(
+            name.clone(),
+            MemType {
+                address_type: AddressType::I32,
+                limits: Limits { min: 1, max: None },
+            },
+        );
+        module.add_export("memory", Export::Memory(name));
+    }
+    if alloc {
+        export(
+            &mut module,
+            "alloc",
+            vec![i32_type()],
+            vec![i32_type()],
+            vec![Instr::I32Const { value: 0 }],
+        );
+    }
+    export(
+        &mut module,
+        "double",
+        vec![i64_type()],
+        vec![i64_type()],
+        vec![local(0), Instr::I64Const { value: 2 }, Instr::I64Mul],
+    );
+    export(
+        &mut module,
+        "echo",
+        vec![i32_type(), i32_type()],
+        vec![i32_type(), i32_type()],
+        vec![local(0), local(1)],
+    );
+
+    to_bytes(&module, &Names::default())
+}
+
 /// One module answering the declarations `exports` names, each an export beside the declaration it answers.
 fn declared(exports: &[(&str, &str)]) -> Vec<DeclaredModule> {
+    declared_of(plugin(), exports)
+}
+
+/// The module `code` compiles to, answering the declarations `exports` names.
+fn declared_of(code: Vec<u8>, exports: &[(&str, &str)]) -> Vec<DeclaredModule> {
     start_test_engine();
     vec![DeclaredModule {
         package: "fixture".to_string(),
         name: "probe".to_string(),
-        code: curios_cranelift::compile(&plugin()).expect("the plugin compiles"),
+        code: curios_cranelift::compile(&code).expect("the plugin compiles"),
         answers: exports
             .iter()
             .map(|(export, declaration)| (declaration.to_string(), export.to_string()))
@@ -264,6 +311,68 @@ fn a_plugin_byte_past_255_is_refused() {
 
     assert!(
         refusal.starts_with("invalid answer: ") && refusal.contains("with 256, which is no byte"),
+        "{refusal}"
+    );
+}
+
+/// A module answering scalars alone exports neither a memory nor an allocator, since nothing crosses through either: it links and answers.
+#[test]
+fn a_module_of_scalar_rows_needs_no_memory_and_no_allocator() {
+    let code = run_linked(
+        r#"
+        foreign double(Nat) -> Nat;
+        let entry() -> /std/Io({}) =
+            let _ = /std/Proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
+            /std/Io/pure(());
+        entry()
+        "#,
+        declared_of(lean_plugin(false, false), &[("double", "/double")]),
+    )
+    .expect("execution succeeded");
+
+    assert_eq!(code, 42);
+}
+
+/// A row taking a byte string is refused before the program runs where its module exports no allocator, the refusal naming the row and what of it needs one.
+#[test]
+fn a_row_taking_a_byte_string_is_refused_where_its_module_exports_no_allocator() {
+    let refusal = run_linked(
+        r#"
+        foreign echo(Bytes) -> Bytes;
+        let entry() -> /std/Io({}) =
+            let _ = echo(/std/Str/to_bytes("curios"))!;
+            /std/Io/pure(());
+        entry()
+        "#,
+        declared_of(lean_plugin(true, false), &[("echo", "/echo")]),
+    )
+    .expect_err("a byte string has no way into the module's memory");
+
+    assert!(
+        refusal.contains("exports neither `cabi_realloc` nor an `alloc`"),
+        "{refusal}"
+    );
+    assert!(refusal.contains("`/echo` takes a byte string"), "{refusal}");
+}
+
+/// A row crossing a byte string is refused before the program runs where its module exports no memory, the refusal naming the row.
+#[test]
+fn a_row_crossing_a_byte_string_is_refused_where_its_module_exports_no_memory() {
+    let refusal = run_linked(
+        r#"
+        foreign echo(Bytes) -> Bytes;
+        let entry() -> /std/Io({}) =
+            let _ = echo(/std/Str/to_bytes("curios"))!;
+            /std/Io/pure(());
+        entry()
+        "#,
+        declared_of(lean_plugin(false, true), &[("echo", "/echo")]),
+    )
+    .expect_err("a byte string has no memory to cross through");
+
+    assert!(refusal.contains("exports no `memory`"), "{refusal}");
+    assert!(
+        refusal.contains("`/echo` crosses a byte string"),
         "{refusal}"
     );
 }
