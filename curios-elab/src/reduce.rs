@@ -32,7 +32,7 @@ use {
         Answered, Classes, Driver, IntrinsicDriver, Judge, ReadsProofs, ScrutineeRead, Within,
         answers, answers_classed, apart_in_instance, atoms_within, case_target_indices,
         could_answer, holds_no_type, one_up_to_instances, pinned_instance, read_operands,
-        read_scrutinee, read_scrutinee_classed, refold,
+        read_scrutinee, read_scrutinee_classed, refold, tested_arm,
     },
     curios_common::{SyntaxRegistry, recurse},
     curios_core::{
@@ -914,6 +914,25 @@ fn scrutinee_read(context: &mut Context, cases: &Cases, forced: Term) -> Result<
     })
 }
 
+/// The arm a dispatch [`reduce_match`] left stuck takes by the equations in force about its keys' tests (`curios_analysis::tested_arm`), each test decided by reducing it to a literal: asked only where an equation is in force and the scrutinee names a local, the one place a test of a value that is no literal can be decided. The certifier's reducer asks it at the same point.
+fn tested(context: &mut Context, stuck: &Term) -> Result<Option<Term>, ReduceError> {
+    let Subterm::Match(Match {
+        head,
+        cases: Cases::Switch { keys, default },
+        ..
+    }) = &**stuck
+    else {
+        return Ok(None);
+    };
+    if !context.has_scrutinee_refinements() || !head.has_local_free() {
+        return Ok(None);
+    }
+
+    tested_arm(keys, default, head, |test| {
+        Ok(reduce(context, test)?.as_bool())
+    })
+}
+
 /// Dispatch a `match` over its scrutinee's already-reduced-and-forced value, where `forced` is what `reduce_forced` produced for it.
 ///
 /// **Rejected — binding an arm to projections of the original scrutinee.** Taking the unreduced scrutinee alongside `forced` and opening the arm at `head.(i + 1)`, the flat view in [`reduce_proj`], would keep a reduced payload from carrying evaluated definition internals — local-`let` annotation holes elaboration never births — into types flowing on to `zonk`. It would buy that at the cost of emitting a term Core cannot type: `Proj` has no rule for an inductive value, so the residual is well-formed only to the untyped reducer. One escaping into a metavariable solution candidate is refused by the re-validation in `convert`'s `solve` as `NotATuple`, which is a *hard* verdict — the goal fails outright instead of parking, and an ordinary program comparing a matched payload against its value would be rejected. Binding the payload directly is also what the certifier does, so the two checkers agree here.
@@ -1746,11 +1765,17 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
                             let value = reduce(context, m.head)?;
                             let forced = force_rec(context, value)?;
 
-                            reduce_match(
+                            match reduce_match(
                                 scrutinee_read(context, &m.cases, forced)?,
                                 m.goal,
                                 m.cases,
-                            )
+                            ) {
+                                Reduce::Break(stuck) => match tested(context, &stuck)? {
+                                    Some(arm) => Reduce::Continue(arm),
+                                    None => Reduce::Break(stuck),
+                                },
+                                step => step,
+                            }
                         }
                     }
                 }

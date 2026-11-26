@@ -737,6 +737,47 @@ let /f : (i: #IntType) -> /M(#IntEql(i, -1), #IntEql(i, +2)) =
 /std/Bool/True/qed()
 "#;
 
+/// `/pick(b)` is a dispatch on `b` keyed at `0`, stuck where `b` is no literal. In the catch-all of `/past`'s dispatch on `b` the key's test is `false`, so `/pick(b)` takes its own catch-all and `Holds(/pick(b) == 2)` is asked of `qed`; under `/at`'s guard `b == 0` the test is `true`, so it takes the key's arm and `Holds(/pick(b) == 1)` is. Both are admitted, and the term the module closes with is refused at `False` alone.
+const A_DISPATCH_UNDER_ITS_KEYS_TESTS: &str = r#"
+let /pick : (b: #ByteType) -> #NatType =
+    (b: #ByteType) =>
+        #{goal = #NatType} match b
+        | #Byte(0) => 1
+        | _ => 2
+        end;
+let /past : (b: #ByteType) -> #BoolType =
+    (b: #ByteType) =>
+        #{goal = #BoolType} match b
+        | #Byte(0) => false
+        | _ =>
+            ((k: /std/Bool/Holds(#NatEql(/pick(b), 2))) =>
+                true)(/std/Bool/True/qed())
+        end;
+let /at : (b: #ByteType) -> #BoolType =
+    (b: #ByteType) =>
+        #{goal = #BoolType} match #NatEql(#ByteToNat(b), 0)
+        | false => false
+        | true =>
+            ((k: /std/Bool/Holds(#NatEql(/pick(b), 1))) =>
+                true)(/std/Bool/True/qed())
+        end;
+/std/Bool/True/qed()
+"#;
+
+#[test]
+fn a_dispatch_stuck_under_its_keys_tests_takes_the_arm_they_decide() {
+    let verdicts = core_text_refusals(&fill!(
+        "${PROPOSITIONS}\n${A_DISPATCH_UNDER_ITS_KEYS_TESTS}",
+        PROPOSITIONS,
+        A_DISPATCH_UNDER_ITS_KEYS_TESTS
+    ));
+
+    assert!(
+        matches!(&verdicts[..], [Refusal { name: None, .. }]),
+        "{verdicts:?}"
+    );
+}
+
 #[test]
 fn an_integers_dispatch_types_each_arm_at_its_key_and_its_catch_all_past_them() {
     let verdicts = core_text_refusals(&fill!(

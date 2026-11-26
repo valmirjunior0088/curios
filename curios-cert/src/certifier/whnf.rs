@@ -27,7 +27,7 @@ use {
     super::{ByValue, Certifier, asked_classes, asked_within, stated_payload, unread_payload},
     curios_analysis::{
         Answered, RESOLVED_SPELLING_LAYERS, ScrutineeRead, answers, answers_classed, atoms_within,
-        could_answer, read_operands, read_scrutinee, read_scrutinee_classed, refold,
+        could_answer, read_operands, read_scrutinee, read_scrutinee_classed, refold, tested_arm,
     },
     curios_common::recurse,
     curios_core::{
@@ -228,7 +228,13 @@ fn whnf_within(certifier: &mut ByValue, term: Term) -> Result<Term, ReduceError>
                         let value = certifier.whnf(head)?;
                         let forced = force(certifier, value)?;
 
-                        step_match(scrutinee_read(certifier, &cases, forced)?, goal, cases)
+                        match step_match(scrutinee_read(certifier, &cases, forced)?, goal, cases) {
+                            Step::Stop(stuck) => match tested(certifier, &stuck)? {
+                                Some(arm) => Step::Continue(arm),
+                                None => Step::Stop(stuck),
+                            },
+                            step => step,
+                        }
                     }
                 }
             }
@@ -678,6 +684,25 @@ fn scrutinee_read(
             read_scrutinee_classed(certifier, &forced, &mut classes)?.unwrap_or(forced)
         }
         ScrutineeRead::Silent | ScrutineeRead::Atoms(_) => forced,
+    })
+}
+
+/// The arm a dispatch [`step_match`] left stuck takes by the equations in force about its keys' tests (`curios_analysis::tested_arm`), each test decided by reducing it to a literal: asked only where an equation is in force and the scrutinee names a local, the one place a test of a value that is no literal can be decided. The elaborator's reducer asks it at the same point.
+fn tested(certifier: &mut ByValue, stuck: &Term) -> Result<Option<Term>, ReduceError> {
+    let Subterm::Match(Match {
+        head,
+        cases: Cases::Switch { keys, default },
+        ..
+    }) = &**stuck
+    else {
+        return Ok(None);
+    };
+    if !certifier.has_refinements() || !head.has_local_free() {
+        return Ok(None);
+    }
+
+    tested_arm(keys, default, head, |test| {
+        Ok(certifier.whnf(test)?.as_bool())
     })
 }
 

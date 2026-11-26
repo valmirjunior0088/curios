@@ -1,4 +1,4 @@
-//! A byte's literals: a `Byte` column is dispatched on its values, as the natural `Byte/to_nat` gives, and a packed run's elements take them.
+//! A byte's literals: a `Byte` column is dispatched on its values, as the natural `Byte/to_nat` gives, a packed run's elements take them, and an arm knows the byte it took or the keys it was reached past.
 
 use {crate::test_support::*, curios_common::fill};
 
@@ -91,4 +91,32 @@ fn a_bytes_arm_knows_the_byte_it_took() {
         "#;
 
     assert_eq!(run(source), b"1 0 2");
+}
+
+/// A dispatch on a byte reads what the arm around it knows of that byte: past the key `0` it takes its own arm past `0`, so `escaped` writing any byte but `0` as itself is `Eq/refl()` there, and under a guard that the byte is `0` it takes its arm at `0`.
+#[test]
+fn a_dispatch_on_a_byte_takes_the_arm_its_keys_tests_decide() {
+    let source = r#"
+        use /std/{Byte, Bytes, Eq, Nat};
+        use /std/Bool/{Holds};
+        let escaped(b: Bytes) -> Bytes =
+            match b
+            | 0x[] => 0x[]
+            | 0x[0, ..t] => 0x[0x0, 0xFF, ..escaped(t)]
+            | 0x[h, ..t] => 0x[h, ..escaped(t)]
+            end;
+        let _kept(h: Byte, t: Bytes, other: Holds(h != 0)) -> Eq()(escaped(0x[h, ..t]), 0x[h, ..escaped(t)]) =
+            match h
+            | 0 => match other end
+            | _ => Eq/refl()
+            end;
+        let _doubled(h: Byte, t: Bytes, zero: Holds(h == 0)) -> Eq()(escaped(0x[h, ..t]), 0x[0x0, 0xFF, ..escaped(t)]) =
+            match h == 0
+            | true => Eq/refl()
+            | false => match zero end
+            end;
+        /std/print(Nat/to_str(Bytes/length(escaped(0x[0x0, 0x41]))))
+        "#;
+
+    assert_eq!(run(source), b"3");
 }

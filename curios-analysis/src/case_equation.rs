@@ -52,6 +52,29 @@ pub fn catch_all_tests<'c>(head: &'c Term, keys: &'c Keys) -> impl Iterator<Item
     })
 }
 
+/// The arm a dispatch over `keys` stuck at `head` takes by its keys' tests ([`catch_all_tests`]), each decided by `decide` as a literal or not at all: a key's arm where its test is `true`, the catch-all `default` where every test is `false`, and `None` where neither, so the dispatch stays stuck.
+///
+/// **It reads what a catch-all assumes.** A catch-all is typed under each key's test at `false`, and a value reaches it exactly where each test is false, so a dispatch on the same scrutinee inside it takes its own catch-all wherever the arm is taken; a test at `true`, a guard's, is a value that is that key. Without it, a function written over a byte's keys has no proof of what it answers past them short of an arm for each of the 256 bytes.
+///
+/// **Both checkers read it, each deciding a test by its own reduction**, which consults the equations in force under every spelling it meets an equation's key by, so a test is answered by both or by neither. Each asks it only where an equation is in force and `head` names a local: nothing else decides a test of a value that is no literal and no floor past every key, which a dispatch takes by its keys alone.
+pub fn tested_arm<E>(
+    keys: &Keys,
+    default: &Term,
+    head: &Term,
+    mut decide: impl FnMut(Term) -> Result<Option<bool>, E>,
+) -> Result<Option<Term>, E> {
+    let mut decided = true;
+    for (test, (_, arm)) in catch_all_tests(head, keys).zip(keys.literals()) {
+        match decide(test)? {
+            Some(true) => return Ok(Some(arm.clone())),
+            Some(false) => {}
+            None => decided = false,
+        }
+    }
+
+    Ok(decided.then(|| default.clone()))
+}
+
 /// Whether `scrutinee`, read as reduction leaves it, is a value of another case than `case`: a literal or a constructed value that the unifier excusing an absent arm ([`invert_indices`]) finds in a definite clash with `case`. An arm at `case` under such a scrutinee is one no reduction takes. `binders` are the case's own, which the unifier may solve; a case's value names each of them once, so the answer is the same where none is named.
 ///
 /// **Both checkers read it, each over what its own reduction answers.** The certifier types no such arm. The elaborator types every arm a reader wrote, and words its refusal of one by this.

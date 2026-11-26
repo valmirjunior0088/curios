@@ -12,7 +12,7 @@ mod case_equation;
 pub use case_equation::{
     Answered, RESOLVED_SPELLING_LAYERS, ReadsProofs, ScrutineeRead, another_case, answers,
     answers_classed, catch_all_tests, constructed, could_answer, holds_no_type, read_scrutinee,
-    read_scrutinee_classed, records_case_equation,
+    read_scrutinee_classed, records_case_equation, tested_arm,
 };
 
 mod classify;
