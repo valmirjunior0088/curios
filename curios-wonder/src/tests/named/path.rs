@@ -321,7 +321,7 @@ fn a_dependency_named_in_a_refused_file_answers_its_type_and_totality() {
 #[test]
 fn a_member_a_module_exposes_beside_its_owner_is_the_line_that_does_it() {
     let option = exposed("/std/Option").expect("the library exposes the module");
-    assert_eq!(option.entries[0], "pub use Option/{some, none}");
+    assert_eq!(option.entries[0], "pub use Option/{none, some}");
     assert!(
         option
             .entries

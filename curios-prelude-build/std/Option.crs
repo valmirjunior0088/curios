@@ -1,5 +1,5 @@
 pub use /sys/{let Option};
-pub use /sys/Option/{some, none};
+pub use /sys/Option/{none, some};
 
 use /std/{Bool, Eq, Show, Spell, Fmt, Monad, Result, Ord, Hash};
 use /std/ops/{Eql};

@@ -55,7 +55,7 @@ pub struct ExposureLine {
     pub owner: Qualifier,
     /// The members the line exposes, as it lists them; a glob's, in the order their owner declares them.
     pub names: Vec<String>,
-    /// The line as a module writes it, `pub use Option/{some, none}`, the owner and each member marked as a signature's names are.
+    /// The line as a module writes it, `pub use Option/{none, some}`, the owner and each member marked as a signature's names are.
     pub signature: Signature,
 }
 

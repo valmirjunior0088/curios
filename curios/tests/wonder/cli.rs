@@ -601,7 +601,7 @@ fn what_the_compiler_provides_is_answered_on_the_path_asked() {
         "{option}"
     );
     assert!(
-        option.contains("more names\n├─ pub use Option/{some, none}\n"),
+        option.contains("more names\n├─ pub use Option/{none, some}\n"),
         "the module lists what it exposes beside the declaration: {option}"
     );
     assert!(!option.contains("/sys"), "{option}");
