@@ -1,9 +1,9 @@
 mod tests;
 
-use /std/{Io};
-
 pub use /sys/{let Box};
 pub use /sys/Box/{new, held};
+
+use /std/{Io};
 
 -- `/sys/Box/set` is spelled here alone: a program changes a box only through `change`, by a function of what it holds.
 --- What `f` answers beside the value it leaves in `b`, given the value `b` holds.

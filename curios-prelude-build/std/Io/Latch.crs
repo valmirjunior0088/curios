@@ -1,10 +1,10 @@
 mod tests;
 
-use /std/{Option, Io};
-use /std/internal/{on_tripped, until};
-
 pub use /sys/Io/{let Latch};
 pub use /sys/Io/Latch/{new, trip, tripped};
+
+use /std/{Option, Io};
+use /std/internal/{on_tripped, until};
 
 -- What a wait asks of `l` each time something it waits on has moved: an answer once `l` is tripped.
 let passed(l: Latch) -> Io(Option({})) =
