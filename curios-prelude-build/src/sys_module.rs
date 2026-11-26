@@ -45,10 +45,10 @@ fn option_decl() -> TopItem {
     let module: Module = r#"
         --- A value that may be absent.
         pub induct Option(A: Sort): pub Type
-        --- The value is there.
-        | some(A)
         --- There is none.
         | none()
+        --- The value is there.
+        | some(A)
         end
     "#
     .parse()
