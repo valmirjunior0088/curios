@@ -40,6 +40,9 @@ run = [
     ],
 ]
 
+[lint]
+description = "Hold the compiler's Rust and the tree's Curios to their formatting and their lints"
+
 [lint.rustfmt]
 description = "Fail on formatting drift in the workspace's Rust, the corpus's Rust twins included"
 run = [
@@ -83,7 +86,10 @@ run = [
     ],
 ]
 
-# What two builds no other step makes do with their caches, a group apart from the suite: the prelude's step elaborates the library again after any edit to a crate it links, which nearly every change to the compiler is.
+# A group apart from the suite: the prelude's step elaborates the library again after any edit to a crate it links, which nearly every change to the compiler is.
+[caches]
+description = "Ask the two builds no other step makes, Binaryen's and the prelude's, what they do with their caches"
+
 [caches.binaryen]
 description = "Hold that a second cargo mode reuses Binaryen's build rather than making it again; the first build after an edit to its build script makes it from source, since its cache is keyed by the script's hash"
 run = [

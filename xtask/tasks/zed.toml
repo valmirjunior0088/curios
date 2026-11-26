@@ -1,5 +1,8 @@
 description = "The Zed extension, a workspace of its own"
 
+[lint]
+description = "Hold the Zed extension's Rust to its formatting and its lints"
+
 [lint.rustfmt]
 description = "Fail on formatting drift in the Zed extension"
 dir = "editors/zed"

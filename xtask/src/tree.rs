@@ -1,6 +1,6 @@
 //! The task files read into one tree, and every refusal reading them can make.
 //!
-//! **A file is a group, and a key's meaning is where it sits.** `xtask/tasks.toml` is the group the files in `xtask/tasks/` belong to, each a group named after its file. A file's top level holds `description`, `variables`, and its steps and groups, and the root's holds `tools` and `data` beside them; a group holds only steps and groups; a step holds `description`, `requires`, `consumes`, `produces`, `run` and `dir`, and no table of its own. So whether a key is an attribute or a child is read off its position, and one out of place is refused rather than guessed at.
+//! **A file is a group, and a key's meaning is where it sits.** `xtask/tasks.toml` is the group the files in `xtask/tasks/` belong to, each a group named after its file. A file's top level holds `description`, `variables`, and its steps and groups, and the root's holds `tools` and `data` beside them; a group holds its `description` and its steps and groups; a step holds `description`, `requires`, `consumes`, `produces`, `run` and `dir`, and no table of its own. So whether a key is an attribute or a child is read off its position, and one out of place is refused rather than guessed at.
 //!
 //! **A name is the path to where it is declared, written from the top with a leading `.`, and it names one thing.** Each segment is a key, read from the top one projection at a time: a step or a group is its tables, `.compiler.lint.clippy`; a variable sits under its file's `variables`, `.compiler.variables.edition`; a tool under the root's `tools`, `.tools.node`, and its version beneath it, `.tools.node.version`; data under the root's `data`, `.data.json`; and a produced file under its step's `produces`, `.compiler.launcher.produces.binary`. So a name reads the same wherever it is written, and says where to find what it names. `requires` names steps and groups, `consumes` produced files, and the braces in a command a variable, a tool, data or a produced file, or, with a `!` where the `.` stands, a value the runner fills ([`BUILT_INS`]). Each resolves as the tree is read, so a name that names nothing, one written without its `.`, or one naming the wrong kind of thing, is refused before anything runs, and so is a command that reads a file its step does not consume, which would run without the edge that orders it.
 
@@ -88,8 +88,8 @@ pub struct Tree {
 
 #[derive(Debug)]
 pub struct Group {
-    /// A file's description; a group inside a file has none, and is described by its steps.
-    pub description: Option<String>,
+    /// What the group is for, as it states it: a file's at its top, a group's inside a file under its own `description`.
+    pub description: String,
     /// The groups and steps directly inside it, in order.
     pub children: Vec<Name>,
     /// The steps it holds, at any depth, in order, by their place in [`Tree::steps`].
@@ -406,6 +406,7 @@ impl Tree {
         for (index, (file, document)) in files.iter().zip(&documents).enumerate() {
             let top = document.as_table();
             let mut description = None;
+            let mut children = Vec::new();
             for (key, item) in top.iter() {
                 let span = top.key(key).and_then(|key| key.span());
                 match key {
@@ -520,15 +521,7 @@ impl Tree {
                                 format!("`{key}` is out of place: a file's top holds `description`, `variables`, and its steps and groups as tables"),
                             )
                         })?;
-                        tree.groups
-                            .entry(file.scope.clone())
-                            .or_insert_with(|| Group {
-                                description: None,
-                                children: Vec::new(),
-                                steps: Vec::new(),
-                            })
-                            .children
-                            .push(name.clone());
+                        children.push(name.clone());
                         walk(
                             file,
                             index,
@@ -548,23 +541,18 @@ impl Tree {
                     "has no `description`, which a file's top states".to_string(),
                 )
             })?;
-            let group = tree
-                .groups
-                .entry(file.scope.clone())
-                .or_insert_with(|| Group {
-                    description: None,
-                    children: Vec::new(),
+            tree.groups.insert(
+                file.scope.clone(),
+                Group {
+                    description,
+                    children,
                     steps: Vec::new(),
-                });
-            group.description = Some(description);
+                },
+            );
             if !file.scope.is_empty() {
                 tree.groups
-                    .entry(Vec::new())
-                    .or_insert_with(|| Group {
-                        description: None,
-                        children: Vec::new(),
-                        steps: Vec::new(),
-                    })
+                    .get_mut(&Vec::new())
+                    .expect("the root file comes first")
                     .children
                     .push(file.scope.clone());
                 declare(&mut kinds, &files[0], &file.scope, Kind::Task, None)?;
@@ -949,7 +937,13 @@ fn walk<'a>(
     tree: &mut Tree,
     written: &mut Vec<Written<'a>>,
 ) -> Result<(), Refusal> {
-    let is_step = table.iter().any(|(key, _)| STEP_KEYS.contains(&key));
+    // A table holding tables other than a step's own is a group, whose `description` is its own; any other is a step.
+    let is_step = table
+        .iter()
+        .any(|(key, _)| key != "description" && STEP_KEYS.contains(&key))
+        || !table
+            .iter()
+            .any(|(key, item)| !STEP_KEYS.contains(&key) && item.is_table_like());
     if is_step {
         for (key, item) in table.iter() {
             if !STEP_KEYS.contains(&key) {
@@ -979,20 +973,32 @@ fn walk<'a>(
     if table.is_empty() {
         return Err(file.refuse(span, format!("`{}` is empty", from_top(&name))));
     }
+    let description = match table.get("description") {
+        Some(item) => text_of(file, item, "description")?,
+        None => {
+            return Err(file.refuse(
+                span,
+                format!(
+                    "group `{}` has no `description`, which a group states of itself",
+                    from_top(&name)
+                ),
+            ));
+        }
+    };
     tree.groups.insert(
         name.clone(),
         Group {
-            description: None,
+            description,
             children: Vec::new(),
             steps: Vec::new(),
         },
     );
-    for (key, item) in table.iter() {
+    for (key, item) in table.iter().filter(|(key, _)| *key != "description") {
         let span = table.key(key).and_then(|key| key.span());
         let child = item.as_table_like().ok_or_else(|| {
             file.refuse(
                 span.clone(),
-                format!("`{key}` is out of place: a group holds only steps and groups"),
+                format!("`{key}` is out of place: a group holds its `description` and its steps and groups"),
             )
         })?;
         let child_name = scoped(&name, key);

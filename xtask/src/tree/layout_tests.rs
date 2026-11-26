@@ -6,7 +6,7 @@ use {super::test_support::*, super::*};
 fn a_file_is_a_group_holding_its_steps_in_order() {
     let tree = tree(&[(
         "a",
-        "description = \"A\"\n[lint.second]\ndescription = \"Two\"\nrun = [[\"true\"]]\n[lint.first]\ndescription = \"One\"\nrun = [[\"true\"]]\n[test]\ndescription = \"Three\"\nrun = [[\"true\"]]\n",
+        "description = \"A\"\n[lint]\ndescription = \"Lint\"\n[lint.second]\ndescription = \"Two\"\nrun = [[\"true\"]]\n[lint.first]\ndescription = \"One\"\nrun = [[\"true\"]]\n[test]\ndescription = \"Three\"\nrun = [[\"true\"]]\n",
     )])
     .unwrap();
 
@@ -56,9 +56,21 @@ fn a_group_holding_anything_but_steps_and_groups_is_refused() {
     assert!(
         refused(&[(
             "a",
-            "description = \"A\"\n[g]\nx = 1\n[g.s]\ndescription = \"S\"\nrun = [[\"true\"]]\n"
+            "description = \"A\"\n[g]\ndescription = \"G\"\nx = 1\n[g.s]\ndescription = \"S\"\nrun = [[\"true\"]]\n"
         )])
-        .contains("a group holds only steps and groups")
+        .contains("a group holds its `description` and its steps and groups")
+    );
+}
+
+/// A group states what it is for, as a file's top does, so the command line describes it by its own line rather than its steps' joined.
+#[test]
+fn a_group_without_a_description_is_refused() {
+    assert!(
+        refused(&[(
+            "a",
+            "description = \"A\"\n[g.s]\ndescription = \"S\"\nrun = [[\"true\"]]\n"
+        )])
+        .contains("group `.a.g` has no `description`")
     );
 }
 

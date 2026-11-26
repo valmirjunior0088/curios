@@ -33,7 +33,7 @@ pub fn command(tree: &Tree) -> Command {
     let mut command = Command::new("cargo xtask")
         .bin_name("cargo xtask")
         .version(env!("CARGO_PKG_VERSION"))
-        .about(top.description.clone().unwrap_or_default())
+        .about(top.description.clone())
         .subcommand_required(true)
         .arg_required_else_help(true)
         .help_template(
@@ -74,14 +74,7 @@ pub fn command(tree: &Tree) -> Command {
 fn task(tree: &Tree, name: &Name) -> Command {
     let word = name.last().expect("a task has a name").clone();
     let about = match tree.groups.get(name) {
-        Some(group) => group.description.clone().unwrap_or_else(|| {
-            group
-                .steps
-                .iter()
-                .map(|step| tree.steps[*step].description.as_str())
-                .collect::<Vec<_>>()
-                .join("; ")
-        }),
+        Some(group) => group.description.clone(),
         None => tree.steps[tree.steps_of(name)[0]].description.clone(),
     };
 

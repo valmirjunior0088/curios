@@ -75,6 +75,9 @@ fn a_group_s_steps_run_in_its_file_s_order_each_after_the_producer_of_what_it_co
             r#"
 description = "W"
 
+[lint]
+description = "Lint"
+
 [lint.first]
 description = "First"
 run = [["true"]]
@@ -151,6 +154,9 @@ fn a_step_runs_after_the_producer_of_each_file_it_consumes_in_the_order_it_names
             "g",
             r#"
 description = "G"
+
+[build]
+description = "Build"
 
 [build.base]
 description = "Base"

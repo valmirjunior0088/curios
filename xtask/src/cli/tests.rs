@@ -10,9 +10,15 @@ description = "A"
 variables.expression.flag = ["-E", "--filterset"]
 variables.expression.help = "Run only what the expression selects"
 
+[lint]
+description = "Lint"
+
 [lint.clippy]
 description = "Clippy"
 run = [["true"]]
+
+[test]
+description = "Test"
 
 [test.suite]
 description = "Suite"
