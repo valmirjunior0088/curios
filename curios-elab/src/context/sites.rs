@@ -386,7 +386,6 @@ impl Context<'_> {
     fn is_monad_head(&self, head: &HeadKey) -> bool {
         let concept = Global::Authored(self.syntax().monad.bind.concept.qualifier());
 
-        self.witness(&concept, &WitnessKey::from([head.clone()]))
-            .is_some()
+        self.witness_declared(&concept, &WitnessKey::from([head.clone()]))
     }
 }

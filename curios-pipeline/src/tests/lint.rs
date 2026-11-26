@@ -193,6 +193,35 @@ pub let greet() -> Io({}) =
     );
 }
 
+/// Whether a region's monad is one asks whether a witness is declared at its head, which is answered alike whichever witnesses have elaborated: a description of the unit's own monad, bound in a function written before its witness and elaborated before it, is an action.
+#[test]
+fn a_description_of_the_units_own_monad_bound_before_its_witness_is_an_action() {
+    let unit = unit_of(
+        "use /std/{Monad, Nat};
+
+pub struct Steps(A: Type): pub Type {
+    value: A,
+}
+
+pub let run() -> Steps(Nat) =
+    let skipped = Steps { value = 1 };
+    Steps { value = 2 };
+
+satisfy Monad(Steps) {
+    pure(a) = Steps { value = a },
+    bind(m, f) = f(m.value),
+}
+",
+    );
+
+    assert_eq!(
+        lints_of(&unit),
+        [
+            "unused-let: unused let\n  `skipped` is an action this program never runs\n  run it with `!`, or delete it"
+        ]
+    );
+}
+
 /// A value of no action's type is deleted: it runs nothing whatever it is.
 #[test]
 fn a_value_bound_and_never_read_is_deleted() {
