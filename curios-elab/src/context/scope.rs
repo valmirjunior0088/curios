@@ -86,6 +86,11 @@ impl<'s> Context<'s> {
             .map(|(_, local)| *local)
     }
 
+    /// The members of the group being elaborated, each beside the local it is named by ([`Context::within_group`]). Empty outside one.
+    pub(crate) fn group_members(&self) -> &[(Global, Free)] {
+        &self.underway.group
+    }
+
     /// The type the declaration `name`, written where the context stands, is read at before an instance of it is chosen: a member of the group being elaborated at its local's, any other at its scheme's.
     pub(crate) fn written_assumption(&self, name: &Global) -> Option<&Term> {
         match self.group_member(name) {

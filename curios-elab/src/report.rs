@@ -11,13 +11,15 @@ mod tests;
 
 use {
     super::{
-        Beside, Context, DeadArm, Error, Folded, HeldFrames, Rejected, callee, decided_sort_of,
-        is_monad, monad_shape, normalize, numeral_default, quality_of, reduce_forced, refold_recs,
-        settle_qualities, stuck_on_metavar, watched, zonk_solved_term_metas,
+        Beside, Context, CycleMember, DeadArm, Error, Folded, HeldFrames, Rejected, callee,
+        decided_sort_of, is_monad, monad_shape, normalize, numeral_default, quality_of,
+        reduce_forced, refold_recs, settle_qualities, stuck_on_metavar, watched,
+        zonk_solved_term_metas,
     },
+    curios_analysis::blocker,
     curios_core::{
-        Apply, ArgumentSite, Bound, Global, Intrinsic, Metavar, MetavarOrigin, Method, Quality,
-        Sort, Subterm, Term, Totality, Transient, Visit,
+        Apply, ArgumentSite, Bound, Free, Global, Intrinsic, Metavar, MetavarOrigin, Method,
+        Quality, Sort, Subterm, Term, Totality, Transient, Visit,
     },
     std::{
         collections::{BTreeMap, HashSet, VecDeque},
@@ -88,8 +90,12 @@ pub fn mismatch(
         zonk_solved_term_metas(context, that),
     ];
     let beside = held_beside(context, beside);
+    let withheld = withheld_members(context);
 
     pending(context, [this, that], move |reporting, [this, that]| {
+        if let Some(report) = read_through_withheld(reporting, &withheld, [&this, &that], false) {
+            return report;
+        }
         let report = display_mismatch(reporting, &term, &sides, &this, &that);
         said_beside(reporting, report, beside)
     })
@@ -103,11 +109,17 @@ pub fn terms_differ(
     beside: Option<Beside>,
 ) -> Error {
     let beside = held_beside(context, beside);
+    let withheld = withheld_members(context);
 
     pending(
         context,
         [written, expected],
         move |reporting, [written, expected]| {
+            if let Some(report) =
+                read_through_withheld(reporting, &withheld, [&written, &expected], true)
+            {
+                return report;
+            }
             let report = Error::terms_differ(
                 resolved_for_display(reporting, &written),
                 resolved_for_display(reporting, &expected),
@@ -115,6 +127,63 @@ pub fn terms_differ(
             said_beside(reporting, report, beside)
         },
     )
+}
+
+/// The members of the group being elaborated that their turns withhold, each by the local it is read through and as a report names it. Read where a refusal is raised, since its report is built past the group.
+fn withheld_members(context: &Context) -> Vec<(Free, CycleMember)> {
+    context
+        .group_members()
+        .iter()
+        .filter(|(_, local)| {
+            matches!(
+                context.var_reduct(local).map(|slot| &**slot),
+                Some(Subterm::Metavar(slot)) if context.is_withheld_rec_slot(slot.id)
+            )
+        })
+        .map(|(name, local)| {
+            let member = match (
+                context.is_witness_declaration(name),
+                context.written_assumption(name),
+            ) {
+                (true, Some(type_)) => CycleMember::Witness {
+                    name: *name,
+                    type_: Box::new(type_.clone()),
+                },
+                _ => CycleMember::Named(*name),
+            };
+            (*local, member)
+        })
+        .collect()
+}
+
+/// A read through one of `withheld`, members their turns found not known to terminate, where a side the conversion compared is stuck on it once reduced: the member stands for nothing there, so what disagrees is its recursion and not the program's terms ([`Error::MemberNotKnownToTerminate`]). `None` where no side is.
+fn read_through_withheld(
+    reporting: &mut Reporting,
+    withheld: &[(Free, CycleMember)],
+    sides: [&Term; 2],
+    terms: bool,
+) -> Option<Error> {
+    if withheld.is_empty() {
+        return None;
+    }
+    let member = sides.into_iter().find_map(|side| {
+        let reduced = reduce_forced(reporting, side.clone()).ok()?;
+        // A member's local reduces to its slot where its definition stands, and a held side spells the slot by the local where it does not.
+        let local = match &**blocker(&reduced)? {
+            Subterm::Var(var) => *var.as_free()?,
+            Subterm::Metavar(slot) => *reporting.rec_slot_name(slot.id)?,
+            _ => return None,
+        };
+        withheld
+            .iter()
+            .find(|(named, _)| *named == local)
+            .map(|(_, member)| member.clone())
+    })?;
+    let [found, expected] = sides.map(|side| resolved_for_display(reporting, side));
+
+    Some(Error::member_not_known_to_terminate(
+        member, found, expected, terms,
+    ))
 }
 
 /// `beside` with a rejected candidate held as reading the context gives it, so its report shows the solutions that had landed where the mismatch was raised.

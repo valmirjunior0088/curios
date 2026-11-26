@@ -78,8 +78,8 @@ impl ReaderScope {
     }
 }
 
-/// One member of an [`Error::DeclarationCycle`] or an [`Error::GroupApart`]: a declaration by its name, or a witness, which a reader knows by the type it is declared at and a report places by its identity.
-#[derive(Debug)]
+/// One member of an [`Error::DeclarationCycle`] or an [`Error::GroupApart`], or the member an [`Error::MemberNotKnownToTerminate`] is read through: a declaration by its name, or a witness, which a reader knows by the type it is declared at and a report places by its identity.
+#[derive(Debug, Clone)]
 pub enum CycleMember {
     /// A definition, by its name.
     Named(Global),
@@ -485,6 +485,18 @@ macro_rules! shown_terms {
                 $visit(inferred);
                 $visit(expected);
             }
+            Self::MemberNotKnownToTerminate {
+                member,
+                inferred,
+                expected,
+                ..
+            } => {
+                if let CycleMember::Witness { type_, .. } = member {
+                    $visit(type_);
+                }
+                $visit(inferred);
+                $visit(expected);
+            }
             Self::StrandedSequencing { sequenced, region } => {
                 if let Some(sequenced) = sequenced {
                     $visit(sequenced);
@@ -688,6 +700,14 @@ pub enum Error {
         /// What conversion declined to compare on the way here, where it declined anything.
         declined: Option<Declined>,
         /// Whether the two are terms a type states at one position, where neither is a type and neither was inferred: the argument a call was written with against what its declared type holds in that argument's place. A report then says that two terms differ, and names the one the program wrote as that.
+        terms: bool,
+    },
+    /// A conversion stuck on a read through a member of a recursive group whose turn found it not known to terminate, which stands for nothing there, so its two sides could not agree: what disagrees is that member's recursion, not the program's terms (`Turns`). Reported at the read, with the member's declaration as a note.
+    MemberNotKnownToTerminate {
+        member: CycleMember,
+        inferred: Box<Term>,
+        expected: Box<Term>,
+        /// Whether the two are terms a type states at one position, as a [`Error::TypeMismatch`]'s are.
         terms: bool,
     },
     /// A candidate conversion found for a metavariable that does not check where the metavariable was born: what a failed conversion reports in place of the pair it was comparing, which it did not find apart. What is refused is a solution, so the report names the metavariable, shows the candidate, and gives the check's own refusal beneath.
@@ -1297,6 +1317,7 @@ variants!(Error {
     BoolLiteralOutOfRange,
     FltLiteralOutOfRange,
     TypeMismatch,
+    MemberNotKnownToTerminate,
     RejectedCandidate,
     StrandedSequencing,
     UnembeddedAction,
@@ -1492,6 +1513,21 @@ impl Error {
             expected: Box::new(expected.into()),
             declined: None,
             terms: true,
+        }
+    }
+
+    /// A read through `member`, which its turn found not known to terminate, where a conversion of `inferred` and `expected` stuck on it: two terms a type states at one position where `terms`, as [`Error::terms_differ`]'s are.
+    pub fn member_not_known_to_terminate<U: Into<Term>, V: Into<Term>>(
+        member: CycleMember,
+        inferred: U,
+        expected: V,
+        terms: bool,
+    ) -> Self {
+        Self::MemberNotKnownToTerminate {
+            member,
+            inferred: Box::new(inferred.into()),
+            expected: Box::new(expected.into()),
+            terms,
         }
     }
 
@@ -2684,6 +2720,13 @@ impl Error {
             Self::IndexedByItsGroup { member, .. } => note(
                 Anchors::label(anchors, member),
                 format!("`{}` is declared here", spelling.symbol(member)),
+            )
+            .into_iter()
+            .collect(),
+            Self::MemberNotKnownToTerminate { member, .. } => note(
+                Anchors::label(anchors, member.name()),
+                "its recursion is here; a member is read through once every call among the members descends"
+                    .to_string(),
             )
             .into_iter()
             .collect(),

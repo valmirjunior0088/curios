@@ -45,6 +45,38 @@ fn spent(f: &mut Said, refusal: &ReduceError) {
     }
 }
 
+/// A mismatch's two sides, what was found before what was expected, the found side named `side`.
+///
+/// Reports erase universe instances and splice nested concatenations, which reads better everywhere except here: when the instances or the grouping *are* the disagreement, both sides render as one string and the message states nothing. Detected on the rendering rather than on the terms, so it covers every axis that could collapse two sides into one spelling and not merely the ones that are known to. Grouping is tried first because it changes nothing where no nesting is present, whereas two polymorphic instances always differ once their levels are shown, so trying the universes first would answer with two metavariable ids where the nesting was the difference.
+fn sides(f: &mut Said, spelling: &Rc<Spelling>, side: &str, found: &Term, expected: &Term) {
+    let plain = (
+        found.spelled(spelling).to_string(),
+        expected.spelled(spelling).to_string(),
+    );
+    let detailed = (plain.0 == plain.1).then(|| {
+        let render = |spelling: Spelling| {
+            let spelling = Rc::new(spelling);
+            (
+                found.spelled(&spelling).to_string(),
+                expected.spelled(&spelling).to_string(),
+            )
+        };
+        let grouped = render(spelling.as_ref().clone().with_faithful_grouping());
+        if grouped.0 != grouped.1 {
+            return grouped;
+        }
+        let shown = render(spelling.as_ref().clone().with_shown_universes());
+        // Neither grouping nor universes was the axis that collapsed them: fall back to core's own spelling, which abbreviates nothing. Unreadable beside the shortened form, and better than a message that says two things are unequal in identical words.
+        match shown.0 == shown.1 {
+            false => shown,
+            true => render(spelling.unabbreviated()),
+        }
+    });
+    let (shown_found, shown_expected) = detailed.unwrap_or(plain);
+    f.stating(format_args!("{side}: {}", Code(&shown_found)));
+    f.stating(format_args!("expected: {}", Code(&shown_expected)));
+}
+
 /// What a report on a dead arm adds, a fact each: that the arm is never taken and what says so — its own guard, the guard of an arm around it that its case contradicts, or its scrutinee's indices, which also say it may be left out.
 pub fn dead_arm_note(said: &mut Said, dead: &DeadArm, spelling: &Rc<Spelling>) {
     said.stating("this arm is never taken");
@@ -717,47 +749,35 @@ impl Displayed<'_> {
                 f.stating(format_args!("with: {}", Code(that.spelled(spelling))));
                 spent(f, refusal)
             }
+            Error::MemberNotKnownToTerminate {
+                member,
+                inferred,
+                expected,
+                terms,
+            } => {
+                f.text("read through a member not known to terminate");
+                f.stating(format_args!(
+                    "{} is read here, and its recursion is not known to descend, so it stands for nothing",
+                    member.spelled(spelling)
+                ));
+                let side = match terms {
+                    true => "written",
+                    false => "inferred",
+                };
+                sides(f, spelling, side, inferred, expected);
+            }
             Error::TypeMismatch {
                 inferred,
                 expected,
                 declined,
                 terms,
             } => {
-                // Reports erase universe instances and splice nested concatenations, which reads better everywhere except here: when the instances or the grouping *are* the disagreement, both sides render as one string and the message states nothing. Detected on the rendering rather than on the terms, so it covers every axis that could collapse two sides into one spelling and not merely the ones that are known to. Grouping is tried first because it changes nothing where no nesting is present, whereas two polymorphic instances always differ once their levels are shown, so trying the universes first would answer with two metavariable ids where the nesting was the difference.
-                let plain = (
-                    inferred.spelled(spelling).to_string(),
-                    expected.spelled(spelling).to_string(),
-                );
-                let detailed = (plain.0 == plain.1).then(|| {
-                    let render = |spelling: Spelling| {
-                        let spelling = Rc::new(spelling);
-                        (
-                            inferred.spelled(&spelling).to_string(),
-                            expected.spelled(&spelling).to_string(),
-                        )
-                    };
-                    let grouped = render(spelling.as_ref().clone().with_faithful_grouping());
-                    if grouped.0 != grouped.1 {
-                        return grouped;
-                    }
-                    let shown = render(spelling.as_ref().clone().with_shown_universes());
-                    // Neither grouping nor universes was the axis that collapsed them: fall back to core's own spelling, which abbreviates nothing. Unreadable beside the shortened form, and better than a message that says two things are unequal in identical words.
-                    match shown.0 == shown.1 {
-                        false => shown,
-                        true => render(spelling.unabbreviated()),
-                    }
-                });
-                let (shown_inferred, shown_expected) = match detailed {
-                    Some(detailed) => detailed,
-                    None => plain,
-                };
                 let (tag, side) = match terms {
                     true => ("term mismatch", "written"),
                     false => ("type mismatch", "inferred"),
                 };
                 f.text(tag);
-                f.stating(format_args!("{side}: {}", Code(&shown_inferred)));
-                f.stating(format_args!("expected: {}", Code(&shown_expected)));
+                sides(f, spelling, side, inferred, expected);
                 // The collision every beginner meets once: a type handed over where a value of it belonged — `Eq/cong(f, Eq()(a, b))` with the statement in the proof's seat. The mismatch line already says `Prop` against `Eq()(…)`, but only to a reader who knows a proposition is a type and a proof is its inhabitant, which is the very thing they have not learned yet. One sentence names the level confusion; the `Type` twin is the same mistake with a type where a value belonged.
                 let inferred_is_sort = matches!(&***inferred, Subterm::Sort(_));
                 let expected_is_sort = matches!(&***expected, Subterm::Sort(_));

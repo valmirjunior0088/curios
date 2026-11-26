@@ -290,3 +290,53 @@ fn a_group_member_also_resolves_through_its_own_entry() {
 
     assert_eq!(run(source), b"(7)");
 }
+
+/// Over a mutual `Tree` and `Forest`, a concept `Law` whose law reads its superclass `Base`, a witness of each declared as one group, and `Law(Forest)`'s `same` reading its own law at `${rest}`.
+const LAWS: &str = r#"
+use /std/{Nat, Eq, print};
+induct Tree: pub Type | leaf(Nat) | node(Forest) and Forest: pub Type | nil() | cons(Tree, Forest) end
+pub concept Base(A: Type): pub Type { size(a: A) -> Nat, }
+pub concept Law(A: Type): pub Type { use Base(A), same(a: A) -> Eq()(Base/size(a), Base/size(a)), }
+satisfy Base(Tree) { size(t) = match t | leaf(n) => n | node(f) => Base/size(f) end, }
+and Base(Forest) { size(f) = match f | nil() => 0 | cons(t, rest) => Base/size(t) + Base/size(rest) end, }
+satisfy Law(Tree) {
+    same(t) =
+        match t
+        | leaf(_) => Eq/refl()
+        | node(f) =>
+            let _: Eq()(Base/size(f), Base/size(f)) = Law/same(f);
+            Eq/refl()
+        end,
+}
+and Law(Forest) {
+    same(f) =
+        match f
+        | nil() => Eq/refl()
+        | cons(t, rest) =>
+            let _: Eq()(Base/size(t), Base/size(t)) = Law/same(t);
+            let _: Eq()(Base/size(${rest}), Base/size(${rest})) = Law/same(${rest});
+            Eq/refl()
+        end,
+}
+print("ok")
+"#;
+
+// A group's law over a superclass reads each member's superclass through the member's entry once the member's turn finds it known to terminate: every law here recurses on a smaller value, so `Law(Tree)` reads `Law(Forest)`'s `Base` as the registered one, and `Law(Forest)` its own.
+#[test]
+fn a_law_over_a_superclass_reads_through_each_members_entry_in_its_group() {
+    assert_eq!(run(&fill!(LAWS, rest = "rest")), b"ok");
+}
+
+// A member whose recursion does not descend stands for nothing in its group, so a read through it is refused as that, naming the member, where the conversion stuck on it would show a local the program never wrote.
+#[test]
+fn a_read_through_a_member_not_known_to_terminate_is_refused_naming_the_member() {
+    let report = error(&fill!(LAWS, rest = "f"));
+    assert!(
+        report.contains("read through a member not known to terminate")
+            && report.contains(
+                "the witness of `Law(Forest)` is read here, and its recursion is not known to descend, so it stands for nothing"
+            )
+            && report.contains("its recursion is here"),
+        "expected the read named by its member and that member's recursion:\n{report}"
+    );
+}
