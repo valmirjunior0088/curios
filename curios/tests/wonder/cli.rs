@@ -590,8 +590,8 @@ fn what_the_compiler_provides_is_answered_on_the_path_asked() {
     assert!(
         option.contains(concat!(
             "│  pub induct Option(A: Sort): pub Type\n",
-            "│  | some(A)\n",
             "│  | none()\n",
+            "│  | some(A)\n",
             "│  end\n",
             "├─ try; curios wonder --name /std/Option --witnesses\n",
             "└─ [declaration] /std/Option\n",

@@ -219,7 +219,8 @@ fn a_re_exported_path_answers_the_declaration_behind_it() {
             "/std/Spell",
             "/std/Monad",
             "/std/Ord",
-            "/std/Hash"
+            "/std/Hash",
+            "/std/Hash/Key"
         ]
     );
 }
