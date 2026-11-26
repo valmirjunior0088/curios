@@ -10,7 +10,7 @@ pub struct Slot: pub Type {
 }
 
 --- The type a value read as `A` is held at under `presence`: an `Option` where it may be absent, and `A` itself where it is required or has a default.
-pub let presented(A: Type, presence: Presence(A)) -> Type =
+pub let Presented(A: Type, presence: Presence(A)) -> Type =
     match presence
     | required() => A
     | optional() => Option(A)
@@ -23,29 +23,20 @@ pub let Carrier(k: Kind) -> Type =
     | flag() => Bool
     | count() => Nat
     | toggle(_) => Bool
-    | option(v, presence) => presented(v.A, presence)
+    | option(v, presence) => Presented(v.A, presence)
     | many(v) => List(v.A)
-    | choice(A, _, presence) => presented(A, presence)
+    | choice(A, _, presence) => Presented(A, presence)
     end;
 
 --- What a group's parse holds: its options, in order.
 pub let option_slots(fields: List(Field)) -> List(Slot) =
-    match fields
-    | [] => []
-    | [f, ..more] => [Slot { name = f.long, T = Carrier(f.kind) }, ..option_slots(more)]
-    end;
+    List/map(fields, (f) => Slot { name = f.long, T = Carrier(f.kind) });
 
 pub let required_slots(ps: List(Positional)) -> List(Slot) =
-    match ps
-    | [] => []
-    | [p, ..more] => [Slot { name = p.name, T = p.v.A }, ..required_slots(more)]
-    end;
+    List/map(ps, (p) => Slot { name = p.name, T = p.v.A });
 
 pub let optional_slots(ps: List(Positional)) -> List(Slot) =
-    match ps
-    | [] => []
-    | [p, ..more] => [Slot { name = p.name, T = Option(p.v.A) }, ..optional_slots(more)]
-    end;
+    List/map(ps, (p) => Slot { name = p.name, T = Option(p.v.A) });
 
 pub let rest_slots(p: Option(Positional)) -> List(Slot) =
     match p
@@ -53,16 +44,13 @@ pub let rest_slots(p: Option(Positional)) -> List(Slot) =
     | some(r) => [Slot { name = r.name, T = List(r.v.A) }]
     end;
 
-pub let joined(a: List(Slot), b: List(Slot)) -> List(Slot) =
-    match a | [] => b | [s, ..more] => [s, ..joined(more, b)] end;
-
 --- What a leaf's parse holds, in order: every option, then every positional.
 pub let slots(options: List(Field), positionals: Positionals) -> List(Slot) =
-    joined(
-        option_slots(options),
-        joined(
-            required_slots(positionals.required),
-            joined(optional_slots(positionals.optional), rest_slots(positionals.rest))));
+    [
+        ..option_slots(options),
+        ..required_slots(positionals.required),
+        ..optional_slots(positionals.optional),
+        ..rest_slots(positionals.rest)];
 
 --- What a command's parse holds by name: a leaf's options and positionals, and a group's options.
 pub let Slots(c: Command) -> List(Slot) =
@@ -79,12 +67,7 @@ pub induct Values: (List(Slot)) -> pub Type
 | cons(@s: Slot, @rest: List(Slot), head: s.T, tail: Values(rest)): ([s, ..rest])
 end
 
-pub let appended(
-    @a: List(Slot),
-    @b: List(Slot),
-    x: Values(a),
-    y: Values(b),
-) -> Values(joined(a, b)) =
+pub let appended(@a: List(Slot), @b: List(Slot), x: Values(a), y: Values(b)) -> Values([..a, ..b]) =
     match x
     | nil() => y
     | cons(head, tail) => Values/cons(head, appended(tail, y))
@@ -129,14 +112,7 @@ pub let Lookup(spec: List(Slot), name: Str) -> Type =
 
 --- That `name` is one of `spec`'s, decided by reduction: a name the declaration lacks is refused where it is written.
 pub let Has(spec: List(Slot), name: Str) -> Prop =
-    match spec
-    | [] => Bool/False
-    | [s, ..rest] =>
-        match s.name == name
-        | true => Bool/True
-        | false => Has(rest, name)
-        end
-    end;
+    Bool/Holds(List/any(spec, (s) => s.name == name));
 
 let read(
     @spec: List(Slot),
@@ -164,14 +140,7 @@ pub let get(
 
 --- That `name` is one of `commands`', decided by reduction.
 pub let HasIn(commands: List(Command), name: Str) -> Prop =
-    match commands
-    | [] => Bool/False
-    | [c, ..rest] =>
-        match /std/Cli/name(c) == name
-        | true => Bool/True
-        | false => HasIn(rest, name)
-        end
-    end;
+    Bool/Holds(List/any(commands, (c) => /std/Cli/name(c) == name));
 
 --- The first of `commands` named `name`.
 pub let NamedIn(commands: List(Command), name: Str) -> Command =

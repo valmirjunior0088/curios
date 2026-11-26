@@ -1,7 +1,7 @@
 use /std/{Str, Bytes, Nat, Bool, List, Option, Result, Map, Fmt};
 use /std/Cli/{Value, nat, Field, Presence, Positional, Positionals, Command, Failure, Reading,
     Carrier, Values, Parsed, Chosen, option_slots, slots, scan};
-use /std/Cli/Parsed/{presented, required_slots, optional_slots, rest_slots, appended};
+use /std/Cli/Parsed/{Presented, required_slots, optional_slots, rest_slots, appended};
 use /std/Cli/scan/{Seen, Raw};
 
 let lifted(@A: Type, @B: Type, r: Reading(A), f: (A) -> B) -> Reading(B) =
@@ -85,14 +85,14 @@ let picks(seen: List(Seen)) -> List(Nat) =
             | _ => held
             end);
 
-let present(@A: Type, presence: Presence(A), a: A) -> presented(A, presence) =
+let present(@A: Type, presence: Presence(A), a: A) -> Presented(A, presence) =
     match presence
     | required() => a
     | optional() => Option/some(a)
     | default(_) => a
     end;
 
-let absent(@A: Type, presence: Presence(A), name: Str) -> Result(Failure, presented(A, presence)) =
+let absent(@A: Type, presence: Presence(A), name: Str) -> Result(Failure, Presented(A, presence)) =
     match presence
     | required() => Result/failure(Failure/missing_required(name))
     | optional() => Result/success(Option/none())
