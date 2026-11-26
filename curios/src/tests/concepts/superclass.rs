@@ -137,8 +137,8 @@ fn a_literals_law_is_stated_over_the_superclass_it_writes() {
     let report = error(source);
     assert!(
         report.contains(
-            "inferred: `(a: Nat, b: Nat) -> /std/Eq(@/std/Ordering)(Nat/ord(a, b), Bytes/ord(Nat/hash(a), Nat/hash(b)))`"
-        ) && report.contains(", /std/Ordering/eq())`"),
+            "expected: `(a: Nat, b: Nat) -> /std/Eq(@/std/Ordering)(/std/Ord/ord(a, b), /std/Ordering/eq())`"
+        ),
         "{report}"
     );
 }

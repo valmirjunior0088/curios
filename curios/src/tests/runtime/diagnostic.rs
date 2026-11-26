@@ -143,6 +143,26 @@ fn keeps_the_name_of_a_stalled_unfolding() {
     );
 }
 
+// A method's call keeps its path the same way: resolution puts `Ord(Nat)`'s witness under `Ord/ord(a, b)`, whose unfolding stalls at `Nat`'s comparison, a `match` on `a < b` the reader never wrote, so the call stays as the reader wrote it.
+#[test]
+fn keeps_the_call_of_a_method_whose_unfolding_stalls() {
+    let source = r#"
+        use /std/{Nat, Eq, Ord, Ordering};
+        let claim(a: Nat, b: Nat) -> Eq()(Ord/ord(a, b), Ordering/eq()) = Eq/refl();
+        claim
+        "#;
+
+    let error = error(source);
+    assert!(
+        error.contains("expected: `Eq(@Ordering)(Ord/ord(a, b), Ordering/eq())`"),
+        "a method's stalled call not kept by its path: {error}"
+    );
+    assert!(
+        !error.contains("a < b"),
+        "the method's body leaked into the report: {error}"
+    );
+}
+
 // The same name where a report is raised on a type's reduct with no second side to put in display form beside it: a member that is no type, a projection off what is no tuple and an elimination of what is not its carrier each reduce a type to learn it is the wrong one, and the reduct spells a family under its parameters alone as the group it unfolds to. Each names the family.
 #[test]
 fn names_a_family_in_a_report_raised_on_a_reduct() {
