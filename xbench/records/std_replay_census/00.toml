@@ -1,0 +1,1658 @@
+taken = 2026-11-26
+subject = "curios 0.16.25 (ee7746426)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "beside 0/declarations"
+measure = "count"
+readings = [[3230], [3230]]
+
+[[figures]]
+name = "beside 0/others//std/Eq/Eq"
+measure = "count"
+readings = [[412], [412]]
+
+[[figures]]
+name = "beside 0/others//std/Eq/subst"
+measure = "count"
+readings = [[41], [41]]
+
+[[figures]]
+name = "beside 0/others//std/Ord/Ordering/Ordering"
+measure = "count"
+readings = [[184], [184]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Spell/record"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise/the witness in '/std/Tuple'"
+measure = "count"
+readings = [[1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "beside 0/others//std/Nat/tests/products/Div"
+measure = "count"
+readings = [[8], [8]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Nat/log2/bounds"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Nat/hash/from_count"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Nat/hash/of_lt"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Nat/hash/leads"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Nat/Divides/Divides"
+measure = "count"
+readings = [[17], [17]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Nat/Coprime/quotients"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Nat/Scale/of"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Int/shl/unique"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Int/Sign"
+measure = "count"
+readings = [[15], [15]]
+
+[[figures]]
+name = "beside 0/others//std/Flt/Rounding/Rounding"
+measure = "count"
+readings = [[56], [56]]
+
+[[figures]]
+name = "beside 0/others//std/Flt/Class/Class"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 0/others//std/Flt/exact/Mode"
+measure = "count"
+readings = [[37], [37]]
+
+[[figures]]
+name = "beside 0/others//std/Flt/reduction/Term"
+measure = "count"
+readings = [[9], [9]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Flt/digits/normalize"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Flt/digits/layout"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Flt/digits/render"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Flt/grammar/of_decimal_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Bytes/of_nat_inj"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise/the witness in '/std/Bytes'"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Char/GraphemeBreak/GraphemeBreak"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "beside 0/others//std/Char/IndicConjunctBreak/IndicConjunctBreak"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "beside 0/others//std/Char/EastAsianWidth/EastAsianWidth"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Char/to_utf8"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Str/Valid/seam_before"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Str/Valid/seam_after"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Str/Valid/begins"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Str/length/concat"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Str/normalization/composition"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Str/normalization/normalized"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Str/Class"
+measure = "count"
+readings = [[458], [458]]
+
+[[figures]]
+name = "beside 0/others//std/Str/Scan"
+measure = "count"
+readings = [[510], [510]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Str/replaced"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Str/of_bytes_lossy"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/List/tests/whole_and_in_order"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/List/tests/_two_sorts_order_by_both_keys"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/List/Member/Member"
+measure = "count"
+readings = [[19], [19]]
+
+[[figures]]
+name = "beside 0/others//std/List/Permutation/Permutation"
+measure = "count"
+readings = [[11], [11]]
+
+[[figures]]
+name = "beside 0/others//std/List/Pairwise/Pairwise"
+measure = "count"
+readings = [[6], [6]]
+
+[[figures]]
+name = "beside 0/others//std/List/sort_by/Layered"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/List/sort_by/push_layered"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/List/sort_by/push_ordered"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/List/partition"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/List/unzip"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/List/traverse"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Vec/append"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Result/Result"
+measure = "count"
+readings = [[134], [134]]
+
+[[figures]]
+name = "beside 0/others//std/Map/digits/Parted"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "beside 0/others//std/Map/internal/Node/Node"
+measure = "count"
+readings = [[92], [92]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Map/internal/Node/found, /std/Map/internal/Node/found_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Map/internal/Node/found, /std/Map/internal/Node/found_in"
+measure = "count"
+readings = [[7], [7]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Map/internal/Node/missing, /std/Map/internal/Node/missing_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Map/internal/Node/branch_stands"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Map/internal/Node/first_filled"
+measure = "count"
+readings = [[15], [15]]
+
+[[figures]]
+name = "beside 0/others//std/Map/internal/Node/Inserted"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Map/internal/Node/insert"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Map/internal/Node/Removed"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "beside 0/others//std/Map/internal/Node/lone_at"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Map/internal/Node/collapsed"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Map/internal/Node/branch_emptied"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Map/internal/Node/remove"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Map/internal/Node/mapped, /std/Map/internal/Node/mapped_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Map/internal/Node/ascending, /std/Map/internal/Node/ascending_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Map/internal/Node/greatest_above, /std/Map/internal/Node/greatest_above_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Map/internal/Node/all_miss"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 0/others//std/Map/internal/Node/either_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Map/internal/Node/entry_found, /std/Map/internal/Node/entry_found_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Map/internal/Node/entry_found, /std/Map/internal/Node/entry_found_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Map/internal/Node/canonical, /std/Map/internal/Node/canonical_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Map/internal/Node/canonical, /std/Map/internal/Node/canonical_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Map/try_get/of_insert_other"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Map/try_get/of_remove_other"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Map/try_get/either"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Map/try_get/inserted_all, /std/Map/try_get/inserted_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Map/try_get/kept_all, /std/Map/try_get/kept_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Parse/str/back"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Parse/str/take_while"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/internal/Status/Status"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 0/others//std/internal/Status/Settled"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 0/others//std/Io/tests/reader/Fed"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 0/others//std/Io/Error/Error"
+measure = "count"
+readings = [[13], [13]]
+
+[[figures]]
+name = "beside 0/others//std/Io/Reader/Step"
+measure = "count"
+readings = [[13], [13]]
+
+[[figures]]
+name = "beside 0/others//std/Io/Reader/Stop"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 0/others//std/Io/Scope/Ended"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Io/Chunk"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 0/others//std/Io/Branch"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Io/all"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Channel/internal/Queue/Stack"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "beside 0/others//std/Channel/Push"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Channel/Take"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Channel/Side"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 0/others//std/Test/Test"
+measure = "count"
+readings = [[8], [8]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Test/all"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Fmt/Fmt"
+measure = "count"
+readings = [[70], [70]]
+
+[[figures]]
+name = "beside 0/others//std/time/Month/Month"
+measure = "count"
+readings = [[6], [6]]
+
+[[figures]]
+name = "beside 0/others//std/time/Weekday/Weekday"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/time/Date/forward"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/time/Date/backward"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/time/Offset/Offset"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "beside 0/asked otherwise/the witness in '/std/time/OffsetDateTime'"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Proc/Exit/Exit"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Proc/Stdio"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 0/others//std/fs/Kind"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "beside 0/others//std/File/Mode"
+measure = "count"
+readings = [[6], [6]]
+
+[[figures]]
+name = "beside 0/others//std/Serial/Parity"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Serial/Flow"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Json/Json"
+measure = "count"
+readings = [[11], [11]]
+
+[[figures]]
+name = "beside 0/others//std/Toml/Error/Rule"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "beside 0/others//std/Toml/Error/Error"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "beside 0/others//std/Toml/build/Seg"
+measure = "count"
+readings = [[6], [6]]
+
+[[figures]]
+name = "beside 0/others//std/Toml/build/Origin"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 0/others//std/Toml/build/Act"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Toml/date_time/dated"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Toml/date_time/offset_tail"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Toml/decode/Stmt"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Toml/Toml"
+measure = "count"
+readings = [[19], [19]]
+
+[[figures]]
+name = "beside 0/others//std/Html/Html"
+measure = "count"
+readings = [[11], [11]]
+
+[[figures]]
+name = "beside 0/others//std/Html/Attr"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "beside 0/others//std/http/tests/cuts/Fed"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 0/others//std/http/Method/Method"
+measure = "count"
+readings = [[11], [11]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/http/Field/Value/year_digits"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/http/Field/Value/of_utc"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/http/Refusal/Refusal"
+measure = "count"
+readings = [[30], [30]]
+
+[[figures]]
+name = "beside 0/others//std/http/Framing/Framing"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 0/others//std/http/Framing/Codings"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/http/read/Chunking"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "beside 0/others//std/http/Url/Scheme/Scheme"
+measure = "count"
+readings = [[6], [6]]
+
+[[figures]]
+name = "beside 0/others//std/http/Request/Address"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/http/Server/Unread"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 0/others//std/http/Error"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "beside 0/others//std/Cli/tests/values/Format"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 0/others//std/Cli/scan/Seen"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 0/others//std/Cli/scan/Claim"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "beside 0/others//std/Cli/Parsed/Values"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "beside 0/others//std/Cli/Parsed/Parsed, /std/Cli/Parsed/Chosen"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 0/others//std/Cli/Presence"
+measure = "count"
+readings = [[9], [9]]
+
+[[figures]]
+name = "beside 0/others//std/Cli/Kind"
+measure = "count"
+readings = [[16], [16]]
+
+[[figures]]
+name = "beside 0/others//std/Cli/Command"
+measure = "count"
+readings = [[20], [20]]
+
+[[figures]]
+name = "beside 0/others//std/Cli/Spelled"
+measure = "count"
+readings = [[10], [10]]
+
+[[figures]]
+name = "beside 0/others//std/Cli/Problem"
+measure = "count"
+readings = [[11], [11]]
+
+[[figures]]
+name = "beside 0/others//std/Cli/Failure"
+measure = "count"
+readings = [[12], [12]]
+
+[[figures]]
+name = "beside 0/others//std/Cli/Reading"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Cli/main"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Tui/Color/Color"
+measure = "count"
+readings = [[19], [19]]
+
+[[figures]]
+name = "beside 0/others//std/Tui/Tile/Tile"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Tui/Frame/of_view"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Tui/View/View"
+measure = "count"
+readings = [[13], [13]]
+
+[[figures]]
+name = "beside 0/others//std/Tui/Key/Code/Code"
+measure = "count"
+readings = [[7], [7]]
+
+[[figures]]
+name = "beside 0/others//std/Tui/Mode/Mode"
+measure = "count"
+readings = [[6], [6]]
+
+[[figures]]
+name = "beside 0/others//std/Tui/Input/decode/Step"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Tui/Input/Input"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "beside 0/others//std/Tui/Reply/Reply"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "beside 0/others//std/Tui/Event/Event"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Tui/Listing/new"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/asked otherwise//std/Tui/Listing/handle"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Tui/Directive/Directive"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 0/others//std/Tui/Wake"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/declarations"
+measure = "count"
+readings = [[3230], [3230]]
+
+[[figures]]
+name = "beside 1/others//std/Eq/Eq"
+measure = "count"
+readings = [[412], [412]]
+
+[[figures]]
+name = "beside 1/others//std/Eq/subst"
+measure = "count"
+readings = [[41], [41]]
+
+[[figures]]
+name = "beside 1/others//std/Bool/and/both"
+measure = "count"
+readings = [[41], [41]]
+
+[[figures]]
+name = "beside 1/others//std/Ord/Ordering/Ordering"
+measure = "count"
+readings = [[183], [183]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Spell/record"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise/the witness in '/std/Tuple'"
+measure = "count"
+readings = [[1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "beside 1/others//std/Nat/tests/products/Div"
+measure = "count"
+readings = [[8], [8]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Nat/log2/bounds"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Nat/hash/from_count"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Nat/hash/of_lt"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Nat/hash/leads"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Nat/Divides/Divides"
+measure = "count"
+readings = [[17], [17]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Nat/Coprime/quotients"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Nat/Scale/of"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Int/shl/unique"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Int/Sign"
+measure = "count"
+readings = [[15], [15]]
+
+[[figures]]
+name = "beside 1/others//std/Flt/Rounding/Rounding"
+measure = "count"
+readings = [[56], [56]]
+
+[[figures]]
+name = "beside 1/others//std/Flt/Class/Class"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 1/others//std/Flt/exact/Mode"
+measure = "count"
+readings = [[37], [37]]
+
+[[figures]]
+name = "beside 1/others//std/Flt/reduction/Term"
+measure = "count"
+readings = [[9], [9]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Flt/digits/normalize"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Flt/digits/layout"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Flt/digits/render"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Flt/grammar/of_decimal_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Bytes/of_nat_inj"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise/the witness in '/std/Bytes'"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Char/GraphemeBreak/GraphemeBreak"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "beside 1/others//std/Char/IndicConjunctBreak/IndicConjunctBreak"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "beside 1/others//std/Char/EastAsianWidth/EastAsianWidth"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Char/to_utf8"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Str/Valid/seam_before"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Str/Valid/seam_after"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Str/Valid/begins"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Str/length/concat"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Str/normalization/composition"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Str/normalization/normalized"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Str/Class"
+measure = "count"
+readings = [[458], [458]]
+
+[[figures]]
+name = "beside 1/others//std/Str/Scan"
+measure = "count"
+readings = [[510], [510]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Str/replaced"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Str/of_bytes_lossy"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/List/tests/whole_and_in_order"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/List/tests/_two_sorts_order_by_both_keys"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/List/Member/Member"
+measure = "count"
+readings = [[19], [19]]
+
+[[figures]]
+name = "beside 1/others//std/List/Permutation/Permutation"
+measure = "count"
+readings = [[11], [11]]
+
+[[figures]]
+name = "beside 1/others//std/List/Pairwise/Pairwise"
+measure = "count"
+readings = [[6], [6]]
+
+[[figures]]
+name = "beside 1/others//std/List/sort_by/Layered"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/List/sort_by/push_layered"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/List/sort_by/push_ordered"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/List/partition"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/List/unzip"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/List/traverse"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Vec/append"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Result/Result"
+measure = "count"
+readings = [[134], [134]]
+
+[[figures]]
+name = "beside 1/others//std/Map/digits/Parted"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "beside 1/others//std/Map/internal/Node/Node"
+measure = "count"
+readings = [[92], [92]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Map/internal/Node/found, /std/Map/internal/Node/found_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Map/internal/Node/found, /std/Map/internal/Node/found_in"
+measure = "count"
+readings = [[7], [7]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Map/internal/Node/missing, /std/Map/internal/Node/missing_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Map/internal/Node/branch_stands"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Map/internal/Node/first_filled"
+measure = "count"
+readings = [[15], [15]]
+
+[[figures]]
+name = "beside 1/others//std/Map/internal/Node/Inserted"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Map/internal/Node/insert"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Map/internal/Node/Removed"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "beside 1/others//std/Map/internal/Node/lone_at"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Map/internal/Node/collapsed"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Map/internal/Node/branch_emptied"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Map/internal/Node/remove"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Map/internal/Node/mapped, /std/Map/internal/Node/mapped_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Map/internal/Node/ascending, /std/Map/internal/Node/ascending_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Map/internal/Node/greatest_above, /std/Map/internal/Node/greatest_above_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Map/internal/Node/all_miss"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 1/others//std/Map/internal/Node/either_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Map/internal/Node/entry_found, /std/Map/internal/Node/entry_found_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Map/internal/Node/entry_found, /std/Map/internal/Node/entry_found_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Map/internal/Node/canonical, /std/Map/internal/Node/canonical_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Map/internal/Node/canonical, /std/Map/internal/Node/canonical_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Map/try_get/of_insert_other"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Map/try_get/of_remove_other"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Map/try_get/either"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Map/try_get/inserted_all, /std/Map/try_get/inserted_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Map/try_get/kept_all, /std/Map/try_get/kept_in"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Parse/str/back"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Parse/str/take_while"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/internal/Status/Status"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 1/others//std/internal/Status/Settled"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 1/others//std/Io/tests/reader/Fed"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 1/others//std/Io/Error/Error"
+measure = "count"
+readings = [[13], [13]]
+
+[[figures]]
+name = "beside 1/others//std/Io/Reader/Step"
+measure = "count"
+readings = [[12], [12]]
+
+[[figures]]
+name = "beside 1/others//std/Io/Reader/Stop"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 1/others//std/Io/Scope/Ended"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Io/Chunk"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 1/others//std/Io/Branch"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Io/all"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Channel/internal/Queue/Stack"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "beside 1/others//std/Channel/Push"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Channel/Take"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Channel/Side"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 1/others//std/Test/Test"
+measure = "count"
+readings = [[8], [8]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Test/all"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Fmt/Fmt"
+measure = "count"
+readings = [[70], [70]]
+
+[[figures]]
+name = "beside 1/others//std/time/Month/Month"
+measure = "count"
+readings = [[6], [6]]
+
+[[figures]]
+name = "beside 1/others//std/time/Weekday/Weekday"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/time/Date/forward"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/time/Date/backward"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/time/Offset/Offset"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "beside 1/asked otherwise/the witness in '/std/time/OffsetDateTime'"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Proc/Exit/Exit"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Proc/Stdio"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 1/others//std/fs/Kind"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "beside 1/others//std/File/Mode"
+measure = "count"
+readings = [[6], [6]]
+
+[[figures]]
+name = "beside 1/others//std/Serial/Parity"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Serial/Flow"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Json/Json"
+measure = "count"
+readings = [[11], [11]]
+
+[[figures]]
+name = "beside 1/others//std/Toml/Error/Rule"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "beside 1/others//std/Toml/Error/Error"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "beside 1/others//std/Toml/build/Seg"
+measure = "count"
+readings = [[6], [6]]
+
+[[figures]]
+name = "beside 1/others//std/Toml/build/Origin"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 1/others//std/Toml/build/Act"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Toml/date_time/dated"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Toml/date_time/offset_tail"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Toml/decode/Stmt"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Toml/Toml"
+measure = "count"
+readings = [[19], [19]]
+
+[[figures]]
+name = "beside 1/others//std/Html/Html"
+measure = "count"
+readings = [[11], [11]]
+
+[[figures]]
+name = "beside 1/others//std/Html/Attr"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "beside 1/others//std/http/tests/cuts/Fed"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 1/others//std/http/Method/Method"
+measure = "count"
+readings = [[11], [11]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/http/Field/Value/year_digits"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/http/Field/Value/of_utc"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/http/Refusal/Refusal"
+measure = "count"
+readings = [[30], [30]]
+
+[[figures]]
+name = "beside 1/others//std/http/Framing/Framing"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 1/others//std/http/Framing/Codings"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/http/read/Chunking"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "beside 1/others//std/http/Url/Scheme/Scheme"
+measure = "count"
+readings = [[6], [6]]
+
+[[figures]]
+name = "beside 1/others//std/http/Request/Address"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/http/Server/Unread"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 1/others//std/http/Error"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "beside 1/others//std/Cli/tests/values/Format"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 1/others//std/Cli/scan/Seen"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 1/others//std/Cli/scan/Claim"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "beside 1/others//std/Cli/Parsed/Values"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "beside 1/others//std/Cli/Parsed/Parsed, /std/Cli/Parsed/Chosen"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 1/others//std/Cli/Presence"
+measure = "count"
+readings = [[9], [9]]
+
+[[figures]]
+name = "beside 1/others//std/Cli/Kind"
+measure = "count"
+readings = [[16], [16]]
+
+[[figures]]
+name = "beside 1/others//std/Cli/Command"
+measure = "count"
+readings = [[20], [20]]
+
+[[figures]]
+name = "beside 1/others//std/Cli/Spelled"
+measure = "count"
+readings = [[10], [10]]
+
+[[figures]]
+name = "beside 1/others//std/Cli/Problem"
+measure = "count"
+readings = [[11], [11]]
+
+[[figures]]
+name = "beside 1/others//std/Cli/Failure"
+measure = "count"
+readings = [[12], [12]]
+
+[[figures]]
+name = "beside 1/others//std/Cli/Reading"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Cli/main"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Tui/Color/Color"
+measure = "count"
+readings = [[19], [19]]
+
+[[figures]]
+name = "beside 1/others//std/Tui/Tile/Tile"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Tui/Frame/of_view"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Tui/View/View"
+measure = "count"
+readings = [[13], [13]]
+
+[[figures]]
+name = "beside 1/others//std/Tui/Key/Code/Code"
+measure = "count"
+readings = [[7], [7]]
+
+[[figures]]
+name = "beside 1/others//std/Tui/Mode/Mode"
+measure = "count"
+readings = [[6], [6]]
+
+[[figures]]
+name = "beside 1/others//std/Tui/Input/decode/Step"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Tui/Input/Input"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "beside 1/others//std/Tui/Reply/Reply"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 1/others//std/Tui/Event/Event"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Tui/Listing/new"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/asked otherwise//std/Tui/Listing/handle"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Tui/Directive/Directive"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "beside 1/others//std/Tui/Wake"
+measure = "count"
+readings = [[1], [1]]
