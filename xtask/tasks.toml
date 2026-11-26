@@ -140,7 +140,6 @@ url = "https://github.com/WebAssembly/binaryen/archive/refs/tags/{.data.binaryen
 sha256 = "c2b72f4d63876db0f36f2e2e7d035862169d4c310c6e418070dd9550b2a59c21"
 beside = "curios-binaryen"
 
-
 [handoff]
 what = "Run every check the handoff holds work to: each subject's steps, each after what it requires and consumes"
 requires = [
