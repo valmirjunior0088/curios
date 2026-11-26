@@ -939,6 +939,8 @@ pub fn unfold_rec(rec: Rec) -> Term {
 /// Reading the head alone cannot separate *stuck* from *finished*, since both are neutral; reading the occurrence alone cannot separate *restuck* from *productive*, since both name the group. The clause needs both, and the group it asks about is the one `folded` is a call on, because the cycle being ruled out is this term growing under repeated demand.
 ///
 /// A non-productive group still spins until the budget runs out, exactly as a top-level `rec` does — every outcome here is idempotent, so this decides which reducts survive, never whether the walk stops.
+///
+/// A call of a definition the main loop kept ([`kept_call`]) is its own forced form, stuck as the `match` it unfolds to is: a folded call, as `documentation/design/soundness/conversion-recurrence.md` states one.
 fn force(certifier: &mut ByValue, term: Term) -> Result<Term, ReduceError> {
     // A closed term takes the machine at the eliminator's demand; the recursive loop below is the strategy for everything the gate declines.
     if machine_admissible(certifier, &term) {

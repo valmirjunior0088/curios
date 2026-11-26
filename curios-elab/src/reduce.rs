@@ -518,6 +518,8 @@ fn unfold_rec_proj(context: &mut Context, proj: Proj) -> Result<Option<Term>, Re
 /// Testing the head alone would conflate *neutral because stuck* with *neutral because that is the answer*: `go(0, acc)` reduces correctly to `acc`, and throwing that bare `Var` away would make the base case of any lemma about an accumulator unprovable in decided form. Testing occurrence alone would conflate *restuck* with *productive* and discard `cons(x, go(k, …))`. Each half is load-bearing over the fixed prelude, where thousands of decisions reach each arm.
 ///
 /// The group is `folded`'s own, deliberately: what this protects is the idempotence of forcing *this* term, so the cycle to rule out is the reduct re-mentioning the group whose call was demanded. All three outcomes are idempotent — `force(force(t)) = force(t)` — so what this clause decides is completeness, not whether the reducer stops; the budget spent per iteration already does that.
+///
+/// A call of a definition the main loop kept ([`kept_call`]) is its own forced form, neutral as the stuck `match` it unfolds to is: a folded call, as `documentation/design/soundness/conversion-recurrence.md` states one.
 fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
     // A weak-head value is its own forced form, asked of no table ([`weak_head_value`]).
     if weak_head_value(&term) {
