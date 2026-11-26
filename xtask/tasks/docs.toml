@@ -16,6 +16,12 @@ run = [
     { in = "{!cargo_target_dir}/doc", write = "index.html", contents = "{.docs.landing}" },
 ]
 
+[lint]
+what = "Hold every tracked Markdown file's shape — its headings, its lists, its code blocks — to the rules `.rumdl.toml` keeps; `format markdown` writes what it holds"
+run = [
+    ["{.tools.rumdl}", "check", "{.docs.markdown}"],
+]
+
 [links]
 what = "Hold every tracked Markdown file's links to the tree: each relative link leads to a tracked file or a directory of them, and each anchor to a heading of the file it names"
 run = [

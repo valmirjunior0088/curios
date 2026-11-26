@@ -116,7 +116,6 @@ Presentation distinguishes the exact from the general: `to_decimal : Rat -> Opti
 
 A `/sys/Flt` fold trusts the Rust model in `curios_num::Floating`; the Curios twin in `/std/Flt/exact` is held to it by the rounding tests but does not fold. Folding by the twin, so that a proof about a fold reaches the Curios code rather than the model, waits on these proofs and on exact rationals.
 
-
 Stages 1 to 4 own the rational representation, normalization, arithmetic, executable conversions, decimal behavior and library laws. Those contracts are used here, not restated. The proofs here additionally depend on the exact interpretation of `/std/Flt` primitives and the correctness of the Curios rounding implementation.
 
 The boundary between executable evidence and formal theorems remains explicit. Stages 1 to 4 can land with their proofs and reference tests complete while this stage remains, the specification then rewritten to it alone; this does not weaken its canonicity, ring, order, field or decimal obligations.

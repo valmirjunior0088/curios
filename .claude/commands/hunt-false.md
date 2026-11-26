@@ -11,9 +11,9 @@ A hunt has two roles. **The gatherer** is the conversation this command was invo
 
 `$ARGUMENTS` is a count of hunters, 1 or more, then directions in prose — a theme, a rule by the decision that designs it, a part of the board by its directory `xboard/tickets/<part>/`, a seed, what to look at or leave alone. Without that count, ask for it and start nothing. Prefer stopping to guessing.
 
-# Part I — What is sought
+## Part I — What is sought
 
-## A proof of `False`
+### A proof of `False`
 
 A closed term the checkers admit at `/std/Bool/False`, and nothing else. It is shown by a witness, never by a story about a rule being wrong, and `xboard/README.md` states the forms a witness takes. The witness supplies the term and the board states the type, so a false equation or a declaration wrongly admitted is driven all the way to `False` before it is a ticket.
 
@@ -23,7 +23,7 @@ A run that finds none has not shown the rule sound: soundness is a claim about e
 
 A ticket already open on the board is spent: it is a proof of `False` waiting for its fix, not a target.
 
-## A finding
+### A finding
 
 Whatever is wrong in the tree and not yet written down, wherever a hunt meets it: shown by a probe, a test or a rule set against its code, never by a story about one. A proof of `False` is the gravest, and a ticket; everything else a hunt meets is a finding, whatever its charter:
 
@@ -39,21 +39,21 @@ Whatever is wrong in the tree and not yet written down, wherever a hunt meets it
 
 Shown against its rule, it is a finding; seen and not shown, it is an entry marked uncertain, saying what would settle it, and one met on the way to `False` names the `False` it might reach. It is filed where `.claude/rules/findings.md` says a finding goes.
 
-## Read first
+### Read first
 
 `xboard/README.md` states what a part, a ticket and a witness are, and `documentation/design/soundness/the-soundness-board.md` the claim, the trusted base, and the boundaries no rule covers. Each part's directory holds every proof of `False` already found in it, a file a ticket, each with its witnesses, and a rule's decision — under `documentation/design/soundness/` or `documentation/design/theory/`, or in its crate's README — states what the rule assumes. What was found short of `False`, and the specifications a fix waits on, are under `documentation/roadmap/`, each area's findings file loading `.claude/rules/findings.md` as it is read. `curios-cert`'s README and `curios-analysis`'s crate documentation are the roster of what the certifier decides and what both checkers share. Read those there. This file restates none of them.
 
-# Part II — Hunting a charter
+## Part II — Hunting a charter
 
 This part is the hunter's: "you" is the hunter. How a unit is sent, and what a hunter may touch, is `.claude/agents/hunter.md`'s.
 
-## The charter
+### The charter
 
 A charter is a theme and its specificities. The theme is one sentence naming a way the checkers could go wrong — a fact settled in one scope answering in another, a call or an occurrence reached through an indirection, a proof handled as data — and the specificities are the rules it crosses, each by the decision that designs it, and within each the premises the theme bears on: what that decision and the code's own documentation state the rule relies on. A route to `False` rarely stays inside one rule, and the board's own tickets share causes across parts, so a theme is what a charter is cut by and a part is only where a ticket is filed. A rule named alone is a charter whose theme is that rule and whose specificities are all its premises; a part named alone is where its themes are looked for.
 
 Attack each premise named through the theme, with a probe. The charter is spent once every premise named has given a proof of `False` or held. A route to `False` met on the way is chased whatever rule it reaches, to `False` or to the refusal that stops it: any route to `False` is one, so a charter bounds where you start and never which route you follow, and a route that held leaves its test as a premise does. A finding met on the way is sent as one, whatever its charter.
 
-## Where a route comes from
+### Where a route comes from
 
 An attack on a premise starts from a seed, a theory a probe can ask where a premise alone states none:
 
@@ -64,7 +64,7 @@ An attack on a premise starts from a seed, a theory a probe can ask where a prem
 - **A check waived.** Every `#[allow]` and `#[expect]` in the checker crates and the layer both judge through is a place where a compiler's own check was argued away by hand, and the reason it states is a premise.
 - **A rule no program reaches.** Its witness is a module built by hand, written in Curios/Core, as a ticket's `.crsc` witness is. Write it as a `.crsc` file in your directory of the snapshot and probe it there. A route through an object one walk filed and a later walk read — a unit offered as a baseline, a unit mounted from the cabinet — is a history, a `metadata.toml` beside the texts of its steps, as `xboard/README.md` states one. An input no program and no history writes — an archive, a stored verdict forged — is attacked by the test that builds it and hands it to the path that reads it, written whole and sent for the gatherer to run; that the board's own witness paths never reach it is no reason to stop.
 
-## Probing
+### Probing
 
 The snapshot's board, `<snapshot>/binaries/xboard probe <file>`, asks the board's question of a candidate on no ticket, as `xboard/README.md` states it, and a route to `False` is tried there before anything is sent. A candidate is a file written in your directory of the snapshot: a program, `.crs`; Curios/Core, `.crsc`; or a ticket, a `metadata.toml` beside the texts its witnesses name, a witness among them a history. A program written there as `f.crs`,
 
@@ -80,7 +80,7 @@ f(2, True/qed())
 
 is put by `<snapshot>/binaries/xboard probe <snapshot>/hunters/hunter-<n>/f.crs`. What it shows admitted is what `cargo xboard report` then shows `OPEN`, and the checker and error it names for a refusal are what a fixed ticket expects. The snapshot's compiler, `<snapshot>/binaries/curios`, answers `run -` and `check -` on standard input as CLAUDE.md probes.
 
-## A refusal met on the way
+### A refusal met on the way
 
 When a probe you wrote is refused, do not rewrite it until it compiles. First read which checker made the refusal, by which error, and whether it is the refusal of the premise attacked: a probe another rule refuses has not attacked this one yet. Then decide which of three things the refusal is, and say which:
 
@@ -90,11 +90,11 @@ When a probe you wrote is refused, do not rewrite it until it compiles. First re
 
 "The elaborator was just being conservative" is the comfortable reading, not the demonstrated one: read the refusing rule and the syntax reference against each other before choosing. Lifting a rule argued under `documentation/design/soundness/` is a finding only with that rule named.
 
-## An attack that held
+### An attack that held
 
 Each premise that held leaves a test: the attack that came nearest, written whole in your directory as the test it would land as, in the crate [the soundness board](../../documentation/design/soundness/the-soundness-board.md) places a held attack in and as `.claude/rules/rust.md` places one, expecting the refusal it met as a pattern over that checker's error, so a change that reopens the route fails the suite. The attack is the run's own, so a test already in the tree stands for it only where it states that attack's shape, and the bundle names it; a rule's existing tests are no reason to land none. A route argued and not run has not been attacked: a construction the elaborator would refuse first is a module built by hand and put to the certifier.
 
-## What you send
+### What you send
 
 Three kinds of unit, each the moment it is shown:
 
@@ -102,11 +102,11 @@ Three kinds of unit, each the moment it is shown:
 - **A finding**, `finding: <the finding>`, carries its entry as [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md) forms one — the finding in bold, where, what is wrong, the fix, its check and its size in commits — with its kind under `.claude/rules/findings.md`, the findings file it belongs to, and, where it meets an entry or a specification, which one and what it adds. One seen and not yet shown says so, with what would settle it, and is filed uncertain.
 - **A held bundle**, `held: Soundness hunt: <the theme, in a sentence>`, sent once every premise the charter names has given a proof of `False` or held, carries each premise that held, by the rule it is a premise of, and each route chased past the charter that held, with the attack that came nearest, the checker that refused it and the error the probe named; the test of each, with a sentence for its name, written whole as **An attack that held** writes one; any mutation check a test's comment claims, named for the gatherer to make; and the checks by name.
 
-# Part III — Gathering
+## Part III — Gathering
 
 This part is the gatherer's: "you" is the gatherer, and every commit of the run is yours.
 
-## Authority
+### Authority
 
 Invoking this command is standing authorization for five kinds of commit, each made in the main checkout on the branch checked out — never create, switch or rebase one:
 
@@ -118,21 +118,21 @@ Invoking this command is standing authorization for five kinds of commit, each m
 
 A write **sets** where it decides what work is held to — a new specification, a finding against stated reasoning, a fix that sets as **Recording a proof of `False`** says — and it waits for the user, held with its text exactly as it would be written.
 
-## 1. The charters
+### 1. The charters
 
 Cut the directions into one charter a hunter, each a theme with its specificities as **The charter** of Part II states one: the charter the directions name goes to the first hunter, and the rest take premises this invocation has not given out, near what the directions name or, with none, where you choose. No premise is named by two charters, so a route two hunters meet is a sibling's by charter and not by chance. Where the directions leave a charter open, choose. Say the charters, and why.
 
-## 2. The snapshot
+### 2. The snapshot
 
 A hunt reads a snapshot, `.claude/snapshots/<commit>/`, which the checkout ignores: `tree/` holds the tree at the hunt's commit, `binaries/` the `curios` and `xboard` binaries built once from it in the main checkout, and `hunters/hunter-<n>/` each hunter's directory, the one place it writes. Every hunter shares the tree and the binaries and builds nothing, so the main checkout moves on under your commits while a hunter's answers stay those of the commit it hunts. A worktree under `.claude/worktrees` is one the user asks for, and no hunt's.
 
 Read `df`. With the tree clean, `git status --short` printing nothing, the commit is `git rev-parse --short HEAD`: build the binaries at it, `cargo xtask distribution build` and `cargo build --release --package xboard`, then make the snapshot, `mkdir -p .claude/snapshots/<commit>/tree .claude/snapshots/<commit>/binaries`, `git archive <commit> | tar -x -C .claude/snapshots/<commit>/tree`, `cp target/release/curios target/release/xboard .claude/snapshots/<commit>/binaries/`, and `mkdir -p .claude/snapshots/<commit>/hunters/hunter-<n>` for each hunter.
 
-## 3. Spawning
+### 3. Spawning
 
 Spawn the count of `hunter` agents in one message, naming `model` on each call, since a definition's own field is not always applied mid-session. Each prompt carries this file's path, its charter, the snapshot's path and its directory there, its siblings' charters and the commit of the tree, and no suspicion of yours: a hunter handed a hypothesis returns it confirmed, so one you hold goes as a question to refute. From then on hunt nothing yourself; your context is for what comes back. This is one gatherer, and no workflow or team: the compiler answers every unit with one command, so a second judge adds a mechanism where the oracle stands, and a single writer is what keeps one entry a cause.
 
-## 4. On a unit
+### 4. On a unit
 
 Nothing a unit carries is filed on the hunter's word. Show it again by the command it carries, in the main checkout, and read it against every entry, specification, ticket and **Rejected** paragraph that names the same code or rule: the hunter read them, and you are the one closing the cause. Then, by its kind:
 
@@ -142,7 +142,7 @@ Nothing a unit carries is filed on the hunter's word. Show it again by the comma
 
 Or send it back with what it lacks, or answer it as already held, naming what holds it, and write nothing. Each write lands as its cause closes, since no hunter builds; its checks wait for the sweep of step 6. Where a cause needs its extent swept or its probe narrowed, send that to the hunter that found it, by `SendMessage`: it has the context, and it resumes. Otherwise answer a hunter only where a unit of its meets something filed or sent back, or where a ticket filed names its charter: what one hunter hands another is the tree as committed, and nothing else.
 
-## Recording a proof of `False`
+### Recording a proof of `False`
 
 A proof of `False` is two commits, and the first is the ticket alone.
 
@@ -152,20 +152,20 @@ A proof of `False` is two commits, and the first is the ticket alone.
 
 Where the fix sets, or is not correct and targeted, yield: the open ticket is already committed and is the record of what stands. The fix it waits on is a specification, as [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md) states one for a proof of `False`; propose it in the close with its text exactly as it would be written, and do not try a second approach or weaken the witness.
 
-## 5. On a report
+### 5. On a report
 
 A hunter's final report comes whole when it finishes; keep its let-go lines and what it did not reach for the close. The report is a pause: a message resumes the hunter with its context, so a hunt is ended by asking for its report, and `TaskStop`, which no message can undo, is for a hunter that does not answer. A report marked partial, the turn budget spent, is read like any other, and the hunter is resumed where its charter is not spent.
 
-## 6. After the last report
+### 6. After the last report
 
 Once every unit a hunter sent has been shown again, run once, over every commit the run made, the checks CLAUDE.md names between steps for what they touched, each test by name among them, and fix what fails in a commit of its own. Then remove the snapshot, `rm -rf .claude/snapshots/<commit>`: a hunter's directory is scratch the gatherer owns, so what no unit carried goes with it.
 
-## 7. Commits and the report
+### 7. Commits and the report
 
 Commit as CLAUDE.md says: the open ticket's message names the proof of `False` found, the fix's the rule now enforced. A commit that lands the tests of a run which filed no ticket — a hunt that reached no `False` — leads its subject with `Soundness hunt: `, so such a run is read off the log; the open ticket and its fix carry no such prefix, told apart from each other by the board file's own history instead.
 
 Close with any ticket filed, first; then each charter attacked, its theme and the rules and premises it named, with its hunter; each premise attacked, by its probe and what refused it; each suspicion let go, by its line, and what of each charter was not reached, so a quiet charter is told from a shallow hunt; what was committed; what waits on the user — each fix that sets with its alternatives, each finding that sets and each specification, with its text exactly as it would be written — put in one round of structured questions; and what is on the tree uncommitted.
 
-## Under `/loop`
+### Under `/loop`
 
 On its own, an invocation hunts its count of charters and ends with its report. Under `/loop`, each next invocation takes as many charters, naming premises this loop has not attacked yet, and what one invocation hands the next is the tree as committed: the board, the findings files and the tests. The loop ends when a proof of `False` stays open because its fix sets; when a run cannot go on, on a check it cannot make pass; and once every rule's premises have been attacked in it.

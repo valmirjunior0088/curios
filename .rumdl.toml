@@ -1,0 +1,3 @@
+# The Markdown files' shape, as `docs lint` holds it and `format markdown` writes it: rumdl's rules, less four. Line length (`MD013`), since a paragraph or a list item is one source line; a first line that is no heading (`MD041`), since a findings file opens on its first entry and an agent or command file on text after its front matter; inline HTML (`MD033`), the README's banner; and spaces inside a code span (`MD038`), which are what the span shows, as `-- ` is the line-comment opener.
+[global]
+disable = ["MD013", "MD041", "MD033", "MD038"]

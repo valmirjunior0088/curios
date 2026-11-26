@@ -47,9 +47,13 @@ Nothing else is done. The roadmap is its documents and never the plan they encod
 Whenever the findings leave a wait, and never by waiting: refine the rest of the roadmap — the findings entries the queue has not reached, in every area unless the directions leave one alone, and the specifications. A finding the refining turns up — an entry shown again as a defect it never named, a specification's claim that is a defect today, what a seed shows — is filed on the user's word and joins the queue.
 
 - **Citations and figures.** Each path, name, commit and figure a document states, looked up against the tree, and what is stale restated; a figure whose retaking is a specification's own next step is left to that step.
+
 - **The shape of the roadmap.** Each specification weighed against the numbering and its neighbours, and the user asked about any of these: **reprioritised**, renumbered within its hundred or moved to another — lifted to `1nn` where a rule is broken, or a benefit is beyond doubt with one way to take it and little left to land; **merged** with one related closely enough to be one piece of work; **dropped** where it is worth too little at its priority to keep; **updated** where what it states has moved — its facts, its next step, its stages, its decisions. A findings entry is weighed the same way: merged with its neighbour, or lifted, alone or with others, into a specification. And what is missing is named.
+
 - **Decisions questioned**, from more than one side, with the peers surveyed.
+
 - **Another session's specification.** One the user has set another session to is that session's: it is left alone, and a change it needs is messaged to that session only on the user's word.
+
 - **What is not written down yet**, hunted from a seed that states a theory a probe can ask:
   - **A defect already fixed.** A commit that deleted a findings entry, or turned a ticket to fixed, states a cause and shows what settled it: `git log` over the findings files and the board's parts, `xboard/tickets/<part>/`. The theory is that the cause stands where the fix did not reach — another crate, another form of the same mistake, the same rule over another carrier.
   - **What landed last.** An area's newest commits, each read whole, its message, its diff and the tests it added. The theory is that a change made for one reason broke what another reader of the same code relies on.

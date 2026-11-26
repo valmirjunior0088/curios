@@ -91,6 +91,16 @@ sha256.x86_64-unknown-linux-gnu = "b7af85e41cc99489dcc21d66c6d5f3685138f06d34651
 sha256.aarch64-unknown-linux-gnu = "68a8133197a50beb8803f8d42f9908d1af1c5540d4bb05fdfca8c1fa47decefc"
 sha256.aarch64-apple-darwin = "339b930feb1ea764467013cc1f72d09cd6b869ebf1013296ba9055ab2ffbd26f"
 
+# Lints every tracked Markdown file's shape and writes the shape it holds, under the root's `.rumdl.toml`; each archive's sum is published beside it.
+[tools.rumdl]
+version = "0.3.7"
+url.x86_64-unknown-linux-gnu = "https://github.com/rvben/rumdl/releases/download/v{.tools.rumdl.version}/rumdl-v{.tools.rumdl.version}-x86_64-unknown-linux-musl.tar.gz"
+url.aarch64-unknown-linux-gnu = "https://github.com/rvben/rumdl/releases/download/v{.tools.rumdl.version}/rumdl-v{.tools.rumdl.version}-aarch64-unknown-linux-musl.tar.gz"
+url.aarch64-apple-darwin = "https://github.com/rvben/rumdl/releases/download/v{.tools.rumdl.version}/rumdl-v{.tools.rumdl.version}-aarch64-apple-darwin.tar.gz"
+sha256.x86_64-unknown-linux-gnu = "77f22b8408db103e39a226bf803e34ffdfc975550f8f79276b3f39738ec2c3e5"
+sha256.aarch64-unknown-linux-gnu = "236d0c162755b3c9597148b193243e74abe6c304cdeaf1045823220dc7234df0"
+sha256.aarch64-apple-darwin = "8f9178cd11f01f637fe65d973b2034608970708f8c35277f9201198a01438b28"
+
 # JSONTestSuite's documents, each named for what a parser does with it: `y_` read, `n_` refused, `i_` its own to decide. Its archive carries the parsers the suite was run over beside them, which are not kept.
 [data.json]
 version = "1ef36fa01286573e846ac449e8683f8833c5b26a"

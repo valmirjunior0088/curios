@@ -46,7 +46,7 @@ Everything else is declared, in the tables [the manifest](#the-manifest) states.
 
 A file two units' `mod` chains reach is refused before anything is compiled, naming both ([`curios-module`'s README](../curios-module/README.md)). A module the library and a program both want lives in the library, which every executable of the package reaches by the package's name:
 
-```
+```text
 `parse.crs` is a module of the library and of the executable "tool": a file is one unit's, so declare it in the library alone, and reach it from the other through `/hello/parse`
 ```
 

@@ -6,7 +6,7 @@ A record is a historical fact and cannot be re-run. That is what separates this 
 
 ## Run it
 
-```
+```text
 xbench/
   src/main.rs                     the command line, and the records the build embeds
   src/measurements/               every measurement but the contest, a module by subject, each named once

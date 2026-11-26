@@ -1492,7 +1492,6 @@ pub let agree(f: (Nat) -> Nat, g: (Nat) -> Nat, same: Eq()(f, g), n: Nat) -> Eq(
 
 Against `(n: Nat) => n + 1`, the same `Eq/refl()` is refused, the two reducing to different terms. Where a type has an `Eql` witness, its decision proves the equation too ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)).
 
-
 ### Bounds from the facts in scope
 
 A bound is stated and proved in `/std/Bool`'s vocabulary, which a program imports by name: `use /std/Bool/{True, False, Holds};`. `Holds(b)` is the proposition that the decision `b` holds: it reduces to `True`, proved by `True/qed()`, where `b` is `true`, and to the empty `False` where it is not.

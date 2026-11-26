@@ -14,6 +14,12 @@ run = [
     ["cargo", "run", "--quiet", "--package", "curios", "--", "format", "{.compiler.sources}"],
 ]
 
+[markdown]
+what = "Format every tracked Markdown file's shape, as `.rumdl.toml` keeps the rules `docs lint` holds"
+run = [
+    ["{.tools.rumdl}", "fmt", "{.docs.markdown}"],
+]
+
 [biome]
 what = "Format the JavaScript, JSON and CSS of every tree, as `biome.json` lists them"
 run = [
