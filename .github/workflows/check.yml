@@ -92,6 +92,8 @@ jobs:
             curios-unicode/.artifacts
       - name: Build
         run: cargo xtask docs build
+      - name: Check the Markdown files' links against the tree
+        run: cargo xtask docs links
 
   bundle:
     name: Browser bundle

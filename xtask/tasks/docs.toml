@@ -1,7 +1,11 @@
-what = "The workspace's Rust documentation"
+what = "The workspace's documentation: its Rust's, and its Markdown files"
 
 # The page `target/doc/` opens on, which sends a reader to the compiler's crate.
 landing = '<!DOCTYPE html><meta http-equiv="refresh" content="0; url=curios/index.html">'
+
+# The tracked Markdown files, and the script that holds their links to the tree, beside this file.
+markdown.run = ["git", "ls-files", "--", "*.md"]
+scripts.links = "xtask/tasks/docs/links.sh"
 
 [build]
 what = "Build the workspace's Rust documentation, over private items and every feature; alone runs rustdoc, where a broken intra-doc link fails"
@@ -10,4 +14,10 @@ consumes = [".compiler.launcher.produces.binary"]
 run = [
     ["cargo", "doc", "--workspace", "--no-deps", "--document-private-items", "--all-features", "--keep-going"],
     { in = "{!cargo_target_dir}/doc", write = "index.html", contents = "{.docs.landing}" },
+]
+
+[links]
+what = "Hold every tracked Markdown file's links to the tree: each relative link leads to a tracked file or a directory of them, and each anchor to a heading of the file it names"
+run = [
+    ["sh", "{.docs.scripts.links}", "{.docs.markdown}"],
 ]

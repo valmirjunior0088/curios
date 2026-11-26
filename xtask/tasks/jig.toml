@@ -20,7 +20,7 @@ run = [
 ]
 
 [agents]
-what = "Hold the agent files, CLAUDE.md and every Markdown file under .claude/, to the tree: each glob of a rule matches a tracked file, and each link, path and source name they cite is there"
+what = "Hold the agent files, CLAUDE.md and every Markdown file under .claude/, to the tree: each glob of a rule matches a tracked file, and each path and source name they cite is there, their links being every Markdown file's, which `docs links` holds"
 run = [
     ["sh", "{.jig.scripts.agents}", "{.jig.agent_files}", "--", "{.jig.sources}"],
 ]
