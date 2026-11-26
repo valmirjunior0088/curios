@@ -1596,3 +1596,26 @@ fn a_bound_over_a_product_of_unknowns_says_the_search_read_it_as_one() {
         "{report}"
     );
 }
+
+/// A bound that reduces to a proposition nothing proves is reported with that proposition's arguments evaluated: the weak-head reduct leaves them as the computations that make them, here a map over a list, where a reader wants the list it comes to.
+#[test]
+fn an_undischarged_bound_is_reported_with_its_reducts_arguments_evaluated() {
+    let report = error(
+        r#"
+        use /std/{Nat, List, print};
+        use /std/Bool/{True};
+
+        induct Missing: (List(Nat)) -> pub Prop
+        end
+
+        let Present(xs: List(Nat), x: Nat) -> Prop =
+            match List/any(xs, (y) => y == x) | true => True | false => Missing(List/map(xs, (y) => y + 1)) end;
+
+        let need(xs: List(Nat), x: Nat, @_: Present(xs, x)) -> Nat = x;
+
+        print(Nat/to_str(need([1, 2], 5)))
+        "#,
+    );
+
+    assert!(report.contains("which reduces to `Missing([2, 3])`"), "{report}");
+}

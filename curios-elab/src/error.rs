@@ -5,7 +5,7 @@ use display::*;
 mod tests;
 
 use {
-    super::{Answer, Context, HeldFrames, Pending, Refusal, written},
+    super::{Answer, Context, HeldFrames, Pending, Refusal, normalize, written},
     curios_analysis::{DeclaredPart, Erased},
     curios_common::{
         Code, InfixOp, Note, Plicity, Qualifier, Report, Said, Span, SyntaxRegistry, variants,
@@ -2519,11 +2519,43 @@ impl Error {
             .and_then(|scope| scope.frames.clone())
             .unwrap_or_default();
         context.reporting(|context| {
-            context.standing_on(&frames, |context| error.write_terms(context));
+            context.standing_on(&frames, |context| {
+                error.evaluate_reducts(context);
+                error.write_terms(context);
+            });
         });
         error.let_go_of_frames();
 
         error
+    }
+
+    /// Each undischarged bound's reduct taken again from its bound, solved by now, and evaluated ([`normalize`]), so its report reads the arguments of the proposition the bound came to as the values they are: the reduct noted when the bound was tried is weak-head, and may predate a solution its arguments wait on. One past the budget, or that comes to no proposition, is left as noted.
+    fn evaluate_reducts(&mut self, context: &mut Context) {
+        match self {
+            Self::Located { error, .. }
+            | Self::InDeclaration { error, .. }
+            | Self::InDeadArm { error, .. }
+            | Self::InAlternative { error, .. }
+            | Self::CheckedAs { error, .. }
+            | Self::KeptFolded { error, .. }
+            | Self::InScope { error, .. }
+            | Self::RejectedCandidate { error, .. } => error.evaluate_reducts(context),
+            Self::Batch(errors) => errors
+                .iter_mut()
+                .for_each(|error| error.evaluate_reducts(context)),
+            Self::UndischargedBound {
+                bound,
+                reduct: Some(reduct),
+                ..
+            } => {
+                if let Ok(evaluated) = normalize(context, (**bound).clone())
+                    && matches!(&*evaluated, Subterm::InductType(_))
+                {
+                    **reduct = evaluated;
+                }
+            }
+            _ => {}
+        }
     }
 
     /// Every term this error shows written as a program writes it where its reader stands ([`written`](fn@crate::written)), the context standing where the error arose: a rejected candidate, and the check's refusal of it, are written where its metavariable was born, at the argument left out there, which is where its reader would write it.
