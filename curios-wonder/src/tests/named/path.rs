@@ -407,8 +407,8 @@ fn a_facade_answers_its_declaration_and_its_module() {
     };
     assert_eq!(module.public, Some(true));
     assert!(at("pub let insert(") < at("satisfy "));
-    assert!(at("satisfy ") < at("pub mod Key"));
-    assert_eq!(module.modules, 5);
+    assert!(at("satisfy ") < at("pub mod try_get"));
+    assert_eq!(module.modules, 4);
 }
 
 /// A module no documentation page shows is listed off the lowering: `Map`'s `internal`, written without `pub`, answers that it is private, the family its `pub use` exposes, written whole from its own text, and its public child; and the child, written `pub` beneath a private module, lists its own names in the order its body writes them and the constructors its glob exposed after them, by name. The library the compiler was built with holds no file, so neither is placed.
