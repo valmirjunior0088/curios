@@ -85,6 +85,20 @@ pub struct SampleSummary {
 }
 
 impl SampleSummary {
+    /// The site as an entry of the summary, beneath the spans: its name and target, then how often it was observed and what it was handed.
+    fn entry(&self) -> String {
+        format!(
+            "{} in {}\nobserved {} times; total: {}; least: {}; greatest: {}; mean: {:.1}",
+            self.name,
+            self.target,
+            thousands(self.count),
+            thousands(self.total),
+            thousands(self.min),
+            thousands(self.max),
+            self.mean()
+        )
+    }
+
     /// The mean observation, or zero when nothing was recorded.
     pub fn mean(&self) -> f64 {
         match self.count {
@@ -185,7 +199,7 @@ struct Ranked<'a> {
 impl Profile {
     /// `curios profile`'s answer for the stream at `stream`, drawn for `style`: one block summarizing the run, closed on the stream.
     ///
-    /// Its facts say whether every span closed or how many were still open, whether the allocator counted, the time spent in spans and the threads that spent it with the bytes they took, the peak, and how many span names the stream holds; a stopped run's open stacks follow, a fact a thread. Its entries are the `SUMMARIZED` span names that took the most time themselves, each with its share of the time in spans and the share so far: self time partitions what the spans cover, so the shares add up. Every other question is the trace's, asked in Perfetto's UI or by `trace_processor`.
+    /// Its facts say whether every span closed or how many were still open, whether the allocator counted, the time spent in spans and the threads that spent it with the bytes they took, the peak, and how many span names the stream holds; a stopped run's open stacks follow, a fact a thread. Its entries are the `SUMMARIZED` span names that took the most time themselves, each with its share of the time in spans and the share so far: self time partitions what the spans cover, so the shares add up; then every sample site, by the total it saw, with how often it was observed and the least, greatest and mean of what it was handed. Every other question is the trace's, asked in Perfetto's UI or by `trace_processor`.
     pub fn answer(&self, stream: &Path, style: &Style) -> String {
         let ranked = self.ranked();
         let spent = ranked
@@ -193,7 +207,7 @@ impl Profile {
             .map(|ranked| ranked.self_total)
             .sum::<Duration>();
         let mut so_far = Duration::ZERO;
-        let entries = ranked
+        let mut entries = ranked
             .iter()
             .take(SUMMARIZED)
             .map(|ranked| {
@@ -201,6 +215,7 @@ impl Profile {
                 ranked.entry(spent, so_far)
             })
             .collect::<Vec<_>>();
+        entries.extend(self.samples.iter().map(SampleSummary::entry));
 
         format!(
             "{}\n",
@@ -280,6 +295,11 @@ impl Profile {
             names => said.stating(format!(
                 "spans: {names} names, the {SUMMARIZED} that took the most time themselves below"
             )),
+        }
+        match self.samples.len() {
+            0 => {}
+            1 => said.stating("samples: 1 site, below"),
+            sites => said.stating(format!("samples: {sites} sites, each below")),
         }
         for (thread, open) in self.stacks() {
             let spans = open

@@ -470,6 +470,30 @@ fn an_instant_carrying_a_value_folds_into_its_distribution() {
     assert_eq!(sample.mean(), 5.0);
 }
 
+// A sample site is summarized beneath the spans with its distribution, so a `sample!` an investigation adds is read back where its spans are.
+#[test]
+fn a_summary_lists_each_sample_site_with_its_distribution() {
+    let mut stream = Stream::new();
+    for (at, value) in [(0, 3), (1, 11), (2, 1)] {
+        stream = stream.event(
+            THREAD,
+            at,
+            track_event::Type::Instant,
+            "universe::finalize_store_len",
+            &[("value", Field::Number(value))],
+            None,
+        );
+    }
+    let answer = answered(&stream.folded());
+
+    assert!(
+        answer.contains("samples: 1 site, below")
+            && answer.contains("universe::finalize_store_len in ")
+            && answer.contains("observed 3 times; total: 15; least: 1; greatest: 11; mean: 5.0"),
+        "{answer}"
+    );
+}
+
 // An end a track holds no beginning for ends a slice the stream does not hold, and nothing is invented for it: the slices it does hold keep their own time, and the end credits no one.
 #[test]
 fn an_end_with_nothing_begun_on_its_track_is_read_as_nothing() {
