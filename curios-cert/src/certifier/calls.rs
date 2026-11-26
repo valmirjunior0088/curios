@@ -70,7 +70,6 @@ pub fn field_handed(handed: &Handed, slot: usize) -> Handed {
     handed
         .iter()
         .map(|(frame, applied)| (*frame, applied.field(slot)))
-        .filter(|(_, applied)| !applied.is_empty())
         .collect()
 }
 
@@ -534,9 +533,8 @@ impl Certifier<'_> {
         for (frame, params) in &callers {
             match handed(self, &context, params, callee, &steps, answer) {
                 Ok(positions) => {
-                    // An argument applied nowhere is handed nothing to record: the call records it as any argument.
                     for (position, applied) in positions.into_iter().enumerate() {
-                        if let Some(applied) = applied.filter(|applied| !applied.is_empty()) {
+                        if let Some(applied) = applied {
                             by_position[position]
                                 .get_or_insert_with(Vec::new)
                                 .push((*frame, applied));
@@ -588,9 +586,8 @@ impl Certifier<'_> {
                             let at = held.iter().position(|(graded, _)| graded == frame)?;
                             Some(held.remove(at).1)
                         });
-                        let applied = through
-                            .map(|through| through.beside(own.unwrap_or_default()))
-                            .filter(|applied| !applied.is_empty());
+                        let applied =
+                            through.map(|through| through.beside(own.unwrap_or_default()));
                         if let Some(applied) = applied {
                             slot.get_or_insert_with(Vec::new).push((*frame, applied));
                         }

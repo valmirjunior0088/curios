@@ -522,6 +522,10 @@ impl<D: Driver> Walk<'_, D> {
             binders.push(cursor.advance_fresh(|hint| self.driver.fresh(hint)));
         }
         let body = cursor.body().expect("a cursor past every entry");
+        // A lambda its callee applies nowhere, every use of it seen, runs nowhere through the call, so its body makes no call there.
+        if handed.is_empty() {
+            return Ok(());
+        }
         self.context
             .assume(binder_bounds(handed, self.params, &binders));
         let walked = self.walk_term(&body);
@@ -538,13 +542,6 @@ impl<D: Driver> Walk<'_, D> {
         let Some(applied) = applied else {
             return self.walk_term(argument);
         };
-        if applied.is_empty() {
-            // A parameter, or a field of one, handed where the callee applies it nowhere, every use of it seen there, is no use of it; any other argument is walked as a term.
-            return match self.tracked_path(argument) {
-                Some(_) => Ok(()),
-                None => self.walk_term(argument),
-            };
-        }
         // A parameter handed whole, or a field of one, is applied where the callee applies what it is handed, as its summary states, through this call: those applications are this member's own, already graded against its parameters ([`handed`]), of the parameter at the path the argument projects, and of its fields at that path continued.
         if let Some((position, projected)) = self.tracked_path(argument) {
             let at = |path: &[usize]| {
@@ -687,17 +684,7 @@ impl<D: Driver> Walk<'_, D> {
             &steps,
             Answer::Held,
         )?;
-        let leading = self
-            .driver
-            .applications(callee)
-            .and_then(|applications| applications.part(&[]).cloned());
-        for (position, (argument, applied)) in given.iter().zip(handed).enumerate() {
-            let stated = leading
-                .as_ref()
-                .is_some_and(|leading| leading.of(position).is_some());
-            if applied.is_none() && stated && self.tracked_path(argument).is_some() {
-                continue;
-            }
+        for (argument, applied) in given.iter().zip(handed) {
             recurse(|| self.walk_argument(argument, applied.as_ref()))?;
         }
         Ok(())

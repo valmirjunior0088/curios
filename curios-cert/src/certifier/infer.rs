@@ -1107,6 +1107,13 @@ fn check_lambda(
                 if parameters {
                     certifier.calls.continue_parameters();
                 }
+                // A lambda its callee applies nowhere, every use of it seen, runs nowhere through the call, so its body records no call there, as the shared walk reads it ([`curios_analysis::handed`]).
+                if let Some(handed) = assumed
+                    && !handed.is_empty()
+                    && handed.iter().all(|(_, applied)| applied.itself.is_empty())
+                {
+                    return certifier.unrecorded(|certifier| check(certifier, &body, &codomain));
+                }
                 if let Some(handed) = assumed {
                     certifier.assume_handed(&binders, handed);
                 }

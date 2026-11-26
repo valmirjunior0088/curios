@@ -333,3 +333,29 @@ fn a_definition_that_applies_nothing_of_its_parameter_states_so_to_its_callers()
         matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
     });
 }
+
+// A member handed where its callee applies it nowhere, every use of it seen, makes no call there: `ignore` never applies `f`, so `go` handing itself to it calls nothing of itself, whole or wrapped in a lambda, and both checkers accept. The refusal applies `f` at the number it is handed, so `go` reaches itself at its own argument.
+#[test]
+fn a_member_handed_where_its_callee_applies_it_nowhere_makes_no_call() {
+    control(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{True};
+
+        let ignore(f: (Nat) -> True, n: Nat) -> True = True/qed();
+
+        let go(n: Nat) -> True = match n | 0 => True/qed() | k + 1 => ignore(go, n) end;
+
+        let wrapped(n: Nat) -> True = match n | 0 => True/qed() | k + 1 => ignore((m) => wrapped(m), n) end;
+
+        let _ = go(3);
+        let _ = wrapped(3);
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("= True/qed();\n", "= f(n);\n")])
+    .by_elaborator_in("/go", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    });
+}
