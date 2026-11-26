@@ -128,7 +128,7 @@ pub enum BoxOp {
     /// Make a box holding the operand.
     New,
     /// Return the value the box holds.
-    Held,
+    Get,
     /// Make the box hold the second operand from then on.
     Set,
 }
@@ -136,14 +136,14 @@ pub enum BoxOp {
 impl BoxOp {
     pub fn operand_arity(self) -> usize {
         match self {
-            Self::New | Self::Held => 1,
+            Self::New | Self::Get => 1,
             Self::Set => 2,
         }
     }
 
     pub fn result_arity(self) -> usize {
         match self {
-            Self::New | Self::Held => 1,
+            Self::New | Self::Get => 1,
             Self::Set => 0,
         }
     }

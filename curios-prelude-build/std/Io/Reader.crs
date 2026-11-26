@@ -132,8 +132,8 @@ pub let take(
             match arrived
             | success(bytes(fresh)) =>
                 let () =
-                    Box/change(r.ahead, (then: Held) =>
-                        (Held { cuts = then.cuts, bytes = 0x[..then.bytes, ..fresh] }, ()))!;
+                    Box/update(r.ahead, (then: Held) =>
+                        Held { cuts = then.cuts, bytes = 0x[..then.bytes, ..fresh] })!;
                 go(next, cuts)
             | success(ended()) =>
                 let moved = touched(r, cuts, bytes)!;

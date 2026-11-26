@@ -326,9 +326,9 @@ fn a_map_a_box_holds_answers_as_if_copied() {
             let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
             let n = Option/to_result(Nat/of_str(Str/trim(s)), "bad input")!;
             let held = Box/new(Map/insert(Map/insert(Map/empty(), n, 1), n + 1, 2))!;
-            let first = Box/held(held)!;
+            let first = Box/get(held)!;
             let grown = Map/length(Map/insert(first, n + 2, 3));
-            let again = Box/held(held)!;
+            let again = Box/get(held)!;
             let kept = Map/length(again);
             let _ = Fmt/print("%\n")(grown * 10 + kept)!;
             Try/pure(());

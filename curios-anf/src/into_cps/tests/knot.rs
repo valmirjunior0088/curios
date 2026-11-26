@@ -473,7 +473,7 @@ fn a_force_sets_the_cycle_before_it_runs_what_its_box_held_and_fills_the_result(
         panic!("presence")
     };
     let curios_cps::Node::Box {
-        op: curios_cps::BoxOp::Held,
+        op: curios_cps::BoxOp::Get,
         args: held_args,
         return_to,
     } = resumed(&module, cases[&0].target)

@@ -1858,8 +1858,8 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
             implicits: vec![element],
             explicits: vec![value],
         },
-        Intrinsic::BoxHeld { element, target } => IntrinsicForm::Call {
-            path: "Box/held".into(),
+        Intrinsic::BoxGet { element, target } => IntrinsicForm::Call {
+            path: "Box/get".into(),
             implicits: vec![element],
             explicits: vec![target],
         },

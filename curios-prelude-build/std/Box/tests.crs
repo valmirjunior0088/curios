@@ -5,7 +5,7 @@ use /std/{Box, Io, Nat, Test};
 test a_change_answers_what_its_function_answers_and_keeps_what_it_leaves =
     let b = Box/new(@Nat, 10)!;
     let before = Box/change(b, (n: Nat) => (n * 2, n))!;
-    let after = Box/held(b)!;
+    let after = Box/get(b)!;
     Test/equal([before, after], [10, 20]);
 
 -- Two branches that each wait and then change the box keep both changes: a wait falls only between changes, never inside one.
@@ -13,7 +13,7 @@ test changes_from_branches_that_wait_between_them_are_each_kept =
     let b = Box/new(@Nat, 10)!;
     let bump() -> Io({}) =
         let () = Io/yield()!;
-        Box/change(b, (n: Nat) => (n + 1, ()));
+        Box/update(b, (n: Nat) => n + 1);
     let _ = Io/both(bump(), bump())!;
-    let n = Box/held(b)!;
+    let n = Box/get(b)!;
     Test/equal(n, 12);

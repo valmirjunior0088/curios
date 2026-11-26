@@ -405,7 +405,7 @@ impl Intrinsic {
             | Intrinsic::LatchTripped { .. }
             | Intrinsic::BoxType { .. }
             | Intrinsic::Box { .. }
-            | Intrinsic::BoxHeld { .. }
+            | Intrinsic::BoxGet { .. }
             | Intrinsic::BoxSet { .. }
             | Intrinsic::IoType { .. }
             | Intrinsic::IoPure { .. }

@@ -872,17 +872,19 @@ fn box_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
                 "The value `b` holds now: an observation, which a wait may leave stale, where a change computed from the value `change` hands its function is not.",
             ],
             operation(
-                "held",
+                "get",
                 &["T", "b"],
                 syntax,
-                Intrinsic::BoxHeld {
+                Intrinsic::BoxGet {
                     element: name("T"),
                     target: name("b"),
                 },
             ),
         ),
         documented(
-            &["Make `b` hold `v` from now on."],
+            &[
+                "Make `b` hold `v` from now on. A `v` computed from a value `get` read before a wait may overwrite what another branch changed meanwhile: `change` reads and writes with no wait between.",
+            ],
             operation(
                 "set",
                 &["T", "b", "v"],

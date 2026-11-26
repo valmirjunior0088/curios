@@ -38,7 +38,7 @@ fn evidence_payloads_still_occupy_storage() {
         use /std/{Nat, Eq, Option, Box, Io, print, Channel};
         let entry() -> /std/Io({}) =
             let proof = Box/new(@Option(Eq()(1, 1)), Option/some(Eq/refl()))!;
-            let _ = print(match Box/held(proof)! | some(_) => "proof " | none() => "missing " end)!;
+            let _ = print(match Box/get(proof)! | some(_) => "proof " | none() => "missing " end)!;
             let p = Channel/new(@Option(Eq()(1, 1)), 1)!;
             let _ = Channel/try_push(p, Option/some(Eq/refl()))!;
             print(match Channel/try_take(p)! | item(_) => "proof" | empty() => "empty" | ended() => "ended" end);
@@ -55,7 +55,7 @@ fn type_payloads_still_occupy_storage() {
         run(r#"
         use /std/{Box, Nat, Io, print, Channel};
         Io/bind(Box/new(@Type, Nat), (b) =>
-        Io/bind(Box/held(b), (_) =>
+        Io/bind(Box/get(b), (_) =>
         Io/bind(print("type "), (_) =>
         Io/bind(Channel/new(@Type, 1), (q) =>
         Io/bind(Channel/try_push(q, Nat), (_) =>

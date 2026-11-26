@@ -16,7 +16,7 @@ end
 
 -- One more child of `live`.
 let started(live: Box(Live)) -> Io({}) =
-    Box/change(live, (l: Live) => (Live { ..l, count = l.count + 1 }, ()));
+    Box/update(live, (l: Live) => Live { ..l, count = l.count + 1 });
 
 -- One child of `live` ended: the count lowered, and every join waiting woken where none is left.
 let ended(live: Box(Live)) -> Io({}) =
@@ -33,12 +33,12 @@ let ended(live: Box(Live)) -> Io({}) =
 
 -- A join's attempt: done where no child of `live` is left.
 let none_left(live: Box(Live)) -> Io(Option({})) =
-    let l = Box/held(live)!;
+    let l = Box/get(live)!;
     Io/pure(match l.count | 0 => Option/some(()) | _ => Option/none() end);
 
 -- The latch a join waits on while children are left: the one there, or a fresh one left there. The latch is made before the change that leaves it, since a change cannot make one, and only where none is there.
 let idle_latch(live: Box(Live)) -> Io(Latch) =
-    let there = Box/held(live)!;
+    let there = Box/get(live)!;
     match there.idle
     | some(latch) => Io/pure(latch)
     | none() =>
@@ -67,10 +67,10 @@ pub let spawn(@A: Type, s: Scope, child: Io(A)) -> Io(Task(A)) =
     let () = started(s.live)!;
     let finished = Io/bind(child, (a) => Io/bind(Future/fill(f, a), (()) => ended(s.live)));
     let () =
-        Box/change(s.children, (held: Option(List(Io({})))) =>
+        Box/update(s.children, (held: Option(List(Io({})))) =>
             match held
-            | some(earlier) => (Option/some([finished, ..earlier]), ())
-            | none() => (Option/none(), ())
+            | some(earlier) => Option/some([finished, ..earlier])
+            | none() => Option/none()
             end)!;
     Io/pure(Task { f });
 
@@ -80,4 +80,4 @@ pub let join_all(s: Scope) -> Io({}) =
 
 --- `release` run when `s` ends, told how it ended: after its children are cancelled, and before every release deferred to it earlier. What a scope's resources are closed by, so nothing opened into a scope outlives it.
 pub let defer(s: Scope, release: (Ended) -> Io({})) -> Io({}) =
-    Box/change(s.releases, (earlier: List((Ended) -> Io({}))) => ([release, ..earlier], ()));
+    Box/update(s.releases, (earlier: List((Ended) -> Io({}))) => [release, ..earlier]);

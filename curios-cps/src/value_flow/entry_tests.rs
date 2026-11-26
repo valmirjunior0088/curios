@@ -527,7 +527,7 @@ fn read_handed(
             return_to: resume,
         }),
         _ => module.add_node(Node::Box {
-            op: BoxOp::Held,
+            op: BoxOp::Get,
             args: vec![Atom::Value(handed)],
             return_to: resume,
         }),
@@ -644,7 +644,7 @@ fn poll_or_read(module: &mut Module, boxed: bool, handed: ValueId, ret: Continua
         let args = vec![Atom::Value(handed)];
         match boxed {
             true => module.add_node(Node::Box {
-                op: BoxOp::Held,
+                op: BoxOp::Get,
                 args,
                 return_to: sentinel,
             }),

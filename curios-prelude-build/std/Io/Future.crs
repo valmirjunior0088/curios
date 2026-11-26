@@ -16,7 +16,7 @@ pub let new(@A: Type) -> Io(Future(A)) =
 
 --- The value, once there is one.
 pub let poll(@A: Type, f: Future(A)) -> Io(Option(A)) =
-    Box/held(f.value);
+    Box/get(f.value);
 
 --- Fill `f` with `a`, and wake whatever waits on it. A second filling is dropped, so the first value stands.
 pub let fill(@A: Type, f: Future(A), a: A) -> Io({}) =

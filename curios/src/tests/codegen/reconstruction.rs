@@ -232,7 +232,7 @@ fn an_escaping_walk_with_multiple_callers_keeps_a_tail_recursive_function() {
         r#"${HEADER}${PROOF}
         let main() -> Io({}) =
         let holder = Box/new(walk)!;
-        let indirect = Box/held(holder)!;
+        let indirect = Box/get(holder)!;
         let n = List/length(/std/Proc/args()!);
         let a = walk(n, 7);
         let b = walk(n + 1, 11);

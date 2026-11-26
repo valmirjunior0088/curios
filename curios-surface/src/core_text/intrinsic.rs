@@ -538,8 +538,8 @@ pub fn intrinsic_written<D: Rendered>(intrinsic: Intrinsic, frame: Frame<'_, D>)
             "Box",
             vec![value(sub(element, frame)), value(sub(held, frame))],
         ),
-        Intrinsic::BoxHeld { element, target } => called(
-            "BoxHeld",
+        Intrinsic::BoxGet { element, target } => called(
+            "BoxGet",
             vec![value(sub(element, frame)), value(sub(target, frame))],
         ),
         Intrinsic::BoxSet {
@@ -1262,9 +1262,9 @@ pub fn intrinsic_read(
                 value: term(value, reader)?,
             }
         }
-        "BoxHeld" => {
+        "BoxGet" => {
             let [element, target] = operands(intrinsic, span)?;
-            Intrinsic::BoxHeld {
+            Intrinsic::BoxGet {
                 element: term(element, reader)?,
                 target: term(target, reader)?,
             }

@@ -395,7 +395,7 @@ pub enum Intrinsic<T = Term> {
         element: T,
         value: T,
     },
-    BoxHeld {
+    BoxGet {
         element: T,
         target: T,
     },
@@ -1187,7 +1187,7 @@ impl Intrinsic {
                 element: a,
                 value: b,
             }
-            | Intrinsic::BoxHeld {
+            | Intrinsic::BoxGet {
                 element: a,
                 target: b,
             } => {
@@ -1557,7 +1557,7 @@ impl Intrinsic {
                 element: visit.visit_subterm(element),
                 value: visit.visit_subterm(value),
             },
-            Intrinsic::BoxHeld { element, target } => Intrinsic::BoxHeld {
+            Intrinsic::BoxGet { element, target } => Intrinsic::BoxGet {
                 element: visit.visit_subterm(element),
                 target: visit.visit_subterm(target),
             },
@@ -1953,7 +1953,7 @@ impl<T> Intrinsic<T> {
                 element: operand(element)?,
                 value: operand(value)?,
             },
-            Intrinsic::BoxHeld { element, target } => Intrinsic::BoxHeld {
+            Intrinsic::BoxGet { element, target } => Intrinsic::BoxGet {
                 element: operand(element)?,
                 target: operand(target)?,
             },

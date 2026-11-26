@@ -12,7 +12,7 @@ fn a_catch_all_is_checked_at_its_scrutinee() {
     assert_eq!(run(A_CATCH_ALL_IS_CHECKED_AT_ITS_SCRUTINEE), b"1");
 }
 
-// The purity premise every refinement rests on: an arm is reached only when its scrutinee *equals* the case's value, which a term of non-`Io` type does because it denotes one value. An effectful read does not — two occurrences of `Box/held(c)` around a change of the box would denote two values, refining both would re-read `p : Eq()(Box/held(c), true)` at `Eq()(false, true)` in the inner arm, and `/std/Bool/false_neq_true` would turn that into `/std/Bool/False` in an arm the run reaches. Its type is `Io(Bool)`, opaque and with no cases, so nothing lets the program treat it as a `Bool`, and the refusal names `Io`. The control forces the read once and matches the `Bool` it yields, which the refusal leaves a description.
+// The purity premise every refinement rests on: an arm is reached only when its scrutinee *equals* the case's value, which a term of non-`Io` type does because it denotes one value. An effectful read does not — two occurrences of `Box/get(c)` around a change of the box would denote two values, refining both would re-read `p : Eq()(Box/get(c), true)` at `Eq()(false, true)` in the inner arm, and `/std/Bool/false_neq_true` would turn that into `/std/Bool/False` in an arm the run reaches. Its type is `Io(Bool)`, opaque and with no cases, so nothing lets the program treat it as a `Bool`, and the refusal names `Io`. The control forces the read once and matches the `Bool` it yields, which the refusal leaves a description.
 #[test]
 fn an_effectful_scrutinee_is_not_a_value() {
     control(
@@ -21,7 +21,7 @@ fn an_effectful_scrutinee_is_not_a_value() {
 
         let entry() -> /std/Io({}) =
             let c = Box/new(true)!;
-            let read = Box/held(c)!;
+            let read = Box/get(c)!;
 
             let forged : Str =
                 match read
@@ -41,7 +41,7 @@ fn an_effectful_scrutinee_is_not_a_value() {
         b"second read true",
     )
     .refused(&[
-        ("let read = Box/held(c)!;", "let read = Box/held(c);"),
+        ("let read = Box/get(c)!;", "let read = Box/get(c);"),
     ])
     .by_elaborator_in(
         "/entry",
@@ -49,7 +49,7 @@ fn an_effectful_scrutinee_is_not_a_value() {
     );
 }
 
-/// Asserted on the *argument*: the fixture uses `Box/held(c) : Io(Bool)`, which `f : (Bool) -> Bool` does not take, so the derivation is refused at the first occurrence and never reaches a refinement at all. The control's read is the value `true`.
+/// Asserted on the *argument*: the fixture uses `Box/get(c) : Io(Bool)`, which `f : (Bool) -> Bool` does not take, so the derivation is refused at the first occurrence and never reaches a refinement at all. The control's read is the value `true`.
 #[test]
 fn an_effect_behind_a_stuck_head_is_not_an_argument() {
     control(
@@ -81,14 +81,14 @@ fn an_effect_behind_a_stuck_head_is_not_an_argument() {
         b"second read true",
     )
     .refused(&[
-        ("let read = true;", "let read = Box/held(@Bool, c);"),
+        ("let read = true;", "let read = Box/get(@Bool, c);"),
     ])
     .by_elaborator_in("/entry", |error| {
         matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "Io(Bool)" && pinned(expected) == "Bool")
     });
 }
 
-/// Asserted on the offending *argument*: the refusal is that `(b) => Box/held(c)` cannot be passed where a `(Bool) -> Bool` is wanted, so the description type has to appear in the diagnostic. A fixture refused anywhere else — at the cell, at `Eq/refl`, at an arm — would not produce that, and this file's rule is that a rule test asserts its own diagnostic. The control's function answers `true`.
+/// Asserted on the offending *argument*: the refusal is that `(b) => Box/get(c)` cannot be passed where a `(Bool) -> Bool` is wanted, so the description type has to appear in the diagnostic. A fixture refused anywhere else — at the cell, at `Eq/refl`, at an arm — would not produce that, and this file's rule is that a rule test asserts its own diagnostic. The control's function answers `true`.
 #[test]
 fn an_effect_cannot_inhabit_a_pure_arrow() {
     control(
@@ -121,7 +121,7 @@ fn an_effect_cannot_inhabit_a_pure_arrow() {
         b"no contradiction",
     )
     .refused(&[
-        ("((b) => true)", "((b) => Box/held(c))"),
+        ("((b) => true)", "((b) => Box/get(c))"),
     ])
     .by_elaborator_in("/entry", |error| {
         matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "Io(Bool)" && pinned(expected) == "Bool")

@@ -58,7 +58,7 @@ fn peel_loops_are_linear_by_construction() {
                 match fuel
                 | 0 => Io/pure(acc)
                 | f + 1 =>
-                    match Box/held(c)!
+                    match Box/get(c)!
                     | 0x[] => Io/pure(acc)
                     | 0x[h, ..t] =>
                         let next = Box/new(t)!;

@@ -873,7 +873,7 @@ fn every_returning_operation_retains_its_result_receiver() {
         let width = match kind {
             "foreign" => foreign.signature().imported_results().len(),
             "cell" => CellOp::Poll.result_arity(),
-            "box" => BoxOp::Held.result_arity(),
+            "box" => BoxOp::Get.result_arity(),
             _ => 1,
         };
         let results = p.params(width);
@@ -914,7 +914,7 @@ fn every_returning_operation_retains_its_result_receiver() {
                 return_to: resume,
             },
             "box" => Node::Box {
-                op: BoxOp::Held,
+                op: BoxOp::Get,
                 args: vec![Atom::Filler],
                 return_to: resume,
             },

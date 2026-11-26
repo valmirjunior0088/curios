@@ -500,7 +500,7 @@ fn a_box_holds_what_any_set_stores() {
                             |module, held| read(module, held[0], &mut probe),
                             |module, return_to| {
                                 module.add_node(Node::Box {
-                                    op: BoxOp::Held,
+                                    op: BoxOp::Get,
                                     args: vec![Atom::Value(made)],
                                     return_to,
                                 })

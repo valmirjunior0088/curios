@@ -390,7 +390,7 @@ pub fn box_roundtrip() -> curios_cps::Module {
         terminates: false,
     });
     let read = module.add_node(curios_cps::Node::Box {
-        op: curios_cps::BoxOp::Held,
+        op: curios_cps::BoxOp::Get,
         args: vec![curios_cps::Atom::Value(made)],
         return_to: after_held,
     });

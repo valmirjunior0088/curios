@@ -438,14 +438,14 @@ impl Eraser<'_> {
                     ))
                 })
             }
-            curios_core::Intrinsic::BoxHeld { .. } => {
+            curios_core::Intrinsic::BoxGet { .. } => {
                 let [target] = places(computed(context, intrinsic));
                 let target = emitted!(self.demanded(context, &target)?);
-                self.thunk(hint.or(Some("io/box_held")), move |lowering| {
+                self.thunk(hint.or(Some("io/box_get")), move |lowering| {
                     Ok(lowering.bind(
                         None,
                         curios_anf::Rhs::Box {
-                            operation: curios_anf::BoxOperation::Held,
+                            operation: curios_anf::BoxOperation::Get,
                             operands: vec![target],
                         },
                     ))

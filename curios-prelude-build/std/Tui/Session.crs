@@ -128,18 +128,18 @@ pub let open(s: Io/Scope) -> Try(Io, Io/Error, Session) =
 
 --- The size the session last knew the terminal at: the one it was opened at, asked since, or reported in the terminal's input.
 pub let size(s: Session) -> Try(Io, Io/Error, Tty/Size) =
-    let kept = Box/held(s.kept)!;
+    let kept = Box/get(s.kept)!;
     Try/pure(kept.size);
 
 --- The terminal's size now, asked of it and kept.
 pub let measure(s: Session) -> Try(Io, Io/Error, Tty/Size) =
     let now = Tty/size(s.tty)!;
-    let () = Box/change(s.kept, (kept: Kept) => (Kept { ..kept, size = now }, ()))!;
+    let () = Box/update(s.kept, (kept: Kept) => Kept { ..kept, size = now })!;
     Try/pure(now);
 
 --- Keep `now` as the terminal's size, as a resize the terminal reported states it.
 pub let resized(s: Session, now: Tty/Size) -> Try(Io, Io/Error, {}) =
-    Box/change(s.kept, (kept: Kept) => (Kept { ..kept, size = now }, ()));
+    Box/update(s.kept, (kept: Kept) => Kept { ..kept, size = now });
 
 --- Whether the terminal reports its size in its input as it changes, so nothing need ask it.
 pub let reports_size(s: Session) -> Bool =
@@ -147,7 +147,7 @@ pub let reports_size(s: Session) -> Bool =
 
 --- Take the terminal's screen as unknown, so the next draw writes it whole.
 pub let forget(s: Session) -> Try(Io, Io/Error, {}) =
-    Box/change(s.kept, (kept: Kept) => (Kept { ..kept, shown = Option/none() }, ()));
+    Box/update(s.kept, (kept: Kept) => Kept { ..kept, shown = Option/none() });
 
 -- The frame `shown` holds, where it was drawn at `w` by `h`.
 let drawn_at(w: Nat, h: Nat, shown: Option(Shown)) -> Option(Frame(w, h)) =
@@ -201,7 +201,7 @@ let taken_pending(s: Session) -> Io(List(Input)) =
 
 -- `inputs` kept after what `s` keeps for its next read.
 let kept_pending(s: Session, inputs: List(Input)) -> Io({}) =
-    Box/change(s.kept, (kept: Kept) => (Kept { ..kept, pending = [..kept.pending, ..inputs] }, ()));
+    Box/update(s.kept, (kept: Kept) => Kept { ..kept, pending = [..kept.pending, ..inputs] });
 
 -- The next burst read from the terminal itself.
 let arrived(s: Session) -> Try(Io, Io/Error, Option(List(Input))) =
@@ -251,6 +251,5 @@ pub let release(@A: Type, s: Session, action: Io(A)) -> Try(Io, Io/Error, A) =
     let () = Io/write(s.tty, entering(s.support))!;
     let now = Tty/size(s.tty)!;
     let () =
-        Box/change(s.kept, (kept: Kept) =>
-            (Kept { ..kept, shown = Option/none(), size = now }, ()))!;
+        Box/update(s.kept, (kept: Kept) => Kept { ..kept, shown = Option/none(), size = now })!;
     Try/pure(answer);

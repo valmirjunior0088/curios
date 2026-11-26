@@ -1455,7 +1455,7 @@ impl<'a, 'd, D: Driver> Walk<'a, 'd, D> {
             | Intrinsic::LatchTrip { .. }
             | Intrinsic::LatchTripped { .. }
             | Intrinsic::Box { .. }
-            | Intrinsic::BoxHeld { .. }
+            | Intrinsic::BoxGet { .. }
             | Intrinsic::BoxSet { .. }
             | Intrinsic::IoPure { .. }
             | Intrinsic::IoBind { .. }

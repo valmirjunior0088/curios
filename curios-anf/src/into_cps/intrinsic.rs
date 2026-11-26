@@ -114,7 +114,7 @@ pub fn cell_op(operation: CellOperation) -> curios_cps::CellOp {
 pub fn box_op(operation: BoxOperation) -> curios_cps::BoxOp {
     match operation {
         BoxOperation::New => curios_cps::BoxOp::New,
-        BoxOperation::Held => curios_cps::BoxOp::Held,
+        BoxOperation::Get => curios_cps::BoxOp::Get,
         BoxOperation::Set => curios_cps::BoxOp::Set,
     }
 }

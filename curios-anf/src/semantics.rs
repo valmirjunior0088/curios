@@ -354,7 +354,7 @@ impl Semantics {
     pub fn box_(operation: BoxOperation) -> LocalBehavior {
         match operation {
             BoxOperation::New => LocalBehavior::alloc(Allocation::Mutable),
-            BoxOperation::Held => LocalBehavior::state_read(),
+            BoxOperation::Get => LocalBehavior::state_read(),
             BoxOperation::Set => LocalBehavior::state_write(),
         }
     }

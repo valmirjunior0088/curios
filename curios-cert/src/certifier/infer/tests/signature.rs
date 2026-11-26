@@ -403,7 +403,7 @@ fn every_row_no_fold_answers_produces_an_inert_description() {
             "#LatchTrip(latch)".to_string(),
             "#LatchTripped(latch)".to_string(),
             "#Box(#NatType, 1)".to_string(),
-            "#BoxHeld(#NatType, held)".to_string(),
+            "#BoxGet(#NatType, held)".to_string(),
             "#BoxSet(#NatType, held, 1)".to_string(),
             "#IoPure(#NatType, 1)".to_string(),
             "#IoBind(#NatType, #NatType, #IoPure(#NatType, 1), (item: #NatType) => #IoPure(#NatType, item))"

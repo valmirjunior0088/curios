@@ -168,7 +168,7 @@ fn classify_under(
             | Intrinsic::LatchTripped { .. }
             | Intrinsic::LatchTrip { .. }
             | Intrinsic::Box { .. }
-            | Intrinsic::BoxHeld { .. }
+            | Intrinsic::BoxGet { .. }
             | Intrinsic::BoxSet { .. }
             | Intrinsic::Flt(..)
             | Intrinsic::FltAbs(..)

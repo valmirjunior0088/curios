@@ -974,7 +974,7 @@ fn solve(
                     BoxOp::Set => {
                         rules.add(move |solver| flow(solver, source(&args[1]), FlowKey::Box))
                     }
-                    BoxOp::Held => rules.add(move |solver| {
+                    BoxOp::Get => rules.add(move |solver| {
                         deliver(solver, *return_to, &|_| Source::Key(FlowKey::Box));
                     }),
                 },

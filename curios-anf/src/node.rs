@@ -218,12 +218,12 @@ impl CellOperation {
     }
 }
 
-/// A box operation. `New` takes the value the box is made holding, `Held` takes the box, and `Set` takes the box then the value it holds from then on.
+/// A box operation. `New` takes the value the box is made holding, `Get` takes the box, and `Set` takes the box then the value it holds from then on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[curios_archive::archived]
 pub enum BoxOperation {
     New,
-    Held,
+    Get,
     Set,
 }
 
@@ -231,7 +231,7 @@ impl BoxOperation {
     /// The exact operand count of this operation.
     pub fn arity(self) -> usize {
         match self {
-            Self::New | Self::Held => 1,
+            Self::New | Self::Get => 1,
             Self::Set => 2,
         }
     }

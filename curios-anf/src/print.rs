@@ -1249,7 +1249,7 @@ fn render_constant(constant: &Constant) -> String {
 fn box_name(operation: BoxOperation) -> &'static str {
     match operation {
         BoxOperation::New => "Box/new",
-        BoxOperation::Held => "Box/held",
+        BoxOperation::Get => "Box/get",
         BoxOperation::Set => "Box/set",
     }
 }

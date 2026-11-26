@@ -473,7 +473,7 @@ impl Intrinsic {
                 vec![Operand::IsType, Operand::At(element.clone())],
                 io_type(box_type(element.clone())),
             ),
-            Self::BoxHeld { element, .. } => sig(
+            Self::BoxGet { element, .. } => sig(
                 vec![Operand::IsType, Operand::At(box_type(element.clone()))],
                 io_type(element.clone()),
             ),

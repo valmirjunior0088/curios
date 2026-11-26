@@ -2225,7 +2225,7 @@ pub fn reduce_intrinsic(
             element: reducer.reduce(element.clone())?,
             value: reducer.reduce(value.clone())?,
         })),
-        Intrinsic::BoxHeld { element, target } => Ok(Subterm::Intrinsic(Intrinsic::BoxHeld {
+        Intrinsic::BoxGet { element, target } => Ok(Subterm::Intrinsic(Intrinsic::BoxGet {
             element: reducer.reduce(element.clone())?,
             target: reducer.reduce(target.clone())?,
         })),

@@ -566,21 +566,3 @@ fn a_closed_channel_drains_before_it_ends() {
         b"empty full closed 1 2 end ended false"
     );
 }
-
-// A box is changed only by a function of what it holds: `/sys` sets a box whole, and `/std/Box` keeps that behind its own `change`, so no program sets a box to a value it read before a wait.
-#[test]
-fn a_program_changes_a_box_only_through_a_function_of_it() {
-    let (system, _io) = MockHost::builder().build();
-    let refusal = run_text(
-        r#"
-        use /std/{Nat, Io, Box};
-        let entry() -> /std/Io({}) =
-            let b = Box/new(@Nat, 1)!;
-            Box/set(b, 2);
-        entry()
-        "#,
-        system,
-    )
-    .expect_err("a box has no public set");
-    assert!(refusal.contains("set"), "{refusal}");
-}

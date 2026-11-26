@@ -510,7 +510,7 @@ impl<'a> Emitter<'a> {
             },
         );
         let held = self.module.add_node(curios_cps::Node::Box {
-            op: curios_cps::BoxOp::Held,
+            op: curios_cps::BoxOp::Get,
             args: vec![curios_cps::Atom::Value(knot.next)],
             return_to: read,
         });

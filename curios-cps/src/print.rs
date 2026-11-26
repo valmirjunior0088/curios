@@ -1097,7 +1097,7 @@ fn render_literal(literal: &Literal) -> String {
 fn box_name(operation: BoxOp) -> &'static str {
     match operation {
         BoxOp::New => "Box/new",
-        BoxOp::Held => "Box/held",
+        BoxOp::Get => "Box/get",
         BoxOp::Set => "Box/set",
     }
 }

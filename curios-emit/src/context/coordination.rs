@@ -117,7 +117,7 @@ impl<'a> Context<'a, '_> {
         output
     }
 
-    /// A box operation, inline: `New` makes the box holding its operand, `Held` answers what the box holds, and `Set` makes it hold its second operand, answering nothing. The field admits null, as every reference position does, so a filler stored in a box reads back as it was stored.
+    /// A box operation, inline: `New` makes the box holding its operand, `Get` answers what the box holds, and `Set` makes it hold its second operand, answering nothing. The field admits null, as every reference position does, so a filler stored in a box reads back as it was stored.
     pub(super) fn box_instrs(&self, target: &'a EmissionBoxTarget) -> Vec<curios_wasm::Instr> {
         let type_name = self.table().box_type();
         let field = self.table().special_field();
@@ -127,7 +127,7 @@ impl<'a> Context<'a, '_> {
                 output.extend(self.load_value_instrs(&target.args[0], LoadAs::Null));
                 output.push(curios_wasm::Instr::StructNew { type_name });
             }
-            curios_cps::BoxOp::Held => {
+            curios_cps::BoxOp::Get => {
                 output.extend(
                     self.load_value_instrs(&target.args[0], LoadAs::Concrete(type_name.clone())),
                 );
