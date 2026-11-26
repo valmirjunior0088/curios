@@ -52,14 +52,15 @@ pub use hash/{let hash};
 
 use /std/{Nat, Bool, Str, Option, Show, Spell, Hash, Eq};
 use /std/ops/{Eql, Add, Sub, Mul, Div, Rem};
+use /std/Bool/{True, Holds};
 
 --- That `a` is not zero, decided — what `/` and `%` on `Int` ask of a divisor.
 pub let NonZero(a: Int) -> Prop =
-    Bool/Holds(a != +0);
+    Holds(a != +0);
 
 --- That `a` is zero or above, decided.
 pub let NonNeg(a: Int) -> Prop =
-    Bool/Holds(a >= +0);
+    Holds(a >= +0);
 
 --- An integer is a widened natural, or one below the negation of one: its two canonical forms, as the family's indices.
 ---
@@ -78,24 +79,24 @@ pub let view(i: Int) -> Sign(i) =
     | false => Sign/neg(to_nat(-1 - i))
     end;
 
-let absurd_succ(@P: Sort, x: Nat, h: Bool/Holds(eql(+0, Nat/to_int(x) + 1))) -> P =
+let absurd_succ(@P: Sort, x: Nat, h: Holds(eql(+0, Nat/to_int(x) + 1))) -> P =
     match h end;
 
 -- Stated over `eql`, and decided through `lt` and `le`, each by name: an operator here would read the witness that names this.
 --- `Eql`'s law at `Int`: a decided equality is an equation.
-let eq_of_eql(a: Int, b: Int, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
+let eq_of_eql(a: Int, b: Int, h: Holds(eql(a, b))) -> Eq()(a, b) =
     match lt(a, b)
     | true =>
-        let below: Bool/Holds(lt(a, b)) = Bool/True/qed();
+        let below: Holds(lt(a, b)) = True/qed();
         absurd_succ(to_nat(b - a - 1, @below), h)
     | false =>
-        let at_least: Bool/Holds(le(b, a)) = Bool/True/qed();
+        let at_least: Holds(le(b, a)) = True/qed();
         match lt(b, a)
         | true =>
-            let above: Bool/Holds(lt(b, a)) = Bool/True/qed();
+            let above: Holds(lt(b, a)) = True/qed();
             absurd_succ(to_nat(a - b - 1, @above), h)
         | false =>
-            let at_most: Bool/Holds(le(a, b)) = Bool/True/qed();
+            let at_most: Holds(le(a, b)) = True/qed();
             le/antisym(a, b, at_most, at_least)
         end
     end;
@@ -136,7 +137,7 @@ pub let non_neg(n: Int) -> Option(NonNeg(n)) =
 satisfy Eql(Int) {
     eql = eql,
     eq = eq_of_eql,
-    refl(_) = Bool/True/qed(),
+    refl(_) = True/qed(),
 }
 
 satisfy Add(Int) {

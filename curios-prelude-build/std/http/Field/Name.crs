@@ -1,5 +1,6 @@
 use /std/{Str, Bytes, Byte, Nat, Bool, Option, Spell};
 use /std/ops/{Eql};
+use /std/Bool/{Holds};
 
 --- Whether `b` may stand in a token (RFC 9110 §5.6.2): a letter, a digit, or one of ``!#$%&'*+-.^_`|~``.
 pub let is_tchar(b: Byte) -> Bool =
@@ -36,7 +37,7 @@ pub struct Name: pub Type {
     --- The name, lowercase: RFC 9110 §5.1 compares names without case, and HTTP/2 and HTTP/3 send them lowercase.
     text: Str,
     --- Why the text is a lowercase token.
-    @token: Bool/Holds(is_name(text)),
+    @token: Holds(is_name(text)),
 }
 
 --- Two names are one where their text is, `content-type` written once for every casing of it.

@@ -1,5 +1,6 @@
-use /std/{Nat, Eq, Option, proved, Bool};
+use /std/{Nat, Eq, Option, proved};
 use /std/Nat/{Divides, Gcd};
+use /std/Bool/{Holds};
 
 --- That `a` and `b` share no divisor but one: their greatest common divisor is `1`.
 pub let Coprime(a: Nat, b: Nat) -> Prop =
@@ -41,7 +42,7 @@ pub let of_common(
 pub let quotients(
     a: Nat,
     b: Nat,
-    @ok: Bool/Holds(0 < Nat/gcd(a, b)),
+    @ok: Holds(0 < Nat/gcd(a, b)),
 ) -> Coprime(a / Nat/gcd(a, b), b / Nat/gcd(a, b)) =
     let g = Nat/gcd(a, b);
     let x = a / g;

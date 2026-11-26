@@ -3,13 +3,14 @@ pub use /sys/Byte/{to_nat};
 
 use /std/{Ordering, Nat, Bool, Show, Spell, Ord, Hash, Eq, proved};
 use /std/ops/{Eql, And, Or};
+use /std/Bool/{True, Holds};
 
 --- Whether the two are equal.
 pub let eql(a: Byte, b: Byte) -> Bool =
     to_nat(a) == to_nat(b);
 
 -- `Eql`'s law at `Byte`: the codes are equal by `Nat`'s, and a byte is the byte of its own code, since `to_byte(to_nat(b))` converts with `b`.
-let eq_of_eql(a: Byte, b: Byte, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
+let eq_of_eql(a: Byte, b: Byte, h: Holds(eql(a, b))) -> Eq()(a, b) =
     Eq/cong((n) => Nat/to_byte(n % 256), proved(@Eq()(to_nat(a), to_nat(b))));
 
 --- Whether `a` is below `b`.
@@ -80,7 +81,7 @@ pub let ord(a: Byte, b: Byte) -> Ordering =
 satisfy Eql(Byte) {
     eql = eql,
     eq = eq_of_eql,
-    refl(_) = Bool/True/qed(),
+    refl(_) = True/qed(),
 }
 
 satisfy And(Byte) {

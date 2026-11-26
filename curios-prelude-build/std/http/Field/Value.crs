@@ -1,6 +1,7 @@
 use /std/{Str, Bytes, Byte, Nat, Int, Bool, List, Option, Result, Spell};
 use /std/time/{Timestamp, Date, DateTime, Month, Weekday, Offset, OffsetDateTime, rfc3339};
 use /std/ops/{Eql};
+use /std/Bool/{True, Holds};
 
 --- Whether `b` may stand in a field value: the tab, the space, and every octet past them but DEL, obs-text included (RFC 9110 §5.5). No other control octet may, a line's end least of all.
 pub let admits(b: Byte) -> Bool =
@@ -12,7 +13,7 @@ pub struct Value: pub Type {
     --- The octets, as the wire carries them.
     bytes: Bytes,
     --- Why every octet may stand in a value.
-    @clean: Bool/Holds(Bytes/all(bytes, admits)),
+    @clean: Holds(Bytes/all(bytes, admits)),
 }
 
 satisfy Eql(Value) {
@@ -28,7 +29,7 @@ pub let empty: Value =
     Value { bytes = 0x[] };
 
 --- The value the literal `s` spells.
-pub let lit(s: Str, @_: Bool/Holds(Bytes/all(Str/to_bytes(s), admits))) -> Value =
+pub let lit(s: Str, @_: Holds(Bytes/all(Str/to_bytes(s), admits))) -> Value =
     Value { bytes = Str/to_bytes(s) };
 
 --- The value `b` holds, or `none` where an octet of it may not stand in one.
@@ -49,7 +50,7 @@ pub let to_str(v: Value) -> Option(Str) =
 --- One octet a value may hold.
 pub struct Octet: pub Type {
     byte: Byte,
-    @clean: Bool/Holds(admits(byte)),
+    @clean: Holds(admits(byte)),
 }
 
 --- `v` with `o` ahead of it: how a value is built an octet at a time, each carrying its own reason.
@@ -63,7 +64,7 @@ pub let append(a: Value, b: Value) -> Value =
     prepended(a.bytes, @a.clean, b);
 
 -- `m`'s octets ahead of `b`, each standing in a value by what `clean` says of them all.
-let prepended(m: Bytes, @clean: Bool/Holds(Bytes/all(m, admits)), b: Value) -> Value =
+let prepended(m: Bytes, @clean: Holds(Bytes/all(m, admits)), b: Value) -> Value =
     match m
     | 0x[] => b
     | 0x[h, ..t] =>
@@ -86,7 +87,7 @@ let digit_octets: List(Octet) =
         Octet { byte = '8' },
         Octet { byte = '9' }];
 
-let digit(n: Nat, @below: Bool/Holds(n < 10)) -> Octet =
+let digit(n: Nat, @below: Holds(n < 10)) -> Octet =
     List/get(digit_octets, n);
 
 -- `n` in two digits ahead of `rest`, what is past its tens left out.
@@ -94,7 +95,7 @@ let two_digits(n: Nat, rest: Value) -> Value =
     cons(digit(n / 10 % 10), cons(digit(n % 10), rest));
 
 -- `n`, below ten thousand, in four digits ahead of `rest`: the year as the fixed-length form writes it.
-let year_digits(n: Nat, rest: Value, @below: Bool/Holds(n < 10000)) -> Value =
+let year_digits(n: Nat, rest: Value, @below: Holds(n < 10000)) -> Value =
     cons(digit(n / 1000), cons(digit(n / 100 % 10), two_digits(n, rest)));
 
 -- The weekday in the three letters the Internet message format writes it in.
@@ -127,16 +128,16 @@ let month_name(m: Month) -> Str =
     end;
 
 -- A weekday's and a month's three letters may each stand in a value: by cases, a literal's reason at each.
-let weekday_admitted(d: Weekday) -> Bool/Holds(Bytes/all(Str/to_bytes(weekday_name(d)), admits)) =
+let weekday_admitted(d: Weekday) -> Holds(Bytes/all(Str/to_bytes(weekday_name(d)), admits)) =
     match d
     | sunday() | monday() | tuesday() | wednesday() | thursday() | friday() | saturday() =>
-        Bool/True/qed()
+        True/qed()
     end;
 
-let month_admitted(m: Month) -> Bool/Holds(Bytes/all(Str/to_bytes(month_name(m)), admits)) =
+let month_admitted(m: Month) -> Holds(Bytes/all(Str/to_bytes(month_name(m)), admits)) =
     match m
     | january() | february() | march() | april() | may() | june() | july() | august() | september()
-    | october() | november() | december() => Bool/True/qed()
+    | october() | november() | december() => True/qed()
     end;
 
 --- The moment as a field's value, in the fixed-length form HTTP sends a date in (RFC 9110 §5.6.7), `Sun, 06 Nov 1994 08:49:37 GMT`: its date and time in UTC, or `none` where its year has more digits than the form's four. Every octet is built valid, so dating a message needs no check that could fail.

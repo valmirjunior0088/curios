@@ -1,6 +1,7 @@
 use /std/{Bytes, Byte, Str, Nat, Bool, List, Option, Result, Spell, Fmt};
 use /std/ops/{Eql};
 use /std/http/{Method, Url, Field, Version, Limits, Refusal, Framing, read, syntax};
+use /std/Bool/{Holds};
 
 --- What is sent: the method, where to, the headers and the body.
 pub struct Request: pub Type {
@@ -32,8 +33,8 @@ pub let with_header(
     r: Request,
     name: Str,
     value: Str,
-    @_: Bool/Holds(Field/Name/is_name(name)),
-    @_: Bool/Holds(Bytes/all(Str/to_bytes(value), Field/Value/admits)),
+    @_: Holds(Field/Name/is_name(name)),
+    @_: Holds(Bytes/all(Str/to_bytes(value), Field/Value/admits)),
 ) -> Request =
     Request { ..r, headers = [..r.headers, Field/of(name, value)] };
 

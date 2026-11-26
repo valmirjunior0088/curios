@@ -1,5 +1,6 @@
 use /std/{Str, Char, Bool, Bytes, Nat, Option, Eq, proved};
 use /std/Str/{At};
+use /std/Bool/{Holds};
 
 --- The first character at or after `from` that `pred` accepts, and where it is, or `none`: one walk over the bytes from `from`, which stops before it.
 pub let seek(s: Str, from: At(s), pred: (Char) -> Bool) -> Option({at: At(s), char: Char}) =
@@ -26,16 +27,16 @@ pub let Found(s: Str, from: At(s)) -> Type =
     {
         start: At(s),
         past: At(s),
-        ordered: Bool/Holds(from.offset <= start.offset),
-        progress: Bool/Holds(start.offset < past.offset)};
+        ordered: Holds(from.offset <= start.offset),
+        progress: Holds(start.offset < past.offset)};
 
 --- A character may begin at the front of bytes that begin with bytes, not empty, at whose front one may.
 let starts_concat(
     a: Bytes,
     r: Bytes,
-    some: Bool/Holds(0 < Bytes/length(a)),
-    at: Bool/Holds(At/starts(a)),
-) -> Bool/Holds(At/starts(0x[..a, ..r])) =
+    some: Holds(0 < Bytes/length(a)),
+    at: Holds(At/starts(a)),
+) -> Holds(At/starts(0x[..a, ..r])) =
     match a
     | 0x[] => match some end
     | 0x[_, .._] => at
@@ -47,17 +48,17 @@ pub let occurrence(
     s: Str,
     from: At(s),
     needle: Str,
-    first: {char: Char, past: At(needle), progress: Bool/Holds(0 < past.offset)},
+    first: {char: Char, past: At(needle), progress: Holds(0 < past.offset)},
 ) -> Option(Found(s, from)) =
     let n = Bytes/length(needle.bytes);
-    let some: Bool/Holds(0 < n) =
+    let some: Holds(0 < n) =
         Nat/lt/of_lt_le(0, first.past.offset, n, first.progress, first.past.within);
     let lead_byte = Bytes/get(needle.bytes, 0, @some);
     let rest = Str/after(s, from);
     let go(
         b: Bytes,
         k: Nat,
-        @w: Bool/Holds(k <= Bytes/length(rest.bytes)),
+        @w: Holds(k <= Bytes/length(rest.bytes)),
         @e: Eq()(Bytes/drop(rest.bytes, k, @w), b),
     ) -> Option(Found(s, from)) =
         match b
@@ -73,12 +74,12 @@ pub let occurrence(
                     match Bytes/slice(rest.bytes, k, n, @inside) == needle.bytes
                     | false => go(t, k + 1, @onward.within, @onward.cut)
                     | true =>
-                        let fits: Bool/Holds(n <= Bytes/length(b)) =
-                            Eq/subst((x: Bytes) => Bool/Holds(n <= Bytes/length(x)), e, proved());
+                        let fits: Holds(n <= Bytes/length(b)) =
+                            Eq/subst((x: Bytes) => Holds(n <= Bytes/length(x)), e, proved());
                         let held: Eq()(Bytes/slice(b, 0, n, @fits), needle.bytes) =
                             Eq/subst(
                                 (x: Bytes) =>
-                                    (q: Bool/Holds(n <= Bytes/length(x))) -> Eq()(
+                                    (q: Holds(n <= Bytes/length(x))) -> Eq()(
                                         Bytes/slice(x, 0, n, @q),
                                         needle.bytes),
                                 e,
@@ -88,12 +89,12 @@ pub let occurrence(
                             Eq/trans(
                                 Str/split_at(b, n, fits),
                                 Eq/cong((p: Bytes) => 0x[..p, ..Bytes/drop(b, n, @fits)], held));
-                        let begins: Bool/Holds(At/starts(Bytes/drop(rest.bytes, k, @w))) =
+                        let begins: Holds(At/starts(Bytes/drop(rest.bytes, k, @w))) =
                             Eq/subst(
-                                (w: Bytes) => Bool/Holds(At/starts(w)),
+                                (w: Bytes) => Holds(At/starts(w)),
                                 Eq/sym(e),
                                 Eq/subst(
-                                    (w: Bytes) => Bool/Holds(At/starts(w)),
+                                    (w: Bytes) => Holds(At/starts(w)),
                                     Eq/sym(split),
                                     starts_concat(
                                         needle.bytes,
@@ -109,16 +110,13 @@ pub let occurrence(
                             Str/Valid/after_prefix(
                                 needle.valid,
                                 Eq/subst((w: Bytes) => Str/Valid(w), split, valid_b));
-                        let room: Bool/Holds(n <= Bytes/length(Bytes/drop(rest.bytes, k, @w))) =
-                            Eq/subst(
-                                (w: Bytes) => Bool/Holds(n <= Bytes/length(w)),
-                                Eq/sym(e),
-                                fits);
-                        let ends: Bool/Holds(
+                        let room: Holds(n <= Bytes/length(Bytes/drop(rest.bytes, k, @w))) =
+                            Eq/subst((w: Bytes) => Holds(n <= Bytes/length(w)), Eq/sym(e), fits);
+                        let ends: Holds(
                             At/starts(Bytes/drop(Bytes/drop(rest.bytes, k, @w), n, @room))) =
                             Eq/subst(
                                 (w: Bytes) =>
-                                    (q: Bool/Holds(n <= Bytes/length(w))) -> Bool/Holds(
+                                    (q: Holds(n <= Bytes/length(w))) -> Holds(
                                         At/starts(Bytes/drop(w, n, @q))),
                                 Eq/sym(e),
                                 (_) => Str/Valid/begins(past_valid))(

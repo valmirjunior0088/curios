@@ -1,12 +1,13 @@
 use /std/{Bytes, Byte, Str, Nat, Bool, List, Option, Result};
 use /std/http/{Field, Status, Version, Refusal, read, octets};
+use /std/Bool/{Holds};
 
 --- The lines of a head's bytes, in order, their line ends left out: the start line first.
 pub let lines(head: Bytes) -> List(Bytes) =
     let go(
         from: Nat,
         found: List(Bytes),
-        @reached: Bool/Holds(from <= Bytes/length(head)),
+        @reached: Holds(from <= Bytes/length(head)),
     ) -> List(Bytes) =
         match read/line_end(head, from)
         | some(ended) => go(ended.at + 2, [Bytes/slice(head, from, ended.at - from), ..found])

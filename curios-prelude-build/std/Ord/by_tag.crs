@@ -1,4 +1,5 @@
-use /std/{Nat, Bool, Eq, Ord, Ordering};
+use /std/{Nat, Eq, Ord, Ordering};
+use /std/Bool/{Holds};
 
 --- Two constructors ordered by declaration position, answering `same` where they agree.
 ---
@@ -33,8 +34,8 @@ pub let chains(
     @x: Ordering,
     @y: Ordering,
     @z: Ordering,
-    tied: (Eq()(left, middle), Eq()(middle, right)) -> Bool/Holds(Ordering/chains(x, y, z)),
-) -> Bool/Holds(
+    tied: (Eq()(left, middle), Eq()(middle, right)) -> Holds(Ordering/chains(x, y, z)),
+) -> Holds(
     Ordering/chains(by_tag(left, middle, x), by_tag(middle, right, y), by_tag(left, right, z))) =
     Ordering/chains/then(
         Ord/chains(left, middle, right),

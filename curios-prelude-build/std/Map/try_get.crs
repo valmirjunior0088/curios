@@ -1,9 +1,8 @@
-use /std/{Nat, Bool, Option, List, Vec, Eq, Hash, Bytes, proved};
+use /std/{Nat, Bool, Option, List, Vec, Eq, Hash, Bytes, Map, proved};
 use /std/List/{Member};
-use /std/Map/{Map, empty, has, insert, remove, map, union, filter, intersection, difference, update,
-    to_list};
 use /std/Map/internal/{Node};
 use /std/Map/digits/{digit, small, Apart};
+use /std/Bool/{True, False, Holds};
 
 --- The value at `key`, or `none`.
 pub let try_get(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V), key: K) -> Option(V) =
@@ -15,7 +14,7 @@ let apart_codes(
     use Hash/Key(K),
     key: K,
     other: K,
-    apart: (Eq()(other, key)) -> Bool/False,
+    apart: (Eq()(other, key)) -> False,
 ) -> Eq()(Hash/hash(key) == Hash/hash(other), false) =
     match Hash/hash(key) == Hash/hash(other)
     | false => Eq/refl()
@@ -56,11 +55,11 @@ let parted_answers(
     v: V,
     c: Nat,
     d: Nat,
-    @small_d: Bool/Holds(d < 16),
+    @small_d: Holds(d < 16),
     back: Eq()(n2, n),
     sound: Node/Sound(n),
     apart: Apart(Hash/hash(key), Node/first(n), c),
-    past: Bool/Holds(Node/deeper(n, c)),
+    past: Holds(Node/deeper(n, c)),
     at_d: Eq()(digit(Node/first(n), c), d),
 ) -> Node/Answers(
     Node/wedge(c, d, n2, key, Hash/hash(key), v, @small_d),
@@ -89,16 +88,16 @@ let parted_answers(
             past,
             at_d));
 
---- The empty map has no value at any key.
+--- The Map/empty Map/map Map/has no value at any key.
 pub let of_empty(
     @K: Type,
     use Hash/Key(K),
     @V: Type,
     key: K,
-) -> Eq()(try_get(empty(), key), Option/none(@V)) =
+) -> Eq()(try_get(Map/empty(), key), Option/none(@V)) =
     Eq/refl();
 
---- `insert` sets the value at its key.
+--- `Map/insert` sets the value at its key.
 pub let of_insert(
     @K: Type,
     use Hash/Key(K),
@@ -106,7 +105,7 @@ pub let of_insert(
     m: Map(K, V),
     key: K,
     v: V,
-) -> Eq()(try_get(insert(m, key, v), key), Option/some(v)) =
+) -> Eq()(try_get(Map/insert(m, key, v), key), Option/some(v)) =
     match Node/insert(m.root, key, Hash/hash(key), v, @Eq/refl(), @m.sound)
     | vacant(_) => Eq/refl()
     | added(_, @_, @answers, @_) | replaced(_, @_, @answers, @_) => answers(Hash/hash(key))
@@ -115,7 +114,7 @@ pub let of_insert(
             Hash/hash(key))
     end;
 
---- `insert` leaves the value at every other key as it was.
+--- `Map/insert` leaves the value at every other key as it was.
 pub let of_insert_other(
     @K: Type,
     use Hash/Key(K),
@@ -124,8 +123,8 @@ pub let of_insert_other(
     key: K,
     v: V,
     other: K,
-    apart: (Eq()(other, key)) -> Bool/False,
-) -> Eq()(try_get(insert(m, key, v), other), try_get(m, other)) =
+    apart: (Eq()(other, key)) -> False,
+) -> Eq()(try_get(Map/insert(m, key, v), other), try_get(m, other)) =
     let codes = apart_codes(key, other, apart);
     match Node/insert(m.root, key, Hash/hash(key), v, @Eq/refl(), @m.sound)
     | vacant(gap) =>
@@ -155,14 +154,14 @@ pub let of_insert_other(
             parted_answers(m.root, n2, key, v, c, d, @small_d, back, m.sound, apart, past, at_d))
     end;
 
---- `remove` leaves no value at its key.
+--- `Map/remove` leaves no value at its key.
 pub let of_remove(
     @K: Type,
     use Hash/Key(K),
     @V: Type,
     m: Map(K, V),
     key: K,
-) -> Eq()(try_get(remove(m, key), key), Option/none(@V)) =
+) -> Eq()(try_get(Map/remove(m, key), key), Option/none(@V)) =
     match Node/remove(m.root, Hash/hash(key), @m.sound)
     | gone(_) => Eq/refl()
     | kept(_, @_, @answers, @_) => answers(Hash/hash(key))
@@ -173,7 +172,7 @@ pub let of_remove(
             answers(Hash/hash(key)))
     end;
 
---- `remove` leaves the value at every other key as it was.
+--- `Map/remove` leaves the value at every other key as it was.
 pub let of_remove_other(
     @K: Type,
     use Hash/Key(K),
@@ -181,8 +180,8 @@ pub let of_remove_other(
     m: Map(K, V),
     key: K,
     other: K,
-    apart: (Eq()(other, key)) -> Bool/False,
-) -> Eq()(try_get(remove(m, key), other), try_get(m, other)) =
+    apart: (Eq()(other, key)) -> False,
+) -> Eq()(try_get(Map/remove(m, key), other), try_get(m, other)) =
     let codes = apart_codes(key, other, apart);
     match Node/remove(m.root, Hash/hash(key), @m.sound)
     | gone(nothing) =>
@@ -206,7 +205,7 @@ pub let of_remove_other(
             Eq/refl())
     end;
 
---- `map` rewrites the value at every key.
+--- `Map/map` rewrites the value at every key.
 pub let of_map(
     @K: Type,
     use Hash/Key(K),
@@ -215,10 +214,10 @@ pub let of_map(
     m: Map(K, V),
     f: (V) -> W,
     key: K,
-) -> Eq()(try_get(map(m, f), key), Option/map(try_get(m, key), f)) =
+) -> Eq()(try_get(Map/map(m, f), key), Option/map(try_get(m, key), f)) =
     Node/mapped_find(m.root, f, Hash/hash(key));
 
--- Two maps with one root are one map: what else a map holds is the proof about its root.
+-- Two maps with one root are one map: what else a Map/map holds is the proof about its root.
 let of_root(
     @K: Type,
     use Hash/Key(K),
@@ -233,8 +232,8 @@ let of_root(
         (_) => Eq/refl())(
         b.sound);
 
--- A map's trie is a function of its entries: the position a sound branch forks at is the first its keys differ at, and which twig holds a key is that key's digit there. So a proof about a map binds to what it holds, and two maps built in different orders, or by different operations, are equal where they agree at every key.
---- Two maps with the same value at every key are one map.
+-- A Map/map's trie is a function of its entries: the position a sound branch forks at is the first its keys differ at, and which twig holds a key is that key's digit there. So a proof about a Map/map binds to what it holds, and two maps built in different orders, or by different operations, are equal where they agree at every key.
+--- Two maps with the same value at every key are one Map/map.
 pub let inj(
     @K: Type,
     use Hash/Key(K),
@@ -262,11 +261,8 @@ let other_key(
     a: K,
     b: K,
     e: Eq()(Hash/hash(a) == Hash/hash(b), false),
-) -> (Eq()(b, a)) -> Bool/False =
-    Hash/Key/apart(
-        a,
-        b,
-        Eq/subst((c: Bool) => Bool/Holds(Bool/not(c)), Eq/sym(e), Bool/True/qed()));
+) -> (Eq()(b, a)) -> False =
+    Hash/Key/apart(a, b, Eq/subst((c: Bool) => Holds(Bool/not(c)), Eq/sym(e), True/qed()));
 
 -- What a sound branch's twigs answer at `k`, asked in turn by a combination that `none` leaves as it was, is what the branch answers there.
 let either(
@@ -299,7 +295,7 @@ let either(
             (n: Node(K, V)) => f(Node/find(n, k), r),
             Eq/sym(Node/picked(tw.list, digit(k, at), @proved()))));
 
--- Inserting a sound node's entries into a map one by one leaves at a key the node's value there, and the map's where the node has none.
+-- Inserting a sound node's entries into a Map/map one by one leaves at a key the node's value there, and the Map/map's where the node Map/has none.
 let inserted_all(
     @K: Type,
     use Hash/Key(K),
@@ -309,7 +305,7 @@ let inserted_all(
     acc: Map(K, V),
     key: K,
 ) -> Eq()(
-    try_get(Node/fold(n, acc, (k: K, v: V, m: Map(K, V)) => insert(m, k, v)), key),
+    try_get(Node/fold(n, acc, (k: K, v: V, m: Map(K, V)) => Map/insert(m, k, v)), key),
     Option/or(Node/find(n, Hash/hash(key)), try_get(acc, key))) =
     match n
     | empty() => Eq/refl()
@@ -318,14 +314,14 @@ let inserted_all(
             b: Bool,
             e: Eq()(Hash/hash(k0) == Hash/hash(key), b),
         ) -> Eq()(
-            try_get(insert(acc, k0, v0), key),
+            try_get(Map/insert(acc, k0, v0), key),
             Option/or(
                 match b | true => Option/some(v0) | false => Option/none() end,
                 try_get(acc, key))) =
             match b
             | true =>
                 Eq/subst(
-                    (y: K) => Eq()(try_get(insert(acc, k0, v0), y), Option/some(v0)),
+                    (y: K) => Eq()(try_get(Map/insert(acc, k0, v0), y), Option/some(v0)),
                     same_key(k0, key, e),
                     of_insert(acc, k0, v0))
             | false => of_insert_other(acc, k0, v0, key, other_key(k0, key, e))
@@ -343,7 +339,7 @@ let inserted_all(
                 (_) => Eq/refl(),
                 try_get(acc, key)))
     end
--- Inserting placed twigs' entries into a map one by one leaves at a key what the twigs answer there, asked in turn.
+-- Inserting placed twigs' entries into a Map/map one by one leaves at a key what the twigs answer there, asked in turn.
 and inserted_in(
     @K: Type,
     use Hash/Key(K),
@@ -356,7 +352,7 @@ and inserted_in(
     acc: Map(K, V),
     key: K,
 ) -> Eq()(
-    try_get(Node/fold_in(l, acc, (k: K, v: V, m: Map(K, V)) => insert(m, k, v)), key),
+    try_get(Node/fold_in(l, acc, (k: K, v: V, m: Map(K, V)) => Map/insert(m, k, v)), key),
     Node/folded(
         l,
         Hash/hash(key),
@@ -372,7 +368,7 @@ and inserted_in(
                 d + 1,
                 a,
                 twigs.1,
-                Node/fold(h, acc, (k: K, v: V, m: Map(K, V)) => insert(m, k, v)),
+                Node/fold(h, acc, (k: K, v: V, m: Map(K, V)) => Map/insert(m, k, v)),
                 key),
             Eq/cong(
                 (o: Option(V)) =>
@@ -384,7 +380,7 @@ and inserted_in(
                 inserted_all(h, Node/twig_sound(h, at, d, a, twigs.0), acc, key)))
     end;
 
---- `union` has at every key the second map's value, and the first's where the second has none.
+--- `Map/union` Map/has at every key the second Map/map's value, and the first's where the second Map/has none.
 pub let of_union(
     @K: Type,
     use Hash/Key(K),
@@ -392,10 +388,10 @@ pub let of_union(
     a: Map(K, V),
     b: Map(K, V),
     key: K,
-) -> Eq()(try_get(union(a, b), key), Option/or(try_get(b, key), try_get(a, key))) =
+) -> Eq()(try_get(Map/union(a, b), key), Option/or(try_get(b, key), try_get(a, key))) =
     inserted_all(b.root, b.sound, a, key);
 
--- What `filter`'s step keeps of a value found at `key`, over what the map it began with has there.
+-- What `Map/filter`'s step keeps of a value found at `key`, over what the Map/map it began with Map/has there.
 let kept(
     @V: Type,
     @K: Type,
@@ -409,7 +405,7 @@ let kept(
     | _ => rest
     end;
 
--- Inserting the entries of a sound node `pred` accepts into a map one by one leaves at a key the node's value there where `pred` accepts it, and the map's otherwise.
+-- Inserting the entries of a sound node `pred` accepts into a Map/map one by one leaves at a key the node's value there where `pred` accepts it, and the Map/map's otherwise.
 let kept_all(
     @K: Type,
     use Hash/Key(K),
@@ -422,7 +418,7 @@ let kept_all(
 ) -> Eq()(
     try_get(
         Node/fold(n, acc, (k: K, v: V, m: Map(K, V)) =>
-            match pred(k, v) | true => insert(m, k, v) | false => m end),
+            match pred(k, v) | true => Map/insert(m, k, v) | false => m end),
         key),
     kept(pred, key, Node/find(n, Hash/hash(key)), try_get(acc, key))) =
     match n
@@ -432,7 +428,12 @@ let kept_all(
             b: Bool,
             e: Eq()(Hash/hash(k0) == Hash/hash(key), b),
         ) -> Eq()(
-            try_get(match pred(k0, v0) | true => insert(acc, k0, v0) | false => acc end, key),
+            try_get(
+                match pred(k0, v0)
+                | true => Map/insert(acc, k0, v0)
+                | false => acc
+                end,
+                key),
             kept(
                 pred,
                 key,
@@ -442,7 +443,10 @@ let kept_all(
             | true =>
                 let at_key: Eq()(
                     try_get(
-                        match pred(key, v0) | true => insert(acc, key, v0) | false => acc end,
+                        match pred(key, v0)
+                        | true => Map/insert(acc, key, v0)
+                        | false => acc
+                        end,
                         key),
                     kept(pred, key, Option/some(v0), try_get(acc, key))) =
                     match pred(key, v0)
@@ -453,7 +457,10 @@ let kept_all(
                     (y: K) =>
                         Eq()(
                             try_get(
-                                match pred(y, v0) | true => insert(acc, y, v0) | false => acc end,
+                                match pred(y, v0)
+                                | true => Map/insert(acc, y, v0)
+                                | false => acc
+                                end,
                                 key),
                             kept(pred, key, Option/some(v0), try_get(acc, key))),
                     Eq/sym(same_key(k0, key, e)),
@@ -477,7 +484,7 @@ let kept_all(
                 (_) => Eq/refl(),
                 try_get(acc, key)))
     end
--- Inserting the entries of placed twigs `pred` accepts into a map one by one leaves at a key what the twigs keep there, asked in turn.
+-- Inserting the entries of placed twigs `pred` accepts into a Map/map one by one leaves at a key what the twigs keep there, asked in turn.
 and kept_in(
     @K: Type,
     use Hash/Key(K),
@@ -493,7 +500,7 @@ and kept_in(
 ) -> Eq()(
     try_get(
         Node/fold_in(l, acc, (k: K, v: V, m: Map(K, V)) =>
-            match pred(k, v) | true => insert(m, k, v) | false => m end),
+            match pred(k, v) | true => Map/insert(m, k, v) | false => m end),
         key),
     Node/folded(
         l,
@@ -512,7 +519,7 @@ and kept_in(
                 twigs.1,
                 pred,
                 Node/fold(h, acc, (k: K, v: V, m: Map(K, V)) =>
-                    match pred(k, v) | true => insert(m, k, v) | false => m end),
+                    match pred(k, v) | true => Map/insert(m, k, v) | false => m end),
                 key),
             Eq/cong(
                 (o: Option(V)) =>
@@ -524,7 +531,7 @@ and kept_in(
                 kept_all(h, Node/twig_sound(h, at, d, a, twigs.0), pred, acc, key)))
     end;
 
---- `filter` has at every key the value there where `pred` accepts it, and none otherwise.
+--- `Map/filter` Map/has at every key the value there where `pred` accepts it, and none otherwise.
 pub let of_filter(
     @K: Type,
     use Hash/Key(K),
@@ -532,10 +539,12 @@ pub let of_filter(
     m: Map(K, V),
     pred: (K, V) -> Bool,
     key: K,
-) -> Eq()(try_get(filter(m, pred), key), Option/filter(try_get(m, key), (v: V) => pred(key, v))) =
-    kept_all(m.root, m.sound, pred, empty(), key);
+) -> Eq()(
+    try_get(Map/filter(m, pred), key),
+    Option/filter(try_get(m, key), (v: V) => pred(key, v))) =
+    kept_all(m.root, m.sound, pred, Map/empty(), key);
 
---- `intersection` has at every key the first map's value where the second has an entry there, and none otherwise.
+--- `Map/intersection` Map/has at every key the first Map/map's value where the second Map/has an entry there, and none otherwise.
 pub let of_intersection(
     @K: Type,
     use Hash/Key(K),
@@ -544,10 +553,12 @@ pub let of_intersection(
     a: Map(K, V),
     b: Map(K, W),
     key: K,
-) -> Eq()(try_get(intersection(a, b), key), Option/filter(try_get(a, key), (_: V) => has(b, key))) =
-    of_filter(a, (k: K, _: V) => has(b, k), key);
+) -> Eq()(
+    try_get(Map/intersection(a, b), key),
+    Option/filter(try_get(a, key), (_: V) => Map/has(b, key))) =
+    of_filter(a, (k: K, _: V) => Map/has(b, k), key);
 
---- `difference` has at every key the first map's value where the second has no entry there, and none otherwise.
+--- `Map/difference` Map/has at every key the first Map/map's value where the second Map/has no entry there, and none otherwise.
 pub let of_difference(
     @K: Type,
     use Hash/Key(K),
@@ -557,11 +568,11 @@ pub let of_difference(
     b: Map(K, W),
     key: K,
 ) -> Eq()(
-    try_get(difference(a, b), key),
-    Option/filter(try_get(a, key), (_: V) => Bool/not(has(b, key)))) =
-    of_filter(a, (k: K, _: V) => Bool/not(has(b, k)), key);
+    try_get(Map/difference(a, b), key),
+    Option/filter(try_get(a, key), (_: V) => Bool/not(Map/has(b, key)))) =
+    of_filter(a, (k: K, _: V) => Bool/not(Map/has(b, k)), key);
 
---- `update` sets the value at its key to what `f` answers of the value there.
+--- `Map/update` sets the value at its key to what `f` answers of the value there.
 pub let of_update(
     @K: Type,
     use Hash/Key(K),
@@ -569,13 +580,13 @@ pub let of_update(
     m: Map(K, V),
     key: K,
     f: (Option(V)) -> Option(V),
-) -> Eq()(try_get(update(m, key, f), key), f(try_get(m, key))) =
+) -> Eq()(try_get(Map/update(m, key, f), key), f(try_get(m, key))) =
     match f(try_get(m, key))
     | some(v) => of_insert(m, key, v)
     | none() => of_remove(m, key)
     end;
 
---- `update` leaves the value at every other key as it was.
+--- `Map/update` leaves the value at every other key as it was.
 pub let of_update_other(
     @K: Type,
     use Hash/Key(K),
@@ -584,14 +595,14 @@ pub let of_update_other(
     key: K,
     f: (Option(V)) -> Option(V),
     other: K,
-    apart: (Eq()(other, key)) -> Bool/False,
-) -> Eq()(try_get(update(m, key, f), other), try_get(m, other)) =
+    apart: (Eq()(other, key)) -> False,
+) -> Eq()(try_get(Map/update(m, key, f), other), try_get(m, other)) =
     match f(try_get(m, key))
     | some(v) => of_insert_other(m, key, v, other, apart)
     | none() => of_remove_other(m, key, other, apart)
     end;
 
---- An entry `to_list` holds is the value at its key.
+--- An entry `Map/to_list` holds is the value at its key.
 pub let of_listed(
     @K: Type,
     use Hash/Key(K),
@@ -599,7 +610,7 @@ pub let of_listed(
     m: Map(K, V),
     key: K,
     v: V,
-    listed: Member()((key, v), to_list(m)),
+    listed: Member()((key, v), Map/to_list(m)),
 ) -> Eq()(try_get(m, key), Option/some(v)) =
     Node/entry_found(
         m.root,
@@ -607,7 +618,7 @@ pub let of_listed(
         (key, v),
         Eq/subst((l: List({K, V})) => Member()((key, v), l), Node/listed(m.root, []), listed));
 
---- The value at a key is an entry `to_list` holds.
+--- The value at a key is an entry `Map/to_list` holds.
 pub let listed(
     @K: Type,
     use Hash/Key(K),
@@ -616,7 +627,7 @@ pub let listed(
     key: K,
     v: V,
     found: Eq()(try_get(m, key), Option/some(v)),
-) -> Member()((key, v), to_list(m)) =
+) -> Member()((key, v), Map/to_list(m)) =
     Eq/subst(
         (l: List({K, V})) => Member()((key, v), l),
         Eq/sym(Node/listed(m.root, [])),

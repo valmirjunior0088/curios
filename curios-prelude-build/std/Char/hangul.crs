@@ -1,10 +1,11 @@
-use /std/{Nat, Bool, Char, Option, Str, proved};
+use /std/{Nat, Char, Option, Str, proved};
 use /std/Char/{Valid};
+use /std/Bool/{Holds};
 
 -- The Hangul syllables, U+AC00 through U+D7A3, decompose and compose by arithmetic (The Unicode Standard, §3.12): the syllable `0xAC00 + (l * 21 + v) * 28 + t` is the leading consonant `0x1100 + l` of 19, the vowel `0x1161 + v` of 21, and, where `t` is not `0`, the trailing consonant `0x11A7 + t` of 27, so 588 syllables share a leading consonant and there are 11,172.
 -- The jamo the syllable at `offset` past U+AC00 decomposes to: its leading consonant, its vowel, and its trailing consonant where it has one.
-let syllable_decomposed(offset: Nat, @inside: Bool/Holds(offset < 11172)) -> Str =
-    let leading_bound: Bool/Holds(offset / 588 < 19) =
+let syllable_decomposed(offset: Nat, @inside: Holds(offset < 11172)) -> Str =
+    let leading_bound: Holds(offset / 588 < 19) =
         Nat/DivMod/div_lt_of_lt_mul(19, offset, 588, proved());
     let trailing_bound = Nat/DivMod/of(offset, 28).bounded;
     let leading = 0x1100 + offset / 588;

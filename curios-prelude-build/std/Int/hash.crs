@@ -1,4 +1,5 @@
-use /std/{Nat, Int, Byte, Bytes, Eq, Ord, Ordering, proved, Bool};
+use /std/{Nat, Int, Byte, Bytes, Eq, Ord, Ordering, proved};
+use /std/Bool/{True, Holds};
 
 -- A run with every byte complemented, a byte at a time so that conversion carries it across a cons.
 let flipped(b: Bytes) -> Bytes =
@@ -11,8 +12,8 @@ let flipped(b: Bytes) -> Bytes =
 let reversed(
     a: Bytes,
     b: Bytes,
-    parted: Bool/Holds(Bytes/ord/below(a, b)),
-) -> Bool/Holds(Bytes/ord/below(flipped(b), flipped(a))) =
+    parted: Holds(Bytes/ord/below(a, b)),
+) -> Holds(Bytes/ord/below(flipped(b), flipped(a))) =
     match a
     | 0x[] => match parted end
     | 0x[h, ..t] =>
@@ -23,13 +24,13 @@ let reversed(
             match Nat/ord(hn, kn)
             | gt() => match parted end
             | lt() =>
-                let under: Bool/Holds(hn < kn) = Ord/below(hn, kn, Eq/refl());
+                let under: Holds(hn < kn) = Ord/below(hn, kn, Eq/refl());
                 Bytes/ord/below/of_heads(Byte/not(k), Byte/not(h), flipped(r), flipped(t), proved())
             | eq() =>
                 let same: Eq()(hn, kn) = Ord/eq(hn, kn, Eq/refl());
                 Eq/subst(
                     (o: Ordering) =>
-                        Bool/Holds(
+                        Holds(
                             match o
                             | eq() => Bytes/ord/below(flipped(r), flipped(t))
                             | lt() => true
@@ -46,9 +47,9 @@ let reversed(
 let halves(
     a: Bytes,
     b: Bytes,
-    upper_a: Bool/Holds(Bytes/ord/below(0x[0x7F], a)),
-    upper_b: Bool/Holds(Bytes/ord/below(0x[0x7F], b)),
-) -> Bool/Holds(Bytes/ord/below(flipped(a), b)) =
+    upper_a: Holds(Bytes/ord/below(0x[0x7F], a)),
+    upper_b: Holds(Bytes/ord/below(0x[0x7F], b)),
+) -> Holds(Bytes/ord/below(flipped(a), b)) =
     match a
     | 0x[] => match upper_a end
     | 0x[h, ..t] =>
@@ -58,10 +59,10 @@ let halves(
             let (hn, kn) = (Byte/to_nat(h), Byte/to_nat(k));
             match Nat/ord(127, hn)
             | lt() =>
-                let over_h: Bool/Holds(127 < hn) = Ord/below(127, hn, Eq/refl());
+                let over_h: Holds(127 < hn) = Ord/below(127, hn, Eq/refl());
                 match Nat/ord(127, kn)
                 | lt() =>
-                    let over_k: Bool/Holds(127 < kn) = Ord/below(127, kn, Eq/refl());
+                    let over_k: Holds(127 < kn) = Ord/below(127, kn, Eq/refl());
                     Bytes/ord/below/of_heads(Byte/not(h), k, flipped(t), r, proved())
                 | eq() | gt() => match upper_b end
                 end
@@ -80,11 +81,7 @@ pub let hash(i: Int) -> Bytes =
     end;
 
 --- `a < b` gives `a`'s encoding below `b`'s at a byte: by the naturals' law where both are at or above zero, by that law reversed where both are below, and by the half each leads in where zero is between them.
-pub let of_lt(
-    a: Int,
-    b: Int,
-    under: Bool/Holds(a < b),
-) -> Bool/Holds(Bytes/ord/below(hash(a), hash(b))) =
+pub let of_lt(a: Int, b: Int, under: Holds(a < b)) -> Holds(Bytes/ord/below(hash(a), hash(b))) =
     match a >= +0
     | true =>
         match b >= +0
@@ -109,16 +106,16 @@ pub let of_lt(
 --- The order of two integers is the order of their encodings.
 pub let mono(a: Int, b: Int) -> Eq()(Int/ord(a, b), Bytes/ord(hash(a), hash(b))) =
     match
-    | a < b => Eq/sym(Bytes/ord/below/lt(hash(a), hash(b), of_lt(a, b, Bool/True/qed())))
+    | a < b => Eq/sym(Bytes/ord/below/lt(hash(a), hash(b), of_lt(a, b, True/qed())))
     | b < a =>
         Eq/trans(
-            Ord/of_gt(a, b, Bool/True/qed()),
+            Ord/of_gt(a, b, True/qed()),
             Eq/sym(
                 Eq/trans(
                     Ord/flips(hash(b), hash(a)),
                     Eq/cong(
                         Ordering/flip,
-                        Bytes/ord/below/lt(hash(b), hash(a), of_lt(b, a, Bool/True/qed()))))))
+                        Bytes/ord/below/lt(hash(b), hash(a), of_lt(b, a, True/qed()))))))
     | _ =>
         Eq/subst(
             (y: Int) => Eq()(Int/ord(a, y), Bytes/ord(hash(a), hash(y))),

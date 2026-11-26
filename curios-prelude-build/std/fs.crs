@@ -2,6 +2,7 @@ use /std/{Nat, Int, Bool, List, Option, Path, Str, Try, Io, Show};
 use /std/ops/{Eql};
 use /std/time/{Timestamp};
 use /std/internal/{Status, temporary_path};
+use /std/Bool/{Holds};
 
 --- What is at a path.
 pub induct Kind: pub Type
@@ -130,7 +131,7 @@ let removed(path: Path) -> Io({}) =
 pub let temp_dir(
     s: Io/Scope,
     prefix: Str,
-    @plain: Bool/Holds(Bool/not(Str/contains(prefix, '/'))),
+    @plain: Holds(Bool/not(Str/contains(prefix, '/'))),
 ) -> Try(Io, Io/Error, Path) =
     let path = temporary_path(prefix)!;
     let status = dir_create(Path/to_bytes(path), true)!;

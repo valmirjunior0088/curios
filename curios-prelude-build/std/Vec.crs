@@ -1,11 +1,12 @@
 mod tests;
 
-use /std/{Nat, List, Eq, Show, Spell, Fmt, Bool, proved};
+use /std/{Nat, List, Eq, Show, Spell, Fmt, proved};
 use /std/ops/{Eql};
+use /std/Bool/{False, Holds};
 
 --- That `l` holds exactly `n` elements.
 pub let Counted(@T: Type, l: List(T), n: Nat) -> Prop =
-    Bool/Holds(List/length(l) == n);
+    Holds(List/length(l) == n);
 
 --- A list of exactly `n` elements. The count is a bound: a literal at a stated length, and every operation below, has it discharged by the elaborator.
 pub struct Vec(T: Type, n: Nat): pub Type {
@@ -46,13 +47,13 @@ pub let cons(@T: Type, @n: Nat, x: T, v: Vec(T, n)) -> Vec(T, n + 1) =
     Vec { list = [x, ..v.list] };
 
 --- `v` with `x` at `i`, under the evidence that `i < n`: the count carries over, since an update keeps the length.
-pub let set(@T: Type, @n: Nat, v: Vec(T, n), i: Nat, x: T, @ok: Bool/Holds(i < n)) -> Vec(T, n) =
+pub let set(@T: Type, @n: Nat, v: Vec(T, n), i: Nat, x: T, @ok: Holds(i < n)) -> Vec(T, n) =
     Vec { list = List/set(@T, v.list, i, x) };
 
 --- Everything after the first element.
 pub let rest(@T: Type, @n: Nat, v: Vec(T, n + 1)) -> Vec(T, n) =
     match v.list
-    | [] => match proved(@Bool/False) end
+    | [] => match proved(@False) end
     | [_, ..t] => Vec { list = t }
     end;
 

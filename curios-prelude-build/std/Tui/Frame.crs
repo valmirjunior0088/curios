@@ -1,5 +1,6 @@
-use /std/{Nat, Str, List, Vec, Option, Bool, proved};
+use /std/{Nat, Str, List, Vec, Option, proved};
 use /std/Tui/{Style, Glyph, Line, Tile, View};
+use /std/Bool/{Holds};
 
 --- `h` rows of `w` tiles: what a view is drawn as, and what the renderer compares from one frame to the next.
 pub let Frame(w: Nat, h: Nat) -> Type =
@@ -159,8 +160,8 @@ pub let get(
     frame: Frame(w, h),
     x: Nat,
     y: Nat,
-    @ok_x: Bool/Holds(x < w),
-    @ok_y: Bool/Holds(y < h),
+    @ok_x: Holds(x < w),
+    @ok_y: Holds(y < h),
 ) -> Tile =
     let row = List/get(frame.list, y);
     List/get(row.list, x);

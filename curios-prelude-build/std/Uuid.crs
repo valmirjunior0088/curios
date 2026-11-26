@@ -4,16 +4,17 @@ use /std/{Nat, Int, Byte, Bytes, Bool, Char, Option, List, Str, Eq, Ordering, Or
     Spell, Fmt, Io, rand, proved};
 use /std/ops/{Eql};
 use /std/time/{Timestamp};
+use /std/Bool/{Holds};
 
 --- A universally unique identifier (RFC 9562): sixteen bytes, laid out as the RFC lays them out, of any version and variant.
 pub struct Uuid: pub Type {
     bytes: Bytes,
     --- That there are sixteen.
-    @sixteen: Bool/Holds(Bytes/length(bytes) == 16),
+    @sixteen: Holds(Bytes/length(bytes) == 16),
 }
 
 --- The UUID the sixteen bytes `b` spell, in the order RFC 9562 lays them out: any sixteen bytes, of any version and variant, as a UUID read off a wire or out of a store is. Their count is decided where `b` is written, so a literal needs nothing more.
-pub let of_bytes(b: Bytes, @sixteen: Bool/Holds(Bytes/length(b) == 16)) -> Uuid =
+pub let of_bytes(b: Bytes, @sixteen: Holds(Bytes/length(b) == 16)) -> Uuid =
     Uuid { bytes = b };
 
 --- The sixteen bytes, in the order RFC 9562 lays them out.
@@ -146,11 +147,11 @@ pub let of_str(s: Str) -> Option(Uuid) =
 pub let eq_of_bytes(a: Uuid, b: Uuid, p: Eq()(a.bytes, b.bytes)) -> Eq()(a, b) =
     Eq/subst(
         (bytes: Bytes) =>
-            (sixteen: Bool/Holds(Bytes/length(bytes) == 16)) -> Eq()(
+            (sixteen: Holds(Bytes/length(bytes) == 16)) -> Eq()(
                 a,
                 Uuid { bytes = bytes, @sixteen = sixteen }),
         p,
-        (_: Bool/Holds(Bytes/length(a.bytes) == 16)) => Eq/refl())(
+        (_: Holds(Bytes/length(a.bytes) == 16)) => Eq/refl())(
         b.sixteen);
 
 satisfy Eql(Uuid) {

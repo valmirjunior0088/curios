@@ -1,6 +1,7 @@
 use /std/{Nat, Bool, Spell};
 use /std/ops/{Eql};
 use /std/http/{Field};
+use /std/Bool/{Holds};
 
 --- Whether a reply of status `code` has no body whatever its fields say: a 1xx, 204 or 304 reply ends at its head (RFC 9112 §6.3 rule 1).
 pub let bodiless(code: Nat) -> Bool =
@@ -16,7 +17,7 @@ pub let carries_content(code: Nat) -> Bool =
 pub struct Status: pub Type {
     code: Nat,
     --- Why the code is three digits.
-    @three: Bool/Holds(100 <= code && code <= 999),
+    @three: Holds(100 <= code && code <= 999),
     --- The reason phrase, which a client ignores: octets, like a field's value.
     reason: Field/Value,
 }
@@ -56,5 +57,5 @@ pub let reason_of(code: Nat) -> Field/Value =
     end;
 
 --- The status `code` with its usual reason.
-pub let of(code: Nat, @_: Bool/Holds(100 <= code && code <= 999)) -> Status =
+pub let of(code: Nat, @_: Holds(100 <= code && code <= 999)) -> Status =
     Status { code = code, reason = reason_of(code) };

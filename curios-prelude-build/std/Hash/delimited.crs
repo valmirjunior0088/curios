@@ -1,4 +1,5 @@
-use /std/{Nat, Byte, Bytes, Bool, Eq, Ord, Ordering, proved};
+use /std/{Nat, Byte, Bytes, Eq, Ord, Ordering, proved};
+use /std/Bool/{True, Holds};
 
 --- `b` with each zero byte written `0x00 0xFF` and closed by `0x00 0x01`: a run that parts at a byte from any other run so written, in the order of the runs themselves.
 ---
@@ -15,12 +16,12 @@ let apart(
     x: Bytes,
     y: Bytes,
     under: Eq()(Bytes/ord(x, y), Ordering/lt()),
-) -> Bool/Holds(Bytes/ord/below(delimited(x), delimited(y))) =
+) -> Holds(Bytes/ord/below(delimited(x), delimited(y))) =
     match x
     | 0x[] =>
         match y
         | 0x[] => match under end
-        | 0x[0, .._] => Bool/True/qed()
+        | 0x[0, .._] => True/qed()
         | 0x[k, ..r] => Bytes/ord/below/of_heads(0x0, k, 0x[0x1], delimited(r), proved())
         end
     | 0x[0, ..t] =>
@@ -50,7 +51,7 @@ let apart(
                         Ord/eq(Byte/to_nat(h), Byte/to_nat(k), Eq/refl()));
                 Eq/subst(
                     (z: Byte) =>
-                        Bool/Holds(Bytes/ord/below(0x[h, ..delimited(t)], 0x[z, ..delimited(r)])),
+                        Holds(Bytes/ord/below(0x[h, ..delimited(t)], 0x[z, ..delimited(r)])),
                     same,
                     Bytes/ord/below/past(0x[h], delimited(t), delimited(r), apart(t, r, under)))
             | gt() => match under end

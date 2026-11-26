@@ -1,13 +1,14 @@
 use /std/{Nat, Bytes, Byte, Bool, Option};
 use /std/Io/{Error};
 use /std/Io/Reader/{Step};
+use /std/Bool/{Holds};
 
 -- Where the first `byte` at or after `i` is in `b`, an index within it.
 let index_from(
     b: Bytes,
     byte: Byte,
     i: Nat,
-) -> Option({at: Nat, within: Bool/Holds(at < Bytes/length(b))}) =
+) -> Option({at: Nat, within: Holds(at < Bytes/length(b))}) =
     match Bool/holds(i < Bytes/length(b))
     | none() => Option/none()
     | some(inside) =>

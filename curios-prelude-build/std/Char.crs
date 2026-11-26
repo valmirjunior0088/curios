@@ -24,6 +24,7 @@ pub use EastAsianWidth/{let EastAsianWidth};
 
 use /std/{Nat, Byte, Bool, Bytes, Option, Ordering, Eq, Str, Show, Spell, Fmt, Ord, proved};
 use /std/ops/{Eql};
+use /std/Bool/{True, Holds};
 
 --- One Unicode scalar value.
 pub struct Char: pub Type {
@@ -128,56 +129,56 @@ pub let to_ascii_upper(c: Char) -> Char =
     end;
 
 -- Every record of `/sys/unicode/upper` maps onto scalar values, decided by reading each when `/std` is built.
-let upper_lands: Bool/Holds(unicode/every_record_lands(/sys/unicode/upper)) =
-    Bool/True/qed();
+let upper_lands: Holds(unicode/every_record_lands(/sys/unicode/upper)) =
+    True/qed();
 
 --- `c` in upper case: its full mapping, the database's `Uppercase_Mapping`, as text — one to three characters, `ß` becoming `SS` — and `c` itself where the database maps it to no other. What `Str/to_upper` writes for each character of a text.
 pub let to_upper(c: Char) -> Str =
     unicode/mapping(/sys/unicode/upper, upper_lands, c);
 
 -- Every record of `/sys/unicode/lower` maps onto scalar values, decided by reading each when `/std` is built.
-let lower_lands: Bool/Holds(unicode/every_record_lands(/sys/unicode/lower)) =
-    Bool/True/qed();
+let lower_lands: Holds(unicode/every_record_lands(/sys/unicode/lower)) =
+    True/qed();
 
 --- `c` in lower case, as text: its full mapping, the database's `Lowercase_Mapping` (`İ` becomes `i̇`), or `c` itself where there is none. It reads no context, so `Σ` becomes `σ`; `Str/to_lower` writes a word's final sigma as `ς`.
 pub let to_lower(c: Char) -> Str =
     unicode/mapping(/sys/unicode/lower, lower_lands, c);
 
 -- Every record of `/sys/unicode/fold` maps onto scalar values, decided by reading each when `/std` is built.
-let fold_lands: Bool/Holds(unicode/every_record_lands(/sys/unicode/fold)) =
-    Bool/True/qed();
+let fold_lands: Holds(unicode/every_record_lands(/sys/unicode/fold)) =
+    True/qed();
 
 --- `c` folded for caseless comparison, as text: its full folding, the database's `Case_Folding` common and full rows (`ß` and `ẞ` become `ss`, `Σ` and `ς` both become `σ`), or `c` itself where there is none. `Str/to_casefold` applies it to each character.
 pub let to_casefold(c: Char) -> Str =
     unicode/mapping(/sys/unicode/fold, fold_lands, c);
 
 -- Every place of the canonical decomposition's characters spells a scalar value, decided by reading each when `/std` is built.
-let canonical_lands: Bool/Holds(
+let canonical_lands: Holds(
     unicode/every_scalar_lands(/sys/unicode/canonical_decomposition_scalars)) =
-    Bool/True/qed();
+    True/qed();
 
 -- Every entry of the canonical decomposition names places its characters hold, decided by reading each when `/std` is built.
-let canonical_within: Bool/Holds(
+let canonical_within: Holds(
     unicode/every_entry_within(
         /sys/unicode/canonical_decomposition,
         /sys/unicode/canonical_decomposition_scalars)) =
-    Bool/True/qed();
+    True/qed();
 
 -- Every place of the compatibility decomposition's characters spells a scalar value, decided by reading each when `/std` is built.
-let compatibility_lands: Bool/Holds(
+let compatibility_lands: Holds(
     unicode/every_scalar_lands(/sys/unicode/compatibility_decomposition_scalars)) =
-    Bool/True/qed();
+    True/qed();
 
 -- Every entry of the compatibility decomposition names places its characters hold, decided by reading each when `/std` is built.
-let compatibility_within: Bool/Holds(
+let compatibility_within: Holds(
     unicode/every_entry_within(
         /sys/unicode/compatibility_decomposition,
         /sys/unicode/compatibility_decomposition_scalars)) =
-    Bool/True/qed();
+    True/qed();
 
 -- Every primary composite is a scalar value, decided by reading each when `/std` is built.
-let composites_land: Bool/Holds(unicode/every_composite_lands(/sys/unicode/composition)) =
-    Bool/True/qed();
+let composites_land: Holds(unicode/every_composite_lands(/sys/unicode/composition)) =
+    True/qed();
 
 --- `c`'s canonical combining class (UAX #15): `0` for a starter, and for a combining mark the class that orders it among the marks beside it, a dot below's 220 before an acute accent's 230. What `Str/normalize` puts a text's marks in order by.
 pub let combining_class(c: Char) -> Nat =
@@ -295,7 +296,7 @@ pub let to_utf8(c: Char) -> Bytes =
     end;
 
 -- A congruence written over the fields and applied at the projections, where an equation between two projections solves nothing. The law is applied outside it, at the projections: a field is below its record, so a family nested through this one descends through the law as it does through `eql`.
-let eq_of_eql(a: Char, b: Char, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
+let eq_of_eql(a: Char, b: Char, h: Holds(eql(a, b))) -> Eq()(a, b) =
     let fields(
         code1: Nat,
         valid1: Valid(code1),

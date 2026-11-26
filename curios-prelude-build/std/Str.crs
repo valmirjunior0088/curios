@@ -38,6 +38,7 @@ use normalization/{normalized};
 use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Result, Eq, Show, Spell, Ordering, Ord, Hash,
     proved};
 use /std/ops/{Eql};
+use /std/Bool/{True, Holds};
 
 --- What a byte begins, as UTF-8 reads it.
 pub induct Class: pub Type
@@ -159,12 +160,7 @@ pub let after(s: Str, at: At(s)) -> Str =
         @valid = Valid/after(s.valid, at.offset, at.within, at.boundary) };
 
 --- The text from `from` to `to`, cut in O(1): what lies before `to` in the text after `from`.
-pub let between(
-    s: Str,
-    from: At(s),
-    to: At(s),
-    @ordered: Bool/Holds(from.offset <= to.offset),
-) -> Str =
+pub let between(s: Str, from: At(s), to: At(s), @ordered: Holds(from.offset <= to.offset)) -> Str =
     before(after(s, from), At/to_after(s, from, to, @ordered));
 
 --- `s` as its extended grapheme clusters, in order: what a reader sees as its characters, each a letter with its marks, an emoji sequence or a flag as one, by the boundaries of [`At/next_grapheme`].
@@ -310,7 +306,7 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
                                                 partial,
                                                 Byte/to_nat(c1),
                                                 p,
-                                                Bool/True/qed()) },
+                                                True/qed()) },
                                     acc))
                         | r2 + 2 =>
                             let p1 =
@@ -321,7 +317,7 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
                                     partial,
                                     Byte/to_nat(c1),
                                     p,
-                                    Bool/True/qed(),
+                                    True/qed(),
                                     proved());
                             match t1
                             | 0x[] => match v end
@@ -345,7 +341,7 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
                                                             one,
                                                             Byte/to_nat(c2),
                                                             p1,
-                                                            Bool/True/qed()) },
+                                                            True/qed()) },
                                                 acc))
                                     | r3 + 1 =>
                                         let p2 =
@@ -356,7 +352,7 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
                                                 one,
                                                 Byte/to_nat(c2),
                                                 p1,
-                                                Bool/True/qed(),
+                                                True/qed(),
                                                 proved());
                                         match t2
                                         | 0x[] => match v end
@@ -381,7 +377,7 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
                                                                         two,
                                                                         Byte/to_nat(c3),
                                                                         p2,
-                                                                        Bool/True/qed()) },
+                                                                        True/qed()) },
                                                             acc))
                                                 | _ + 1 => match p end
                                                 end
@@ -402,8 +398,8 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
 let Leading(whole: Bytes) -> Type =
     {
         taken: Nat,
-        within: Bool/Holds(taken <= Bytes/length(whole)),
-        boundary: Bool/Holds(At/starts(Bytes/drop(whole, taken, @within))),
+        within: Holds(taken <= Bytes/length(whole)),
+        boundary: Holds(At/starts(Bytes/drop(whole, taken, @within))),
         stop: Option(Char)};
 
 --- A walk over `whole` that stands `taken` bytes in, before `passed` and then `t`, stands before `t` once it passes `passed`.
@@ -412,22 +408,19 @@ let passing(
     @passed: Bytes,
     @t: Bytes,
     taken: Nat,
-    w: Bool/Holds(taken <= Bytes/length(whole)),
+    w: Holds(taken <= Bytes/length(whole)),
     e: Eq()(Bytes/drop(whole, taken, @w), 0x[..passed, ..t]),
 ) -> {
-    within: Bool/Holds(taken + Bytes/length(passed) <= Bytes/length(whole)),
+    within: Holds(taken + Bytes/length(passed) <= Bytes/length(whole)),
     cut: Eq()(Bytes/drop(whole, taken + Bytes/length(passed), @within), t)} =
-    let room: Bool/Holds(Bytes/length(passed) <= Bytes/length(Bytes/drop(whole, taken, @w))) =
-        Eq/subst(
-            (b: Bytes) => Bool/Holds(Bytes/length(passed) <= Bytes/length(b)),
-            Eq/sym(e),
-            proved());
+    let room: Holds(Bytes/length(passed) <= Bytes/length(Bytes/drop(whole, taken, @w))) =
+        Eq/subst((b: Bytes) => Holds(Bytes/length(passed) <= Bytes/length(b)), Eq/sym(e), proved());
     (
         within = proved(),
         cut =
             Eq/subst(
                 (b: Bytes) =>
-                    (q: Bool/Holds(Bytes/length(passed) <= Bytes/length(b))) -> Eq()(
+                    (q: Holds(Bytes/length(passed) <= Bytes/length(b))) -> Eq()(
                         Bytes/drop(b, Bytes/length(passed), @q),
                         t),
                 Eq/sym(e),
@@ -441,13 +434,13 @@ let stopped(
     v: Valid(b),
     taken: Nat,
     stop: Option(Char),
-    @w: Bool/Holds(taken <= Bytes/length(whole)),
+    @w: Holds(taken <= Bytes/length(whole)),
     @e: Eq()(Bytes/drop(whole, taken, @w), b),
 ) -> Leading(whole) =
     (
         taken = taken,
         within = w,
-        boundary = Eq/subst((x: Bytes) => Bool/Holds(At/starts(x)), Eq/sym(e), Valid/begins(v)),
+        boundary = Eq/subst((x: Bytes) => Holds(At/starts(x)), Eq/sym(e), Valid/begins(v)),
         stop = stop);
 
 --- How many bytes at the front of `b` hold characters `pred` accepts, counted on from `taken`, and the first character it refused. It decodes as [`fold`] does. Its place in `whole` is carried as proofs only, so the stop is a position of `whole` without a slice being made.
@@ -458,7 +451,7 @@ let leading(
     pred: (Char) -> Bool,
     taken: Nat,
     @whole: Bytes,
-    @w: Bool/Holds(taken <= Bytes/length(whole)),
+    @w: Holds(taken <= Bytes/length(whole)),
     @e: Eq()(Bytes/drop(whole, taken, @w), b),
 ) -> Leading(whole) =
     match b
@@ -489,13 +482,7 @@ let leading(
                             Char {
                                 code = one,
                                 @valid =
-                                    concluded(
-                                        lo,
-                                        hi,
-                                        partial,
-                                        Byte/to_nat(c1),
-                                        p,
-                                        Bool/True/qed()) };
+                                    concluded(lo, hi, partial, Byte/to_nat(c1), p, True/qed()) };
                         match pred(c)
                         | true =>
                             let step = passing(@whole, @0x[h, c1], @t1, taken, w, e);
@@ -511,7 +498,7 @@ let leading(
                                 partial,
                                 Byte/to_nat(c1),
                                 p,
-                                Bool/True/qed(),
+                                True/qed(),
                                 proved());
                         match t1
                         | 0x[] => match v end
@@ -532,7 +519,7 @@ let leading(
                                                     one,
                                                     Byte/to_nat(c2),
                                                     p1,
-                                                    Bool/True/qed()) };
+                                                    True/qed()) };
                                     match pred(c)
                                     | true =>
                                         let step =
@@ -556,7 +543,7 @@ let leading(
                                             one,
                                             Byte/to_nat(c2),
                                             p1,
-                                            Bool/True/qed(),
+                                            True/qed(),
                                             proved());
                                     match t2
                                     | 0x[] => match v end
@@ -577,7 +564,7 @@ let leading(
                                                                 two,
                                                                 Byte/to_nat(c3),
                                                                 p2,
-                                                                Bool/True/qed()) };
+                                                                True/qed()) };
                                                 match pred(c)
                                                 | true =>
                                                     let step =
@@ -677,7 +664,7 @@ pub let join(sep: Str, parts: List(Str)) -> Str =
 let split_at(
     b: Bytes,
     k: Nat,
-    within: Bool/Holds(k <= Bytes/length(b)),
+    within: Holds(k <= Bytes/length(b)),
 ) -> Eq()(b, 0x[..Bytes/slice(b, 0, k, @within), ..Bytes/drop(b, k, @within)]) =
     match k
     | 0 => Eq/refl()
@@ -694,7 +681,7 @@ pub let follows(
     s: Str,
     from: At(s),
     piece: Str,
-) -> Option({past: At(s), reach: Bool/Holds(from.offset <= past.offset)}) =
+) -> Option({past: At(s), reach: Holds(from.offset <= past.offset)}) =
     let rest = after(s, from);
     let n = Bytes/length(piece.bytes);
     match Bool/holds(n <= Bytes/length(rest.bytes))
@@ -717,7 +704,7 @@ pub let span(
     s: Str,
     from: At(s),
     pred: (Char) -> Bool,
-) -> {past: At(s), reach: Bool/Holds(from.offset <= past.offset)} =
+) -> {past: At(s), reach: Holds(from.offset <= past.offset)} =
     let rest = after(s, from);
     let walked = leading(rest.bytes, rest.valid, pred, 0, @rest.bytes, @proved(), @Eq/refl());
     (
@@ -760,7 +747,7 @@ pub let strip_suffix(s: Str, suffix: Str) -> Option(Str) =
                     @_,
                     @boundary =
                         Eq/subst(
-                            (w: Bytes) => Bool/Holds(At/starts(w)),
+                            (w: Bytes) => Holds(At/starts(w)),
                             Eq/sym(
                                 proved(
                                     @Eq()(
@@ -831,7 +818,7 @@ pub let replace(s: Str, from: Str, to: Str) -> Str =
 --- `s` with each character that `with` maps to `some` replaced by its answer. The runs between are copied as slices of `s`, so the result needs no revalidation. Encoders escape through it.
 pub let escape(s: Str, with: (Char) -> Option(Str)) -> Str =
     At/forward(
-        (at) => (written: Str, run: At(s), ordered: Bool/Holds(run.offset <= at.offset)) -> Str,
+        (at) => (written: Str, run: At(s), ordered: Holds(run.offset <= at.offset)) -> Str,
         (at, again) =>
             (written, run, ordered) =>
                 match At/try_next(s, at)
@@ -886,13 +873,13 @@ pub let pad_end(s: Str, n: Nat, c: Char) -> Str =
     concat(s, repeat(of_char(c), n - length(s)));
 
 -- Their bytes are one run by `Bytes`'s own law, and a string is its bytes.
-let eq_of_eql(a: Str, b: Str, h: Bool/Holds(eql(a, b))) -> Eq()(a, b) =
+let eq_of_eql(a: Str, b: Str, h: Holds(eql(a, b))) -> Eq()(a, b) =
     eq_of_bytes(a, b, proved());
 
 satisfy Eql(Str) {
     eql = eql,
     eq = eq_of_eql,
-    refl(_) = Bool/True/qed(),
+    refl(_) = True/qed(),
 }
 
 satisfy Show(Str) {

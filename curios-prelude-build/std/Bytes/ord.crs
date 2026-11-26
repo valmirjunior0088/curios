@@ -3,6 +3,7 @@ pub mod below;
 pub use below/{let below};
 
 use /std/{Nat, Byte, Bytes, Bool, Eq, Ordering, Ord, proved};
+use /std/Bool/{True, Holds};
 
 --- Bytewise, a proper prefix first.
 ---
@@ -115,7 +116,7 @@ let after(o: Ordering, t: Bytes, r: Bytes) -> Bool =
 let trans: Ord/Trans(Ord/le_by(ord)) =
     (a, b, c, p, q) =>
         match a
-        | 0x[] => match c | 0x[] | 0x[_, .._] => Bool/True/qed() end
+        | 0x[] => match c | 0x[] | 0x[_, .._] => True/qed() end
         | 0x[h, ..t] =>
             match b
             | 0x[] => match p end
@@ -127,47 +128,47 @@ let trans: Ord/Trans(Ord/le_by(ord)) =
                     match Nat/ord(hn, kn)
                     | gt() => match p end
                     | lt() =>
-                        let first: Bool/Holds(hn < kn) = Ord/below(hn, kn, Eq/refl());
+                        let first: Holds(hn < kn) = Ord/below(hn, kn, Eq/refl());
                         match Nat/ord(kn, jn)
                         | gt() => match q end
                         | lt() =>
-                            let second: Bool/Holds(kn < jn) = Ord/below(kn, jn, Eq/refl());
+                            let second: Holds(kn < jn) = Ord/below(kn, jn, Eq/refl());
                             Eq/subst(
-                                (o: Ordering) => Bool/Holds(after(o, t, s)),
+                                (o: Ordering) => Holds(after(o, t, s)),
                                 Eq/sym(Ord/of_lt(hn, jn, proved())),
-                                Bool/True/qed())
+                                True/qed())
                         | eq() =>
                             let second: Eq()(kn, jn) = Ord/eq(kn, jn, Eq/refl());
                             Eq/subst(
-                                (o: Ordering) => Bool/Holds(after(o, t, s)),
+                                (o: Ordering) => Holds(after(o, t, s)),
                                 Eq/sym(
                                     Ord/of_lt(
                                         hn,
                                         jn,
-                                        Eq/subst((x: Nat) => Bool/Holds(hn < x), second, first))),
-                                Bool/True/qed())
+                                        Eq/subst((x: Nat) => Holds(hn < x), second, first))),
+                                True/qed())
                         end
                     | eq() =>
                         let first: Eq()(hn, kn) = Ord/eq(hn, kn, Eq/refl());
                         match Nat/ord(kn, jn)
                         | gt() => match q end
                         | lt() =>
-                            let second: Bool/Holds(kn < jn) = Ord/below(kn, jn, Eq/refl());
+                            let second: Holds(kn < jn) = Ord/below(kn, jn, Eq/refl());
                             Eq/subst(
-                                (o: Ordering) => Bool/Holds(after(o, t, s)),
+                                (o: Ordering) => Holds(after(o, t, s)),
                                 Eq/sym(
                                     Ord/of_lt(
                                         hn,
                                         jn,
                                         Eq/subst(
-                                            (x: Nat) => Bool/Holds(x < jn),
+                                            (x: Nat) => Holds(x < jn),
                                             Eq/sym(first),
                                             second))),
-                                Bool/True/qed())
+                                True/qed())
                         | eq() =>
                             let second: Eq()(kn, jn) = Ord/eq(kn, jn, Eq/refl());
                             Eq/subst(
-                                (o: Ordering) => Bool/Holds(after(o, t, s)),
+                                (o: Ordering) => Holds(after(o, t, s)),
                                 Eq/sym(Ord/of_eq(hn, jn, Eq/trans(first, second))),
                                 trans(t, r, s, p, q))
                         end

@@ -1,6 +1,7 @@
 use /std/{Flt, Nat, Int, Bool, List, Vec};
 use /std/Flt/{Rounding, Exceptions, rounded, exact, reduction};
 use /std/Flt/internal/{Dyadic};
+use /std/Bool/{True};
 
 --- Only the invalid operation.
 let invalid: Exceptions =
@@ -70,7 +71,7 @@ pub let div(r: Rounding, a: Flt, b: Flt) -> Exceptions =
             match x.mantissa
             | +0 => Exceptions/none
             | _ =>
-                let (q, sticky) = Dyadic/quotient(x, y, @Bool/True/qed());
+                let (q, sticky) = Dyadic/quotient(x, y, @True/qed());
                 from_exact(r, q, sticky, rounded/div(r, a, b))
             end
         end

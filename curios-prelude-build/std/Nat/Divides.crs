@@ -1,4 +1,5 @@
-use /std/{Nat, Eq, proved, Bool};
+use /std/{Nat, Eq, proved};
+use /std/Bool/{True, Holds};
 
 --- That `d` divides `n`: some multiple of `d` is `n`.
 pub induct Divides(d: Nat, n: Nat): pub Prop
@@ -48,14 +49,13 @@ pub let sub(@d: Nat, @a: Nat, @b: Nat, p: Divides(d, a + b), q: Divides(d, a)) -
             let sum: Eq()(m * d + b, k * d) = Eq/trans(Eq/cong((x: Nat) => x + b, Eq/sym(f)), e);
             match m <= k
             | true =>
-                let split: Eq()(m + (k - m), k) = Nat/le/add_sub_cancel(m, k, Bool/True/qed());
+                let split: Eq()(m + (k - m), k) = Nat/le/add_sub_cancel(m, k, True/qed());
                 let spread: Eq()(m * d + b, (m + (k - m)) * d) =
                     Eq/subst((x: Nat) => Eq()(m * d + b, x * d), Eq/sym(split), sum);
                 Divides/intro(k - m, Eq/cong((x: Nat) => x - m * d, spread))
             | false =>
-                let grown: Bool/Holds((k + 1) * d <= m * d) =
-                    Nat/le/mul_mono_r(@k + 1, @m, d, proved());
-                Divides/intro(0, Nat/le/antisym(b, 0, proved(), Bool/True/qed()))
+                let grown: Holds((k + 1) * d <= m * d) = Nat/le/mul_mono_r(@k + 1, @m, d, proved());
+                Divides/intro(0, Nat/le/antisym(b, 0, proved(), True/qed()))
             end
         end
     end;
@@ -82,7 +82,7 @@ pub let antisym(@a: Nat, @b: Nat, p: Divides(a, b), q: Divides(b, a)) -> Eq()(a,
     end;
 
 --- A zero remainder is a divisor: `n % d == 0` gives `Divides(d, n)`, the quotient as the witness.
-pub let of_rem(n: Nat, d: Nat, @ok: Bool/Holds(0 < d), h: Bool/Holds(n % d == 0)) -> Divides(d, n) =
+pub let of_rem(n: Nat, d: Nat, @ok: Holds(0 < d), h: Holds(n % d == 0)) -> Divides(d, n) =
     let joined: Eq()(n, n / d * d + n % d) = Eq/refl();
     Divides/intro(
         n / d,
@@ -91,19 +91,19 @@ pub let of_rem(n: Nat, d: Nat, @ok: Bool/Holds(0 < d), h: Bool/Holds(n % d == 0)
 --- A divisor leaves no remainder: `Divides(d, n)` gives `n % d == 0`, the converse of [`of_rem`].
 ---
 --- Neither reduction nor the facts in scope show a multiple's remainder by a symbolic divisor to be zero, so a proof that needs it takes this lemma.
-pub let to_rem(n: Nat, d: Nat, @ok: Bool/Holds(0 < d), p: Divides(d, n)) -> Bool/Holds(n % d == 0) =
+pub let to_rem(n: Nat, d: Nat, @ok: Holds(0 < d), p: Divides(d, n)) -> Holds(n % d == 0) =
     match p
     | intro(k, e) =>
         Eq/subst(
-            (r: Nat) => Bool/Holds(r == 0),
+            (r: Nat) => Holds(r == 0),
             Nat/DivMod/unique(n, d, k, 0, e, proved()).remainder,
-            Bool/True/qed())
+            True/qed())
     end;
 
 --- A quotient by a divisor is exact: under `Divides(d, n)`, `n` is `n / d` copies of `d`.
 ---
 --- What the evidence buys of `/`, which is the quotient either way: the multiple with nothing left over.
-pub let exact(n: Nat, d: Nat, @ok: Bool/Holds(0 < d), p: Divides(d, n)) -> Eq()(n, n / d * d) =
+pub let exact(n: Nat, d: Nat, @ok: Holds(0 < d), p: Divides(d, n)) -> Eq()(n, n / d * d) =
     match p
     | intro(k, e) =>
         Eq/subst((x: Nat) => Eq()(n, x * d), Nat/DivMod/unique(n, d, k, 0, e, proved()).quotient, e)
@@ -115,7 +115,7 @@ pub let rem(
     @d: Nat,
     a: Nat,
     b: Nat,
-    @ok: Bool/Holds(0 < b),
+    @ok: Holds(0 < b),
     p: Divides(d, a),
     q: Divides(d, b),
 ) -> Divides(d, a % b) =

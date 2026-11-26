@@ -1,5 +1,6 @@
 use /std/{Int, Nat, Flt, Bool, Str, Option, Spell, proved};
 use /std/ops/{Eql};
+use /std/Bool/{True, Holds};
 
 --- Whether `mantissa · 10^exponent` is written the one way `Number` holds a number: a nonzero mantissa that ends in no zero, or zero with exponent zero.
 pub let canonical(mantissa: Int, exponent: Int) -> Bool =
@@ -12,7 +13,7 @@ pub let canonical(mantissa: Int, exponent: Int) -> Bool =
 pub struct Number: pub Type {
     mantissa: Int,
     exponent: Int,
-    @canonical: Bool/Holds(canonical(mantissa, exponent)),
+    @canonical: Holds(canonical(mantissa, exponent)),
 }
 
 satisfy Eql(Number) {
@@ -26,7 +27,7 @@ satisfy Spell(Number) {
 --- `mantissa · 10^exponent`, the mantissa's trailing zeros moved into the exponent.
 pub let of(mantissa: Int, exponent: Int) -> Number =
     match
-    | mantissa == +0 => Number { mantissa = +0, exponent = +0, @canonical = Bool/True/qed() }
+    | mantissa == +0 => Number { mantissa = +0, exponent = +0, @canonical = True/qed() }
     | Int/rem(mantissa, +10) == +0 => of(Int/div(mantissa, +10), exponent + +1)
     | _ => Number { mantissa = mantissa, exponent = exponent, @canonical = proved() }
     end;

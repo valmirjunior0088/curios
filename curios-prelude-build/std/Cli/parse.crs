@@ -1,7 +1,7 @@
-use /std/{Str, Bytes, Nat, Bool, List, Option, Result, Map, Fmt};
-use /std/Cli/{Value, nat, Field, Presence, Positional, Positionals, Command, Failure, Reading,
-    Carrier, Values, Parsed, Chosen, option_slots, slots, scan};
-use /std/Cli/Parsed/{Presented, required_slots, optional_slots, rest_slots, appended};
+use /std/{Str, Bytes, Nat, Bool, List, Option, Result, Map, Fmt, Cli};
+use /std/Cli/{Value, Field, Presence, Positional, Positionals, Command, Failure, Reading, Carrier,
+    Values, Parsed, Chosen, scan};
+use /std/Cli/Parsed/{Presented};
 use /std/Cli/scan/{Seen, Raw};
 
 let lifted(@A: Type, @B: Type, r: Reading(A), f: (A) -> B) -> Reading(B) =
@@ -121,7 +121,7 @@ let read_field(
         match given(seen) == 0
         | true =>
             match set
-            | some((var, text)) => reading(nat, var, text)
+            | some((var, text)) => reading(Cli/nat, var, text)
             | none() => Result/success(0)
             end
         | false => Result/success(given(seen))
@@ -190,7 +190,7 @@ let read_options(
     at: Nat,
     seen: Map(Nat, List(Seen)),
     env: Map(Str, Bytes),
-) -> Result(Failure, Values(option_slots(fields))) =
+) -> Result(Failure, Values(Parsed/option_slots(fields))) =
     match fields
     | [] => Result/success(Values/nil())
     | [f, ..more] =>
@@ -202,7 +202,7 @@ let read_options(
 let read_required(
     ps: List(Positional),
     tokens: List(Bytes),
-) -> Result(Failure, {Values(required_slots(ps)), List(Bytes)}) =
+) -> Result(Failure, {Values(Parsed/required_slots(ps)), List(Bytes)}) =
     match ps
     | [] => Result/success((Values/nil(), tokens))
     | [p, ..more] =>
@@ -218,7 +218,7 @@ let read_required(
 let read_optional(
     ps: List(Positional),
     tokens: List(Bytes),
-) -> Result(Failure, {Values(optional_slots(ps)), List(Bytes)}) =
+) -> Result(Failure, {Values(Parsed/optional_slots(ps)), List(Bytes)}) =
     match ps
     | [] => Result/success((Values/nil(), tokens))
     | [p, ..more] =>
@@ -236,7 +236,7 @@ let read_optional(
 let read_rest(
     p: Option(Positional),
     tokens: List(Bytes),
-) -> Result(Failure, Values(rest_slots(p))) =
+) -> Result(Failure, Values(Parsed/rest_slots(p))) =
     match p
     | none() =>
         match tokens
@@ -253,12 +253,12 @@ let leaf_values(
     ps: Positionals,
     raw: Raw,
     env: Map(Str, Bytes),
-) -> Result(Failure, Values(slots(options, ps))) =
+) -> Result(Failure, Values(Parsed/slots(options, ps))) =
     let o = read_options(options, 0, raw.seen, env)!;
     let (r, after_required) = read_required(ps.required, raw.positionals)!;
     let (q, after_optional) = read_optional(ps.optional, after_required)!;
     let t = read_rest(ps.rest, after_optional)!;
-    Result/success(appended(o, appended(r, appended(q, t))));
+    Result/success(Parsed/appended(o, Parsed/appended(r, Parsed/appended(q, t))));
 
 -- What `raw` asks before the line is read further: help, then the version, then the first refusal.
 let asked(@A: Type, raw: Raw, path: List(Str), version: Option(Str)) -> Option(Reading(A)) =

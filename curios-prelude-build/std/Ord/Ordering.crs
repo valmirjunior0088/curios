@@ -8,6 +8,7 @@ pub use chains/{let chains};
 
 use /std/{Bool, Eq, Hash, Ord, Show, Spell};
 use /std/ops/{Eql};
+use /std/Bool/{False};
 
 --- The three-way answer a comparison gives.
 pub induct Ordering: pub Type
@@ -53,22 +54,22 @@ pub let is_le(r: Ordering) -> Bool =
 pub let is_ge(r: Ordering) -> Bool =
     match r | lt() => false | eq() => true | gt() => true end;
 
-pub let lt_neq_eq(p: Eq()(Ordering/lt(), Ordering/eq())) -> Bool/False =
+pub let lt_neq_eq(p: Eq()(Ordering/lt(), Ordering/eq())) -> False =
     Bool/false_neq_true(Eq/cong(is_eq, p));
 
-pub let gt_neq_eq(p: Eq()(Ordering/gt(), Ordering/eq())) -> Bool/False =
+pub let gt_neq_eq(p: Eq()(Ordering/gt(), Ordering/eq())) -> False =
     Bool/false_neq_true(Eq/cong(is_eq, p));
 
-pub let eq_neq_lt(p: Eq()(Ordering/eq(), Ordering/lt())) -> Bool/False =
+pub let eq_neq_lt(p: Eq()(Ordering/eq(), Ordering/lt())) -> False =
     Bool/false_neq_true(Eq/cong(is_lt, p));
 
-pub let gt_neq_lt(p: Eq()(Ordering/gt(), Ordering/lt())) -> Bool/False =
+pub let gt_neq_lt(p: Eq()(Ordering/gt(), Ordering/lt())) -> False =
     Bool/false_neq_true(Eq/cong(is_lt, p));
 
-pub let eq_neq_gt(p: Eq()(Ordering/eq(), Ordering/gt())) -> Bool/False =
+pub let eq_neq_gt(p: Eq()(Ordering/eq(), Ordering/gt())) -> False =
     Bool/false_neq_true(Eq/cong(is_gt, p));
 
-pub let lt_neq_gt(p: Eq()(Ordering/lt(), Ordering/gt())) -> Bool/False =
+pub let lt_neq_gt(p: Eq()(Ordering/lt(), Ordering/gt())) -> False =
     Bool/false_neq_true(Eq/cong(is_gt, p));
 
 satisfy Eql(Ordering) {

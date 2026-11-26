@@ -1,5 +1,6 @@
 use /std/{Bytes, Bool, Str, Path, Try, Io, fs};
 use /std/internal/{Handle, read_to_end, temporary_path};
+use /std/Bool/{Holds};
 
 --- An open file.
 pub struct File: Type {
@@ -33,7 +34,7 @@ pub let open(s: Io/Scope, path: Path, mode: Mode) -> Try(Io, Io/Error, File) =
 pub let temp(
     s: Io/Scope,
     prefix: Str,
-    @plain: Bool/Holds(Bool/not(Str/contains(prefix, '/'))),
+    @plain: Holds(Bool/not(Str/contains(prefix, '/'))),
 ) -> Try(Io, Io/Error, {path: Path, file: File}) =
     let path = temporary_path(prefix)!;
     let opened = Try/run(open(s, path, Mode/create_private()))!;

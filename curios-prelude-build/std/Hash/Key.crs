@@ -1,4 +1,5 @@
 use /std/{Bytes, Bool, Eq, Hash, Ord, Ordering, proved};
+use /std/Bool/{False, Holds};
 
 --- How a key type encodes to the byte string that identifies it, with the proof that the encodings stand in the keys' own order.
 ---
@@ -39,7 +40,7 @@ pub let same(
     use Key(K),
     a: K,
     b: K,
-    h: Bool/Holds(Hash/hash(a) == Hash/hash(b)),
+    h: Holds(Hash/hash(a) == Hash/hash(b)),
 ) -> Eq()(a, b) =
     inj(a, b, proved());
 
@@ -49,9 +50,9 @@ pub let apart(
     use Key(K),
     a: K,
     b: K,
-    h: Bool/Holds(Bool/not(Hash/hash(a) == Hash/hash(b))),
-) -> (Eq()(b, a)) -> Bool/False =
-    (same) => Eq/subst((y: K) => Bool/Holds(Bool/not(Hash/hash(a) == Hash/hash(y))), same, h);
+    h: Holds(Bool/not(Hash/hash(a) == Hash/hash(b))),
+) -> (Eq()(b, a)) -> False =
+    (same) => Eq/subst((y: K) => Holds(Bool/not(Hash/hash(a) == Hash/hash(y))), same, h);
 
 -- The part's answer read off its encodings, the encodings' delimited order read as their step, and the two steps taken in turn.
 --- A derived key's comparison stepped through a part before its last: where the comparison so far `acc` stepped by the part's answer `o`, which `part` reads off the part's encodings `x` and `y`, and then by what follows, `s` against `u`, is the whole comparison, so is `acc` stepped by the delimited part and what follows it. What a derived `mono` is written through, a part at a time from the last back.

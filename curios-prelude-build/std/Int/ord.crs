@@ -1,4 +1,5 @@
 use /std/{Int, Bool, Eq, Ordering, Ord};
+use /std/Bool/{True, False, Holds};
 
 --- The order of the two.
 pub let ord(x: Int, y: Int) -> Ordering =
@@ -15,21 +16,21 @@ let eq(a: Int, b: Int, h: Eq()(ord(a, b), Ordering/eq())) -> Eq()(a, b) =
     | true => match h end
     | false =>
         match Int/eql(a, b)
-        | true => Int/eq_of_eql(a, b, Bool/True/qed())
+        | true => Int/eq_of_eql(a, b, True/qed())
         | false => match h end
         end
     end;
 
 -- No two integers are each below the other: `a < b` is `a + 1 <= b`, and the two bounds in a row put `a + 1` at most `a - 1`.
-let apart(a: Int, b: Int, p: Bool/Holds(Int/lt(a, b)), q: Bool/Holds(Int/lt(b, a))) -> Bool/False =
+let apart(a: Int, b: Int, p: Holds(Int/lt(a, b)), q: Holds(Int/lt(b, a))) -> False =
     Int/le/trans(@a + 1, @b, @a - 1, p, q);
 
 -- Two integers neither of which is below the other are one: a comparison that failed is the dual one holding.
 let level(
     a: Int,
     b: Int,
-    p: Bool/Holds(Bool/not(Int/lt(a, b))),
-    q: Bool/Holds(Bool/not(Int/lt(b, a))),
+    p: Holds(Bool/not(Int/lt(a, b))),
+    q: Holds(Bool/not(Int/lt(b, a))),
 ) -> Eq()(a, b) =
     Int/le/antisym(a, b, q, p);
 
@@ -40,15 +41,12 @@ let flips: Ord/Flips(ord) =
         match Int/lt(a, b)
         | true =>
             match Int/lt(b, a)
-            | true => match apart(a, b, Bool/True/qed(), Bool/True/qed()) end
+            | true => match apart(a, b, True/qed(), True/qed()) end
             | false =>
                 match Int/eql(b, a)
                 | true =>
-                    let same = Int/eq_of_eql(b, a, Bool/True/qed());
-                    match Eq/subst(
-                        (x: Int) => Bool/Holds(Int/lt(x, b)),
-                        Eq/sym(same),
-                        Bool/True/qed())
+                    let same = Int/eq_of_eql(b, a, True/qed());
+                    match Eq/subst((x: Int) => Holds(Int/lt(x, b)), Eq/sym(same), True/qed())
                     end
                 | false => Eq/refl()
                 end
@@ -56,17 +54,17 @@ let flips: Ord/Flips(ord) =
         | false =>
             match Int/eql(a, b)
             | true =>
-                let refl() = Int/eq_of_eql(a, b, Bool/True/qed());
+                let refl() = Int/eq_of_eql(a, b, True/qed());
                 Eq/refl()
             | false =>
                 match Int/lt(b, a)
                 | true => Eq/refl()
                 | false =>
-                    let same = level(a, b, Bool/True/qed(), Bool/True/qed());
+                    let same = level(a, b, True/qed(), True/qed());
                     match Eq/subst(
-                        (x: Int) => Bool/Holds(Bool/not(Int/eql(a, x))),
+                        (x: Int) => Holds(Bool/not(Int/eql(a, x))),
                         Eq/sym(same),
-                        Bool/True/qed())
+                        True/qed())
                     end
                 end
             end
@@ -85,21 +83,18 @@ let is_le(a: Int, b: Int) -> Eq()(Int/le(a, b), Ordering/is_le(ord(a, b))) =
     | true =>
         match Int/le(a, b)
         | true => Eq/refl()
-        | false => match apart(a, b, Bool/True/qed(), Bool/True/qed()) end
+        | false => match apart(a, b, True/qed(), True/qed()) end
         end
     | false =>
         match Int/eql(a, b)
         | true =>
-            let refl() = Int/eq_of_eql(a, b, Bool/True/qed());
+            let refl() = Int/eq_of_eql(a, b, True/qed());
             Eq/refl()
         | false =>
             match Int/le(a, b)
             | true =>
-                let same = level(a, b, Bool/True/qed(), Bool/True/qed());
-                match Eq/subst(
-                    (x: Int) => Bool/Holds(Bool/not(Int/eql(a, x))),
-                    Eq/sym(same),
-                    Bool/True/qed())
+                let same = level(a, b, True/qed(), True/qed());
+                match Eq/subst((x: Int) => Holds(Bool/not(Int/eql(a, x))), Eq/sym(same), True/qed())
                 end
             | false => Eq/refl()
             end
@@ -110,11 +105,9 @@ let is_le(a: Int, b: Int) -> Eq()(Int/le(a, b), Ordering/is_le(ord(a, b))) =
 --- `ord` as a relation carries across a middle element.
 let trans: Ord/Trans(Ord/le_by(ord)) =
     (a, b, c, p, q) =>
-        let below: Bool/Holds(Int/le(a, b)) =
-            Eq/subst((x: Bool) => Bool/Holds(x), Eq/sym(is_le(a, b)), p);
-        let above: Bool/Holds(Int/le(b, c)) =
-            Eq/subst((x: Bool) => Bool/Holds(x), Eq/sym(is_le(b, c)), q);
-        Eq/subst((x: Bool) => Bool/Holds(x), is_le(a, c), Int/le/trans(below, above));
+        let below: Holds(Int/le(a, b)) = Eq/subst((x: Bool) => Holds(x), Eq/sym(is_le(a, b)), p);
+        let above: Holds(Int/le(b, c)) = Eq/subst((x: Bool) => Holds(x), Eq/sym(is_le(b, c)), q);
+        Eq/subst((x: Bool) => Holds(x), is_le(a, c), Int/le/trans(below, above));
 
 satisfy Ord(Int) {
     ord = ord,

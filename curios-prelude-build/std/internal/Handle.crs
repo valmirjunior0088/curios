@@ -9,6 +9,7 @@ use /std/{Bool, Byte, Bytes, Nat, List, Option, Result, Io, Try};
 use /std/Io/{Error};
 use /std/File/{Mode};
 use /std/internal/{Status, Waiting, suspend_on, until};
+use /std/Bool/{Holds};
 
 --- Open the file at this path in the mode this `/sys/open_mode` code names: `ok` beside its handle, or the status of the failure.
 foreign file_open(Bytes, Nat) -> {status: Nat, handle: Handle};
@@ -109,7 +110,7 @@ pub let retried(
     settle(reply, settled);
 
 --- Up to `n` bytes, waiting while the host would block.
-let read_waiting(h: Handle, n: Nat, @_: Bool/Holds(0 < n)) -> Io(Result(Error, Io/Chunk)) =
+let read_waiting(h: Handle, n: Nat, @_: Holds(0 < n)) -> Io(Result(Error, Io/Chunk)) =
     retried(
         h,
         Interest/readable,

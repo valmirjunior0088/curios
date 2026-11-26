@@ -1,4 +1,5 @@
 use /std/{Bool, Eq};
+use /std/Bool/{Holds};
 
 --- Equality as a decision, which `==` dispatches through, and `!=` as its negation.
 ---
@@ -7,9 +8,9 @@ pub concept Eql(A: Type): pub Type {
     --- Whether the two are equal.
     eql(A, A) -> Bool,
     --- Two values `eql` holds equal are one: the bridge from a decided equality to an equation.
-    eq(a: A, b: A, h: Bool/Holds(eql(a, b))) -> Eq()(a, b),
+    eq(a: A, b: A, h: Holds(eql(a, b))) -> Eq()(a, b),
     --- A value is equal to itself.
-    refl(a: A) -> Bool/Holds(eql(a, a)),
+    refl(a: A) -> Holds(eql(a, a)),
 }
 
 --- Addition, which `+` dispatches through.
@@ -32,9 +33,9 @@ pub concept Mul(A: Type): pub Type {
 
 --- Division, which `/` dispatches through, under the precondition `Ok` each carrier states on its divisor.
 ---
---- A literal divisor discharges the precondition by reduction, and a computed one from the facts in scope — a guard or a hypothesis. A carrier whose division is total states `Bool/True`.
+--- A literal divisor discharges the precondition by reduction, and a computed one from the facts in scope — a guard or a hypothesis. A carrier whose division is total states `True`.
 pub concept Div(A: Type): pub Type {
-    --- The precondition this carrier states for a divisor: `Bool/True` where division is total, and a proposition the caller must discharge where it is not.
+    --- The precondition this carrier states for a divisor: `True` where division is total, and a proposition the caller must discharge where it is not.
     Ok(A) -> Prop,
     --- The quotient, under the evidence that `b` may be divided by.
     div(a: A, b: A, @ok: Ok(b)) -> A,

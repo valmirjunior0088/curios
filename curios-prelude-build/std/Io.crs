@@ -26,6 +26,7 @@ use /std/{Monad, Bytes, Nat, Int, Bool, List, Option, Box, Program, Try, Vec};
 use /std/Io/Scope/{Ended};
 use /std/internal/{Handle, Waiting, suspend_on, wait_tripped};
 use /std/time/{Duration, Instant};
+use /std/Bool/{Holds};
 
 satisfy Monad(Io) {
     pure = pure,
@@ -144,7 +145,7 @@ let using(@A: Type, release: (Ended) -> Io({}), body: Io(A)) -> Io(A) =
 --- A chunk holds at least one byte, and says so: a read asks for a positive count, and a stream with nothing more to give has ended. So a reader takes a chunk's first byte by its proof rather than by a default, and a loop over chunks advances with every one.
 pub induct Chunk: pub Type
 --- Bytes were read: at least one.
-| bytes(bytes: Bytes, @some: Bool/Holds(0 < Bytes/length(bytes)))
+| bytes(bytes: Bytes, @some: Holds(0 < Bytes/length(bytes)))
 --- The stream is finished.
 | ended()
 end
@@ -153,7 +154,7 @@ end
 ---
 --- The lower bound is the chunk's own, stated in its type, so a witness for a stream of its own proves every chunk it hands out holds a byte — `Bool/holds` decides it of a length the witness cannot see. The upper bound is the witness's promise, which the host's rows hold `Handle` to.
 pub concept Read(S: Type): pub Type {
-    read(s: S, n: Nat, @positive: Bool/Holds(0 < n)) -> Try(Io, Error, Chunk),
+    read(s: S, n: Nat, @positive: Holds(0 < n)) -> Try(Io, Error, Chunk),
 }
 
 pub use Read/*;

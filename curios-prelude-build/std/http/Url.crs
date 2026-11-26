@@ -5,6 +5,7 @@ pub use Scheme/{let Scheme};
 use /std/{Bytes, Byte, Char, Str, Nat, Bool, List, Option, Result, Parse, Spell, Fmt};
 use /std/ops/{Eql};
 use /std/http/{Field};
+use /std/Bool/{True, False, Holds};
 
 --- Where a request goes. A fragment is the client's and is dropped.
 pub struct Url: pub Type {
@@ -119,7 +120,7 @@ pub let of_str(s: Str) -> Result(Parse/Error, Url) =
 
 --- That `r` is a URL that read.
 pub let Read(r: Result(Parse/Error, Url)) -> Prop =
-    match r | success(_) => Bool/True | failure(_) => Bool/False end;
+    match r | success(_) => True | failure(_) => False end;
 
 --- That `s` reads as a URL, decided by reduction: a literal that does not is refused where it is written.
 pub let Valid(s: Str) -> Prop =
@@ -235,7 +236,7 @@ let hex_octets: List(Field/Value/Octet) =
         Field/Value/Octet { byte = 'F' }];
 
 -- The hexadecimal digit of the nibble `n`, read off the sixteen under the bound that makes it one.
-let hex_octet(n: Nat, @nibble: Bool/Holds(n < 16)) -> Field/Value/Octet =
+let hex_octet(n: Nat, @nibble: Holds(n < 16)) -> Field/Value/Octet =
     List/get(hex_octets, n);
 
 -- `b` with every octet that is not visible ASCII written as its `%XX`.
@@ -298,7 +299,7 @@ pub let encode(component: Str) -> Str =
     Str/escape(component, percent);
 
 -- The digit travels with the evidence that it is below sixteen, because the caller combines two of them into a byte and reduction cannot see a bound a guard established: `Char/of_hex_digit` refuses what is no hex digit, and the comparison below proves the bound its answer meets. Masking the digit instead would state a width this encoding does not have — a hex digit is four bits because of what it is, not because of where it is stored.
-let hex_value(byte: Byte) -> Option({v: Nat, ok: Bool/Holds(v < 16)}) =
+let hex_value(byte: Byte) -> Option({v: Nat, ok: Holds(v < 16)}) =
     let digit = Option/bind(Char/of_ascii(byte), Char/of_hex_digit)!;
     match Bool/holds(digit < 16)
     | some(ok) => Option/some((v = digit, ok = ok))

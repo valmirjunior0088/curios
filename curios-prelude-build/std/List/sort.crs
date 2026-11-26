@@ -1,5 +1,6 @@
 use /std/{List, Bool, Ord};
 use /std/List/{Permutation, Pairwise, sort_by};
+use /std/Bool/{Holds};
 
 --- `l` sorted by `T`'s order, stably.
 ---
@@ -18,7 +19,7 @@ pub let ordered(
     second: (T, T) -> Bool,
     l: List(T),
     given: Pairwise(second)(l),
-) -> Bool/Holds(List/ordered(sort(l), Ord/then((a: T, b: T) => Ord/ord(a, b), second))) =
+) -> Holds(List/ordered(sort(l), Ord/then((a: T, b: T) => Ord/ord(a, b), second))) =
     sort_by/ordered((a, b) => Ord/ord(a, b), (a, b) => Ord/flips(a, b), second, l, given);
 
 --- The sort's answer is in order.
@@ -26,5 +27,5 @@ pub let sorted(
     @T: Type,
     use Ord(T),
     l: List(T),
-) -> Bool/Holds(List/ordered(sort(l), Ord/le_by((a: T, b: T) => Ord/ord(a, b)))) =
+) -> Holds(List/ordered(sort(l), Ord/le_by((a: T, b: T) => Ord/ord(a, b)))) =
     sort_by/sorted((a, b) => Ord/ord(a, b), (a, b) => Ord/flips(a, b), l);

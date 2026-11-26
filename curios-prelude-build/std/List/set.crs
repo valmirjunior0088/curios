@@ -1,6 +1,7 @@
 pub use /sys/List/{set};
 
-use /std/{List, Nat, Bool, Eq, proved};
+use /std/{List, Nat, Eq, proved};
+use /std/Bool/{Holds};
 
 --- An update keeps the length, by reduction: the measure passes through it.
 pub let length(
@@ -8,7 +9,7 @@ pub let length(
     l: List(T),
     i: Nat,
     x: T,
-    @ok: Bool/Holds(i < List/length(l)),
+    @ok: Holds(i < List/length(l)),
 ) -> Eq()(List/length(List/set(l, i, x)), List/length(l)) =
     Eq/refl();
 
@@ -18,7 +19,7 @@ pub let at(
     l: List(T),
     i: Nat,
     x: T,
-    @ok: Bool/Holds(i < List/length(l)),
+    @ok: Holds(i < List/length(l)),
 ) -> Eq()(List/get(List/set(l, i, x), i), x) =
     match l
     | [] => match ok end
@@ -32,9 +33,9 @@ pub let other(
     i: Nat,
     j: Nat,
     x: T,
-    @ok: Bool/Holds(i < List/length(l)),
-    @within: Bool/Holds(j < List/length(l)),
-    apart: Bool/Holds(i != j),
+    @ok: Holds(i < List/length(l)),
+    @within: Holds(j < List/length(l)),
+    apart: Holds(i != j),
 ) -> Eq()(List/get(List/set(l, i, x), j), List/get(l, j)) =
     match l
     | [] => match ok end
@@ -58,7 +59,7 @@ pub let itself(
     @T: Type,
     l: List(T),
     i: Nat,
-    @ok: Bool/Holds(i < List/length(l)),
+    @ok: Holds(i < List/length(l)),
 ) -> Eq()(List/set(l, i, List/get(l, i)), l) =
     match l
     | [] => match ok end

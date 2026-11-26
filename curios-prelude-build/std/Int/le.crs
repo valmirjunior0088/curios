@@ -1,25 +1,26 @@
 pub use /sys/Int/{le};
 
-use /std/{Nat, Int, Bool, Eq};
+use /std/{Nat, Int, Eq};
+use /std/Bool/{True, Holds};
 
 -- The floors the order laws stand on, stated over abstract naturals, where the comparison decides them by comparing preimages; a law instantiates one at the naturals its hypotheses name, and the instance reduces to the comparison the law concludes.
-let floor(x: Nat, y: Nat) -> Bool/Holds(le(+0, Nat/to_int(x) + Nat/to_int(y))) =
-    Bool/True/qed();
+let floor(x: Nat, y: Nat) -> Holds(le(+0, Nat/to_int(x) + Nat/to_int(y))) =
+    True/qed();
 
-let floor_mul(x: Nat, y: Nat) -> Bool/Holds(+0 <= Nat/to_int(x) * Nat/to_int(y)) =
-    Bool/True/qed();
+let floor_mul(x: Nat, y: Nat) -> Holds(+0 <= Nat/to_int(x) * Nat/to_int(y)) =
+    True/qed();
 
 -- Stated through `Int/lt` by name, as [`antisym`] is through `le`: `Eql(Int)`'s law reads both, and an operator here would read the order's witness, which reads that one.
-let positive(m: Nat, y: Nat) -> Bool/Holds(Int/lt(+0, Nat/to_int(m + 1) + Nat/to_int(y))) =
-    Bool/True/qed();
+let positive(m: Nat, y: Nat) -> Holds(Int/lt(+0, Nat/to_int(m + 1) + Nat/to_int(y))) =
+    True/qed();
 
-pub let refl(n: Int) -> Bool/Holds(n <= n) =
-    Bool/True/qed();
+pub let refl(n: Int) -> Holds(n <= n) =
+    True/qed();
 
 -- The step a proof the elaborator writes takes from the arm a `<=` guard failed in to the bound a `min` or a `max` is decided by. `a < b` is `a + 1 <= b` over the integers, so it is [`trans`] after `a <= a + 1`.
 --- A strict bound is a loose one: `a < b` gives `a <= b`.
-pub let of_lt(a: Int, b: Int, p: Bool/Holds(a < b)) -> Bool/Holds(a <= b) =
-    trans(@a, @a + 1, @b, Bool/True/qed(), p);
+pub let of_lt(a: Int, b: Int, p: Holds(a < b)) -> Holds(a <= b) =
+    trans(@a, @a + 1, @b, True/qed(), p);
 
 -- Stated through `le` by name, with the floor it stands on: `Ord(Int)`'s laws read it, and an operator here would read that witness.
 --- Transitivity.
@@ -27,9 +28,9 @@ pub let trans(
     @a: Int,
     @b: Int,
     @c: Int,
-    p: Bool/Holds(le(a, b)),
-    q: Bool/Holds(le(b, c)),
-) -> Bool/Holds(le(a, c)) =
+    p: Holds(le(a, b)),
+    q: Holds(le(b, c)),
+) -> Holds(le(a, c)) =
     floor(Int/to_nat(b - a, @p), Int/to_nat(c - b, @q));
 
 -- The step a proof the elaborator writes from the facts in scope is summed with, one fact at a time. It is [`trans`] alone, because `a + c <= b + c` cancels to `a <= b` and `b + c <= b + d` to `c <= d`.
@@ -39,31 +40,31 @@ pub let add(
     @b: Int,
     @c: Int,
     @d: Int,
-    p: Bool/Holds(a <= b),
-    q: Bool/Holds(c <= d),
-) -> Bool/Holds(a + c <= b + d) =
+    p: Holds(a <= b),
+    q: Holds(c <= d),
+) -> Holds(a + c <= b + d) =
     trans(@a + c, @b + c, @b + d, p, q);
 
 --- `a <= a + k` for a natural `k`: a quotient's multiple is at most its dividend, the remainder being a natural, which is how the elaborator's proofs read an `Int` quotient's bound from below.
-pub let add_r(a: Int, k: Nat) -> Bool/Holds(a <= a + Nat/to_int(k)) =
-    Bool/True/qed();
+pub let add_r(a: Int, k: Nat) -> Holds(a <= a + Nat/to_int(k)) =
+    True/qed();
 
 --- `a <= b` gives `n + a <= n + b`: a fact over a remainder raised to one over its dividend, as the elaborator's proofs lift a remainder out of a fact.
-pub let add_mono_l(n: Int, @a: Int, @b: Int, p: Bool/Holds(a <= b)) -> Bool/Holds(n + a <= n + b) =
+pub let add_mono_l(n: Int, @a: Int, @b: Int, p: Holds(a <= b)) -> Holds(n + a <= n + b) =
     p;
 
 -- How a proof the elaborator writes from the facts in scope reads an equation: as this bound and the one [`Eq/sym`] turns it into.
-pub let of_eq(@a: Int, @b: Int, e: Eq()(a, b)) -> Bool/Holds(a <= b) =
-    Eq/subst((x: Int) => Bool/Holds(a <= x), e, refl(a));
+pub let of_eq(@a: Int, @b: Int, e: Eq()(a, b)) -> Holds(a <= b) =
+    Eq/subst((x: Int) => Holds(a <= x), e, refl(a));
 
 --- `a <= b` gives `a * k <= b * k` for a `k` no smaller than zero.
 pub let mul_mono_r(
     @a: Int,
     @b: Int,
     k: Int,
-    p: Bool/Holds(a <= b),
-    q: Bool/Holds(+0 <= k),
-) -> Bool/Holds(a * k <= b * k) =
+    p: Holds(a <= b),
+    q: Holds(+0 <= k),
+) -> Holds(a * k <= b * k) =
     floor_mul(Int/to_nat(b - a, @p), Int/to_nat(k, @q));
 
 -- The step a proof the elaborator writes multiplies two facts by, where a multiplier is no literal. It is [`mul_mono_r`] by `d - c`, which `q` shows is not negative, once conversion distributes the products.
@@ -73,23 +74,20 @@ pub let mul(
     @b: Int,
     @c: Int,
     @d: Int,
-    p: Bool/Holds(a <= b),
-    q: Bool/Holds(c <= d),
-) -> Bool/Holds(a * d + b * c <= a * c + b * d) =
+    p: Holds(a <= b),
+    q: Holds(c <= d),
+) -> Holds(a * d + b * c <= a * c + b * d) =
     mul_mono_r(@a, @b, d - c, p, q);
 
 -- The two differences are naturals summing to zero; a successor for the first is a positive sum, which the second hypothesis already refutes.
 --- Two bounds facing each other pin one value.
-pub let antisym(a: Int, b: Int, p: Bool/Holds(le(a, b)), q: Bool/Holds(le(b, a))) -> Eq()(a, b) =
+pub let antisym(a: Int, b: Int, p: Holds(le(a, b)), q: Holds(le(b, a))) -> Eq()(a, b) =
     let other = Int/to_nat(a - b, @q);
     let e: Eq()(Nat/to_int(Int/to_nat(b - a, @p)), b - a) = Eq/refl();
     match Int/to_nat(b - a, @p)
     | 0 => Eq/cong((x: Int) => a + x, e)
     | m + 1 =>
-        let sum: Bool/Holds(Int/lt(+0, b - a + Nat/to_int(other))) =
-            Eq/subst(
-                (x: Int) => Bool/Holds(Int/lt(+0, x + Nat/to_int(other))),
-                e,
-                positive(m, other));
+        let sum: Holds(Int/lt(+0, b - a + Nat/to_int(other))) =
+            Eq/subst((x: Int) => Holds(Int/lt(+0, x + Nat/to_int(other))), e, positive(m, other));
         match sum end
     end;

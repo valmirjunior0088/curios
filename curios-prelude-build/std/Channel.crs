@@ -6,6 +6,7 @@ use internal/{Queue};
 use /std/{Nat, Bool, Option, Box, Io};
 use /std/Io/{Latch};
 use /std/internal/{Waiting, on_tripped, until};
+use /std/Bool/{Holds};
 
 --- The outcome of one push that does not wait: `full` passes once a take makes room, and `closed` never does.
 pub induct Push: pub Type
@@ -71,7 +72,7 @@ let woken(latch: Option(Latch)) -> Io({}) =
     match latch | some(c) => Latch/trip(c) | none() => Io/pure(()) end;
 
 --- A channel holding at most `capacity` values. A sender needing acknowledgement can include a reply `Future` in its message, which the receiver fills.
-pub let new(@A: Type, capacity: Nat, @_: Bool/Holds(0 < capacity)) -> Io(Channel(A)) =
+pub let new(@A: Type, capacity: Nat, @_: Holds(0 < capacity)) -> Io(Channel(A)) =
     let held =
         Box/new(
             Held {

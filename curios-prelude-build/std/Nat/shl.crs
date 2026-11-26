@@ -1,6 +1,7 @@
 pub use /sys/Nat/{shl};
 
-use /std/{Nat, Eq, Bool};
+use /std/{Nat, Eq};
+use /std/Bool/{Holds};
 
 --- A shift by `i` is a shift by `i - j` and then by `j`, where `j <= i`.
 ---
@@ -9,6 +10,6 @@ pub let split(
     x: Nat,
     i: Nat,
     j: Nat,
-    fits: Bool/Holds(j <= i),
+    fits: Holds(j <= i),
 ) -> Eq()(shl(x, i), shl(shl(x, i - j), j)) =
     Eq/cong((count: Nat) => shl(x, count), Eq/sym(Nat/le/add_sub_cancel(j, i, fits)));

@@ -1,5 +1,6 @@
-use /std/{Str, Nat, Bool, List, Option};
-use /std/Cli/{Field, Kind, Presence, Positional, Positionals, Command, positionals};
+use /std/{Str, Nat, Bool, List, Option, Cli};
+use /std/Cli/{Field, Kind, Presence, Positional, Positionals, Command};
+use /std/Bool/{False, Holds};
 
 --- What a parse fills and `get` reads by name.
 pub struct Slot: pub Type {
@@ -112,7 +113,7 @@ pub let Lookup(spec: List(Slot), name: Str) -> Type =
 
 --- That `name` is one of `spec`'s, decided by reduction: a name the declaration lacks is refused where it is written.
 pub let Has(spec: List(Slot), name: Str) -> Prop =
-    Bool/Holds(List/any(spec, (s) => s.name == name));
+    Holds(List/any(spec, (s) => s.name == name));
 
 let read(
     @spec: List(Slot),
@@ -140,12 +141,12 @@ pub let get(
 
 --- That `name` is one of `commands`', decided by reduction.
 pub let HasIn(commands: List(Command), name: Str) -> Prop =
-    Bool/Holds(List/any(commands, (c) => /std/Cli/name(c) == name));
+    Holds(List/any(commands, (c) => /std/Cli/name(c) == name));
 
 --- The first of `commands` named `name`.
 pub let NamedIn(commands: List(Command), name: Str) -> Command =
     match commands
-    | [] => Command/leaf(name, "", [], positionals([]))
+    | [] => Command/leaf(name, "", [], Cli/positionals([]))
     | [c, ..rest] =>
         match /std/Cli/name(c) == name
         | true => c
@@ -156,7 +157,7 @@ pub let NamedIn(commands: List(Command), name: Str) -> Command =
 --- That `c` is a group with a command named `name`.
 pub let HasCommand(c: Command, name: Str) -> Prop =
     match c
-    | leaf(_, _, _, _) => Bool/False
+    | leaf(_, _, _, _) => False
     | group(_, _, _, commands) => HasIn(commands, name)
     end;
 

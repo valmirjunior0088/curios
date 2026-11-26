@@ -1,7 +1,8 @@
-use /std/{List, Eq, Ord, Bool, Hash};
+use /std/{List, Eq, Ord, Hash};
 use /std/List/{Pairwise};
 use /std/Map/{Map};
 use /std/Map/internal/{Node};
+use /std/Bool/{Holds};
 
 --- The keys, in their type's own order: each is before every one after it, by [`pairwise`].
 pub let keys(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V)) -> List(K) =
@@ -26,5 +27,5 @@ pub let ordered(
     use Hash/Key(K),
     @V: Type,
     m: Map(K, V),
-) -> Bool/Holds(List/ordered(keys(m), Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))) =
+) -> Holds(List/ordered(keys(m), Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))) =
     Pairwise/adjacent(Ord/lt_by((a: K, b: K) => Ord/ord(a, b)), keys(m), pairwise(m));

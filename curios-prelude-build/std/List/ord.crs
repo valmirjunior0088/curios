@@ -1,4 +1,5 @@
-use /std/{List, Bool, Bytes, Eq, Hash, Ord, Ordering};
+use /std/{List, Bytes, Eq, Hash, Ord, Ordering};
+use /std/Bool/{True, Holds};
 
 --- Lexicographic, a proper prefix first.
 pub let ord(@T: Type, use Ord(T), a: List(T), b: List(T)) -> Ordering =
@@ -39,19 +40,19 @@ let chains(
     a: List(T),
     b: List(T),
     c: List(T),
-) -> Bool/Holds(Ordering/chains(ord(a, b), ord(b, c), ord(a, c))) =
+) -> Holds(Ordering/chains(ord(a, b), ord(b, c), ord(a, c))) =
     match a
     | [] =>
         match b
         | [] => Ordering/chains/tied(ord(b, c))
-        | [_, .._] => match c | [] => Bool/True/qed() | [_, .._] => Bool/True/qed() end
+        | [_, .._] => match c | [] => True/qed() | [_, .._] => True/qed() end
         end
     | [x, ..xs] =>
         match b
-        | [] => Bool/True/qed()
+        | [] => True/qed()
         | [y, ..ys] =>
             match c
-            | [] => Bool/True/qed()
+            | [] => True/qed()
             | [z, ..zs] => Ordering/chains/then(Ord/chains(x, y, z), (_, _) => chains(xs, ys, zs))
             end
         end
@@ -64,9 +65,9 @@ let trans(
     a: List(T),
     b: List(T),
     c: List(T),
-    below: Bool/Holds(Ordering/is_le(ord(a, b))),
-    above: Bool/Holds(Ordering/is_le(ord(b, c))),
-) -> Bool/Holds(Ordering/is_le(ord(a, c))) =
+    below: Holds(Ordering/is_le(ord(a, b))),
+    above: Holds(Ordering/is_le(ord(b, c))),
+) -> Holds(Ordering/is_le(ord(a, c))) =
     Ordering/chains/le(ord(a, b), ord(b, c), ord(a, c), chains(a, b, c), below, above);
 
 --- `ord(a, b)` is `eq` only where `a` is `b`: the order agrees with equality.

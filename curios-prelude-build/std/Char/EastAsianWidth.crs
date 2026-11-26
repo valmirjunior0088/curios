@@ -1,6 +1,7 @@
-use /std/{Nat, List, Char, Spell, Bool};
+use /std/{Nat, List, Char, Spell};
 use /std/ops/{Eql};
 use /std/Char/{unicode};
+use /std/Bool/{True, Holds};
 
 --- A character's `East_Asian_Width` class (UAX #11). A terminal gives `wide` and `fullwidth` characters two columns and the rest one, which is how `/std/Tui` counts a glyph's columns.
 pub induct EastAsianWidth: pub Type
@@ -36,10 +37,10 @@ let of_code(code: Nat) -> EastAsianWidth =
     end;
 
 -- Every code `/sys` names is a case of `of_code`: a class the database gains is refused here until the ladder has its arm.
-let _every_code_the_database_names_is_a_case: Bool/Holds(
+let _every_code_the_database_names_is_a_case: Holds(
     List/all(/sys/east_asian_width/codes, (code: Nat) =>
         code == /sys/east_asian_width/neutral || of_code(code) != neutral())) =
-    Bool/True/qed();
+    True/qed();
 
 --- `c`'s class.
 pub let of_char(c: Char) -> EastAsianWidth =

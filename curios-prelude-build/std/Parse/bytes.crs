@@ -1,18 +1,19 @@
 use /std/{Result, Nat, Byte, Bytes, Char, Str, Bool, Option, Parse, Fmt, proved};
 use /std/Parse/{Of, At, Pos, Input, Error};
+use /std/Bool/{True, Holds};
 
 --- A bytes parser walks its input as it is, and its positions lie within it.
 satisfy Input(Bytes) {
-    Admits(input, offset) = Bool/Holds(offset <= Bytes/length(input)),
+    Admits(input, offset) = Holds(offset <= Bytes/length(input)),
     bytes(input) = input,
-    start(_) = Bool/True/qed(),
+    start(_) = True/qed(),
 }
 
 --- The position past `at`, which holds a byte: still within the input.
 let step(
     @input: Bytes,
     at: Pos(Bytes, input),
-    ok: Bool/Holds(at.offset < Bytes/length(input)),
+    ok: Holds(at.offset < Bytes/length(input)),
 ) -> Pos(Bytes, input) =
     At { offset = at.offset + 1, holds = ok };
 
@@ -103,7 +104,7 @@ let leading_within(
     rest: Bytes,
     pred: (Byte) -> Bool,
     taken: Nat,
-) -> Bool/Holds(leading(rest, pred, taken) <= taken + Bytes/length(rest)) =
+) -> Holds(leading(rest, pred, taken) <= taken + Bytes/length(rest)) =
     match rest
     | 0x[] => proved()
     | 0x[h, ..t] =>

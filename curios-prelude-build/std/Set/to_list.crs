@@ -1,6 +1,7 @@
-use /std/{List, Ord, Map, Bool, Hash};
+use /std/{List, Ord, Map, Hash};
 use /std/List/{Pairwise};
 use /std/Set/{Set};
+use /std/Bool/{Holds};
 
 --- The elements, in their type's own order: each is before every one after it, by [`pairwise`].
 pub let to_list(@K: Type, use Hash/Key(K), s: Set(K)) -> List(K) =
@@ -19,5 +20,5 @@ pub let ordered(
     @K: Type,
     use Hash/Key(K),
     s: Set(K),
-) -> Bool/Holds(List/ordered(to_list(s), Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))) =
+) -> Holds(List/ordered(to_list(s), Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))) =
     Map/keys/ordered(s.map);

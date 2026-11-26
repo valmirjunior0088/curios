@@ -25,6 +25,7 @@ pub use greatest/{let greatest};
 
 use /std/{Nat, Bool, Str, List, Option, Eq, Hash, Show, Spell, Fmt};
 use /std/ops/{Eql};
+use /std/Bool/{True, Holds};
 
 --- A map from keys of type `K` to values, built and read under one `Hash/Key(K)` dictionary, which its type names.
 ---
@@ -37,7 +38,7 @@ pub struct Map(K: Type, use Hash/Key(K), V: Type): Type {
 }
 
 pub let empty(@K: Type, use Hash/Key(K), @V: Type) -> Map(K, V) =
-    Map { root = Node/empty(), @sound = Bool/True/qed() };
+    Map { root = Node/empty(), @sound = True/qed() };
 
 --- How many entries, counted: the trie holds its entries and nothing beside them, so the count is a walk over every one.
 pub let length(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V)) -> Nat =
@@ -54,7 +55,7 @@ pub let get(
     @V: Type,
     m: Map(K, V),
     key: K,
-    @ok: Bool/Holds(has(m, key)),
+    @ok: Holds(has(m, key)),
 ) -> V =
     match try_get(m, key)
     | some(v) => v
@@ -65,7 +66,7 @@ pub let get(
 pub let insert(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V), key: K, v: V) -> Map(K, V) =
     let k = Hash/hash(key);
     match Node/insert(m.root, key, k, v, @Eq/refl(), @m.sound)
-    | vacant(_) => Map { root = Node/leaf(key, v), @sound = Bool/True/qed() }
+    | vacant(_) => Map { root = Node/leaf(key, v), @sound = True/qed() }
     | added(n2, @stands, @_, @_) | replaced(n2, @stands, @_, @_) =>
         Map { root = n2, @sound = stands.sound }
     | parted(n2, c, d, @back, @full, @apart, @past, @at_d, @small_d) =>
@@ -94,7 +95,7 @@ pub let insert(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V), key: K, v: V) 
 --- `m` without `key`; unchanged when absent.
 pub let remove(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V), key: K) -> Map(K, V) =
     match Node/remove(m.root, Hash/hash(key), @m.sound)
-    | gone(_) => Map { root = Node/empty(), @sound = Bool/True/qed() }
+    | gone(_) => Map { root = Node/empty(), @sound = True/qed() }
     | kept(n2, @stands, @_, @_) => Map { root = n2, @sound = stands.sound }
     | absent(n2, @back, _) =>
         Map {

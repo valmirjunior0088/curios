@@ -41,6 +41,7 @@ pub use ord/{let ord};
 
 use /std/{Nat, Bool, Bytes, Option, Str, Eq, Show, Spell, Fmt, Monad, Hash, proved};
 use /std/ops/{Eql};
+use /std/Bool/{True, Holds};
 
 --- The element at `i`, or `none` past the end.
 pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =
@@ -50,7 +51,7 @@ pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =
     end;
 
 --- Everything from `k` on, under the evidence that `k` is within the length.
-pub let drop(@T: Type, a: List(T), k: Nat, @ok: Bool/Holds(k <= length(a))) -> List(T) =
+pub let drop(@T: Type, a: List(T), k: Nat, @ok: Holds(k <= length(a))) -> List(T) =
     slice(@T, a, k, length(a) - k);
 
 --- The concatenation, in order.
@@ -202,10 +203,10 @@ pub let balanced(
     @A: Type,
     n: Nat,
     empty: A,
-    single: (i: Nat, Bool/Holds(i < n)) -> A,
+    single: (i: Nat, Holds(i < n)) -> A,
     combine: (A, A) -> A,
 ) -> A =
-    let go(lo: Nat, count: Nat, @bounded: Bool/Holds(lo + count <= n)) -> A =
+    let go(lo: Nat, count: Nat, @bounded: Holds(lo + count <= n)) -> A =
         match
         | 1 < count =>
             let half = count / 2;
@@ -228,13 +229,7 @@ pub let eql(@A: Type, use Eql(A), a: List(A), b: List(A)) -> Bool =
     end;
 
 -- By recursion on both lists: two conses `eql` holds equal have one head, by the elements' own law, and one tail.
-let eq_of_eql(
-    @A: Type,
-    use Eql(A),
-    a: List(A),
-    b: List(A),
-    h: Bool/Holds(eql(a, b)),
-) -> Eq()(a, b) =
+let eq_of_eql(@A: Type, use Eql(A), a: List(A), b: List(A), h: Holds(eql(a, b))) -> Eq()(a, b) =
     match a
     | [] =>
         match b
@@ -252,9 +247,9 @@ let eq_of_eql(
     end;
 
 -- By recursion: each element is equal to itself by its own law.
-let eql_refl(@A: Type, use Eql(A), a: List(A)) -> Bool/Holds(eql(a, a)) =
+let eql_refl(@A: Type, use Eql(A), a: List(A)) -> Holds(eql(a, a)) =
     match a
-    | [] => Bool/True/qed()
+    | [] => True/qed()
     | [x, ..xs] => Bool/and/both(x == x, eql(xs, xs), Eql/refl(x), eql_refl(xs))
     end;
 

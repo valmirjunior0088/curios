@@ -1,5 +1,6 @@
 use /std/{Bool, Eq, Show, Spell, Fmt, Ord, Ordering, Hash, Str, List, proved};
 use /std/ops/{Eql};
+use /std/Bool/{True};
 
 let parens(parts: List(Str)) -> Str =
     Fmt/render("(%)")(Str/join(", ", parts));
@@ -488,7 +489,7 @@ satisfy Eql({}) {
     eql((), ()) = true,
     -- The unit has one value, so any two are one.
     eq((), (), _) = Eq/refl(),
-    refl(()) = Bool/True/qed(),
+    refl(()) = True/qed(),
 }
 
 satisfy (@A: Type, use Eql(A)) => Eql({A}) {
@@ -788,7 +789,7 @@ satisfy Ord({}) {
     lt((), ()) = false,
     le((), ()) = true,
     flips((), ()) = Eq/refl(),
-    trans((), (), (), _, _) = Bool/True/qed(),
+    trans((), (), (), _, _) = True/qed(),
     -- The unit has one value, so any two are one.
     eq((), (), _) = Eq/refl(),
     is_lt((), ()) = Eq/refl(),

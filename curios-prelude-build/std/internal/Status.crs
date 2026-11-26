@@ -1,4 +1,5 @@
-use /std/{Nat, List, Io, Try, Bool};
+use /std/{Nat, List, Io, Try};
+use /std/Bool/{True, Holds};
 
 --- What a host operation answers beside its payload, read off the wire's code: what a reading of a reply decides by before it reads anything else.
 pub induct Status: pub Type
@@ -67,10 +68,10 @@ pub let answer(s: Settled) -> Try(Io, Io/Error, {}) =
     end;
 
 -- Every failure the wire names decodes to a case of its own: a status the wire's list gains is refused until `errors` names it.
-let _every_failure_the_wire_names_decodes_to_a_case_of_its_own: Bool/Holds(
+let _every_failure_the_wire_names_decodes_to_a_case_of_its_own: Holds(
     List/all(/sys/status/failures, (code: Nat) =>
         match of_code(code)
         | settled(failed(other(_))) => false
         | _ => true
         end)) =
-    Bool/True/qed();
+    True/qed();

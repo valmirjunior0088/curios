@@ -1,4 +1,5 @@
-use /std/{Nat, Bool, Eq, Ordering, Ord};
+use /std/{Nat, Eq, Ordering, Ord};
+use /std/Bool/{True};
 
 --- The order of the two.
 pub let ord(x: Nat, y: Nat) -> Ordering =
@@ -38,7 +39,7 @@ let flips: Ord/Flips(ord) =
 let trans: Ord/Trans(Ord/le_by(ord)) =
     (a, b, c, p, q) =>
         match a
-        | 0 => match c | 0 => Bool/True/qed() | _ + 1 => Bool/True/qed() end
+        | 0 => match c | 0 => True/qed() | _ + 1 => True/qed() end
         | ap + 1 =>
             match b
             | 0 => match p end

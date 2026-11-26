@@ -9,6 +9,7 @@ pub use Value/{let Value};
 use /std/{Str, Bytes, Byte, Nat, Bool, List, Option, Spell};
 use /std/ops/{Eql};
 use /std/http/{octets};
+use /std/Bool/{Holds};
 
 --- One field line of a message: its name and its value, each what a line can carry, so a message's fields are written as they are held.
 pub struct Field: pub Type {
@@ -28,8 +29,8 @@ satisfy Spell(Field) {
 pub let of(
     name: Str,
     value: Str,
-    @_: Bool/Holds(Name/is_name(name)),
-    @_: Bool/Holds(Bytes/all(Str/to_bytes(value), Value/admits)),
+    @_: Holds(Name/is_name(name)),
+    @_: Holds(Bytes/all(Str/to_bytes(value), Value/admits)),
 ) -> Field =
     Field { name = Name { text = name }, value = Value/lit(value) };
 
@@ -51,8 +52,8 @@ let pieces(b: Bytes) -> List(Bytes) =
         quoted: Bool,
         escaped: Bool,
         found: List(Bytes),
-        @ordered: Bool/Holds(from <= at),
-        @reached: Bool/Holds(at <= Bytes/length(b)),
+        @ordered: Holds(from <= at),
+        @reached: Holds(at <= Bytes/length(b)),
     ) -> List(Bytes) =
         match Bool/holds(at < Bytes/length(b))
         | none() => List/reverse([Bytes/slice(b, from, at - from), ..found])

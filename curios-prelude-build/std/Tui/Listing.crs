@@ -1,20 +1,17 @@
 use /std/{Nat, Str, Bool, List, Option};
 use /std/Tui/{Style, View, Pane, Key};
+use /std/Bool/{Holds};
 
 --- Items of any type, one selected when there are any, and the first one shown: when the selection leaves the visible rows, they scroll just enough to bring it back, and a move within them leaves them still.
 pub struct Listing(A: Type): pub Type {
     items: List(A),
     --- The selected item, none where there are no items.
-    cursor: Option({i: Nat, ok: Bool/Holds(i < List/length(items))}),
+    cursor: Option({i: Nat, ok: Holds(i < List/length(items))}),
     --- The first item shown.
     first: Nat,
 }
 
-let at(
-    @A: Type,
-    items: List(A),
-    i: Nat,
-) -> Option({i: Nat, ok: Bool/Holds(i < List/length(items))}) =
+let at(@A: Type, items: List(A), i: Nat) -> Option({i: Nat, ok: Holds(i < List/length(items))}) =
     match Bool/holds(i < List/length(items))
     | none() => Option/none()
     | some(ok) => Option/some((i = i, ok = ok))

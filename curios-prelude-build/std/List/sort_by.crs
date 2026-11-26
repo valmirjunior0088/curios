@@ -1,5 +1,6 @@
 use /std/{List, Bool, Option, Eq, Ordering, Ord};
 use /std/List/{Member, Permutation, Pairwise};
+use /std/Bool/{True, Holds};
 
 -- `a` and `b` merged behind `acc`, an element of `a` first where `ord` ties the two heads.
 --
@@ -123,9 +124,9 @@ let merge_leads(
     z: T,
     a: List(T),
     b: List(T),
-    za: Bool/Holds(List/ordered/leads(le, z, a)),
-    zb: Bool/Holds(List/ordered/leads(le, z, b)),
-) -> Bool/Holds(List/ordered/leads(le, z, merge(ord, a, b, []))) =
+    za: Holds(List/ordered/leads(le, z, a)),
+    zb: Holds(List/ordered/leads(le, z, b)),
+) -> Holds(List/ordered/leads(le, z, merge(ord, a, b, []))) =
     match (a, b)
     | ([], _) => zb
     | ([_, .._], []) => za
@@ -133,12 +134,12 @@ let merge_leads(
         match ord(x, y)
         | gt() =>
             Eq/subst(
-                (r: List(T)) => Bool/Holds(List/ordered/leads(le, z, r)),
+                (r: List(T)) => Holds(List/ordered/leads(le, z, r)),
                 Eq/sym(merge_accumulates(ord, [x, ..xs], ys, [y])),
                 zb)
         | lt() | eq() =>
             Eq/subst(
-                (r: List(T)) => Bool/Holds(List/ordered/leads(le, z, r)),
+                (r: List(T)) => Holds(List/ordered/leads(le, z, r)),
                 Eq/sym(merge_accumulates(ord, xs, [y, ..ys], [x])),
                 za)
         end
@@ -146,7 +147,7 @@ let merge_leads(
 
 -- Every element of `a` stands in `second` to every element of `b`.
 let Across(@T: Type, second: (T, T) -> Bool, a: List(T), b: List(T)) -> Prop =
-    (x: T, y: T, Member()(x, a), Member()(y, b)) -> Bool/Holds(second(x, y));
+    (x: T, y: T, Member()(x, a), Member()(y, b)) -> Holds(second(x, y));
 
 -- Two runs in order by `ord` and then `second`, the first across from the second, merge into one in that order.
 --
@@ -158,10 +159,10 @@ let merge_ordered(
     second: (T, T) -> Bool,
     a: List(T),
     b: List(T),
-    sa: Bool/Holds(List/ordered(a, Ord/then(ord, second))),
-    sb: Bool/Holds(List/ordered(b, Ord/then(ord, second))),
+    sa: Holds(List/ordered(a, Ord/then(ord, second))),
+    sb: Holds(List/ordered(b, Ord/then(ord, second))),
     across: Across(second, a, b),
-) -> Bool/Holds(List/ordered(merge(ord, a, b, []), Ord/then(ord, second))) =
+) -> Holds(List/ordered(merge(ord, a, b, []), Ord/then(ord, second))) =
     let le = Ord/then(ord, second);
     match (a, b)
     | ([], _) => sb
@@ -169,13 +170,12 @@ let merge_ordered(
     | ([x, ..xs], [y, ..ys]) =>
         match ord(x, y)
         | gt() =>
-            let below: Bool/Holds(le(y, x)) =
+            let below: Holds(le(y, x)) =
                 Eq/subst(
                     (o: Ordering) =>
-                        Bool/Holds(
-                            match o | lt() => true | eq() => second(y, x) | gt() => false end),
+                        Holds(match o | lt() => true | eq() => second(y, x) | gt() => false end),
                     Eq/sym(flips(x, y)),
-                    Bool/True/qed());
+                    True/qed());
             let rest =
                 merge_ordered(
                     ord,
@@ -189,7 +189,7 @@ let merge_ordered(
             let lead =
                 merge_leads(ord, le, y, [x, ..xs], ys, below, List/ordered/head(le, y, ys, sb));
             Eq/subst(
-                (r: List(T)) => Bool/Holds(List/ordered(r, le)),
+                (r: List(T)) => Holds(List/ordered(r, le)),
                 Eq/sym(merge_accumulates(ord, [x, ..xs], ys, [y])),
                 List/ordered/cons(le, y, merge(ord, [x, ..xs], ys, []), lead, rest))
         | lt() =>
@@ -211,9 +211,9 @@ let merge_ordered(
                     xs,
                     [y, ..ys],
                     List/ordered/head(le, x, xs, sa),
-                    Bool/True/qed());
+                    True/qed());
             Eq/subst(
-                (r: List(T)) => Bool/Holds(List/ordered(r, le)),
+                (r: List(T)) => Holds(List/ordered(r, le)),
                 Eq/sym(merge_accumulates(ord, xs, [y, ..ys], [x])),
                 List/ordered/cons(le, x, merge(ord, xs, [y, ..ys], []), lead, rest))
         | eq() =>
@@ -237,7 +237,7 @@ let merge_ordered(
                     List/ordered/head(le, x, xs, sa),
                     across(x, y, Member/here(), Member/here()));
             Eq/subst(
-                (r: List(T)) => Bool/Holds(List/ordered(r, le)),
+                (r: List(T)) => Holds(List/ordered(r, le)),
                 Eq/sym(merge_accumulates(ord, xs, [y, ..ys], [x])),
                 List/ordered/cons(le, x, merge(ord, xs, [y, ..ys], []), lead, rest))
         end
@@ -332,9 +332,9 @@ let runs_cons(
     le: (T, T) -> Bool,
     top: Option(List(T)),
     rest: List(Option(List(T))),
-    first: Bool/Holds(List/ordered(held(top), le)),
-    others: Bool/Holds(runs_ordered(le, rest)),
-) -> Bool/Holds(runs_ordered(le, [top, ..rest])) =
+    first: Holds(List/ordered(held(top), le)),
+    others: Holds(runs_ordered(le, rest)),
+) -> Holds(runs_ordered(le, [top, ..rest])) =
     match List/ordered(held(top), le)
     | true => others
     | false => match first end
@@ -345,10 +345,10 @@ let runs_head(
     le: (T, T) -> Bool,
     top: Option(List(T)),
     rest: List(Option(List(T))),
-    whole: Bool/Holds(runs_ordered(le, [top, ..rest])),
-) -> Bool/Holds(List/ordered(held(top), le)) =
+    whole: Holds(runs_ordered(le, [top, ..rest])),
+) -> Holds(List/ordered(held(top), le)) =
     match List/ordered(held(top), le)
-    | true => Bool/True/qed()
+    | true => True/qed()
     | false => match whole end
     end;
 
@@ -357,8 +357,8 @@ let runs_tail(
     le: (T, T) -> Bool,
     top: Option(List(T)),
     rest: List(Option(List(T))),
-    whole: Bool/Holds(runs_ordered(le, [top, ..rest])),
-) -> Bool/Holds(runs_ordered(le, rest)) =
+    whole: Holds(runs_ordered(le, [top, ..rest])),
+) -> Holds(runs_ordered(le, rest)) =
     match List/ordered(held(top), le)
     | true => whole
     | false => match whole end
@@ -438,14 +438,14 @@ let push_ordered(
     second: (T, T) -> Bool,
     stack: List(Option(List(T))),
     run: List(T),
-    runs: Bool/Holds(runs_ordered(Ord/then(ord, second), stack)),
-    one: Bool/Holds(List/ordered(run, Ord/then(ord, second))),
+    runs: Holds(runs_ordered(Ord/then(ord, second), stack)),
+    one: Holds(List/ordered(run, Ord/then(ord, second))),
     layered: Layered(second)(stack),
     across: Across(second, flat(stack), run),
-) -> Bool/Holds(runs_ordered(Ord/then(ord, second), push(ord, stack, run))) =
+) -> Holds(runs_ordered(Ord/then(ord, second), push(ord, stack, run))) =
     let le = Ord/then(ord, second);
     match stack
-    | [] => runs_cons(le, Option/some(run), [], one, Bool/True/qed())
+    | [] => runs_cons(le, Option/some(run), [], one, True/qed())
     | [none(), ..rest] =>
         runs_cons(le, Option/some(run), rest, one, runs_tail(le, Option/none(), rest, runs))
     | [some(older), ..rest] =>
@@ -454,7 +454,7 @@ let push_ordered(
             le,
             Option/none(),
             push(ord, rest, merged),
-            Bool/True/qed(),
+            True/qed(),
             push_ordered(
                 ord,
                 flips,
@@ -490,11 +490,11 @@ let flush_ordered(
     second: (T, T) -> Bool,
     stack: List(Option(List(T))),
     newer: List(T),
-    runs: Bool/Holds(runs_ordered(Ord/then(ord, second), stack)),
-    one: Bool/Holds(List/ordered(newer, Ord/then(ord, second))),
+    runs: Holds(runs_ordered(Ord/then(ord, second), stack)),
+    one: Holds(List/ordered(newer, Ord/then(ord, second))),
     layered: Layered(second)(stack),
     across: Across(second, flat(stack), newer),
-) -> Bool/Holds(List/ordered(flush(ord, stack, newer), Ord/then(ord, second))) =
+) -> Holds(List/ordered(flush(ord, stack, newer), Ord/then(ord, second))) =
     let le = Ord/then(ord, second);
     match stack
     | [] => one
@@ -545,13 +545,13 @@ let drive_ordered(
     second: (T, T) -> Bool,
     stack: List(Option(List(T))),
     rest: List(T),
-    runs: Bool/Holds(runs_ordered(Ord/then(ord, second), stack)),
+    runs: Holds(runs_ordered(Ord/then(ord, second), stack)),
     layered: Layered(second)(stack),
     across: Across(second, flat(stack), rest),
     given: Pairwise(second)(rest),
-) -> Bool/Holds(List/ordered(drive(ord, stack, rest), Ord/then(ord, second))) =
+) -> Holds(List/ordered(drive(ord, stack, rest), Ord/then(ord, second))) =
     match rest
-    | [] => flush_ordered(ord, flips, second, stack, [], runs, Bool/True/qed(), layered, across)
+    | [] => flush_ordered(ord, flips, second, stack, [], runs, True/qed(), layered, across)
     | [h, ..t] =>
         let one: Across(second, flat(stack), [h]) =
             (u, _, iu, iv) =>
@@ -559,7 +559,7 @@ let drive_ordered(
                     iv,
                     (e) =>
                         Eq/subst(
-                            (k: T) => Bool/Holds(second(u, k)),
+                            (k: T) => Holds(second(u, k)),
                             Eq/sym(e),
                             across(u, h, iu, Member/here())),
                     (none) => match Member/absent(none) end);
@@ -569,7 +569,7 @@ let drive_ordered(
             second,
             push(ord, stack, [h]),
             t,
-            push_ordered(ord, flips, second, stack, [h], runs, Bool/True/qed(), layered, one),
+            push_ordered(ord, flips, second, stack, [h], runs, True/qed(), layered, one),
             push_layered(ord, second, stack, [h], layered, one),
             (u, v, iu, iv) =>
                 Member/split(
@@ -581,7 +581,7 @@ let drive_ordered(
                             new,
                             (e) =>
                                 Eq/subst(
-                                    (k: T) => Bool/Holds(second(k, v)),
+                                    (k: T) => Holds(second(k, v)),
                                     Eq/sym(e),
                                     Pairwise/head(given)(v, iv)),
                             (none) => match Member/absent(none) end)),
@@ -598,9 +598,9 @@ pub let ordered(
     second: (T, T) -> Bool,
     l: List(T),
     given: Pairwise(second)(l),
-) -> Bool/Holds(List/ordered(sort_by(l, ord), Ord/then(ord, second))) =
+) -> Holds(List/ordered(sort_by(l, ord), Ord/then(ord, second))) =
     let nothing: Across(second, [], l) = (_, _, iu, _) => match Member/absent(iu) end;
-    drive_ordered(ord, flips, second, [], l, Bool/True/qed(), Layered/bottom(), nothing, given);
+    drive_ordered(ord, flips, second, [], l, True/qed(), Layered/bottom(), nothing, given);
 
 --- The sort's answer is in order by `ord`, under `ord`'s flip.
 pub let sorted(
@@ -608,5 +608,5 @@ pub let sorted(
     ord: (T, T) -> Ordering,
     flips: Ord/Flips(ord),
     l: List(T),
-) -> Bool/Holds(List/ordered(sort_by(l, ord), Ord/le_by(ord))) =
-    ordered(ord, flips, (_, _) => true, l, Pairwise/everywhere((_, _) => Bool/True/qed(), l));
+) -> Holds(List/ordered(sort_by(l, ord), Ord/le_by(ord))) =
+    ordered(ord, flips, (_, _) => true, l, Pairwise/everywhere((_, _) => True/qed(), l));

@@ -6,7 +6,8 @@ pub use Key/{let Key};
 pub mod delimited;
 pub use delimited/{let delimited};
 
-use /std/{Nat, Byte, Bytes, Bool};
+use /std/{Nat, Byte, Bytes};
+use /std/Bool/{Holds};
 
 --- How a value encodes to the bytes that identify it.
 ---
@@ -25,7 +26,7 @@ let padded(b: Bytes, width: Nat) -> Bytes =
 
 -- The modulus is a parameter, so the evidence that it is positive is this telescope's `ok`, which `%`'s bound is proved from.
 --- One polynomial lane: `acc · base + byte + 1` reduced modulo `prime`, folded over `b`.
-let lane(b: Bytes, base: Nat, prime: Nat, @ok: Bool/Holds(0 < prime)) -> Nat =
+let lane(b: Bytes, base: Nat, prime: Nat, @ok: Holds(0 < prime)) -> Nat =
     Bytes/fold(b, 1, (byte, acc) => (acc * base + Byte/to_nat(byte) + 1) % prime);
 
 -- Every intermediate stays below `2^30`, so a lane never leaves the range a `Nat` is held unboxed in: an accumulator is below its prime, so a step is below `prime · base + 257`, and each pair below is chosen to keep it there. `Nat` has no wrapping arithmetic, so the modulus is what bounds a lane.

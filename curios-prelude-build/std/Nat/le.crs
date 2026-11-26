@@ -1,16 +1,17 @@
 pub use /sys/Nat/{le};
 
-use /std/{Nat, Bool, Eq};
+use /std/{Nat, Eq};
+use /std/Bool/{True, Holds};
 
-pub let refl(n: Nat) -> Bool/Holds(n <= n) =
-    Bool/True/qed();
+pub let refl(n: Nat) -> Holds(n <= n) =
+    True/qed();
 
-pub let add_r(a: Nat, k: Nat) -> Bool/Holds(a <= a + k) =
-    Bool/True/qed();
+pub let add_r(a: Nat, k: Nat) -> Holds(a <= a + k) =
+    True/qed();
 
-pub let of_lt(a: Nat, b: Nat, p: Bool/Holds(a < b)) -> Bool/Holds(a <= b) =
+pub let of_lt(a: Nat, b: Nat, p: Holds(a < b)) -> Holds(a <= b) =
     match a
-    | 0 => Bool/True/qed()
+    | 0 => True/qed()
     | ap + 1 =>
         match b
         | 0 => match p end
@@ -19,19 +20,13 @@ pub let of_lt(a: Nat, b: Nat, p: Bool/Holds(a < b)) -> Bool/Holds(a <= b) =
     end;
 
 -- How a proof the elaborator writes from the facts in scope reads an equation: as this bound and the one [`Eq/sym`] turns it into.
-pub let of_eq(@a: Nat, @b: Nat, e: Eq()(a, b)) -> Bool/Holds(a <= b) =
-    Eq/subst((x: Nat) => Bool/Holds(a <= x), e, refl(a));
+pub let of_eq(@a: Nat, @b: Nat, e: Eq()(a, b)) -> Holds(a <= b) =
+    Eq/subst((x: Nat) => Holds(a <= x), e, refl(a));
 
 --- Transitivity.
-pub let trans(
-    @a: Nat,
-    @b: Nat,
-    @c: Nat,
-    p: Bool/Holds(a <= b),
-    q: Bool/Holds(b <= c),
-) -> Bool/Holds(a <= c) =
+pub let trans(@a: Nat, @b: Nat, @c: Nat, p: Holds(a <= b), q: Holds(b <= c)) -> Holds(a <= c) =
     match a
-    | 0 => Bool/True/qed()
+    | 0 => True/qed()
     | ap + 1 =>
         match b
         | 0 => match p end
@@ -43,7 +38,7 @@ pub let trans(
         end
     end;
 
-pub let add_mono_l(n: Nat, @a: Nat, @b: Nat, p: Bool/Holds(a <= b)) -> Bool/Holds(n + a <= n + b) =
+pub let add_mono_l(n: Nat, @a: Nat, @b: Nat, p: Holds(a <= b)) -> Holds(n + a <= n + b) =
     p;
 
 -- The step a proof the elaborator writes from the facts in scope is summed with, one fact at a time. It is [`trans`] alone, because `a + c <= b + c` cancels to `a <= b` and `b + c <= b + d` to `c <= d`.
@@ -53,15 +48,15 @@ pub let add(
     @b: Nat,
     @c: Nat,
     @d: Nat,
-    p: Bool/Holds(a <= b),
-    q: Bool/Holds(c <= d),
-) -> Bool/Holds(a + c <= b + d) =
+    p: Holds(a <= b),
+    q: Holds(c <= d),
+) -> Holds(a + c <= b + d) =
     trans(@a + c, @b + c, @b + d, p, q);
 
 -- The successor case is one application of [`add_mono_l`]: `(a + 1) * k` is `k + a * k`, which is what that step has to produce.
-pub let mul_mono_r(@a: Nat, @b: Nat, k: Nat, p: Bool/Holds(a <= b)) -> Bool/Holds(a * k <= b * k) =
+pub let mul_mono_r(@a: Nat, @b: Nat, k: Nat, p: Holds(a <= b)) -> Holds(a * k <= b * k) =
     match a
-    | 0 => Bool/True/qed()
+    | 0 => True/qed()
     | ap + 1 =>
         match b
         | 0 => match p end
@@ -70,10 +65,10 @@ pub let mul_mono_r(@a: Nat, @b: Nat, k: Nat, p: Bool/Holds(a <= b)) -> Bool/Hold
     end;
 
 --- `a <= b + (a - b)`: adding back what a subtraction took off reaches at least the minuend, whatever `a` and `b` are. It is the half of `a - b <= c` iff `a <= b + c` that needs no hypothesis, and conversion does not decide it.
-pub let add_sub(a: Nat, b: Nat) -> Bool/Holds(a <= b + (a - b)) =
+pub let add_sub(a: Nat, b: Nat) -> Holds(a <= b + (a - b)) =
     match b
     | 0 => refl(a)
-    | bp + 1 => match a | 0 => Bool/True/qed() | ap + 1 => add_sub(ap, bp) end
+    | bp + 1 => match a | 0 => True/qed() | ap + 1 => add_sub(ap, bp) end
     end;
 
 --- A decided range check as its two bounds: `in_range(c, lo, hi)` gives `lo <= c` and `c <= hi`.
@@ -81,10 +76,10 @@ pub let of_in_range(
     c: Nat,
     lo: Nat,
     hi: Nat,
-    h: Bool/Holds(Nat/in_range(c, lo, hi)),
-) -> {low: Bool/Holds(lo <= c), high: Bool/Holds(c <= hi)} =
+    h: Holds(Nat/in_range(c, lo, hi)),
+) -> {low: Holds(lo <= c), high: Holds(c <= hi)} =
     match c >= lo
-    | true => (low = Bool/True/qed(), high = h)
+    | true => (low = True/qed(), high = h)
     | false => match h end
     end;
 
@@ -93,16 +88,16 @@ pub let to_in_range(
     c: Nat,
     lo: Nat,
     hi: Nat,
-    low: Bool/Holds(lo <= c),
-    high: Bool/Holds(c <= hi),
-) -> Bool/Holds(Nat/in_range(c, lo, hi)) =
+    low: Holds(lo <= c),
+    high: Holds(c <= hi),
+) -> Holds(Nat/in_range(c, lo, hi)) =
     match c >= lo
     | true => high
     | false => match low end
     end;
 
 --- Two bounds facing each other pin one value.
-pub let antisym(a: Nat, b: Nat, p: Bool/Holds(a <= b), q: Bool/Holds(b <= a)) -> Eq()(a, b) =
+pub let antisym(a: Nat, b: Nat, p: Holds(a <= b), q: Holds(b <= a)) -> Eq()(a, b) =
     match a
     | 0 =>
         match b
@@ -117,7 +112,7 @@ pub let antisym(a: Nat, b: Nat, p: Bool/Holds(a <= b), q: Bool/Holds(b <= a)) ->
     end;
 
 --- `a + (b - a) = b` under `a <= b`, which is what makes it true, since `Nat` subtraction truncates.
-pub let add_sub_cancel(a: Nat, b: Nat, p: Bool/Holds(a <= b)) -> Eq()(a + (b - a), b) =
+pub let add_sub_cancel(a: Nat, b: Nat, p: Holds(a <= b)) -> Eq()(a + (b - a), b) =
     match a
     | 0 => Eq/refl()
     | ap + 1 =>
@@ -134,10 +129,10 @@ pub let mul(
     @b: Nat,
     @c: Nat,
     @d: Nat,
-    p: Bool/Holds(a <= b),
-    q: Bool/Holds(c <= d),
-) -> Bool/Holds(a * d + b * c <= a * c + b * d) =
+    p: Holds(a <= b),
+    q: Holds(c <= d),
+) -> Holds(a * d + b * c <= a * c + b * d) =
     Eq/subst(
-        (x: Nat) => Bool/Holds(a * x + b * c <= a * c + b * x),
+        (x: Nat) => Holds(a * x + b * c <= a * c + b * x),
         add_sub_cancel(c, d, q),
         mul_mono_r(@a, @b, d - c, p));

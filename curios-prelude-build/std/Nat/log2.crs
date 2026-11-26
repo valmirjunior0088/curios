@@ -1,4 +1,5 @@
-use /std/{Nat, Eq, proved, Bool};
+use /std/{Nat, Eq, proved};
+use /std/Bool/{Holds};
 
 --- The exponent of the highest power of two not above `n`, and `0` at zero.
 pub let log2(n: Nat) -> Nat =
@@ -8,16 +9,16 @@ pub let log2(n: Nat) -> Nat =
 --- A positive `n` lies between the power of two at `log2(n)` and the next: `pow(2, log2(n)) <= n < 2 * pow(2, log2(n))`, so `log2(n) + 1` is `n`'s length in bits.
 pub let bounds(
     n: Nat,
-    @ok: Bool/Holds(0 < n),
-) -> {low: Bool/Holds(Nat/pow(2, log2(n)) <= n), high: Bool/Holds(n < 2 * Nat/pow(2, log2(n)))} =
+    @ok: Holds(0 < n),
+) -> {low: Holds(Nat/pow(2, log2(n)) <= n), high: Holds(n < 2 * Nat/pow(2, log2(n)))} =
     match n < 2
     | true => (low = proved(), high = proved())
     | false =>
         let inner = bounds(n / 2);
         let step: Eq()(log2(n / 2) + 1, log2(n)) = Eq/refl();
-        let low: Bool/Holds(2 * Nat/pow(2, log2(n / 2)) <= n) = proved();
-        let high: Bool/Holds(n < 4 * Nat/pow(2, log2(n / 2))) = proved();
+        let low: Holds(2 * Nat/pow(2, log2(n / 2)) <= n) = proved();
+        let high: Holds(n < 4 * Nat/pow(2, log2(n / 2))) = proved();
         (
-            low = Eq/subst((l: Nat) => Bool/Holds(Nat/pow(2, l) <= n), step, low),
-            high = Eq/subst((l: Nat) => Bool/Holds(n < 2 * Nat/pow(2, l)), step, high))
+            low = Eq/subst((l: Nat) => Holds(Nat/pow(2, l) <= n), step, low),
+            high = Eq/subst((l: Nat) => Holds(n < 2 * Nat/pow(2, l)), step, high))
     end;

@@ -1,34 +1,24 @@
 pub use /sys/Nat/{lt};
 
 use /std/{Nat, Bool, Eq};
+use /std/Bool/{True, Holds};
 
 --- A bound whose two sides differ is strict: `a <= b` and `a == b` failing give `a < b`.
 ---
 --- The case of a disequality its loose bound holds in.
-pub let of_le_ne(
-    a: Nat,
-    b: Nat,
-    p: Bool/Holds(a <= b),
-    q: Bool/Holds(Bool/not(a == b)),
-) -> Bool/Holds(a < b) =
+pub let of_le_ne(a: Nat, b: Nat, p: Holds(a <= b), q: Holds(Bool/not(a == b))) -> Holds(a < b) =
     match a < b
-    | true => Bool/True/qed()
+    | true => True/qed()
     | false =>
-        let back: Bool/Holds(b <= a) = Bool/True/qed();
+        let back: Holds(b <= a) = True/qed();
         let same: Eq()(a, b) = Nat/le/antisym(a, b, p, back);
-        let absurd: Bool/Holds(Bool/not(a == a)) =
-            Eq/subst((x: Nat) => Bool/Holds(Bool/not(a == x)), Eq/sym(same), q);
+        let absurd: Holds(Bool/not(a == a)) =
+            Eq/subst((x: Nat) => Holds(Bool/not(a == x)), Eq/sym(same), q);
         match absurd end
     end;
 
 --- A strict bound composed with a loose one stays strict.
-pub let of_lt_le(
-    a: Nat,
-    b: Nat,
-    c: Nat,
-    p: Bool/Holds(a < b),
-    q: Bool/Holds(b <= c),
-) -> Bool/Holds(a < c) =
+pub let of_lt_le(a: Nat, b: Nat, c: Nat, p: Holds(a < b), q: Holds(b <= c)) -> Holds(a < c) =
     Nat/le/trans(p, q);
 
 --- Two bounded digits in adjacent places stay under the product of their radices: `a < m` and `b < n` give `a * n + b < m * n`.
@@ -39,7 +29,7 @@ pub let add_mul_lt(
     b: Nat,
     m: Nat,
     n: Nat,
-    pa: Bool/Holds(a < m),
-    pb: Bool/Holds(b < n),
-) -> Bool/Holds(a * n + b < m * n) =
+    pa: Holds(a < m),
+    pb: Holds(b < n),
+) -> Holds(a * n + b < m * n) =
     of_lt_le(a * n + b, a * n + n, m * n, pb, Nat/le/mul_mono_r(n, pa));

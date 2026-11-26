@@ -1,4 +1,5 @@
 use /std/{Nat, Byte, Bytes, Bool, Eq, Ord, Ordering, proved};
+use /std/Bool/{True, Holds};
 
 -- A byte's high nibble.
 let high(x: Nat) -> Nat =
@@ -55,29 +56,29 @@ pub let crit(a: Bytes, b: Bytes) -> Parted =
     parts(a, b, 0);
 
 --- A digit is below sixteen, so it indexes a fork's twigs.
-pub let small(k: Bytes, p: Nat) -> Bool/Holds(digit(k, p) < 16) =
+pub let small(k: Bytes, p: Nat) -> Holds(digit(k, p) < 16) =
     match p / 4 < Bytes/length(k)
-    | false => Bool/True/qed()
+    | false => True/qed()
     | true =>
         match p % 4
-        | 0 => Bool/True/qed()
+        | 0 => True/qed()
         | 1 => proved()
         | 2 => proved()
-        | _ + 3 => Bool/True/qed()
+        | _ + 3 => True/qed()
         end
     end;
 
 --- Two runs apart at the position `c`: the first position they differ at.
 pub struct Apart(a: Bytes, b: Bytes, c: Nat): pub Prop {
     --- They agree at every position below it.
-    below: (j: Nat, under: Bool/Holds(j < c)) -> Eq()(digit(a, j), digit(b, j)),
+    below: (j: Nat, under: Holds(j < c)) -> Eq()(digit(a, j), digit(b, j)),
     --- They differ at it.
-    differs: Bool/Holds(digit(a, c) != digit(b, c)),
+    differs: Holds(digit(a, c) != digit(b, c)),
 }
 
 -- What a walk that began at byte `g` found at `c`: a position at or past the walk's start, the runs apart at it counted from there.
 struct Shifted(a: Bytes, b: Bytes, g: Nat, c: Nat): Prop {
-    over: Bool/Holds(4 * g <= c),
+    over: Holds(4 * g <= c),
     apart: Apart(a, b, c - 4 * g),
 }
 
@@ -90,7 +91,7 @@ let onward(
     h: Byte,
     t: Bytes,
     j: Nat,
-    over: Bool/Holds(4 <= j),
+    over: Holds(4 <= j),
 ) -> Eq()(digit(0x[h, ..t], j), digit(t, j - 4)) =
     Eq/subst(
         (v: Nat) => Eq()(digit(0x[h, ..t], v), digit(t, j - 4)),
@@ -98,14 +99,14 @@ let onward(
         Eq/refl());
 
 -- A position below four is its place in the first byte.
-let inward(k: Bytes, j: Nat, under: Bool/Holds(j < 4)) -> Eq()(digit(k, j), at_place(k, 0, j)) =
-    let first: Bool/Holds(j / 4 < 1) = Nat/DivMod/div_lt_of_lt_mul(1, j, 4, proved());
+let inward(k: Bytes, j: Nat, under: Holds(j < 4)) -> Eq()(digit(k, j), at_place(k, 0, j)) =
+    let first: Holds(j / 4 < 1) = Nat/DivMod/div_lt_of_lt_mul(1, j, 4, proved());
     Eq/subst(
         (v: Nat) => Eq()(at_place(k, j / 4, v), at_place(k, 0, j)),
         Nat/le/antisym(j, j % 4, proved(), proved()),
         Eq/subst(
             (v: Nat) => Eq()(at_place(k, v, j), at_place(k, 0, j)),
-            Nat/le/antisym(0, j / 4, Bool/True/qed(), proved()),
+            Nat/le/antisym(0, j / 4, True/qed(), proved()),
             Eq/refl()));
 
 -- Two runs led by one byte agree at every position of it.
@@ -114,7 +115,7 @@ let led(
     t: Bytes,
     r: Bytes,
     j: Nat,
-    under: Bool/Holds(j < 4),
+    under: Holds(j < 4),
 ) -> Eq()(digit(0x[h, ..t], j), digit(0x[h, ..r], j)) =
     Eq/trans(inward(0x[h, ..t], j, under), Eq/sym(inward(0x[h, ..r], j, under)));
 
@@ -130,7 +131,7 @@ let lifted(
         below =
             (j, under) =>
                 match j < 4
-                | true => led(h, t, r, j, Bool/True/qed())
+                | true => led(h, t, r, j, True/qed())
                 | false =>
                     Eq/trans(
                         onward(h, t, j, proved()),
@@ -145,21 +146,21 @@ let lowered(
     r: Bytes,
     c: Nat,
     apart: Apart(0x[h, ..t], 0x[h, ..r], c),
-    over: Bool/Holds(4 <= c),
+    over: Holds(4 <= c),
 ) -> Apart(t, r, c - 4) =
     Apart {
         below = (j, under) => apart.below(j + 4, proved()),
         differs =
             Eq/subst(
-                (v: Nat) => Bool/Holds(digit(0x[h, ..t], v) != digit(0x[h, ..r], v)),
+                (v: Nat) => Holds(digit(0x[h, ..t], v) != digit(0x[h, ..r], v)),
                 Eq/sym(Nat/le/add_sub_cancel(4, c, over)),
                 apart.differs) };
 
 let ended(k: Byte, r: Bytes) -> Apart(0x[], 0x[k, ..r], 0) =
-    Apart { below = (_, under) => match under end, differs = Bool/True/qed() };
+    Apart { below = (_, under) => match under end, differs = True/qed() };
 
 let outlasted(h: Byte, t: Bytes) -> Apart(0x[h, ..t], 0x[], 0) =
-    Apart { below = (_, under) => match under end, differs = Bool/True/qed() };
+    Apart { below = (_, under) => match under end, differs = True/qed() };
 
 -- Two bytes alike in both nibbles are one byte.
 let joined(
@@ -175,14 +176,14 @@ let joined(
 let low_differs(
     h: Byte,
     k: Byte,
-    differs: Bool/Holds(Bool/not(h == k)),
-    up: Bool/Holds(high(Byte/to_nat(h)) == high(Byte/to_nat(k))),
-) -> Bool/Holds(low(Byte/to_nat(h)) != low(Byte/to_nat(k))) =
+    differs: Holds(Bool/not(h == k)),
+    up: Holds(high(Byte/to_nat(h)) == high(Byte/to_nat(k))),
+) -> Holds(low(Byte/to_nat(h)) != low(Byte/to_nat(k))) =
     match low(Byte/to_nat(h)) == low(Byte/to_nat(k))
-    | false => Bool/True/qed()
+    | false => True/qed()
     | true =>
         let same = joined(h, k, proved(), proved());
-        match Eq/subst((y: Byte) => Bool/Holds(Bool/not(h == y)), Eq/sym(same), differs)
+        match Eq/subst((y: Byte) => Holds(Bool/not(h == y)), Eq/sym(same), differs)
         end
     end;
 
@@ -226,7 +227,7 @@ let spec(a: Bytes, b: Bytes, g: Nat) -> Found(a, b, g, parts(a, b, g)) =
                                         | 0 => Eq/refl()
                                         | _ + 1 => match under end
                                         end,
-                                differs = Bool/True/qed() }) }
+                                differs = True/qed() }) }
             | true =>
                 Shifted {
                     over = proved(),
@@ -242,7 +243,7 @@ let spec(a: Bytes, b: Bytes, g: Nat) -> Found(a, b, g, parts(a, b, g)) =
                                         | 1 => proved()
                                         | _ + 2 => match under end
                                         end,
-                                differs = low_differs(h, k, Bool/True/qed(), Bool/True/qed()) }) }
+                                differs = low_differs(h, k, True/qed(), True/qed()) }) }
             end
         end
     end;
@@ -274,18 +275,18 @@ pub let reheaded(
     b: Bytes,
     c: Nat,
     apart: Apart(a, b, c),
-    agree: (j: Nat, within: Bool/Holds(j <= c)) -> Eq()(digit(n, j), digit(a, j)),
+    agree: (j: Nat, within: Holds(j <= c)) -> Eq()(digit(n, j), digit(a, j)),
 ) -> Apart(n, b, c) =
     Apart {
         below = (j, under) => Eq/trans(agree(j, proved()), apart.below(j, under)),
         differs =
             Eq/subst(
-                (v: Nat) => Bool/Holds(v != digit(b, c)),
-                Eq/sym(agree(c, Bool/True/qed())),
+                (v: Nat) => Holds(v != digit(b, c)),
+                Eq/sym(agree(c, True/qed())),
                 apart.differs) };
 
 -- A number whose high nibble is below another's is below it.
-let higher(x: Nat, y: Nat, up: Bool/Holds(high(x) < high(y))) -> Bool/Holds(x < y) =
+let higher(x: Nat, y: Nat, up: Holds(high(x) < high(y))) -> Holds(x < y) =
     proved();
 
 -- A number alike in its high nibble with another and below it in its low one is below it.
@@ -293,8 +294,8 @@ let lower(
     x: Nat,
     y: Nat,
     up: Eq()(high(x), high(y)),
-    down: Bool/Holds(low(x) < low(y)),
-) -> Bool/Holds(x < y) =
+    down: Holds(low(x) < low(y)),
+) -> Holds(x < y) =
     proved();
 
 -- Two runs whose first bytes are in order are in order.
@@ -303,7 +304,7 @@ let headed(
     k: Byte,
     t: Bytes,
     r: Bytes,
-    ordered: Bool/Holds(Byte/to_nat(h) < Byte/to_nat(k)),
+    ordered: Holds(Byte/to_nat(h) < Byte/to_nat(k)),
 ) -> Eq()(Bytes/ord(0x[h, ..t], 0x[k, ..r]), Ordering/lt()) =
     Eq/subst(
         (o: Ordering) =>
@@ -323,7 +324,7 @@ pub let before(
     b: Bytes,
     c: Nat,
     apart: Apart(a, b, c),
-    less: Bool/Holds(digit(a, c) < digit(b, c)),
+    less: Holds(digit(a, c) < digit(b, c)),
 ) -> Eq()(Bytes/ord(a, b), Ordering/lt()) =
     match (a, b)
     | (0x[], 0x[]) => match apart.differs end
@@ -334,14 +335,14 @@ pub let before(
         match c
         | 0 => match less end
         | 1 => headed(h, k, t, r, higher(hn, kn, less))
-        | 2 => headed(h, k, t, r, lower(hn, kn, apart.below(1, Bool/True/qed()), less))
+        | 2 => headed(h, k, t, r, lower(hn, kn, apart.below(1, True/qed()), less))
         | 3 => match less end
         | _ + 4 =>
             let same: Eq()(h, k) = joined(h, k, apart.below(1, proved()), apart.below(2, proved()));
             Eq/subst(
                 (y: Byte) =>
                     (apart: Apart(0x[h, ..t], 0x[y, ..r], c)) -> (
-                        less: Bool/Holds(digit(0x[h, ..t], c) < digit(0x[y, ..r], c))) -> Eq()(
+                        less: Holds(digit(0x[h, ..t], c) < digit(0x[y, ..r], c))) -> Eq()(
                         Bytes/ord(0x[h, ..t], 0x[y, ..r]),
                         Ordering/lt()),
                 same,
@@ -353,10 +354,10 @@ pub let before(
                             c - 4,
                             lowered(h, t, r, c, apart, proved()),
                             Eq/subst(
-                                (v: Nat) => Bool/Holds(v < digit(r, c - 4)),
+                                (v: Nat) => Holds(v < digit(r, c - 4)),
                                 onward(h, t, c, proved()),
                                 Eq/subst(
-                                    (v: Nat) => Bool/Holds(digit(0x[h, ..t], c) < v),
+                                    (v: Nat) => Holds(digit(0x[h, ..t], c) < v),
                                     onward(h, r, c, proved()),
                                     less))))(
                 apart)(

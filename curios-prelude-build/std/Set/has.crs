@@ -1,5 +1,5 @@
-use /std/{Bool, Option, Eq, Map, Hash};
-use /std/Set/{Set, empty, insert, remove, union, intersection, difference};
+use /std/{Bool, Option, Eq, Map, Hash, Set};
+use /std/Bool/{False};
 
 --- Whether `k` is an element.
 pub let has(@K: Type, use Hash/Key(K), s: Set(K), k: K) -> Bool =
@@ -14,35 +14,45 @@ let held(
 ) -> Eq()(Option/is_some(x), Option/is_some(y)) =
     Eq/cong((m: Option(A)) => Option/is_some(m), e);
 
-pub let of_empty(@K: Type, use Hash/Key(K), k: K) -> Eq()(has(empty(), k), false) =
+pub let of_empty(@K: Type, use Hash/Key(K), k: K) -> Eq()(has(Set/empty(), k), false) =
     Eq/refl();
 
-pub let of_insert(@K: Type, use Hash/Key(K), s: Set(K), k: K) -> Eq()(has(insert(s, k), k), true) =
+pub let of_insert(
+    @K: Type,
+    use Hash/Key(K),
+    s: Set(K),
+    k: K,
+) -> Eq()(has(Set/insert(s, k), k), true) =
     held(Map/try_get/of_insert(s.map, k, ()));
 
---- `insert` leaves every other key as it was.
+--- `Set/insert` leaves every other key as it was.
 pub let of_insert_other(
     @K: Type,
     use Hash/Key(K),
     s: Set(K),
     k: K,
     other: K,
-    apart: (Eq()(other, k)) -> Bool/False,
-) -> Eq()(has(insert(s, k), other), has(s, other)) =
+    apart: (Eq()(other, k)) -> False,
+) -> Eq()(has(Set/insert(s, k), other), has(s, other)) =
     held(Map/try_get/of_insert_other(s.map, k, (), other, apart));
 
-pub let of_remove(@K: Type, use Hash/Key(K), s: Set(K), k: K) -> Eq()(has(remove(s, k), k), false) =
+pub let of_remove(
+    @K: Type,
+    use Hash/Key(K),
+    s: Set(K),
+    k: K,
+) -> Eq()(has(Set/remove(s, k), k), false) =
     held(Map/try_get/of_remove(s.map, k));
 
---- `remove` leaves every other key as it was.
+--- `Set/remove` leaves every other key as it was.
 pub let of_remove_other(
     @K: Type,
     use Hash/Key(K),
     s: Set(K),
     k: K,
     other: K,
-    apart: (Eq()(other, k)) -> Bool/False,
-) -> Eq()(has(remove(s, k), other), has(s, other)) =
+    apart: (Eq()(other, k)) -> False,
+) -> Eq()(has(Set/remove(s, k), other), has(s, other)) =
     held(Map/try_get/of_remove_other(s.map, k, other, apart));
 
 -- Whether the first of two options holding a value answers holds one: whether either does.
@@ -53,14 +63,14 @@ let either(
 ) -> Eq()(Option/is_some(Option/or(y, x)), Option/is_some(x) || Option/is_some(y)) =
     match y | some(_) | none() => Eq/refl() end;
 
---- An element of `union` is an element of either.
+--- An element of `Set/union` is an element of either.
 pub let of_union(
     @K: Type,
     use Hash/Key(K),
     a: Set(K),
     b: Set(K),
     k: K,
-) -> Eq()(has(union(a, b), k), has(a, k) || has(b, k)) =
+) -> Eq()(has(Set/union(a, b), k), has(a, k) || has(b, k)) =
     Eq/trans(
         held(Map/try_get/of_union(a.map, b.map, k)),
         either(Map/try_get(a.map, k), Map/try_get(b.map, k)));
@@ -75,26 +85,26 @@ let kept(
     | some(_) | none() => match c | true | false => Eq/refl() end
     end;
 
---- An element of `intersection` is an element of both.
+--- An element of `Set/intersection` is an element of both.
 pub let of_intersection(
     @K: Type,
     use Hash/Key(K),
     a: Set(K),
     b: Set(K),
     k: K,
-) -> Eq()(has(intersection(a, b), k), has(a, k) && has(b, k)) =
+) -> Eq()(has(Set/intersection(a, b), k), has(a, k) && has(b, k)) =
     Eq/trans(
         held(Map/try_get/of_intersection(a.map, b.map, k)),
         kept(Map/try_get(a.map, k), Map/has(b.map, k)));
 
---- An element of `difference` is an element of the first and no element of the second.
+--- An element of `Set/difference` is an element of the first and no element of the second.
 pub let of_difference(
     @K: Type,
     use Hash/Key(K),
     a: Set(K),
     b: Set(K),
     k: K,
-) -> Eq()(has(difference(a, b), k), has(a, k) && Bool/not(has(b, k))) =
+) -> Eq()(has(Set/difference(a, b), k), has(a, k) && Bool/not(has(b, k))) =
     Eq/trans(
         held(Map/try_get/of_difference(a.map, b.map, k)),
         kept(Map/try_get(a.map, k), Bool/not(Map/has(b.map, k))));

@@ -20,6 +20,7 @@ pub use Parsed/{let Parsed, Slot, Carrier, option_slots, slots, Slots, Values, C
 use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Map, Io, Show, Fmt, Proc,
     Path, print, print_err};
 use /std/ops/{Eql};
+use /std/Bool/{True};
 
 --- How an argument is read, from the bytes the host handed over: a reader of text decodes them first and refuses bytes that are no text, and a path takes them as they are.
 pub struct Value: pub Type {
@@ -322,12 +323,9 @@ pub induct Refused: (List(Problem)) -> pub Prop
 end
 
 let Clear(problems: List(Problem)) -> Prop =
-    match problems
-    | [] => Bool/True
-    | [p, ..more] => Refused([p, ..more])
-    end;
+    match problems | [] => True | [p, ..more] => Refused([p, ..more]) end;
 
---- That `command`, with `version` where it has one, describes one unambiguous command line, decided by reduction: `Bool/True` where it does, and otherwise `Refused` of every problem it has.
+--- That `command`, with `version` where it has one, describes one unambiguous command line, decided by reduction: `True` where it does, and otherwise `Refused` of every problem it has.
 pub let WellFormed(command: Command, version: Option(Str)) -> Prop =
     Clear(check/problems(command, version));
 
@@ -347,7 +345,7 @@ pub let declare(command: Command, version: Option(Str), @ok: WellFormed(command,
 --- A declaration checked as the program runs: the command line, or every problem that keeps it from describing one.
 pub let checked(command: Command, version: Option(Str)) -> Result(List(Problem), Cli) =
     match check/problems(command, version)
-    | [] => Result/success(Cli { command = command, version = version, @ok = Bool/True/qed() })
+    | [] => Result/success(Cli { command = command, version = version, @ok = True/qed() })
     | [p, ..more] => Result/failure([p, ..more])
     end;
 
@@ -451,7 +449,7 @@ pub let try_main(
     run: (Parsed(command)) -> Io({}),
 ) -> Io({}) =
     match check/problems(command, version)
-    | [] => main(Cli { command = command, version = version, @ok = Bool/True/qed() }, run)
+    | [] => main(Cli { command = command, version = version, @ok = True/qed() }, run)
     | [p, ..more] =>
         let () =
             Fmt/print_err("error: invalid command line declaration: %\n")(

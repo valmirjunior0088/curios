@@ -1,13 +1,14 @@
 use /std/{Nat, Bool, Str, Option, Parse};
 use /std/time/{Date, Offset, iso8601};
+use /std/Bool/{Holds};
 
 --- That `d`'s year has the four digits RFC 3339 writes, 0000 to 9999: what a format that writes a date by RFC 3339 carries of every date it holds.
 pub let FourDigits(d: Date) -> Prop =
-    Bool/Holds(+0 <= d.year && d.year <= 9999);
+    Holds(+0 <= d.year && d.year <= 9999);
 
 --- That `o` is a whole number of minutes, the only offsets RFC 3339 writes; the unknown local offset is one, written `Z`.
 pub let WholeMinutes(o: Offset) -> Prop =
-    Bool/Holds(Offset/ahead(o) % 60 == +0);
+    Holds(Offset/ahead(o) % 60 == +0);
 
 --- The procedure that decides `FourDigits(d)`.
 pub let four_digits(d: Date) -> Option(FourDigits(d)) =

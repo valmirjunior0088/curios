@@ -1,6 +1,7 @@
 use /std/{Nat, Bool, Str, Char, List, Option, Spell, proved};
 use /std/ops/{Eql};
 use /std/Char/{GraphemeBreak, EastAsianWidth};
+use /std/Bool/{True, Holds};
 
 --- Whether a terminal draws `c` rather than reading it as a control: it is none of the C0 controls, DEL or the C1 controls.
 pub let printable(c: Char) -> Bool =
@@ -11,7 +12,7 @@ pub let printable(c: Char) -> Bool =
 pub struct Glyph: Type {
     chars: List(Char),
     wide: Bool,
-    @printable: Bool/Holds(List/all(chars, printable)),
+    @printable: Holds(List/all(chars, printable)),
 }
 
 satisfy Eql(Glyph) {
@@ -59,20 +60,20 @@ let columns(chars: List(Char)) -> Nat =
     end;
 
 --- `c` alone as a glyph, under the evidence that a terminal draws it: what a box's corners and edges are drawn with, a literal's evidence discharged by reduction.
-pub let of_char(c: Char, @drawn: Bool/Holds(printable(c))) -> Glyph =
+pub let of_char(c: Char, @drawn: Holds(printable(c))) -> Glyph =
     Glyph {
         chars = [c],
         wide = columns([c]) == 2,
-        @printable = List/all/cons(printable, c, [], drawn, Bool/True/qed()) };
+        @printable = List/all/cons(printable, c, [], drawn, True/qed()) };
 
 -- The glyph of the character `code` of the Control Pictures block, which is printable: every code of the block lies past the C1 controls and below the surrogates. The block is drawn one column wide.
-let pictured(code: Nat, @block: Bool/Holds(0x2400 <= code && code < 0x2440)) -> Glyph =
+let pictured(code: Nat, @block: Holds(0x2400 <= code && code < 0x2440)) -> Glyph =
     let shown = Char { code = code, @valid = Char/Valid/below_surrogates(code, proved()) };
-    let drawn: Bool/Holds(printable(shown)) = proved();
+    let drawn: Holds(printable(shown)) = proved();
     Glyph {
         chars = [shown],
         wide = false,
-        @printable = List/all/cons(printable, shown, [], drawn, Bool/True/qed()) };
+        @printable = List/all/cons(printable, shown, [], drawn, True/qed()) };
 
 --- What a terminal shows in place of `c` when `c` is a control, since a terminal obeys a control rather than drawing it: its Control Pictures symbol for a C0 control or DEL, and the replacement character for a C1 control or any other.
 pub let picture(c: Char) -> Glyph =

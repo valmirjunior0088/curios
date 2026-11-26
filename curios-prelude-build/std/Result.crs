@@ -2,6 +2,7 @@ pub use Result/{success, failure};
 
 use /std/{Bool, Eq, Show, Spell, Fmt, Option, Ordering, Ord, Monad};
 use /std/ops/{Eql};
+use /std/Bool/{True};
 
 --- Success or failure, the failure's type first.
 pub induct Result(E: Type, A: Type): pub Type
@@ -128,12 +129,12 @@ satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Ord(Result(E, A)) {
             | failure(f) =>
                 match c
                 | failure(g) => Ord/trans(e, f, g, p, q)
-                | success(_) => Bool/True/qed()
+                | success(_) => True/qed()
                 end
             | success(_) =>
                 match c
                 | failure(_) => match q end
-                | success(_) => Bool/True/qed()
+                | success(_) => True/qed()
                 end
             end
         | success(x) =>

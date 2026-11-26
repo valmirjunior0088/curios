@@ -1,5 +1,6 @@
 use /std/{Bool, Eq, Ordering};
 use /std/ops/{Eql};
+use /std/Bool/{True, Holds};
 
 -- Stated with `||`, of which conversion absorbs a `true` operand on either side: what a `gt` settles is settled whatever the other answers are, so a proof at `chains(first, Ordering/gt(), across)`, or at `chains(Ordering/lt(), second, Ordering/lt())`, takes no case of the answers left open.
 --- Whether three answers chain: the first is `gt`, or the second is, or the third is the step of the first two ([`Ordering/then`]).
@@ -19,25 +20,25 @@ pub let then(
     @x: Ordering,
     @y: Ordering,
     @z: Ordering,
-    prefix: Bool/Holds(chains(px, py, pz)),
-    piece: (Eq()(px, Ordering/eq()), Eq()(py, Ordering/eq())) -> Bool/Holds(chains(x, y, z)),
-) -> Bool/Holds(chains(Ordering/then(px, x), Ordering/then(py, y), Ordering/then(pz, z))) =
+    prefix: Holds(chains(px, py, pz)),
+    piece: (Eq()(px, Ordering/eq()), Eq()(py, Ordering/eq())) -> Holds(chains(x, y, z)),
+) -> Holds(chains(Ordering/then(px, x), Ordering/then(py, y), Ordering/then(pz, z))) =
     match px
     | lt() =>
         match py
         | lt() =>
             match pz
-            | lt() => Bool/True/qed()
+            | lt() => True/qed()
             | eq() => match prefix end
             | gt() => match prefix end
             end
         | eq() =>
             match pz
-            | lt() => Bool/True/qed()
+            | lt() => True/qed()
             | eq() => match prefix end
             | gt() => match prefix end
             end
-        | gt() => Bool/True/qed()
+        | gt() => True/qed()
         end
     | eq() =>
         match py
@@ -45,9 +46,9 @@ pub let then(
             match pz
             | lt() =>
                 match x
-                | lt() => Bool/True/qed()
-                | eq() => Bool/True/qed()
-                | gt() => Bool/True/qed()
+                | lt() => True/qed()
+                | eq() => True/qed()
+                | gt() => True/qed()
                 end
             | eq() => match prefix end
             | gt() => match prefix end
@@ -58,14 +59,14 @@ pub let then(
             | eq() => piece(Eq/refl(), Eq/refl())
             | gt() => match prefix end
             end
-        | gt() => Bool/True/qed()
+        | gt() => True/qed()
         end
-    | gt() => Bool/True/qed()
+    | gt() => True/qed()
     end;
 
 -- The third part of what is asked is the answer equal to itself, which no reduction decides of an answer not yet known.
 --- An answer chains with itself after a tie: where the first answer is `eq`, the second and the third are one.
-pub let tied(answer: Ordering) -> Bool/Holds(chains(Ordering/eq(), answer, answer)) =
+pub let tied(answer: Ordering) -> Holds(chains(Ordering/eq(), answer, answer)) =
     Bool/or/of_second(Ordering/is_gt(answer), answer == answer, Eql/refl(answer));
 
 --- The third of three answers that chain is `lt` or `eq` where the first two are: what makes an order transitive.
@@ -73,22 +74,22 @@ pub let le(
     x: Ordering,
     y: Ordering,
     z: Ordering,
-    chained: Bool/Holds(chains(x, y, z)),
-    below: Bool/Holds(Ordering/is_le(x)),
-    above: Bool/Holds(Ordering/is_le(y)),
-) -> Bool/Holds(Ordering/is_le(z)) =
+    chained: Holds(chains(x, y, z)),
+    below: Holds(Ordering/is_le(x)),
+    above: Holds(Ordering/is_le(y)),
+) -> Holds(Ordering/is_le(z)) =
     match x
     | lt() =>
         match y
         | lt() =>
             match z
-            | lt() => Bool/True/qed()
+            | lt() => True/qed()
             | eq() => match chained end
             | gt() => match chained end
             end
         | eq() =>
             match z
-            | lt() => Bool/True/qed()
+            | lt() => True/qed()
             | eq() => match chained end
             | gt() => match chained end
             end
@@ -98,14 +99,14 @@ pub let le(
         match y
         | lt() =>
             match z
-            | lt() => Bool/True/qed()
+            | lt() => True/qed()
             | eq() => match chained end
             | gt() => match chained end
             end
         | eq() =>
             match z
             | lt() => match chained end
-            | eq() => Bool/True/qed()
+            | eq() => True/qed()
             | gt() => match chained end
             end
         | gt() => match above end

@@ -49,7 +49,7 @@ pub use Byte/{let Byte};
 
 --- Natural numbers, unbounded: a machine word while a value is small, and a run of limbs once it outgrows one.
 ---
---- Subtraction truncates at zero. Division and remainder require `Nat/NonZero(b)`, which is `Bool/Holds(0 < b)`. `Nat/lt` and `Nat/le` hold the order lemmas bounds are proved with.
+--- Subtraction truncates at zero. Division and remainder require `Nat/NonZero(b)`, which is `Holds(0 < b)`. `Nat/lt` and `Nat/le` hold the order lemmas bounds are proved with.
 pub mod Nat;
 pub use Nat/{let Nat};
 
@@ -248,9 +248,9 @@ pub use Tui/{let Tui};
 
 --- `P`, a fact a term needs that no bound demands: the elaborator proves it from the facts in scope, or the program is refused naming them.
 ---
---- The proposition is written — `proved(@Bool/Holds(i < n))` — or pinned by the expectation, where the bound waits until it is and is proved then, from the facts the expression's own scope holds.
+--- The proposition is written — `proved(@Holds(i < n))` — or pinned by the expectation, where the bound waits until it is and is proved then, from the facts the expression's own scope holds.
 ---
---- At `Bool/False` it is the contradiction a zero-arm match eliminates, `match proved(@Bool/False) end`, where the facts refute each other past what a match's cases state: a case of a match they rule out takes no arm at all. A producer, not an eliminator: the zero-arm match stays the one way a contradiction is discharged.
+--- At `False` it is the contradiction a zero-arm match eliminates, `match proved(@False) end`, where the facts refute each other past what a match's cases state: a case of a match they rule out takes no arm at all. A producer, not an eliminator: the zero-arm match stays the one way a contradiction is discharged.
 pub let proved(@P: Prop, @p: P) -> P =
     p;
 

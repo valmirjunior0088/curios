@@ -1,6 +1,7 @@
 use /std/{Nat, Int, Bool, List, Option, Ord, Hash, Spell, Str, Show, proved};
 use /std/ops/{Eql};
 use /std/time/{Month, Weekday, iso8601};
+use /std/Bool/{Holds};
 
 --- Whether `year` is a leap year of the proleptic Gregorian calendar: four divides it, and a hundred does not unless four hundred does.
 pub let is_leap(year: Int) -> Bool =
@@ -37,7 +38,7 @@ pub let days_in_year(year: Int) -> Nat =
 
 --- That the three spell a day: a day `month` has in `year`.
 pub let Valid(year: Int, month: Month, day: Nat) -> Prop =
-    Bool/Holds(Nat/in_range(day, 1, days_in_month(year, month)));
+    Holds(Nat/in_range(day, 1, days_in_month(year, month)));
 
 --- A calendar date, in the proleptic Gregorian calendar with a year 0, as ISO 8601 counts years.
 pub struct Date: pub Type {
@@ -91,7 +92,7 @@ let in_months(
     year: Int,
     months: List(Month),
     r: Nat,
-    within: Bool/Holds(r < span(year, months)),
+    within: Holds(r < span(year, months)),
 ) -> Date =
     match months
     | [m, ..rest] =>

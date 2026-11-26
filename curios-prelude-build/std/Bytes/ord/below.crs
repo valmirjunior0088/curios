@@ -1,4 +1,5 @@
 use /std/{Nat, Byte, Bytes, Bool, Eq, Ord, Ordering, proved};
+use /std/Bool/{True, Holds};
 
 --- Whether `a` and `b` part at a byte where `a`'s is the smaller, neither running out before it.
 ---
@@ -24,20 +25,15 @@ pub let of_heads(
     k: Byte,
     t: Bytes,
     r: Bytes,
-    under: Bool/Holds(h < k),
-) -> Bool/Holds(below(0x[h, ..t], 0x[k, ..r])) =
+    under: Holds(h < k),
+) -> Holds(below(0x[h, ..t], 0x[k, ..r])) =
     Eq/subst(
-        (o: Ordering) =>
-            Bool/Holds(match o | eq() => below(t, r) | lt() => true | gt() => false end),
+        (o: Ordering) => Holds(match o | eq() => below(t, r) | lt() => true | gt() => false end),
         Eq/sym(Ord/of_lt(Byte/to_nat(h), Byte/to_nat(k), proved())),
-        Bool/True/qed());
+        True/qed());
 
 --- A run below another at a byte is `lt` to it.
-pub let lt(
-    a: Bytes,
-    b: Bytes,
-    parted: Bool/Holds(below(a, b)),
-) -> Eq()(Bytes/ord(a, b), Ordering/lt()) =
+pub let lt(a: Bytes, b: Bytes, parted: Holds(below(a, b))) -> Eq()(Bytes/ord(a, b), Ordering/lt()) =
     match a
     | 0x[] => match parted end
     | 0x[h, ..t] =>
@@ -58,8 +54,8 @@ pub let onto(
     b: Bytes,
     s: Bytes,
     u: Bytes,
-    parted: Bool/Holds(below(a, b)),
-) -> Bool/Holds(below(0x[..a, ..s], 0x[..b, ..u])) =
+    parted: Holds(below(a, b)),
+) -> Holds(below(0x[..a, ..s], 0x[..b, ..u])) =
     match a
     | 0x[] => match parted end
     | 0x[h, ..t] =>
@@ -68,7 +64,7 @@ pub let onto(
         | 0x[k, ..r] =>
             match Nat/ord(Byte/to_nat(h), Byte/to_nat(k))
             | eq() => onto(t, r, s, u, parted)
-            | lt() => Bool/True/qed()
+            | lt() => True/qed()
             | gt() => match parted end
             end
         end
@@ -79,6 +75,6 @@ pub let past(
     p: Bytes,
     a: Bytes,
     b: Bytes,
-    parted: Bool/Holds(below(a, b)),
-) -> Bool/Holds(below(0x[..p, ..a], 0x[..p, ..b])) =
+    parted: Holds(below(a, b)),
+) -> Holds(below(0x[..p, ..a], 0x[..p, ..b])) =
     match p | 0x[] => parted | 0x[_, ..t] => past(t, a, b, parted) end;
