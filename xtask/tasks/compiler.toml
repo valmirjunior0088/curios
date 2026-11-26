@@ -8,10 +8,10 @@ variables.loose.run = ["git", "ls-files", "--", "programs/*.rs"]
 variables.sources.run = ["git", "ls-files", "--", "*.crs", ":!editors/**", ":!xboard/archive/**"]
 # The programs the tree ships, each loose, compiled against `/std` alone: the measurement corpus and the conformance programs.
 variables.programs.run = ["git", "ls-files", "--", "programs/*.crs", "xtask/tasks/conformance/*.crs"]
-variables.package.flag = ["-p", "--package"]
-variables.package.help = "Compile and run one shipped package's tests alone, as a mutation of a crate the standard library's build parses through asks; every shipped member's when omitted"
-variables.expression.flag = ["-E", "--filterset"]
-variables.expression.help = "Run only the tests nextest's filterset selects, as `test(~name)` or `binary(=name)`; every test when omitted"
+given.package.flag = ["-p", "--package"]
+given.package.help = "The packages whose tests are built and run, one flag each; every shipped member's when omitted"
+given.expression.flag = ["-E", "--filterset"]
+given.expression.help = "Which of the built tests run, by name, as `test(~name)`; every one when omitted"
 
 [launcher]
 description = "Build the slim launcher in a cargo invocation of its own and file it where the compiler embeds it: the one build of the launcher's crate as it ships, handing rustc the target directory, Cargo's home and the toolchain's root remapped, so no directory of the machine it is built on is in an executable it is part of"
@@ -80,9 +80,9 @@ description = "Run the compiler's tests as they ship, the one compilation of the
 consumes = [".compiler.launcher.produces.binary"]
 run = [
     [
-        "{.tools.cargo-nextest}", "nextest", "run", "{.compiler.variables.package}",
+        "{.tools.cargo-nextest}", "nextest", "run", "{.compiler.given.package}",
         "--all-targets", "--no-fail-fast", "--no-tests=warn",
-        "{.compiler.variables.expression}",
+        "{.compiler.given.expression}",
     ],
 ]
 

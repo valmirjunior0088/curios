@@ -1,6 +1,6 @@
 //! The task files read into one tree, and every refusal reading them can make.
 //!
-//! **A file is a group, and a key's meaning is where it sits.** `xtask/tasks.toml` is the group the files in `xtask/tasks/` belong to, each a group named after its file. A file's top level holds `description`, `variables`, and its steps and groups, and the root's holds `tools` and `data` beside them; a group holds its `description` and its steps and groups; a step holds `description`, `requires`, `consumes`, `produces`, `run` and `dir`, and no table of its own. So whether a key is an attribute or a child is read off its position, and one out of place is refused rather than guessed at.
+//! **A file is a group, and a key's meaning is where it sits.** `xtask/tasks.toml` is the group the files in `xtask/tasks/` belong to, each a group named after its file. A file's top level holds `description`, `variables`, `given`, and its steps and groups, and the root's holds `tools` and `data` beside them; a group holds its `description` and its steps and groups; a step holds `description`, `requires`, `consumes`, `produces`, `run` and `dir`, and no table of its own. So whether a key is an attribute or a child is read off its position, and one out of place is refused rather than guessed at.
 //!
 //! **A name is the path to where it is declared, written from the top with a leading `.`, and it names one thing.** Each segment is a key, read from the top one projection at a time: a step or a group is its tables, `.compiler.lint.clippy`; a variable sits under its file's `variables`, `.compiler.variables.edition`; a tool under the root's `tools`, `.tools.node`, and its version beneath it, `.tools.node.version`; data under the root's `data`, `.data.json`; and a produced file under its step's `produces`, `.compiler.launcher.produces.binary`. So a name reads the same wherever it is written, and says where to find what it names. `requires` names steps and groups, `consumes` produced files, and the braces in a command a variable, a tool, data or a produced file, or, with a `!` where the `.` stands, a value the runner fills ([`BUILT_INS`]). Each resolves as the tree is read, so a name that names nothing, one written without its `.`, or one naming the wrong kind of thing, is refused before anything runs, and so is a command that reads a file its step does not consume, which would run without the edge that orders it.
 
@@ -81,6 +81,8 @@ pub struct Tree {
     /// Every group by its name, the top's included under the empty name: the steps it holds, at any depth, in order.
     pub groups: BTreeMap<Name, Group>,
     pub variables: BTreeMap<Name, Variable>,
+    /// What the command line may give a run, by name.
+    pub given: BTreeMap<Name, Given>,
     pub produced: BTreeMap<Name, Produced>,
     pub tools: BTreeMap<Name, Tool>,
     pub data: BTreeMap<Name, Data>,
@@ -228,14 +230,6 @@ pub enum Variable {
     Output(Vec<String>),
     /// The string a key of a TOML file holds, `key` its keys from the file's top, read once a run and only where a step that uses it runs: a value another file owns, stated there alone.
     Read { path: String, key: Vec<String> },
-    /// Given on the command line with a value by any of `flags`, a short spelling, a long one or both: the flag and the value for each time it is given, nothing where it is not. Whether the command takes it more than once is the command's to say.
-    Flag { flags: Vec<String>, help: String },
-    /// Given on the command line as a positional argument, `otherwise` where it is not.
-    Argument {
-        placeholder: String,
-        otherwise: String,
-        help: String,
-    },
 }
 
 impl Variable {
@@ -243,8 +237,31 @@ impl Variable {
     fn is_one_word(&self) -> bool {
         match self {
             Variable::Words(words) => words.len() == 1,
-            Variable::Argument { .. } | Variable::Read { .. } => true,
-            Variable::Output(_) | Variable::Flag { .. } => false,
+            Variable::Read { .. } => true,
+            Variable::Output(_) => false,
+        }
+    }
+}
+
+/// What the command line may give a run, which a file's `given` declares: a value the person running chose, which also narrows the run to the steps that read it, where a variable is a constant of the run.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Given {
+    /// Given with a value by any of `flags`, a short spelling, a long one or both: the flag and the value for each time it is given, nothing where it is not. Whether the command takes it more than once is the command's to say.
+    Flag { flags: Vec<String>, help: String },
+    /// Given as a positional argument, `otherwise` where it is not.
+    Argument {
+        placeholder: String,
+        otherwise: String,
+        help: String,
+    },
+}
+
+impl Given {
+    /// Whether the value always stands for one word, so it may sit inside a word beside other text.
+    fn is_one_word(&self) -> bool {
+        match self {
+            Given::Argument { .. } => true,
+            Given::Flag { .. } => false,
         }
     }
 }
@@ -271,6 +288,8 @@ pub enum Fill {
     /// The toolchain's root, as the pinned `rustc` prints it, `!rust_sysroot`.
     RustSysroot,
     Variable(Name),
+    /// A value the command line gives a run.
+    Given(Name),
     /// A produced file's path.
     Produced(Name),
     /// A tool's executable, kept for the host the run is on.
@@ -287,9 +306,11 @@ impl Fill {
             Fill::CargoTargetDir => "!cargo_target_dir".to_string(),
             Fill::CargoHome => "!cargo_home".to_string(),
             Fill::RustSysroot => "!rust_sysroot".to_string(),
-            Fill::Variable(name) | Fill::Produced(name) | Fill::Tool(name) | Fill::Data(name) => {
-                from_top(name)
-            }
+            Fill::Variable(name)
+            | Fill::Given(name)
+            | Fill::Produced(name)
+            | Fill::Tool(name)
+            | Fill::Data(name) => from_top(name),
         }
     }
 }
@@ -353,6 +374,7 @@ struct Written<'a> {
 enum Kind {
     Task,
     Variable,
+    Given,
     Produced,
     Tool,
     Data,
@@ -419,6 +441,7 @@ impl Tree {
             steps: Vec::new(),
             groups: BTreeMap::new(),
             variables: BTreeMap::new(),
+            given: BTreeMap::new(),
             produced: BTreeMap::new(),
             tools: BTreeMap::new(),
             data: BTreeMap::new(),
@@ -446,6 +469,17 @@ impl Tree {
                             declare(&mut kinds, file, &name, Kind::Variable, value.span())?;
                             let variable = variable_of(file, value)?;
                             tree.variables.insert(name, variable);
+                        }
+                    }
+                    "given" => {
+                        let table = item.as_table_like().ok_or_else(|| {
+                            file.refuse(item.span(), "`given` is a table of names".to_string())
+                        })?;
+                        for (name, value) in table.iter() {
+                            let name = scoped(&scoped(&file.scope, "given"), name);
+                            declare(&mut kinds, file, &name, Kind::Given, value.span())?;
+                            let given = given_of(file, value)?;
+                            tree.given.insert(name, given);
                         }
                     }
                     "tools" => {
@@ -544,7 +578,7 @@ impl Tree {
                         let table = item.as_table_like().ok_or_else(|| {
                             file.refuse(
                                 span.clone(),
-                                format!("`{key}` is out of place: a file's top holds `description`, `variables`, and its steps and groups as tables"),
+                                format!("`{key}` is out of place: a file's top holds `description`, `variables`, `given`, and its steps and groups as tables"),
                             )
                         })?;
                         children.push(name.clone());
@@ -602,12 +636,24 @@ impl Tree {
         }
 
         for tool in &tools {
-            let read = tool_of(&files[tool.file], tool, &kinds, &tree.variables)?;
+            let read = tool_of(
+                &files[tool.file],
+                tool,
+                &kinds,
+                &tree.variables,
+                &tree.given,
+            )?;
             tree.tools.insert(tool.name.clone(), read);
         }
         tree.refuse_tools(&files, &tools)?;
         for written in &data {
-            let read = data_of(&files[written.file], written, &kinds, &tree.variables)?;
+            let read = data_of(
+                &files[written.file],
+                written,
+                &kinds,
+                &tree.variables,
+                &tree.given,
+            )?;
             tree.data.insert(written.name.clone(), read);
         }
 
@@ -669,7 +715,14 @@ impl Tree {
                             format!("`{name}` is produced at a path, a string"),
                         )
                     })?;
-                    let path = word_of(file, path, value.span(), &kinds, &tree.variables)?;
+                    let path = word_of(
+                        file,
+                        path,
+                        value.span(),
+                        &kinds,
+                        &tree.variables,
+                        &tree.given,
+                    )?;
                     let name = scoped(&scoped(&step.name, "produces"), name);
                     tree.produced.insert(
                         name.clone(),
@@ -687,7 +740,14 @@ impl Tree {
                 let text = word
                     .as_str()
                     .ok_or_else(|| file.refuse(word.span(), "a word is a string".to_string()))?;
-                let word_value = word_of(file, text, word.span(), &kinds, &tree.variables)?;
+                let word_value = word_of(
+                    file,
+                    text,
+                    word.span(),
+                    &kinds,
+                    &tree.variables,
+                    &tree.given,
+                )?;
                 for fill in word_value.fills() {
                     if let Fill::Produced(name) = fill
                         && !consumes.contains(name)
@@ -710,9 +770,14 @@ impl Tree {
                     if let Some(table) = instruction.as_inline_table() {
                         run.push(match table.contains_key("check") {
                             true => check_of(file, table, instruction.span())?,
-                            false => {
-                                write_of(file, table, instruction.span(), &tree.variables, &word)?
-                            }
+                            false => write_of(
+                                file,
+                                table,
+                                instruction.span(),
+                                &tree.variables,
+                                &tree.given,
+                                &word,
+                            )?,
                         });
                         continue;
                     }
@@ -812,14 +877,7 @@ impl Tree {
             .flat_map(Instruction::words)
             .flat_map(Word::fills)
             .filter_map(|fill| match fill {
-                Fill::Variable(name)
-                    if matches!(
-                        self.variables.get(name),
-                        Some(Variable::Flag { .. } | Variable::Argument { .. })
-                    ) =>
-                {
-                    Some(name.clone())
-                }
+                Fill::Given(name) => Some(name.clone()),
                 _ => None,
             })
             .collect()
@@ -1112,6 +1170,7 @@ fn tool_of(
     written: &Written<'_>,
     kinds: &BTreeMap<Name, Kind>,
     variables: &BTreeMap<Name, Variable>,
+    given: &BTreeMap<Name, Given>,
 ) -> Result<Tool, Refusal> {
     let table = written.table;
     let key = written.name.last().expect("a tool is named");
@@ -1184,7 +1243,7 @@ fn tool_of(
         let text = item
             .as_str()
             .ok_or_else(|| file.refuse(item.span(), format!("`url.{triple}` is a string")))?;
-        let url = word_of(file, text, item.span(), kinds, variables)?;
+        let url = word_of(file, text, item.span(), kinds, variables, given)?;
         let shape = match url.0.last() {
             Some(Piece::Text(tail)) if tail.ends_with(".tar.gz") => Shape::Tarball,
             Some(Piece::Text(tail)) if tail.ends_with(".gz") => Shape::Gzipped,
@@ -1234,6 +1293,7 @@ fn data_of(
     written: &Written<'_>,
     kinds: &BTreeMap<Name, Kind>,
     variables: &BTreeMap<Name, Variable>,
+    given: &BTreeMap<Name, Given>,
 ) -> Result<Data, Refusal> {
     let table = written.table;
     let key = written.name.last().expect("data is named");
@@ -1256,7 +1316,7 @@ fn data_of(
     let text = url
         .as_str()
         .ok_or_else(|| file.refuse(url.span(), "the `url` of data is a string".to_string()))?;
-    let url_word = word_of(file, text, url.span(), kinds, variables)?;
+    let url_word = word_of(file, text, url.span(), kinds, variables, given)?;
     let archive = matches!(url_word.0.last(), Some(Piece::Text(tail)) if tail.ends_with(".tar.gz"));
     let form = match (table.get("path"), table.get("files")) {
         (Some(path), None) if archive => Form::Directory(text_of(file, path, "path")?),
@@ -1362,6 +1422,58 @@ fn hosts_of<'a>(
 }
 
 /// The variable `item` declares.
+/// What the command line gives a run as `item` declares it: a flag, by its spellings, or a positional argument, by its placeholder and what it is where none is given.
+fn given_of(file: &File<'_>, item: &Item) -> Result<Given, Refusal> {
+    let table = item.as_table_like().ok_or_else(|| {
+        file.refuse(
+            item.span(),
+            "a given value is a table: a flag (`flag`) or an argument (`argument`)".to_string(),
+        )
+    })?;
+    let text = |key: &str| -> Result<Option<String>, Refusal> {
+        table
+            .get(key)
+            .map(|item| text_of(file, item, key))
+            .transpose()
+    };
+    let keys = table.iter().map(|(key, _)| key).collect::<BTreeSet<_>>();
+    let only = |allowed: &[&str]| -> Result<(), Refusal> {
+        match keys.iter().find(|key| !allowed.contains(key)) {
+            Some(key) => Err(file.refuse(
+                table.key(key).and_then(|key| key.span()),
+                format!("`{key}` is no key of this given value"),
+            )),
+            None => Ok(()),
+        }
+    };
+
+    if let Some(flag) = table.get("flag") {
+        only(&["flag", "help"])?;
+        return Ok(Given::Flag {
+            flags: flags_of(file, flag)?,
+            help: text("help")?.unwrap_or_default(),
+        });
+    }
+    if let Some(placeholder) = text("argument")? {
+        only(&["argument", "else", "help"])?;
+        return Ok(Given::Argument {
+            placeholder,
+            otherwise: text("else")?.ok_or_else(|| {
+                file.refuse(
+                    item.span(),
+                    "an argument states what it is `else`, where none is given".to_string(),
+                )
+            })?,
+            help: text("help")?.unwrap_or_default(),
+        });
+    }
+
+    Err(file.refuse(
+        item.span(),
+        "a given value is a flag (`flag`) or an argument (`argument`)".to_string(),
+    ))
+}
+
 fn variable_of(file: &File<'_>, item: &Item) -> Result<Variable, Refusal> {
     if let Some(text) = item.as_str() {
         return Ok(Variable::Words(vec![text.to_string()]));
@@ -1407,27 +1519,12 @@ fn variable_of(file: &File<'_>, item: &Item) -> Result<Variable, Refusal> {
             })?;
         return Ok(Variable::Output(words_of(file, list)?));
     }
-    if let Some(flag) = table.get("flag") {
-        only(&["flag", "help"])?;
-        return Ok(Variable::Flag {
-            flags: flags_of(file, flag)?,
-            help: text("help")?.unwrap_or_default(),
-        });
+    if table.get("flag").is_some() || table.get("argument").is_some() {
+        return Err(file.refuse(
+            item.span(),
+            "a flag or an argument is what the command line gives a run, declared under `given`, where a variable is a constant of the run".to_string(),
+        ));
     }
-    if let Some(placeholder) = text("argument")? {
-        only(&["argument", "else", "help"])?;
-        return Ok(Variable::Argument {
-            placeholder,
-            otherwise: text("else")?.ok_or_else(|| {
-                file.refuse(
-                    item.span(),
-                    "an argument states what it is `else`, where none is given".to_string(),
-                )
-            })?,
-            help: text("help")?.unwrap_or_default(),
-        });
-    }
-
     if let Some(path) = text("read")? {
         only(&["read", "key"])?;
         let key = text("key")?.ok_or_else(|| {
@@ -1444,7 +1541,7 @@ fn variable_of(file: &File<'_>, item: &Item) -> Result<Variable, Refusal> {
 
     Err(file.refuse(
         item.span(),
-        "a variable's table is a command's output (`run`), a key of a file (`read`), a flag (`flag`) or an argument (`argument`)".to_string(),
+        "a variable's table is a command's output (`run`) or a key of a file (`read`)".to_string(),
     ))
 }
 
@@ -1454,6 +1551,7 @@ fn write_of(
     table: &toml_edit::InlineTable,
     span: Option<Range<usize>>,
     variables: &BTreeMap<Name, Variable>,
+    given: &BTreeMap<Name, Given>,
     word: &dyn Fn(&toml_edit::Value) -> Result<Word, Refusal>,
 ) -> Result<Instruction, Refusal> {
     if let Some((key, _)) = table.iter().find(|(key, _)| !WRITE_KEYS.contains(key)) {
@@ -1470,12 +1568,16 @@ fn write_of(
             )
         })?;
         let written = word(value)?;
-        if let Some(Fill::Variable(name)) = written.alone()
-            && matches!(
-                variables.get(name),
-                Some(Variable::Output(_) | Variable::Flag { .. })
-            )
-        {
+        let several = match written.alone() {
+            Some(Fill::Variable(name)) => {
+                matches!(variables.get(name), Some(Variable::Output(_))).then_some(name)
+            }
+            Some(Fill::Given(name)) => {
+                matches!(given.get(name), Some(Given::Flag { .. })).then_some(name)
+            }
+            _ => None,
+        };
+        if let Some(name) = several {
             return Err(file.refuse(
                 value.span(),
                 format!(
@@ -1541,6 +1643,7 @@ fn word_of(
     span: Option<Range<usize>>,
     kinds: &BTreeMap<Name, Kind>,
     variables: &BTreeMap<Name, Variable>,
+    given: &BTreeMap<Name, Given>,
 ) -> Result<Word, Refusal> {
     let refuse = |message: String| file.refuse(span.clone(), message);
 
@@ -1574,6 +1677,7 @@ fn word_of(
                 let name = resolved(written).ok_or_else(|| refuse(unrooted(written)))?;
                 match kinds.get(&name) {
                     Some(Kind::Variable) => Fill::Variable(name),
+                    Some(Kind::Given) => Fill::Given(name),
                     Some(Kind::Produced) => Fill::Produced(name),
                     Some(Kind::Tool) => Fill::Tool(name),
                     Some(Kind::Data) => Fill::Data(name),
@@ -1599,11 +1703,17 @@ fn word_of(
     let word = Word(pieces);
     if word.alone().is_none() {
         for fill in word.fills() {
-            if let Fill::Variable(name) = fill
-                && variables
+            let several = match fill {
+                Fill::Variable(name) => variables
                     .get(name)
-                    .is_some_and(|variable| !variable.is_one_word())
-            {
+                    .is_some_and(|variable| !variable.is_one_word()),
+                Fill::Given(name) => given.get(name).is_some_and(|given| !given.is_one_word()),
+                _ => false,
+            };
+            if several {
+                let (Fill::Variable(name) | Fill::Given(name)) = fill else {
+                    unreachable!("only a variable or a given value stands for several words")
+                };
                 return Err(refuse(format!(
                     "`{}` stands for several words or none, so it is a word of its own",
                     from_top(name)

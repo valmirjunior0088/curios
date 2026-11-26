@@ -3,8 +3,8 @@
 //! **A path the tree does not hold cannot be written.** Each group is a subcommand whose own subcommands are what it holds, so `cargo xtask bundle lint` is the parser's own error, and `--help` at any depth lists what is there, each step described by its `description` and each group inside a file by its steps'. A variable given on the command line is a flag or an argument of every subcommand whose steps use it. `release` and `installer` are the two commands outside the tree, and the reader refuses a task of either name.
 
 use {
-    crate::{Given, Name, Tree, Variable, dotted},
-    clap::{Arg, ArgMatches, Command, parser::ValueSource},
+    crate::{Given, GivenValues, Name, Tree, dotted},
+    clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource},
     std::collections::BTreeSet,
 };
 
@@ -17,7 +17,7 @@ pub enum Asked {
     /// A step or a group, by its path, with the variables the command line gave.
     Task {
         name: Name,
-        given: Given,
+        given: GivenValues,
     },
     Release {
         bump: Option<String>,
@@ -90,23 +90,29 @@ fn task(tree: &Tree, name: &Name) -> Command {
         .steps_of(name)
         .into_iter()
         .flat_map(|step| tree.given_to(step))
-        .filter(|variable| !is_group || matches!(tree.variables[variable], Variable::Flag { .. }))
+        .filter(|given| !is_group || matches!(tree.given[given], Given::Flag { .. }))
         .collect::<BTreeSet<_>>();
-    for variable in given {
-        command = command.arg(argument(tree, &variable));
+    for given in given {
+        command = command.arg(argument(tree, &given));
     }
 
     command
 }
 
-/// How the command line gives the variable `name`.
+/// How the command line gives the value `name`.
 fn argument(tree: &Tree, name: &Name) -> Arg {
     let id = dotted(name);
-    match &tree.variables[name] {
-        Variable::Flag { flags, help } => {
-            let value = name.last().expect("a variable has a name").to_uppercase();
+    match &tree.given[name] {
+        Given::Flag { flags, help } => {
+            let value = name
+                .last()
+                .expect("a given value has a name")
+                .to_uppercase();
             flags.iter().fold(
-                Arg::new(id).value_name(value).help(help.clone()),
+                Arg::new(id)
+                    .value_name(value)
+                    .help(help.clone())
+                    .action(ArgAction::Append),
                 |argument, flag| match flag.strip_prefix("--") {
                     Some(long) => argument.long(long.to_string()),
                     None => argument.short(
@@ -117,14 +123,11 @@ fn argument(tree: &Tree, name: &Name) -> Arg {
                 },
             )
         }
-        Variable::Argument {
+        Given::Argument {
             placeholder, help, ..
         } => Arg::new(id)
             .value_name(placeholder.clone())
             .help(help.clone()),
-        Variable::Words(_) | Variable::Output(_) | Variable::Read { .. } => {
-            unreachable!("only a flag or an argument is given on the command line")
-        }
     }
 }
 
@@ -148,17 +151,17 @@ pub fn asked(matches: &ArgMatches) -> Asked {
     }
 
     let mut name = Vec::new();
-    let mut given = Given::new();
+    let mut given = GivenValues::new();
     let mut current = matches;
     while let Some((word, below)) = current.subcommand() {
         name.push(word.to_string());
         for id in below.ids() {
             if below.value_source(id.as_str()) == Some(ValueSource::CommandLine)
-                && let Some(value) = below.get_one::<String>(id.as_str())
+                && let Some(values) = below.get_many::<String>(id.as_str())
             {
                 given.insert(
                     id.as_str().split('.').map(str::to_string).collect(),
-                    value.clone(),
+                    values.cloned().collect(),
                 );
             }
         }

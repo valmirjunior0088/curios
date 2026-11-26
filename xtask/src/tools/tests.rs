@@ -87,7 +87,7 @@ fn a_tool_is_kept_by_its_name_and_version() {
         panic!("the step runs a command");
     };
     assert_eq!(
-        Values::new(&tree, &Given::new()).command(words),
+        Values::new(&tree, &GivenValues::new()).command(words),
         Ok(Some(vec![
             artifacts()
                 .join("tools/bare-1.0")
@@ -131,7 +131,7 @@ fn a_tool_without_a_download_for_the_host_refuses_the_run() {
     );
     let tree = tree_of(&tools, "[\"{.tools.elsewhere}\"]");
 
-    let refused = fetch(&tree, &Values::new(&tree, &Given::new()), &[0]).unwrap_err();
+    let refused = fetch(&tree, &Values::new(&tree, &GivenValues::new()), &[0]).unwrap_err();
 
     assert!(
         refused.contains(&format!(
@@ -154,7 +154,7 @@ fn a_tool_kept_already_is_not_fetched_again() {
         &fill!("[\"{.tools.${name}}\"]", name),
     );
 
-    let outcome = fetch(&tree, &Values::new(&tree, &Given::new()), &[0]);
+    let outcome = fetch(&tree, &Values::new(&tree, &GivenValues::new()), &[0]);
 
     fs::remove_file(&kept).unwrap();
     assert_eq!(outcome, Ok(()));
@@ -173,7 +173,7 @@ fn a_placed_download_is_checked_and_kept_as_an_executable() {
         &fill!("[\"{.tools.${name}}\"]", name),
     );
 
-    let outcome = fetch(&tree, &Values::new(&tree, &Given::new()), &[0]);
+    let outcome = fetch(&tree, &Values::new(&tree, &GivenValues::new()), &[0]);
 
     let kept = executable(&tree, &tool(&name));
     let held = (fs::read(&kept).ok(), fs::metadata(&kept).ok());
@@ -215,7 +215,7 @@ fn a_placed_tarball_is_unpacked_into_the_tool_s_directory() {
         &fill!("[\"{.tools.${name}}\"]", name),
     );
 
-    let outcome = fetch(&tree, &Values::new(&tree, &Given::new()), &[0]);
+    let outcome = fetch(&tree, &Values::new(&tree, &GivenValues::new()), &[0]);
 
     let kept = tools_place().join(format!("{name}-1.0"));
     let held = fs::read(executable(&tree, &tool(&name))).ok();
@@ -239,7 +239,7 @@ fn a_placed_download_whose_digest_differs_is_refused() {
         &fill!("[\"{.tools.${name}}\"]", name),
     );
 
-    let outcome = fetch(&tree, &Values::new(&tree, &Given::new()), &[0]);
+    let outcome = fetch(&tree, &Values::new(&tree, &GivenValues::new()), &[0]);
 
     let kept = executable(&tree, &tool(&name)).exists();
     let _ = fs::remove_file(&placed);
@@ -293,7 +293,7 @@ fn data_is_kept_as_its_one_directory_of_a_placed_archive() {
         &fill!("[\"true\", \"{.data.${name}}\"]", name),
     );
 
-    let outcome = fetch(&tree, &Values::new(&tree, &Given::new()), &[0]);
+    let outcome = fetch(&tree, &Values::new(&tree, &GivenValues::new()), &[0]);
 
     let kept = data_kept(&tree, &data(&name));
     let one = fs::read(kept.join("one.json")).ok();
@@ -320,7 +320,7 @@ fn data_whose_files_differ_from_its_digest_is_refused() {
         &fill!("[\"true\", \"{.data.${name}}\"]", name),
     );
 
-    let outcome = fetch(&tree, &Values::new(&tree, &Given::new()), &[0]);
+    let outcome = fetch(&tree, &Values::new(&tree, &GivenValues::new()), &[0]);
 
     let kept = data_kept(&tree, &data(&name)).exists();
     let _ = fs::remove_file(&placed);
@@ -350,7 +350,7 @@ fn data_a_crate_s_build_reads_is_gathered_beside_the_crate_whatever_the_run_s_st
         "[\"true\"]",
     );
 
-    let outcome = fetch(&tree, &Values::new(&tree, &Given::new()), &[0]);
+    let outcome = fetch(&tree, &Values::new(&tree, &GivenValues::new()), &[0]);
 
     let stated = data_kept(&tree, &data(&name));
     let two = fs::read(kept.join("deeper/two.txt")).ok();
@@ -375,7 +375,7 @@ fn data_beside_what_is_no_crate_is_refused() {
         "[\"true\"]",
     );
 
-    let refused = fetch(&tree, &Values::new(&tree, &Given::new()), &[0]).unwrap_err();
+    let refused = fetch(&tree, &Values::new(&tree, &GivenValues::new()), &[0]).unwrap_err();
 
     assert!(
         refused.contains("is no crate at the repository's root"),

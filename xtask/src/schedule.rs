@@ -5,7 +5,7 @@
 //! **Order is the order things are written, after what they run after.** A step is placed once everything it runs after is, and otherwise in the order the tree reaches it: an asked group's steps as its file writes them, a step's requirements as its `requires` lists them. So the handoff runs its subjects in the order it names them, and nothing about a step's place needs stating beyond what it reads.
 
 use {
-    crate::{Given, Name, Tree},
+    crate::{GivenValues, Name, Tree},
     std::collections::BTreeSet,
 };
 
@@ -13,7 +13,7 @@ use {
 mod tests;
 
 /// The steps a run of `asked` performs under `given`, by their place in [`Tree::steps`], in the order it performs them.
-pub fn schedule(tree: &Tree, asked: &Name, given: &Given) -> Vec<usize> {
+pub fn schedule(tree: &Tree, asked: &Name, given: &GivenValues) -> Vec<usize> {
     let given = given.keys().cloned().collect::<BTreeSet<_>>();
     let asked = tree
         .steps_of(asked)

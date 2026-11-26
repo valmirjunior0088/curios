@@ -1,15 +1,15 @@
 description = "A run under a recorder, the summary of what it filed, and a question asked of it"
 # The one place the stream's location is spelled: the compiler takes it as an argument and keeps no default, so what is written, summarized and asked cannot drift. A run asked of another stream, the prelude's among them, names it.
-variables.stream.argument = "STREAM"
-variables.stream.else = "curios/.artifacts/profile.pftrace"
-variables.stream.help = "The stream a run under a recorder files, and a query reads"
-variables.program.argument = "PATH"
-variables.program.else = "programs/hello_world.crs"
-variables.program.help = "The .crs entry file to run"
+given.stream.argument = "STREAM"
+given.stream.else = "curios/.artifacts/profile.pftrace"
+given.stream.help = "The stream a run under a recorder files, and a query reads"
+given.program.argument = "PATH"
+given.program.else = "programs/hello_world.crs"
+given.program.help = "The .crs entry file to run"
 # A question asked unasked is the one every profile is first asked: where the time went.
-variables.sql.argument = "SQL"
-variables.sql.else = "select name, count(*) as calls, round(sum(dur) / 1e6, 3) as ms from slice group by name order by ms desc limit 20"
-variables.sql.help = "The question to ask, in Perfetto's SQL"
+given.sql.argument = "SQL"
+given.sql.else = "select name, count(*) as calls, round(sum(dur) / 1e6, 3) as ms from slice group by name order by ms desc limit 20"
+given.sql.help = "The question to ask, in Perfetto's SQL"
 
 [debug]
 description = "Run one program under a recorder with the compiler in debug, the build iterating already has, so a question asked of a change costs the change; then summarize what it filed"
@@ -18,10 +18,10 @@ consumes = [".compiler.launcher.produces.binary"]
 run = [
     [
         "cargo", "run", "--package", "curios", "--",
-        "--profile", "{.profile.variables.stream}",
-        "run", "{.profile.variables.program}",
+        "--profile", "{.profile.given.stream}",
+        "run", "{.profile.given.program}",
     ],
-    ["cargo", "run", "--package", "curios", "--", "profile", "{.profile.variables.stream}"],
+    ["cargo", "run", "--package", "curios", "--", "profile", "{.profile.given.stream}"],
 ]
 
 [release]
@@ -30,12 +30,12 @@ consumes = [".compiler.launcher.produces.binary"]
 run = [
     [
         "cargo", "run", "--release", "--package", "curios", "--",
-        "--profile", "{.profile.variables.stream}",
-        "run", "{.profile.variables.program}",
+        "--profile", "{.profile.given.stream}",
+        "run", "{.profile.given.program}",
     ],
     [
         "cargo", "run", "--release", "--package", "curios", "--",
-        "profile", "{.profile.variables.stream}",
+        "profile", "{.profile.given.stream}",
     ],
 ]
 
@@ -55,7 +55,7 @@ description = "Ask a stream a question in Perfetto's SQL, through trace_processo
 # Perfetto's own reader answers, so what this says of a stream is what Perfetto's UI and its query page say of the same file, past what the summary states.
 run = [
     [
-        "{.tools.trace_processor_shell}", "--query-string", "{.profile.variables.sql}",
-        "{.profile.variables.stream}",
+        "{.tools.trace_processor_shell}", "--query-string", "{.profile.given.sql}",
+        "{.profile.given.stream}",
     ],
 ]

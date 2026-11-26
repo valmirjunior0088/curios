@@ -16,15 +16,14 @@ fn step(top: &str, command: &str) -> Tree {
 
 /// The words the step's one command is under `given`.
 fn words(tree: &Tree, given: &[(&str, &str)]) -> Option<Vec<String>> {
-    let given = given
-        .iter()
-        .map(|(name, value)| {
-            (
-                name.split('.').map(str::to_string).collect(),
-                value.to_string(),
-            )
-        })
-        .collect::<Given>();
+    let mut gathered = GivenValues::new();
+    for (name, value) in given {
+        gathered
+            .entry(name.split('.').map(str::to_string).collect())
+            .or_default()
+            .push(value.to_string());
+    }
+    let given = gathered;
 
     let Instruction::Command(command) = &tree.steps[0].run[0] else {
         panic!("the step runs a command");
@@ -56,14 +55,32 @@ fn a_string_sits_inside_a_word_beside_text() {
 #[test]
 fn a_flag_is_its_flag_and_value_where_given_and_nothing_where_not() {
     let tree = step(
-        "variables.only = { flag = \"-E\" }",
-        "[\"echo\", \"{.a.variables.only}\"]",
+        "given.only = { flag = \"-E\" }",
+        "[\"echo\", \"{.a.given.only}\"]",
     );
 
     assert_eq!(words(&tree, &[]).unwrap(), ["echo"]);
     assert_eq!(
-        words(&tree, &[("a.variables.only", "test(~x)")]).unwrap(),
+        words(&tree, &[("a.given.only", "test(~x)")]).unwrap(),
         ["echo", "-E", "test(~x)"]
+    );
+}
+
+/// A flag given more than once is handed on each time, in the order given, so a command that takes several, as nextest takes several packages, is handed every one: whether it takes more than one is the command's to say.
+#[test]
+fn a_flag_given_twice_is_handed_on_twice() {
+    let tree = step(
+        "given.package = { flag = [\"-p\", \"--package\"] }",
+        "[\"echo\", \"{.a.given.package}\"]",
+    );
+
+    assert_eq!(
+        words(
+            &tree,
+            &[("a.given.package", "first"), ("a.given.package", "second")]
+        )
+        .unwrap(),
+        ["echo", "--package", "first", "--package", "second"]
     );
 }
 
@@ -71,12 +88,12 @@ fn a_flag_is_its_flag_and_value_where_given_and_nothing_where_not() {
 #[test]
 fn a_flag_of_two_spellings_is_handed_on_by_its_long_one() {
     let tree = step(
-        "variables.only = { flag = [\"-E\", \"--filterset\"] }",
-        "[\"echo\", \"{.a.variables.only}\"]",
+        "given.only = { flag = [\"-E\", \"--filterset\"] }",
+        "[\"echo\", \"{.a.given.only}\"]",
     );
 
     assert_eq!(
-        words(&tree, &[("a.variables.only", "test(~x)")]).unwrap(),
+        words(&tree, &[("a.given.only", "test(~x)")]).unwrap(),
         ["echo", "--filterset", "test(~x)"]
     );
 }
@@ -84,13 +101,13 @@ fn a_flag_of_two_spellings_is_handed_on_by_its_long_one() {
 #[test]
 fn an_argument_is_its_default_where_none_is_given() {
     let tree = step(
-        "variables.file = { argument = \"PATH\", else = \"default.crs\" }",
-        "[\"echo\", \"{.a.variables.file}\"]",
+        "given.file = { argument = \"PATH\", else = \"default.crs\" }",
+        "[\"echo\", \"{.a.given.file}\"]",
     );
 
     assert_eq!(words(&tree, &[]).unwrap(), ["echo", "default.crs"]);
     assert_eq!(
-        words(&tree, &[("a.variables.file", "other.crs")]).unwrap(),
+        words(&tree, &[("a.given.file", "other.crs")]).unwrap(),
         ["echo", "other.crs"]
     );
 }
@@ -149,7 +166,7 @@ fn a_variables_command_naming_a_missing_program_is_refused_naming_both() {
         panic!("the step runs a command");
     };
 
-    let refusal = Values::new(&tree, &Given::new())
+    let refusal = Values::new(&tree, &GivenValues::new())
         .command(command)
         .unwrap_err();
     assert!(
@@ -203,7 +220,7 @@ fn a_key_a_file_does_not_hold_as_a_string_is_refused_naming_both() {
             panic!("the step runs a command");
         };
 
-        Values::new(&tree, &Given::new())
+        Values::new(&tree, &GivenValues::new())
             .command(command)
             .unwrap_err()
     };

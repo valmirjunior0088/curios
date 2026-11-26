@@ -7,8 +7,8 @@ const SUBJECT: (&str, &str) = (
     "a",
     r#"
 description = "A"
-variables.expression.flag = ["-E", "--filterset"]
-variables.expression.help = "Run only what the expression selects"
+given.expression.flag = ["-E", "--filterset"]
+given.expression.help = "Run only what the expression selects"
 
 [lint]
 description = "Lint"
@@ -22,7 +22,7 @@ description = "Test"
 
 [test.suite]
 description = "Suite"
-run = [["true", "{.a.variables.expression}"]]
+run = [["true", "{.a.given.expression}"]]
 
 [build]
 description = "Build"
@@ -45,7 +45,7 @@ fn a_path_names_a_task_at_any_depth() {
             parsed(&path.split(' ').collect::<Vec<_>>()).unwrap(),
             Asked::Task {
                 name: path.split(' ').map(str::to_string).collect(),
-                given: Given::new()
+                given: GivenValues::new()
             }
         );
     }
@@ -62,7 +62,7 @@ fn a_path_the_tree_does_not_hold_is_refused() {
 fn a_flag_is_taken_where_a_step_under_the_path_uses_it() {
     let expected = Asked::Task {
         name: vec!["a".to_string(), "test".to_string()],
-        given: [(name("a.variables.expression"), "test(~cli)".to_string())]
+        given: [(name("a.given.expression"), vec!["test(~cli)".to_string()])]
             .into_iter()
             .collect(),
     };
@@ -76,6 +76,23 @@ fn a_flag_is_taken_where_a_step_under_the_path_uses_it() {
         expected
     );
     assert!(parsed(&["a", "lint", "-E", "test(~cli)"]).is_err());
+}
+
+/// A flag given more than once is gathered each time, in the order given, under either spelling, so a run hands every value on.
+#[test]
+fn a_flag_given_twice_is_gathered_twice() {
+    assert_eq!(
+        parsed(&["a", "test", "-E", "test(~a)", "--filterset", "test(~b)"]).unwrap(),
+        Asked::Task {
+            name: vec!["a".to_string(), "test".to_string()],
+            given: [(
+                name("a.given.expression"),
+                vec!["test(~a)".to_string(), "test(~b)".to_string()]
+            )]
+            .into_iter()
+            .collect(),
+        }
+    );
 }
 
 #[test]

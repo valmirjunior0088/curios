@@ -25,7 +25,7 @@ fn a_step_behind_one_that_failed_is_not_run_and_the_rest_go_on() {
     );
 
     assert_eq!(
-        perform(&tree, &group(), &Given::new()),
+        perform(&tree, &group(), &GivenValues::new()),
         Err("failed: a broken; not run: a behind".to_string())
     );
 }
@@ -37,7 +37,7 @@ fn a_step_that_leaves_no_file_it_produces_fails() {
     );
 
     assert_eq!(
-        perform(&tree, &group(), &Given::new()),
+        perform(&tree, &group(), &GivenValues::new()),
         Err("failed: a maker".to_string())
     );
 }
@@ -48,7 +48,7 @@ fn a_run_of_steps_that_pass_passes() {
         "[first]\ndescription = \"F\"\nrun = [[\"true\"], [\"true\"]]\n[second]\ndescription = \"S\"\nrequires = [\".a.first\"]\nrun = [[\"true\"]]\n",
     );
 
-    assert_eq!(perform(&tree, &group(), &Given::new()), Ok(()));
+    assert_eq!(perform(&tree, &group(), &GivenValues::new()), Ok(()));
 }
 
 #[test]
@@ -61,7 +61,7 @@ fn a_write_leaves_its_file_holding_its_contents() {
         written.display()
     ));
 
-    let performed = perform(&tree, &group(), &Given::new());
+    let performed = perform(&tree, &group(), &GivenValues::new());
     let held = std::fs::read_to_string(&written);
     let _ = std::fs::remove_dir_all(written.parent().expect("the file is in a directory"));
 
@@ -106,7 +106,7 @@ run = [["sh", "-c", 'test "$(echo "$PATH" | cut -d: -f1)" = "$(dirname "$0")"', 
     ])
     .unwrap();
 
-    let outcome = perform(&tree, &group(), &Given::new());
+    let outcome = perform(&tree, &group(), &GivenValues::new());
 
     fs::remove_dir_all(&kept).unwrap();
     assert_eq!(outcome, Ok(()));

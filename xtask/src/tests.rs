@@ -74,7 +74,7 @@ fn every_step_the_handoff_runs_has_a_job() {
     }
 
     let handoff = vec!["handoff".to_string()];
-    for step in schedule(&tree, &handoff, &Given::new()) {
+    for step in schedule(&tree, &handoff, &GivenValues::new()) {
         if tree.steps[step].name != handoff {
             assert!(run.contains(&step), "{}", spelled(&tree.steps[step].name));
         }

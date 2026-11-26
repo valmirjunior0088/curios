@@ -6,8 +6,8 @@
 
 use {
     crate::{
-        Given, Instruction, Name, Tree, Values, Word, directories, fetch, launch, launch_in, root,
-        say, schedule, spelled,
+        GivenValues, Instruction, Name, Tree, Values, Word, directories, fetch, launch, launch_in,
+        root, say, schedule, spelled,
     },
     std::{env, fs, time::Instant},
 };
@@ -22,7 +22,7 @@ const PASSED: &str = "✓";
 const UNPASSED: &str = "✗";
 
 /// Run `asked` and what it runs after, as `given` narrows it, and close each step with a line naming it, `»»» <step> «««`, how it ended and in how long.
-pub fn perform(tree: &Tree, asked: &Name, given: &Given) -> Result<(), String> {
+pub fn perform(tree: &Tree, asked: &Name, given: &GivenValues) -> Result<(), String> {
     let values = Values::new(tree, given);
     let scheduled = schedule(tree, asked, given);
     fetch(tree, &values, &scheduled)?;

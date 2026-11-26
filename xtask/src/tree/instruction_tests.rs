@@ -49,14 +49,11 @@ fn a_write_holds_its_file_and_contents_and_nothing_else() {
 /// A flag stands for two words or none and a command's output for as many as it prints, so neither is the one string a file's name or contents is.
 #[test]
 fn a_write_of_a_value_that_may_be_several_words_is_refused() {
-    let flag = "variables.only.flag = \"-E\"\nvariables.only.help = \"H\"\n";
+    let flag = "given.only.flag = \"-E\"\ngiven.only.help = \"H\"\n";
 
     assert!(
-        run_refused(
-            flag,
-            "[{ write = \"a\", contents = \"{.a.variables.only}\" }]"
-        )
-        .contains("may stand for several words or none")
+        run_refused(flag, "[{ write = \"a\", contents = \"{.a.given.only}\" }]")
+            .contains("may stand for several words or none")
     );
 }
 
@@ -70,10 +67,10 @@ fn a_flag_that_is_no_short_or_long_spelling_is_refused() {
         "[\"-E\", \"-F\"]",
         "[\"--one\", \"--other\"]",
     ] {
-        let variables = ["variables.only.flag = ", flag, "\n"].concat();
+        let variables = ["given.only.flag = ", flag, "\n"].concat();
 
         assert!(
-            run_refused(&variables, "[\"echo\", \"{.a.variables.only}\"]")
+            run_refused(&variables, "[\"echo\", \"{.a.given.only}\"]")
                 .contains("a flag is one spelling"),
             "{flag}"
         );

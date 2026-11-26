@@ -4,7 +4,7 @@
 
 use {
     crate::{
-        Fill, HOST_TRIPLE, Name, Piece, Tree, Variable, Word, ask, ask_launched, cargo_home,
+        Fill, Given, HOST_TRIPLE, Name, Piece, Tree, Variable, Word, ask, ask_launched, cargo_home,
         data_kept, executable, from_top, launch, root, target_directory,
     },
     std::{
@@ -21,19 +21,19 @@ use {
 mod tests;
 
 /// What the command line gave, by the name of the variable it fills.
-pub type Given = BTreeMap<Name, String>;
+pub type GivenValues = BTreeMap<Name, Vec<String>>;
 
 /// The values one run fills braces with.
 pub struct Values<'a> {
     tree: &'a Tree,
-    given: &'a Given,
+    given: &'a GivenValues,
     printed: RefCell<BTreeMap<Name, Vec<String>>>,
     read: RefCell<BTreeMap<Name, String>>,
     sysroot: OnceCell<String>,
 }
 
 impl<'a> Values<'a> {
-    pub fn new(tree: &'a Tree, given: &'a Given) -> Self {
+    pub fn new(tree: &'a Tree, given: &'a GivenValues) -> Self {
         Values {
             tree,
             given,
@@ -76,23 +76,32 @@ impl<'a> Values<'a> {
                     let printed = self.printed(name, command)?;
                     Ok((!printed.is_empty()).then_some(printed))
                 }
+                Variable::Read { path, key } => Ok(Some(vec![self.read(name, path, key)?])),
+            },
+            Fill::Given(name) => match &self.tree.given[name] {
                 // The command is handed the long spelling where the flag has one, so the echoed line reads by itself.
-                Variable::Flag { flags, .. } => Ok(Some(
+                Given::Flag { flags, .. } => {
+                    let spelling = flags
+                        .iter()
+                        .find(|flag| flag.starts_with("--"))
+                        .or(flags.first());
+                    Ok(Some(
+                        self.given
+                            .get(name)
+                            .into_iter()
+                            .flatten()
+                            .zip(spelling.into_iter().cycle())
+                            .flat_map(|(value, spelling)| [spelling.clone(), value.clone()])
+                            .collect(),
+                    ))
+                }
+                Given::Argument { otherwise, .. } => Ok(Some(vec![
                     self.given
                         .get(name)
-                        .and_then(|value| {
-                            let spelling = flags
-                                .iter()
-                                .find(|flag| flag.starts_with("--"))
-                                .or(flags.first())?;
-                            Some(vec![spelling.clone(), value.clone()])
-                        })
-                        .unwrap_or_default(),
-                )),
-                Variable::Argument { otherwise, .. } => Ok(Some(vec![
-                    self.given.get(name).unwrap_or(otherwise).clone(),
+                        .and_then(|values| values.last())
+                        .unwrap_or(otherwise)
+                        .clone(),
                 ])),
-                Variable::Read { path, key } => Ok(Some(vec![self.read(name, path, key)?])),
             },
             Fill::HostTriple
             | Fill::CargoTargetDir
@@ -127,11 +136,19 @@ impl<'a> Values<'a> {
                 }
                 Piece::Value(Fill::Variable(name)) => match &self.tree.variables[name] {
                     Variable::Words(words) => text.push_str(&words.concat()),
-                    Variable::Argument { otherwise, .. } => {
-                        text.push_str(self.given.get(name).unwrap_or(otherwise))
-                    }
                     Variable::Read { path, key } => text.push_str(&self.read(name, path, key)?),
-                    Variable::Output(_) | Variable::Flag { .. } => {
+                    Variable::Output(_) => {
+                        unreachable!("the reader keeps `{}` a word of its own", from_top(name))
+                    }
+                },
+                Piece::Value(Fill::Given(name)) => match &self.tree.given[name] {
+                    Given::Argument { otherwise, .. } => text.push_str(
+                        self.given
+                            .get(name)
+                            .and_then(|values| values.last())
+                            .unwrap_or(otherwise),
+                    ),
+                    Given::Flag { .. } => {
                         unreachable!("the reader keeps `{}` a word of its own", from_top(name))
                     }
                 },

@@ -19,8 +19,8 @@ run = [["true"]]
 fn scheduled(tree: &Tree, asked: &str, given: &[(&str, &str)]) -> Vec<String> {
     let given = given
         .iter()
-        .map(|(variable, value)| (name(variable), value.to_string()))
-        .collect::<Given>();
+        .map(|(given, value)| (name(given), vec![value.to_string()]))
+        .collect::<GivenValues>();
     let asked = asked.split(' ').map(str::to_string).collect::<Name>();
 
     schedule(tree, &asked, &given)
@@ -198,7 +198,7 @@ fn a_variable_given_runs_only_the_steps_that_use_it() {
             "w",
             r#"
 description = "W"
-variables.expression.flag = ["-E", "--filterset"]
+given.expression.flag = ["-E", "--filterset"]
 
 [lint]
 description = "Lint"
@@ -208,14 +208,14 @@ run = [["true"]]
 [test]
 description = "Test"
 consumes = [".l.build.produces.binary"]
-run = [["true", "{.w.variables.expression}"]]
+run = [["true", "{.w.given.expression}"]]
 "#,
         ),
     ])
     .unwrap();
 
     assert_eq!(
-        scheduled(&tree, "w", &[("w.variables.expression", "test(~cli)")]),
+        scheduled(&tree, "w", &[("w.given.expression", "test(~cli)")]),
         ["l build", "w test"]
     );
     assert_eq!(scheduled(&tree, "w", &[]), ["l build", "w lint", "w test"]);
