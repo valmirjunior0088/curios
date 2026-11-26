@@ -210,7 +210,7 @@ fn a_re_exported_path_answers_the_declaration_behind_it() {
         ),
         ("/std/Option", "/sys/Option", Declared::Inductive),
     );
-    assert_eq!(described.members, ["some", "none"]);
+    assert_eq!(described.members, ["none", "some"]);
     assert_eq!(
         keyed(&described),
         [
