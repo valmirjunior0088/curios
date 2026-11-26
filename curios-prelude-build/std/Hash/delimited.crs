@@ -1,0 +1,98 @@
+use /std/{Nat, Byte, Bytes, Bool, Eq, Ord, Ordering, proved};
+
+--- `b` with each zero byte written `0x00 0xFF` and closed by `0x00 0x01`: a run that parts at a byte from any other run so written, in the order of the runs themselves.
+---
+--- What a derived encoding writes for every part but the last, so a part's encoding orders as the part does whatever follows it, and a text that begins a longer one encodes below it. CockroachDB's ordered keys close a byte string this way, and FoundationDB's tuple layer escapes a zero in one the same way.
+pub let delimited(b: Bytes) -> Bytes =
+    match b
+    | 0x[] => 0x[0x0, 0x1]
+    | 0x[0, ..t] => 0x[0x0, 0xFF, ..delimited(t)]
+    | 0x[h, ..t] => 0x[h, ..delimited(t)]
+    end;
+
+-- A recursion over both runs. A run that begins the other parts from it at the close's second byte, `0x01` below a byte that follows or a zero's `0xFF`, and two runs that part at a byte still do once each byte is written, a zero's `0x00` being below every other byte.
+let apart(
+    x: Bytes,
+    y: Bytes,
+    under: Eq()(Bytes/ord(x, y), Ordering/lt()),
+) -> Bool/Holds(Bytes/ord/below(delimited(x), delimited(y))) =
+    match x
+    | 0x[] =>
+        match y
+        | 0x[] => match under end
+        | 0x[0, .._] => Bool/True/qed()
+        | 0x[k, ..r] => Bytes/ord/below/of_heads(0x0, k, 0x[0x1], delimited(r), proved())
+        end
+    | 0x[0, ..t] =>
+        match y
+        | 0x[] => match under end
+        | 0x[0, ..r] => apart(t, r, under)
+        | 0x[k, ..r] =>
+            Bytes/ord/below/of_heads(0x0, k, 0x[0xFF, ..delimited(t)], delimited(r), proved())
+        end
+    | 0x[h, ..t] =>
+        match y
+        | 0x[] => match under end
+        | 0x[0, .._] => match under end
+        | 0x[k, ..r] =>
+            match Nat/ord(Byte/to_nat(h), Byte/to_nat(k))
+            | lt() =>
+                Bytes/ord/below/of_heads(
+                    h,
+                    k,
+                    delimited(t),
+                    delimited(r),
+                    Ord/below(Byte/to_nat(h), Byte/to_nat(k), Eq/refl()))
+            | eq() =>
+                let same: Eq()(h, k) =
+                    Eq/cong(
+                        (n: Nat) => Nat/to_byte(n % 256),
+                        Ord/eq(Byte/to_nat(h), Byte/to_nat(k), Eq/refl()));
+                Eq/subst(
+                    (z: Byte) =>
+                        Bool/Holds(Bytes/ord/below(0x[h, ..delimited(t)], 0x[z, ..delimited(r)])),
+                    same,
+                    Bytes/ord/below/past(0x[h], delimited(t), delimited(r), apart(t, r, under)))
+            | gt() => match under end
+            end
+        end
+    end;
+
+-- Where the runs part, their delimited forms part at a byte, which holds whatever follows each; where they are one run, so are their delimited forms, and what follows decides.
+--- Two delimited runs, each with anything after it, order as the runs do, and then as what follows them.
+pub let ord(
+    x: Bytes,
+    y: Bytes,
+    s: Bytes,
+    u: Bytes,
+) -> Eq()(
+    Bytes/ord(0x[..delimited(x), ..s], 0x[..delimited(y), ..u]),
+    Ordering/then(Bytes/ord(x, y), Bytes/ord(s, u))) =
+    match Bytes/ord(x, y)
+    | lt() =>
+        Bytes/ord/below/lt(
+            0x[..delimited(x), ..s],
+            0x[..delimited(y), ..u],
+            Bytes/ord/below/onto(delimited(x), delimited(y), s, u, apart(x, y, Eq/refl())))
+    | gt() =>
+        Eq/trans(
+            Ord/flips(0x[..delimited(y), ..u], 0x[..delimited(x), ..s]),
+            Eq/cong(
+                Ordering/flip,
+                Bytes/ord/below/lt(
+                    0x[..delimited(y), ..u],
+                    0x[..delimited(x), ..s],
+                    Bytes/ord/below/onto(
+                        delimited(y),
+                        delimited(x),
+                        u,
+                        s,
+                        apart(y, x, Ord/flips(x, y))))))
+    | eq() =>
+        let same: Eq()(x, y) = Ord/eq(x, y, Eq/refl());
+        Eq/subst(
+            (z: Bytes) =>
+                Eq()(Bytes/ord(0x[..delimited(x), ..s], 0x[..delimited(z), ..u]), Bytes/ord(s, u)),
+            same,
+            Bytes/ord/past(delimited(x), s, u))
+    end;

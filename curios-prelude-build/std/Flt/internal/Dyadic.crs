@@ -1,10 +1,10 @@
-use /std/{Flt, Nat, Int, Bool, Option, Str, Show, Spell, Fmt, Hash};
+use /std/{Flt, Nat, Int, Bool, Option, Str, Show, Spell, Fmt};
 use /std/ops/{Add, Sub, Mul};
 use /std/Flt/{Rounding, exact};
 
 --- A dyadic rational, `mantissa · 2^exponent`. Every finite float's exact value is one, and so is every sum, difference and product of them, so the arithmetic here never rounds; `to_flt` is the one way back to a float.
 ---
---- Unnormalized: `3 · 2^0` and `6 · 2^-1` are two representations of one number, and arithmetic keeps whichever it arrives at rather than paying to normalize. Every comparison and the hash read the number, not the representation; `normalized` answers the one representation each number has with an odd mantissa.
+--- Unnormalized: `3 · 2^0` and `6 · 2^-1` are two representations of one number, and arithmetic keeps whichever it arrives at rather than paying to normalize. Every comparison reads the number, not the representation.
 pub struct Dyadic: pub Type {
     --- The whole number scaled, carrying the sign.
     mantissa: Int,
@@ -67,18 +67,6 @@ pub let quotient(a: Dyadic, b: Dyadic, @ok: Int/NonZero(b.mantissa)) -> {Dyadic,
             exponent = a.exponent - b.exponent - Nat/to_int(k) },
         scaled % b.mantissa != +0);
 
---- The representation with an odd mantissa, or `0 · 2^0` for zero: the one each number has.
-pub let normalized(a: Dyadic) -> Dyadic =
-    let m = Int/abs(a.mantissa);
-    match 0 < m
-    | true =>
-        let scale = Nat/Scale/of(m);
-        Dyadic {
-            mantissa = Int/sign(a.mantissa) * Nat/to_int(2 * scale.half + 1),
-            exponent = a.exponent + Nat/to_int(scale.count) }
-    | false => of_int(+0)
-    end;
-
 --- Whether the two are one number.
 pub let eql(a: Dyadic, b: Dyadic) -> Bool =
     let e = common(a, b);
@@ -107,11 +95,4 @@ satisfy Show(Dyadic) {
 --- The representation as it is held, so a spelled value reads back to the same one.
 satisfy Spell(Dyadic) {
     ..
-}
-
---- The normalized representation's, so two representations of one number hash alike, as `eql` calls them one.
-satisfy Hash(Dyadic) {
-    hash(a) =
-        let n = normalized(a);
-        Hash/tagged(0, [Hash/hash(n.mantissa), Hash/hash(n.exponent)]),
 }

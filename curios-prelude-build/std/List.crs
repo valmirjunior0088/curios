@@ -39,7 +39,7 @@ pub use sort/{let sort};
 pub mod ord;
 pub use ord/{let ord};
 
-use /std/{Nat, Bool, Option, Str, Eq, Show, Spell, Fmt, Monad, Hash, proved};
+use /std/{Nat, Bool, Bytes, Option, Str, Eq, Show, Spell, Fmt, Monad, Hash, proved};
 use /std/ops/{Eql};
 
 --- The element at `i`, or `none` past the end.
@@ -277,6 +277,7 @@ satisfy Monad(List) {
     bind(m, f) = fold(m, [], (x, acc) => [..acc, ..f(x)]),
 }
 
+--- Each element's encoding delimited, in order: in the order of the lists, a list that begins a longer one first.
 satisfy (@A: Type, use Hash(A)) => Hash(List(A)) {
-    hash(values) = Hash/tagged(length(values), map(values, (value) => Hash/hash(value))),
+    hash(values) = Bytes/flatten(map(values, (value) => Hash/delimited(Hash/hash(value)))),
 }

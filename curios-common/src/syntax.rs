@@ -762,13 +762,16 @@ impl OrdLaws {
     }
 }
 
-/// The names a derived `Hash` witness body is written with: its own method, applied to each payload, and the one `/std/Hash` combinator the body folds their encodings through — `tagged`, which writes the constructor's ordinal and frames every part.
+/// The names a derived `Hash` witness body is written with: its own method, applied to each payload; the encoding a constructor's position is written in where the type has several; and the escape every payload's encoding but the last is written through.
 ///
-/// One combinator where `Ord` needs three, because framing is the whole of the structure: a tag and a list of already-encoded parts determine the answer, so there is no across-constructors case to spell separately and no tie to fill. No string machinery, for `Ord`'s reason — an encoding is `Bytes`, which the body builds as an intrinsic literal and needs no name for.
+/// The body joins the pieces as a packed literal of spreads, an intrinsic, which needs no name. No string machinery, for `Ord`'s reason: an encoding is `Bytes`, never rendered.
 #[derive(Debug, Clone, Copy)]
 pub struct HashDerivation {
     pub hash: ConceptField,
-    pub tagged: SyntaxName,
+    /// A natural's encoding, `/std/Nat/hash`: in the order of the numbers and parting at a byte from every other, so a position orders the encodings as it orders the values.
+    pub position: SyntaxName,
+    /// `/std/Hash/delimited`, which writes a part so it orders as it does whatever follows it.
+    pub delimited: SyntaxName,
 }
 
 /// One row of the roster as the lookup yields it: the tag a body writer dispatches on, carrying the names that writer applies.
@@ -862,9 +865,11 @@ impl Derivation<'_> {
                     .map(SyntaxName::qualifier),
                 )
                 .collect(),
-            Derivation::Hash(&HashDerivation { hash: _, tagged }) => {
-                vec![concept, tagged.qualifier()]
-            }
+            Derivation::Hash(&HashDerivation {
+                hash: _,
+                position,
+                delimited,
+            }) => vec![concept, position.qualifier(), delimited.qualifier()],
         }
     }
 
@@ -890,7 +895,11 @@ impl Derivation<'_> {
                 .into_iter()
                 .chain(laws.lemmas())
                 .collect(),
-            Derivation::Hash(&HashDerivation { hash, tagged }) => vec![hash.concept, tagged],
+            Derivation::Hash(&HashDerivation {
+                hash,
+                position,
+                delimited,
+            }) => vec![hash.concept, position, delimited],
         }
         .into_iter()
     }

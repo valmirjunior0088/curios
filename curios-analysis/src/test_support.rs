@@ -122,7 +122,8 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         },
         hash: HashDerivation {
             hash: field(&["std", "Digest", "Digest"], "digest"),
-            tagged: name(&["std", "Digest", "tagged"]),
+            position: name(&["std", "Nat", "hash", "hash"]),
+            delimited: name(&["std", "Digest", "delimited", "delimited"]),
         },
     },
     entailment: EntailmentSyntax {

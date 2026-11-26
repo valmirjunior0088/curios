@@ -26,7 +26,7 @@ use {
         Mention, MetavarOrigin, Method, Numeral, StructDecl, StructEntry, StructType, Subterm,
         Term, WantedPremise, WitnessOrigin, WitnessRole, str_literal, syn_call,
     },
-    curios_num::Natural,
+    curios_num::{Binary, Natural},
     std::rc::Rc,
 };
 
@@ -715,7 +715,7 @@ fn spell_body(
 
 /// The `Hash` witness record: `hash` over the derived encoding.
 ///
-/// One arm per constructor, each `Hash/tagged(ordinal, [hash(p₀), …])` — the constructor's position followed by the encodings of its payloads that take part, every part framed by `tagged` so that no two distinct values share a byte string. A struct has one shape and takes ordinal zero.
+/// One arm per constructor, each `0x[..Nat/hash(position), ..delimited(hash(p₀)), …, ..hash(pₙ)]`: the constructor's position where the type has more than one, then the encodings of its payloads that take part in declaration order, every one but the last delimited. A position's encoding and a delimited part each part at a byte from any other of their kind, in the order of what they encode, so two values encode in the order the derived `Ord` puts them in, by position and then a payload at a time, and no two distinct values share an encoding. A struct has one shape and writes no position, so a type of one field encodes as its field.
 ///
 /// **A proof payload is omitted rather than encoded.** `Spell` renders one as `"?"` because a reader wants to see it; here two values differing only in a proof *are* the same value, so giving them different encodings would be wrong — and erasure drops the payload anyway, so nothing could produce the bytes at run time.
 fn hash_body(
@@ -725,6 +725,10 @@ fn hash_body(
     row: HashDerivation,
 ) -> Result<Term, Error> {
     let value = context.fresh(None);
+    let several = match subject {
+        Subject::Struct { .. } => false,
+        Subject::Induct { decl, .. } => decl.constructors().len() > 1,
+    };
 
     // The encoding of one classified payload read through `read`, or nothing where the payload is a proof.
     let encode = |context: &mut Context, classified: &Classified, read: Term| match &classified.part
@@ -740,8 +744,6 @@ fn hash_body(
         )),
     };
 
-    let ordinal = |index: usize| Term::num_lit(Numeral::Natural(Natural::from(index)));
-
     let encoded = match subject {
         Subject::Struct { name, decl, params } => {
             let parts = struct_parts(context, site, name, decl, params, &value)?;
@@ -753,8 +755,7 @@ fn hash_body(
                     encode(context, classified, read)
                 })
                 .collect::<Vec<_>>();
-            let items = list(context, pieces);
-            site.at(syn_call(row.tagged, [ordinal(0), items]))
+            joined(site, row, None, pieces)
         }
         Subject::Induct { name, decl, params } => {
             let mut arms = Vec::new();
@@ -774,8 +775,7 @@ fn hash_body(
                         encode(context, classified, read)
                     })
                     .collect::<Vec<_>>();
-                let items = list(context, pieces);
-                let body = site.at(syn_call(row.tagged, [ordinal(index), items]));
+                let body = joined(site, row, several.then_some(index), pieces);
                 arms.push((
                     tag.clone(),
                     constructor
@@ -799,6 +799,37 @@ fn hash_body(
 
     let method = Term::func([(value, Term::hole(context.mint_metavar()))], encoded);
     Ok(site.at(dictionary(site, [method])))
+}
+
+/// One shape's encoding: its `position`'s, where it is one of several, then its payloads' `pieces` in order, every one but the last delimited, as a packed literal of spreads. A lone piece is the encoding itself, and no piece is the empty run.
+fn joined(
+    site: &Site<'_>,
+    row: HashDerivation,
+    position: Option<usize>,
+    pieces: Vec<Term>,
+) -> Term {
+    let last = pieces.len().saturating_sub(1);
+    let parts = pieces
+        .into_iter()
+        .enumerate()
+        .map(|(index, piece)| match index == last {
+            true => piece,
+            false => site.at(syn_call(row.delimited, [piece])),
+        });
+    let mut operands = position
+        .map(|position| {
+            let numeral = Term::num_lit(Numeral::Natural(Natural::from(position)));
+            site.at(syn_call(row.position, [numeral]))
+        })
+        .into_iter()
+        .chain(parts)
+        .collect::<Vec<_>>();
+
+    match operands.len() {
+        0 => site.at(Term::intrinsic(Intrinsic::Bytes(Binary::empty()))),
+        1 => operands.remove(0),
+        _ => site.at(Term::intrinsic(Intrinsic::bytes_concat(operands))),
+    }
 }
 
 /// The `Eql` witness record: `eql` over the derived comparison, and its two laws, each proved through its payloads' own.

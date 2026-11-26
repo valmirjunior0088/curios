@@ -40,8 +40,8 @@ fn a_derived_body_reaching_a_proof_is_held_to_termination_as_its_written_body_is
         induct Tree: Type | leaf(Nat) | node(Tree, Tree) end
         satisfy Hash(Tree) {
             hash(t) = match t
-                | leaf(x) => Hash/tagged(0, [Hash/hash(x)])
-                | node(l, r) => Hash/tagged(1, [Hash/hash(l), Hash/hash(r)])
+                | leaf(x) => 0x[..Nat/hash(0), ..Hash/hash(x)]
+                | node(l, r) => 0x[..Nat/hash(1), ..Hash/delimited(Hash/hash(l)), ..Hash/hash(r)]
                 end,
         }
         let _apart(h: Holds(Hash/hash(Tree/leaf(1)) == Hash/hash(Tree/leaf(2)))) -> False = h;
@@ -53,8 +53,8 @@ fn a_derived_body_reaching_a_proof_is_held_to_termination_as_its_written_body_is
     }
 
     let looping = written.replace(
-        "[Hash/hash(l), Hash/hash(r)]",
-        "[Hash/hash(t), Hash/hash(r)]",
+        "Hash/delimited(Hash/hash(l))",
+        "Hash/delimited(Hash/hash(t))",
     );
     let report = error(&looping);
     assert!(

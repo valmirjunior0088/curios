@@ -8,7 +8,7 @@ Four stages, each landing alone: the executable core, the executable binary64 bo
 
 ## What this builds on
 
-- **`Dyadic`**, at `/std/Flt/internal/Dyadic` and private to `Flt` today: `{mantissa: Int, exponent: Int}`, unnormalized, whose `+`, `-` and `·` never round and whose `eql` and `Hash` read the value, with `normalized` answering the odd-mantissa representation. It has no `Eql` and no `Ord`: two representations of one number are two values, so its `eql` decides no `Eq`. Every dyadic is a rational, so `Rat` takes one in whole.
+- **`Dyadic`**, at `/std/Flt/internal/Dyadic` and private to `Flt` today: `{mantissa: Int, exponent: Int}`, unnormalized, whose `+`, `-` and `·` never round and whose `eql` reads the value. It has no `Eql` and no `Ord`: two representations of one number are two values, so its `eql` decides no `Eq`. Every dyadic is a rational, so `Rat` takes one in whole.
 - **`Dyadic/of(f, @ok: Flt/Finite(f))`**: a finite float's exact value, through `/sys/Flt/mantissa` and `/sys/Flt/exponent`, which take the same bound. `Dyadic/try_of` is the `Option` form.
 - **`Dyadic/to_flt(r, d)`**: the one rounding in the library, `curios_num::Floating`'s own, line for line, in every direction — with the subnormal grid, the carry into the exponent, and the overflow each direction sends where it sends it.
 - **`Nat` and `Int`**: unbounded at run time ([Nat and Int are an i31 until they outgrow it](../../design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md)), so no exact computation here reintroduces a width.
@@ -53,7 +53,7 @@ of_flt : (f : Flt, @ok : Flt/Finite(f)) -> Rat
 try_of_flt : Flt -> Option(Rat)
 ```
 
-`of_dyadic` strips the mantissa's trailing zeros — `Dyadic/normalized`, built over `/std/Nat/Scale/of` so that its odd mantissa is a fact a certificate can take — and needs no gcd; `of_flt(f, @ok)` is `of_dyadic(Dyadic/of(f, @ok))`, so nothing decodes a float's bits here, and a negative zero is canonical zero, deliberately.
+`of_dyadic` strips the mantissa's trailing zeros — a `Dyadic/normalized` this stage writes, the representation with an odd mantissa, over `/std/Nat/Scale/of` so that its odd mantissa is a fact a certificate can take — and needs no gcd; `of_flt(f, @ok)` is `of_dyadic(Dyadic/of(f, @ok))`, so nothing decodes a float's bits here, and a negative zero is canonical zero, deliberately.
 
 **Operations.** Negation and absolute value act on the numerator. Addition and subtraction align the exponents, cross-multiply the odd denominators, add once, and normalize once; multiplication multiplies numerators and denominators, cross-cancelling first where that is proved equivalent. Comparison aligns and cross-multiplies without normalizing.
 

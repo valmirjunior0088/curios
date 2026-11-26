@@ -1,7 +1,7 @@
 pub use /sys/{let Option};
 pub use /sys/Option/{some, none};
 
-use /std/{Bool, Eq, Show, Spell, Fmt, Monad, Result, Ordering, Ord, Hash};
+use /std/{Nat, Bool, Eq, Show, Spell, Fmt, Monad, Result, Ordering, Ord, Hash};
 use /std/ops/{Eql};
 
 --- `f` on the value, or `none`.
@@ -139,10 +139,11 @@ satisfy (@A: Type, use Ord(A)) => Ord(Option(A)) {
     is_le(_, _) = Eq/refl(),
 }
 
+--- As a derived witness writes one: the constructor's position as a natural encodes it, then the payload's encoding, so `none` encodes first and a `some` as its payload orders.
 satisfy (@A: Type, use Hash(A)) => Hash(Option(A)) {
     hash(value) =
         match value
-        | none() => Hash/tagged(0, [])
-        | some(inner) => Hash/tagged(1, [Hash/hash(inner)])
+        | none() => Nat/hash(0)
+        | some(inner) => 0x[..Nat/hash(1), ..Hash/hash(inner)]
         end,
 }
