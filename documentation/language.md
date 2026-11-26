@@ -530,8 +530,8 @@ Why: [A bound is stated in a decided proposition and discharged by reduction](de
 use /std/{Nat, Byte, Bytes, Parse};
 
 pub let parser() -> Parse(Bytes, Nat) =
-    let a = Parse/bytes/byte!;
-    let b = Parse/bytes/byte!;
+    let a = Parse/bytes/byte()!;
+    let b = Parse/bytes/byte()!;
     Parse/pure(Byte/to_nat(a) + Byte/to_nat(b));
 ```
 

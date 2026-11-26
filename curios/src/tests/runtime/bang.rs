@@ -53,12 +53,12 @@ fn dispatches_through_a_user_monad_witness() {
 
 #[test]
 fn std_parse_threads_bangs_left_to_right() {
-    // The real `/std/Parse` monad, sequenced with bare `!` — each site resolves the witness for `Parse(Bytes)` from the function's expected result type. Two `Parse/bytes/byte!`s read consecutive bytes; reflecting through `Byte/to_nat` and using a *non-commutative* `Nat/sub` pins the evaluation order: on "BA" the first byte is 'B' (66) and the second 'A' (65), so the result is 66 - 65 = 1 (the reversed order would saturate to 0).
+    // The real `/std/Parse` monad, sequenced with bare `!` — each site resolves the witness for `Parse(Bytes)` from the function's expected result type. Two `Parse/bytes/byte()!`s read consecutive bytes; reflecting through `Byte/to_nat` and using a *non-commutative* `Nat/sub` pins the evaluation order: on "BA" the first byte is 'B' (66) and the second 'A' (65), so the result is 66 - 65 = 1 (the reversed order would saturate to 0).
     let source = r#"
         use /std/{Parse, Byte, Bytes, Nat, Result};
 
         let parser() -> Parse/Parse(Bytes, Nat) =
-            Parse/pure(Nat/sub(Byte/to_nat(Parse/bytes/byte!), Byte/to_nat(Parse/bytes/byte!)));
+            Parse/pure(Nat/sub(Byte/to_nat(Parse/bytes/byte()!), Byte/to_nat(Parse/bytes/byte()!)));
 
         match Parse/run(parser(), /std/Str/to_bytes("BA"))
         | success(n) => /std/print(Nat/to_str(n))
@@ -86,7 +86,7 @@ fn region_mixes_action_types() {
         let is_a : (Byte) -> Bool = (b) => b == 0x41;
 
         let parser() -> Parse/Parse(Bytes, Bytes) =
-            Parse/pure(0x[..Parse/bytes/take_while(is_a)!, Parse/bytes/byte!]);
+            Parse/pure(0x[..Parse/bytes/take_while(is_a)!, Parse/bytes/byte()!]);
 
         match Parse/run(parser(), /std/Str/to_bytes("AB"))
         | success(s) =>

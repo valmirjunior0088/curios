@@ -348,7 +348,7 @@ fn a_missing_edge_between_aliased_monads_reports_them_as_written() {
     let source = r#"
         use /std/{Byte, Str, Parse};
         pub let mixed() -> Parse(Str, Byte) =
-            let b = Parse/bytes/byte!;
+            let b = Parse/bytes/byte()!;
             Parse/pure(b);
         /std/Io/pure(())
         "#;

@@ -321,7 +321,7 @@ let drive(held: List(Branch), intake: Io(List(Branch)), settled: Io(Bool)) -> Io
     end;
 
 -- A driver over a fixed set of branches.
-let nothing_more: Io(List(Branch)) =
+let nothing_more() -> Io(List(Branch)) =
     pure([]);
 
 -- Whether `f` has been filled.
@@ -336,7 +336,7 @@ let into(@A: Type, a: Io(A), f: Future(A)) -> Branch =
 pub let both(@A: Type, @B: Type, a: Io(A), b: Io(B)) -> Io({A, B}) =
     let fa = Future/new()!;
     let fb = Future/new()!;
-    let () = drive([into(a, fa), into(b, fb)], nothing_more, pure(false))!;
+    let () = drive([into(a, fa), into(b, fb)], nothing_more(), pure(false))!;
     let x = Future/wait(fa)!;
     let y = Future/wait(fb)!;
     pure((x, y));
@@ -367,7 +367,7 @@ pub let all(@A: Type, actions: List(Io(A))) -> Io(Vec(A, List/length(actions))) 
     let () =
         drive(
             List/map(pairs.list, (p: {Io(A), Future(A)}) => into(p.0, p.1)),
-            nothing_more,
+            nothing_more(),
             pure(false))!;
     let answers = awaited(List/map(pairs.list, (p: {Io(A), Future(A)}) => p.1))!;
     pure(Vec { list = answers.list });
@@ -377,7 +377,7 @@ pub let all(@A: Type, actions: List(Io(A))) -> Io(Vec(A, List/length(actions))) 
 --- Every action of `/std` cancelled where it waits has lost nothing: what it took before it waited is answered already or kept where the drop cannot reach it, so a take, a read, a join, a `Future`'s wait, a sleep, a `write`, a `copy` and a `Reader`'s reads can be dropped and run again without loss. A write takes its whole message before it waits, which the stream then holds and hands on whole; a reader keeps what it read ahead in itself. Keep what must not be lost as the last step of its action, and do what follows after `select` answers. An action of your own that holds something across a wait of its own keeps it where a drop cannot lose it: in a `Box` before it waits, as `Io/Reader` keeps the bytes it read ahead, or in a release deferred to its scope, which is told the scope was `cancelled`.
 pub let select(@A: Type, actions: List(Io(A))) -> Io(A) =
     let won: Future(A) = Future/new()!;
-    let () = drive(List/map(actions, (a: Io(A)) => into(a, won)), nothing_more, answered(won))!;
+    let () = drive(List/map(actions, (a: Io(A)) => into(a, won)), nothing_more(), answered(won))!;
     Future/wait(won);
 
 --- `a`'s answer, or `none` where `d` passes first, `a` then cancelled where it waits: a `select` against a sleep. An answer that lands after `d` is dropped, which is what a timeout means.

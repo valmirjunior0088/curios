@@ -7,42 +7,42 @@ use /std/Toml/keys/{key_dotted};
 use /std/Toml/numbers/{flt_number, flt_special, int_value};
 use /std/Toml/date_time/{date_time_value};
 
-let str_basic_value: Parse(Str, Toml) =
-    Parse/map(Parse/or(str_ml_basic(), str_basic), (s) => Toml/str(s));
+let str_basic_value() -> Parse(Str, Toml) =
+    Parse/map(Parse/or(str_ml_basic(), str_basic()), (s) => Toml/str(s));
 
-let str_literal_value: Parse(Str, Toml) =
-    Parse/map(Parse/or(str_ml_literal(), str_literal), (s) => Toml/str(s));
+let str_literal_value() -> Parse(Str, Toml) =
+    Parse/map(Parse/or(str_ml_literal(), str_literal()), (s) => Toml/str(s));
 
-let true_value: Parse(Str, Toml) =
+let true_value() -> Parse(Str, Toml) =
     Parse/map(Parse/str/literal("true"), (()) => Toml/bool(true));
 
-let false_value: Parse(Str, Toml) =
+let false_value() -> Parse(Str, Toml) =
     Parse/map(Parse/str/literal("false"), (()) => Toml/bool(false));
 
-let signed_number_value: Parse(Str, Toml) =
+let signed_number_value() -> Parse(Str, Toml) =
     Parse/or(flt_number(), Parse/or(int_value(), flt_special()));
 
-let special_value: Parse(Str, Toml) =
+let special_value() -> Parse(Str, Toml) =
     Parse/label(flt_special(), "expected value");
 
-let digit_led_value: Parse(Str, Toml) =
-    Parse/or(date_time_value, Parse/or(flt_number(), int_value()));
+let digit_led_value() -> Parse(Str, Toml) =
+    Parse/or(date_time_value(), Parse/or(flt_number(), int_value()));
 
 let inline_comma() -> Parse(Str, {}) =
     let _ = Parse/str/expect(',')!;
-    ws;
+    ws();
 
 let array_value() -> Parse(Str, Toml) =
     let _ = Parse/label(Parse/str/expect('['), "expected array")!;
     array_items([])
 and array_items(acc: List(Toml)) -> Parse(Str, Toml) =
-    let () = trivia!;
+    let () = trivia()!;
     let closed = Parse/optional(Parse/str/expect(']'))!;
     match closed
     | some(_) => Parse/pure(Toml/arr(acc))
     | none() =>
         let v = value()!;
-        let () = trivia!;
+        let () = trivia()!;
         let acc2 = [..acc, v];
         let comma = Parse/optional(Parse/str/expect(','))!;
         match comma
@@ -57,7 +57,7 @@ and array_items(acc: List(Toml)) -> Parse(Str, Toml) =
     end
 and inline_table_value() -> Parse(Str, Toml) =
     let _ = Parse/label(Parse/str/expect('{'), "expected inline table")!;
-    let () = ws!;
+    let () = ws()!;
     let empty = Parse/optional(Parse/str/expect('}'))!;
     match empty
     | some(_) => Parse/pure(Toml/table(Map/empty()))
@@ -70,27 +70,27 @@ and inline_table_value() -> Parse(Str, Toml) =
         end
     end
 and inline_pair() -> Parse(Str, {List(Str), Toml}) =
-    let path = key_dotted!;
-    let () = ws!;
+    let path = key_dotted()!;
+    let () = ws()!;
     let _ = Parse/label(Parse/str/expect('='), "expected '=' in inline table")!;
-    let () = ws!;
+    let () = ws()!;
     let v = value()!;
-    let () = ws!;
+    let () = ws()!;
     Parse/pure((path, v))
 pub and value() -> Parse(Str, Toml) =
-    let next = Parse/str/peek!;
+    let next = Parse/str/peek()!;
     match next
     | none() => Parse/fail("expected value")
     | some(c) =>
         match c
-        | '"' => str_basic_value
-        | '\'' => str_literal_value
-        | 't' => true_value
-        | 'f' => false_value
+        | '"' => str_basic_value()
+        | '\'' => str_literal_value()
+        | 't' => true_value()
+        | 'f' => false_value()
         | '[' => array_value()
         | '{' => inline_table_value()
-        | '+' | '-' => signed_number_value
-        | 'i' | 'n' => special_value
-        | _ => digit_led_value
+        | '+' | '-' => signed_number_value()
+        | 'i' | 'n' => special_value()
+        | _ => digit_led_value()
         end
     end;

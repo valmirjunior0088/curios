@@ -8,7 +8,7 @@ let pair() -> Parse(Str, {Str, Str}) =
     let word = Parse/str/take_while((c) => Char/to_nat(c) != 32)!;
     let _ = Parse/str/expect(' ')!;
     let () = Parse/str/literal("wö")!;
-    let rest = Parse/str/rest!;
+    let rest = Parse/str/rest()!;
     let () = Parse/eof()!;
     Parse/pure((word, rest));
 
@@ -25,13 +25,13 @@ test a_text_refusal_is_at_a_byte_offset =
         "expected \"wö\" at byte 7");
 
 let two() -> Parse(Str, {Char, Char}) =
-    let a = Parse/str/char!;
-    let b = Parse/str/char!;
+    let a = Parse/str/char()!;
+    let b = Parse/str/char()!;
     Parse/pure((a, b));
 
 let peeked() -> Parse(Str, Str) =
-    let first = Parse/str/peek!;
-    let taken = Parse/str/char!;
+    let first = Parse/str/peek()!;
+    let taken = Parse/str/char()!;
     Parse/pure(
         Str/concat(
             match first | some(c) => Str/of_char(c) | none() => "none" end,
@@ -67,10 +67,10 @@ test a_bytes_literal_is_read_byte_by_byte =
             shown(Parse/run(Parse/bytes/literal("ab"), 0x['a']), (()) => "ok"),
             "expected \"ab\" at byte 0")]);
 
-let digit: Parse(Str, Char) =
+let digit() -> Parse(Str, Char) =
     Parse/label(Parse/str/char_if(Char/is_ascii_digit), "expected a digit");
 
-let comma: Parse(Str, {}) =
+let comma() -> Parse(Str, {}) =
     Parse/str/literal(",");
 
 let whole(list: Parse(Str, List(Char))) -> Parse(Str, Str) =
@@ -85,24 +85,24 @@ let read(list: Parse(Str, List(Char)), input: Str) -> Str =
 test a_separator_owes_the_element_after_it =
     Test/equal(
         Str/join("|", [
-            read(Parse/sep_by0(digit, comma), "1,2"),
-            read(Parse/sep_by0(digit, comma), ""),
-            read(Parse/sep_by0(digit, comma), "1,2,"),
-            read(Parse/sep_by0_trailing(digit, comma), "1,2,"),
-            read(Parse/sep_by0_trailing(digit, comma), ""),
-            read(Parse/sep_by1(digit, comma), ""),
-            read(Parse/sep_by1_trailing(digit, comma), "1,"),
-            read(Parse/sep_by1_trailing(digit, comma), ",")]),
+            read(Parse/sep_by0(digit(), comma()), "1,2"),
+            read(Parse/sep_by0(digit(), comma()), ""),
+            read(Parse/sep_by0(digit(), comma()), "1,2,"),
+            read(Parse/sep_by0_trailing(digit(), comma()), "1,2,"),
+            read(Parse/sep_by0_trailing(digit(), comma()), ""),
+            read(Parse/sep_by1(digit(), comma()), ""),
+            read(Parse/sep_by1_trailing(digit(), comma()), "1,"),
+            read(Parse/sep_by1_trailing(digit(), comma()), ",")]),
         "[12]|[]|expected a digit at byte 4|[12]|[]|expected a digit at byte 0|[1]|expected a digit at byte 0");
 
 -- `many1` owes its first value where `many0` answers an empty list.
 test many1_owes_its_first_value =
     Test/equal(
         Str/join("|", [
-            read(Parse/many0(digit), "12"),
-            read(Parse/many0(digit), ""),
-            read(Parse/many1(digit), "12"),
-            read(Parse/many1(digit), "")]),
+            read(Parse/many0(digit()), "12"),
+            read(Parse/many0(digit()), ""),
+            read(Parse/many1(digit()), "12"),
+            read(Parse/many1(digit()), "")]),
         "[12]|[]|[12]|expected a digit at byte 0");
 
 -- Of two alternatives that decline at one offset, the first's refusal is reported: it is the reading the choice led with.
@@ -115,7 +115,7 @@ test or_reports_the_first_refusal_on_a_tie =
 
 let cut(lit: Str) -> Parse(Str, {Str, Str}) =
     let before = Parse/str/until(lit)!;
-    let rest = Parse/str/rest!;
+    let rest = Parse/str/rest()!;
     Parse/pure((before, rest));
 
 -- `until` answers the piece of the input before a literal's next occurrence and leaves the literal unread, with multi-byte characters on either side of it. Where the literal does not occur it answers all that is left, and an occurrence where the parser stands is an empty piece.
@@ -131,7 +131,7 @@ test until_reads_the_piece_before_a_literal =
         "é → ü|-->𝄞 / no end -- > here| / |→x / |");
 
 let one_byte() -> Parse(Bytes, Byte) =
-    let b = Parse/bytes/byte!;
+    let b = Parse/bytes/byte()!;
     let () = Parse/eof()!;
     Parse/pure(b);
 

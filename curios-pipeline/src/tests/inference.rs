@@ -297,7 +297,7 @@ fn continuation_postpones_until_the_result_type_pins_its_codomain() {
         use /std/{Bytes, Parse};
         use /std/{Byte};
         let pair() -> Parse(Bytes, { Byte, Byte }) =
-            let x = Parse/bytes/byte!;
+            let x = Parse/bytes/byte()!;
             Parse/pure((x, x));
         /std/Io/pure(())
     "#;
@@ -308,7 +308,7 @@ fn continuation_postpones_until_the_result_type_pins_its_codomain() {
     let unpinned = r#"
         use /std/{Parse};
         let bad = () =>
-            let x = Parse/bytes/byte!;
+            let x = Parse/bytes/byte()!;
             Parse/pure((x, x));
         /std/Io/pure(())
     "#;

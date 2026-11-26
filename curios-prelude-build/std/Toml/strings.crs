@@ -1,13 +1,13 @@
 use /std/{Nat, Bool, Char, Str, Option, Parse};
 
 let hex_digit() -> Parse(Str, Nat) =
-    let next = Parse/str/peek!;
+    let next = Parse/str/peek()!;
     match next
     | none() => Parse/fail("unterminated escape")
     | some(c) =>
         match Char/of_hex_digit(c)
         | some(v) =>
-            let _ = Parse/str/char!;
+            let _ = Parse/str/char()!;
             Parse/pure(v)
         | none() => Parse/fail("invalid hex digit in escape")
         end
@@ -30,11 +30,11 @@ let scalar(code: Nat) -> Parse(Str, Str) =
 
 --- What follows a backslash: the character the escape names.
 let escape() -> Parse(Str, Str) =
-    let next = Parse/str/peek!;
+    let next = Parse/str/peek()!;
     match next
     | none() => Parse/fail("unterminated escape")
     | some(c) =>
-        let _ = Parse/str/char!;
+        let _ = Parse/str/char()!;
         match c
         | 'b' => Parse/pure("\u{8}")
         | 't' => Parse/pure("\t")
@@ -53,7 +53,7 @@ let escape() -> Parse(Str, Str) =
         end
     end;
 
-let crlf: Parse(Str, Option({Char, Char})) =
+let crlf() -> Parse(Str, Option({Char, Char})) =
     Parse/optional(Parse/and(Parse/str/expect('\r'), Parse/str/expect('\n')));
 
 --- Whether `c` stands in a string as written whatever delimits it: a tab, or any character that is no control character.
@@ -65,16 +65,16 @@ let is_text(c: Char) -> Bool =
 let basic_body(acc: Str) -> Parse(Str, Str) =
     let run = Parse/str/take_while((c) => is_text(c) && c != '"' && c != '\\')!;
     let here = Str/concat(acc, run);
-    let next = Parse/str/peek!;
+    let next = Parse/str/peek()!;
     match next
     | none() => Parse/fail("unterminated string")
     | some(c) =>
         match c
         | '"' =>
-            let _ = Parse/str/char!;
+            let _ = Parse/str/char()!;
             Parse/pure(here)
         | '\\' =>
-            let _ = Parse/str/char!;
+            let _ = Parse/str/char()!;
             let piece = escape()!;
             basic_body(Str/concat(here, piece))
         | _ => Parse/fail("control character in string")
@@ -88,13 +88,13 @@ let basic_str_scan() -> Parse(Str, Str) =
 --- A literal string's body: the piece of the input up to the closing quote, taken as written.
 let literal_body() -> Parse(Str, Str) =
     let run = Parse/str/take_while((c) => is_text(c) && c != '\'')!;
-    let next = Parse/str/peek!;
+    let next = Parse/str/peek()!;
     match next
     | none() => Parse/fail("unterminated string")
     | some(c) =>
         match c == '\''
         | true =>
-            let _ = Parse/str/char!;
+            let _ = Parse/str/char()!;
             Parse/pure(run)
         | false => Parse/fail("control character in string")
         end
@@ -110,19 +110,19 @@ let trim_run(seen_nl: Bool) -> Parse(Str, {}) =
         | true => Parse/pure(())
         | false => Parse/fail("invalid escape")
         end;
-    let next = Parse/str/peek!;
+    let next = Parse/str/peek()!;
     match next
     | none() => stop
     | some(c) =>
         match c
         | ' ' | '\t' =>
-            let _ = Parse/str/char!;
+            let _ = Parse/str/char()!;
             trim_run(seen_nl)
         | '\n' =>
-            let _ = Parse/str/char!;
+            let _ = Parse/str/char()!;
             trim_run(true)
         | '\r' =>
-            let pair = crlf!;
+            let pair = crlf()!;
             match pair
             | some(_) => trim_run(true)
             | none() => Parse/fail("bare carriage return")
@@ -136,7 +136,7 @@ let skip_opening_newline() -> Parse(Str, {}) =
     match lf
     | some(_) => Parse/pure(())
     | none() =>
-        let _ = crlf!;
+        let _ = crlf()!;
         Parse/pure(())
     end;
 
@@ -154,7 +154,7 @@ let quote_run(quote: Char, acc: Str) -> Parse(Str, {Str, Bool}) =
 let ml_basic_body(acc: Str) -> Parse(Str, Str) =
     let run = Parse/str/take_while((c) => is_text(c) && c != '"' && c != '\\')!;
     let here = Str/concat(acc, run);
-    let next = Parse/str/peek!;
+    let next = Parse/str/peek()!;
     match next
     | none() => Parse/fail("unterminated string")
     | some(c) =>
@@ -166,8 +166,8 @@ let ml_basic_body(acc: Str) -> Parse(Str, Str) =
             | false => ml_basic_body(kept)
             end
         | '\\' =>
-            let _ = Parse/str/char!;
-            let folded = Parse/str/peek!;
+            let _ = Parse/str/char()!;
+            let folded = Parse/str/peek()!;
             match folded
             | some(w), w == ' ' || w == '\t' || w == '\n' || w == '\r' =>
                 let () = trim_run(false)!;
@@ -177,10 +177,10 @@ let ml_basic_body(acc: Str) -> Parse(Str, Str) =
                 ml_basic_body(Str/concat(here, piece))
             end
         | '\n' =>
-            let _ = Parse/str/char!;
+            let _ = Parse/str/char()!;
             ml_basic_body(Str/concat(here, "\n"))
         | '\r' =>
-            let pair = crlf!;
+            let pair = crlf()!;
             match pair
             | some(_) => ml_basic_body(Str/concat(here, "\r\n"))
             | none() => Parse/fail("bare carriage return")
@@ -192,7 +192,7 @@ let ml_basic_body(acc: Str) -> Parse(Str, Str) =
 let ml_literal_body(acc: Str) -> Parse(Str, Str) =
     let run = Parse/str/take_while((c) => is_text(c) && c != '\'')!;
     let here = Str/concat(acc, run);
-    let next = Parse/str/peek!;
+    let next = Parse/str/peek()!;
     match next
     | none() => Parse/fail("unterminated string")
     | some(c) =>
@@ -204,10 +204,10 @@ let ml_literal_body(acc: Str) -> Parse(Str, Str) =
             | false => ml_literal_body(kept)
             end
         | '\n' =>
-            let _ = Parse/str/char!;
+            let _ = Parse/str/char()!;
             ml_literal_body(Str/concat(here, "\n"))
         | '\r' =>
-            let pair = crlf!;
+            let pair = crlf()!;
             match pair
             | some(_) => ml_literal_body(Str/concat(here, "\r\n"))
             | none() => Parse/fail("bare carriage return")
@@ -217,11 +217,11 @@ let ml_literal_body(acc: Str) -> Parse(Str, Str) =
     end;
 
 --- A basic string, delimited by `"`, with its escapes resolved.
-pub let str_basic: Parse(Str, Str) =
+pub let str_basic() -> Parse(Str, Str) =
     basic_str_scan();
 
 --- A literal string, delimited by `'`, taken as written.
-pub let str_literal: Parse(Str, Str) =
+pub let str_literal() -> Parse(Str, Str) =
     literal_str_scan();
 
 --- A multi-line basic string, delimited by `"""`, with its escapes resolved and the opening line break dropped.

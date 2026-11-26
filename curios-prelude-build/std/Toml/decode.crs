@@ -12,19 +12,19 @@ induct Stmt: Type
 end
 
 let key_path(acc: List(Str)) -> Parse(Str, List(Str)) =
-    let k = key_part!;
-    let () = ws!;
+    let k = key_part()!;
+    let () = ws()!;
     let acc2 = [..acc, k];
     let dot = Parse/optional(Parse/str/expect('.'))!;
     match dot
     | some(_) =>
-        let () = ws!;
+        let () = ws()!;
         key_path(acc2)
     | none() => Parse/pure(acc2)
     end;
 
 let header(double: Bool) -> Parse(Str, List(Str)) =
-    let () = ws!;
+    let () = ws()!;
     let path = key_path([])!;
     let _ = Parse/label(Parse/str/expect(']'), "expected ']' in table header")!;
     match double
@@ -40,7 +40,7 @@ let stmt() -> Parse(Str, Stmt) =
     | none() =>
         let path = key_path([])!;
         let _ = Parse/label(Parse/str/expect('='), "expected '=' after key")!;
-        let () = ws!;
+        let () = ws()!;
         let parsed = value()!;
         Parse/pure(Stmt/assign(path, parsed))
     | some(_) =>
@@ -56,7 +56,7 @@ let stmt() -> Parse(Str, Stmt) =
     end;
 
 let stmts(acc: List(Stmt)) -> Parse(Str, List(Stmt)) =
-    let () = trivia!;
+    let () = trivia()!;
     let done = Parse/optional(Parse/eof())!;
     match done
     | some(()) => Parse/pure(acc)

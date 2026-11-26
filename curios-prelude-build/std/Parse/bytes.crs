@@ -17,7 +17,7 @@ let step(
     At { offset = at.offset + 1, holds = ok };
 
 --- The next byte; declines at the end of the input.
-pub let byte: Parse(Bytes, Byte) =
+pub let byte() -> Parse(Bytes, Byte) =
     Of {
         run(input, at) =
             match Bool/holds(at.offset < Bytes/length(input))
@@ -27,14 +27,16 @@ pub let byte: Parse(Bytes, Byte) =
 
 --- The next byte when `pred` accepts it; declines otherwise, consuming nothing.
 pub let byte_if(pred: (Byte) -> Bool) -> Parse(Bytes, Byte) =
-    Parse/bind(byte, (b) =>
-        match pred(b)
-        | true => Parse/pure(b)
-        | false => Parse/fail("unexpected byte")
-        end);
+    Parse/bind(
+        byte(),
+        (b) =>
+            match pred(b)
+            | true => Parse/pure(b)
+            | false => Parse/fail("unexpected byte")
+            end);
 
 --- The next byte without consuming it; declines at the end of the input.
-pub let peek_byte: Parse(Bytes, Byte) =
+pub let peek_byte() -> Parse(Bytes, Byte) =
     Of {
         run(input, at) =
             match Bool/holds(at.offset < Bytes/length(input))
@@ -43,8 +45,8 @@ pub let peek_byte: Parse(Bytes, Byte) =
             end };
 
 --- The next byte without consuming it, or `none` at the end of the input.
-pub let peek: Parse(Bytes, Option(Byte)) =
-    Parse/or(Parse/map(peek_byte, (b) => Option/some(b)), Parse/pure(Option/none()));
+pub let peek() -> Parse(Bytes, Option(Byte)) =
+    Parse/or(Parse/map(peek_byte(), (b) => Option/some(b)), Parse/pure(Option/none()));
 
 let byte_spelling(b: Byte) -> Str =
     let numbered = Str/concat("byte ", Nat/to_str(Byte/to_nat(b)));
@@ -123,7 +125,7 @@ pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes, Bytes) =
                 Bytes/slice(input, at.offset, taken))) };
 
 --- Everything from the current position to the end of the input.
-pub let rest: Parse(Bytes, Bytes) =
+pub let rest() -> Parse(Bytes, Bytes) =
     Of {
         run(input, at) =
             Result/success((
@@ -139,5 +141,5 @@ pub let take(n: Nat) -> Parse(Bytes, Bytes) =
                 Result/success((
                     At { offset = at.offset + n, holds = within },
                     Bytes/slice(input, at.offset, n, @within)))
-            | none() => rest.run(input, at)
+            | none() => rest().run(input, at)
             end };

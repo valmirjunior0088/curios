@@ -15,7 +15,7 @@ let is_comment_char(c: Char) -> Bool =
     n == '\t' || Nat/in_range(n, ' ', '~') || n >= 0x80;
 
 --- Spaces and tabs, as many as there are.
-pub let ws: Parse(Str, {}) =
+pub let ws() -> Parse(Str, {}) =
     Parse/map(Parse/str/take_while(is_ws_char), (_) => ());
 
 let comment() -> Parse(Str, {}) =
@@ -23,24 +23,24 @@ let comment() -> Parse(Str, {}) =
     Parse/map(Parse/str/take_while(is_comment_char), (_) => ());
 
 --- One line break, either `\r\n` or a bare `\n`.
-pub let newline: Parse(Str, {}) =
+pub let newline() -> Parse(Str, {}) =
     Parse/or(
         Parse/map(Parse/and(Parse/str/expect('\r'), Parse/str/expect('\n')), (_) => ()),
         Parse/map(Parse/str/expect('\n'), (_) => ()));
 
 --- Whitespace, line breaks and comments, as much as there is: what may sit between two items.
-pub let trivia: Parse(Str, {}) =
+pub let trivia() -> Parse(Str, {}) =
     Parse/map(
         Parse/many0(
             Parse/or(
                 Parse/map(Parse/str/expect(' '), (_) => ()),
                 Parse/or(
                     Parse/map(Parse/str/expect('\t'), (_) => ()),
-                    Parse/or(newline, comment())))),
+                    Parse/or(newline(), comment())))),
         (_) => ());
 
 --- The end of a line: trailing whitespace, an optional comment, then a line break or the end of the input.
 pub let line_end() -> Parse(Str, {}) =
-    let () = ws!;
+    let () = ws()!;
     let () = Parse/or(comment(), Parse/pure(()))!;
-    Parse/label(Parse/or(newline, Parse/eof()), "expected end of line");
+    Parse/label(Parse/or(newline(), Parse/eof()), "expected end of line");

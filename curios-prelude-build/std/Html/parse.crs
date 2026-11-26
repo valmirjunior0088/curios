@@ -4,7 +4,7 @@ use /std/Html/{Attr};
 let is_ws(c: Char) -> Bool =
     match c | ' ' | '\t' | '\n' | '\r' | '\u{C}' => true | _ => false end;
 
-let ws: Parse(Str, {}) =
+let ws() -> Parse(Str, {}) =
     Parse/map(Parse/str/take_while(is_ws), (_) => ());
 
 let is_name_char(c: Char) -> Bool =
@@ -12,7 +12,7 @@ let is_name_char(c: Char) -> Bool =
     Bool/not(is_ws(c) || n == '<' || n == '>' || n == '/' || n == '=' || n == '"' || n == '\'');
 
 --- A tag or attribute name: everything up to whitespace or a delimiter, empty when there is none.
-let name: Parse(Str, Str) =
+let name() -> Parse(Str, Str) =
     Parse/str/take_while(is_name_char);
 
 --- Everything before the next `stop`, or to the end of the input.
@@ -83,19 +83,19 @@ let quoted(quote: Char) -> Parse(Str, Str) =
     let _ = Parse/optional(Parse/str/expect(quote))!;
     Parse/pure(value);
 
-let unquoted: Parse(Str, Str) =
+let unquoted() -> Parse(Str, Str) =
     Parse/str/take_while((c) => Bool/not(is_ws(c) || c == '>'));
 
 let attr_value() -> Parse(Str, Str) =
-    let () = ws!;
+    let () = ws()!;
     let _ = Parse/str/expect('=')!;
-    let () = ws!;
-    Parse/or(quoted('"'), Parse/or(quoted('\''), unquoted));
+    let () = ws()!;
+    Parse/or(quoted('"'), Parse/or(quoted('\''), unquoted()));
 
 --- One attribute: a name, then `=` and a value, quoted or bare, when there is one. Declines at anything but a name, which ends the run.
 let attribute() -> Parse(Str, Attr) =
-    let () = ws!;
-    let n = name!;
+    let () = ws()!;
+    let n = name()!;
     match Str/is_empty(n)
     | true => Parse/fail("an attribute has a name")
     | false =>
@@ -109,8 +109,8 @@ let attribute() -> Parse(Str, Attr) =
 
 let close_tag() -> Parse(Str, {}) =
     let () = Parse/str/literal("</")!;
-    let _ = name!;
-    let () = ws!;
+    let _ = name()!;
+    let () = ws()!;
     let _ = Parse/optional(Parse/str/expect('>'))!;
     Parse/pure(());
 
@@ -131,17 +131,17 @@ let text_run() -> Parse(Str, Html) =
     let chunk = until_char('<')!;
     Parse/pure(Html/text(unescape(chunk)));
 
-let lone_bracket: Parse(Str, Html) =
-    Parse/map(Parse/str/char, (_) => Html/text("<"));
+let lone_bracket() -> Parse(Str, Html) =
+    Parse/map(Parse/str/char(), (_) => Html/text("<"));
 
 --- An element from its opening tag: one closed with `/>` is `void`; `script` and `style` hold their text as written up to their closing tag; any other holds the trees up to the next closing tag, whichever name it bears, or the end of the input — so `<br>` written without the slash holds what follows it, since no element name is consulted.
 let element() -> Parse(Str, Html) =
     let _ = Parse/str/expect('<')!;
-    let n = name!;
+    let n = name()!;
     let attrs = Parse/many0(attribute())!;
-    let () = ws!;
+    let () = ws()!;
     let closed = Parse/optional(Parse/str/expect('/'))!;
-    let () = ws!;
+    let () = ws()!;
     let _ = Parse/optional(Parse/str/expect('>'))!;
     match
     | Option/is_some(closed) => Parse/pure(Html/void(n, attrs))
@@ -155,22 +155,22 @@ let element() -> Parse(Str, Html) =
         Parse/pure(Html/element(n, attrs, children))
     end
 and tree() -> Parse(Str, Html) =
-    let next = Parse/str/peek!;
+    let next = Parse/str/peek()!;
     match next
     | none() => Parse/fail("the end of the input")
     | some(c) =>
         match c == '<'
         | false => text_run()
         | true =>
-            let (_, second) = Parse/lookahead(Parse/and(Parse/str/char, Parse/str/peek))!;
+            let (_, second) = Parse/lookahead(Parse/and(Parse/str/char(), Parse/str/peek()))!;
             match second
-            | none() => lone_bracket
+            | none() => lone_bracket()
             | some(after) =>
                 match after
                 | '/' => Parse/fail("a closing tag")
                 | '!' => Parse/or(comment(), declaration())
                 | _, is_name_char(after) => element()
-                | _ => lone_bracket
+                | _ => lone_bracket()
                 end
             end
         end
@@ -178,7 +178,7 @@ and tree() -> Parse(Str, Html) =
 and trees: Parse(Str, List(Html)) =
     Parse/many0(tree());
 
-let stray_close: Parse(Str, Html) =
+let stray_close() -> Parse(Str, Html) =
     Parse/map(close_tag(), (()) => Html/fragment([]));
 
 let is_empty_fragment(h: Html) -> Bool =
@@ -188,7 +188,7 @@ let is_empty_fragment(h: Html) -> Bool =
     end;
 
 let content() -> Parse(Str, Html) =
-    let all = Parse/many0(Parse/or(tree(), stray_close))!;
+    let all = Parse/many0(Parse/or(tree(), stray_close()))!;
     let () = Parse/eof()!;
     let read = List/filter(all, (n) => Bool/not(is_empty_fragment(n)));
     Parse/pure(match read | [one] => one | _ => Html/fragment(read) end);

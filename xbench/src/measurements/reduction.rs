@@ -339,8 +339,8 @@ pub fn combinator_web_cost_measurements() {
 /// A program whose claim is how many bytes of `input` are `left` once `parser` has read it, read back by the carrier's `rest` and stated over a declaration bound to the read, so no member is left to inference. A claim over the success alone counts no walk where a primitive answers its success before its walk is run, as one that builds its position where its walk stops does.
 fn primitive_claim(carrier: &str, parser: &str, input: &str, left: usize) -> String {
     let (rest, length) = match carrier {
-        "Str" => ("Parse/str/rest", "Bytes/length(Str/to_bytes(tail))"),
-        _ => ("Parse/bytes/rest", "Bytes/length(tail)"),
+        "Str" => ("Parse/str/rest()", "Bytes/length(Str/to_bytes(tail))"),
+        _ => ("Parse/bytes/rest()", "Bytes/length(tail)"),
     };
     fill!(
         "use /std/{Str, Bytes, Byte, Char, Nat, Parse, Result, Option, Eq};\n\nlet left(r: Result(Parse/Error, Nat)) -> Option(Nat) =\n    match r\n    | success(n) => Option/some(n)\n    | failure(_) => Option/none()\n    end;\n\nlet times(@I: Type, use Parse/Input(I), @A: Type, n: Nat, p: Parse(I, A)) -> Parse(I, {}) =\n    match n\n    | 0 => Parse/pure(())\n    | k + 1 =>\n        let _ = p!;\n        times(k, p)\n    end;\n\nlet reader() -> Parse(${carrier}, Nat) =\n    let _ = ${parser}!;\n    let tail = ${rest}!;\n    Parse/pure(${length});\n\nlet read: Result(Parse/Error, Nat) = Parse/run(reader(), ${input});\n\nlet _claim: Eq()(left(read), Option/some(${left})) = Eq/refl();\n\n/std/print(\"ok\")\n",
@@ -377,8 +377,8 @@ pub fn parse_primitive_measurements() {
         ),
         (
             "char, byte",
-            "times(32, Parse/str/char)".to_string(),
-            Some("times(32, Parse/bytes/byte)".to_string()),
+            "times(32, Parse/str/char())".to_string(),
+            Some("times(32, Parse/bytes/byte())".to_string()),
         ),
         (
             "char_if, byte_if",
@@ -392,8 +392,8 @@ pub fn parse_primitive_measurements() {
         ),
         (
             "rest",
-            "Parse/str/rest".to_string(),
-            Some("Parse/bytes/rest".to_string()),
+            "Parse/str/rest()".to_string(),
+            Some("Parse/bytes/rest()".to_string()),
         ),
         ("until", "Parse/str/until(\"b\")".to_string(), None),
     ];

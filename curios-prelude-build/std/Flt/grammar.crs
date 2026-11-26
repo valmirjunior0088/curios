@@ -69,11 +69,11 @@ pub let sign() -> Parse(Str, Bool) =
     Parse/pure(match written | some(c) => c == '-' | none() => false end);
 
 --- A run of decimal digits, possibly empty.
-pub let decimal_run: Parse(Str, Str) =
+pub let decimal_run() -> Parse(Str, Str) =
     Parse/str/take_while(Char/is_ascii_digit);
 
 --- A run of hex digits in either case, possibly empty.
-pub let hex_run: Parse(Str, Str) =
+pub let hex_run() -> Parse(Str, Str) =
     Parse/str/take_while((c) => Option/is_some(Char/of_hex_digit(c)));
 
 --- `0x`, in either case.
@@ -89,7 +89,7 @@ pub let exponent_after(lower: Char, upper: Char) -> Parse(Str, Int) =
     | none() => Parse/pure(+0)
     | some(_) =>
         let negative = sign()!;
-        let run = decimal_run!;
+        let run = decimal_run()!;
         match Str/is_empty(run)
         | true => Parse/fail("expected an exponent")
         | false =>
@@ -110,7 +110,7 @@ pub let nan_payload(signaling: Bool) -> Parse(Str, Nat) =
     | none() => Parse/pure(match signaling | true => 1 | false => 0 end)
     | some(_) =>
         let () = hex_mark()!;
-        let run = hex_run!;
+        let run = hex_run()!;
         let _ = Parse/str/expect(')')!;
         match hex_value(run)
         | some(payload) => Parse/pure(payload)
@@ -147,8 +147,8 @@ pub let special(negative: Bool) -> Parse(Str, Flt) =
 --- Hex text after its sign, rounded once in the direction `r`: `0x`, hex digits with an optional point and at least one digit among them, and an optional `p` exponent. A nonzero significand is the exact dyadic `Dyadic/to_flt` rounds, whatever its exponent; a zero takes its sign here, since a dyadic's zero has none.
 pub let hexadecimal(r: Rounding, negative: Bool) -> Parse(Str, Flt) =
     let () = hex_mark()!;
-    let whole = hex_run!;
-    let fraction = fraction_of(hex_run)!;
+    let whole = hex_run()!;
+    let fraction = fraction_of(hex_run())!;
     let exponent = exponent_after('p', 'P')!;
     match hex_value(Str/concat(whole, fraction))
     | none() => Parse/fail("expected a hex digit")
@@ -169,8 +169,8 @@ pub let hexadecimal(r: Rounding, negative: Bool) -> Parse(Str, Flt) =
 
 --- Decimal text after its sign, rounded once in the direction `r`: digits with an optional point and at least one digit among them, and an optional `e` exponent.
 pub let decimal(r: Rounding, negative: Bool) -> Parse(Str, Flt) =
-    let whole = decimal_run!;
-    let fraction = fraction_of(decimal_run)!;
+    let whole = decimal_run()!;
+    let fraction = fraction_of(decimal_run())!;
     match Str/is_empty(whole) && Str/is_empty(fraction)
     | true => Parse/fail("expected a digit")
     | false =>

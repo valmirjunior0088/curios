@@ -31,7 +31,7 @@ pub let offset() -> Parse(Str, Offset) =
     end;
 
 --- The separator between a date and a time: `T`, or the lowercase `t` or a space §5.6 admits.
-pub let separator: Parse(Str, {}) =
+pub let separator() -> Parse(Str, {}) =
     Parse/label(
         Parse/map(Parse/str/char_if((c) => c == 'T' || c == 't' || c == ' '), (_) => ()),
         "expected T");

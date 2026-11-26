@@ -60,7 +60,7 @@ let ends_authority(next: Option(Char)) -> Bool =
 let port_number(s: Scheme) -> Parse(Str, Nat) =
     let _ = Parse/str/expect(':')!;
     let digits = Parse/str/take_while(Char/is_ascii_digit)!;
-    let next = Parse/str/peek!;
+    let next = Parse/str/peek()!;
     match
     | Bool/not(ends_authority(next)) => Parse/fail("a port is a number")
     | Str/is_empty(digits) => Parse/pure(Scheme/default_port(s))
@@ -73,7 +73,7 @@ let port_number(s: Scheme) -> Parse(Str, Nat) =
     end;
 
 let port_of(s: Scheme) -> Parse(Str, Nat) =
-    let next = Parse/str/peek!;
+    let next = Parse/str/peek()!;
     match next
     | some(c), Char/to_nat(c) == ':' => port_number(s)
     | _ => Parse/pure(Scheme/default_port(s))
@@ -94,7 +94,7 @@ let query_text() -> Parse(Str, Option(Str)) =
     Parse/pure(Option/some(s));
 
 let query() -> Parse(Str, Option(Str)) =
-    let next = Parse/str/peek!;
+    let next = Parse/str/peek()!;
     match next
     | some(c), Char/to_nat(c) == '?' => query_text()
     | _ => Parse/pure(Option/none())
@@ -107,7 +107,7 @@ let url() -> Parse(Str, Url) =
     let p = port_of(s)!;
     let pa = path()!;
     let q = query()!;
-    let _ = Parse/str/rest!;
+    let _ = Parse/str/rest()!;
     match Str/is_empty(host)
     | true => Parse/fail("a URL names a host")
     | false => Parse/pure(Url { scheme = s, host = host, port = p, path = pa, query = q })

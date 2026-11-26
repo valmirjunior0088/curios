@@ -510,13 +510,13 @@ fn a_guarded_arm_is_read_in_a_region_whose_type_holds_a_sealed_method() {
     let source = r#"
         use /std/{Char, Nat, Option, Parse, Result, Str};
         let two_guards() -> Parse(Str, Nat) =
-            let c = Parse/str/char!;
+            let c = Parse/str/char()!;
             match Option/some(Char/to_nat(c))
             | some(n), n > 50, n < 55 => Parse/pure(1)
             | _ => Parse/pure(0)
             end;
         let walked() -> Parse(Str, Nat) =
-            let c = Parse/str/char!;
+            let c = Parse/str/char()!;
             match Char/to_nat(c)
             | '/' => Parse/pure(2)
             | _, Char/is_ascii_digit(c) => Parse/pure(3)
