@@ -1,21 +1,23 @@
-description = "The compiler as it is released"
+what = "The compiler as it is released"
+# What every build of a binary as it ships hands rustc: the target directory, Cargo's home and the toolchain's root remapped, so no directory of the machine it is built on is in what it embeds. Argued, and retired at a stable `trim-paths`, by documentation/design/compilation/a-source-is-named-by-its-package-and-read-from-its-file.md.
+remapped = """CARGO_ENCODED_RUSTFLAGS=\
+    --remap-path-prefix={!cargo_target_dir}=target\u001F\
+    --remap-path-prefix={!cargo_home}=cargo\u001F\
+    --remap-path-prefix={!rust_sysroot}=rust"""
 
 [build]
-description = "Build the compiler as it is released, handing rustc the target directory, Cargo's home and the toolchain's root remapped, so no directory of the machine it is built on is in it"
+what = "Build the compiler as it is released, handing rustc the target directory, Cargo's home and the toolchain's root remapped, so no directory of the machine it is built on is in it"
 consumes = [".compiler.launcher.produces.binary"]
 produces.binary = "{!cargo_target_dir}/release/curios"
 run = [
     [
-        """CARGO_ENCODED_RUSTFLAGS=\
-            --remap-path-prefix={!cargo_target_dir}=target\u001F\
-            --remap-path-prefix={!cargo_home}=cargo\u001F\
-            --remap-path-prefix={!rust_sysroot}=rust""",
+        "{.distribution.remapped}",
         "cargo", "build", "--release", "--package", "curios", "--keep-going",
     ],
 ]
 
 [test]
-description = "Compile fixture packages for a browser with the compiler as it is released and start each page's loader under a JavaScript engine, beside the test runner's own pieces: alone runs a page the compiler wrote, its gateways answering their rows, and a test serve end to end; and hold the compiler, and an executable it writes, to holding no directory of the machine that built them"
+what = "Compile fixture packages for a browser with the compiler as it is released and start each page's loader under a JavaScript engine, beside the test runner's own pieces: alone runs a page the compiler wrote, its gateways answering their rows, and a test serve end to end; and hold the compiler, and an executable it writes, to holding no directory of the machine that built them"
 # The compiler under test is the one this file's build filed, named to the suite rather than found on PATH, where an installed one would answer instead.
 consumes = [".distribution.build.produces.binary"]
 run = [

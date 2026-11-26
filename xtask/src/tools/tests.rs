@@ -14,13 +14,10 @@ use {
 /// The tree whose root declares `tools` and whose file `a` holds one step running `run`.
 fn tree_of(tools: &str, run: &str) -> Tree {
     Tree::parse(&[
-        (
-            "xtask/tasks.toml",
-            &format!("description = \"The top\"\n{tools}"),
-        ),
+        ("xtask/tasks.toml", &format!("what = \"The top\"\n{tools}")),
         (
             "xtask/tasks/a.toml",
-            &format!("description = \"A\"\n[s]\ndescription = \"S\"\nrun = [{run}]\n"),
+            &format!("what = \"A\"\n[s]\nwhat = \"S\"\nrun = [{run}]\n"),
         ),
     ])
     .unwrap()
@@ -83,7 +80,7 @@ fn a_tool_is_kept_by_its_name_and_version() {
         artifacts().join("tools/bare-1.1")
     );
 
-    let Instruction::Command(words) = &tree.steps[0].run[0] else {
+    let Instruction::Command { words, .. } = &tree.steps[0].run[0] else {
         panic!("the step runs a command");
     };
     assert_eq!(

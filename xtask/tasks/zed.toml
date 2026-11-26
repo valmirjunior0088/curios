@@ -1,31 +1,41 @@
-description = "The Zed extension, a workspace of its own"
+what = "The Zed extension, a workspace of its own"
+
+# Each grammar `extension.toml` pins, by the revision Zed installs it from and the directory at that revision, read where the manifest states them; and the script that holds the pins to the tree.
+scripts.pins = "xtask/tasks/zed/pins.sh"
+curios_rev.read = "editors/zed/extension.toml"
+curios_rev.key = "grammars.curios.rev"
+curios_path.read = "editors/zed/extension.toml"
+curios_path.key = "grammars.curios.path"
+curios_core_rev.read = "editors/zed/extension.toml"
+curios_core_rev.key = "grammars.curios_core.rev"
+curios_core_path.read = "editors/zed/extension.toml"
+curios_core_path.key = "grammars.curios_core.path"
 
 [lint]
-description = "Hold the Zed extension's Rust to its formatting and its lints"
+what = "Hold the Zed extension's Rust to its formatting and its lints"
 
 [lint.rustfmt]
-description = "Fail on formatting drift in the Zed extension"
-dir = "editors/zed"
+what = "Fail on formatting drift in the Zed extension"
 run = [
-    ["cargo", "fmt", "--all", "--", "--check"],
+    { in = "editors/zed", do = ["cargo", "fmt", "--all", "--", "--check"] },
 ]
 
 [lint.clippy]
-description = "Lint every target of the Zed extension, for the target Zed loads"
-dir = "editors/zed"
+what = "Lint every target of the Zed extension, for the target Zed loads"
 run = [
-    ["cargo", "clippy", "--all-targets", "--target", "wasm32-wasip2"],
+    { in = "editors/zed", do = ["cargo", "clippy", "--all-targets", "--target", "wasm32-wasip2"] },
 ]
 
 [build]
-description = "Link the Zed extension into the wasm32-wasip2 component Zed loads, which the lint's check build and the test's host build never do"
-dir = "editors/zed"
+what = "Link the Zed extension into the wasm32-wasip2 component Zed loads, which the lint's check build and the test's host build never do"
 run = [
-    ["cargo", "build", "--release", "--target", "wasm32-wasip2"],
+    { in = "editors/zed", do = ["cargo", "build", "--release", "--target", "wasm32-wasip2"] },
 ]
 
 [check]
-description = "Hold the Zed extension to the tree around it: the grammar revisions it pins publish these grammars, Curios/Core's highlight query opens with the program's, and its lints are the workspace's"
-# It hashes each grammar where `extension.toml` says Zed installs it from, a path it states rather than one it is handed, after the parsers there are generated.
+what = "Hold the grammar revisions the Zed extension pins to the grammars this tree holds: each publishes, at its revision, the directory on disk"
+# The directory on disk is read after the parsers there are generated. The extension's two other copies, Curios/Core's highlight query opening with the program's and the lint table restating the workspace's, are kept equal by hand.
 consumes = [".tree-sitter.build.base.produces.parser", ".tree-sitter.build.core.produces.parser"]
-run = [{ check = "zed" }]
+run = [
+    ["sh", "{.zed.scripts.pins}", "{.zed.curios_rev}", "{.zed.curios_path}", "{.zed.curios_core_rev}", "{.zed.curios_core_path}"],
+]

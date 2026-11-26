@@ -6,7 +6,7 @@ use {super::test_support::*, super::*};
 fn a_file_is_a_group_holding_its_steps_in_order() {
     let tree = tree(&[(
         "a",
-        "description = \"A\"\n[lint]\ndescription = \"Lint\"\n[lint.second]\ndescription = \"Two\"\nrun = [[\"true\"]]\n[lint.first]\ndescription = \"One\"\nrun = [[\"true\"]]\n[test]\ndescription = \"Three\"\nrun = [[\"true\"]]\n",
+        "what = \"A\"\n[lint]\nwhat = \"Lint\"\n[lint.second]\nwhat = \"Two\"\nrun = [[\"true\"]]\n[lint.first]\nwhat = \"One\"\nrun = [[\"true\"]]\n[test]\nwhat = \"Three\"\nrun = [[\"true\"]]\n",
     )])
     .unwrap();
 
@@ -24,19 +24,17 @@ fn a_file_is_a_group_holding_its_steps_in_order() {
 
 #[test]
 fn a_key_out_of_place_at_a_file_s_top_is_refused() {
-    assert!(
-        refused(&[("a", "description = \"A\"\nrun = [[\"true\"]]\n")]).contains("out of place")
-    );
+    assert!(refused(&[("a", "what = \"A\"\nrun = [[\"true\"]]\n")]).contains("out of place"));
 }
 
 #[test]
-fn variables_below_a_file_s_top_are_refused() {
+fn a_value_below_a_file_s_top_is_refused() {
     assert!(
         refused(&[(
             "a",
-            "description = \"A\"\n[s]\ndescription = \"S\"\nvariables.x = \"y\"\nrun = [[\"true\"]]\n"
+            "what = \"A\"\n[s]\nwhat = \"S\"\nx = \"y\"\nrun = [[\"true\"]]\n"
         )])
-        .contains("belongs at a file's top")
+        .contains("a value belongs at a file's top")
     );
 }
 
@@ -45,7 +43,7 @@ fn a_table_inside_a_step_is_refused() {
     assert!(
         refused(&[(
             "a",
-            "description = \"A\"\n[s]\ndescription = \"S\"\nrun = [[\"true\"]]\n[s.t]\ndescription = \"T\"\nrun = [[\"true\"]]\n"
+            "what = \"A\"\n[s]\nwhat = \"S\"\nrun = [[\"true\"]]\n[s.t]\nwhat = \"T\"\nrun = [[\"true\"]]\n"
         )])
         .contains("a table inside a step")
     );
@@ -56,9 +54,9 @@ fn a_group_holding_anything_but_steps_and_groups_is_refused() {
     assert!(
         refused(&[(
             "a",
-            "description = \"A\"\n[g]\ndescription = \"G\"\nx = 1\n[g.s]\ndescription = \"S\"\nrun = [[\"true\"]]\n"
+            "what = \"A\"\n[g]\nwhat = \"G\"\nx = 1\n[g.s]\nwhat = \"S\"\nrun = [[\"true\"]]\n"
         )])
-        .contains("a group holds its `description` and its steps and groups")
+        .contains("a group holds its `what` and its steps and groups")
     );
 }
 
@@ -68,41 +66,20 @@ fn a_group_without_a_description_is_refused() {
     assert!(
         refused(&[(
             "a",
-            "description = \"A\"\n[g.s]\ndescription = \"S\"\nrun = [[\"true\"]]\n"
+            "what = \"A\"\n[g.s]\nwhat = \"S\"\nrun = [[\"true\"]]\n"
         )])
-        .contains("group `.a.g` has no `description`")
+        .contains("group `.a.g` has no `what`")
     );
 }
 
 #[test]
-fn a_step_without_a_description_is_refused() {
-    assert!(
-        refused(&[("a", "description = \"A\"\n[s]\nrun = [[\"true\"]]\n")])
-            .contains("has no `description`")
-    );
+fn a_step_without_its_what_is_refused() {
+    assert!(refused(&[("a", "what = \"A\"\n[s]\nrun = [[\"true\"]]\n")]).contains("has no `what`"));
 }
 
 #[test]
-fn a_file_without_a_description_is_refused() {
-    assert!(
-        refused(&[("a", "[s]\ndescription = \"S\"\nrun = [[\"true\"]]\n")])
-            .contains("has no `description`")
-    );
-}
-
-#[test]
-fn a_task_named_like_a_command_outside_the_tree_is_refused() {
-    let refusal = Tree::parse(&[(
-        ROOT_FILE,
-        "description = \"Top\"\n[release]\ndescription = \"R\"\nrun = [[\"true\"]]\n",
-    )])
-    .unwrap_err();
-
-    assert!(
-        refusal.headline.contains("outside the tree"),
-        "{}",
-        refusal.rendered(false)
-    );
+fn a_file_without_its_what_is_refused() {
+    assert!(refused(&[("a", "[s]\nwhat = \"S\"\nrun = [[\"true\"]]\n")]).contains("has no `what`"));
 }
 
 /// A refusal is drawn as what it says, the line it is about with the place marked, and the file, line and column it closes on.
@@ -110,7 +87,7 @@ fn a_task_named_like_a_command_outside_the_tree_is_refused() {
 fn a_refusal_marks_its_place_and_closes_on_its_file_line_and_column() {
     let refusal = tree(&[(
         "a",
-        "description = \"A\"\n[s]\ndescription = \"S\"\nrequires = [\".nothing\"]\n",
+        "what = \"A\"\n[s]\nwhat = \"S\"\nrequires = [\".nothing\"]\n",
     )])
     .unwrap_err()
     .rendered(false);

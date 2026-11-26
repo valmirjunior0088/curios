@@ -10,7 +10,7 @@ fn under(data: &str, step: &str) -> Result<Tree, Refusal> {
         (ROOT_FILE, &format!("{TOP}{data}")),
         (
             "xtask/tasks/a.toml",
-            &format!("description = \"A\"\n[s]\ndescription = \"S\"\n{step}\n"),
+            &format!("what = \"A\"\n[s]\nwhat = \"S\"\n{step}\n"),
         ),
     ])
 }
@@ -46,7 +46,7 @@ fn data_is_read_with_its_version_its_archive_its_directory_and_its_digest() {
         data.url.0[1],
         Piece::Value(Fill::Variable(name("data.cases.version")))
     );
-    let Instruction::Command(words) = &tree.steps[0].run[0] else {
+    let Instruction::Command { words, .. } = &tree.steps[0].run[0] else {
         panic!("the step runs a command");
     };
     assert_eq!(words[1].alone(), Some(&Fill::Data(name("data.cases"))));
@@ -93,7 +93,7 @@ fn data_below_the_root_is_refused() {
     let refusal = refused(&[(
         "a",
         &format!(
-            "description = \"A\"\n{}",
+            "what = \"A\"\n{}",
             cases("https://example.invalid/cases.tar.gz")
         ),
     )]);

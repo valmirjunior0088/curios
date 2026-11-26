@@ -2,7 +2,7 @@
 
 use super::*;
 
-pub const TOP: &str = "description = \"The top\"\n";
+pub const TOP: &str = "what = \"The top\"\n";
 
 /// The tree the files `(name, text)` of [`DIRECTORY`] make, under a top holding nothing of its own.
 pub fn tree(files: &[(&str, &str)]) -> Result<Tree, Refusal> {

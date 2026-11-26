@@ -2,7 +2,7 @@
 
 use super::*;
 
-const FILE: &str = "description = \"A\"\n[s]\nrun = [[\"{.tools.nope}\"]]\n";
+const FILE: &str = "what = \"A\"\n[s]\nrun = [[\"{.tools.nope}\"]]\n";
 
 // A refusal about a place names its line and its column from one, quotes the line and puts a caret under each character refused.
 #[test]

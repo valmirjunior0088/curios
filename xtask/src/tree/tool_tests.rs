@@ -9,11 +9,11 @@ fn with_tool(table: &str) -> Result<Tree, Refusal> {
     Tree::parse(&[
         (
             ROOT_FILE,
-            &fill!("description = \"The top\"\n[tools.t]\n${table}\n", table),
+            &fill!("what = \"The top\"\n[tools.t]\n${table}\n", table),
         ),
         (
             "xtask/tasks/a.toml",
-            "description = \"A\"\n[s]\ndescription = \"S\"\nrun = [[\"{.tools.t}\", \"go\"]]\n",
+            "what = \"A\"\n[s]\nwhat = \"S\"\nrun = [[\"{.tools.t}\", \"go\"]]\n",
         ),
     ])
 }
@@ -52,7 +52,7 @@ fn a_tool_s_url_writes_its_version_and_a_step_names_the_tool() {
             .any(|fill| *fill == Fill::Variable(name("tools.t.version")))
     );
     assert_eq!(published.sha256, DIGEST);
-    let Instruction::Command(words) = &tree.steps[0].run[0] else {
+    let Instruction::Command { words, .. } = &tree.steps[0].run[0] else {
         panic!("the step runs a command");
     };
     assert_eq!(words[0].alone(), Some(&Fill::Tool(name("tools.t"))));
@@ -140,11 +140,8 @@ fn a_tool_shipped_in_another_names_its_path_there() {
 #[test]
 fn a_tool_outside_the_root_is_refused() {
     assert!(
-        refused(&[(
-            "a",
-            &format!("description = \"A\"\n[tools.t]\n{}\n", fetched("t"))
-        )])
-        .contains("belongs at the top of `xtask/tasks.toml`")
+        refused(&[("a", &format!("what = \"A\"\n[tools.t]\n{}\n", fetched("t")))])
+            .contains("belongs at the top of `xtask/tasks.toml`")
     );
 }
 
@@ -153,7 +150,7 @@ fn tools_below_a_file_s_top_are_refused() {
     assert!(
         refused(&[(
             "a",
-            "description = \"A\"\n[s]\ndescription = \"S\"\nrun = [[\"true\"]]\ntools.t = { version = \"1\" }\n"
+            "what = \"A\"\n[s]\nwhat = \"S\"\nrun = [[\"true\"]]\ntools.t = { version = \"1\" }\n"
         )])
         .contains("belongs at the top of `xtask/tasks.toml`")
     );

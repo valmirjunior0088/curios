@@ -1,11 +1,11 @@
 //! The task files read into one tree, and every refusal reading them can make.
 //!
-//! **A file is a group, and a key's meaning is where it sits.** `xtask/tasks.toml` is the group the files in `xtask/tasks/` belong to, each a group named after its file. A file's top level holds `description`, `variables`, `given`, and its steps and groups, and the root's holds `tools` and `data` beside them; a group holds its `description` and its steps and groups; a step holds `description`, `requires`, `consumes`, `produces`, `run` and `dir`, and no table of its own. So whether a key is an attribute or a child is read off its position, and one out of place is refused rather than guessed at.
+//! **A file is a group, and a key's meaning is where it sits.** `xtask/tasks.toml` is the group the files in `xtask/tasks/` belong to, each a group named after its file. A file's top level holds `what`, its values and its steps and groups, and the root's holds `tools` and `data` beside them: a table that states its `what` is a task, and every other key a value — words, a command's output (`run`), a key of another file (`read` and `key`), or what the command line gives (`flag`, or `argument` and its `else`) — or a table of values, each named by its path, `.zed.scripts.pins`. A group holds its `what` and its steps and groups; a step holds `what`, `requires`, `consumes`, `produces` and `run`, and no table of its own. So whether a key is an attribute, a value or a child is read off where it sits, and one out of place is refused rather than guessed at.
 //!
-//! **A name is the path to where it is declared, written from the top with a leading `.`, and it names one thing.** Each segment is a key, read from the top one projection at a time: a step or a group is its tables, `.compiler.lint.clippy`; a variable sits under its file's `variables`, `.compiler.variables.edition`; a tool under the root's `tools`, `.tools.node`, and its version beneath it, `.tools.node.version`; data under the root's `data`, `.data.json`; and a produced file under its step's `produces`, `.compiler.launcher.produces.binary`. So a name reads the same wherever it is written, and says where to find what it names. `requires` names steps and groups, `consumes` produced files, and the braces in a command a variable, a tool, data or a produced file, or, with a `!` where the `.` stands, a value the runner fills ([`BUILT_INS`]). Each resolves as the tree is read, so a name that names nothing, one written without its `.`, or one naming the wrong kind of thing, is refused before anything runs, and so is a command that reads a file its step does not consume, which would run without the edge that orders it.
+//! **A name is the path to where it is declared, written from the top with a leading `.`, and it names one thing.** Each segment is a key, read from the top one projection at a time: a step or a group is its tables, `.compiler.lint.clippy`; a value sits at its file's top, `.compiler.edition`; a tool under the root's `tools`, `.tools.node`, and its version beneath it, `.tools.node.version`; data under the root's `data`, `.data.json`; and a produced file under its step's `produces`, `.compiler.launcher.produces.binary`. So a name reads the same wherever it is written, and says where to find what it names. `requires` names steps and groups, `consumes` produced files, and the braces in a command a variable, a tool, data or a produced file, or, with a `!` where the `.` stands, a value the runner fills ([`BUILT_INS`]). Each resolves as the tree is read, so a name that names nothing, one written without its `.`, or one naming the wrong kind of thing, is refused before anything runs, and so is a command that reads a file its step does not consume, which would run without the edge that orders it.
 
 use {
-    crate::{CHECKS, Check, Refusal, root},
+    crate::{Refusal, root},
     std::{
         collections::{BTreeMap, BTreeSet},
         fs,
@@ -34,9 +34,6 @@ const ROOT_FILE: &str = "xtask/tasks.toml";
 /// The directory whose files are the top's groups, each named after its file.
 const DIRECTORY: &str = "xtask/tasks";
 
-/// The words `cargo xtask` keeps for its commands outside the tree, which no task may take.
-pub const COMMANDS: [&str; 2] = ["release", "installer"];
-
 /// The values the runner fills, which no file declares: each written after a `!` in a brace, `{!host_triple}`, named as Cargo and `rustc` name what it holds.
 const BUILT_INS: [&str; 4] = [
     "host_triple",
@@ -46,14 +43,7 @@ const BUILT_INS: [&str; 4] = [
 ];
 
 /// The keys a step may hold.
-const STEP_KEYS: [&str; 6] = [
-    "description",
-    "requires",
-    "consumes",
-    "produces",
-    "run",
-    "dir",
-];
+const STEP_KEYS: [&str; 5] = ["what", "requires", "consumes", "produces", "run"];
 
 /// What names a task, a variable or a produced file: its words from the top, as the command line spells a task.
 pub type Name = Vec<String>;
@@ -90,7 +80,7 @@ pub struct Tree {
 
 #[derive(Debug)]
 pub struct Group {
-    /// What the group is for, as it states it: a file's at its top, a group's inside a file under its own `description`.
+    /// What the group is for, as it states it: a file's at its top, a group's inside a file under its own `what`.
     pub description: String,
     /// The groups and steps directly inside it, in order.
     pub children: Vec<Name>,
@@ -110,35 +100,46 @@ pub struct Step {
     pub produces: Vec<Name>,
     /// What it runs, in order.
     pub run: Vec<Instruction>,
-    /// Where the commands run, from the repository's root.
-    pub dir: Option<String>,
 }
 
 /// One thing a step runs.
 #[derive(Debug)]
 pub enum Instruction {
-    /// A command: the words a person would type, the program first.
-    Command(Vec<Word>),
-    /// A file written whole: where, from where the step runs, and what it holds.
-    Write { path: Word, contents: Word },
-    /// A judgment of the tree the runner holds, which no command states.
-    Check(Check),
+    /// A command: the words a person would type, the program first, and the directory it runs in, from the repository's root, where it states one, `{ in = directory, do = words }`.
+    Command {
+        words: Vec<Word>,
+        directory: Option<Word>,
+    },
+    /// A file written whole: where, under its directory where it states one, `{ in = directory, write = path, contents = text }`, and from the repository's root else_, and what it holds.
+    Write {
+        path: Word,
+        contents: Word,
+        directory: Option<Word>,
+    },
 }
 
 impl Instruction {
     /// Every word the instruction holds.
     pub fn words(&self) -> impl Iterator<Item = &Word> {
         match self {
-            Instruction::Command(words) => words.iter().collect::<Vec<_>>(),
-            Instruction::Write { path, contents } => vec![path, contents],
-            Instruction::Check(_) => Vec::new(),
+            Instruction::Command { words, directory } => {
+                words.iter().chain(directory).collect::<Vec<_>>()
+            }
+            Instruction::Write {
+                path,
+                contents,
+                directory,
+            } => [path, contents].into_iter().chain(directory).collect(),
         }
         .into_iter()
     }
 }
 
 /// The keys a write holds, besides which it holds none.
-const WRITE_KEYS: [&str; 2] = ["write", "contents"];
+const WRITE_KEYS: [&str; 4] = ["in", "write", "contents", "template"];
+
+/// The keys a command written as a table holds, besides which it holds none.
+const COMMAND_KEYS: [&str; 2] = ["in", "do"];
 
 /// A file a step makes: where it is, and which step makes it.
 #[derive(Debug)]
@@ -224,8 +225,8 @@ const SHIPPED_KEYS: [&str; 2] = ["archive", "path"];
 /// A named value of a file, the same for the whole run.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Variable {
-    /// Words as written: a string is one, a list each of its items.
-    Words(Vec<String>),
+    /// Words as written, each of which may hold a value the runner fills ([`runner_word`]): a string is one, a list each of its items.
+    Words(Vec<Word>),
     /// What a command prints, a word to a line, asked once a run and only where a step that uses it runs.
     Output(Vec<String>),
     /// The string a key of a TOML file holds, `key` its keys from the file's top, read once a run and only where a step that uses it runs: a value another file owns, stated there alone.
@@ -248,10 +249,10 @@ impl Variable {
 pub enum Given {
     /// Given with a value by any of `flags`, a short spelling, a long one or both: the flag and the value for each time it is given, nothing where it is not. Whether the command takes it more than once is the command's to say.
     Flag { flags: Vec<String>, help: String },
-    /// Given as a positional argument, `otherwise` where it is not.
+    /// Given as a positional argument: its `else` where it is not given and states one, and required where it states none, the command line refusing it missing before anything runs.
     Argument {
         placeholder: String,
-        otherwise: String,
+        else_: Option<String>,
         help: String,
     },
 }
@@ -316,6 +317,11 @@ impl Fill {
 }
 
 impl Word {
+    /// The word that is `text` and holds no value.
+    pub fn text(text: String) -> Self {
+        Self(vec![Piece::Text(text)])
+    }
+
     /// The word as a task file writes it, each value by its braces: what a reader looks the value up by.
     pub fn written(&self) -> String {
         self.0
@@ -459,29 +465,7 @@ impl Tree {
             for (key, item) in top.iter() {
                 let span = top.key(key).and_then(|key| key.span());
                 match key {
-                    "description" => description = Some(text_of(file, item, "description")?),
-                    "variables" => {
-                        let table = item.as_table_like().ok_or_else(|| {
-                            file.refuse(item.span(), "`variables` is a table of names".to_string())
-                        })?;
-                        for (name, value) in table.iter() {
-                            let name = scoped(&scoped(&file.scope, "variables"), name);
-                            declare(&mut kinds, file, &name, Kind::Variable, value.span())?;
-                            let variable = variable_of(file, value)?;
-                            tree.variables.insert(name, variable);
-                        }
-                    }
-                    "given" => {
-                        let table = item.as_table_like().ok_or_else(|| {
-                            file.refuse(item.span(), "`given` is a table of names".to_string())
-                        })?;
-                        for (name, value) in table.iter() {
-                            let name = scoped(&scoped(&file.scope, "given"), name);
-                            declare(&mut kinds, file, &name, Kind::Given, value.span())?;
-                            let given = given_of(file, value)?;
-                            tree.given.insert(name, given);
-                        }
-                    }
+                    "what" => description = Some(text_of(file, item, "what")?),
                     "tools" => {
                         if !file.scope.is_empty() {
                             return Err(file.refuse(span, TOOLS_AT_THE_ROOT.to_string()));
@@ -513,8 +497,10 @@ impl Tree {
                                     version.span(),
                                 )?;
                                 let version = text_of(file, version, "version")?;
-                                tree.variables
-                                    .insert(version_name, Variable::Words(vec![version]));
+                                tree.variables.insert(
+                                    version_name,
+                                    Variable::Words(vec![Word::text(version)]),
+                                );
                             }
                             tools.push(Written {
                                 file: index,
@@ -555,8 +541,10 @@ impl Tree {
                                     version.span(),
                                 )?;
                                 let version = text_of(file, version, "version")?;
-                                tree.variables
-                                    .insert(version_name, Variable::Words(vec![version]));
+                                tree.variables.insert(
+                                    version_name,
+                                    Variable::Words(vec![Word::text(version)]),
+                                );
                             }
                             data.push(Written {
                                 file: index,
@@ -566,19 +554,24 @@ impl Tree {
                             });
                         }
                     }
+                    // Every other key is a value of the file's or a task: a table that states its `what` is a task, and so is any table no value's keys make.
+                    _ if valued(item) || of_values(item) => {
+                        values_of(
+                            file,
+                            scoped(&file.scope, key),
+                            item,
+                            span,
+                            &mut kinds,
+                            &mut tree,
+                        )?;
+                    }
                     _ => {
                         let name = scoped(&file.scope, key);
-                        if file.scope.is_empty() && COMMANDS.contains(&key) {
-                            return Err(file.refuse(
-                                span,
-                                format!("`{key}` is a command of `cargo xtask` outside the tree"),
-                            ));
-                        }
                         declare(&mut kinds, file, &name, Kind::Task, span.clone())?;
                         let table = item.as_table_like().ok_or_else(|| {
                             file.refuse(
                                 span.clone(),
-                                format!("`{key}` is out of place: a file's top holds `description`, `variables`, `given`, and its steps and groups as tables"),
+                                format!("`{key}` is out of place: a file's top holds its `what`, its values, and its steps and groups as tables"),
                             )
                         })?;
                         children.push(name.clone());
@@ -596,10 +589,7 @@ impl Tree {
             }
 
             let description = description.ok_or_else(|| {
-                file.refuse(
-                    None,
-                    "has no `description`, which a file's top states".to_string(),
-                )
+                file.refuse(None, "has no `what`, which a file's top states".to_string())
             })?;
             tree.groups.insert(
                 file.scope.clone(),
@@ -670,12 +660,12 @@ impl Tree {
                 }
             };
 
-            let description = match step.table.get("description") {
-                Some(item) => text_of(file, item, "description")?,
+            let description = match step.table.get("what") {
+                Some(item) => text_of(file, item, "what")?,
                 None => {
                     return Err(file.refuse(
                         step.span.clone(),
-                        format!("step `{}` has no `description`", from_top(&step.name)),
+                        format!("step `{}` has no `what`", from_top(&step.name)),
                     ));
                 }
             };
@@ -768,12 +758,20 @@ impl Tree {
                 })?;
                 for instruction in instructions.iter() {
                     if let Some(table) = instruction.as_inline_table() {
-                        run.push(match table.contains_key("check") {
-                            true => check_of(file, table, instruction.span())?,
+                        run.push(match table.contains_key("do") {
+                            true => command_of(
+                                file,
+                                table,
+                                instruction.span(),
+                                &tree.variables,
+                                &tree.given,
+                                &word,
+                            )?,
                             false => write_of(
                                 file,
                                 table,
                                 instruction.span(),
+                                &kinds,
                                 &tree.variables,
                                 &tree.given,
                                 &word,
@@ -787,11 +785,14 @@ impl Tree {
                         .ok_or_else(|| {
                             file.refuse(
                                 instruction.span(),
-                                "an instruction is a command, a list of words; a write, `{ write = path, contents = text }`; or a check, `{ check = name }`".to_string(),
+                                "an instruction is a command, a list of words or `{ in = directory, do = words }`, or a write, `{ write = path, contents = text }`".to_string(),
                             )
                         })?;
                     let words = words.iter().map(&word).collect::<Result<Vec<_>, _>>()?;
-                    run.push(Instruction::Command(words));
+                    run.push(Instruction::Command {
+                        words,
+                        directory: None,
+                    });
                 }
             }
 
@@ -805,11 +806,6 @@ impl Tree {
                 ));
             }
 
-            let dir = match step.table.get("dir") {
-                Some(item) => Some(text_of(file, item, "dir")?),
-                None => None,
-            };
-
             steps.push(Step {
                 name: step.name.clone(),
                 description,
@@ -817,7 +813,6 @@ impl Tree {
                 consumes,
                 produces,
                 run,
-                dir,
             });
         }
         tree.steps = steps;
@@ -992,7 +987,7 @@ fn resolved(text: &str) -> Option<Name> {
 /// What refuses a name written without its leading `.`.
 fn unrooted(text: &str) -> String {
     format!(
-        "`{text}` is no path: a name is written from the top with a leading `.`, as `.compiler.variables.edition`"
+        "`{text}` is no path: a name is written from the top with a leading `.`, as `.compiler.edition`"
     )
 }
 
@@ -1011,6 +1006,75 @@ fn declare(
     Ok(())
 }
 
+/// The keys a value's table holds, besides which it holds none: a command whose output it is, `run`; another file's key, `read` and `key`; or what the command line gives, `flag`, or `argument` with its `else`; and the `help` a given value states.
+const VALUE_KEYS: [&str; 7] = ["run", "read", "key", "flag", "argument", "else", "help"];
+
+/// Whether `item`, at a file's top, is a value rather than a task: a string or a list of words, or a table that states no `what` and holds a value's keys alone, a `run` among them a list of words rather than of instructions.
+fn valued(item: &Item) -> bool {
+    match item.as_table_like() {
+        None => {
+            item.is_str()
+                || item
+                    .as_array()
+                    .is_some_and(|words| words.iter().all(|word| word.is_str()))
+        }
+        Some(table) => {
+            !table.is_empty()
+                && table.iter().all(|(key, _)| VALUE_KEYS.contains(&key))
+                && table.get("run").is_none_or(|run| {
+                    run.as_array()
+                        .is_some_and(|words| words.iter().all(|word| word.is_str()))
+                })
+        }
+    }
+}
+
+/// Whether `item`, at a file's top, is a table of values: a table that is no value and holds no key of a task's, `what` among them, each of whose entries is a value or a table of values in turn, named by its path, `.zed.scripts.pins`. A table holding a task's key is a task, refused where it states no `what`.
+fn of_values(item: &Item) -> bool {
+    item.as_table_like().is_some_and(|table| {
+        !table.is_empty()
+            && !table.iter().any(|(key, _)| STEP_KEYS.contains(&key))
+            && table
+                .iter()
+                .all(|(_, entry)| valued(entry) || of_values(entry))
+    })
+}
+
+/// Declare `item`, at `name`: a value, the command line's where it is a `flag` or an `argument` and a constant of the run otherwise, or a table of values, each declared at its path below `name`.
+fn values_of(
+    file: &File<'_>,
+    name: Name,
+    item: &Item,
+    span: Option<Range<usize>>,
+    kinds: &mut BTreeMap<Name, Kind>,
+    tree: &mut Tree,
+) -> Result<(), Refusal> {
+    if !valued(item)
+        && let Some(table) = item.as_table_like()
+    {
+        for (key, entry) in table.iter() {
+            let span = table.key(key).and_then(|key| key.span());
+            values_of(file, scoped(&name, key), entry, span, kinds, tree)?;
+        }
+
+        return Ok(());
+    }
+    match item.get("flag").or(item.get("argument")) {
+        Some(_) => {
+            declare(kinds, file, &name, Kind::Given, span)?;
+            let given = given_of(file, item)?;
+            tree.given.insert(name, given);
+        }
+        None => {
+            declare(kinds, file, &name, Kind::Variable, span)?;
+            let variable = variable_of(file, item)?;
+            tree.variables.insert(name, variable);
+        }
+    }
+
+    Ok(())
+}
+
 /// Walk the table `name`: a step where it holds a step's keys, a group of steps and groups otherwise.
 fn walk<'a>(
     file: &File<'_>,
@@ -1021,10 +1085,10 @@ fn walk<'a>(
     tree: &mut Tree,
     written: &mut Vec<Written<'a>>,
 ) -> Result<(), Refusal> {
-    // A table holding tables other than a step's own is a group, whose `description` is its own; any other is a step.
+    // A table holding tables other than a step's own is a group, whose `what` is its own; any other is a step.
     let is_step = table
         .iter()
-        .any(|(key, _)| key != "description" && STEP_KEYS.contains(&key))
+        .any(|(key, _)| key != "what" && STEP_KEYS.contains(&key))
         || !table
             .iter()
             .any(|(key, item)| !STEP_KEYS.contains(&key) && item.is_table_like());
@@ -1035,12 +1099,13 @@ fn walk<'a>(
                 return Err(file.refuse(
                     span,
                     match key {
-                        "variables" => format!("`{key}` belongs at a file's top"),
                         "tools" => TOOLS_AT_THE_ROOT.to_string(),
                         _ if item.is_table() => {
                             format!("`{key}` is a table inside a step, which holds no tables")
                         }
-                        _ => format!("`{key}` is no key of a step"),
+                        _ => format!(
+                            "`{key}` is no key of a step, and a value belongs at a file's top"
+                        ),
                     },
                 ));
             }
@@ -1057,13 +1122,13 @@ fn walk<'a>(
     if table.is_empty() {
         return Err(file.refuse(span, format!("`{}` is empty", from_top(&name))));
     }
-    let description = match table.get("description") {
-        Some(item) => text_of(file, item, "description")?,
+    let description = match table.get("what") {
+        Some(item) => text_of(file, item, "what")?,
         None => {
             return Err(file.refuse(
                 span,
                 format!(
-                    "group `{}` has no `description`, which a group states of itself",
+                    "group `{}` has no `what`, which a group states of itself",
                     from_top(&name)
                 ),
             ));
@@ -1077,12 +1142,14 @@ fn walk<'a>(
             steps: Vec::new(),
         },
     );
-    for (key, item) in table.iter().filter(|(key, _)| *key != "description") {
+    for (key, item) in table.iter().filter(|(key, _)| *key != "what") {
         let span = table.key(key).and_then(|key| key.span());
         let child = item.as_table_like().ok_or_else(|| {
             file.refuse(
                 span.clone(),
-                format!("`{key}` is out of place: a group holds its `description` and its steps and groups"),
+                format!(
+                    "`{key}` is out of place: a group holds its `what` and its steps and groups"
+                ),
             )
         })?;
         let child_name = scoped(&name, key);
@@ -1458,12 +1525,7 @@ fn given_of(file: &File<'_>, item: &Item) -> Result<Given, Refusal> {
         only(&["argument", "else", "help"])?;
         return Ok(Given::Argument {
             placeholder,
-            otherwise: text("else")?.ok_or_else(|| {
-                file.refuse(
-                    item.span(),
-                    "an argument states what it is `else`, where none is given".to_string(),
-                )
-            })?,
+            else_: text("else")?,
             help: text("help")?.unwrap_or_default(),
         });
     }
@@ -1476,10 +1538,21 @@ fn given_of(file: &File<'_>, item: &Item) -> Result<Given, Refusal> {
 
 fn variable_of(file: &File<'_>, item: &Item) -> Result<Variable, Refusal> {
     if let Some(text) = item.as_str() {
-        return Ok(Variable::Words(vec![text.to_string()]));
+        return Ok(Variable::Words(vec![runner_word(file, text, item.span())?]));
     }
     if let Some(list) = item.as_array() {
-        return Ok(Variable::Words(words_of(file, list)?));
+        let words = list
+            .iter()
+            .map(|value| {
+                let text = value
+                    .as_str()
+                    .ok_or_else(|| file.refuse(value.span(), "a word is a string".to_string()))?;
+
+                runner_word(file, text, value.span())
+            })
+            .collect::<Result<_, _>>()?;
+
+        return Ok(Variable::Words(words));
     }
 
     let table = item.as_table_like().ok_or_else(|| {
@@ -1519,12 +1592,6 @@ fn variable_of(file: &File<'_>, item: &Item) -> Result<Variable, Refusal> {
             })?;
         return Ok(Variable::Output(words_of(file, list)?));
     }
-    if table.get("flag").is_some() || table.get("argument").is_some() {
-        return Err(file.refuse(
-            item.span(),
-            "a flag or an argument is what the command line gives a run, declared under `given`, where a variable is a constant of the run".to_string(),
-        ));
-    }
     if let Some(path) = text("read")? {
         only(&["read", "key"])?;
         let key = text("key")?.ok_or_else(|| {
@@ -1545,11 +1612,57 @@ fn variable_of(file: &File<'_>, item: &Item) -> Result<Variable, Refusal> {
     ))
 }
 
-/// The write `table` states: the file its `write` names and the `contents` it holds, each one string, so neither may be a value that stands for several words or none.
+/// The value `value` stands for as one string, where an instruction's `key` takes one: never a value that stands for several words or none.
+fn single(
+    file: &File<'_>,
+    value: &toml_edit::Value,
+    key: &str,
+    variables: &BTreeMap<Name, Variable>,
+    given: &BTreeMap<Name, Given>,
+    word: &dyn Fn(&toml_edit::Value) -> Result<Word, Refusal>,
+) -> Result<Word, Refusal> {
+    let written = word(value)?;
+    let several = match written.alone() {
+        Some(Fill::Variable(name)) => {
+            matches!(variables.get(name), Some(Variable::Output(_))).then_some(name)
+        }
+        Some(Fill::Given(name)) => {
+            matches!(given.get(name), Some(Given::Flag { .. })).then_some(name)
+        }
+        _ => None,
+    };
+    match several {
+        Some(name) => Err(file.refuse(
+            value.span(),
+            format!(
+                "an instruction's `{key}` is one string, and `{}` may stand for several words or none",
+                from_top(name)
+            ),
+        )),
+        None => Ok(written),
+    }
+}
+
+/// The directory an instruction states, `in`, one string read from the repository's root, or `None` where it states none and so stands at the root.
+fn directory_of(
+    file: &File<'_>,
+    table: &toml_edit::InlineTable,
+    variables: &BTreeMap<Name, Variable>,
+    given: &BTreeMap<Name, Given>,
+    word: &dyn Fn(&toml_edit::Value) -> Result<Word, Refusal>,
+) -> Result<Option<Word>, Refusal> {
+    table
+        .get("in")
+        .map(|value| single(file, value, "in", variables, given, word))
+        .transpose()
+}
+
+/// The write `table` states: the file its `write` names, under its `in` where it states one, and the `contents` it holds, each one string.
 fn write_of(
     file: &File<'_>,
     table: &toml_edit::InlineTable,
     span: Option<Range<usize>>,
+    kinds: &BTreeMap<Name, Kind>,
     variables: &BTreeMap<Name, Variable>,
     given: &BTreeMap<Name, Given>,
     word: &dyn Fn(&toml_edit::Value) -> Result<Word, Refusal>,
@@ -1557,86 +1670,94 @@ fn write_of(
     if let Some((key, _)) = table.iter().find(|(key, _)| !WRITE_KEYS.contains(key)) {
         return Err(file.refuse(
             span,
-            format!("a write holds `write` and `contents`, and `{key}` is neither"),
+            format!("a write holds `in`, `write`, and `contents` or `template`, and `{key}` is none of them"),
         ));
     }
-    let one = |key: &str| -> Result<Word, Refusal> {
-        let value = table.get(key).ok_or_else(|| {
-            file.refuse(
-                span.clone(),
-                format!("a write names the file it writes, `write`, and what it holds, `contents`, and this one lacks `{key}`"),
-            )
-        })?;
-        let written = word(value)?;
-        let several = match written.alone() {
-            Some(Fill::Variable(name)) => {
-                matches!(variables.get(name), Some(Variable::Output(_))).then_some(name)
-            }
-            Some(Fill::Given(name)) => {
-                matches!(given.get(name), Some(Given::Flag { .. })).then_some(name)
-            }
-            _ => None,
-        };
-        if let Some(name) = several {
+    let path = table.get("write").ok_or_else(|| {
+        file.refuse(
+            span.clone(),
+            "a write names the file it writes, `write`".to_string(),
+        )
+    })?;
+    let contents = match (table.get("contents"), table.get("template")) {
+        (Some(contents), None) => single(file, contents, "contents", variables, given, word)?,
+        (None, Some(template)) => template_of(file, template, kinds, variables, given)?,
+        _ => {
             return Err(file.refuse(
-                value.span(),
-                format!(
-                    "a write's `{key}` is one string, and `{}` may stand for several words or none",
-                    from_top(name)
-                ),
+                span,
+                "a write holds what it writes as its `contents` or as a `template`, one of the two"
+                    .to_string(),
             ));
         }
-        Ok(written)
     };
 
     Ok(Instruction::Write {
-        path: one("write")?,
-        contents: one("contents")?,
+        path: single(file, path, "write", variables, given, word)?,
+        contents,
+        directory: directory_of(file, table, variables, given, word)?,
     })
 }
 
-/// The check `table` names, one the runner holds, which holds nothing beside its name.
-fn check_of(
+/// A command written as a table: its words, `do`, and the directory it runs in, `in`, read from the repository's root as every path a step states is.
+fn command_of(
     file: &File<'_>,
     table: &toml_edit::InlineTable,
     span: Option<Range<usize>>,
+    variables: &BTreeMap<Name, Variable>,
+    given: &BTreeMap<Name, Given>,
+    word: &dyn Fn(&toml_edit::Value) -> Result<Word, Refusal>,
 ) -> Result<Instruction, Refusal> {
-    if let Some((key, _)) = table.iter().find(|(key, _)| *key != "check") {
+    if let Some((key, _)) = table.iter().find(|(key, _)| !COMMAND_KEYS.contains(key)) {
         return Err(file.refuse(
             span,
-            format!("a check holds the name of the one it runs, `check`, and `{key}` is not it"),
+            format!(
+                "a command holds its words, `do`, and where it runs, `in`, and `{key}` is neither"
+            ),
         ));
     }
-    let named = table
-        .get("check")
-        .and_then(toml_edit::Value::as_str)
+    let words = table
+        .get("do")
+        .and_then(toml_edit::Value::as_array)
+        .filter(|words| !words.is_empty())
         .ok_or_else(|| {
             file.refuse(
                 span.clone(),
-                "a check's `check` is a name, a string".to_string(),
+                "a command's `do` is its words, a list of strings".to_string(),
             )
-        })?;
-
-    CHECKS
+        })?
         .iter()
-        .find(|check| check.name == named)
-        .map(|check| Instruction::Check(*check))
-        .ok_or_else(|| {
-            file.refuse(
-                span,
-                format!(
-                    "`{named}` is no check the runner holds, which are {}",
-                    CHECKS
-                        .iter()
-                        .map(|check| format!("`{}`", check.name))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
-            )
-        })
+        .map(word)
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(Instruction::Command {
+        words,
+        directory: directory_of(file, table, variables, given, word)?,
+    })
 }
 
 /// The word `text` writes, its braces resolved in `file`'s scope.
+/// A variable's word as written: its text and the values the runner fills, `{!name}`, and no name of the tree's, so a variable is a constant of the run whatever step reads it, and no variable reads another.
+fn runner_word(file: &File<'_>, text: &str, span: Option<Range<usize>>) -> Result<Word, Refusal> {
+    if text
+        .match_indices('{')
+        .any(|(open, _)| !text[open + 1..].starts_with('!'))
+    {
+        return Err(file.refuse(
+            span,
+            format!("`{text}` names a value of the tree, where a variable's words hold only what the runner fills, `{{!name}}`"),
+        ));
+    }
+
+    word_of(
+        file,
+        text,
+        span,
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+    )
+}
+
 fn word_of(
     file: &File<'_>,
     text: &str,
@@ -1657,39 +1778,7 @@ fn word_of(
             .find('}')
             .map(|close| open + close)
             .ok_or_else(|| refuse(format!("`{text}` opens a brace it does not close")))?;
-        let written = &rest[open + 1..close];
-        let fill = match written.strip_prefix('!') {
-            Some("host_triple") => Fill::HostTriple,
-            Some("cargo_target_dir") => Fill::CargoTargetDir,
-            Some("cargo_home") => Fill::CargoHome,
-            Some("rust_sysroot") => Fill::RustSysroot,
-            Some(filled) => {
-                return Err(refuse(format!(
-                    "`!{filled}` is no value the runner fills, which are {}",
-                    BUILT_INS
-                        .iter()
-                        .map(|name| format!("`!{name}`"))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )));
-            }
-            None => {
-                let name = resolved(written).ok_or_else(|| refuse(unrooted(written)))?;
-                match kinds.get(&name) {
-                    Some(Kind::Variable) => Fill::Variable(name),
-                    Some(Kind::Given) => Fill::Given(name),
-                    Some(Kind::Produced) => Fill::Produced(name),
-                    Some(Kind::Tool) => Fill::Tool(name),
-                    Some(Kind::Data) => Fill::Data(name),
-                    Some(Kind::Task) => {
-                        return Err(refuse(format!(
-                            "`{written}` is a step or group, which has no value"
-                        )));
-                    }
-                    None => return Err(refuse(format!("`{written}` names nothing"))),
-                }
-            }
-        };
+        let fill = fill_of(&rest[open + 1..close], kinds, &refuse)?;
         pieces.push(Piece::Value(fill));
         rest = &rest[close + 1..];
     }
@@ -1701,26 +1790,119 @@ fn word_of(
     }
 
     let word = Word(pieces);
-    if word.alone().is_none() {
-        for fill in word.fills() {
-            let several = match fill {
-                Fill::Variable(name) => variables
-                    .get(name)
-                    .is_some_and(|variable| !variable.is_one_word()),
-                Fill::Given(name) => given.get(name).is_some_and(|given| !given.is_one_word()),
-                _ => false,
-            };
-            if several {
-                let (Fill::Variable(name) | Fill::Given(name)) = fill else {
-                    unreachable!("only a variable or a given value stands for several words")
-                };
-                return Err(refuse(format!(
-                    "`{}` stands for several words or none, so it is a word of its own",
-                    from_top(name)
-                )));
-            }
-        }
+    if word.alone().is_none()
+        && let Some(name) = word
+            .fills()
+            .find_map(|fill| several(fill, variables, given))
+    {
+        return Err(refuse(format!(
+            "`{}` stands for several words or none, so it is a word of its own",
+            from_top(name)
+        )));
     }
 
     Ok(word)
+}
+
+/// The value braces hold, `written` being what stands between them, in a word or a template alike: a value the runner fills where it opens with `!`, and otherwise the name of a variable, a given value, a tool, data or a produced file, read from the top.
+fn fill_of(
+    written: &str,
+    kinds: &BTreeMap<Name, Kind>,
+    refuse: &dyn Fn(String) -> Refusal,
+) -> Result<Fill, Refusal> {
+    match written.strip_prefix('!') {
+        Some("host_triple") => Ok(Fill::HostTriple),
+        Some("cargo_target_dir") => Ok(Fill::CargoTargetDir),
+        Some("cargo_home") => Ok(Fill::CargoHome),
+        Some("rust_sysroot") => Ok(Fill::RustSysroot),
+        Some(filled) => Err(refuse(format!(
+            "`!{filled}` is no value the runner fills, which are {}",
+            BUILT_INS
+                .iter()
+                .map(|name| format!("`!{name}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))),
+        None => {
+            let name = resolved(written).ok_or_else(|| refuse(unrooted(written)))?;
+            match kinds.get(&name) {
+                Some(Kind::Variable) => Ok(Fill::Variable(name)),
+                Some(Kind::Given) => Ok(Fill::Given(name)),
+                Some(Kind::Produced) => Ok(Fill::Produced(name)),
+                Some(Kind::Tool) => Ok(Fill::Tool(name)),
+                Some(Kind::Data) => Ok(Fill::Data(name)),
+                Some(Kind::Task) => Err(refuse(format!(
+                    "`{written}` is a step or group, which has no value"
+                ))),
+                None => Err(refuse(format!("`{written}` names nothing"))),
+            }
+        }
+    }
+}
+
+/// The name of the variable or the given value `fill` is, where it stands for several words or none, and so cannot sit beside other text.
+fn several<'a>(
+    fill: &'a Fill,
+    variables: &BTreeMap<Name, Variable>,
+    given: &BTreeMap<Name, Given>,
+) -> Option<&'a Name> {
+    match fill {
+        Fill::Variable(name) => variables
+            .get(name)
+            .is_some_and(|variable| !variable.is_one_word())
+            .then_some(name),
+        Fill::Given(name) => given
+            .get(name)
+            .is_some_and(|given| !given.is_one_word())
+            .then_some(name),
+        _ => None,
+    }
+}
+
+/// The template `value` names, a file of the tree read from the repository's root, as one string: its text with each value it holds filled, written as the task files write one, `{.path}` or `{!name}` up to the next `}`, and every other brace kept as text, since a template is a file of another language whose braces are its own.
+fn template_of(
+    file: &File<'_>,
+    value: &toml_edit::Value,
+    kinds: &BTreeMap<Name, Kind>,
+    variables: &BTreeMap<Name, Variable>,
+    given: &BTreeMap<Name, Given>,
+) -> Result<Word, Refusal> {
+    let path = value.as_str().ok_or_else(|| {
+        file.refuse(
+            value.span(),
+            "a write's `template` is the path of a template, a string".to_string(),
+        )
+    })?;
+    let refuse =
+        |message: String| file.refuse(value.span(), format!("the template `{path}`: {message}"));
+    let text = fs::read_to_string(root().join(path)).map_err(|error| refuse(error.to_string()))?;
+
+    let mut pieces = Vec::new();
+    let mut rest = text.as_str();
+    while let Some((open, _)) = rest
+        .match_indices('{')
+        .find(|(at, _)| matches!(rest.as_bytes().get(at + 1), Some(b'.' | b'!')))
+    {
+        if open > 0 {
+            pieces.push(Piece::Text(rest[..open].to_string()));
+        }
+        let close = rest[open..]
+            .find('}')
+            .map(|close| open + close)
+            .ok_or_else(|| refuse("a value opens with no `}` to close it".to_string()))?;
+        let fill = fill_of(&rest[open + 1..close], kinds, &refuse)?;
+        if let Some(name) = several(&fill, variables, given) {
+            return Err(refuse(format!(
+                "`{}` stands for several words or none, and a template is one string",
+                from_top(name)
+            )));
+        }
+        pieces.push(Piece::Value(fill));
+        rest = &rest[close + 1..];
+    }
+    if !rest.is_empty() {
+        pieces.push(Piece::Text(rest.to_string()));
+    }
+
+    Ok(Word(pieces))
 }

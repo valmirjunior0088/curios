@@ -9,7 +9,7 @@ description = "The Zed extension for Curios: launches `curios wonder --server` f
 # Its own root, not a member of the compiler's workspace: Zed builds an extension from its own directory, with its own lock file, for wasm32-wasip2, and nothing in the compiler depends on it or it on the compiler.
 [workspace]
 
-# The compiler's workspace's lint table, restated because a workspace of its own cannot inherit one; `zed check` holds the two equal.
+# The compiler's workspace's lint table, restated because a workspace of its own cannot inherit one; the two are kept equal by hand.
 [lints.rust]
 unnameable_types = "warn"
 warnings = "deny"

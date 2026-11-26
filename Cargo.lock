@@ -3373,7 +3373,6 @@ dependencies = [
 name = "xtask"
 version = "0.16.25"
 dependencies = [
- "askama",
  "clap",
  "curios-common",
  "flate2",

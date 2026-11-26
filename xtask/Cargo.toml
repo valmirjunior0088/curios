@@ -19,7 +19,6 @@ tar = "0.4.46"
 flate2 = { version = "1.1.9", default-features = false, features = ["rust_backend"] }
 # `string` for a command line whose subcommands and flags are the task files' names, read when the program runs.
 clap = { workspace = true, features = ["string"] }
-askama = { workspace = true }
 # The task files, read with the place of every key and value for a refusal's caret, and for `release`, format-preserving edits of the workspace and standard-library manifests, so a bump sets only their version fields and the diff it produced can be read back and checked exactly.
 toml_edit = { workspace = true }
 

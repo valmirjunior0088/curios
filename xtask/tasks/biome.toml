@@ -1,7 +1,7 @@
-description = "The JavaScript, JSON and CSS of every tree, as `biome.json` lists them"
+what = "The JavaScript, JSON and CSS of every tree, as `biome.json` lists them"
 
 [lint]
-description = "Fail on formatting drift and lint findings in the JavaScript, JSON and CSS `biome.json` lists, which Biome reads from the root"
+what = "Fail on formatting drift and lint findings in the JavaScript, JSON and CSS `biome.json` lists, which Biome reads from the root"
 # `check` formats and lints in one pass and reports both; its import sorting, an assist, is no check the tree holds.
 run = [
     ["{.tools.biome}", "check", "--assist-enabled=false", "--error-on-warnings", "."],

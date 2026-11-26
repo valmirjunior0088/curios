@@ -2,14 +2,14 @@
 //!
 //! **A run's tools are kept before its first step.** Every tool the scheduled steps name is fetched where it is not kept yet, and a run any of them cannot be had for runs nothing, naming each ([`fetch`]). A step's commands find first on their `PATH` the directory of each tool it names that is kept as a directory.
 //!
-//! **A run reports every failure rather than the first.** [`perform`] takes the schedule and runs each step to its end whatever the one before it did: a step's commands run in order, the first that fails failing the step, and a step whose produced files are not there afterwards fails too. A step behind one that did not pass is not run, since what it reads is not there; the steps that read nothing of the failure go on, and the end names what failed and what was not run.
+//! **A run reports every failure rather than the first.** [`perform`] takes the schedule and runs each step to its end whatever the one before it did: a step's commands run in order, the first that fails failing the step, and a step whose produced files are not there afterwards fails too. A step behind one that did not pass is not run, since what it reads is not there, and says so on a line of its own; the steps that read nothing of the failure go on. A failure is said once, on the line that closes its step, so the run hands back only whether every step passed, which the exit code says.
 
 use {
     crate::{
         GivenValues, Instruction, Name, Tree, Values, Word, directories, fetch, launch, launch_in,
-        root, say, schedule, spelled,
+        root, schedule, spelled,
     },
-    std::{env, fs, time::Instant},
+    std::{env, fs, path::PathBuf, time::Instant},
 };
 
 #[cfg(test)]
@@ -21,8 +21,8 @@ const PASSED: &str = "✓";
 /// The mark of a step that did not pass, as `curios test` marks a test that did not.
 const UNPASSED: &str = "✗";
 
-/// Run `asked` and what it runs after, as `given` narrows it, and close each step with a line naming it, `»»» <step> «««`, how it ended and in how long.
-pub fn perform(tree: &Tree, asked: &Name, given: &GivenValues) -> Result<(), String> {
+/// Run `asked` and what it runs after, as `given` narrows it, and close each step with a line naming it, `»»» <step> «««`, how it ended and in how long: whether every step passed, and a refusal where a tool the steps name could not be had and nothing ran.
+pub fn perform(tree: &Tree, asked: &Name, given: &GivenValues) -> Result<bool, String> {
     let values = Values::new(tree, given);
     let scheduled = schedule(tree, asked, given);
     fetch(tree, &values, &scheduled)?;
@@ -58,23 +58,15 @@ pub fn perform(tree: &Tree, asked: &Name, given: &GivenValues) -> Result<(), Str
         }
     }
 
-    let named = |steps: &[usize]| {
-        steps
-            .iter()
-            .map(|step| spelled(&tree.steps[*step].name))
-            .collect::<Vec<_>>()
-            .join(", ")
-    };
+    Ok(failed.is_empty() && unrun.is_empty())
+}
 
-    match (failed.is_empty(), unrun.is_empty()) {
-        (true, true) => Ok(()),
-        (false, true) => Err(format!("failed: {}", named(&failed))),
-        (_, false) => Err(format!(
-            "failed: {}; not run: {}",
-            named(&failed),
-            named(&unrun)
-        )),
-    }
+/// The directory an instruction stands in: its `in`, read from the repository's root, or the root where it states none.
+fn placed(values: &Values<'_>, directory: Option<&Word>) -> Result<PathBuf, String> {
+    Ok(match directory {
+        Some(directory) => root().join(values.text(directory)?),
+        None => root().to_path_buf(),
+    })
 }
 
 /// Run one step's instructions in order — each command launched, each write's file written whole, its directory made where it is not, each check judged — then hold the step to what it produces.
@@ -93,24 +85,21 @@ fn run(tree: &Tree, values: &Values<'_>, step: usize) -> Result<(), String> {
         ),
     };
     let step = &tree.steps[step];
-    let directory = root().join(step.dir.as_deref().unwrap_or(""));
 
     for instruction in &step.run {
-        let command = match instruction {
-            Instruction::Command(command) => command,
-            Instruction::Write { path, contents } => {
-                let path = directory.join(values.text(path)?);
+        let (command, directory) = match instruction {
+            Instruction::Command { words, directory } => (words, directory),
+            Instruction::Write {
+                path,
+                contents,
+                directory,
+            } => {
+                let path = placed(values, directory.as_ref())?.join(values.text(path)?);
                 let failed = |error: std::io::Error| format!("{}: {error}", path.display());
                 if let Some(parent) = path.parent() {
                     fs::create_dir_all(parent).map_err(failed)?;
                 }
                 fs::write(&path, values.text(contents)?).map_err(failed)?;
-                continue;
-            }
-            Instruction::Check(check) => {
-                // Said as a command's line is, so the terminal reads as a transcript of the work.
-                say(&format!("check {}", check.name));
-                (check.judge)()?;
                 continue;
             }
         };
@@ -126,7 +115,12 @@ fn run(tree: &Tree, values: &Values<'_>, step: usize) -> Result<(), String> {
             .map(Word::written)
             .collect::<Vec<_>>()
             .join(" ");
-        launch_in(&directory, launched, &written)?;
+        // A command run elsewhere than the root says where, so its echo reads as what a person would type there.
+        let written = match directory {
+            Some(directory) => format!("in {}: {written}", directory.written()),
+            None => written,
+        };
+        launch_in(&placed(values, directory.as_ref())?, launched, &written)?;
     }
 
     for produced in &step.produces {

@@ -1,17 +1,15 @@
-description = "The TextMate grammars, with the table of classes their scopes stand for"
+what = "The TextMate grammars, with the table of classes their scopes stand for"
 
 [install]
-description = "Install the TextMate grammars' tools from their lock file, exactly, as every run that reads them does"
-dir = "editors/textmate"
+what = "Install the TextMate grammars' tools from their lock file, exactly, as every run that reads them does"
 produces.installed = "editors/textmate/node_modules"
 run = [
-    ["{.tools.npm}", "clean-install"],
+    { in = "editors/textmate", do = ["{.tools.npm}", "clean-install"] },
 ]
 
 [test]
-description = "Hold the TextMate grammars to their snapshots"
-dir = "editors/textmate"
+what = "Hold the TextMate grammars to their snapshots"
 consumes = [".textmate.install.produces.installed"]
 run = [
-    ["{.tools.npm}", "test"],
+    { in = "editors/textmate", do = ["{.tools.npm}", "test"] },
 ]

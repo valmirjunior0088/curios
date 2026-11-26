@@ -1,4 +1,15 @@
-description = "The repository's tasks: a group of steps for each file under `tasks/`, and the steps here"
+what = "The repository's tasks: a group of steps for each file under `tasks/`, and the steps here"
+
+# The script the release is, and the manifests it moves: the workspace's, whose version every crate inherits, and the standard library's, whose compiler follows it.
+scripts.release = "xtask/tasks/release.sh"
+manifests = ["Cargo.toml", "curios-prelude-build/std/curios.toml"]
+bump.argument = "BUMP"
+bump.help = "The release to cut: `patch`, `minor` or `major`, or the version itself"
+version.argument = "VERSION"
+version.help = "The version the release's tag names after `release/`"
+# Where a release is published, as the workspace's manifest states it.
+repository.read = "Cargo.toml"
+repository.key = "workspace.package.repository"
 
 # The tools the steps run beside the Rust toolchain, which `rust-toolchain.toml` pins: each fetched at its digest for the host a run is on before the run's first step, and kept as `xtask/.artifacts/tools/<name>-<version>`.
 
@@ -70,6 +81,16 @@ sha256.aarch64-apple-darwin = "46cb97d9a2c52c94e22d9a76c2f1116156b8b61f98360e2a9
 
 # The data the steps and the builds read, each one directory checked by the digest of its files, which `find . -type f -printf '%P\0' | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum` retakes in the directory, and kept as `xtask/.artifacts/data/<name>-<version>`: one directory of the archive a forge generates at a pinned commit, its `path`, or the `files` a site publishes one by one under the `url`.
 
+# Lints the scripts the task files run, each POSIX `sh`; a gzipped tarball a platform, its digests GitHub's.
+[tools.shellcheck]
+version = "0.11.0"
+url.x86_64-unknown-linux-gnu = "https://github.com/koalaman/shellcheck/releases/download/v{.tools.shellcheck.version}/shellcheck-v{.tools.shellcheck.version}.linux.x86_64.tar.gz"
+url.aarch64-unknown-linux-gnu = "https://github.com/koalaman/shellcheck/releases/download/v{.tools.shellcheck.version}/shellcheck-v{.tools.shellcheck.version}.linux.aarch64.tar.gz"
+url.aarch64-apple-darwin = "https://github.com/koalaman/shellcheck/releases/download/v{.tools.shellcheck.version}/shellcheck-v{.tools.shellcheck.version}.darwin.aarch64.tar.gz"
+sha256.x86_64-unknown-linux-gnu = "b7af85e41cc99489dcc21d66c6d5f3685138f06d34651e6d34b42ec6d54fe6f6"
+sha256.aarch64-unknown-linux-gnu = "68a8133197a50beb8803f8d42f9908d1af1c5540d4bb05fdfca8c1fa47decefc"
+sha256.aarch64-apple-darwin = "339b930feb1ea764467013cc1f72d09cd6b869ebf1013296ba9055ab2ffbd26f"
+
 # JSONTestSuite's documents, each named for what a parser does with it: `y_` read, `n_` refused, `i_` its own to decide. Its archive carries the parsers the suite was run over beside them, which are not kept.
 [data.json]
 version = "1ef36fa01286573e846ac449e8683f8833c5b26a"
@@ -121,14 +142,29 @@ beside = "curios-binaryen"
 
 
 [handoff]
-description = "Run every check the handoff holds work to: each subject's steps, each after what it requires and consumes"
+what = "Run every check the handoff holds work to: each subject's steps, each after what it requires and consumes"
 requires = [
     ".compiler", ".docs", ".distribution", ".bundle", ".conformance", ".biome",
     ".tree-sitter", ".textmate", ".vscode", ".zed", ".jig",
 ]
 
+# Cutting a release publishes it, so no requirement reaches this step: it runs where it is asked for by its path alone.
+[release]
+what = "Cut a release: the workspace's version and the standard library's compiler moved to the one the argument names, the lock updated, then one commit, one tag and the push that publishes them"
+run = [
+    ["sh", "{.scripts.release}", "{.bump}", "{.manifests}"],
+]
+
+# The version is baked in when the script is rendered rather than discovered when it runs, so the script a release ships installs that release's binary and a pinned URL stays pinned; what ships is a build product, never a mutated checkout.
+[installer]
+what = "Render the install script a release attaches, its version baked in, under xtask/.artifacts/install.sh"
+produces.script = "xtask/.artifacts/install.sh"
+run = [
+    { write = "{.installer.produces.script}", template = "xtask/tasks/install.sh" },
+]
+
 [clean]
-description = "Remove the build products git ignores, keeping untracked work, the worktrees under .claude/worktrees and the hunts' snapshots under .claude/snapshots"
+what = "Remove the build products git ignores, keeping untracked work, the worktrees under .claude/worktrees and the hunts' snapshots under .claude/snapshots"
 # `-X` removes what the ignore rules mark as a build product and nothing else: an untracked file is work no commit holds yet. A worktree under `.claude/worktrees` is ignored, and a nested checkout `-ff` would delete with whatever another session has not committed in it, so the negated pattern un-ignores it, which leaves it to `-X`. A snapshot under `.claude/snapshots` is ignored too, and a hunt running over it would lose its tree, its binaries and what its hunters wrote, so it is kept the same way.
 run = [
     ["git", "clean", "-Xffd", "--exclude", "!/.claude/worktrees", "--exclude", "!/.claude/snapshots"],

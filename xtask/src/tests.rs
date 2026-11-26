@@ -26,8 +26,8 @@ fn commands_of<'a>(tree: &'a Tree, group: &str) -> Vec<(&'a Step, Vec<String>)> 
             step.run
                 .iter()
                 .filter_map(move |instruction| match instruction {
-                    Instruction::Command(command) => Some(command),
-                    Instruction::Write { .. } | Instruction::Check(_) => None,
+                    Instruction::Command { words: command, .. } => Some(command),
+                    Instruction::Write { .. } => None,
                 })
                 .map(move |command| {
                     (
@@ -67,9 +67,7 @@ fn every_step_the_handoff_runs_has_a_job() {
         let matches = command(&tree)
             .try_get_matches_from(["cargo xtask"].into_iter().chain(words.split(' ')))
             .unwrap_or_else(|error| panic!("{line}\n{error}"));
-        let Asked::Task { name, given } = asked(&matches) else {
-            panic!("no task of the tree: {line}");
-        };
+        let Asked { name, given } = asked(&matches);
         run.extend(schedule(&tree, &name, &given));
     }
 

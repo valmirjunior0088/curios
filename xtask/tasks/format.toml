@@ -1,28 +1,27 @@
-description = "Every tree's formatting, written; the trees' lints hold it"
+what = "Every tree's formatting, written; the trees' lints hold it"
 
 [rust]
-description = "Format the workspace's Rust, the corpus's Rust twins included"
+what = "Format the workspace's Rust, the corpus's Rust twins included"
 run = [
     ["cargo", "fmt", "--all"],
-    ["rustfmt", "--edition", "{.compiler.variables.edition}", "{.compiler.variables.loose}"],
+    ["rustfmt", "--edition", "{.compiler.edition}", "{.compiler.loose}"],
 ]
 
 [curios]
-description = "Format the tree's Curios sources with this tree's compiler, each as the package that governs it states"
+what = "Format the tree's Curios sources with this tree's compiler, each as the package that governs it states"
 consumes = [".compiler.launcher.produces.binary"]
 run = [
-    ["cargo", "run", "--quiet", "--package", "curios", "--", "format", "{.compiler.variables.sources}"],
+    ["cargo", "run", "--quiet", "--package", "curios", "--", "format", "{.compiler.sources}"],
 ]
 
 [biome]
-description = "Format the JavaScript, JSON and CSS of every tree, as `biome.json` lists them"
+what = "Format the JavaScript, JSON and CSS of every tree, as `biome.json` lists them"
 run = [
     ["{.tools.biome}", "format", "--write", "."],
 ]
 
 [zed]
-description = "Format the Zed extension, a workspace of its own"
-dir = "editors/zed"
+what = "Format the Zed extension, a workspace of its own"
 run = [
-    ["cargo", "fmt", "--all"],
+    { in = "editors/zed", do = ["cargo", "fmt", "--all"] },
 ]

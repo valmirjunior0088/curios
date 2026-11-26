@@ -10,7 +10,7 @@ paths:
 
 - Data flows down the pipeline and Rust dependencies point up it: a lowering depends on the representation it constructs.
 - Crate boundaries, not Cargo features, separate the compiler, runtime and browser products. Where an external dependency's version is stated, and which crate may spell its types, is [One crate is the authority for one external concern](../../documentation/design/one-crate-is-the-authority-for-one-external-concern.md)'s.
-- The lint table is the root manifest's, inherited by every member and restated by `editors/zed/Cargo.toml`, a workspace of its own, held equal by `zed check`. It denies warnings, so every build of every configuration fails on one and no step passes a flag for it.
+- The lint table is the root manifest's, inherited by every member and restated by `editors/zed/Cargo.toml`, a workspace of its own, and kept equal by hand. It denies warnings, so every build of every configuration fails on one and no step passes a flag for it.
 - Each tool's version is stated once: `rust-toolchain.toml` for Rust and its targets, which rustup reads, and the `tools` of the task files for every other tool a step runs, each with its download and SHA-256 for every host, which `xtask` fetches before a run's first step and keeps in `xtask/.artifacts`. Cargo and CMake are the host's, run by build scripts under any cargo command.
 - A build script and its dependencies are compiled optimized under both profiles, the prelude's being the compiler run over the library; a change to a build profile retakes `documentation/design/every-profile-compiles-optimized-and-a-test-keeps-its-checks.md`'s measurement.
 - `rust-toolchain.toml`'s floor is Wasmtime's; bump it when the workspace manifest's `wasmtime` row moves past it.

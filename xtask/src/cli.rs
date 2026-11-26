@@ -1,6 +1,6 @@
 //! The command line, read off the tree: a subcommand for each group and step by its path, and the flags and arguments the variables of its steps take.
 //!
-//! **A path the tree does not hold cannot be written.** Each group is a subcommand whose own subcommands are what it holds, so `cargo xtask bundle lint` is the parser's own error, and `--help` at any depth lists what is there, each step described by its `description` and each group inside a file by its steps'. A variable given on the command line is a flag or an argument of every subcommand whose steps use it. `release` and `installer` are the two commands outside the tree, and the reader refuses a task of either name.
+//! **A path the tree does not hold cannot be written.** Each group is a subcommand whose own subcommands are what it holds, so `cargo xtask bundle lint` is the parser's own error, and `--help` at any depth lists what is there, each step described by its `description` and each group inside a file by its steps'. A variable given on the command line is a flag or an argument of every subcommand whose steps use it.
 
 use {
     crate::{Given, GivenValues, Name, Tree, dotted},
@@ -11,20 +11,11 @@ use {
 #[cfg(test)]
 mod tests;
 
-/// What the command line asked for.
+/// What the command line asked for: a step or a group, by its path, with the variables the command line gave.
 #[derive(Debug, PartialEq, Eq)]
-pub enum Asked {
-    /// A step or a group, by its path, with the variables the command line gave.
-    Task {
-        name: Name,
-        given: GivenValues,
-    },
-    Release {
-        bump: Option<String>,
-    },
-    Installer {
-        version: String,
-    },
+pub struct Asked {
+    pub name: Name,
+    pub given: GivenValues,
 }
 
 /// The command line the tree reads as.
@@ -49,25 +40,6 @@ pub fn command(tree: &Tree) -> Command {
     }
 
     command
-        .subcommand(
-            Command::new("release")
-                .about("Bump the workspace version and bundled library's compiler version, commit them, tag the release, and push main and the tag")
-                .arg(
-                    Arg::new("bump")
-                        .value_name("BUMP")
-                        .help("patch, minor, major, or the version itself; omitted, the three candidates are named"),
-                ),
-        )
-        .subcommand(
-            Command::new("installer")
-                .about("Render the installer script for one release version under xtask/.artifacts/install.sh")
-                .arg(
-                    Arg::new("version")
-                        .value_name("VERSION")
-                        .required(true)
-                        .help("The release's version: the part of its tag after release/"),
-                ),
-        )
 }
 
 /// The subcommand of the task `name`: what it holds, and the variables its steps take from the command line.
@@ -124,32 +96,18 @@ fn argument(tree: &Tree, name: &Name) -> Arg {
             )
         }
         Given::Argument {
-            placeholder, help, ..
+            placeholder,
+            else_,
+            help,
         } => Arg::new(id)
             .value_name(placeholder.clone())
+            .required(else_.is_none())
             .help(help.clone()),
     }
 }
 
 /// What `matches` asked for.
 pub fn asked(matches: &ArgMatches) -> Asked {
-    match matches.subcommand() {
-        Some(("release", release)) => {
-            return Asked::Release {
-                bump: release.get_one::<String>("bump").cloned(),
-            };
-        }
-        Some(("installer", installer)) => {
-            return Asked::Installer {
-                version: installer
-                    .get_one::<String>("version")
-                    .expect("the version is required")
-                    .clone(),
-            };
-        }
-        _ => {}
-    }
-
     let mut name = Vec::new();
     let mut given = GivenValues::new();
     let mut current = matches;
@@ -168,5 +126,5 @@ pub fn asked(matches: &ArgMatches) -> Asked {
         current = below;
     }
 
-    Asked::Task { name, given }
+    Asked { name, given }
 }

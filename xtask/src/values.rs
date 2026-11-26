@@ -23,6 +23,20 @@ mod tests;
 /// What the command line gave, by the name of the variable it fills.
 pub type GivenValues = BTreeMap<Name, Vec<String>>;
 
+/// The argument `name` stands for: the last value the command line gave, or its `else` where it gave none; a required one the command line refuses missing before anything runs.
+fn argued(given: Option<&Vec<String>>, else_: Option<&String>, name: &Name) -> String {
+    given
+        .and_then(|values| values.last())
+        .or(else_)
+        .unwrap_or_else(|| {
+            panic!(
+                "the command line refuses `{}` missing, for it states no `else`",
+                from_top(name)
+            )
+        })
+        .clone()
+}
+
 /// The values one run fills braces with.
 pub struct Values<'a> {
     tree: &'a Tree,
@@ -71,7 +85,11 @@ impl<'a> Values<'a> {
 
         match fill {
             Fill::Variable(name) => match &self.tree.variables[name] {
-                Variable::Words(words) => Ok(Some(words.clone())),
+                Variable::Words(words) => words
+                    .iter()
+                    .map(|word| self.text(word))
+                    .collect::<Result<_, _>>()
+                    .map(Some),
                 Variable::Output(command) => {
                     let printed = self.printed(name, command)?;
                     Ok((!printed.is_empty()).then_some(printed))
@@ -95,13 +113,11 @@ impl<'a> Values<'a> {
                             .collect(),
                     ))
                 }
-                Given::Argument { otherwise, .. } => Ok(Some(vec![
-                    self.given
-                        .get(name)
-                        .and_then(|values| values.last())
-                        .unwrap_or(otherwise)
-                        .clone(),
-                ])),
+                Given::Argument { else_, .. } => Ok(Some(vec![argued(
+                    self.given.get(name),
+                    else_.as_ref(),
+                    name,
+                )])),
             },
             Fill::HostTriple
             | Fill::CargoTargetDir
@@ -135,19 +151,20 @@ impl<'a> Values<'a> {
                     text.push_str(&data_kept(self.tree, name).to_string_lossy())
                 }
                 Piece::Value(Fill::Variable(name)) => match &self.tree.variables[name] {
-                    Variable::Words(words) => text.push_str(&words.concat()),
+                    Variable::Words(words) => {
+                        for word in words {
+                            text.push_str(&self.text(word)?);
+                        }
+                    }
                     Variable::Read { path, key } => text.push_str(&self.read(name, path, key)?),
                     Variable::Output(_) => {
                         unreachable!("the reader keeps `{}` a word of its own", from_top(name))
                     }
                 },
                 Piece::Value(Fill::Given(name)) => match &self.tree.given[name] {
-                    Given::Argument { otherwise, .. } => text.push_str(
-                        self.given
-                            .get(name)
-                            .and_then(|values| values.last())
-                            .unwrap_or(otherwise),
-                    ),
+                    Given::Argument { else_, .. } => {
+                        text.push_str(&argued(self.given.get(name), else_.as_ref(), name))
+                    }
                     Given::Flag { .. } => {
                         unreachable!("the reader keeps `{}` a word of its own", from_top(name))
                     }

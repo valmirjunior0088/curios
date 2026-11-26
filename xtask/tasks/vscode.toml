@@ -1,17 +1,15 @@
-description = "The VS Code extension"
+what = "The VS Code extension"
 
 [install]
-description = "Install the VS Code extension's tools from its lock file, exactly, as every run that reads them does"
-dir = "editors/vscode"
+what = "Install the VS Code extension's tools from its lock file, exactly, as every run that reads them does"
 produces.installed = "editors/vscode/node_modules"
 run = [
-    ["{.tools.npm}", "clean-install"],
+    { in = "editors/vscode", do = ["{.tools.npm}", "clean-install"] },
 ]
 
 [build]
-description = "Bundle the VS Code extension and the TextMate grammars it ships, and write its package as it ships, which the snapshots never load"
-dir = "editors/vscode"
+what = "Bundle the VS Code extension and the TextMate grammars it ships, and write its package as it ships, which the snapshots never load"
 consumes = [".vscode.install.produces.installed"]
 run = [
-    ["{.tools.npm}", "run", "package"],
+    { in = "editors/vscode", do = ["{.tools.npm}", "run", "package"] },
 ]

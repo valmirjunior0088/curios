@@ -5,10 +5,10 @@ use {super::*, crate::*};
 /// The one step of the file `a`, whose top is `top` and whose step runs `command`, under a top holding nothing of its own.
 fn step(top: &str, command: &str) -> Tree {
     Tree::parse(&[
-        ("xtask/tasks.toml", "description = \"The top\"\n"),
+        ("xtask/tasks.toml", "what = \"The top\"\n"),
         (
             "xtask/tasks/a.toml",
-            &format!("description = \"A\"\n{top}\n[s]\ndescription = \"S\"\nrun = [{command}]\n"),
+            &format!("what = \"A\"\n{top}\n[s]\nwhat = \"S\"\nrun = [{command}]\n"),
         ),
     ])
     .unwrap()
@@ -25,7 +25,7 @@ fn words(tree: &Tree, given: &[(&str, &str)]) -> Option<Vec<String>> {
     }
     let given = gathered;
 
-    let Instruction::Command(command) = &tree.steps[0].run[0] else {
+    let Instruction::Command { words: command, .. } = &tree.steps[0].run[0] else {
         panic!("the step runs a command");
     };
 
@@ -34,34 +34,39 @@ fn words(tree: &Tree, given: &[(&str, &str)]) -> Option<Vec<String>> {
 
 #[test]
 fn a_list_stands_for_its_words() {
-    let tree = step(
-        "variables.list = [\"x\", \"y\"]",
-        "[\"echo\", \"{.a.variables.list}\", \"z\"]",
-    );
+    let tree = step("list = [\"x\", \"y\"]", "[\"echo\", \"{.a.list}\", \"z\"]");
 
     assert_eq!(words(&tree, &[]).unwrap(), ["echo", "x", "y", "z"]);
 }
 
 #[test]
 fn a_string_sits_inside_a_word_beside_text() {
-    let tree = step(
-        "variables.name = \"x\"",
-        "[\"echo\", \"--{.a.variables.name}=1\"]",
-    );
+    let tree = step("name = \"x\"", "[\"echo\", \"--{.a.name}=1\"]");
 
     assert_eq!(words(&tree, &[]).unwrap(), ["echo", "--x=1"]);
 }
 
+/// A variable's word may hold what the runner fills, filled where a step reads it, so two steps reading one variable are handed one value. Mutation-checked: with a variable's word read as its text alone, the braces reach the command.
+#[test]
+fn a_variables_word_holds_what_the_runner_fills() {
+    let tree = step(
+        "at = \"--target={!host_triple}\"",
+        "[\"echo\", \"{.a.at}\"]",
+    );
+
+    assert_eq!(
+        words(&tree, &[]).unwrap(),
+        ["echo".to_string(), format!("--target={HOST_TRIPLE}")]
+    );
+}
+
 #[test]
 fn a_flag_is_its_flag_and_value_where_given_and_nothing_where_not() {
-    let tree = step(
-        "given.only = { flag = \"-E\" }",
-        "[\"echo\", \"{.a.given.only}\"]",
-    );
+    let tree = step("only = { flag = \"-E\" }", "[\"echo\", \"{.a.only}\"]");
 
     assert_eq!(words(&tree, &[]).unwrap(), ["echo"]);
     assert_eq!(
-        words(&tree, &[("a.given.only", "test(~x)")]).unwrap(),
+        words(&tree, &[("a.only", "test(~x)")]).unwrap(),
         ["echo", "-E", "test(~x)"]
     );
 }
@@ -70,16 +75,12 @@ fn a_flag_is_its_flag_and_value_where_given_and_nothing_where_not() {
 #[test]
 fn a_flag_given_twice_is_handed_on_twice() {
     let tree = step(
-        "given.package = { flag = [\"-p\", \"--package\"] }",
-        "[\"echo\", \"{.a.given.package}\"]",
+        "package = { flag = [\"-p\", \"--package\"] }",
+        "[\"echo\", \"{.a.package}\"]",
     );
 
     assert_eq!(
-        words(
-            &tree,
-            &[("a.given.package", "first"), ("a.given.package", "second")]
-        )
-        .unwrap(),
+        words(&tree, &[("a.package", "first"), ("a.package", "second")]).unwrap(),
         ["echo", "--package", "first", "--package", "second"]
     );
 }
@@ -88,12 +89,12 @@ fn a_flag_given_twice_is_handed_on_twice() {
 #[test]
 fn a_flag_of_two_spellings_is_handed_on_by_its_long_one() {
     let tree = step(
-        "given.only = { flag = [\"-E\", \"--filterset\"] }",
-        "[\"echo\", \"{.a.given.only}\"]",
+        "only = { flag = [\"-E\", \"--filterset\"] }",
+        "[\"echo\", \"{.a.only}\"]",
     );
 
     assert_eq!(
-        words(&tree, &[("a.given.only", "test(~x)")]).unwrap(),
+        words(&tree, &[("a.only", "test(~x)")]).unwrap(),
         ["echo", "--filterset", "test(~x)"]
     );
 }
@@ -101,13 +102,13 @@ fn a_flag_of_two_spellings_is_handed_on_by_its_long_one() {
 #[test]
 fn an_argument_is_its_default_where_none_is_given() {
     let tree = step(
-        "given.file = { argument = \"PATH\", else = \"default.crs\" }",
-        "[\"echo\", \"{.a.given.file}\"]",
+        "file = { argument = \"PATH\", else = \"default.crs\" }",
+        "[\"echo\", \"{.a.file}\"]",
     );
 
     assert_eq!(words(&tree, &[]).unwrap(), ["echo", "default.crs"]);
     assert_eq!(
-        words(&tree, &[("a.given.file", "other.crs")]).unwrap(),
+        words(&tree, &[("a.file", "other.crs")]).unwrap(),
         ["echo", "other.crs"]
     );
 }
@@ -115,13 +116,10 @@ fn an_argument_is_its_default_where_none_is_given() {
 /// A tool handed no paths reads its standard input or the whole directory, so a command whose list came back empty has nothing to run on.
 #[test]
 fn a_command_whose_printed_list_is_empty_is_not_run() {
-    let empty = step(
-        "variables.files = { run = [\"true\"] }",
-        "[\"echo\", \"{.a.variables.files}\"]",
-    );
+    let empty = step("files = { run = [\"true\"] }", "[\"echo\", \"{.a.files}\"]");
     let printed = step(
-        "variables.files = { run = [\"echo\", \"one\"] }",
-        "[\"echo\", \"{.a.variables.files}\"]",
+        "files = { run = [\"echo\", \"one\"] }",
+        "[\"echo\", \"{.a.files}\"]",
     );
 
     assert_eq!(words(&empty, &[]), None);
@@ -131,10 +129,10 @@ fn a_command_whose_printed_list_is_empty_is_not_run() {
 #[test]
 fn a_produced_file_is_its_path_from_the_root() {
     let tree = Tree::parse(&[
-        ("xtask/tasks.toml", "description = \"The top\"\n"),
+        ("xtask/tasks.toml", "what = \"The top\"\n"),
         (
             "xtask/tasks/a.toml",
-            "description = \"A\"\n[s]\ndescription = \"S\"\nproduces = { out = \"some/{!host_triple}.d\" }\nrun = [[\"touch\", \"{.a.s.produces.out}\"]]\n",
+            "what = \"A\"\n[s]\nwhat = \"S\"\nproduces = { out = \"some/{!host_triple}.d\" }\nrun = [[\"touch\", \"{.a.s.produces.out}\"]]\n",
         ),
     ])
     .unwrap();
@@ -155,14 +153,14 @@ fn a_produced_file_is_its_path_from_the_root() {
 #[test]
 fn a_variables_command_naming_a_missing_program_is_refused_naming_both() {
     let tree = Tree::parse(&[
-        ("xtask/tasks.toml", "description = \"The top\"\n"),
+        ("xtask/tasks.toml", "what = \"The top\"\n"),
         (
             "xtask/tasks/a.toml",
-            "description = \"A\"\nvariables.listed.run = [\"no-such-lister\"]\n[s]\ndescription = \"S\"\nrun = [[\"echo\", \"{.a.variables.listed}\"]]\n",
+            "what = \"A\"\nlisted.run = [\"no-such-lister\"]\n[s]\nwhat = \"S\"\nrun = [[\"echo\", \"{.a.listed}\"]]\n",
         ),
     ])
     .unwrap();
-    let Instruction::Command(command) = &tree.steps[0].run[0] else {
+    let Instruction::Command { words: command, .. } = &tree.steps[0].run[0] else {
         panic!("the step runs a command");
     };
 
@@ -170,9 +168,8 @@ fn a_variables_command_naming_a_missing_program_is_refused_naming_both() {
         .command(command)
         .unwrap_err();
     assert!(
-        refusal.starts_with(
-            "`.a.variables.listed` is what `no-such-lister` prints: cannot run no-such-lister:"
-        ),
+        refusal
+            .starts_with("`.a.listed` is what `no-such-lister` prints: cannot run no-such-lister:"),
         "{refusal}"
     );
 }
@@ -193,10 +190,10 @@ fn a_key_of_a_file_stands_for_the_string_it_holds() {
     let path = manifest("read", "[workspace.package]\nedition = \"2024\"\n");
     let tree = step(
         &format!(
-            "variables.edition = {{ read = \"{}\", key = \"workspace.package.edition\" }}",
+            "edition = {{ read = \"{}\", key = \"workspace.package.edition\" }}",
             path.display()
         ),
-        "[\"rustfmt\", \"--edition={.a.variables.edition}\"]",
+        "[\"rustfmt\", \"--edition={.a.edition}\"]",
     );
 
     let read = words(&tree, &[]);
@@ -211,12 +208,12 @@ fn a_key_a_file_does_not_hold_as_a_string_is_refused_naming_both() {
     let refusal = |key: &str| {
         let tree = step(
             &format!(
-                "variables.edition = {{ read = \"{}\", key = \"{key}\" }}",
+                "edition = {{ read = \"{}\", key = \"{key}\" }}",
                 path.display()
             ),
-            "[\"rustfmt\", \"{.a.variables.edition}\"]",
+            "[\"rustfmt\", \"{.a.edition}\"]",
         );
-        let Instruction::Command(command) = &tree.steps[0].run[0] else {
+        let Instruction::Command { words: command, .. } = &tree.steps[0].run[0] else {
             panic!("the step runs a command");
         };
 
@@ -232,7 +229,7 @@ fn a_key_a_file_does_not_hold_as_a_string_is_refused_naming_both() {
         assert_eq!(
             refusal,
             &format!(
-                "`.a.variables.edition` is what `{}` holds at `{key}`: no string stands there",
+                "`.a.edition` is what `{}` holds at `{key}`: no string stands there",
                 path.display()
             )
         );
@@ -245,11 +242,11 @@ fn data_stands_for_its_kept_directory() {
     let tree = Tree::parse(&[
         (
             "xtask/tasks.toml",
-            "description = \"The top\"\n[data.cases]\nversion = \"abc\"\nurl = \"https://example.invalid/abc.tar.gz\"\npath = \"cases\"\nsha256 = \"0000000000000000000000000000000000000000000000000000000000000000\"\n[data.tables]\nversion = \"7.0\"\nurl = \"https://example.invalid/ucd\"\nfiles = [\"one.txt\"]\nsha256 = \"0000000000000000000000000000000000000000000000000000000000000000\"\nbeside = \"some-crate\"\n",
+            "what = \"The top\"\n[data.cases]\nversion = \"abc\"\nurl = \"https://example.invalid/abc.tar.gz\"\npath = \"cases\"\nsha256 = \"0000000000000000000000000000000000000000000000000000000000000000\"\n[data.tables]\nversion = \"7.0\"\nurl = \"https://example.invalid/ucd\"\nfiles = [\"one.txt\"]\nsha256 = \"0000000000000000000000000000000000000000000000000000000000000000\"\nbeside = \"some-crate\"\n",
         ),
         (
             "xtask/tasks/a.toml",
-            "description = \"A\"\n[s]\ndescription = \"S\"\nrun = [[\"ls\", \"{.data.cases}\", \"{.data.tables}\"]]\n",
+            "what = \"A\"\n[s]\nwhat = \"S\"\nrun = [[\"ls\", \"{.data.cases}\", \"{.data.tables}\"]]\n",
         ),
     ])
     .unwrap();

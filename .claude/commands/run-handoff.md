@@ -8,7 +8,7 @@ The handoff: the check work passes before it lands. Why it holds these steps and
 
 ## What it runs
 
-One command, `cargo xtask handoff`: every step of the subjects the handoff requires, one after another in the order it names them, each after what it requires and consumes; each subject's `lint` holds its formatting, and nothing writes. Each step ends on a line saying whether it passed or failed and in how long; a step whose prerequisite did not pass is not run, and says which; the steps that read nothing of a failure go on, and the last line names what failed and what was not run.
+One command, `cargo xtask handoff`: every step of the subjects the handoff requires, one after another in the order it names them, each after what it requires and consumes; each subject's `lint` holds its formatting, and nothing writes. Each step ends on a line saying whether it passed or failed and in how long; a step whose prerequisite did not pass is not run, and says which; the steps that read nothing of a failure go on, and the exit code says whether every step passed.
 
 It needs cargo and the `wasm32-unknown-unknown` and `wasm32-wasip2` targets `rust-toolchain.toml` installs; every other tool a step runs is fetched at its digest before the first step and kept in `xtask/.artifacts`, which needs the network once a checkout.
 
@@ -18,12 +18,12 @@ The checkout is the handoff's own while it runs: no other session builds in it o
 
 ## How it runs
 
-The command is a tracked background task, `systemd-run --user --scope -q -p MemoryMax=24G -p MemorySwapMax=0 cargo xtask handoff`, its output unredirected: the scope caps what the handoff's changed code may hold, so a run that outgrows it ends rather than taking the machine, and the harness keeps both streams, standard error being where the handoff writes each step's verdict, in the file it names at the launch, `<output>` below, where the user can watch the run. Nothing follows the handoff in the command, so its exit code is the handoff's, and the task's notification reports it; where the handoff fails, the last line it wrote names what failed and what was not run. Never detach with `&`, and never add a shell that waits on another.
+The command is a tracked background task, `systemd-run --user --scope -q -p MemoryMax=24G -p MemorySwapMax=0 cargo xtask handoff`, its output unredirected: the scope caps what the handoff's changed code may hold, so a run that outgrows it ends rather than taking the machine, and the harness keeps both streams, standard error being where the handoff writes each step's verdict, in the file it names at the launch, `<output>` below, where the user can watch the run. Nothing follows the handoff in the command, so its exit code is the handoff's, and the task's notification reports it; where the handoff fails, its closing rows marked `✗` name what failed and its `not run` lines what was held back. Never detach with `&`, and never add a shell that waits on another.
 
-Beside it, one monitor reports each step as it ends: an event for each line of that file that ends a step or the handoff, in order, and an exit once the handoff's process is gone. It is armed at the longest deadline a monitor takes, and armed again at its expiry while the handoff runs on, starting past the lines it already reported:
+Beside it, one monitor reports each step as it ends: an event for each line of that file that closes a step or says one was not run, in order, and an exit once the handoff's process is gone. It is armed at the longest deadline a monitor takes, and armed again at its expiry while the handoff runs on, starting past the lines it already reported:
 
 ```sh
-lines='^»»» .* ««« |not run|^failed:'
+lines='^»»» .* ««« |not run'
 seen=$(grep -cE "$lines" <output> 2>/dev/null || true)
 seen=${seen:-0}
 while true; do

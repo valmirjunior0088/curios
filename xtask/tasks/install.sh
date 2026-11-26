@@ -2,24 +2,21 @@
 #
 # Install the `curios` CLI:
 #
-#   curl -fsSL https://github.com/valmirjunior0088/curios/releases/latest/download/install.sh | sh
+#   curl -fsSL {.repository}/releases/latest/download/install.sh | sh
 #
 # The version is fixed at release time and this script takes no options: it installs the release it shipped with, into ~/.local/bin. To install a different release, fetch that release's own copy of this script — the URL is the version selector, so a pinned script and a pinned binary cannot drift apart.
 
 set -eu
 
-VERSION="{{ version }}"
-REPO="https://github.com/valmirjunior0088/curios"
+# The release this script installs and where it is published, written in when a release renders it (`cargo xtask installer <version>`, a write of this file as its template).
+VERSION="{.version}"
+REPO="{.repository}"
 BIN_DIR="$HOME/.local/bin"
 
 die() {
     echo "install: $*" >&2
     exit 1
 }
-
-case "$VERSION" in
-    *"{"*) die "this is the template, not a released installer; fetch it from $REPO/releases/latest/download/install.sh" ;;
-esac
 
 # The three platforms the release workflow builds. Anything else is refused by name rather than guessed at: a binary for the wrong architecture fails much less clearly than this line does.
 os=$(uname -s)
@@ -99,7 +96,7 @@ else
 fi
 
 # Whether *this* shell can see the directory is not the question worth asking: it is interactive, so its PATH may have been built by a startup file only a terminal like it reads, or by hand in this session alone. So ask a shell that reads no interactive startup file, which is the PATH a new session starts from. A shell that cannot be asked falls back to this one, which is the weaker check rather than no check.
-launched_path=$(env -i HOME="$HOME" "${SHELL:-/bin/sh}" -lc 'printf %s "$PATH"' 2> /dev/null) || launched_path="$PATH"
+launched_path=$(env -i HOME="$HOME" "${SHELL:-/bin/sh}" -lc "printf %s \"\$PATH\"" 2> /dev/null) || launched_path="$PATH"
 
 case ":$launched_path:" in
     *":$BIN_DIR:"*) ;;

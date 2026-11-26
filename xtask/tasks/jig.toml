@@ -1,17 +1,26 @@
-description = "The jig's own crates, whose names start with x: these task files' runner, the bench and the board"
+what = "The jig's own crates, whose names start with x: these task files' runner, the bench and the board"
+
+# The scripts the task files run, each beside the task file of its step; the one that holds the agent files to the tree, the agent files, `CLAUDE.md` and the Markdown under `.claude/`, and the patterns of the files that hold the sources' names.
+shell.run = ["git", "ls-files", "--", "xtask/tasks/*.sh"]
+scripts.agents = "xtask/tasks/jig/agents.sh"
+agent_files.run = ["git", "ls-files", "--", "CLAUDE.md", ".claude/*.md"]
+sources = ["*.rs", "*.crs", "*.toml", "*.js", "*.sh", "*.yml"]
 
 [lint]
-description = "Lint every target of the jig's crates, which the compiler's lint leaves out: a crate of the jig takes the compiler's crates, and no crate of the compiler takes one of the jig's"
+what = "Lint every target of the jig's crates, which the compiler's lint leaves out: a crate of the jig takes the compiler's crates, and no crate of the compiler takes one of the jig's; and the scripts the task files run, by ShellCheck"
 run = [
     ["cargo", "clippy", "--package", "x*", "--all-targets", "--keep-going"],
+    ["{.tools.shellcheck}", "{.jig.shell}"],
 ]
 
 [test]
-description = "Run the jig's tests: these task files held to the command line and the check workflow, the runner's own, the bench's and the board's"
+what = "Run the jig's tests: these task files held to the command line and the check workflow, the runner's own, the bench's and the board's"
 run = [
     ["{.tools.cargo-nextest}", "nextest", "run", "--package", "x*", "--all-targets", "--no-fail-fast"],
 ]
 
 [agents]
-description = "Hold the agent files, CLAUDE.md and every Markdown file under .claude/, to the tree: each glob of a rule matches a tracked file, and each link, path and source name they cite is there"
-run = [{ check = "agents" }]
+what = "Hold the agent files, CLAUDE.md and every Markdown file under .claude/, to the tree: each glob of a rule matches a tracked file, and each link, path and source name they cite is there"
+run = [
+    ["sh", "{.jig.scripts.agents}", "{.jig.agent_files}", "--", "{.jig.sources}"],
+]

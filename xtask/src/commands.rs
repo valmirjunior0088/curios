@@ -1,9 +1,9 @@
-//! How a program is spawned and echoed: a step's command, cargo for the commands outside the task files, and any other program one of those names.
+//! How a program is spawned and echoed: a step's command, and a program the runner asks for what it prints.
 //!
-//! **A verb names how a program is reached.** [`launch_in`] runs a command's words from a directory, and is how the runner performs a step's commands; [`cargo`] is the toolchain's cargo at the workspace root, for the commands outside the task files; anything else is a [`Command`] handed to [`run`], which defaults to the root. Every one of them echoes its command line before it runs, so the terminal reads as a transcript of the work.
+//! **A verb names how a program is reached.** [`launch_in`] runs a command's words from a directory, and is how the runner performs a step's commands, echoing its command line before it runs, so the terminal reads as a transcript of the work; [`ask`] and [`ask_launched`] run a program for what it prints, and echo nothing.
 
 use {
-    crate::{Launch, launch, root},
+    crate::{Launch, root},
     std::{
         path::Path,
         process::{Command, Stdio},
@@ -70,28 +70,7 @@ fn execute(
     }
 }
 
-/// The toolchain's cargo at the workspace root, for a command outside the task files.
-pub fn cargo(arguments: &[&str]) -> Result<(), String> {
-    let mut words = vec!["cargo".to_string()];
-    words.extend(arguments.iter().map(|argument| argument.to_string()));
-
-    launch_in(root(), launch(&words)?, &words.join(" "))
-}
-
-/// Run one command from the workspace root, echoing it first as a step's would be, and fail with its status.
-pub fn run(command: Command, arguments: &[&str]) -> Result<(), String> {
-    run_in(root(), command, arguments)
-}
-
-/// [`run`] from `directory` instead of the workspace root.
-pub fn run_in(directory: &Path, command: Command, arguments: &[&str]) -> Result<(), String> {
-    let mut words = vec![command.get_program().to_string_lossy().into_owned()];
-    words.extend(arguments.iter().map(|argument| argument.to_string()));
-    say(&words.join(" "));
-    execute(directory, command, arguments, Output::Streamed).map(drop)
-}
-
-/// Run what `launched` names from `directory` as [`run_in`] does, what its leading assignments set beside what it inherits, said as `said`: a step's command as its task file writes it.
+/// Run what `launched` names from `directory`, what its leading assignments set beside what it inherits, said first as `said`, a step's command as its task file writes it, and fail with its status.
 pub fn launch_in(directory: &Path, launched: Launch, said: &str) -> Result<(), String> {
     let Launch { command, arguments } = launched;
     let arguments = arguments.iter().map(String::as_str).collect::<Vec<_>>();
