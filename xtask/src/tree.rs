@@ -228,7 +228,7 @@ pub enum Variable {
     Output(Vec<String>),
     /// The string a key of a TOML file holds, `key` its keys from the file's top, read once a run and only where a step that uses it runs: a value another file owns, stated there alone.
     Read { path: String, key: Vec<String> },
-    /// Given on the command line with a value by any of `flags`, a short spelling, a long one or both: the flag and the value where it is given, nothing where it is not.
+    /// Given on the command line with a value by any of `flags`, a short spelling, a long one or both: the flag and the value for each time it is given, nothing where it is not. Whether the command takes it more than once is the command's to say.
     Flag { flags: Vec<String>, help: String },
     /// Given on the command line as a positional argument, `otherwise` where it is not.
     Argument {
@@ -279,7 +279,33 @@ pub enum Fill {
     Data(Name),
 }
 
+impl Fill {
+    /// What a task file writes between the braces: a built-in by its `!` name, and any other value by its path from the top.
+    pub fn written(&self) -> String {
+        match self {
+            Fill::HostTriple => "!host_triple".to_string(),
+            Fill::CargoTargetDir => "!cargo_target_dir".to_string(),
+            Fill::CargoHome => "!cargo_home".to_string(),
+            Fill::RustSysroot => "!rust_sysroot".to_string(),
+            Fill::Variable(name) | Fill::Produced(name) | Fill::Tool(name) | Fill::Data(name) => {
+                from_top(name)
+            }
+        }
+    }
+}
+
 impl Word {
+    /// The word as a task file writes it, each value by its braces: what a reader looks the value up by.
+    pub fn written(&self) -> String {
+        self.0
+            .iter()
+            .map(|piece| match piece {
+                Piece::Text(text) => text.clone(),
+                Piece::Value(fill) => format!("{{{}}}", fill.written()),
+            })
+            .collect()
+    }
+
     /// The values the word's braces stand for.
     pub fn fills(&self) -> impl Iterator<Item = &Fill> {
         self.0.iter().filter_map(|piece| match piece {

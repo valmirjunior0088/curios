@@ -7,6 +7,7 @@ use {
     std::{
         path::Path,
         process::{Command, Stdio},
+        sync::atomic::{AtomicBool, Ordering},
     },
 };
 
@@ -19,7 +20,18 @@ enum Output {
     Captured,
 }
 
-/// The one spawn. A streamed command echoes its command line and inherits both of the terminal's streams; a captured one says nothing and pipes stdout back, leaving stderr inherited so a failure explains itself in the tool's own words rather than through this function. Either way a non-zero status is the error, as is a program the system cannot find, named with what the system said of it.
+/// Whether a row has been said in this run, so every row after the first stands apart from the output above it.
+static SAID: AtomicBool = AtomicBool::new(false);
+
+/// Say what is about to run, between guillemets, so a reader of the terminal finds where each piece of work begins: a step's command as its task file writes it, a check by its name, or a command outside the task files by its words.
+pub fn say(line: &str) {
+    if SAID.swap(true, Ordering::Relaxed) {
+        eprintln!();
+    }
+    eprintln!("««« {line} »»»");
+}
+
+/// The one spawn. A streamed command inherits both of the terminal's streams, its caller having said it ([`say`]); a captured one says nothing and pipes stdout back, leaving stderr inherited so a failure explains itself in the tool's own words rather than through this function. Either way a non-zero status is the error, as is a program the system cannot find, named with what the system said of it.
 fn execute(
     directory: &Path,
     mut command: Command,
@@ -33,15 +45,6 @@ fn execute(
 
     let (status, printed) = match output {
         Output::Streamed => {
-            eprintln!(
-                "{program} {}",
-                command
-                    .get_args()
-                    .map(|argument| argument.to_string_lossy())
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            );
-
             let status = command.status().map_err(unspawned)?;
 
             (status, String::new())
@@ -72,7 +75,7 @@ pub fn cargo(arguments: &[&str]) -> Result<(), String> {
     let mut words = vec!["cargo".to_string()];
     words.extend(arguments.iter().map(|argument| argument.to_string()));
 
-    launch_in(root(), launch(&words)?)
+    launch_in(root(), launch(&words)?, &words.join(" "))
 }
 
 /// Run one command from the workspace root, echoing it first as a step's would be, and fail with its status.
@@ -82,14 +85,18 @@ pub fn run(command: Command, arguments: &[&str]) -> Result<(), String> {
 
 /// [`run`] from `directory` instead of the workspace root.
 pub fn run_in(directory: &Path, command: Command, arguments: &[&str]) -> Result<(), String> {
+    let mut words = vec![command.get_program().to_string_lossy().into_owned()];
+    words.extend(arguments.iter().map(|argument| argument.to_string()));
+    say(&words.join(" "));
     execute(directory, command, arguments, Output::Streamed).map(drop)
 }
 
-/// Run what `launched` names from `directory` as [`run_in`] does, what its leading assignments set beside what it inherits.
-pub fn launch_in(directory: &Path, launched: Launch) -> Result<(), String> {
+/// Run what `launched` names from `directory` as [`run_in`] does, what its leading assignments set beside what it inherits, said as `said`: a step's command as its task file writes it.
+pub fn launch_in(directory: &Path, launched: Launch, said: &str) -> Result<(), String> {
     let Launch { command, arguments } = launched;
     let arguments = arguments.iter().map(String::as_str).collect::<Vec<_>>();
 
+    say(said);
     execute(directory, command, &arguments, Output::Streamed).map(drop)
 }
 

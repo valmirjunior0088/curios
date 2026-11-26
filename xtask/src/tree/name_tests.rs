@@ -31,6 +31,25 @@ fn a_name_is_the_path_from_the_top_to_its_declaration_in_every_file() {
     }
 }
 
+/// A command is said as its task file writes it, each value between its braces by its path from the top or its built-in name, so a reader of the transcript looks it up where it is written: text around a value stays as it stands.
+#[test]
+fn a_word_is_written_back_as_its_task_file_writes_it() {
+    let tree = tree(&[(
+        "a",
+        "description = \"A\"\nvariables.flavor = \"plain\"\n[test]\ndescription = \"Test\"\nrun = [[\"true\", \"--flavor={.a.variables.flavor}\", \"{!host_triple}\"]]\n",
+    )])
+    .unwrap();
+
+    let step = tree.steps_of(&name("a.test"))[0];
+    let Instruction::Command(words) = &tree.steps[step].run[0] else {
+        panic!("the step runs a command");
+    };
+    assert_eq!(
+        words.iter().map(Word::written).collect::<Vec<_>>(),
+        ["true", "--flavor={.a.variables.flavor}", "{!host_triple}"]
+    );
+}
+
 /// A name without its leading `.` is refused, whatever it would once have named, so no name is read relative to the file it is written in.
 #[test]
 fn a_name_without_its_leading_dot_is_refused() {

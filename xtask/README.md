@@ -110,6 +110,14 @@ What a step runs beyond the Rust toolchain is a tool the task files declare and 
 
 **Rejected.** Every tracked file of the three languages wherever it stands, with the files Biome cannot read excluded one by one, which a new template has to know to add; the workspace's paths computed from what git tracks, a rule of the runner's for what four words state; a `package.json` at the root to pin it, which makes the repository an npm package for one tool's sake; a development dependency in each npm tree, two pins of one tool and none for the workspace's own JavaScript; a linter and a formatter as two tools with a plugin tree between them, for what one binary does; each tree's Biome steps handed its slice of the list, four slices of one list restated beside it and held to it by a test; Biome's paths read off `biome.json` by this crate, which Biome reads itself.
 
+### A run is a transcript of its steps
+
+**Decision.** A run says each command it launches before its output, `««« <command> »»»`, the command as its task file writes it, each value by its braces, and a check by its name; a blank line stands before every such line but the run's first. Each step closes with one line, `»»» compiler test ««« ✓ 58.7s`: the step's name, as `cargo xtask` takes it, then `✓` or `✗`, the marks `curios test` closes a test with, and what it took.
+
+**Rationale.** A step's output is the tools' own, so the lines that open and close it are what a reader, or a monitor reading the file, finds the work's edges by: the command as written is what a reader looks up in the task files, where the expanded one is a path into the machine, and the closing line names the step a reader runs again.
+
+**Rejected.** The expanded command, which names no task file's text; a count of the commands a step has run, which a reader does not act on; a closing line for each command, which repeats the command a step runs once.
+
 ### The handoff is a step that requires every subject
 
 **Decision.** `cargo xtask handoff` is the top's step that requires every subject it checks, in the order it names them, and nothing else: `format`, `native`, `profile` and `clean` are tasks no requirement reaches. Each step runs to its end whatever the one before it did, and says how it ended and in how long; a step behind one that did not pass is not run, since what it reads is not there, while the steps that read nothing of the failure go on, and the end names what failed and what was not run. The handoff, `.claude/commands/run-handoff.md`, is `cargo xtask handoff`, and a step that failed in it is run again by its path.

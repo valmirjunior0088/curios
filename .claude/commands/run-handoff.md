@@ -23,7 +23,7 @@ The command is a tracked background task, `systemd-run --user --scope -q -p Memo
 Beside it, one monitor reports each step as it ends: an event for each line of that file that ends a step or the handoff, in order, and an exit once the handoff's process is gone. It is armed at the longest deadline a monitor takes, and armed again at its expiry while the handoff runs on, starting past the lines it already reported:
 
 ```sh
-lines=' (passed|failed) in |not run|^failed:'
+lines='^»»» .* ««« |not run|^failed:'
 seen=$(grep -cE "$lines" <output> 2>/dev/null || true)
 seen=${seen:-0}
 while true; do

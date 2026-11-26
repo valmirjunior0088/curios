@@ -6,8 +6,8 @@
 
 use {
     crate::{
-        Given, Instruction, Name, Tree, Values, directories, fetch, launch, launch_in, root,
-        schedule, spelled,
+        Given, Instruction, Name, Tree, Values, Word, directories, fetch, launch, launch_in, root,
+        say, schedule, spelled,
     },
     std::{env, fs, time::Instant},
 };
@@ -15,7 +15,13 @@ use {
 #[cfg(test)]
 mod tests;
 
-/// Run `asked` and what it runs after, as `given` narrows it, and say of each step how it ended and in how long.
+/// The mark of a step that passed, on the line that closes it: the one `curios test` prints for a test that passed (`curios/src/report/tree.rs`), so the two transcripts read alike.
+const PASSED: &str = "✓";
+
+/// The mark of a step that did not pass, as `curios test` marks a test that did not.
+const UNPASSED: &str = "✗";
+
+/// Run `asked` and what it runs after, as `given` narrows it, and close each step with a line naming it, `»»» <step> «««`, how it ended and in how long.
 pub fn perform(tree: &Tree, asked: &Name, given: &Given) -> Result<(), String> {
     let values = Values::new(tree, given);
     let scheduled = schedule(tree, asked, given);
@@ -43,10 +49,10 @@ pub fn perform(tree: &Tree, asked: &Name, given: &Given) -> Result<(), String> {
         let took = started.elapsed().as_secs_f64();
 
         match outcome {
-            Ok(()) => eprintln!("{name} passed in {took:.1}s"),
+            Ok(()) => eprintln!("»»» {name} ««« {PASSED} {took:.1}s"),
             Err(message) => {
                 eprintln!("{message}");
-                eprintln!("{name} failed in {took:.1}s");
+                eprintln!("»»» {name} ««« {UNPASSED} {took:.1}s");
                 failed.push(step);
             }
         }
@@ -103,7 +109,7 @@ fn run(tree: &Tree, values: &Values<'_>, step: usize) -> Result<(), String> {
             }
             Instruction::Check(check) => {
                 // Said as a command's line is, so the terminal reads as a transcript of the work.
-                eprintln!("check {}", check.name);
+                say(&format!("check {}", check.name));
                 (check.judge)()?;
                 continue;
             }
@@ -115,7 +121,12 @@ fn run(tree: &Tree, values: &Values<'_>, step: usize) -> Result<(), String> {
         if let Some(path) = &path {
             launched.command.env("PATH", path);
         }
-        launch_in(&directory, launched)?;
+        let written = command
+            .iter()
+            .map(Word::written)
+            .collect::<Vec<_>>()
+            .join(" ");
+        launch_in(&directory, launched, &written)?;
     }
 
     for produced in &step.produces {
