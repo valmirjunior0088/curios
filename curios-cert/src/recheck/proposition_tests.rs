@@ -708,18 +708,29 @@ and /v :
 /std/Bool/True/qed()
 "#;
 
-// A member stands in its group's own signatures and bodies as the local it is assumed at, which holds no group, so a proof or a type there that reaches a member of a group that does not descend encloses the group by what the group is and not by what the position holds: each is refused under the item that holds the group, the group's first member for a group of the module's own, as a position holding the group closed is. Admitted, `w` would be a proof of `False` in every erased position that reads it, and `v`'s type one no reduction settles.
+// A member stands in its group's own signatures and bodies as the local it is assumed at, which names nothing, so a proof or a type there that reaches a member of a group that does not descend is read as it stands outside the group, under the item that holds the group: an item's member by its declaration, which the refusal names, and a member of a group in a term as that group closed, which the position encloses and no name holds. Mutation-checked: with `Positions::close_over_group` leaving its positions as they are, each refusal of an item's group names nothing and this fails.
 #[test]
-fn a_group_that_does_not_descend_is_enclosed_by_every_proof_or_type_naming_a_member() {
-    for (module, holder, erased) in [
-        (A_DICTIONARY_CALLING_ITSELF, "w", Erased::Proof),
-        (A_SIBLING_READING_THE_DICTIONARY, "n", Erased::Proof),
+fn a_group_that_does_not_descend_is_reached_by_every_proof_or_type_naming_a_member() {
+    for (module, holder, erased, reached) in [
+        (A_DICTIONARY_CALLING_ITSELF, "w", Erased::Proof, Some("w")),
+        (
+            A_SIBLING_READING_THE_DICTIONARY,
+            "n",
+            Erased::Proof,
+            Some("w"),
+        ),
         (
             A_DICTIONARY_CALLING_ITSELF_IN_A_TERM,
             "inline",
             Erased::Proof,
+            None,
         ),
-        (A_SIGNATURE_READING_ITS_SIBLING, "d", Erased::Type),
+        (
+            A_SIGNATURE_READING_ITS_SIBLING,
+            "d",
+            Erased::Type,
+            Some("d"),
+        ),
     ] {
         let verdicts = core_text_refusals(&fill!(
             "${PROPOSITIONS}\n${A_FALSE_CONCEPT}\n${module}",
@@ -735,7 +746,7 @@ fn a_group_that_does_not_descend_is_enclosed_by_every_proof_or_type_naming_a_mem
                     && verdict.error
                         == Error::NotTotal {
                             erased,
-                            reached: None
+                            reached: reached.map(global),
                         }),
             "{holder}: {verdicts:?}"
         );
@@ -756,7 +767,7 @@ let /named : #NatType =
 /std/Bool/False
 "#;
 
-// A member stands in its group's own signatures as a local that holds no group, so a type position naming one is not seen to enclose a group that does not descend by what it holds: the position is marked as naming it, and `/named`, whose value is no proof, is refused as holding a type that does not terminate. The control, whose signatures name no member, stands. Mutation-checked: with `Positions::enclose_partial_naming` marking nothing, `/named` stands and this fails.
+// A member stands in its group's own signatures as a local that holds no group, so a type position naming one is read as it stands outside the group, naming the member's declaration, and `/named`, whose value is no proof, is refused as holding a type that does not terminate. The control, whose signatures name no member, stands. Mutation-checked: with `Positions::close_over_group` leaving its positions as they are, `/named` stands and this fails.
 #[test]
 fn a_signature_naming_a_member_that_does_not_descend_is_a_type_that_does_not_terminate() {
     let named = |parameter: &str| {

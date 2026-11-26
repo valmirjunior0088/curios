@@ -557,7 +557,7 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
         // **A member is bound in the tail, as a `let` binds.** The group's bodies are checked over members that are locals, which is what keeps a body from re-entering its own check — each unfolding in reduction once its turn has found it known to terminate, and standing for nothing until then (`check_group`); the tail is what the group is in scope of, and there a member is its folded selection, the term a `rec` reduces its tail over ([`unfold_rec`](super::unfold_rec)) and the one a top-level member is defined as. Held opaque there, a member computes nowhere in the function that declares it: `f(4)` is no number, and a term that spells the member by value — the elaborator defines it so, and a solution commits what it reduced — never converts with its name.
         Subterm::Rec(block) => {
             let (group, tail) = (block.group(), block.tail());
-            check_group(certifier, group, |certifier, names| {
+            check_group(certifier, group, None, |certifier, names| {
                 let total = certifier.group_verdict(group) == Some(Totality::Total);
                 for (index, (name, member)) in names.iter().zip(group.members()).enumerate() {
                     let partial = !total || certifier.member_encloses_partial(group, index);

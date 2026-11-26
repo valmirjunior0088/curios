@@ -189,7 +189,7 @@ pub fn define_as_stated(
     }
 }
 
-/// Check every member of `group` against its declared type, then run `within` with the members in scope.
+/// Check every member of `group` against its declared type, then run `within` with the members in scope. `outside` names each member as it stands outside the group, where it has a name there: an item's members are its declarations.
 ///
 /// Each member is assumed under a *fresh binder identity* rather than opened over the group's own folded spelling. A member occurrence inside a body is then an ordinary local, gated by the scope stack like every other binder — which is what stops a body from naming a group nothing ever checked, and what stops checking a body from re-entering the check it is already inside. `within` runs within that scope, because a `rec` tail sees the members too; the names retract on every path out, so what the caller returns must not mention them.
 ///
@@ -199,6 +199,7 @@ pub fn define_as_stated(
 pub fn check_group<R>(
     certifier: &mut Certifier,
     group: &RecGroup,
+    outside: Option<&[Term]>,
     within: impl FnOnce(&mut Certifier, &[Free]) -> Result<R, Error>,
 ) -> Result<R, Error> {
     // A group carries no universe context of its own, so there is nothing to decide here and nothing to assume: its members' level and quality parameters are the enclosing declaration's, whose context `certify_definitions` decided closed and satisfiable before this walk assumed it, and whose sorts `at_every_sort` judges this group at every assignment of.
@@ -309,9 +310,9 @@ pub fn check_group<R>(
             enclosing[index] |= certifier.partial_groups() > before;
         }
         let totality = certifier.close_group(group, enclosing);
-        // A member stands in its group's own signatures and bodies as a local, which holds no group, so a position there reaching one is not seen to enclose the group by what it holds: every one that names a member of a group that does not descend encloses it, under the item that holds the group, as a position outside the group holding it closed does.
+        // A member stands in its group's own signatures and bodies as a local, which holds no group and names nothing, so a position there is read as it stands outside the group once the group is known not to descend: an item's member by its declaration, which a proof reaches only where its reduct still names it, and a member of a group in a term as that group closed, which the position encloses.
         if totality != Totality::Total {
-            certifier.enclose_partial_naming(since, &names);
+            certifier.close_over_group(since, &names, outside);
         }
 
         if let Some(type_) = erased_member
@@ -359,7 +360,11 @@ pub fn check_rec_group(
             }
         };
 
-        check_group(certifier, group, |_, _| Ok(()))?;
+        let declared = members
+            .iter()
+            .map(|(name, _)| Term::instance(*name, universes.identity_instance()))
+            .collect::<Vec<_>>();
+        check_group(certifier, group, Some(&declared), |_, _| Ok(()))?;
 
         for (index, proof) in proofs.iter_mut().enumerate() {
             *proof = *proof && bears_proof(certifier, &group.member_type(index)).unwrap_or(false);

@@ -70,14 +70,25 @@ impl Positions {
         }
     }
 
-    /// Each position recorded since `since` whose term names one of `members` enclosed a group that does not descend: the group's members, assumed while its signatures and bodies are checked, stand in those positions as locals that hold no group.
-    pub fn enclose_partial_naming(&mut self, since: usize, members: &[Free]) {
+    /// Each position recorded since `since` whose term names one of `members`, a group's that does not descend, read as it stands outside the group: each member by its name there, `outside`, where it has one — an item's member is its declaration — so the position is judged as any other naming a definition not known to terminate; and where it has none, a group in a term, enclosing that group, which a reading as reduced would unfold without end. The members, assumed while the group's signatures and bodies are checked, stand in those positions as locals that name nothing as locals that hold no group.
+    pub fn close_over_group(&mut self, since: usize, members: &[Free], outside: Option<&[Term]>) {
+        let named = outside.map(|outside| {
+            members
+                .iter()
+                .copied()
+                .zip(outside.iter().cloned())
+                .collect::<Vec<_>>()
+        });
         for position in self.recorded.iter_mut().skip(since) {
-            if members
+            if !members
                 .iter()
                 .any(|member| position.term.mentions_free(member))
             {
-                position.encloses_partial = true;
+                continue;
+            }
+            match &named {
+                Some(named) => position.term = position.term.substitute(named),
+                None => position.encloses_partial = true,
             }
         }
     }

@@ -1283,14 +1283,19 @@ impl<'s> Certifier<'s> {
         Some(position)
     }
 
-    /// How many positions this item's check has recorded: where a group's check begins, for [`Certifier::enclose_partial_naming`].
+    /// How many positions this item's check has recorded: where a group's check begins, for [`Certifier::close_over_group`].
     pub(crate) fn positions_recorded(&self) -> usize {
         self.positions.recorded().0
     }
 
-    /// Each position recorded since `since` whose term names one of `members` enclosed a group that does not descend.
-    pub(crate) fn enclose_partial_naming(&mut self, since: usize, members: &[Free]) {
-        self.positions.enclose_partial_naming(since, members);
+    /// Each position recorded since `since` whose term names one of `members`, a group's that does not descend, read as it stands outside the group ([`Positions::close_over_group`](positions::Positions::close_over_group)).
+    pub(crate) fn close_over_group(
+        &mut self,
+        since: usize,
+        members: &[Free],
+        outside: Option<&[Term]>,
+    ) {
+        self.positions.close_over_group(since, members, outside);
     }
 
     /// The position recorded at `position`, where there is one, enclosed a group that does not descend.
