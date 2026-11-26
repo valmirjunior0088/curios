@@ -1,0 +1,19 @@
+-- The recursion of `a_member_named_bare_handed_to_a_definition_held_at_its_field.crs` with a lambda calling `/m` handed to `/hold` in its place: `/hold`'s leading lambdas apply it nowhere, so its body is typed recording no call, and the call it makes where `/hold`'s field lambda applies it is graded by neither checker.
+use /std/{Nat};
+use /std/Bool/{False};
+
+struct Inner: Type {
+    step: (Nat) -> False,
+}
+
+struct Outer: Type {
+    a: Inner,
+}
+
+let hold(g: (Nat) -> Outer) -> Inner =
+    Inner { step(k) = g(k).a.step(k) };
+
+let m(n: Nat) -> Outer =
+    Outer { a = hold((j) => m(j)) };
+
+m(0).a.step(0)

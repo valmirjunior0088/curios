@@ -1,0 +1,34 @@
+title = "An argument of a definition held at a field is applied where the definition's field lambda runs, and neither checker grades the application"
+status = "open"
+
+[[witness]]
+what = "a recursion through `/m` named bare and handed to `/hold`, held at `a`, whose field lambda applies it at its own argument"
+source = "a_member_named_bare_handed_to_a_definition_held_at_its_field.crs"
+refused = [
+    { by = "elaborator", error = "PartialInErasedPosition", within = "entry" },
+    { by = "certifier", error = "NotTotal", within = "entry" },
+]
+
+[[witness]]
+what = "the same recursion through a lambda calling `/m`, handed to `/hold` in its place"
+source = "a_lambda_calling_the_member_handed_to_a_definition_held_at_its_field.crs"
+refused = [
+    { by = "elaborator", error = "PartialInErasedPosition", within = "entry" },
+    { by = "certifier", error = "NotTotal", within = "entry" },
+]
+
+[[witness]]
+what = "a recursion through a callback `/m` hands `/hold`, held at `a`, wrapped in a lambda, which `/m`'s summary states applied nowhere"
+source = "a_callback_wrapped_in_a_lambda_handed_to_a_definition_held_at_its_field.crs"
+refused = [
+    { by = "elaborator", error = "PartialInErasedPosition", within = "entry" },
+    { by = "certifier", error = "NotTotal", within = "entry" },
+]
+
+[[witness]]
+what = "the same recursion through `/std/Flt/Env/bind`, whose record holds `/std/State/bind` applied to a lambda wrapping its callback, a proof read off a run of it"
+source = "a_callback_the_environments_bind_hands_its_states_bind.crs"
+refused = [
+    { by = "elaborator", error = "PartialInErasedPosition", within = "entry" },
+    { by = "certifier", error = "NotTotal", within = "entry" },
+]

@@ -1,0 +1,22 @@
+-- `/m`'s record holds `/hold((j) => f(j))` at `a`, and `/hold`'s field lambda applies what it is handed, so `/m(k, g).a.step(k)` applies `g` at `k`. The summary of how `/m` applies its parameters hands the lambda what `/hold`'s leading lambdas apply of it, nothing, so its body is never walked, and the part `/m` holds at `a` grades no argument that is no parameter: `/m` states `f` applied nowhere, `/spin`'s callback is handed where nothing applies it, and `/spin(0)` is `/spin(0)` again.
+use /std/{Nat};
+use /std/Bool/{False};
+
+struct Inner: Type {
+    step: (Nat) -> False,
+}
+
+struct Outer: Type {
+    a: Inner,
+}
+
+let hold(g: (Nat) -> False) -> Inner =
+    Inner { step(k) = g(k) };
+
+let m(n: Nat, f: (Nat) -> False) -> Outer =
+    Outer { a = hold((j) => f(j)) };
+
+let spin(k: Nat) -> False =
+    m(k, (x) => spin(x)).a.step(k);
+
+spin(0)

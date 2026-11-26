@@ -1,0 +1,13 @@
+-- `/std/Flt/Env/bind`'s record holds `/std/State/bind(m.0, (a) => f(a).0)`, whose field lambda runs the lambda it is handed, which applies `f`. The summary of how `bind` applies its parameters hands the lambda what `/std/State/bind`'s leading lambdas apply of it, nothing, so its body is never walked, and the part `bind` holds grades no argument that is no parameter: `bind` states `f` applied nowhere, `/spin`'s callback is handed where nothing applies it, and running `/spin(0)` runs `/spin(0)` again. The proof `Box` holds is read off a run that never ends.
+use /std/{Nat};
+use /std/Flt/{Env};
+use /std/Bool/{False};
+
+struct Box: Type {
+    p: False,
+}
+
+let spin(n: Nat) -> Env(Box) =
+    Env/bind(Env/pure(n), (x) => spin(x));
+
+Env/run(spin(0)).0.p

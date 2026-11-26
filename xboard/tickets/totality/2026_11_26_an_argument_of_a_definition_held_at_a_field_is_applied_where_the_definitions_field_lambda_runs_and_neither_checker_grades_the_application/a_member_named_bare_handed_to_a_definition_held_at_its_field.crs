@@ -1,0 +1,19 @@
+-- `/m`'s record holds `/hold(m)` at `a`, so `/m(n).a.step(k)` runs `/hold`'s field lambda with `g` standing for `/m`, which calls `/m(k).a.step(k)`, the same call again. Both checkers hand `/m` to `/hold`'s leading lambdas, which apply it nowhere, so it makes no call there, and neither grades the call `/hold`'s field lambda makes of it where the part `/m` holds at `a` runs: the group closes over no call, and `/m` is known to terminate.
+use /std/{Nat};
+use /std/Bool/{False};
+
+struct Inner: Type {
+    step: (Nat) -> False,
+}
+
+struct Outer: Type {
+    a: Inner,
+}
+
+let hold(g: (Nat) -> Outer) -> Inner =
+    Inner { step(k) = g(k).a.step(k) };
+
+let m(n: Nat) -> Outer =
+    Outer { a = hold(m) };
+
+m(0).a.step(0)
