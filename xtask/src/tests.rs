@@ -3,7 +3,10 @@
 use {crate::*, std::collections::BTreeSet};
 
 /// The check workflow, whose jobs are the machines the steps run on.
-const WORKFLOW: &str = include_str!("../../.github/workflows/check.yml");
+const CHECK_WORKFLOW: &str = include_str!("../../.github/workflows/check.yml");
+
+/// The release workflow, whose jobs build what a release publishes and publish it.
+const RELEASE_WORKFLOW: &str = include_str!("../../.github/workflows/release.yml");
 
 /// The lock file, which says what version of `wasm-bindgen` the bundle builds against.
 const LOCK: &str = include_str!("../../Cargo.lock");
@@ -50,31 +53,103 @@ fn commands_of<'a>(tree: &'a Tree, group: &str) -> Vec<(&'a Step, Vec<String>)> 
         .collect()
 }
 
+/// The words after `cargo xtask` of every line of `workflow` that runs this program, each a command on a line of its own: a step's `run:`, or a line of a `run: |` block.
+fn tasks_of(workflow: &str) -> Vec<&str> {
+    workflow
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.starts_with('#') && line.contains("cargo xtask"))
+        .map(|line| {
+            line.strip_prefix("run: ")
+                .unwrap_or(line)
+                .strip_prefix("cargo xtask ")
+                .unwrap_or_else(|| panic!("not one command on a line of its own: {line}"))
+        })
+        .collect()
+}
+
+/// The steps the task `words` names, as the parser reads it from the command line.
+fn scheduled(tree: &Tree, words: &str) -> Vec<usize> {
+    let matches = command(tree)
+        .try_get_matches_from(["cargo xtask"].into_iter().chain(words.split(' ')))
+        .unwrap_or_else(|error| panic!("cargo xtask {words}\n{error}"));
+    let Asked { name, given } = asked(&matches);
+
+    schedule(tree, &name, &given)
+}
+
 /// Every line of the check workflow that runs this program is a command the parser reads, and together they run every step the handoff runs: a step added to a subject and to no job fails here, and so does a job left spelling a task that is gone.
 #[test]
 fn every_step_the_handoff_runs_has_a_job() {
     let tree = tree();
     let mut run = BTreeSet::new();
 
-    let lines = WORKFLOW
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.starts_with('#') && line.contains("cargo xtask"));
-    for line in lines {
-        let words = line
-            .strip_prefix("run: cargo xtask ")
-            .unwrap_or_else(|| panic!("not one command on a line of its own: {line}"));
-        let matches = command(&tree)
-            .try_get_matches_from(["cargo xtask"].into_iter().chain(words.split(' ')))
-            .unwrap_or_else(|error| panic!("{line}\n{error}"));
-        let Asked { name, given } = asked(&matches);
-        run.extend(schedule(&tree, &name, &given));
+    for words in tasks_of(CHECK_WORKFLOW) {
+        run.extend(scheduled(&tree, words));
     }
 
     let handoff = vec!["handoff".to_string()];
     for step in schedule(&tree, &handoff, &GivenValues::new()) {
         if tree.steps[step].name != handoff {
             assert!(run.contains(&step), "{}", spelled(&tree.steps[step].name));
+        }
+    }
+}
+
+/// Every line of the release workflow that runs this program is a command the parser reads, so a step renamed or taken out fails here rather than at the release that runs it.
+#[test]
+fn every_task_the_release_runs_is_one_the_parser_reads() {
+    let tree = tree();
+    let tasks = tasks_of(RELEASE_WORKFLOW);
+
+    assert!(!tasks.is_empty(), "the release runs this program");
+    for words in tasks {
+        scheduled(&tree, words);
+    }
+}
+
+/// Each job of `workflow` by its name, with the lines that state it: those after `jobs:`, a job opening on its name two columns in.
+fn jobs_of(workflow: &str) -> Vec<(&str, Vec<&str>)> {
+    let mut jobs: Vec<(&str, Vec<&str>)> = Vec::new();
+    for line in workflow.lines().skip_while(|line| *line != "jobs:").skip(1) {
+        let opening = line
+            .strip_prefix("  ")
+            .filter(|rest| !rest.starts_with(' ') && !rest.starts_with('#'))
+            .and_then(|rest| rest.strip_suffix(':'));
+        match (opening, jobs.last_mut()) {
+            (Some(name), _) => jobs.push((name, Vec::new())),
+            (None, Some((_, lines))) => lines.push(line),
+            (None, None) => {}
+        }
+    }
+
+    jobs
+}
+
+/// Every job of either workflow that runs `cargo` installs the toolchain `rust-toolchain.toml` pins through the shared setup step before it, so no job leaves the toolchain to rustup's first `cargo`, which installs it with a warning and caches nothing. Mutation-checked: with the release job's setup step taken out, the job is named here.
+#[test]
+fn every_job_that_runs_cargo_installs_the_pinned_toolchain_first() {
+    for (workflow, text) in [("check", CHECK_WORKFLOW), ("release", RELEASE_WORKFLOW)] {
+        for (job, lines) in jobs_of(text) {
+            let runs = |line: &&str| {
+                let line = line.trim();
+                !line.starts_with('#')
+                    && line
+                        .strip_prefix("run: ")
+                        .unwrap_or(line)
+                        .starts_with("cargo ")
+            };
+            let Some(cargo) = lines.iter().position(runs) else {
+                continue;
+            };
+            let setup = lines
+                .iter()
+                .position(|line| line.trim() == "- uses: ./.github/actions/setup");
+
+            assert!(
+                setup.is_some_and(|setup| setup < cargo),
+                "the {workflow} workflow's job `{job}` runs cargo before it installs the pinned toolchain"
+            );
         }
     }
 }
