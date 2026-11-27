@@ -8,6 +8,8 @@ sources = ["*.rs", "*.crs", "*.toml", "*.js", "*.sh", "*.yml"]
 
 [lint]
 what = "Lint every target of the jig's crates, which the compiler's lint leaves out: a crate of the jig takes the compiler's crates, and no crate of the compiler takes one of the jig's; and the scripts the task files run, by ShellCheck"
+# The bench takes `curios`, whose build embeds the launcher.
+consumes = [".compiler.launcher.produces.binary"]
 run = [
     ["cargo", "clippy", "--package", "x*", "--all-targets", "--keep-going"],
     ["{.tools.shellcheck}", "{.jig.shell}"],
@@ -15,6 +17,8 @@ run = [
 
 [test]
 what = "Run the jig's tests: these task files held to the command line and the check workflow, the runner's own, the bench's and the board's"
+# The bench takes `curios`, whose build embeds the launcher.
+consumes = [".compiler.launcher.produces.binary"]
 run = [
     ["{.tools.cargo-nextest}", "nextest", "run", "--package", "x*", "--all-targets", "--no-fail-fast"],
 ]
