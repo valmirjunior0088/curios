@@ -262,14 +262,14 @@ fn a_match_on_a_constructor_is_written_as_its_patterns() {
         use /std/{Nat, Option};
         pub let subject(chosen: Option(Nat)) -> Nat =
             match chosen
-            | none() => 0
             | some(n) => n + 1
+            | none() => 0
             end;
     "#;
 
     assert_eq!(
         body(source, "subject"),
-        "(chosen) => match chosen | some(n) => n + 1 | none() => 0 end"
+        "(chosen) => match chosen | none() => 0 | some(n) => n + 1 end"
     );
 }
 

@@ -117,7 +117,7 @@ fn a_guarded_arm_before_a_case_of_it_is_refused() {
         "#,
     );
     assert!(
-        report.contains("`some(n)` is a case of `_`, which is written before it"),
+        report.contains("`none()` is a case of `_`, which is written before it"),
         "{report}"
     );
 }

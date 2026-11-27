@@ -230,7 +230,7 @@ fn a_value_no_arm_matches_is_reported_as_its_pattern() {
         (
             "a: Option(Nat), b: Option(Nat)",
             "match (a, b) | (some(x), some(y)) => x + y | (none(), none()) => 0 end",
-            "(some(_), none())",
+            "(none(), some(_))",
         ),
         (
             "m: Option(Option(Nat))",
