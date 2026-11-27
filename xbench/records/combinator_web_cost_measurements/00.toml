@@ -1,0 +1,563 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "web at 8, applied/elaborator/units"
+measure = "count"
+size = 8
+readings = [[4651], [4651]]
+
+[[figures]]
+name = "web at 8, applied/elaborator/depth"
+measure = "count"
+size = 8
+readings = [[3], [3]]
+
+[[figures]]
+name = "web at 8, applied/elaborator/other"
+measure = "count"
+size = 8
+readings = [[1579], [1579]]
+
+[[figures]]
+name = "web at 8, applied/certifier/units"
+measure = "count"
+size = 8
+readings = [[6700], [6700]]
+
+[[figures]]
+name = "web at 8, applied/certifier/depth"
+measure = "count"
+size = 8
+readings = [[6], [6]]
+
+[[figures]]
+name = "web at 8, applied/certifier/other"
+measure = "count"
+size = 8
+readings = [[556], [556]]
+
+[[figures]]
+name = "web at 8, scrutinized/elaborator/units"
+measure = "count"
+size = 8
+readings = [[4651], [4651]]
+
+[[figures]]
+name = "web at 8, scrutinized/elaborator/depth"
+measure = "count"
+size = 8
+readings = [[3], [3]]
+
+[[figures]]
+name = "web at 8, scrutinized/elaborator/other"
+measure = "count"
+size = 8
+readings = [[1579], [1579]]
+
+[[figures]]
+name = "web at 8, scrutinized/certifier/units"
+measure = "count"
+size = 8
+readings = [[6700], [6700]]
+
+[[figures]]
+name = "web at 8, scrutinized/certifier/depth"
+measure = "count"
+size = 8
+readings = [[6], [6]]
+
+[[figures]]
+name = "web at 8, scrutinized/certifier/other"
+measure = "count"
+size = 8
+readings = [[556], [556]]
+
+[[figures]]
+name = "web at 8, closed/elaborator/units"
+measure = "count"
+size = 8
+readings = [[4651], [4651]]
+
+[[figures]]
+name = "web at 8, closed/elaborator/depth"
+measure = "count"
+size = 8
+readings = [[3], [3]]
+
+[[figures]]
+name = "web at 8, closed/elaborator/other"
+measure = "count"
+size = 8
+readings = [[1579], [1579]]
+
+[[figures]]
+name = "web at 8, closed/certifier/units"
+measure = "count"
+size = 8
+readings = [[6700], [6700]]
+
+[[figures]]
+name = "web at 8, closed/certifier/depth"
+measure = "count"
+size = 8
+readings = [[6], [6]]
+
+[[figures]]
+name = "web at 8, closed/certifier/other"
+measure = "count"
+size = 8
+readings = [[556], [556]]
+
+[[figures]]
+name = "web at 12, applied/elaborator/units"
+measure = "count"
+size = 12
+readings = [[4651], [4651]]
+
+[[figures]]
+name = "web at 12, applied/elaborator/depth"
+measure = "count"
+size = 12
+readings = [[3], [3]]
+
+[[figures]]
+name = "web at 12, applied/elaborator/other"
+measure = "count"
+size = 12
+readings = [[1579], [1579]]
+
+[[figures]]
+name = "web at 12, applied/certifier/units"
+measure = "count"
+size = 12
+readings = [[6700], [6700]]
+
+[[figures]]
+name = "web at 12, applied/certifier/depth"
+measure = "count"
+size = 12
+readings = [[6], [6]]
+
+[[figures]]
+name = "web at 12, applied/certifier/other"
+measure = "count"
+size = 12
+readings = [[556], [556]]
+
+[[figures]]
+name = "web at 12, scrutinized/elaborator/units"
+measure = "count"
+size = 12
+readings = [[4651], [4651]]
+
+[[figures]]
+name = "web at 12, scrutinized/elaborator/depth"
+measure = "count"
+size = 12
+readings = [[3], [3]]
+
+[[figures]]
+name = "web at 12, scrutinized/elaborator/other"
+measure = "count"
+size = 12
+readings = [[1579], [1579]]
+
+[[figures]]
+name = "web at 12, scrutinized/certifier/units"
+measure = "count"
+size = 12
+readings = [[6700], [6700]]
+
+[[figures]]
+name = "web at 12, scrutinized/certifier/depth"
+measure = "count"
+size = 12
+readings = [[6], [6]]
+
+[[figures]]
+name = "web at 12, scrutinized/certifier/other"
+measure = "count"
+size = 12
+readings = [[556], [556]]
+
+[[figures]]
+name = "web at 12, closed/elaborator/units"
+measure = "count"
+size = 12
+readings = [[4651], [4651]]
+
+[[figures]]
+name = "web at 12, closed/elaborator/depth"
+measure = "count"
+size = 12
+readings = [[3], [3]]
+
+[[figures]]
+name = "web at 12, closed/elaborator/other"
+measure = "count"
+size = 12
+readings = [[1579], [1579]]
+
+[[figures]]
+name = "web at 12, closed/certifier/units"
+measure = "count"
+size = 12
+readings = [[6700], [6700]]
+
+[[figures]]
+name = "web at 12, closed/certifier/depth"
+measure = "count"
+size = 12
+readings = [[6], [6]]
+
+[[figures]]
+name = "web at 12, closed/certifier/other"
+measure = "count"
+size = 12
+readings = [[556], [556]]
+
+[[figures]]
+name = "web at 13, applied/elaborator/units"
+measure = "count"
+size = 13
+readings = [[4651], [4651]]
+
+[[figures]]
+name = "web at 13, applied/elaborator/depth"
+measure = "count"
+size = 13
+readings = [[3], [3]]
+
+[[figures]]
+name = "web at 13, applied/elaborator/other"
+measure = "count"
+size = 13
+readings = [[1579], [1579]]
+
+[[figures]]
+name = "web at 13, applied/certifier/units"
+measure = "count"
+size = 13
+readings = [[6700], [6700]]
+
+[[figures]]
+name = "web at 13, applied/certifier/depth"
+measure = "count"
+size = 13
+readings = [[6], [6]]
+
+[[figures]]
+name = "web at 13, applied/certifier/other"
+measure = "count"
+size = 13
+readings = [[556], [556]]
+
+[[figures]]
+name = "web at 13, scrutinized/elaborator/units"
+measure = "count"
+size = 13
+readings = [[4651], [4651]]
+
+[[figures]]
+name = "web at 13, scrutinized/elaborator/depth"
+measure = "count"
+size = 13
+readings = [[3], [3]]
+
+[[figures]]
+name = "web at 13, scrutinized/elaborator/other"
+measure = "count"
+size = 13
+readings = [[1579], [1579]]
+
+[[figures]]
+name = "web at 13, scrutinized/certifier/units"
+measure = "count"
+size = 13
+readings = [[6700], [6700]]
+
+[[figures]]
+name = "web at 13, scrutinized/certifier/depth"
+measure = "count"
+size = 13
+readings = [[6], [6]]
+
+[[figures]]
+name = "web at 13, scrutinized/certifier/other"
+measure = "count"
+size = 13
+readings = [[556], [556]]
+
+[[figures]]
+name = "web at 13, closed/elaborator/units"
+measure = "count"
+size = 13
+readings = [[4651], [4651]]
+
+[[figures]]
+name = "web at 13, closed/elaborator/depth"
+measure = "count"
+size = 13
+readings = [[3], [3]]
+
+[[figures]]
+name = "web at 13, closed/elaborator/other"
+measure = "count"
+size = 13
+readings = [[1579], [1579]]
+
+[[figures]]
+name = "web at 13, closed/certifier/units"
+measure = "count"
+size = 13
+readings = [[6700], [6700]]
+
+[[figures]]
+name = "web at 13, closed/certifier/depth"
+measure = "count"
+size = 13
+readings = [[6], [6]]
+
+[[figures]]
+name = "web at 13, closed/certifier/other"
+measure = "count"
+size = 13
+readings = [[556], [556]]
+
+[[figures]]
+name = "web at 14, applied/elaborator/units"
+measure = "count"
+size = 14
+readings = [[4651], [4651]]
+
+[[figures]]
+name = "web at 14, applied/elaborator/depth"
+measure = "count"
+size = 14
+readings = [[3], [3]]
+
+[[figures]]
+name = "web at 14, applied/elaborator/other"
+measure = "count"
+size = 14
+readings = [[1579], [1579]]
+
+[[figures]]
+name = "web at 14, applied/certifier/units"
+measure = "count"
+size = 14
+readings = [[6700], [6700]]
+
+[[figures]]
+name = "web at 14, applied/certifier/depth"
+measure = "count"
+size = 14
+readings = [[6], [6]]
+
+[[figures]]
+name = "web at 14, applied/certifier/other"
+measure = "count"
+size = 14
+readings = [[556], [556]]
+
+[[figures]]
+name = "web at 14, scrutinized/elaborator/units"
+measure = "count"
+size = 14
+readings = [[4651], [4651]]
+
+[[figures]]
+name = "web at 14, scrutinized/elaborator/depth"
+measure = "count"
+size = 14
+readings = [[3], [3]]
+
+[[figures]]
+name = "web at 14, scrutinized/elaborator/other"
+measure = "count"
+size = 14
+readings = [[1579], [1579]]
+
+[[figures]]
+name = "web at 14, scrutinized/certifier/units"
+measure = "count"
+size = 14
+readings = [[6700], [6700]]
+
+[[figures]]
+name = "web at 14, scrutinized/certifier/depth"
+measure = "count"
+size = 14
+readings = [[6], [6]]
+
+[[figures]]
+name = "web at 14, scrutinized/certifier/other"
+measure = "count"
+size = 14
+readings = [[556], [556]]
+
+[[figures]]
+name = "web at 14, closed/elaborator/units"
+measure = "count"
+size = 14
+readings = [[4651], [4651]]
+
+[[figures]]
+name = "web at 14, closed/elaborator/depth"
+measure = "count"
+size = 14
+readings = [[3], [3]]
+
+[[figures]]
+name = "web at 14, closed/elaborator/other"
+measure = "count"
+size = 14
+readings = [[1579], [1579]]
+
+[[figures]]
+name = "web at 14, closed/certifier/units"
+measure = "count"
+size = 14
+readings = [[6700], [6700]]
+
+[[figures]]
+name = "web at 14, closed/certifier/depth"
+measure = "count"
+size = 14
+readings = [[6], [6]]
+
+[[figures]]
+name = "web at 14, closed/certifier/other"
+measure = "count"
+size = 14
+readings = [[556], [556]]
+
+[[figures]]
+name = "web at 20, applied/elaborator/units"
+measure = "count"
+size = 20
+readings = [[4651], [4651]]
+
+[[figures]]
+name = "web at 20, applied/elaborator/depth"
+measure = "count"
+size = 20
+readings = [[3], [3]]
+
+[[figures]]
+name = "web at 20, applied/elaborator/other"
+measure = "count"
+size = 20
+readings = [[1579], [1579]]
+
+[[figures]]
+name = "web at 20, applied/certifier/units"
+measure = "count"
+size = 20
+readings = [[6700], [6700]]
+
+[[figures]]
+name = "web at 20, applied/certifier/depth"
+measure = "count"
+size = 20
+readings = [[6], [6]]
+
+[[figures]]
+name = "web at 20, applied/certifier/other"
+measure = "count"
+size = 20
+readings = [[556], [556]]
+
+[[figures]]
+name = "web at 20, scrutinized/elaborator/units"
+measure = "count"
+size = 20
+readings = [[4651], [4651]]
+
+[[figures]]
+name = "web at 20, scrutinized/elaborator/depth"
+measure = "count"
+size = 20
+readings = [[3], [3]]
+
+[[figures]]
+name = "web at 20, scrutinized/elaborator/other"
+measure = "count"
+size = 20
+readings = [[1579], [1579]]
+
+[[figures]]
+name = "web at 20, scrutinized/certifier/units"
+measure = "count"
+size = 20
+readings = [[6700], [6700]]
+
+[[figures]]
+name = "web at 20, scrutinized/certifier/depth"
+measure = "count"
+size = 20
+readings = [[6], [6]]
+
+[[figures]]
+name = "web at 20, scrutinized/certifier/other"
+measure = "count"
+size = 20
+readings = [[556], [556]]
+
+[[figures]]
+name = "web at 20, closed/elaborator/units"
+measure = "count"
+size = 20
+readings = [[4651], [4651]]
+
+[[figures]]
+name = "web at 20, closed/elaborator/depth"
+measure = "count"
+size = 20
+readings = [[3], [3]]
+
+[[figures]]
+name = "web at 20, closed/elaborator/other"
+measure = "count"
+size = 20
+readings = [[1579], [1579]]
+
+[[figures]]
+name = "web at 20, closed/certifier/units"
+measure = "count"
+size = 20
+readings = [[6700], [6700]]
+
+[[figures]]
+name = "web at 20, closed/certifier/depth"
+measure = "count"
+size = 20
+readings = [[6], [6]]
+
+[[figures]]
+name = "web at 20, closed/certifier/other"
+measure = "count"
+size = 20
+readings = [[556], [556]]

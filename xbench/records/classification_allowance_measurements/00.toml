@@ -1,0 +1,43 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "sites::classify/sites"
+measure = "count"
+readings = [[2423], [2423]]
+
+[[figures]]
+name = "sites::classify/most"
+measure = "count"
+readings = [[10525], [10525]]
+
+[[figures]]
+name = "sites::column/sites"
+measure = "count"
+readings = [[904], [904]]
+
+[[figures]]
+name = "sites::column/most"
+measure = "count"
+readings = [[40615], [40615]]

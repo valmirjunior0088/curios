@@ -1,0 +1,743 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "none at 2"
+measure = "microseconds"
+size = 2
+readings = [[271646, 275932, 275573], [272567, 273897, 275262], [274988, 275631, 275625], [274619, 275187, 275268], [275946, 276730, 276156]]
+
+[[figures]]
+name = "none at 2/calls"
+measure = "count"
+size = 2
+readings = [[1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1]]
+
+[[figures]]
+name = "none at 2/allocated"
+measure = "bytes"
+size = 2
+readings = [[207225720, 207218160, 207215416], [207218120, 207224928, 207222272], [207207304, 207210296, 207220632], [207217192, 207211760, 207221952], [207220960, 207223288, 207222096]]
+
+[[figures]]
+name = "none at 2/allocations"
+measure = "allocations"
+size = 2
+readings = [[2194915, 2194847, 2194825], [2194848, 2194931, 2194900], [2194776, 2194830, 2194885], [2194823, 2194803, 2194887], [2194923, 2194907, 2194872]]
+
+[[figures]]
+name = "none at 2/looks"
+measure = "count"
+size = 2
+readings = [[262230, 262230, 262230], [262230, 262230, 262230], [262230, 262230, 262230], [262230, 262230, 262230], [262230, 262230, 262230]]
+
+[[figures]]
+name = "none at 2"
+measure = "instructions"
+size = 2
+readings = [[2138165345, 2137417791, 2138423635], [2138216359, 2137881827, 2137672726], [2137372692, 2138160998, 2137793903], [2138193577, 2137829569, 2137622156], [2138371352, 2137661344, 2138348496]]
+
+[[figures]]
+name = "none at 2/chain copies"
+measure = "count"
+size = 2
+readings = [[4, 4, 4], [4, 4, 4], [4, 4, 4], [4, 4, 4], [4, 4, 4]]
+
+[[figures]]
+name = "none at 2/functions"
+measure = "count"
+size = 2
+readings = [[325, 325, 325], [325, 325, 325], [325, 325, 325], [325, 325, 325], [325, 325, 325]]
+
+[[figures]]
+name = "none at 4"
+measure = "microseconds"
+size = 4
+readings = [[299150, 299927, 299547], [295140, 297027, 298924], [298945, 298935, 299279], [298853, 296412, 298789], [299669, 299168, 300153]]
+
+[[figures]]
+name = "none at 4/calls"
+measure = "count"
+size = 4
+readings = [[1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1]]
+
+[[figures]]
+name = "none at 4/allocated"
+measure = "bytes"
+size = 4
+readings = [[231139045, 231120581, 231126925], [231127485, 231127373, 231146701], [231132581, 231142053, 231128917], [231140997, 231138005, 231128421], [231148085, 231128541, 231143957]]
+
+[[figures]]
+name = "none at 4/allocations"
+measure = "allocations"
+size = 4
+readings = [[2367290, 2367137, 2367194], [2367197, 2367194, 2367366], [2367230, 2367313, 2367192], [2367283, 2367270, 2367226], [2367346, 2367197, 2367307]]
+
+[[figures]]
+name = "none at 4/looks"
+measure = "count"
+size = 4
+readings = [[378542, 378542, 378542], [378542, 378542, 378542], [378542, 378542, 378542], [378542, 378542, 378542], [378542, 378542, 378542]]
+
+[[figures]]
+name = "none at 4"
+measure = "instructions"
+size = 4
+readings = [[2316174177, 2316956234, 2316963432], [2316604324, 2316158369, 2316430475], [2316237418, 2316975532, 2316539711], [2316832386, 2316769071, 2317236152], [2316338318, 2317040706, 2316637840]]
+
+[[figures]]
+name = "none at 4/chain copies"
+measure = "count"
+size = 4
+readings = [[6, 6, 6], [6, 6, 6], [6, 6, 6], [6, 6, 6], [6, 6, 6]]
+
+[[figures]]
+name = "none at 4/functions"
+measure = "count"
+size = 4
+readings = [[335, 335, 335], [335, 335, 335], [335, 335, 335], [335, 335, 335], [335, 335, 335]]
+
+[[figures]]
+name = "none at 8"
+measure = "microseconds"
+size = 8
+readings = [[347236, 346222, 346130], [342602, 343826, 347121], [346239, 345764, 346269], [344338, 342193, 345788], [346090, 346509, 347492]]
+
+[[figures]]
+name = "none at 8/calls"
+measure = "count"
+size = 8
+readings = [[1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1]]
+
+[[figures]]
+name = "none at 8/allocated"
+measure = "bytes"
+size = 8
+readings = [[278878293, 278896005, 278885317], [278884189, 278884589, 278877045], [278871437, 278896933, 278886573], [278876773, 278893101, 278876837], [278880541, 278868045, 278873877]]
+
+[[figures]]
+name = "none at 8/allocations"
+measure = "allocations"
+size = 8
+readings = [[2718994, 2719132, 2719051], [2719044, 2719026, 2718987], [2718948, 2719124, 2719018], [2718965, 2719072, 2719039], [2719026, 2718920, 2718941]]
+
+[[figures]]
+name = "none at 8/looks"
+measure = "count"
+size = 8
+readings = [[611166, 611166, 611166], [611166, 611166, 611166], [611166, 611166, 611166], [611166, 611166, 611166], [611166, 611166, 611166]]
+
+[[figures]]
+name = "none at 8"
+measure = "instructions"
+size = 8
+readings = [[2678102880, 2677042696, 2676750082], [2677904989, 2676997623, 2678396988], [2678109495, 2677730706, 2677753949], [2678006146, 2677199114, 2677432407], [2678656741, 2677435158, 2677213705]]
+
+[[figures]]
+name = "none at 8/chain copies"
+measure = "count"
+size = 8
+readings = [[10, 10, 10], [10, 10, 10], [10, 10, 10], [10, 10, 10], [10, 10, 10]]
+
+[[figures]]
+name = "none at 8/functions"
+measure = "count"
+size = 8
+readings = [[355, 355, 355], [355, 355, 355], [355, 355, 355], [355, 355, 355], [355, 355, 355]]
+
+[[figures]]
+name = "none at 12"
+measure = "microseconds"
+size = 12
+readings = [[394567, 394331, 405389], [389043, 390731, 393825], [394473, 393826, 394369], [389416, 390530, 392399], [394067, 393458, 395539]]
+
+[[figures]]
+name = "none at 12/calls"
+measure = "count"
+size = 12
+readings = [[1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1]]
+
+[[figures]]
+name = "none at 12/allocated"
+measure = "bytes"
+size = 12
+readings = [[326008800, 326031720, 326030440], [326033440, 326032160, 326021864], [326032888, 326017608, 326038816], [326034888, 326034064, 326028544], [326031960, 326028400, 326037016]]
+
+[[figures]]
+name = "none at 12/allocations"
+measure = "allocations"
+size = 12
+readings = [[3071634, 3071839, 3071764], [3071847, 3071825, 3071739], [3071809, 3071713, 3071880], [3071822, 3071830, 3071830], [3071804, 3071808, 3071813]]
+
+[[figures]]
+name = "none at 12/looks"
+measure = "count"
+size = 12
+readings = [[843790, 843790, 843790], [843790, 843790, 843790], [843790, 843790, 843790], [843790, 843790, 843790], [843790, 843790, 843790]]
+
+[[figures]]
+name = "none at 12"
+measure = "instructions"
+size = 12
+readings = [[3041780671, 3041584258, 3041917545], [3041747515, 3041965584, 3042326654], [3041379845, 3042012191, 3041719458], [3041488079, 3042047884, 3041579702], [3042074310, 3041764693, 3040892871]]
+
+[[figures]]
+name = "none at 12/chain copies"
+measure = "count"
+size = 12
+readings = [[14, 14, 14], [14, 14, 14], [14, 14, 14], [14, 14, 14], [14, 14, 14]]
+
+[[figures]]
+name = "none at 12/functions"
+measure = "count"
+size = 12
+readings = [[375, 375, 375], [375, 375, 375], [375, 375, 375], [375, 375, 375], [375, 375, 375]]
+
+[[figures]]
+name = "none at 16"
+measure = "microseconds"
+size = 16
+readings = [[442477, 442647, 440603], [437056, 439128, 441612], [441127, 442142, 441814], [436076, 436827, 441754], [441986, 441736, 443345]]
+
+[[figures]]
+name = "none at 16/calls"
+measure = "count"
+size = 16
+readings = [[1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1]]
+
+[[figures]]
+name = "none at 16/allocated"
+measure = "bytes"
+size = 16
+readings = [[373698042, 373700202, 373696178], [373683154, 373706770, 373704058], [373687114, 373702906, 373699162], [373679826, 373695394, 373700890], [373712114, 373695498, 373686378]]
+
+[[figures]]
+name = "none at 16/allocations"
+measure = "allocations"
+size = 16
+readings = [[3437881, 3437903, 3437833], [3437744, 3437926, 3437901], [3437775, 3437883, 3437869], [3437710, 3437825, 3437866], [3438007, 3437860, 3437827]]
+
+[[figures]]
+name = "none at 16/looks"
+measure = "count"
+size = 16
+readings = [[1076414, 1076414, 1076414], [1076414, 1076414, 1076414], [1076414, 1076414, 1076414], [1076414, 1076414, 1076414], [1076414, 1076414, 1076414]]
+
+[[figures]]
+name = "none at 16"
+measure = "instructions"
+size = 16
+readings = [[3418453521, 3417817333, 3418143642], [3418342305, 3418764355, 3416987034], [3418389493, 3417971252, 3419018141], [3419032928, 3418077739, 3417726898], [3417784139, 3417743697, 3417732952]]
+
+[[figures]]
+name = "none at 16/chain copies"
+measure = "count"
+size = 16
+readings = [[18, 18, 18], [18, 18, 18], [18, 18, 18], [18, 18, 18], [18, 18, 18]]
+
+[[figures]]
+name = "none at 16/functions"
+measure = "count"
+size = 16
+readings = [[395, 395, 395], [395, 395, 395], [395, 395, 395], [395, 395, 395], [395, 395, 395]]
+
+[[figures]]
+name = "in a continuation at 2"
+measure = "microseconds"
+size = 2
+readings = [[310436, 310856, 310486], [306794, 308235, 306425], [311088, 310853, 311269], [308409, 307084, 307851], [310370, 310776, 312010]]
+
+[[figures]]
+name = "in a continuation at 2/calls"
+measure = "count"
+size = 2
+readings = [[1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1]]
+
+[[figures]]
+name = "in a continuation at 2/allocated"
+measure = "bytes"
+size = 2
+readings = [[236654552, 236662592, 236646976], [236656584, 236643712, 236663256], [236657512, 236660344, 236649944], [236641928, 236657680, 236648992], [236662656, 236657744, 236659680]]
+
+[[figures]]
+name = "in a continuation at 2/allocations"
+measure = "allocations"
+size = 2
+readings = [[2449782, 2449875, 2449745], [2449828, 2449711, 2449874], [2449824, 2449854, 2449798], [2449707, 2449843, 2449786], [2449849, 2449817, 2449860]]
+
+[[figures]]
+name = "in a continuation at 2/looks"
+measure = "count"
+size = 2
+readings = [[352948, 352948, 352948], [352948, 352948, 352948], [352948, 352948, 352948], [352948, 352948, 352948], [352948, 352948, 352948]]
+
+[[figures]]
+name = "in a continuation at 2"
+measure = "instructions"
+size = 2
+readings = [[2420079388, 2419243695, 2420598367], [2420207140, 2419946326, 2419455166], [2419994517, 2420289505, 2420076528], [2419247427, 2419956282, 2420001680], [2419810924, 2419844975, 2419907306]]
+
+[[figures]]
+name = "in a continuation at 2/chain copies"
+measure = "count"
+size = 2
+readings = [[4, 4, 4], [4, 4, 4], [4, 4, 4], [4, 4, 4], [4, 4, 4]]
+
+[[figures]]
+name = "in a continuation at 2/functions"
+measure = "count"
+size = 2
+readings = [[337, 337, 337], [337, 337, 337], [337, 337, 337], [337, 337, 337], [337, 337, 337]]
+
+[[figures]]
+name = "in a continuation at 4"
+measure = "microseconds"
+size = 4
+readings = [[365546, 365176, 364504], [361194, 361897, 360978], [365976, 365518, 365226], [360350, 361460, 360304], [364461, 365659, 366232]]
+
+[[figures]]
+name = "in a continuation at 4/calls"
+measure = "count"
+size = 4
+readings = [[1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1]]
+
+[[figures]]
+name = "in a continuation at 4/allocated"
+measure = "bytes"
+size = 4
+readings = [[287055305, 287053345, 287068545], [287065657, 287063905, 287069257], [287070889, 287058289, 287054161], [287065433, 287059377, 287047481], [287058561, 287065353, 287073225]]
+
+[[figures]]
+name = "in a continuation at 4/allocations"
+measure = "allocations"
+size = 4
+readings = [[2848490, 2848467, 2848579], [2848555, 2848551, 2848581], [2848570, 2848547, 2848435], [2848525, 2848506, 2848398], [2848494, 2848523, 2848582]]
+
+[[figures]]
+name = "in a continuation at 4/looks"
+measure = "count"
+size = 4
+readings = [[560016, 560016, 560016], [560016, 560016, 560016], [560016, 560016, 560016], [560016, 560016, 560016], [560016, 560016, 560016]]
+
+[[figures]]
+name = "in a continuation at 4"
+measure = "instructions"
+size = 4
+readings = [[2848194755, 2847798563, 2847398194], [2848057480, 2848020437, 2847416288], [2848164072, 2848148626, 2848845628], [2847831901, 2847692894, 2847952588], [2848737556, 2848059775, 2847825192]]
+
+[[figures]]
+name = "in a continuation at 4/chain copies"
+measure = "count"
+size = 4
+readings = [[6, 6, 6], [6, 6, 6], [6, 6, 6], [6, 6, 6], [6, 6, 6]]
+
+[[figures]]
+name = "in a continuation at 4/functions"
+measure = "count"
+size = 4
+readings = [[359, 359, 359], [359, 359, 359], [359, 359, 359], [359, 359, 359], [359, 359, 359]]
+
+[[figures]]
+name = "in a continuation at 8"
+measure = "microseconds"
+size = 8
+readings = [[473986, 473544, 472708], [467614, 468563, 467528], [474427, 473729, 472535], [467971, 468167, 465550], [473435, 474585, 474992]]
+
+[[figures]]
+name = "in a continuation at 8/calls"
+measure = "count"
+size = 8
+readings = [[1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1]]
+
+[[figures]]
+name = "in a continuation at 8/allocated"
+measure = "bytes"
+size = 8
+readings = [[396901001, 396918537, 396899417], [396910393, 396916985, 396902209], [396903601, 396893993, 396896289], [396900801, 396905201, 396907929], [396890841, 396907257, 396905833]]
+
+[[figures]]
+name = "in a continuation at 8/allocations"
+measure = "allocations"
+size = 8
+readings = [[3659971, 3660082, 3659960], [3660057, 3660083, 3659984], [3659999, 3659880, 3659949], [3659943, 3660003, 3660018], [3659890, 3660019, 3660038]]
+
+[[figures]]
+name = "in a continuation at 8/looks"
+measure = "count"
+size = 8
+readings = [[974152, 974152, 974152], [974152, 974152, 974152], [974152, 974152, 974152], [974152, 974152, 974152], [974152, 974152, 974152]]
+
+[[figures]]
+name = "in a continuation at 8"
+measure = "instructions"
+size = 8
+readings = [[3738861686, 3739914553, 3739216291], [3739755052, 3740568298, 3739232245], [3739422074, 3739176935, 3739697638], [3739302797, 3738869612, 3738988800], [3739375591, 3738667962, 3738967261]]
+
+[[figures]]
+name = "in a continuation at 8/chain copies"
+measure = "count"
+size = 8
+readings = [[10, 10, 10], [10, 10, 10], [10, 10, 10], [10, 10, 10], [10, 10, 10]]
+
+[[figures]]
+name = "in a continuation at 8/functions"
+measure = "count"
+size = 8
+readings = [[403, 403, 403], [403, 403, 403], [403, 403, 403], [403, 403, 403], [403, 403, 403]]
+
+[[figures]]
+name = "in a continuation at 12"
+measure = "microseconds"
+size = 12
+readings = [[581722, 580798, 579765], [575517, 576362, 574250], [579792, 582451, 582207], [574399, 574191, 576954], [581860, 577540, 581971]]
+
+[[figures]]
+name = "in a continuation at 12/calls"
+measure = "count"
+size = 12
+readings = [[1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1]]
+
+[[figures]]
+name = "in a continuation at 12/allocated"
+measure = "bytes"
+size = 12
+readings = [[497508467, 497501291, 497502179], [497501771, 497494179, 497500019], [497494715, 497512179, 497501971], [497506899, 497501979, 497487483], [497493067, 497507035, 497502715]]
+
+[[figures]]
+name = "in a continuation at 12/allocations"
+measure = "allocations"
+size = 12
+readings = [[4477202, 4477149, 4477069], [4477128, 4477041, 4477061], [4477121, 4477164, 4477111], [4477156, 4477164, 4477010], [4477055, 4477170, 4477085]]
+
+[[figures]]
+name = "in a continuation at 12/looks"
+measure = "count"
+size = 12
+readings = [[1388288, 1388288, 1388288], [1388288, 1388288, 1388288], [1388288, 1388288, 1388288], [1388288, 1388288, 1388288], [1388288, 1388288, 1388288]]
+
+[[figures]]
+name = "in a continuation at 12"
+measure = "instructions"
+size = 12
+readings = [[4639255603, 4638489070, 4639442412], [4638097164, 4638792162, 4640361657], [4639126275, 4638902095, 4639523766], [4638587594, 4639904953, 4639124948], [4639513036, 4639368254, 4639503880]]
+
+[[figures]]
+name = "in a continuation at 12/chain copies"
+measure = "count"
+size = 12
+readings = [[14, 14, 14], [14, 14, 14], [14, 14, 14], [14, 14, 14], [14, 14, 14]]
+
+[[figures]]
+name = "in a continuation at 12/functions"
+measure = "count"
+size = 12
+readings = [[447, 447, 447], [447, 447, 447], [447, 447, 447], [447, 447, 447], [447, 447, 447]]
+
+[[figures]]
+name = "in a continuation at 16"
+measure = "microseconds"
+size = 16
+readings = [[694835, 694143, 692554], [693900, 687166, 684670], [694376, 693368, 693295], [684267, 683350, 690568], [692293, 682637, 694944]]
+
+[[figures]]
+name = "in a continuation at 16/calls"
+measure = "count"
+size = 16
+readings = [[1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1]]
+
+[[figures]]
+name = "in a continuation at 16/allocated"
+measure = "bytes"
+size = 16
+readings = [[607350952, 607360264, 607322656], [607329728, 607347536, 607321864], [607342560, 607342176, 607327872], [607350640, 607336128, 607338224], [607328472, 607343624, 607351488]]
+
+[[figures]]
+name = "in a continuation at 16/allocations"
+measure = "allocations"
+size = 16
+readings = [[5303904, 5304071, 5303840], [5303823, 5303959, 5303813], [5303941, 5303927, 5303768], [5303925, 5303869, 5303911], [5303815, 5303935, 5303970]]
+
+[[figures]]
+name = "in a continuation at 16/looks"
+measure = "count"
+size = 16
+readings = [[1802424, 1802424, 1802424], [1802424, 1802424, 1802424], [1802424, 1802424, 1802424], [1802424, 1802424, 1802424], [1802424, 1802424, 1802424]]
+
+[[figures]]
+name = "in a continuation at 16"
+measure = "instructions"
+size = 16
+readings = [[5592615939, 5591379165, 5592418738], [5592859261, 5591308997, 5592233056], [5591913135, 5592077636, 5589872775], [5592029052, 5591775314, 5591887250], [5591500875, 5592033732, 5592227447]]
+
+[[figures]]
+name = "in a continuation at 16/chain copies"
+measure = "count"
+size = 16
+readings = [[18, 18, 18], [18, 18, 18], [18, 18, 18], [18, 18, 18], [18, 18, 18]]
+
+[[figures]]
+name = "in a continuation at 16/functions"
+measure = "count"
+size = 16
+readings = [[491, 491, 491], [491, 491, 491], [491, 491, 491], [491, 491, 491], [491, 491, 491]]
+
+[[figures]]
+name = "hoisted to items at 2"
+measure = "microseconds"
+size = 2
+readings = [[318495, 317962, 315978], [318110, 315047, 315200], [317495, 317969, 317948], [314713, 314552, 317887], [318016, 313459, 319512]]
+
+[[figures]]
+name = "hoisted to items at 2/calls"
+measure = "count"
+size = 2
+readings = [[1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1]]
+
+[[figures]]
+name = "hoisted to items at 2/allocated"
+measure = "bytes"
+size = 2
+readings = [[240260889, 240272321, 240277377], [240260097, 240259097, 240270153], [240275953, 240270065, 240278945], [240274225, 240276473, 240273137], [240272697, 240280545, 240262769]]
+
+[[figures]]
+name = "hoisted to items at 2/allocations"
+measure = "allocations"
+size = 2
+readings = [[2482630, 2482679, 2482730], [2482625, 2482601, 2482629], [2482716, 2482684, 2482772], [2482686, 2482740, 2482713], [2482655, 2482767, 2482635]]
+
+[[figures]]
+name = "hoisted to items at 2/looks"
+measure = "count"
+size = 2
+readings = [[384662, 384662, 384662], [384662, 384662, 384662], [384662, 384662, 384662], [384662, 384662, 384662], [384662, 384662, 384662]]
+
+[[figures]]
+name = "hoisted to items at 2"
+measure = "instructions"
+size = 2
+readings = [[2460898707, 2461159019, 2460399520], [2460833772, 2460858469, 2459775840], [2460322210, 2460183961, 2460862907], [2460344878, 2461031710, 2461262358], [2461198363, 2460538904, 2460395062]]
+
+[[figures]]
+name = "hoisted to items at 2/chain copies"
+measure = "count"
+size = 2
+readings = [[4, 4, 4], [4, 4, 4], [4, 4, 4], [4, 4, 4], [4, 4, 4]]
+
+[[figures]]
+name = "hoisted to items at 2/functions"
+measure = "count"
+size = 2
+readings = [[337, 337, 337], [337, 337, 337], [337, 337, 337], [337, 337, 337], [337, 337, 337]]
+
+[[figures]]
+name = "hoisted to items at 4"
+measure = "microseconds"
+size = 4
+readings = [[381356, 381177, 375782], [378401, 377785, 375814], [380284, 380119, 380429], [376209, 376910, 380414], [379678, 375103, 381387]]
+
+[[figures]]
+name = "hoisted to items at 4/calls"
+measure = "count"
+size = 4
+readings = [[1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1]]
+
+[[figures]]
+name = "hoisted to items at 4/allocated"
+measure = "bytes"
+size = 4
+readings = [[295105785, 295088713, 295101761], [295095569, 295102745, 295102881], [295103945, 295102433, 295095097], [295113393, 295090817, 295087817], [295101033, 295096841, 295097905]]
+
+[[figures]]
+name = "hoisted to items at 4/allocations"
+measure = "allocations"
+size = 4
+readings = [[2922802, 2922688, 2922778], [2922767, 2922812, 2922815], [2922850, 2922833, 2922740], [2922923, 2922700, 2922657], [2922802, 2922745, 2922756]]
+
+[[figures]]
+name = "hoisted to items at 4/looks"
+measure = "count"
+size = 4
+readings = [[623420, 623420, 623420], [623420, 623420, 623420], [623420, 623420, 623420], [623420, 623420, 623420], [623420, 623420, 623420]]
+
+[[figures]]
+name = "hoisted to items at 4"
+measure = "instructions"
+size = 4
+readings = [[2940463974, 2939302807, 2939579216], [2940069258, 2940091021, 2940671527], [2939850182, 2940718068, 2939679731], [2939877401, 2939852246, 2940128667], [2941078036, 2940500848, 2939221434]]
+
+[[figures]]
+name = "hoisted to items at 4/chain copies"
+measure = "count"
+size = 4
+readings = [[6, 6, 6], [6, 6, 6], [6, 6, 6], [6, 6, 6], [6, 6, 6]]
+
+[[figures]]
+name = "hoisted to items at 4/functions"
+measure = "count"
+size = 4
+readings = [[359, 359, 359], [359, 359, 359], [359, 359, 359], [359, 359, 359], [359, 359, 359]]
+
+[[figures]]
+name = "hoisted to items at 8"
+measure = "microseconds"
+size = 8
+readings = [[507046, 506992, 501016], [501522, 502214, 502069], [506353, 505580, 507227], [500846, 504610, 505345], [502500, 498920, 505568]]
+
+[[figures]]
+name = "hoisted to items at 8/calls"
+measure = "count"
+size = 8
+readings = [[1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1]]
+
+[[figures]]
+name = "hoisted to items at 8/allocated"
+measure = "bytes"
+size = 8
+readings = [[414710803, 414706947, 414703891], [414696803, 414693723, 414694667], [414697259, 414690475, 414691835], [414694251, 414702451, 414695995], [414699763, 414683987, 414696451]]
+
+[[figures]]
+name = "hoisted to items at 8/allocations"
+measure = "allocations"
+size = 8
+readings = [[3827384, 3827350, 3827374], [3827351, 3827326, 3827266], [3827303, 3827314, 3827276], [3827286, 3827356, 3827318], [3827348, 3827208, 3827326]]
+
+[[figures]]
+name = "hoisted to items at 8/looks"
+measure = "count"
+size = 8
+readings = [[1100936, 1100936, 1100936], [1100936, 1100936, 1100936], [1100936, 1100936, 1100936], [1100936, 1100936, 1100936], [1100936, 1100936, 1100936]]
+
+[[figures]]
+name = "hoisted to items at 8"
+measure = "instructions"
+size = 8
+readings = [[3942917106, 3942891441, 3943525500], [3943424557, 3943662183, 3943704084], [3943824537, 3943187592, 3944099616], [3943714849, 3943910415, 3943934755], [3943417882, 3942598018, 3943901995]]
+
+[[figures]]
+name = "hoisted to items at 8/chain copies"
+measure = "count"
+size = 8
+readings = [[10, 10, 10], [10, 10, 10], [10, 10, 10], [10, 10, 10], [10, 10, 10]]
+
+[[figures]]
+name = "hoisted to items at 8/functions"
+measure = "count"
+size = 8
+readings = [[403, 403, 403], [403, 403, 403], [403, 403, 403], [403, 403, 403], [403, 403, 403]]
+
+[[figures]]
+name = "hoisted to items at 12"
+measure = "microseconds"
+size = 12
+readings = [[636205, 633968, 627753], [627836, 630035, 628337], [636164, 634664, 635912], [628458, 632854, 633474], [633365, 629598, 634420]]
+
+[[figures]]
+name = "hoisted to items at 12/calls"
+measure = "count"
+size = 12
+readings = [[1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1]]
+
+[[figures]]
+name = "hoisted to items at 12/allocated"
+measure = "bytes"
+size = 12
+readings = [[526599657, 526615465, 526590497], [526602769, 526616153, 526598609], [526587497, 526594705, 526600489], [526610233, 526606473, 526600665], [526598625, 526594857, 526598401]]
+
+[[figures]]
+name = "hoisted to items at 12/allocations"
+measure = "allocations"
+size = 12
+readings = [[4750948, 4751097, 4750912], [4750956, 4751136, 4750909], [4750863, 4750942, 4750964], [4751039, 4750982, 4751040], [4751023, 4750919, 4750970]]
+
+[[figures]]
+name = "hoisted to items at 12/looks"
+measure = "count"
+size = 12
+readings = [[1578452, 1578452, 1578452], [1578452, 1578452, 1578452], [1578452, 1578452, 1578452], [1578452, 1578452, 1578452], [1578452, 1578452, 1578452]]
+
+[[figures]]
+name = "hoisted to items at 12"
+measure = "instructions"
+size = 12
+readings = [[4975392154, 4975843008, 4975454154], [4974757633, 4976186579, 4975087521], [4975107272, 4974181342, 4975936526], [4974436080, 4974858861, 4974915499], [4975151475, 4975611288, 4975599772]]
+
+[[figures]]
+name = "hoisted to items at 12/chain copies"
+measure = "count"
+size = 12
+readings = [[14, 14, 14], [14, 14, 14], [14, 14, 14], [14, 14, 14], [14, 14, 14]]
+
+[[figures]]
+name = "hoisted to items at 12/functions"
+measure = "count"
+size = 12
+readings = [[447, 447, 447], [447, 447, 447], [447, 447, 447], [447, 447, 447], [447, 447, 447]]
+
+[[figures]]
+name = "hoisted to items at 16"
+measure = "microseconds"
+size = 16
+readings = [[769169, 769855, 757707], [761631, 762659, 769545], [769177, 769435, 768160], [759234, 767099, 767130], [766148, 767538, 772105]]
+
+[[figures]]
+name = "hoisted to items at 16/calls"
+measure = "count"
+size = 16
+readings = [[1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1]]
+
+[[figures]]
+name = "hoisted to items at 16/allocated"
+measure = "bytes"
+size = 16
+readings = [[649071256, 649050328, 649030208], [649056240, 649064480, 649043312], [649052528, 649058640, 649038120], [649058720, 649057184, 649045072], [649067832, 649046184, 649048536]]
+
+[[figures]]
+name = "hoisted to items at 16/allocations"
+measure = "allocations"
+size = 16
+readings = [[5697787, 5697587, 5697467], [5697684, 5697789, 5697572], [5697643, 5697711, 5697467], [5697693, 5697654, 5697614], [5697694, 5697585, 5697561]]
+
+[[figures]]
+name = "hoisted to items at 16/looks"
+measure = "count"
+size = 16
+readings = [[2055968, 2055968, 2055968], [2055968, 2055968, 2055968], [2055968, 2055968, 2055968], [2055968, 2055968, 2055968], [2055968, 2055968, 2055968]]
+
+[[figures]]
+name = "hoisted to items at 16"
+measure = "instructions"
+size = 16
+readings = [[6075405246, 6075163205, 6075359066], [6075958960, 6075535785, 6075128177], [6073884080, 6076415368, 6075718260], [6074128876, 6074963313, 6074882894], [6074672803, 6075765595, 6074641766]]
+
+[[figures]]
+name = "hoisted to items at 16/chain copies"
+measure = "count"
+size = 16
+readings = [[18, 18, 18], [18, 18, 18], [18, 18, 18], [18, 18, 18], [18, 18, 18]]
+
+[[figures]]
+name = "hoisted to items at 16/functions"
+measure = "count"
+size = 16
+readings = [[491, 491, 491], [491, 491, 491], [491, 491, 491], [491, 491, 491], [491, 491, 491]]

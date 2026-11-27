@@ -1,0 +1,448 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "dependent_vectors/tuple sites"
+measure = "count"
+readings = [[59], [59]]
+
+[[figures]]
+name = "dependent_vectors/slice sites"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "dependent_vectors/regions"
+measure = "count"
+readings = [[48], [48]]
+
+[[figures]]
+name = "hello_world/tuple sites"
+measure = "count"
+readings = [[59], [59]]
+
+[[figures]]
+name = "hello_world/slice sites"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "hello_world/regions"
+measure = "count"
+readings = [[48], [48]]
+
+[[figures]]
+name = "monad_suspend/tuple sites"
+measure = "count"
+readings = [[83], [83]]
+
+[[figures]]
+name = "monad_suspend/slice sites"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "monad_suspend/regions"
+measure = "count"
+readings = [[75], [75]]
+
+[[figures]]
+name = "monad_io/tuple sites"
+measure = "count"
+readings = [[60], [60]]
+
+[[figures]]
+name = "monad_io/slice sites"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "monad_io/regions"
+measure = "count"
+readings = [[57], [57]]
+
+[[figures]]
+name = "monad_result/tuple sites"
+measure = "count"
+readings = [[60], [60]]
+
+[[figures]]
+name = "monad_result/slice sites"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "monad_result/regions"
+measure = "count"
+readings = [[57], [57]]
+
+[[figures]]
+name = "parse_bindless/tuple sites"
+measure = "count"
+readings = [[60], [60]]
+
+[[figures]]
+name = "parse_bindless/slice sites"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "parse_bindless/regions"
+measure = "count"
+readings = [[57], [57]]
+
+[[figures]]
+name = "parse_digits/tuple sites"
+measure = "count"
+readings = [[68], [68]]
+
+[[figures]]
+name = "parse_digits/slice sites"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "parse_digits/regions"
+measure = "count"
+readings = [[62], [62]]
+
+[[figures]]
+name = "parse_manual/tuple sites"
+measure = "count"
+readings = [[60], [60]]
+
+[[figures]]
+name = "parse_manual/slice sites"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "parse_manual/regions"
+measure = "count"
+readings = [[57], [57]]
+
+[[figures]]
+name = "parse_multibyte/tuple sites"
+measure = "count"
+readings = [[60], [60]]
+
+[[figures]]
+name = "parse_multibyte/slice sites"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "parse_multibyte/regions"
+measure = "count"
+readings = [[57], [57]]
+
+[[figures]]
+name = "rng_manual/tuple sites"
+measure = "count"
+readings = [[60], [60]]
+
+[[figures]]
+name = "rng_manual/slice sites"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "rng_manual/regions"
+measure = "count"
+readings = [[57], [57]]
+
+[[figures]]
+name = "rng_state/tuple sites"
+measure = "count"
+readings = [[60], [60]]
+
+[[figures]]
+name = "rng_state/slice sites"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "rng_state/regions"
+measure = "count"
+readings = [[57], [57]]
+
+[[figures]]
+name = "state_manual/tuple sites"
+measure = "count"
+readings = [[60], [60]]
+
+[[figures]]
+name = "state_manual/slice sites"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "state_manual/regions"
+measure = "count"
+readings = [[57], [57]]
+
+[[figures]]
+name = "state_monad/tuple sites"
+measure = "count"
+readings = [[60], [60]]
+
+[[figures]]
+name = "state_monad/slice sites"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "state_monad/regions"
+measure = "count"
+readings = [[57], [57]]
+
+[[figures]]
+name = "trees/tuple sites"
+measure = "count"
+readings = [[61], [61]]
+
+[[figures]]
+name = "trees/slice sites"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "trees/regions"
+measure = "count"
+readings = [[58], [58]]
+
+[[figures]]
+name = "buckets/blocked"
+measure = "count"
+readings = [[763], [763]]
+
+[[figures]]
+name = "buckets/continuation-only"
+measure = "count"
+readings = [[26], [26]]
+
+[[figures]]
+name = "buckets/needs-workers"
+measure = "count"
+readings = [[15], [15]]
+
+[[figures]]
+name = "needs-workers owners/io/bind"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "reachable owners outside the library/io/bind"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "variant regions"
+measure = "count"
+readings = [[14], [14]]
+
+[[figures]]
+name = "variant flows/blocked"
+measure = "count"
+readings = [[14], [14]]
+
+[[figures]]
+name = "variant shapes/roster 2 width 3"
+measure = "count"
+readings = [[14], [14]]
+
+[[figures]]
+name = "variant owners/blocked//measured/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "variant owners/blocked//std/Io/both/1/1/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "variant owners/blocked//std/Io/both/1/1/1/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "variant owners/blocked//std/Io/cancel_all/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "variant owners/blocked//std/Io/drive/1/1/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "variant owners/blocked//std/Io/drive/1/1/1/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "variant owners/blocked//std/Io/into/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "variant owners/blocked//std/Io/pass"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "variant owners/blocked//std/Io/split"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "variant owners/blocked//std/Try/bind/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "variant owners/blocked//std/Try/witness~/std/Program/Program(/std/Try/Try)/1/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "variant owners/blocked//std/answered"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "variant owners/blocked//std/internal/Handle/settled_reply/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "variant owners/blocked//std/internal/Handle/write_waiting/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "variant owners/blocked//std/internal/Status/of_code"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "variant owners/blocked//std/internal/until/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "variant owners/blocked//std/internal/until/1/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "variant owners/blocked//std/print/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "variant owners/blocked//std/print_err/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "variant owners/blocked/io/bind"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "variant owners/blocked/io/carry"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "variant owners/blocked/main"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "tag-led constructions"
+measure = "count"
+readings = [[632], [632]]
+
+[[figures]]
+name = "tag-led constructions/never read back"
+measure = "count"
+readings = [[584], [584]]
+
+[[figures]]
+name = "returns//build/Tuple(4)"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "returns//build/Bare"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "returns//std/Nat/of_str/Tuple(2)"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "returns//std/Nat/of_str/Bare"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "returns/io/bind/Tuple(0)"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "returns/io/bind/Bare"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "returns/io/bind/escapes"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "returns/io/resume/Tuple(5)"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "returns/io/resume/Bare"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "returns/io/surface/Tuple(5)"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "returns/io/surface/Bare"
+measure = "count"
+readings = [[1], [1]]

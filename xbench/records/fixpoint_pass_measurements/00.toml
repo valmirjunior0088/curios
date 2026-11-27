@@ -1,0 +1,2288 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "compile_with_prelude"
+measure = "microseconds"
+readings = [[4252012], [4254873], [4262113], [4249342], [4256734]]
+
+[[figures]]
+name = "compile_with_prelude/calls"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "compile_with_prelude/allocated"
+measure = "bytes"
+readings = [[3016395194], [3016402314], [3016391962], [3016394722], [3016404442]]
+
+[[figures]]
+name = "compile_with_prelude/allocations"
+measure = "allocations"
+readings = [[30504168], [30504224], [30504115], [30504162], [30504236]]
+
+[[figures]]
+name = "compile_with_prelude/looks"
+measure = "count"
+readings = [[99089], [99089], [99089], [99089], [99089]]
+
+[[figures]]
+name = "compile_with_prelude"
+measure = "instructions"
+readings = [[41905949418], [41906154864], [41910564040], [41905242862], [41909622302]]
+
+[[figures]]
+name = "compile_entrypoint"
+measure = "microseconds"
+readings = [[4215815], [4219379], [4226852], [4213643], [4221491]]
+
+[[figures]]
+name = "compile_entrypoint/calls"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "compile_entrypoint/allocated"
+measure = "bytes"
+readings = [[2996010151], [2996017271], [2996006919], [2996009679], [2996019399]]
+
+[[figures]]
+name = "compile_entrypoint/allocations"
+measure = "allocations"
+readings = [[30358670], [30358726], [30358617], [30358664], [30358738]]
+
+[[figures]]
+name = "compile_entrypoint/looks"
+measure = "count"
+readings = [[99089], [99089], [99089], [99089], [99089]]
+
+[[figures]]
+name = "cps_optimize"
+measure = "microseconds"
+readings = [[3056448], [3062578], [3064853], [3056590], [3060654]]
+
+[[figures]]
+name = "cps_optimize/calls"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "cps_optimize/allocated"
+measure = "bytes"
+readings = [[1956942986], [1956942986], [1956942986], [1956942986], [1956942986]]
+
+[[figures]]
+name = "cps_optimize/allocations"
+measure = "allocations"
+readings = [[19653859], [19653859], [19653859], [19653859], [19653859]]
+
+[[figures]]
+name = "cps_optimize/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::answer_row_tests"
+measure = "microseconds"
+readings = [[747156], [746433], [746532], [747426], [750336]]
+
+[[figures]]
+name = "cps::answer_row_tests/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::answer_row_tests/allocated"
+measure = "bytes"
+readings = [[753097534], [753097534], [753097534], [753097534], [753097534]]
+
+[[figures]]
+name = "cps::answer_row_tests/allocations"
+measure = "allocations"
+readings = [[4103399], [4103399], [4103399], [4103399], [4103399]]
+
+[[figures]]
+name = "cps::answer_row_tests/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "rebuild_in_place"
+measure = "microseconds"
+readings = [[409043], [407729], [410829], [407877], [411440]]
+
+[[figures]]
+name = "rebuild_in_place/calls"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "rebuild_in_place/allocated"
+measure = "bytes"
+readings = [[420707159], [420707159], [420707159], [420707159], [420707159]]
+
+[[figures]]
+name = "rebuild_in_place/allocations"
+measure = "allocations"
+readings = [[3663595], [3663595], [3663595], [3663595], [3663595]]
+
+[[figures]]
+name = "rebuild_in_place/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::split_windows"
+measure = "microseconds"
+readings = [[404275], [405631], [409920], [404444], [403987]]
+
+[[figures]]
+name = "cps::split_windows/calls"
+measure = "count"
+readings = [[3], [3], [3], [3], [3]]
+
+[[figures]]
+name = "cps::split_windows/allocated"
+measure = "bytes"
+readings = [[143272400], [143272400], [143272400], [143272400], [143272400]]
+
+[[figures]]
+name = "cps::split_windows/allocations"
+measure = "allocations"
+readings = [[2567036], [2567036], [2567036], [2567036], [2567036]]
+
+[[figures]]
+name = "cps::split_windows/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::split_parameters"
+measure = "microseconds"
+readings = [[331553], [334263], [332822], [331781], [332397]]
+
+[[figures]]
+name = "cps::split_parameters/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::split_parameters/allocated"
+measure = "bytes"
+readings = [[114834056], [114834056], [114834056], [114834056], [114834056]]
+
+[[figures]]
+name = "cps::split_parameters/allocations"
+measure = "allocations"
+readings = [[949974], [949974], [949974], [949974], [949974]]
+
+[[figures]]
+name = "cps::split_parameters/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::shrink"
+measure = "microseconds"
+readings = [[246329], [246920], [247309], [246539], [246431]]
+
+[[figures]]
+name = "cps::shrink/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::shrink/allocated"
+measure = "bytes"
+readings = [[87604244], [87604244], [87604244], [87604244], [87604244]]
+
+[[figures]]
+name = "cps::shrink/allocations"
+measure = "allocations"
+readings = [[1449746], [1449746], [1449746], [1449746], [1449746]]
+
+[[figures]]
+name = "cps::shrink/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::sink_computations"
+measure = "microseconds"
+readings = [[236477], [237328], [237179], [236025], [236577]]
+
+[[figures]]
+name = "cps::sink_computations/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::sink_computations/allocated"
+measure = "bytes"
+readings = [[104971009], [104971009], [104971009], [104971009], [104971009]]
+
+[[figures]]
+name = "cps::sink_computations/allocations"
+measure = "allocations"
+readings = [[1687232], [1687232], [1687232], [1687232], [1687232]]
+
+[[figures]]
+name = "cps::sink_computations/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::known_values"
+measure = "microseconds"
+readings = [[172527], [171729], [170929], [171321], [171433]]
+
+[[figures]]
+name = "cps::known_values/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::known_values/allocated"
+measure = "bytes"
+readings = [[186503571], [186503571], [186503571], [186503571], [186503571]]
+
+[[figures]]
+name = "cps::known_values/allocations"
+measure = "allocations"
+readings = [[2119028], [2119028], [2119028], [2119028], [2119028]]
+
+[[figures]]
+name = "cps::known_values/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::flatten_indexed_lists"
+measure = "microseconds"
+readings = [[104374], [104313], [104498], [104169], [104774]]
+
+[[figures]]
+name = "cps::flatten_indexed_lists/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::flatten_indexed_lists/allocated"
+measure = "bytes"
+readings = [[90378350], [90378350], [90378350], [90378350], [90378350]]
+
+[[figures]]
+name = "cps::flatten_indexed_lists/allocations"
+measure = "allocations"
+readings = [[744494], [744494], [744494], [744494], [744494]]
+
+[[figures]]
+name = "cps::flatten_indexed_lists/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::inline_known_calls"
+measure = "microseconds"
+readings = [[95398], [96080], [95820], [95671], [95797]]
+
+[[figures]]
+name = "cps::inline_known_calls/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::inline_known_calls/allocated"
+measure = "bytes"
+readings = [[57615693], [57615693], [57615693], [57615693], [57615693]]
+
+[[figures]]
+name = "cps::inline_known_calls/allocations"
+measure = "allocations"
+readings = [[751180], [751180], [751180], [751180], [751180]]
+
+[[figures]]
+name = "cps::inline_known_calls/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::split_returns"
+measure = "microseconds"
+readings = [[86942], [87305], [87720], [87180], [87336]]
+
+[[figures]]
+name = "cps::split_returns/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::split_returns/allocated"
+measure = "bytes"
+readings = [[67758393], [67758393], [67758393], [67758393], [67758393]]
+
+[[figures]]
+name = "cps::split_returns/allocations"
+measure = "allocations"
+readings = [[802033], [802033], [802033], [802033], [802033]]
+
+[[figures]]
+name = "cps::split_returns/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::prune_unreachable"
+measure = "microseconds"
+readings = [[63777], [63974], [64123], [63702], [63976]]
+
+[[figures]]
+name = "cps::prune_unreachable/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::prune_unreachable/allocated"
+measure = "bytes"
+readings = [[10046744], [10046744], [10046744], [10046744], [10046744]]
+
+[[figures]]
+name = "cps::prune_unreachable/allocations"
+measure = "allocations"
+readings = [[237661], [237661], [237661], [237661], [237661]]
+
+[[figures]]
+name = "cps::prune_unreachable/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::split_workers"
+measure = "microseconds"
+readings = [[50950], [51166], [50591], [50909], [51052]]
+
+[[figures]]
+name = "cps::split_workers/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::split_workers/allocated"
+measure = "bytes"
+readings = [[51724561], [51724561], [51724561], [51724561], [51724561]]
+
+[[figures]]
+name = "cps::split_workers/allocations"
+measure = "allocations"
+readings = [[436378], [436378], [436378], [436378], [436378]]
+
+[[figures]]
+name = "cps::split_workers/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::shrink_inlined"
+measure = "microseconds"
+readings = [[47031], [47394], [47354], [47034], [47000]]
+
+[[figures]]
+name = "cps::shrink_inlined/calls"
+measure = "count"
+readings = [[3], [3], [3], [3], [3]]
+
+[[figures]]
+name = "cps::shrink_inlined/allocated"
+measure = "bytes"
+readings = [[16707273], [16707273], [16707273], [16707273], [16707273]]
+
+[[figures]]
+name = "cps::shrink_inlined/allocations"
+measure = "allocations"
+readings = [[264669], [264669], [264669], [264669], [264669]]
+
+[[figures]]
+name = "cps::shrink_inlined/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::uncurry_nests"
+measure = "microseconds"
+readings = [[46983], [47135], [47143], [47483], [47152]]
+
+[[figures]]
+name = "cps::uncurry_nests/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::uncurry_nests/allocated"
+measure = "bytes"
+readings = [[22244728], [22244728], [22244728], [22244728], [22244728]]
+
+[[figures]]
+name = "cps::uncurry_nests/allocations"
+measure = "allocations"
+readings = [[507081], [507081], [507081], [507081], [507081]]
+
+[[figures]]
+name = "cps::uncurry_nests/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::answer_window_guards"
+measure = "microseconds"
+readings = [[36164], [35964], [36185], [35773], [36346]]
+
+[[figures]]
+name = "cps::answer_window_guards/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::answer_window_guards/allocated"
+measure = "bytes"
+readings = [[14417280], [14417280], [14417280], [14417280], [14417280]]
+
+[[figures]]
+name = "cps::answer_window_guards/allocations"
+measure = "allocations"
+readings = [[207845], [207845], [207845], [207845], [207845]]
+
+[[figures]]
+name = "cps::answer_window_guards/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::merge_equal_continuations"
+measure = "microseconds"
+readings = [[34093], [34108], [34144], [34108], [34136]]
+
+[[figures]]
+name = "cps::merge_equal_continuations/calls"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "cps::merge_equal_continuations/allocated"
+measure = "bytes"
+readings = [[28428741], [28428741], [28428741], [28428741], [28428741]]
+
+[[figures]]
+name = "cps::merge_equal_continuations/allocations"
+measure = "allocations"
+readings = [[187469], [187469], [187469], [187469], [187469]]
+
+[[figures]]
+name = "cps::merge_equal_continuations/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::dedupe_intrinsics"
+measure = "microseconds"
+readings = [[33302], [33290], [33355], [33005], [33337]]
+
+[[figures]]
+name = "cps::dedupe_intrinsics/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::dedupe_intrinsics/allocated"
+measure = "bytes"
+readings = [[14234152], [14234152], [14234152], [14234152], [14234152]]
+
+[[figures]]
+name = "cps::dedupe_intrinsics/allocations"
+measure = "allocations"
+readings = [[170433], [170433], [170433], [170433], [170433]]
+
+[[figures]]
+name = "cps::dedupe_intrinsics/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::specialize_scc_calls"
+measure = "microseconds"
+readings = [[31817], [31637], [31902], [32264], [31819]]
+
+[[figures]]
+name = "cps::specialize_scc_calls/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::specialize_scc_calls/allocated"
+measure = "bytes"
+readings = [[39688527], [39688527], [39688527], [39688527], [39688527]]
+
+[[figures]]
+name = "cps::specialize_scc_calls/allocations"
+measure = "allocations"
+readings = [[350100], [350100], [350100], [350100], [350100]]
+
+[[figures]]
+name = "cps::specialize_scc_calls/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::eliminate_dead_calls"
+measure = "microseconds"
+readings = [[31816], [32190], [32077], [31869], [32113]]
+
+[[figures]]
+name = "cps::eliminate_dead_calls/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::eliminate_dead_calls/allocated"
+measure = "bytes"
+readings = [[33503547], [33503547], [33503547], [33503547], [33503547]]
+
+[[figures]]
+name = "cps::eliminate_dead_calls/allocations"
+measure = "allocations"
+readings = [[231881], [231881], [231881], [231881], [231881]]
+
+[[figures]]
+name = "cps::eliminate_dead_calls/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::specialize_jump_patterns"
+measure = "microseconds"
+readings = [[30766], [30852], [31140], [30912], [30708]]
+
+[[figures]]
+name = "cps::specialize_jump_patterns/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::specialize_jump_patterns/allocated"
+measure = "bytes"
+readings = [[17952624], [17952624], [17952624], [17952624], [17952624]]
+
+[[figures]]
+name = "cps::specialize_jump_patterns/allocations"
+measure = "allocations"
+readings = [[334392], [334392], [334392], [334392], [334392]]
+
+[[figures]]
+name = "cps::specialize_jump_patterns/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::uncurry_returns"
+measure = "microseconds"
+readings = [[29789], [30087], [29813], [30042], [29901]]
+
+[[figures]]
+name = "cps::uncurry_returns/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::uncurry_returns/allocated"
+measure = "bytes"
+readings = [[13117472], [13117472], [13117472], [13117472], [13117472]]
+
+[[figures]]
+name = "cps::uncurry_returns/allocations"
+measure = "allocations"
+readings = [[197756], [197756], [197756], [197756], [197756]]
+
+[[figures]]
+name = "cps::uncurry_returns/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::contify_calls"
+measure = "microseconds"
+readings = [[22640], [22618], [22639], [22637], [22576]]
+
+[[figures]]
+name = "cps::contify_calls/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::contify_calls/allocated"
+measure = "bytes"
+readings = [[5085429], [5085429], [5085429], [5085429], [5085429]]
+
+[[figures]]
+name = "cps::contify_calls/allocations"
+measure = "allocations"
+readings = [[106834], [106834], [106834], [106834], [106834]]
+
+[[figures]]
+name = "cps::contify_calls/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::fuse_append_chains"
+measure = "microseconds"
+readings = [[20656], [21049], [20640], [20656], [20707]]
+
+[[figures]]
+name = "cps::fuse_append_chains/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::fuse_append_chains/allocated"
+measure = "bytes"
+readings = [[7830688], [7830688], [7830688], [7830688], [7830688]]
+
+[[figures]]
+name = "cps::fuse_append_chains/allocations"
+measure = "allocations"
+readings = [[172707], [172707], [172707], [172707], [172707]]
+
+[[figures]]
+name = "cps::fuse_append_chains/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::eliminate_dead_parameters"
+measure = "microseconds"
+readings = [[16864], [16971], [16880], [16899], [16992]]
+
+[[figures]]
+name = "cps::eliminate_dead_parameters/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::eliminate_dead_parameters/allocated"
+measure = "bytes"
+readings = [[10462372], [10462372], [10462372], [10462372], [10462372]]
+
+[[figures]]
+name = "cps::eliminate_dead_parameters/allocations"
+measure = "allocations"
+readings = [[195511], [195511], [195511], [195511], [195511]]
+
+[[figures]]
+name = "cps::eliminate_dead_parameters/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::separate_loop_entries"
+measure = "microseconds"
+readings = [[15589], [15752], [15617], [15562], [15625]]
+
+[[figures]]
+name = "cps::separate_loop_entries/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::separate_loop_entries/allocated"
+measure = "bytes"
+readings = [[6411896], [6411896], [6411896], [6411896], [6411896]]
+
+[[figures]]
+name = "cps::separate_loop_entries/allocations"
+measure = "allocations"
+readings = [[96507], [96507], [96507], [96507], [96507]]
+
+[[figures]]
+name = "cps::separate_loop_entries/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::eliminate_dead_loops"
+measure = "microseconds"
+readings = [[10035], [9888], [10182], [9947], [9923]]
+
+[[figures]]
+name = "cps::eliminate_dead_loops/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::eliminate_dead_loops/allocated"
+measure = "bytes"
+readings = [[8319340], [8319340], [8319340], [8319340], [8319340]]
+
+[[figures]]
+name = "cps::eliminate_dead_loops/allocations"
+measure = "allocations"
+readings = [[84572], [84572], [84572], [84572], [84572]]
+
+[[figures]]
+name = "cps::eliminate_dead_loops/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::forward_continuations"
+measure = "microseconds"
+readings = [[9410], [9467], [9579], [9424], [9470]]
+
+[[figures]]
+name = "cps::forward_continuations/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::forward_continuations/allocated"
+measure = "bytes"
+readings = [[13188456], [13188456], [13188456], [13188456], [13188456]]
+
+[[figures]]
+name = "cps::forward_continuations/allocations"
+measure = "allocations"
+readings = [[208491], [208491], [208491], [208491], [208491]]
+
+[[figures]]
+name = "cps::forward_continuations/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::specialize_call_patterns"
+measure = "microseconds"
+readings = [[5908], [6056], [5910], [5904], [5922]]
+
+[[figures]]
+name = "cps::specialize_call_patterns/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::specialize_call_patterns/allocated"
+measure = "bytes"
+readings = [[2578592], [2578592], [2578592], [2578592], [2578592]]
+
+[[figures]]
+name = "cps::specialize_call_patterns/allocations"
+measure = "allocations"
+readings = [[18065], [18065], [18065], [18065], [18065]]
+
+[[figures]]
+name = "cps::specialize_call_patterns/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::rewrite_atoms"
+measure = "microseconds"
+readings = [[5631], [5616], [5594], [5623], [5638]]
+
+[[figures]]
+name = "cps::rewrite_atoms/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::rewrite_atoms/allocated"
+measure = "bytes"
+readings = [[1016], [1016], [1016], [1016], [1016]]
+
+[[figures]]
+name = "cps::rewrite_atoms/allocations"
+measure = "allocations"
+readings = [[6], [6], [6], [6], [6]]
+
+[[figures]]
+name = "cps::rewrite_atoms/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::fold_negated_comparisons"
+measure = "microseconds"
+readings = [[3604], [3693], [3575], [3588], [3615]]
+
+[[figures]]
+name = "cps::fold_negated_comparisons/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::fold_negated_comparisons/allocated"
+measure = "bytes"
+readings = [[2039008], [2039008], [2039008], [2039008], [2039008]]
+
+[[figures]]
+name = "cps::fold_negated_comparisons/allocations"
+measure = "allocations"
+readings = [[9925], [9925], [9925], [9925], [9925]]
+
+[[figures]]
+name = "cps::fold_negated_comparisons/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::forward_calls"
+measure = "microseconds"
+readings = [[3332], [3394], [3293], [3347], [3331]]
+
+[[figures]]
+name = "cps::forward_calls/calls"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::forward_calls/allocated"
+measure = "bytes"
+readings = [[322100], [322100], [322100], [322100], [322100]]
+
+[[figures]]
+name = "cps::forward_calls/allocations"
+measure = "allocations"
+readings = [[2342], [2342], [2342], [2342], [2342]]
+
+[[figures]]
+name = "cps::forward_calls/looks"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::prune_unreachable::cap"
+measure = "count"
+readings = [[768157], [768157], [768157], [768157], [768157]]
+
+[[figures]]
+name = "cps::prune_unreachable::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::split_workers::cap"
+measure = "count"
+readings = [[768157], [768157], [768157], [768157], [768157]]
+
+[[figures]]
+name = "cps::split_workers::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::uncurry_nests::cap"
+measure = "count"
+readings = [[768157], [768157], [768157], [768157], [768157]]
+
+[[figures]]
+name = "cps::uncurry_nests::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::uncurry_returns::cap"
+measure = "count"
+readings = [[768157], [768157], [768157], [768157], [768157]]
+
+[[figures]]
+name = "cps::uncurry_returns::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::split_parameters::cap"
+measure = "count"
+readings = [[768000], [768000], [768000], [768000], [768000]]
+
+[[figures]]
+name = "cps::split_parameters::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::split_returns::cap"
+measure = "count"
+readings = [[764923], [764923], [764923], [764923], [764923]]
+
+[[figures]]
+name = "cps::split_returns::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::specialize_jump_patterns::cap"
+measure = "count"
+readings = [[764587], [764587], [764587], [764587], [764587]]
+
+[[figures]]
+name = "cps::specialize_jump_patterns::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::separate_loop_entries::cap"
+measure = "count"
+readings = [[763070], [763070], [763070], [763070], [763070]]
+
+[[figures]]
+name = "cps::separate_loop_entries::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::specialize_call_patterns::cap"
+measure = "count"
+readings = [[763070], [763070], [763070], [763070], [763070]]
+
+[[figures]]
+name = "cps::specialize_call_patterns::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::specialize_scc_calls::cap"
+measure = "count"
+readings = [[759415], [759415], [759415], [759415], [759415]]
+
+[[figures]]
+name = "cps::specialize_scc_calls::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::contify_calls::cap"
+measure = "count"
+readings = [[753440], [753440], [753440], [753440], [753440]]
+
+[[figures]]
+name = "cps::contify_calls::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::sink_computations::cap"
+measure = "count"
+readings = [[753237], [753237], [753237], [753237], [753237]]
+
+[[figures]]
+name = "cps::sink_computations::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::inline_known_calls::cap"
+measure = "count"
+readings = [[753061], [753061], [753061], [753061], [753061]]
+
+[[figures]]
+name = "cps::inline_known_calls::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::eliminate_dead_calls::cap"
+measure = "count"
+readings = [[731953], [731953], [731953], [731953], [731953]]
+
+[[figures]]
+name = "cps::eliminate_dead_calls::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::eliminate_dead_loops::cap"
+measure = "count"
+readings = [[731953], [731953], [731953], [731953], [731953]]
+
+[[figures]]
+name = "cps::eliminate_dead_loops::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::eliminate_dead_parameters::cap"
+measure = "count"
+readings = [[731953], [731953], [731953], [731953], [731953]]
+
+[[figures]]
+name = "cps::eliminate_dead_parameters::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::flatten_indexed_lists::cap"
+measure = "count"
+readings = [[731953], [731953], [731953], [731953], [731953]]
+
+[[figures]]
+name = "cps::flatten_indexed_lists::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::answer_row_tests::cap"
+measure = "count"
+readings = [[731952], [731952], [731952], [731952], [731952]]
+
+[[figures]]
+name = "cps::answer_row_tests::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::answer_window_guards::cap"
+measure = "count"
+readings = [[731952], [731952], [731952], [731952], [731952]]
+
+[[figures]]
+name = "cps::answer_window_guards::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::dedupe_intrinsics::cap"
+measure = "count"
+readings = [[731952], [731952], [731952], [731952], [731952]]
+
+[[figures]]
+name = "cps::dedupe_intrinsics::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::fold_negated_comparisons::cap"
+measure = "count"
+readings = [[731952], [731952], [731952], [731952], [731952]]
+
+[[figures]]
+name = "cps::fold_negated_comparisons::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::forward_calls::cap"
+measure = "count"
+readings = [[731952], [731952], [731952], [731952], [731952]]
+
+[[figures]]
+name = "cps::forward_calls::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::forward_continuations::cap"
+measure = "count"
+readings = [[731952], [731952], [731952], [731952], [731952]]
+
+[[figures]]
+name = "cps::forward_continuations::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::fuse_append_chains::cap"
+measure = "count"
+readings = [[731952], [731952], [731952], [731952], [731952]]
+
+[[figures]]
+name = "cps::fuse_append_chains::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::rewrite_atoms::cap"
+measure = "count"
+readings = [[731952], [731952], [731952], [731952], [731952]]
+
+[[figures]]
+name = "cps::rewrite_atoms::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::shrink::cap"
+measure = "count"
+readings = [[731952], [731952], [731952], [731952], [731952]]
+
+[[figures]]
+name = "cps::shrink::cap/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::forward_calls::nodes"
+measure = "count"
+readings = [[244336], [244336], [244336], [244336], [244336]]
+
+[[figures]]
+name = "cps::forward_calls::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::forward_continuations::nodes"
+measure = "count"
+readings = [[244336], [244336], [244336], [244336], [244336]]
+
+[[figures]]
+name = "cps::forward_continuations::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::rewrite_atoms::nodes"
+measure = "count"
+readings = [[244336], [244336], [244336], [244336], [244336]]
+
+[[figures]]
+name = "cps::rewrite_atoms::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::split_workers::nodes"
+measure = "count"
+readings = [[229908], [229908], [229908], [229908], [229908]]
+
+[[figures]]
+name = "cps::split_workers::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::uncurry_nests::nodes"
+measure = "count"
+readings = [[229888], [229888], [229888], [229888], [229888]]
+
+[[figures]]
+name = "cps::uncurry_nests::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::uncurry_returns::nodes"
+measure = "count"
+readings = [[229888], [229888], [229888], [229888], [229888]]
+
+[[figures]]
+name = "cps::uncurry_returns::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::split_parameters::nodes"
+measure = "count"
+readings = [[229751], [229751], [229751], [229751], [229751]]
+
+[[figures]]
+name = "cps::split_parameters::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::prune_unreachable::nodes"
+measure = "count"
+readings = [[229587], [229587], [229587], [229587], [229587]]
+
+[[figures]]
+name = "cps::prune_unreachable::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::split_returns::nodes"
+measure = "count"
+readings = [[226674], [226674], [226674], [226674], [226674]]
+
+[[figures]]
+name = "cps::split_returns::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::specialize_jump_patterns::nodes"
+measure = "count"
+readings = [[226338], [226338], [226338], [226338], [226338]]
+
+[[figures]]
+name = "cps::specialize_jump_patterns::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::separate_loop_entries::nodes"
+measure = "count"
+readings = [[224821], [224821], [224821], [224821], [224821]]
+
+[[figures]]
+name = "cps::separate_loop_entries::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::specialize_call_patterns::nodes"
+measure = "count"
+readings = [[224821], [224821], [224821], [224821], [224821]]
+
+[[figures]]
+name = "cps::specialize_call_patterns::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::specialize_scc_calls::nodes"
+measure = "count"
+readings = [[221166], [221166], [221166], [221166], [221166]]
+
+[[figures]]
+name = "cps::specialize_scc_calls::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::inline_known_calls::nodes"
+measure = "count"
+readings = [[220434], [220434], [220434], [220434], [220434]]
+
+[[figures]]
+name = "cps::inline_known_calls::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::contify_calls::nodes"
+measure = "count"
+readings = [[215191], [215191], [215191], [215191], [215191]]
+
+[[figures]]
+name = "cps::contify_calls::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::split_windows::cap"
+measure = "count"
+readings = [[215074], [215074], [215074], [215074], [215074]]
+
+[[figures]]
+name = "cps::split_windows::cap/observations"
+measure = "count"
+readings = [[3], [3], [3], [3], [3]]
+
+[[figures]]
+name = "cps::sink_computations::nodes"
+measure = "count"
+readings = [[214988], [214988], [214988], [214988], [214988]]
+
+[[figures]]
+name = "cps::sink_computations::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::answer_row_tests::nodes"
+measure = "count"
+readings = [[210903], [210903], [210903], [210903], [210903]]
+
+[[figures]]
+name = "cps::answer_row_tests::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::shrink::nodes"
+measure = "count"
+readings = [[210903], [210903], [210903], [210903], [210903]]
+
+[[figures]]
+name = "cps::shrink::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::answer_window_guards::nodes"
+measure = "count"
+readings = [[210661], [210661], [210661], [210661], [210661]]
+
+[[figures]]
+name = "cps::answer_window_guards::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::dedupe_intrinsics::nodes"
+measure = "count"
+readings = [[210555], [210555], [210555], [210555], [210555]]
+
+[[figures]]
+name = "cps::dedupe_intrinsics::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::fold_negated_comparisons::nodes"
+measure = "count"
+readings = [[210555], [210555], [210555], [210555], [210555]]
+
+[[figures]]
+name = "cps::fold_negated_comparisons::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::eliminate_dead_calls::nodes"
+measure = "count"
+readings = [[210542], [210542], [210542], [210542], [210542]]
+
+[[figures]]
+name = "cps::eliminate_dead_calls::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::eliminate_dead_loops::nodes"
+measure = "count"
+readings = [[210542], [210542], [210542], [210542], [210542]]
+
+[[figures]]
+name = "cps::eliminate_dead_loops::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::eliminate_dead_parameters::nodes"
+measure = "count"
+readings = [[210542], [210542], [210542], [210542], [210542]]
+
+[[figures]]
+name = "cps::eliminate_dead_parameters::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::flatten_indexed_lists::nodes"
+measure = "count"
+readings = [[210542], [210542], [210542], [210542], [210542]]
+
+[[figures]]
+name = "cps::flatten_indexed_lists::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::fuse_append_chains::nodes"
+measure = "count"
+readings = [[210542], [210542], [210542], [210542], [210542]]
+
+[[figures]]
+name = "cps::fuse_append_chains::nodes/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::shrink_inlined::cap"
+measure = "count"
+readings = [[183293], [183293], [183293], [183293], [183293]]
+
+[[figures]]
+name = "cps::shrink_inlined::cap/observations"
+measure = "count"
+readings = [[3], [3], [3], [3], [3]]
+
+[[figures]]
+name = "cps::forward_calls::values"
+measure = "count"
+readings = [[149591], [149591], [149591], [149591], [149591]]
+
+[[figures]]
+name = "cps::forward_calls::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::forward_continuations::values"
+measure = "count"
+readings = [[149591], [149591], [149591], [149591], [149591]]
+
+[[figures]]
+name = "cps::forward_continuations::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::rewrite_atoms::values"
+measure = "count"
+readings = [[149591], [149591], [149591], [149591], [149591]]
+
+[[figures]]
+name = "cps::rewrite_atoms::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::uncurry_returns::values"
+measure = "count"
+readings = [[140685], [140685], [140685], [140685], [140685]]
+
+[[figures]]
+name = "cps::uncurry_returns::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::split_workers::values"
+measure = "count"
+readings = [[140607], [140607], [140607], [140607], [140607]]
+
+[[figures]]
+name = "cps::split_workers::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::uncurry_nests::values"
+measure = "count"
+readings = [[140607], [140607], [140607], [140607], [140607]]
+
+[[figures]]
+name = "cps::uncurry_nests::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::prune_unreachable::values"
+measure = "count"
+readings = [[140490], [140490], [140490], [140490], [140490]]
+
+[[figures]]
+name = "cps::prune_unreachable::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::split_parameters::values"
+measure = "count"
+readings = [[140439], [140439], [140439], [140439], [140439]]
+
+[[figures]]
+name = "cps::split_parameters::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::split_returns::values"
+measure = "count"
+readings = [[136875], [136875], [136875], [136875], [136875]]
+
+[[figures]]
+name = "cps::split_returns::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::specialize_jump_patterns::values"
+measure = "count"
+readings = [[136149], [136149], [136149], [136149], [136149]]
+
+[[figures]]
+name = "cps::specialize_jump_patterns::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::separate_loop_entries::values"
+measure = "count"
+readings = [[135104], [135104], [135104], [135104], [135104]]
+
+[[figures]]
+name = "cps::separate_loop_entries::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::specialize_call_patterns::values"
+measure = "count"
+readings = [[135104], [135104], [135104], [135104], [135104]]
+
+[[figures]]
+name = "cps::specialize_call_patterns::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::specialize_scc_calls::values"
+measure = "count"
+readings = [[133043], [133043], [133043], [133043], [133043]]
+
+[[figures]]
+name = "cps::specialize_scc_calls::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::inline_known_calls::values"
+measure = "count"
+readings = [[132283], [132283], [132283], [132283], [132283]]
+
+[[figures]]
+name = "cps::inline_known_calls::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::contify_calls::values"
+measure = "count"
+readings = [[129428], [129428], [129428], [129428], [129428]]
+
+[[figures]]
+name = "cps::contify_calls::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::sink_computations::values"
+measure = "count"
+readings = [[129428], [129428], [129428], [129428], [129428]]
+
+[[figures]]
+name = "cps::sink_computations::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::answer_row_tests::values"
+measure = "count"
+readings = [[126811], [126811], [126811], [126811], [126811]]
+
+[[figures]]
+name = "cps::answer_row_tests::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::shrink::values"
+measure = "count"
+readings = [[126811], [126811], [126811], [126811], [126811]]
+
+[[figures]]
+name = "cps::shrink::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::answer_window_guards::values"
+measure = "count"
+readings = [[126569], [126569], [126569], [126569], [126569]]
+
+[[figures]]
+name = "cps::answer_window_guards::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::dedupe_intrinsics::values"
+measure = "count"
+readings = [[126463], [126463], [126463], [126463], [126463]]
+
+[[figures]]
+name = "cps::dedupe_intrinsics::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::fold_negated_comparisons::values"
+measure = "count"
+readings = [[126463], [126463], [126463], [126463], [126463]]
+
+[[figures]]
+name = "cps::fold_negated_comparisons::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::flatten_indexed_lists::values"
+measure = "count"
+readings = [[126450], [126450], [126450], [126450], [126450]]
+
+[[figures]]
+name = "cps::flatten_indexed_lists::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::fuse_append_chains::values"
+measure = "count"
+readings = [[126450], [126450], [126450], [126450], [126450]]
+
+[[figures]]
+name = "cps::fuse_append_chains::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::eliminate_dead_calls::values"
+measure = "count"
+readings = [[125812], [125812], [125812], [125812], [125812]]
+
+[[figures]]
+name = "cps::eliminate_dead_calls::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::eliminate_dead_loops::values"
+measure = "count"
+readings = [[125812], [125812], [125812], [125812], [125812]]
+
+[[figures]]
+name = "cps::eliminate_dead_loops::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::eliminate_dead_parameters::values"
+measure = "count"
+readings = [[125812], [125812], [125812], [125812], [125812]]
+
+[[figures]]
+name = "cps::eliminate_dead_parameters::values/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::forward_calls::conts"
+measure = "count"
+readings = [[77278], [77278], [77278], [77278], [77278]]
+
+[[figures]]
+name = "cps::forward_calls::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::forward_continuations::conts"
+measure = "count"
+readings = [[77278], [77278], [77278], [77278], [77278]]
+
+[[figures]]
+name = "cps::forward_continuations::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::rewrite_atoms::conts"
+measure = "count"
+readings = [[77278], [77278], [77278], [77278], [77278]]
+
+[[figures]]
+name = "cps::rewrite_atoms::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::specialize_jump_patterns::conts"
+measure = "count"
+readings = [[74064], [74064], [74064], [74064], [74064]]
+
+[[figures]]
+name = "cps::specialize_jump_patterns::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::split_parameters::conts"
+measure = "count"
+readings = [[74064], [74064], [74064], [74064], [74064]]
+
+[[figures]]
+name = "cps::split_parameters::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::split_returns::conts"
+measure = "count"
+readings = [[74064], [74064], [74064], [74064], [74064]]
+
+[[figures]]
+name = "cps::split_returns::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::split_workers::conts"
+measure = "count"
+readings = [[74064], [74064], [74064], [74064], [74064]]
+
+[[figures]]
+name = "cps::split_workers::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::uncurry_nests::conts"
+measure = "count"
+readings = [[74064], [74064], [74064], [74064], [74064]]
+
+[[figures]]
+name = "cps::uncurry_nests::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::uncurry_returns::conts"
+measure = "count"
+readings = [[74064], [74064], [74064], [74064], [74064]]
+
+[[figures]]
+name = "cps::uncurry_returns::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::prune_unreachable::conts"
+measure = "count"
+readings = [[73900], [73900], [73900], [73900], [73900]]
+
+[[figures]]
+name = "cps::prune_unreachable::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::separate_loop_entries::conts"
+measure = "count"
+readings = [[73628], [73628], [73628], [73628], [73628]]
+
+[[figures]]
+name = "cps::separate_loop_entries::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::specialize_call_patterns::conts"
+measure = "count"
+readings = [[73628], [73628], [73628], [73628], [73628]]
+
+[[figures]]
+name = "cps::specialize_call_patterns::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::specialize_scc_calls::conts"
+measure = "count"
+readings = [[72315], [72315], [72315], [72315], [72315]]
+
+[[figures]]
+name = "cps::specialize_scc_calls::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::inline_known_calls::conts"
+measure = "count"
+readings = [[72082], [72082], [72082], [72082], [72082]]
+
+[[figures]]
+name = "cps::inline_known_calls::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::contify_calls::conts"
+measure = "count"
+readings = [[70348], [70348], [70348], [70348], [70348]]
+
+[[figures]]
+name = "cps::contify_calls::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::sink_computations::conts"
+measure = "count"
+readings = [[70145], [70145], [70145], [70145], [70145]]
+
+[[figures]]
+name = "cps::sink_computations::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::answer_row_tests::conts"
+measure = "count"
+readings = [[69650], [69650], [69650], [69650], [69650]]
+
+[[figures]]
+name = "cps::answer_row_tests::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::answer_window_guards::conts"
+measure = "count"
+readings = [[69650], [69650], [69650], [69650], [69650]]
+
+[[figures]]
+name = "cps::answer_window_guards::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::dedupe_intrinsics::conts"
+measure = "count"
+readings = [[69650], [69650], [69650], [69650], [69650]]
+
+[[figures]]
+name = "cps::dedupe_intrinsics::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::eliminate_dead_calls::conts"
+measure = "count"
+readings = [[69650], [69650], [69650], [69650], [69650]]
+
+[[figures]]
+name = "cps::eliminate_dead_calls::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::eliminate_dead_loops::conts"
+measure = "count"
+readings = [[69650], [69650], [69650], [69650], [69650]]
+
+[[figures]]
+name = "cps::eliminate_dead_loops::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::eliminate_dead_parameters::conts"
+measure = "count"
+readings = [[69650], [69650], [69650], [69650], [69650]]
+
+[[figures]]
+name = "cps::eliminate_dead_parameters::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::flatten_indexed_lists::conts"
+measure = "count"
+readings = [[69650], [69650], [69650], [69650], [69650]]
+
+[[figures]]
+name = "cps::flatten_indexed_lists::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::fold_negated_comparisons::conts"
+measure = "count"
+readings = [[69650], [69650], [69650], [69650], [69650]]
+
+[[figures]]
+name = "cps::fold_negated_comparisons::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::fuse_append_chains::conts"
+measure = "count"
+readings = [[69650], [69650], [69650], [69650], [69650]]
+
+[[figures]]
+name = "cps::fuse_append_chains::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::shrink::conts"
+measure = "count"
+readings = [[69650], [69650], [69650], [69650], [69650]]
+
+[[figures]]
+name = "cps::shrink::conts/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::split_windows::nodes"
+measure = "count"
+readings = [[61798], [61798], [61798], [61798], [61798]]
+
+[[figures]]
+name = "cps::split_windows::nodes/observations"
+measure = "count"
+readings = [[3], [3], [3], [3], [3]]
+
+[[figures]]
+name = "cps::shrink_inlined::nodes"
+measure = "count"
+readings = [[51710], [51710], [51710], [51710], [51710]]
+
+[[figures]]
+name = "cps::shrink_inlined::nodes/observations"
+measure = "count"
+readings = [[3], [3], [3], [3], [3]]
+
+[[figures]]
+name = "cps::split_windows::values"
+measure = "count"
+readings = [[38170], [38170], [38170], [38170], [38170]]
+
+[[figures]]
+name = "cps::split_windows::values/observations"
+measure = "count"
+readings = [[3], [3], [3], [3], [3]]
+
+[[figures]]
+name = "cps::shrink_inlined::values"
+measure = "count"
+readings = [[30849], [30849], [30849], [30849], [30849]]
+
+[[figures]]
+name = "cps::shrink_inlined::values/observations"
+measure = "count"
+readings = [[3], [3], [3], [3], [3]]
+
+[[figures]]
+name = "cps::split_windows::conts"
+measure = "count"
+readings = [[20033], [20033], [20033], [20033], [20033]]
+
+[[figures]]
+name = "cps::split_windows::conts/observations"
+measure = "count"
+readings = [[3], [3], [3], [3], [3]]
+
+[[figures]]
+name = "cps::shrink_inlined::conts"
+measure = "count"
+readings = [[16428], [16428], [16428], [16428], [16428]]
+
+[[figures]]
+name = "cps::shrink_inlined::conts/observations"
+measure = "count"
+readings = [[3], [3], [3], [3], [3]]
+
+[[figures]]
+name = "cps_optimize::rounds"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps_optimize::rounds/observations"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "cps::shrink"
+measure = "count"
+readings = [[7], [7], [7], [7], [7]]
+
+[[figures]]
+name = "cps::shrink/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::dedupe_intrinsics"
+measure = "count"
+readings = [[6], [6], [6], [6], [6]]
+
+[[figures]]
+name = "cps::dedupe_intrinsics/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::forward_continuations"
+measure = "count"
+readings = [[6], [6], [6], [6], [6]]
+
+[[figures]]
+name = "cps::forward_continuations/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::eliminate_dead_parameters"
+measure = "count"
+readings = [[5], [5], [5], [5], [5]]
+
+[[figures]]
+name = "cps::eliminate_dead_parameters/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::rewrite_atoms"
+measure = "count"
+readings = [[5], [5], [5], [5], [5]]
+
+[[figures]]
+name = "cps::rewrite_atoms/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::sink_computations"
+measure = "count"
+readings = [[5], [5], [5], [5], [5]]
+
+[[figures]]
+name = "cps::sink_computations/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::contify_calls"
+measure = "count"
+readings = [[4], [4], [4], [4], [4]]
+
+[[figures]]
+name = "cps::contify_calls/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::split_returns"
+measure = "count"
+readings = [[4], [4], [4], [4], [4]]
+
+[[figures]]
+name = "cps::split_returns/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::inline_known_calls"
+measure = "count"
+readings = [[3], [3], [3], [3], [3]]
+
+[[figures]]
+name = "cps::inline_known_calls/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::separate_loop_entries"
+measure = "count"
+readings = [[3], [3], [3], [3], [3]]
+
+[[figures]]
+name = "cps::separate_loop_entries/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::shrink_inlined"
+measure = "count"
+readings = [[3], [3], [3], [3], [3]]
+
+[[figures]]
+name = "cps::shrink_inlined/observations"
+measure = "count"
+readings = [[3], [3], [3], [3], [3]]
+
+[[figures]]
+name = "cps::split_parameters"
+measure = "count"
+readings = [[3], [3], [3], [3], [3]]
+
+[[figures]]
+name = "cps::split_parameters/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::uncurry_nests"
+measure = "count"
+readings = [[3], [3], [3], [3], [3]]
+
+[[figures]]
+name = "cps::uncurry_nests/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::uncurry_returns"
+measure = "count"
+readings = [[3], [3], [3], [3], [3]]
+
+[[figures]]
+name = "cps::uncurry_returns/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::forward_calls"
+measure = "count"
+readings = [[2], [2], [2], [2], [2]]
+
+[[figures]]
+name = "cps::forward_calls/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::prune_unreachable"
+measure = "count"
+readings = [[2], [2], [2], [2], [2]]
+
+[[figures]]
+name = "cps::prune_unreachable/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::specialize_scc_calls"
+measure = "count"
+readings = [[2], [2], [2], [2], [2]]
+
+[[figures]]
+name = "cps::specialize_scc_calls/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::split_workers"
+measure = "count"
+readings = [[2], [2], [2], [2], [2]]
+
+[[figures]]
+name = "cps::split_workers/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::answer_window_guards"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "cps::answer_window_guards/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::eliminate_dead_calls"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "cps::eliminate_dead_calls/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::flatten_indexed_lists"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "cps::flatten_indexed_lists/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::fold_negated_comparisons"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "cps::fold_negated_comparisons/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::fuse_append_chains"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "cps::fuse_append_chains/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::specialize_jump_patterns"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "cps::specialize_jump_patterns/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::split_windows"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "cps::split_windows/observations"
+measure = "count"
+readings = [[3], [3], [3], [3], [3]]
+
+[[figures]]
+name = "cps::answer_row_tests"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::answer_row_tests/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::eliminate_dead_loops"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::eliminate_dead_loops/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]
+
+[[figures]]
+name = "cps::specialize_call_patterns"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "cps::specialize_call_patterns/observations"
+measure = "count"
+readings = [[11], [11], [11], [11], [11]]

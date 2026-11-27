@@ -1,0 +1,248 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "cold restore"
+measure = "microseconds"
+readings = [[41113], [39996], [41059], [40958], [40460]]
+
+[[figures]]
+name = "cold restore/calls"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "cold restore/allocated"
+measure = "bytes"
+readings = [[20386244], [20386244], [20386244], [20386244], [20386244]]
+
+[[figures]]
+name = "cold restore/allocations"
+measure = "allocations"
+readings = [[145511], [145511], [145511], [145511], [145511]]
+
+[[figures]]
+name = "cold restore"
+measure = "instructions"
+readings = [[271417576], [271449486], [271509314], [271422600], [271403880]]
+
+[[figures]]
+name = "/sys/certifying"
+measure = "microseconds"
+readings = [[23721], [23166], [23438], [23126], [23376]]
+
+[[figures]]
+name = "/sys/certifying/calls"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "/sys/certifying/allocated"
+measure = "bytes"
+readings = [[16439020], [16439212], [16439156], [16438684], [16439836]]
+
+[[figures]]
+name = "/sys/certifying/allocations"
+measure = "allocations"
+readings = [[111738], [111740], [111743], [111737], [111746]]
+
+[[figures]]
+name = "/sys/certifying"
+measure = "instructions"
+readings = [[183433489], [183473307], [183477012], [183350331], [183465744]]
+
+[[figures]]
+name = "/sys/re-erasing"
+measure = "microseconds"
+readings = [[13463], [13287], [13383], [12635], [12768]]
+
+[[figures]]
+name = "/sys/re-erasing/calls"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "/sys/re-erasing/allocated"
+measure = "bytes"
+readings = [[7348667], [7348091], [7347523], [7348043], [7347235]]
+
+[[figures]]
+name = "/sys/re-erasing/allocations"
+measure = "allocations"
+readings = [[42885], [42881], [42876], [42879], [42875]]
+
+[[figures]]
+name = "/sys/re-erasing"
+measure = "instructions"
+readings = [[51537627], [51575979], [51555330], [51621150], [51512815]]
+
+[[figures]]
+name = "/sys/refusals"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "/sys/heaviest declaration/units"
+measure = "count"
+readings = [[5282], [5282], [5282], [5282], [5282]]
+
+[[figures]]
+name = "/sys/heaviest declaration/depth"
+measure = "count"
+readings = [[5], [5], [5], [5], [5]]
+
+[[figures]]
+name = "/sys/heaviest declaration/frame units"
+measure = "count"
+readings = [[5120], [5120], [5120], [5120], [5120]]
+
+[[figures]]
+name = "/sys/items"
+measure = "count"
+readings = [[247], [247], [247], [247], [247]]
+
+[[figures]]
+name = "/sys/definitions"
+measure = "count"
+readings = [[247], [247], [247], [247], [247]]
+
+[[figures]]
+name = "/sys/witnesses"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "/sys/inductives"
+measure = "count"
+readings = [[3], [3], [3], [3], [3]]
+
+[[figures]]
+name = "/sys/structures"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "/sys/concepts"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "/std/certifying"
+measure = "microseconds"
+readings = [[34931253], [34641416], [34416115], [34873672], [34692526]]
+
+[[figures]]
+name = "/std/certifying/calls"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "/std/certifying/allocated"
+measure = "bytes"
+readings = [[30117846417], [30118277913], [30118279865], [30117920553], [30118144713]]
+
+[[figures]]
+name = "/std/certifying/allocations"
+measure = "allocations"
+readings = [[211130279], [211134358], [211132857], [211133125], [211133227]]
+
+[[figures]]
+name = "/std/certifying"
+measure = "instructions"
+readings = [[265537611542], [265494710852], [265573492176], [265634015153], [265636361288]]
+
+[[figures]]
+name = "/std/re-erasing"
+measure = "microseconds"
+readings = [[2589481], [2598002], [2614634], [2607632], [2573793]]
+
+[[figures]]
+name = "/std/re-erasing/calls"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "/std/re-erasing/allocated"
+measure = "bytes"
+readings = [[2232019910], [2232127358], [2232015934], [2232070462], [2232026630]]
+
+[[figures]]
+name = "/std/re-erasing/allocations"
+measure = "allocations"
+readings = [[15347193], [15348359], [15347253], [15347704], [15347690]]
+
+[[figures]]
+name = "/std/re-erasing"
+measure = "instructions"
+readings = [[18702796390], [18667077303], [18654442845], [18621984161], [18678089803]]
+
+[[figures]]
+name = "/std/refusals"
+measure = "count"
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "/std/heaviest declaration/units"
+measure = "count"
+readings = [[10268712], [10268712], [10268712], [10268712], [10268712]]
+
+[[figures]]
+name = "/std/heaviest declaration/depth"
+measure = "count"
+readings = [[5], [5], [5], [5], [5]]
+
+[[figures]]
+name = "/std/heaviest declaration/frame units"
+measure = "count"
+readings = [[5120], [5120], [5120], [5120], [5120]]
+
+[[figures]]
+name = "/std/items"
+measure = "count"
+readings = [[3258], [3258], [3258], [3258], [3258]]
+
+[[figures]]
+name = "/std/definitions"
+measure = "count"
+readings = [[3308], [3308], [3308], [3308], [3308]]
+
+[[figures]]
+name = "/std/witnesses"
+measure = "count"
+readings = [[371], [371], [371], [371], [371]]
+
+[[figures]]
+name = "/std/inductives"
+measure = "count"
+readings = [[96], [96], [96], [96], [96]]
+
+[[figures]]
+name = "/std/structures"
+measure = "count"
+readings = [[133], [133], [133], [133], [133]]
+
+[[figures]]
+name = "/std/concepts"
+measure = "count"
+readings = [[21], [21], [21], [21], [21]]

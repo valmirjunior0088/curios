@@ -1,0 +1,3863 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "chain at 12/elaborator"
+measure = "microseconds"
+size = 12
+readings = [[2735], [2454], [2464], [2451], [2497]]
+
+[[figures]]
+name = "chain at 12/elaborator/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "chain at 12/elaborator/allocated"
+measure = "bytes"
+size = 12
+readings = [[2074490], [2075386], [2074234], [2073466], [2076410]]
+
+[[figures]]
+name = "chain at 12/elaborator/allocations"
+measure = "allocations"
+size = 12
+readings = [[13401], [13400], [13385], [13389], [13409]]
+
+[[figures]]
+name = "chain at 12/elaborator/looks"
+measure = "count"
+size = 12
+readings = [[15269], [15269], [15269], [15269], [15269]]
+
+[[figures]]
+name = "chain at 12/elaborator"
+measure = "instructions"
+size = 12
+readings = [[18369318], [18398351], [18377749], [18380151], [18408418]]
+
+[[figures]]
+name = "chain at 12/elaborator/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "chain at 12/elaborator/units"
+measure = "count"
+size = 12
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "chain at 12/certifier"
+measure = "microseconds"
+size = 12
+readings = [[1875], [1712], [1757], [1731], [1734]]
+
+[[figures]]
+name = "chain at 12/certifier/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "chain at 12/certifier/allocated"
+measure = "bytes"
+size = 12
+readings = [[1323088], [1325776], [1327184], [1329232], [1325648]]
+
+[[figures]]
+name = "chain at 12/certifier/allocations"
+measure = "allocations"
+size = 12
+readings = [[8617], [8636], [8638], [8663], [8629]]
+
+[[figures]]
+name = "chain at 12/certifier/looks"
+measure = "count"
+size = 12
+readings = [[10600], [10600], [10600], [10600], [10600]]
+
+[[figures]]
+name = "chain at 12/certifier"
+measure = "instructions"
+size = 12
+readings = [[11719832], [11738125], [11728929], [11723830], [11714687]]
+
+[[figures]]
+name = "chain at 12/certifier/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "chain at 12/certifier/units"
+measure = "count"
+size = 12
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "chain at 16/elaborator"
+measure = "microseconds"
+size = 16
+readings = [[2636], [2595], [2632], [2624], [2641]]
+
+[[figures]]
+name = "chain at 16/elaborator/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "chain at 16/elaborator/allocated"
+measure = "bytes"
+size = 16
+readings = [[2299165], [2294045], [2297885], [2296989], [2295709]]
+
+[[figures]]
+name = "chain at 16/elaborator/allocations"
+measure = "allocations"
+size = 16
+readings = [[14604], [14567], [14588], [14577], [14567]]
+
+[[figures]]
+name = "chain at 16/elaborator/looks"
+measure = "count"
+size = 16
+readings = [[17093], [17093], [17093], [17093], [17093]]
+
+[[figures]]
+name = "chain at 16/elaborator"
+measure = "instructions"
+size = 16
+readings = [[20004938], [19950675], [19963900], [20000789], [19964282]]
+
+[[figures]]
+name = "chain at 16/elaborator/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "chain at 16/elaborator/units"
+measure = "count"
+size = 16
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "chain at 16/certifier"
+measure = "microseconds"
+size = 16
+readings = [[1626], [1618], [1641], [1613], [1622]]
+
+[[figures]]
+name = "chain at 16/certifier/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "chain at 16/certifier/allocated"
+measure = "bytes"
+size = 16
+readings = [[1429540], [1429796], [1429156], [1430436], [1430820]]
+
+[[figures]]
+name = "chain at 16/certifier/allocations"
+measure = "allocations"
+size = 16
+readings = [[9196], [9202], [9192], [9213], [9206]]
+
+[[figures]]
+name = "chain at 16/certifier/looks"
+measure = "count"
+size = 16
+readings = [[11606], [11606], [11606], [11606], [11606]]
+
+[[figures]]
+name = "chain at 16/certifier"
+measure = "instructions"
+size = 16
+readings = [[12645995], [12642850], [12632965], [12643731], [12637024]]
+
+[[figures]]
+name = "chain at 16/certifier/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "chain at 16/certifier/units"
+measure = "count"
+size = 16
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "chain, in a member at 12/elaborator"
+measure = "microseconds"
+size = 12
+readings = [[3664], [3616], [3621], [3597], [3599]]
+
+[[figures]]
+name = "chain, in a member at 12/elaborator/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "chain, in a member at 12/elaborator/allocated"
+measure = "bytes"
+size = 12
+readings = [[3531681], [3535761], [3538833], [3534593], [3533569]]
+
+[[figures]]
+name = "chain, in a member at 12/elaborator/allocations"
+measure = "allocations"
+size = 12
+readings = [[22405], [22430], [22450], [22417], [22417]]
+
+[[figures]]
+name = "chain, in a member at 12/elaborator/looks"
+measure = "count"
+size = 12
+readings = [[23910], [23910], [23910], [23910], [23910]]
+
+[[figures]]
+name = "chain, in a member at 12/elaborator"
+measure = "instructions"
+size = 12
+readings = [[27300962], [27319725], [27314323], [27310943], [27289901]]
+
+[[figures]]
+name = "chain, in a member at 12/elaborator/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "chain, in a member at 12/elaborator/units"
+measure = "count"
+size = 12
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "chain, in a member at 12/certifier"
+measure = "microseconds"
+size = 12
+readings = [[1870], [1860], [1868], [1862], [1872]]
+
+[[figures]]
+name = "chain, in a member at 12/certifier/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "chain, in a member at 12/certifier/allocated"
+measure = "bytes"
+size = 12
+readings = [[1668203], [1667691], [1667307], [1664235], [1666923]]
+
+[[figures]]
+name = "chain, in a member at 12/certifier/allocations"
+measure = "allocations"
+size = 12
+readings = [[10489], [10492], [10491], [10446], [10480]]
+
+[[figures]]
+name = "chain, in a member at 12/certifier/looks"
+measure = "count"
+size = 12
+readings = [[12598], [12598], [12598], [12598], [12598]]
+
+[[figures]]
+name = "chain, in a member at 12/certifier"
+measure = "instructions"
+size = 12
+readings = [[14165285], [14167951], [14163470], [14153368], [14142111]]
+
+[[figures]]
+name = "chain, in a member at 12/certifier/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "chain, in a member at 12/certifier/units"
+measure = "count"
+size = 12
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "chain, in a member at 16/elaborator"
+measure = "microseconds"
+size = 16
+readings = [[3854], [3833], [3852], [3808], [3837]]
+
+[[figures]]
+name = "chain, in a member at 16/elaborator/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "chain, in a member at 16/elaborator/allocated"
+measure = "bytes"
+size = 16
+readings = [[4091565], [4090317], [4091949], [4089645], [4092365]]
+
+[[figures]]
+name = "chain, in a member at 16/elaborator/allocations"
+measure = "allocations"
+size = 16
+readings = [[24901], [24892], [24908], [24885], [24904]]
+
+[[figures]]
+name = "chain, in a member at 16/elaborator/looks"
+measure = "count"
+size = 16
+readings = [[27608], [27608], [27608], [27608], [27608]]
+
+[[figures]]
+name = "chain, in a member at 16/elaborator"
+measure = "instructions"
+size = 16
+readings = [[30553496], [30537965], [30554292], [30563891], [30557933]]
+
+[[figures]]
+name = "chain, in a member at 16/elaborator/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "chain, in a member at 16/elaborator/units"
+measure = "count"
+size = 16
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "chain, in a member at 16/certifier"
+measure = "microseconds"
+size = 16
+readings = [[1964], [1956], [1950], [1958], [1998]]
+
+[[figures]]
+name = "chain, in a member at 16/certifier/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "chain, in a member at 16/certifier/allocated"
+measure = "bytes"
+size = 16
+readings = [[1802967], [1801943], [1803095], [1805527], [1805015]]
+
+[[figures]]
+name = "chain, in a member at 16/certifier/allocations"
+measure = "allocations"
+size = 16
+readings = [[11150], [11143], [11142], [11171], [11164]]
+
+[[figures]]
+name = "chain, in a member at 16/certifier/looks"
+measure = "count"
+size = 16
+readings = [[13746], [13746], [13746], [13746], [13746]]
+
+[[figures]]
+name = "chain, in a member at 16/certifier"
+measure = "instructions"
+size = 16
+readings = [[15307565], [15316239], [15332147], [15322822], [15312186]]
+
+[[figures]]
+name = "chain, in a member at 16/certifier/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "chain, in a member at 16/certifier/units"
+measure = "count"
+size = 16
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "calls at 12/elaborator"
+measure = "microseconds"
+size = 12
+readings = [[2626], [2654], [2615], [2590], [2636]]
+
+[[figures]]
+name = "calls at 12/elaborator/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "calls at 12/elaborator/allocated"
+measure = "bytes"
+size = 12
+readings = [[2190860], [2190604], [2194828], [2190476], [2192524]]
+
+[[figures]]
+name = "calls at 12/elaborator/allocations"
+measure = "allocations"
+size = 12
+readings = [[13908], [13918], [13945], [13917], [13929]]
+
+[[figures]]
+name = "calls at 12/elaborator/looks"
+measure = "count"
+size = 12
+readings = [[16994], [16994], [16994], [16994], [16994]]
+
+[[figures]]
+name = "calls at 12/elaborator"
+measure = "instructions"
+size = 12
+readings = [[20165924], [20211184], [20204987], [20222531], [20211292]]
+
+[[figures]]
+name = "calls at 12/elaborator/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "calls at 12/elaborator/units"
+measure = "count"
+size = 12
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "calls at 12/certifier"
+measure = "microseconds"
+size = 12
+readings = [[1560], [1570], [1564], [1543], [1565]]
+
+[[figures]]
+name = "calls at 12/certifier/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "calls at 12/certifier/allocated"
+measure = "bytes"
+size = 12
+readings = [[1357072], [1356944], [1355792], [1358224], [1356304]]
+
+[[figures]]
+name = "calls at 12/certifier/allocations"
+measure = "allocations"
+size = 12
+readings = [[8804], [8793], [8780], [8807], [8787]]
+
+[[figures]]
+name = "calls at 12/certifier/looks"
+measure = "count"
+size = 12
+readings = [[11192], [11192], [11192], [11192], [11192]]
+
+[[figures]]
+name = "calls at 12/certifier"
+measure = "instructions"
+size = 12
+readings = [[12108810], [12123447], [12151802], [12114961], [12120078]]
+
+[[figures]]
+name = "calls at 12/certifier/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "calls at 12/certifier/units"
+measure = "count"
+size = 12
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "calls at 16/elaborator"
+measure = "microseconds"
+size = 16
+readings = [[2811], [2839], [2802], [2810], [2822]]
+
+[[figures]]
+name = "calls at 16/elaborator/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "calls at 16/elaborator/allocated"
+measure = "bytes"
+size = 16
+readings = [[2436896], [2435360], [2430368], [2432928], [2434720]]
+
+[[figures]]
+name = "calls at 16/elaborator/allocations"
+measure = "allocations"
+size = 16
+readings = [[15275], [15266], [15211], [15235], [15245]]
+
+[[figures]]
+name = "calls at 16/elaborator/looks"
+measure = "count"
+size = 16
+readings = [[19330], [19330], [19330], [19330], [19330]]
+
+[[figures]]
+name = "calls at 16/elaborator"
+measure = "instructions"
+size = 16
+readings = [[22313062], [22322084], [22301041], [22285026], [22308927]]
+
+[[figures]]
+name = "calls at 16/elaborator/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "calls at 16/elaborator/units"
+measure = "count"
+size = 16
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "calls at 16/certifier"
+measure = "microseconds"
+size = 16
+readings = [[1670], [1662], [1667], [1650], [1666]]
+
+[[figures]]
+name = "calls at 16/certifier/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "calls at 16/certifier/allocated"
+measure = "bytes"
+size = 16
+readings = [[1471780], [1467556], [1468452], [1467684], [1470116]]
+
+[[figures]]
+name = "calls at 16/certifier/allocations"
+measure = "allocations"
+size = 16
+readings = [[9416], [9386], [9388], [9389], [9413]]
+
+[[figures]]
+name = "calls at 16/certifier/looks"
+measure = "count"
+size = 16
+readings = [[12392], [12392], [12392], [12392], [12392]]
+
+[[figures]]
+name = "calls at 16/certifier"
+measure = "instructions"
+size = 16
+readings = [[13148503], [13153754], [13148555], [13132114], [13154072]]
+
+[[figures]]
+name = "calls at 16/certifier/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "calls at 16/certifier/units"
+measure = "count"
+size = 16
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "calls, in a member at 12/elaborator"
+measure = "microseconds"
+size = 12
+readings = [[3729], [3721], [3729], [3663], [3685]]
+
+[[figures]]
+name = "calls, in a member at 12/elaborator/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "calls, in a member at 12/elaborator/allocated"
+measure = "bytes"
+size = 12
+readings = [[3827381], [3822405], [3827269], [3824181], [3823029]]
+
+[[figures]]
+name = "calls, in a member at 12/elaborator/allocations"
+measure = "allocations"
+size = 12
+readings = [[22883], [22858], [22898], [22874], [22869]]
+
+[[figures]]
+name = "calls, in a member at 12/elaborator/looks"
+measure = "count"
+size = 12
+readings = [[27302], [27302], [27302], [27302], [27302]]
+
+[[figures]]
+name = "calls, in a member at 12/elaborator"
+measure = "instructions"
+size = 12
+readings = [[30112599], [30100195], [30133429], [30112418], [30110311]]
+
+[[figures]]
+name = "calls, in a member at 12/elaborator/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "calls, in a member at 12/elaborator/units"
+measure = "count"
+size = 12
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "calls, in a member at 12/certifier"
+measure = "microseconds"
+size = 12
+readings = [[2043], [2004], [1986], [1983], [2001]]
+
+[[figures]]
+name = "calls, in a member at 12/certifier/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "calls, in a member at 12/certifier/allocated"
+measure = "bytes"
+size = 12
+readings = [[1885507], [1886659], [1886147], [1887939], [1883715]]
+
+[[figures]]
+name = "calls, in a member at 12/certifier/allocations"
+measure = "allocations"
+size = 12
+readings = [[11446], [11437], [11427], [11449], [11409]]
+
+[[figures]]
+name = "calls, in a member at 12/certifier/looks"
+measure = "count"
+size = 12
+readings = [[14685], [14685], [14685], [14685], [14685]]
+
+[[figures]]
+name = "calls, in a member at 12/certifier"
+measure = "instructions"
+size = 12
+readings = [[15867740], [15894504], [15879447], [15897469], [15865259]]
+
+[[figures]]
+name = "calls, in a member at 12/certifier/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "calls, in a member at 12/certifier/units"
+measure = "count"
+size = 12
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "calls, in a member at 16/elaborator"
+measure = "microseconds"
+size = 16
+readings = [[4068], [4023], [4069], [4017], [4062]]
+
+[[figures]]
+name = "calls, in a member at 16/elaborator/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "calls, in a member at 16/elaborator/allocated"
+measure = "bytes"
+size = 16
+readings = [[4409033], [4410041], [4411737], [4407353], [4412233]]
+
+[[figures]]
+name = "calls, in a member at 16/elaborator/allocations"
+measure = "allocations"
+size = 16
+readings = [[25709], [25718], [25731], [25696], [25734]]
+
+[[figures]]
+name = "calls, in a member at 16/elaborator/looks"
+measure = "count"
+size = 16
+readings = [[32130], [32130], [32130], [32130], [32130]]
+
+[[figures]]
+name = "calls, in a member at 16/elaborator"
+measure = "instructions"
+size = 16
+readings = [[34262824], [34287561], [34265949], [34252928], [34254605]]
+
+[[figures]]
+name = "calls, in a member at 16/elaborator/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "calls, in a member at 16/elaborator/units"
+measure = "count"
+size = 16
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "calls, in a member at 16/certifier"
+measure = "microseconds"
+size = 16
+readings = [[2167], [2131], [2140], [2136], [2134]]
+
+[[figures]]
+name = "calls, in a member at 16/certifier/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "calls, in a member at 16/certifier/allocated"
+measure = "bytes"
+size = 16
+readings = [[2073959], [2075879], [2074087], [2073831], [2072807]]
+
+[[figures]]
+name = "calls, in a member at 16/certifier/allocations"
+measure = "allocations"
+size = 16
+readings = [[12281], [12297], [12278], [12288], [12266]]
+
+[[figures]]
+name = "calls, in a member at 16/certifier/looks"
+measure = "count"
+size = 16
+readings = [[16389], [16389], [16389], [16389], [16389]]
+
+[[figures]]
+name = "calls, in a member at 16/certifier"
+measure = "instructions"
+size = 16
+readings = [[17448847], [17466066], [17460659], [17437983], [17417983]]
+
+[[figures]]
+name = "calls, in a member at 16/certifier/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "calls, in a member at 16/certifier/units"
+measure = "count"
+size = 16
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "pairs at 12/elaborator"
+measure = "microseconds"
+size = 12
+readings = [[2370], [2339], [2344], [2331], [2343]]
+
+[[figures]]
+name = "pairs at 12/elaborator/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "pairs at 12/elaborator/allocated"
+measure = "bytes"
+size = 12
+readings = [[2034311], [2036871], [2034695], [2034183], [2036103]]
+
+[[figures]]
+name = "pairs at 12/elaborator/allocations"
+measure = "allocations"
+size = 12
+readings = [[12964], [12988], [12971], [12962], [12968]]
+
+[[figures]]
+name = "pairs at 12/elaborator/looks"
+measure = "count"
+size = 12
+readings = [[13626], [13626], [13626], [13626], [13626]]
+
+[[figures]]
+name = "pairs at 12/elaborator"
+measure = "instructions"
+size = 12
+readings = [[17141004], [17148688], [17142216], [17131650], [17146814]]
+
+[[figures]]
+name = "pairs at 12/elaborator/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "pairs at 12/elaborator/units"
+measure = "count"
+size = 12
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "pairs at 12/certifier"
+measure = "microseconds"
+size = 12
+readings = [[1538], [1538], [1532], [1523], [1527]]
+
+[[figures]]
+name = "pairs at 12/certifier/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "pairs at 12/certifier/allocated"
+measure = "bytes"
+size = 12
+readings = [[1317618], [1319666], [1318898], [1320050], [1323378]]
+
+[[figures]]
+name = "pairs at 12/certifier/allocations"
+measure = "allocations"
+size = 12
+readings = [[8541], [8557], [8561], [8562], [8590]]
+
+[[figures]]
+name = "pairs at 12/certifier/looks"
+measure = "count"
+size = 12
+readings = [[9312], [9312], [9312], [9312], [9312]]
+
+[[figures]]
+name = "pairs at 12/certifier"
+measure = "instructions"
+size = 12
+readings = [[11835520], [11881906], [11836968], [11895266], [11857348]]
+
+[[figures]]
+name = "pairs at 12/certifier/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "pairs at 12/certifier/units"
+measure = "count"
+size = 12
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "pairs at 16/elaborator"
+measure = "microseconds"
+size = 16
+readings = [[2465], [2423], [2445], [2440], [2464]]
+
+[[figures]]
+name = "pairs at 16/elaborator/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "pairs at 16/elaborator/allocated"
+measure = "bytes"
+size = 16
+readings = [[2245659], [2244123], [2242843], [2241179], [2243611]]
+
+[[figures]]
+name = "pairs at 16/elaborator/allocations"
+measure = "allocations"
+size = 16
+readings = [[14136], [14136], [14118], [14111], [14120]]
+
+[[figures]]
+name = "pairs at 16/elaborator/looks"
+measure = "count"
+size = 16
+readings = [[14966], [14966], [14966], [14966], [14966]]
+
+[[figures]]
+name = "pairs at 16/elaborator"
+measure = "instructions"
+size = 16
+readings = [[18408164], [18418192], [18407156], [18402511], [18404965]]
+
+[[figures]]
+name = "pairs at 16/elaborator/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "pairs at 16/elaborator/units"
+measure = "count"
+size = 16
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "pairs at 16/certifier"
+measure = "microseconds"
+size = 16
+readings = [[1645], [1620], [1636], [1660], [1633]]
+
+[[figures]]
+name = "pairs at 16/certifier/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "pairs at 16/certifier/allocated"
+measure = "bytes"
+size = 16
+readings = [[1411990], [1411862], [1411606], [1409814], [1410582]]
+
+[[figures]]
+name = "pairs at 16/certifier/allocations"
+measure = "allocations"
+size = 16
+readings = [[9135], [9146], [9133], [9118], [9132]]
+
+[[figures]]
+name = "pairs at 16/certifier/looks"
+measure = "count"
+size = 16
+readings = [[9924], [9924], [9924], [9924], [9924]]
+
+[[figures]]
+name = "pairs at 16/certifier"
+measure = "instructions"
+size = 16
+readings = [[12835384], [12856691], [12862167], [12881872], [12871960]]
+
+[[figures]]
+name = "pairs at 16/certifier/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "pairs at 16/certifier/units"
+measure = "count"
+size = 16
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "pairs, in a member at 12/elaborator"
+measure = "microseconds"
+size = 12
+readings = [[3089], [3073], [3084], [3054], [3090]]
+
+[[figures]]
+name = "pairs, in a member at 12/elaborator/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "pairs, in a member at 12/elaborator/allocated"
+measure = "bytes"
+size = 12
+readings = [[3243135], [3241999], [3244783], [3242127], [3240831]]
+
+[[figures]]
+name = "pairs, in a member at 12/elaborator/allocations"
+measure = "allocations"
+size = 12
+readings = [[20786], [20776], [20800], [20776], [20772]]
+
+[[figures]]
+name = "pairs, in a member at 12/elaborator/looks"
+measure = "count"
+size = 12
+readings = [[20307], [20307], [20307], [20307], [20307]]
+
+[[figures]]
+name = "pairs, in a member at 12/elaborator"
+measure = "instructions"
+size = 12
+readings = [[23842465], [23857282], [23874398], [23866404], [23890394]]
+
+[[figures]]
+name = "pairs, in a member at 12/elaborator/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "pairs, in a member at 12/elaborator/units"
+measure = "count"
+size = 12
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "pairs, in a member at 12/certifier"
+measure = "microseconds"
+size = 12
+readings = [[1784], [1754], [1764], [1750], [1783]]
+
+[[figures]]
+name = "pairs, in a member at 12/certifier/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "pairs, in a member at 12/certifier/allocated"
+measure = "bytes"
+size = 12
+readings = [[1562072], [1562840], [1563992], [1569112], [1567192]]
+
+[[figures]]
+name = "pairs, in a member at 12/certifier/allocations"
+measure = "allocations"
+size = 12
+readings = [[9990], [9994], [10003], [10041], [10030]]
+
+[[figures]]
+name = "pairs, in a member at 12/certifier/looks"
+measure = "count"
+size = 12
+readings = [[10778], [10778], [10778], [10778], [10778]]
+
+[[figures]]
+name = "pairs, in a member at 12/certifier"
+measure = "instructions"
+size = 12
+readings = [[13606457], [13589859], [13596284], [13604593], [13599476]]
+
+[[figures]]
+name = "pairs, in a member at 12/certifier/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "pairs, in a member at 12/certifier/units"
+measure = "count"
+size = 12
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "pairs, in a member at 16/elaborator"
+measure = "microseconds"
+size = 16
+readings = [[3414], [3350], [3386], [3377], [3415]]
+
+[[figures]]
+name = "pairs, in a member at 16/elaborator/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "pairs, in a member at 16/elaborator/allocated"
+measure = "bytes"
+size = 16
+readings = [[3871963], [3870427], [3871963], [3873115], [3868635]]
+
+[[figures]]
+name = "pairs, in a member at 16/elaborator/allocations"
+measure = "allocations"
+size = 16
+readings = [[24394], [24376], [24387], [24407], [24352]]
+
+[[figures]]
+name = "pairs, in a member at 16/elaborator/looks"
+measure = "count"
+size = 16
+readings = [[23707], [23707], [23707], [23707], [23707]]
+
+[[figures]]
+name = "pairs, in a member at 16/elaborator"
+measure = "instructions"
+size = 16
+readings = [[27172384], [27160130], [27164149], [27176055], [27141947]]
+
+[[figures]]
+name = "pairs, in a member at 16/elaborator/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "pairs, in a member at 16/elaborator/units"
+measure = "count"
+size = 16
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "pairs, in a member at 16/certifier"
+measure = "microseconds"
+size = 16
+readings = [[1910], [1881], [1905], [1895], [1901]]
+
+[[figures]]
+name = "pairs, in a member at 16/certifier/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "pairs, in a member at 16/certifier/allocated"
+measure = "bytes"
+size = 16
+readings = [[1726156], [1729868], [1728332], [1727820], [1724748]]
+
+[[figures]]
+name = "pairs, in a member at 16/certifier/allocations"
+measure = "allocations"
+size = 16
+readings = [[10770], [10799], [10797], [10787], [10763]]
+
+[[figures]]
+name = "pairs, in a member at 16/certifier/looks"
+measure = "count"
+size = 16
+readings = [[11562], [11562], [11562], [11562], [11562]]
+
+[[figures]]
+name = "pairs, in a member at 16/certifier"
+measure = "instructions"
+size = 16
+readings = [[14894025], [14889250], [14922835], [14883044], [14893542]]
+
+[[figures]]
+name = "pairs, in a member at 16/certifier/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "pairs, in a member at 16/certifier/units"
+measure = "count"
+size = 16
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "lists at 12/elaborator"
+measure = "microseconds"
+size = 12
+readings = [[4121], [3989], [4009], [3967], [4003]]
+
+[[figures]]
+name = "lists at 12/elaborator/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "lists at 12/elaborator/allocated"
+measure = "bytes"
+size = 12
+readings = [[3545150], [3546966], [3545926], [3545190], [3541710]]
+
+[[figures]]
+name = "lists at 12/elaborator/allocations"
+measure = "allocations"
+size = 12
+readings = [[22744], [22761], [22746], [22733], [22703]]
+
+[[figures]]
+name = "lists at 12/elaborator/looks"
+measure = "count"
+size = 12
+readings = [[28027], [28027], [28027], [28027], [28027]]
+
+[[figures]]
+name = "lists at 12/elaborator"
+measure = "instructions"
+size = 12
+readings = [[30626439], [30562733], [30601646], [30597499], [30559046]]
+
+[[figures]]
+name = "lists at 12/elaborator/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "lists at 12/elaborator/units"
+measure = "count"
+size = 12
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "lists at 12/certifier"
+measure = "microseconds"
+size = 12
+readings = [[1856], [1829], [1856], [1830], [1826]]
+
+[[figures]]
+name = "lists at 12/certifier/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "lists at 12/certifier/allocated"
+measure = "bytes"
+size = 12
+readings = [[1646470], [1643014], [1647366], [1644166], [1647878]]
+
+[[figures]]
+name = "lists at 12/certifier/allocations"
+measure = "allocations"
+size = 12
+readings = [[10632], [10600], [10635], [10612], [10643]]
+
+[[figures]]
+name = "lists at 12/certifier/looks"
+measure = "count"
+size = 12
+readings = [[13135], [13135], [13135], [13135], [13135]]
+
+[[figures]]
+name = "lists at 12/certifier"
+measure = "instructions"
+size = 12
+readings = [[14864546], [14870932], [14911538], [14864921], [14841901]]
+
+[[figures]]
+name = "lists at 12/certifier/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "lists at 12/certifier/units"
+measure = "count"
+size = 12
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "lists at 16/elaborator"
+measure = "microseconds"
+size = 16
+readings = [[4690], [4630], [4651], [4625], [4672]]
+
+[[figures]]
+name = "lists at 16/elaborator/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "lists at 16/elaborator/allocated"
+measure = "bytes"
+size = 16
+readings = [[4265102], [4265710], [4268734], [4267190], [4269166]]
+
+[[figures]]
+name = "lists at 16/elaborator/allocations"
+measure = "allocations"
+size = 16
+readings = [[27058], [27064], [27093], [27085], [27091]]
+
+[[figures]]
+name = "lists at 16/elaborator/looks"
+measure = "count"
+size = 16
+readings = [[34467], [34467], [34467], [34467], [34467]]
+
+[[figures]]
+name = "lists at 16/elaborator"
+measure = "instructions"
+size = 16
+readings = [[36561361], [36518387], [36544932], [36501891], [36512938]]
+
+[[figures]]
+name = "lists at 16/elaborator/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "lists at 16/elaborator/units"
+measure = "count"
+size = 16
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "lists at 16/certifier"
+measure = "microseconds"
+size = 16
+readings = [[2050], [2021], [2051], [2014], [2019]]
+
+[[figures]]
+name = "lists at 16/certifier/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "lists at 16/certifier/allocated"
+measure = "bytes"
+size = 16
+readings = [[1859802], [1859930], [1856858], [1860570], [1858906]]
+
+[[figures]]
+name = "lists at 16/certifier/allocations"
+measure = "allocations"
+size = 16
+readings = [[11893], [11892], [11866], [11903], [11888]]
+
+[[figures]]
+name = "lists at 16/certifier/looks"
+measure = "count"
+size = 16
+readings = [[14963], [14963], [14963], [14963], [14963]]
+
+[[figures]]
+name = "lists at 16/certifier"
+measure = "instructions"
+size = 16
+readings = [[16861406], [16876634], [16833860], [16847537], [16817062]]
+
+[[figures]]
+name = "lists at 16/certifier/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "lists at 16/certifier/units"
+measure = "count"
+size = 16
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "lists, in a member at 12/elaborator"
+measure = "microseconds"
+size = 12
+readings = [[5481], [5408], [5493], [5450], [5507]]
+
+[[figures]]
+name = "lists, in a member at 12/elaborator/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "lists, in a member at 12/elaborator/allocated"
+measure = "bytes"
+size = 12
+readings = [[6267442], [6268274], [6271954], [6274602], [6271306]]
+
+[[figures]]
+name = "lists, in a member at 12/elaborator/allocations"
+measure = "allocations"
+size = 12
+readings = [[38399], [38416], [38444], [38470], [38432]]
+
+[[figures]]
+name = "lists, in a member at 12/elaborator/looks"
+measure = "count"
+size = 12
+readings = [[43761], [43761], [43761], [43761], [43761]]
+
+[[figures]]
+name = "lists, in a member at 12/elaborator"
+measure = "instructions"
+size = 12
+readings = [[44817513], [44806303], [44813296], [44794637], [44810927]]
+
+[[figures]]
+name = "lists, in a member at 12/elaborator/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "lists, in a member at 12/elaborator/units"
+measure = "count"
+size = 12
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "lists, in a member at 12/certifier"
+measure = "microseconds"
+size = 12
+readings = [[2107], [2092], [2110], [2087], [2093]]
+
+[[figures]]
+name = "lists, in a member at 12/certifier/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "lists, in a member at 12/certifier/allocated"
+measure = "bytes"
+size = 12
+readings = [[1894940], [1893916], [1896732], [1894556], [1896860]]
+
+[[figures]]
+name = "lists, in a member at 12/certifier/allocations"
+measure = "allocations"
+size = 12
+readings = [[12105], [12099], [12122], [12106], [12132]]
+
+[[figures]]
+name = "lists, in a member at 12/certifier/looks"
+measure = "count"
+size = 12
+readings = [[14554], [14554], [14554], [14554], [14554]]
+
+[[figures]]
+name = "lists, in a member at 12/certifier"
+measure = "instructions"
+size = 12
+readings = [[16786056], [16722477], [16744693], [16720835], [16718798]]
+
+[[figures]]
+name = "lists, in a member at 12/certifier/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "lists, in a member at 12/certifier/units"
+measure = "count"
+size = 12
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "lists, in a member at 16/elaborator"
+measure = "microseconds"
+size = 16
+readings = [[6621], [6515], [6624], [6554], [6590]]
+
+[[figures]]
+name = "lists, in a member at 16/elaborator/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "lists, in a member at 16/elaborator/allocated"
+measure = "bytes"
+size = 16
+readings = [[7948218], [7943474], [7947898], [7940002], [7941690]]
+
+[[figures]]
+name = "lists, in a member at 16/elaborator/allocations"
+measure = "allocations"
+size = 16
+readings = [[47558], [47510], [47563], [47473], [47493]]
+
+[[figures]]
+name = "lists, in a member at 16/elaborator/looks"
+measure = "count"
+size = 16
+readings = [[56243], [56243], [56243], [56243], [56243]]
+
+[[figures]]
+name = "lists, in a member at 16/elaborator"
+measure = "instructions"
+size = 16
+readings = [[55709638], [55685482], [55728785], [55622587], [55664736]]
+
+[[figures]]
+name = "lists, in a member at 16/elaborator/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "lists, in a member at 16/elaborator/units"
+measure = "count"
+size = 16
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "lists, in a member at 16/certifier"
+measure = "microseconds"
+size = 16
+readings = [[2362], [2290], [2324], [2312], [2309]]
+
+[[figures]]
+name = "lists, in a member at 16/certifier/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "lists, in a member at 16/certifier/allocated"
+measure = "bytes"
+size = 16
+readings = [[2177648], [2176368], [2175216], [2176880], [2179184]]
+
+[[figures]]
+name = "lists, in a member at 16/certifier/allocations"
+measure = "allocations"
+size = 16
+readings = [[13568], [13558], [13549], [13568], [13588]]
+
+[[figures]]
+name = "lists, in a member at 16/certifier/looks"
+measure = "count"
+size = 16
+readings = [[16554], [16554], [16554], [16554], [16554]]
+
+[[figures]]
+name = "lists, in a member at 16/certifier"
+measure = "instructions"
+size = 16
+readings = [[19067134], [19046991], [19059804], [19052494], [19070649]]
+
+[[figures]]
+name = "lists, in a member at 16/certifier/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "lists, in a member at 16/certifier/units"
+measure = "count"
+size = 16
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "arms at 12/elaborator"
+measure = "microseconds"
+size = 12
+readings = [[3699], [3647], [3675], [3654], [3656]]
+
+[[figures]]
+name = "arms at 12/elaborator/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arms at 12/elaborator/allocated"
+measure = "bytes"
+size = 12
+readings = [[3288459], [3291931], [3285883], [3288819], [3290099]]
+
+[[figures]]
+name = "arms at 12/elaborator/allocations"
+measure = "allocations"
+size = 12
+readings = [[20743], [20765], [20713], [20746], [20753]]
+
+[[figures]]
+name = "arms at 12/elaborator/looks"
+measure = "count"
+size = 12
+readings = [[21419], [21419], [21419], [21419], [21419]]
+
+[[figures]]
+name = "arms at 12/elaborator"
+measure = "instructions"
+size = 12
+readings = [[25817393], [25819542], [25825593], [25811285], [25803109]]
+
+[[figures]]
+name = "arms at 12/elaborator/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arms at 12/elaborator/units"
+measure = "count"
+size = 12
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "arms at 12/certifier"
+measure = "microseconds"
+size = 12
+readings = [[1858], [1827], [1848], [1830], [1858]]
+
+[[figures]]
+name = "arms at 12/certifier/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arms at 12/certifier/allocated"
+measure = "bytes"
+size = 12
+readings = [[1831978], [1836714], [1832362], [1834026], [1837226]]
+
+[[figures]]
+name = "arms at 12/certifier/allocations"
+measure = "allocations"
+size = 12
+readings = [[11017], [11052], [11028], [11035], [11068]]
+
+[[figures]]
+name = "arms at 12/certifier/looks"
+measure = "count"
+size = 12
+readings = [[13156], [13156], [13156], [13156], [13156]]
+
+[[figures]]
+name = "arms at 12/certifier"
+measure = "instructions"
+size = 12
+readings = [[15507823], [15591129], [15492522], [15528070], [15500979]]
+
+[[figures]]
+name = "arms at 12/certifier/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arms at 12/certifier/units"
+measure = "count"
+size = 12
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "arms at 16/elaborator"
+measure = "microseconds"
+size = 16
+readings = [[4279], [4209], [4260], [4201], [4275]]
+
+[[figures]]
+name = "arms at 16/elaborator/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arms at 16/elaborator/allocated"
+measure = "bytes"
+size = 16
+readings = [[4070443], [4074251], [4072603], [4076259], [4072867]]
+
+[[figures]]
+name = "arms at 16/elaborator/allocations"
+measure = "allocations"
+size = 16
+readings = [[25715], [25764], [25739], [25765], [25746]]
+
+[[figures]]
+name = "arms at 16/elaborator/looks"
+measure = "count"
+size = 16
+readings = [[25615], [25615], [25615], [25615], [25615]]
+
+[[figures]]
+name = "arms at 16/elaborator"
+measure = "instructions"
+size = 16
+readings = [[30583323], [30583477], [30573581], [30567534], [30614104]]
+
+[[figures]]
+name = "arms at 16/elaborator/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arms at 16/elaborator/units"
+measure = "count"
+size = 16
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "arms at 16/certifier"
+measure = "microseconds"
+size = 16
+readings = [[2224], [2168], [2216], [2174], [2197]]
+
+[[figures]]
+name = "arms at 16/certifier/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arms at 16/certifier/allocated"
+measure = "bytes"
+size = 16
+readings = [[2390014], [2388734], [2386046], [2387710], [2390142]]
+
+[[figures]]
+name = "arms at 16/certifier/allocations"
+measure = "allocations"
+size = 16
+readings = [[13885], [13883], [13856], [13871], [13880]]
+
+[[figures]]
+name = "arms at 16/certifier/looks"
+measure = "count"
+size = 16
+readings = [[16428], [16428], [16428], [16428], [16428]]
+
+[[figures]]
+name = "arms at 16/certifier"
+measure = "instructions"
+size = 16
+readings = [[19617513], [19609067], [19617344], [19589521], [19627252]]
+
+[[figures]]
+name = "arms at 16/certifier/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arms at 16/certifier/units"
+measure = "count"
+size = 16
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "arms, in a member at 12/elaborator"
+measure = "microseconds"
+size = 12
+readings = [[5303], [5212], [5246], [5210], [5237]]
+
+[[figures]]
+name = "arms, in a member at 12/elaborator/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arms, in a member at 12/elaborator/allocated"
+measure = "bytes"
+size = 12
+readings = [[5749373], [5751973], [5755141], [5749757], [5748317]]
+
+[[figures]]
+name = "arms, in a member at 12/elaborator/allocations"
+measure = "allocations"
+size = 12
+readings = [[34815], [34843], [34860], [34815], [34809]]
+
+[[figures]]
+name = "arms, in a member at 12/elaborator/looks"
+measure = "count"
+size = 12
+readings = [[36111], [36111], [36111], [36111], [36111]]
+
+[[figures]]
+name = "arms, in a member at 12/elaborator"
+measure = "instructions"
+size = 12
+readings = [[40202902], [40196411], [40221012], [40143474], [40192988]]
+
+[[figures]]
+name = "arms, in a member at 12/elaborator/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arms, in a member at 12/elaborator/units"
+measure = "count"
+size = 12
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "arms, in a member at 12/certifier"
+measure = "microseconds"
+size = 12
+readings = [[2305], [2267], [2263], [2253], [2254]]
+
+[[figures]]
+name = "arms, in a member at 12/certifier/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arms, in a member at 12/certifier/allocated"
+measure = "bytes"
+size = 12
+readings = [[2241987], [2246851], [2246851], [2243267], [2242499]]
+
+[[figures]]
+name = "arms, in a member at 12/certifier/allocations"
+measure = "allocations"
+size = 12
+readings = [[13188], [13226], [13216], [13188], [13185]]
+
+[[figures]]
+name = "arms, in a member at 12/certifier/looks"
+measure = "count"
+size = 12
+readings = [[16547], [16547], [16547], [16547], [16547]]
+
+[[figures]]
+name = "arms, in a member at 12/certifier"
+measure = "instructions"
+size = 12
+readings = [[18684037], [18686885], [18673939], [18730779], [18697664]]
+
+[[figures]]
+name = "arms, in a member at 12/certifier/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arms, in a member at 12/certifier/units"
+measure = "count"
+size = 12
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "arms, in a member at 16/elaborator"
+measure = "microseconds"
+size = 16
+readings = [[6232], [6111], [6155], [6064], [6111]]
+
+[[figures]]
+name = "arms, in a member at 16/elaborator/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arms, in a member at 16/elaborator/allocated"
+measure = "bytes"
+size = 16
+readings = [[7194213], [7195821], [7202509], [7195661], [7198029]]
+
+[[figures]]
+name = "arms, in a member at 16/elaborator/allocations"
+measure = "allocations"
+size = 16
+readings = [[42544], [42551], [42610], [42569], [42569]]
+
+[[figures]]
+name = "arms, in a member at 16/elaborator/looks"
+measure = "count"
+size = 16
+readings = [[44977], [44977], [44977], [44977], [44977]]
+
+[[figures]]
+name = "arms, in a member at 16/elaborator"
+measure = "instructions"
+size = 16
+readings = [[48521686], [48598954], [48559836], [48552144], [48518407]]
+
+[[figures]]
+name = "arms, in a member at 16/elaborator/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arms, in a member at 16/elaborator/units"
+measure = "count"
+size = 16
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "arms, in a member at 16/certifier"
+measure = "microseconds"
+size = 16
+readings = [[2682], [2643], [2663], [2654], [2670]]
+
+[[figures]]
+name = "arms, in a member at 16/certifier/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arms, in a member at 16/certifier/allocated"
+measure = "bytes"
+size = 16
+readings = [[2873127], [2868903], [2871463], [2872231], [2870695]]
+
+[[figures]]
+name = "arms, in a member at 16/certifier/allocations"
+measure = "allocations"
+size = 16
+readings = [[16296], [16259], [16291], [16287], [16277]]
+
+[[figures]]
+name = "arms, in a member at 16/certifier/looks"
+measure = "count"
+size = 16
+readings = [[20487], [20487], [20487], [20487], [20487]]
+
+[[figures]]
+name = "arms, in a member at 16/certifier"
+measure = "instructions"
+size = 16
+readings = [[23338827], [23310832], [23266535], [23236974], [23281199]]
+
+[[figures]]
+name = "arms, in a member at 16/certifier/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arms, in a member at 16/certifier/units"
+measure = "count"
+size = 16
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "guards at 12/elaborator"
+measure = "microseconds"
+size = 12
+readings = [[4189], [4176], [4151], [4145], [4134]]
+
+[[figures]]
+name = "guards at 12/elaborator/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "guards at 12/elaborator/allocated"
+measure = "bytes"
+size = 12
+readings = [[3615757], [3619725], [3615813], [3618669], [3621285]]
+
+[[figures]]
+name = "guards at 12/elaborator/allocations"
+measure = "allocations"
+size = 12
+readings = [[23573], [23593], [23575], [23591], [23625]]
+
+[[figures]]
+name = "guards at 12/elaborator/looks"
+measure = "count"
+size = 12
+readings = [[26673], [26673], [26673], [26673], [26673]]
+
+[[figures]]
+name = "guards at 12/elaborator"
+measure = "instructions"
+size = 12
+readings = [[30370763], [30375553], [30348033], [30446385], [30400714]]
+
+[[figures]]
+name = "guards at 12/elaborator/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "guards at 12/elaborator/units"
+measure = "count"
+size = 12
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "guards at 12/certifier"
+measure = "microseconds"
+size = 12
+readings = [[1763], [1746], [1753], [1741], [1754]]
+
+[[figures]]
+name = "guards at 12/certifier/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "guards at 12/certifier/allocated"
+measure = "bytes"
+size = 12
+readings = [[1423347], [1424371], [1422579], [1425011], [1424627]]
+
+[[figures]]
+name = "guards at 12/certifier/allocations"
+measure = "allocations"
+size = 12
+readings = [[9401], [9413], [9407], [9416], [9419]]
+
+[[figures]]
+name = "guards at 12/certifier/looks"
+measure = "count"
+size = 12
+readings = [[13074], [13074], [13074], [13074], [13074]]
+
+[[figures]]
+name = "guards at 12/certifier"
+measure = "instructions"
+size = 12
+readings = [[13868442], [13899838], [13873480], [13889697], [13879544]]
+
+[[figures]]
+name = "guards at 12/certifier/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "guards at 12/certifier/units"
+measure = "count"
+size = 12
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "guards at 16/elaborator"
+measure = "microseconds"
+size = 16
+readings = [[4898], [4888], [4865], [4794], [4852]]
+
+[[figures]]
+name = "guards at 16/elaborator/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "guards at 16/elaborator/allocated"
+measure = "bytes"
+size = 16
+readings = [[4533253], [4531501], [4531733], [4531085], [4528525]]
+
+[[figures]]
+name = "guards at 16/elaborator/allocations"
+measure = "allocations"
+size = 16
+readings = [[29347], [29322], [29326], [29317], [29295]]
+
+[[figures]]
+name = "guards at 16/elaborator/looks"
+measure = "count"
+size = 16
+readings = [[32461], [32461], [32461], [32461], [32461]]
+
+[[figures]]
+name = "guards at 16/elaborator"
+measure = "instructions"
+size = 16
+readings = [[36606501], [36576231], [36582335], [36576466], [36516035]]
+
+[[figures]]
+name = "guards at 16/elaborator/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "guards at 16/elaborator/units"
+measure = "count"
+size = 16
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "guards at 16/certifier"
+measure = "microseconds"
+size = 16
+readings = [[1922], [1896], [1911], [1884], [1891]]
+
+[[figures]]
+name = "guards at 16/certifier/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "guards at 16/certifier/allocated"
+measure = "bytes"
+size = 16
+readings = [[1549751], [1551543], [1547063], [1548343], [1547575]]
+
+[[figures]]
+name = "guards at 16/certifier/allocations"
+measure = "allocations"
+size = 16
+readings = [[10240], [10256], [10229], [10229], [10223]]
+
+[[figures]]
+name = "guards at 16/certifier/looks"
+measure = "count"
+size = 16
+readings = [[14886], [14886], [14886], [14886], [14886]]
+
+[[figures]]
+name = "guards at 16/certifier"
+measure = "instructions"
+size = 16
+readings = [[15449524], [15441632], [15432405], [15441386], [15440648]]
+
+[[figures]]
+name = "guards at 16/certifier/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "guards at 16/certifier/units"
+measure = "count"
+size = 16
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "guards, in a member at 12/elaborator"
+measure = "microseconds"
+size = 12
+readings = [[5929], [5865], [5963], [5856], [5880]]
+
+[[figures]]
+name = "guards, in a member at 12/elaborator/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "guards, in a member at 12/elaborator/allocated"
+measure = "bytes"
+size = 12
+readings = [[6456555], [6460107], [6458563], [6458187], [6459347]]
+
+[[figures]]
+name = "guards, in a member at 12/elaborator/allocations"
+measure = "allocations"
+size = 12
+readings = [[40271], [40304], [40291], [40284], [40297]]
+
+[[figures]]
+name = "guards, in a member at 12/elaborator/looks"
+measure = "count"
+size = 12
+readings = [[43926], [43926], [43926], [43926], [43926]]
+
+[[figures]]
+name = "guards, in a member at 12/elaborator"
+measure = "instructions"
+size = 12
+readings = [[46912829], [46918089], [46947436], [46889435], [46906233]]
+
+[[figures]]
+name = "guards, in a member at 12/elaborator/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "guards, in a member at 12/elaborator/units"
+measure = "count"
+size = 12
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "guards, in a member at 12/certifier"
+measure = "microseconds"
+size = 12
+readings = [[2236], [2212], [2262], [2211], [2266]]
+
+[[figures]]
+name = "guards, in a member at 12/certifier/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "guards, in a member at 12/certifier/allocated"
+measure = "bytes"
+size = 12
+readings = [[1894830], [1895086], [1894830], [1891758], [1890350]]
+
+[[figures]]
+name = "guards, in a member at 12/certifier/allocations"
+measure = "allocations"
+size = 12
+readings = [[12091], [12097], [12097], [12080], [12062]]
+
+[[figures]]
+name = "guards, in a member at 12/certifier/looks"
+measure = "count"
+size = 12
+readings = [[17349], [17349], [17349], [17349], [17349]]
+
+[[figures]]
+name = "guards, in a member at 12/certifier"
+measure = "instructions"
+size = 12
+readings = [[17553458], [17560252], [17557151], [17559633], [17522004]]
+
+[[figures]]
+name = "guards, in a member at 12/certifier/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "guards, in a member at 12/certifier/units"
+measure = "count"
+size = 12
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "guards, in a member at 16/elaborator"
+measure = "microseconds"
+size = 16
+readings = [[6987], [6950], [7024], [6915], [6970]]
+
+[[figures]]
+name = "guards, in a member at 16/elaborator/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "guards, in a member at 16/elaborator/allocated"
+measure = "bytes"
+size = 16
+readings = [[8236619], [8239051], [8238411], [8240291], [8240875]]
+
+[[figures]]
+name = "guards, in a member at 16/elaborator/allocations"
+measure = "allocations"
+size = 16
+readings = [[49277], [49289], [49286], [49307], [49314]]
+
+[[figures]]
+name = "guards, in a member at 16/elaborator/looks"
+measure = "count"
+size = 16
+readings = [[55590], [55590], [55590], [55590], [55590]]
+
+[[figures]]
+name = "guards, in a member at 16/elaborator"
+measure = "instructions"
+size = 16
+readings = [[57438557], [57453838], [57460962], [57419584], [57440075]]
+
+[[figures]]
+name = "guards, in a member at 16/elaborator/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "guards, in a member at 16/elaborator/units"
+measure = "count"
+size = 16
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "guards, in a member at 16/certifier"
+measure = "microseconds"
+size = 16
+readings = [[2430], [2428], [2444], [2437], [2487]]
+
+[[figures]]
+name = "guards, in a member at 16/certifier/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "guards, in a member at 16/certifier/allocated"
+measure = "bytes"
+size = 16
+readings = [[2114434], [2115842], [2118914], [2113922], [2115714]]
+
+[[figures]]
+name = "guards, in a member at 16/certifier/allocations"
+measure = "allocations"
+size = 16
+readings = [[13315], [13330], [13351], [13311], [13325]]
+
+[[figures]]
+name = "guards, in a member at 16/certifier/looks"
+measure = "count"
+size = 16
+readings = [[20113], [20113], [20113], [20113], [20113]]
+
+[[figures]]
+name = "guards, in a member at 16/certifier"
+measure = "instructions"
+size = 16
+readings = [[19823783], [19894122], [19825742], [19859747], [19858062]]
+
+[[figures]]
+name = "guards, in a member at 16/certifier/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "guards, in a member at 16/certifier/units"
+measure = "count"
+size = 16
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "recursions at 12/elaborator"
+measure = "microseconds"
+size = 12
+readings = [[9656], [9540], [9621], [9605], [9562]]
+
+[[figures]]
+name = "recursions at 12/elaborator/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "recursions at 12/elaborator/allocated"
+measure = "bytes"
+size = 12
+readings = [[11438588], [11430404], [11432308], [11429980], [11431700]]
+
+[[figures]]
+name = "recursions at 12/elaborator/allocations"
+measure = "allocations"
+size = 12
+readings = [[70233], [70158], [70184], [70157], [70170]]
+
+[[figures]]
+name = "recursions at 12/elaborator/looks"
+measure = "count"
+size = 12
+readings = [[88668], [88668], [88668], [88668], [88668]]
+
+[[figures]]
+name = "recursions at 12/elaborator"
+measure = "instructions"
+size = 12
+readings = [[85299676], [85281972], [85361189], [85412675], [85300455]]
+
+[[figures]]
+name = "recursions at 12/elaborator/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "recursions at 12/elaborator/units"
+measure = "count"
+size = 12
+readings = [[25609], [25609], [25609], [25609], [25609]]
+
+[[figures]]
+name = "recursions at 12/certifier"
+measure = "microseconds"
+size = 12
+readings = [[3188], [3137], [3152], [3117], [3133]]
+
+[[figures]]
+name = "recursions at 12/certifier/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "recursions at 12/certifier/allocated"
+measure = "bytes"
+size = 12
+readings = [[3088623], [3085807], [3083887], [3085807], [3080687]]
+
+[[figures]]
+name = "recursions at 12/certifier/allocations"
+measure = "allocations"
+size = 12
+readings = [[20360], [20342], [20331], [20333], [20297]]
+
+[[figures]]
+name = "recursions at 12/certifier/looks"
+measure = "count"
+size = 12
+readings = [[26906], [26906], [26906], [26906], [26906]]
+
+[[figures]]
+name = "recursions at 12/certifier"
+measure = "instructions"
+size = 12
+readings = [[26858614], [26833629], [26818229], [26872722], [26812228]]
+
+[[figures]]
+name = "recursions at 12/certifier/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "recursions at 12/certifier/units"
+measure = "count"
+size = 12
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "recursions at 16/elaborator"
+measure = "microseconds"
+size = 16
+readings = [[12599], [12432], [12544], [12456], [12498]]
+
+[[figures]]
+name = "recursions at 16/elaborator/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "recursions at 16/elaborator/allocated"
+measure = "bytes"
+size = 16
+readings = [[15908320], [15912848], [15914168], [15919248], [15915128]]
+
+[[figures]]
+name = "recursions at 16/elaborator/allocations"
+measure = "allocations"
+size = 16
+readings = [[95527], [95553], [95574], [95597], [95574]]
+
+[[figures]]
+name = "recursions at 16/elaborator/looks"
+measure = "count"
+size = 16
+readings = [[124007], [124007], [124007], [124007], [124007]]
+
+[[figures]]
+name = "recursions at 16/elaborator"
+measure = "instructions"
+size = 16
+readings = [[116711151], [116648442], [116754420], [116784885], [116721567]]
+
+[[figures]]
+name = "recursions at 16/elaborator/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "recursions at 16/elaborator/units"
+measure = "count"
+size = 16
+readings = [[33801], [33801], [33801], [33801], [33801]]
+
+[[figures]]
+name = "recursions at 16/certifier"
+measure = "microseconds"
+size = 16
+readings = [[3673], [3618], [3627], [3598], [3611]]
+
+[[figures]]
+name = "recursions at 16/certifier/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "recursions at 16/certifier/allocated"
+measure = "bytes"
+size = 16
+readings = [[3720587], [3713291], [3707403], [3714571], [3705483]]
+
+[[figures]]
+name = "recursions at 16/certifier/allocations"
+measure = "allocations"
+size = 16
+readings = [[24168], [24112], [24072], [24116], [24055]]
+
+[[figures]]
+name = "recursions at 16/certifier/looks"
+measure = "count"
+size = 16
+readings = [[32626], [32626], [32626], [32626], [32626]]
+
+[[figures]]
+name = "recursions at 16/certifier"
+measure = "instructions"
+size = 16
+readings = [[32098349], [32086918], [32069234], [32075501], [32056864]]
+
+[[figures]]
+name = "recursions at 16/certifier/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "recursions at 16/certifier/units"
+measure = "count"
+size = 16
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "handed at 12/elaborator"
+measure = "microseconds"
+size = 12
+readings = [[3749], [3734], [3735], [3695], [3775]]
+
+[[figures]]
+name = "handed at 12/elaborator/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "handed at 12/elaborator/allocated"
+measure = "bytes"
+size = 12
+readings = [[4288882], [4290034], [4289234], [4288370], [4285474]]
+
+[[figures]]
+name = "handed at 12/elaborator/allocations"
+measure = "allocations"
+size = 12
+readings = [[28867], [28892], [28887], [28873], [28848]]
+
+[[figures]]
+name = "handed at 12/elaborator/looks"
+measure = "count"
+size = 12
+readings = [[24923], [24923], [24923], [24923], [24923]]
+
+[[figures]]
+name = "handed at 12/elaborator"
+measure = "instructions"
+size = 12
+readings = [[29040999], [29053845], [29072830], [29048450], [29057753]]
+
+[[figures]]
+name = "handed at 12/elaborator/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "handed at 12/elaborator/units"
+measure = "count"
+size = 12
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "handed at 12/certifier"
+measure = "microseconds"
+size = 12
+readings = [[1969], [1925], [1949], [1923], [1951]]
+
+[[figures]]
+name = "handed at 12/certifier/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "handed at 12/certifier/allocated"
+measure = "bytes"
+size = 12
+readings = [[1798258], [1797362], [1802354], [1799282], [1797490]]
+
+[[figures]]
+name = "handed at 12/certifier/allocations"
+measure = "allocations"
+size = 12
+readings = [[11496], [11492], [11530], [11504], [11497]]
+
+[[figures]]
+name = "handed at 12/certifier/looks"
+measure = "count"
+size = 12
+readings = [[11968], [11968], [11968], [11968], [11968]]
+
+[[figures]]
+name = "handed at 12/certifier"
+measure = "instructions"
+size = 12
+readings = [[14943665], [14935945], [14956724], [14952099], [14938959]]
+
+[[figures]]
+name = "handed at 12/certifier/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "handed at 12/certifier/units"
+measure = "count"
+size = 12
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "handed at 16/elaborator"
+measure = "microseconds"
+size = 16
+readings = [[4168], [4154], [4177], [4138], [4164]]
+
+[[figures]]
+name = "handed at 16/elaborator/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "handed at 16/elaborator/allocated"
+measure = "bytes"
+size = 16
+readings = [[5180814], [5177950], [5182142], [5183934], [5180462]]
+
+[[figures]]
+name = "handed at 16/elaborator/allocations"
+measure = "allocations"
+size = 16
+readings = [[34825], [34788], [34836], [34848], [34799]]
+
+[[figures]]
+name = "handed at 16/elaborator/looks"
+measure = "count"
+size = 16
+readings = [[29583], [29583], [29583], [29583], [29583]]
+
+[[figures]]
+name = "handed at 16/elaborator"
+measure = "instructions"
+size = 16
+readings = [[33705790], [33850936], [33664425], [33689176], [33767749]]
+
+[[figures]]
+name = "handed at 16/elaborator/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "handed at 16/elaborator/units"
+measure = "count"
+size = 16
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "handed at 16/certifier"
+measure = "microseconds"
+size = 16
+readings = [[2086], [2062], [2145], [2055], [2084]]
+
+[[figures]]
+name = "handed at 16/certifier/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "handed at 16/certifier/allocated"
+measure = "bytes"
+size = 16
+readings = [[1997958], [1995398], [1996038], [1996294], [1997958]]
+
+[[figures]]
+name = "handed at 16/certifier/allocations"
+measure = "allocations"
+size = 16
+readings = [[12575], [12559], [12566], [12568], [12577]]
+
+[[figures]]
+name = "handed at 16/certifier/looks"
+measure = "count"
+size = 16
+readings = [[12976], [12976], [12976], [12976], [12976]]
+
+[[figures]]
+name = "handed at 16/certifier"
+measure = "instructions"
+size = 16
+readings = [[16490153], [16500296], [16484729], [16464132], [16480187]]
+
+[[figures]]
+name = "handed at 16/certifier/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "handed at 16/certifier/units"
+measure = "count"
+size = 16
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "aliases at 12/elaborator"
+measure = "microseconds"
+size = 12
+readings = [[2221], [2196], [2212], [2195], [2209]]
+
+[[figures]]
+name = "aliases at 12/elaborator/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "aliases at 12/elaborator/allocated"
+measure = "bytes"
+size = 12
+readings = [[2089265], [2089681], [2091665], [2095697], [2089089]]
+
+[[figures]]
+name = "aliases at 12/elaborator/allocations"
+measure = "allocations"
+size = 12
+readings = [[13662], [13662], [13686], [13717], [13659]]
+
+[[figures]]
+name = "aliases at 12/elaborator/looks"
+measure = "count"
+size = 12
+readings = [[12962], [12962], [12962], [12962], [12962]]
+
+[[figures]]
+name = "aliases at 12/elaborator"
+measure = "instructions"
+size = 12
+readings = [[16187257], [16211472], [16193091], [16219002], [16205345]]
+
+[[figures]]
+name = "aliases at 12/elaborator/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "aliases at 12/elaborator/units"
+measure = "count"
+size = 12
+readings = [[4027], [4027], [4027], [4027], [4027]]
+
+[[figures]]
+name = "aliases at 12/certifier"
+measure = "microseconds"
+size = 12
+readings = [[1515], [1505], [1502], [1503], [1526]]
+
+[[figures]]
+name = "aliases at 12/certifier/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "aliases at 12/certifier/allocated"
+measure = "bytes"
+size = 12
+readings = [[1457490], [1460306], [1461970], [1457490], [1459154]]
+
+[[figures]]
+name = "aliases at 12/certifier/allocations"
+measure = "allocations"
+size = 12
+readings = [[9796], [9821], [9831], [9803], [9803]]
+
+[[figures]]
+name = "aliases at 12/certifier/looks"
+measure = "count"
+size = 12
+readings = [[10169], [10169], [10169], [10169], [10169]]
+
+[[figures]]
+name = "aliases at 12/certifier"
+measure = "instructions"
+size = 12
+readings = [[11910072], [11950782], [11918098], [11892892], [11913979]]
+
+[[figures]]
+name = "aliases at 12/certifier/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "aliases at 12/certifier/units"
+measure = "count"
+size = 12
+readings = [[17380], [17380], [17380], [17380], [17380]]
+
+[[figures]]
+name = "aliases at 16/elaborator"
+measure = "microseconds"
+size = 16
+readings = [[2307], [2311], [2318], [2306], [2331]]
+
+[[figures]]
+name = "aliases at 16/elaborator/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "aliases at 16/elaborator/allocated"
+measure = "bytes"
+size = 16
+readings = [[2353539], [2354547], [2354307], [2352291], [2352595]]
+
+[[figures]]
+name = "aliases at 16/elaborator/allocations"
+measure = "allocations"
+size = 16
+readings = [[15318], [15335], [15327], [15288], [15316]]
+
+[[figures]]
+name = "aliases at 16/elaborator/looks"
+measure = "count"
+size = 16
+readings = [[14242], [14242], [14242], [14242], [14242]]
+
+[[figures]]
+name = "aliases at 16/elaborator"
+measure = "instructions"
+size = 16
+readings = [[17565794], [17589556], [17564840], [17542866], [17554115]]
+
+[[figures]]
+name = "aliases at 16/elaborator/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "aliases at 16/elaborator/units"
+measure = "count"
+size = 16
+readings = [[4027], [4027], [4027], [4027], [4027]]
+
+[[figures]]
+name = "aliases at 16/certifier"
+measure = "microseconds"
+size = 16
+readings = [[1628], [1604], [1634], [1623], [1609]]
+
+[[figures]]
+name = "aliases at 16/certifier/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "aliases at 16/certifier/allocated"
+measure = "bytes"
+size = 16
+readings = [[1584470], [1585238], [1584342], [1582678], [1583190]]
+
+[[figures]]
+name = "aliases at 16/certifier/allocations"
+measure = "allocations"
+size = 16
+readings = [[10791], [10796], [10792], [10772], [10781]]
+
+[[figures]]
+name = "aliases at 16/certifier/looks"
+measure = "count"
+size = 16
+readings = [[11021], [11021], [11021], [11021], [11021]]
+
+[[figures]]
+name = "aliases at 16/certifier"
+measure = "instructions"
+size = 16
+readings = [[12943428], [12947725], [12941760], [12923230], [12936754]]
+
+[[figures]]
+name = "aliases at 16/certifier/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "aliases at 16/certifier/units"
+measure = "count"
+size = 16
+readings = [[21488], [21488], [21488], [21488], [21488]]
+
+[[figures]]
+name = "arrows at 12/elaborator"
+measure = "microseconds"
+size = 12
+readings = [[2077], [2087], [2096], [2087], [2094]]
+
+[[figures]]
+name = "arrows at 12/elaborator/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arrows at 12/elaborator/allocated"
+measure = "bytes"
+size = 12
+readings = [[2028754], [2029666], [2031234], [2029554], [2031378]]
+
+[[figures]]
+name = "arrows at 12/elaborator/allocations"
+measure = "allocations"
+size = 12
+readings = [[12869], [12890], [12897], [12877], [12888]]
+
+[[figures]]
+name = "arrows at 12/elaborator/looks"
+measure = "count"
+size = 12
+readings = [[12877], [12877], [12877], [12877], [12877]]
+
+[[figures]]
+name = "arrows at 12/elaborator"
+measure = "instructions"
+size = 12
+readings = [[15620761], [15625826], [15633595], [15618621], [15633003]]
+
+[[figures]]
+name = "arrows at 12/elaborator/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arrows at 12/elaborator/units"
+measure = "count"
+size = 12
+readings = [[4027], [4027], [4027], [4027], [4027]]
+
+[[figures]]
+name = "arrows at 12/certifier"
+measure = "microseconds"
+size = 12
+readings = [[1507], [1495], [1507], [1499], [1519]]
+
+[[figures]]
+name = "arrows at 12/certifier/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arrows at 12/certifier/allocated"
+measure = "bytes"
+size = 12
+readings = [[1430834], [1430578], [1434290], [1431858], [1430194]]
+
+[[figures]]
+name = "arrows at 12/certifier/allocations"
+measure = "allocations"
+size = 12
+readings = [[9492], [9489], [9513], [9506], [9478]]
+
+[[figures]]
+name = "arrows at 12/certifier/looks"
+measure = "count"
+size = 12
+readings = [[10217], [10217], [10217], [10217], [10217]]
+
+[[figures]]
+name = "arrows at 12/certifier"
+measure = "instructions"
+size = 12
+readings = [[11836845], [11861854], [11858452], [11840293], [11835819]]
+
+[[figures]]
+name = "arrows at 12/certifier/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arrows at 12/certifier/units"
+measure = "count"
+size = 12
+readings = [[17404], [17404], [17404], [17404], [17404]]
+
+[[figures]]
+name = "arrows at 16/elaborator"
+measure = "microseconds"
+size = 16
+readings = [[2265], [2193], [2215], [2221], [2220]]
+
+[[figures]]
+name = "arrows at 16/elaborator/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arrows at 16/elaborator/allocated"
+measure = "bytes"
+size = 16
+readings = [[2273050], [2274794], [2274554], [2273338], [2273098]]
+
+[[figures]]
+name = "arrows at 16/elaborator/allocations"
+measure = "allocations"
+size = 16
+readings = [[14243], [14263], [14249], [14236], [14246]]
+
+[[figures]]
+name = "arrows at 16/elaborator/looks"
+measure = "count"
+size = 16
+readings = [[14129], [14129], [14129], [14129], [14129]]
+
+[[figures]]
+name = "arrows at 16/elaborator"
+measure = "instructions"
+size = 16
+readings = [[16820048], [16822204], [16779646], [16781178], [16783594]]
+
+[[figures]]
+name = "arrows at 16/elaborator/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arrows at 16/elaborator/units"
+measure = "count"
+size = 16
+readings = [[4027], [4027], [4027], [4027], [4027]]
+
+[[figures]]
+name = "arrows at 16/certifier"
+measure = "microseconds"
+size = 16
+readings = [[1641], [1584], [1618], [1580], [1617]]
+
+[[figures]]
+name = "arrows at 16/certifier/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arrows at 16/certifier/allocated"
+measure = "bytes"
+size = 16
+readings = [[1553446], [1548582], [1554342], [1551398], [1551270]]
+
+[[figures]]
+name = "arrows at 16/certifier/allocations"
+measure = "allocations"
+size = 16
+readings = [[10388], [10342], [10395], [10362], [10362]]
+
+[[figures]]
+name = "arrows at 16/certifier/looks"
+measure = "count"
+size = 16
+readings = [[11085], [11085], [11085], [11085], [11085]]
+
+[[figures]]
+name = "arrows at 16/certifier"
+measure = "instructions"
+size = 16
+readings = [[12853900], [12858072], [12860814], [12862137], [12839662]]
+
+[[figures]]
+name = "arrows at 16/certifier/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "arrows at 16/certifier/units"
+measure = "count"
+size = 16
+readings = [[21520], [21520], [21520], [21520], [21520]]
+
+[[figures]]
+name = "fields at 12/elaborator"
+measure = "microseconds"
+size = 12
+readings = [[3097], [2965], [3015], [2976], [3001]]
+
+[[figures]]
+name = "fields at 12/elaborator/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "fields at 12/elaborator/allocated"
+measure = "bytes"
+size = 12
+readings = [[3124844], [3124972], [3128412], [3131884], [3128716]]
+
+[[figures]]
+name = "fields at 12/elaborator/allocations"
+measure = "allocations"
+size = 12
+readings = [[20069], [20069], [20091], [20120], [20088]]
+
+[[figures]]
+name = "fields at 12/elaborator/looks"
+measure = "count"
+size = 12
+readings = [[19376], [19376], [19376], [19376], [19376]]
+
+[[figures]]
+name = "fields at 12/elaborator"
+measure = "instructions"
+size = 12
+readings = [[22782978], [22760219], [22807909], [22804693], [22760386]]
+
+[[figures]]
+name = "fields at 12/elaborator/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "fields at 12/elaborator/units"
+measure = "count"
+size = 12
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "fields at 12/certifier"
+measure = "microseconds"
+size = 12
+readings = [[1859], [1842], [1842], [1791], [1805]]
+
+[[figures]]
+name = "fields at 12/certifier/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "fields at 12/certifier/allocated"
+measure = "bytes"
+size = 12
+readings = [[1865159], [1866951], [1865671], [1864903], [1863495]]
+
+[[figures]]
+name = "fields at 12/certifier/allocations"
+measure = "allocations"
+size = 12
+readings = [[12055], [12073], [12059], [12053], [12038]]
+
+[[figures]]
+name = "fields at 12/certifier/looks"
+measure = "count"
+size = 12
+readings = [[12559], [12559], [12559], [12559], [12559]]
+
+[[figures]]
+name = "fields at 12/certifier"
+measure = "instructions"
+size = 12
+readings = [[14165381], [14149738], [14164799], [14163625], [14145867]]
+
+[[figures]]
+name = "fields at 12/certifier/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "fields at 12/certifier/units"
+measure = "count"
+size = 12
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "fields at 16/elaborator"
+measure = "microseconds"
+size = 16
+readings = [[3318], [3238], [3297], [3218], [3256]]
+
+[[figures]]
+name = "fields at 16/elaborator/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "fields at 16/elaborator/allocated"
+measure = "bytes"
+size = 16
+readings = [[3701142], [3706230], [3708726], [3702150], [3706838]]
+
+[[figures]]
+name = "fields at 16/elaborator/allocations"
+measure = "allocations"
+size = 16
+readings = [[23355], [23409], [23429], [23365], [23416]]
+
+[[figures]]
+name = "fields at 16/elaborator/looks"
+measure = "count"
+size = 16
+readings = [[22600], [22600], [22600], [22600], [22600]]
+
+[[figures]]
+name = "fields at 16/elaborator"
+measure = "instructions"
+size = 16
+readings = [[25740126], [25745868], [25749845], [25719516], [25765737]]
+
+[[figures]]
+name = "fields at 16/elaborator/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "fields at 16/elaborator/units"
+measure = "count"
+size = 16
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "fields at 16/certifier"
+measure = "microseconds"
+size = 16
+readings = [[1951], [1941], [1960], [1944], [1957]]
+
+[[figures]]
+name = "fields at 16/certifier/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "fields at 16/certifier/allocated"
+measure = "bytes"
+size = 16
+readings = [[2165671], [2168487], [2170407], [2168231], [2171943]]
+
+[[figures]]
+name = "fields at 16/certifier/allocations"
+measure = "allocations"
+size = 16
+readings = [[13665], [13697], [13703], [13699], [13714]]
+
+[[figures]]
+name = "fields at 16/certifier/looks"
+measure = "count"
+size = 16
+readings = [[14167], [14167], [14167], [14167], [14167]]
+
+[[figures]]
+name = "fields at 16/certifier"
+measure = "instructions"
+size = 16
+readings = [[15921665], [15896376], [15928890], [15897151], [15886486]]
+
+[[figures]]
+name = "fields at 16/certifier/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "fields at 16/certifier/units"
+measure = "count"
+size = 16
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "two towers at 12/elaborator"
+measure = "microseconds"
+size = 12
+readings = [[3582], [3463], [3506], [3499], [3500]]
+
+[[figures]]
+name = "two towers at 12/elaborator/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "two towers at 12/elaborator/allocated"
+measure = "bytes"
+size = 12
+readings = [[4174078], [4171158], [4168238], [4166174], [4170862]]
+
+[[figures]]
+name = "two towers at 12/elaborator/allocations"
+measure = "allocations"
+size = 12
+readings = [[30502], [30482], [30426], [30407], [30461]]
+
+[[figures]]
+name = "two towers at 12/elaborator/looks"
+measure = "count"
+size = 12
+readings = [[22379], [22379], [22379], [22379], [22379]]
+
+[[figures]]
+name = "two towers at 12/elaborator"
+measure = "instructions"
+size = 12
+readings = [[28485724], [28376866], [28466312], [28211431], [28349642]]
+
+[[figures]]
+name = "two towers at 12/elaborator/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "two towers at 12/elaborator/units"
+measure = "count"
+size = 12
+readings = [[4130], [4130], [4130], [4130], [4130]]
+
+[[figures]]
+name = "two towers at 12/certifier"
+measure = "microseconds"
+size = 12
+readings = [[2042], [1999], [2023], [1985], [2011]]
+
+[[figures]]
+name = "two towers at 12/certifier/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "two towers at 12/certifier/allocated"
+measure = "bytes"
+size = 12
+readings = [[1970067], [1969043], [1971987], [1967811], [1969043]]
+
+[[figures]]
+name = "two towers at 12/certifier/allocations"
+measure = "allocations"
+size = 12
+readings = [[13280], [13283], [13309], [13280], [13288]]
+
+[[figures]]
+name = "two towers at 12/certifier/looks"
+measure = "count"
+size = 12
+readings = [[13340], [13340], [13340], [13340], [13340]]
+
+[[figures]]
+name = "two towers at 12/certifier"
+measure = "instructions"
+size = 12
+readings = [[16382361], [16370983], [16416549], [16351666], [16367446]]
+
+[[figures]]
+name = "two towers at 12/certifier/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "two towers at 12/certifier/units"
+measure = "count"
+size = 12
+readings = [[5159], [5159], [5159], [5159], [5159]]
+
+[[figures]]
+name = "two towers at 16/elaborator"
+measure = "microseconds"
+size = 16
+readings = [[4017], [3918], [3946], [3935], [3951]]
+
+[[figures]]
+name = "two towers at 16/elaborator/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "two towers at 16/elaborator/allocated"
+measure = "bytes"
+size = 16
+readings = [[5222377], [5215289], [5215113], [5212105], [5214857]]
+
+[[figures]]
+name = "two towers at 16/elaborator/allocations"
+measure = "allocations"
+size = 16
+readings = [[39205], [39114], [39100], [39056], [39117]]
+
+[[figures]]
+name = "two towers at 16/elaborator/looks"
+measure = "count"
+size = 16
+readings = [[26805], [26805], [26805], [26805], [26805]]
+
+[[figures]]
+name = "two towers at 16/elaborator"
+measure = "instructions"
+size = 16
+readings = [[33686837], [33773864], [33583462], [33846744], [33446030]]
+
+[[figures]]
+name = "two towers at 16/elaborator/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "two towers at 16/elaborator/units"
+measure = "count"
+size = 16
+readings = [[4150], [4150], [4150], [4150], [4150]]
+
+[[figures]]
+name = "two towers at 16/certifier"
+measure = "microseconds"
+size = 16
+readings = [[2225], [2198], [2214], [2208], [2218]]
+
+[[figures]]
+name = "two towers at 16/certifier/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "two towers at 16/certifier/allocated"
+measure = "bytes"
+size = 16
+readings = [[2249819], [2248283], [2248795], [2245595], [2248923]]
+
+[[figures]]
+name = "two towers at 16/certifier/allocations"
+measure = "allocations"
+size = 16
+readings = [[15089], [15090], [15086], [15071], [15088]]
+
+[[figures]]
+name = "two towers at 16/certifier/looks"
+measure = "count"
+size = 16
+readings = [[14956], [14956], [14956], [14956], [14956]]
+
+[[figures]]
+name = "two towers at 16/certifier"
+measure = "instructions"
+size = 16
+readings = [[18670448], [18651745], [18615226], [18679391], [18658444]]
+
+[[figures]]
+name = "two towers at 16/certifier/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "two towers at 16/certifier/units"
+measure = "count"
+size = 16
+readings = [[5187], [5187], [5187], [5187], [5187]]
+
+[[figures]]
+name = "apart at 12/elaborator"
+measure = "microseconds"
+size = 12
+readings = [[4408], [4316], [4329], [4301], [4332]]
+
+[[figures]]
+name = "apart at 12/elaborator/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "apart at 12/elaborator/allocated"
+measure = "bytes"
+size = 12
+readings = [[3891013], [3893637], [3891141], [3891397], [3891021]]
+
+[[figures]]
+name = "apart at 12/elaborator/allocations"
+measure = "allocations"
+size = 12
+readings = [[24315], [24335], [24317], [24327], [24318]]
+
+[[figures]]
+name = "apart at 12/elaborator/looks"
+measure = "count"
+size = 12
+readings = [[31454], [31454], [31454], [31454], [31454]]
+
+[[figures]]
+name = "apart at 12/elaborator"
+measure = "instructions"
+size = 12
+readings = [[34137024], [34113134], [34118356], [34102497], [34114911]]
+
+[[figures]]
+name = "apart at 12/elaborator/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "apart at 12/elaborator/units"
+measure = "count"
+size = 12
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "apart at 12/certifier"
+measure = "microseconds"
+size = 12
+readings = [[2397], [2308], [2361], [2322], [2368]]
+
+[[figures]]
+name = "apart at 12/certifier/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "apart at 12/certifier/allocated"
+measure = "bytes"
+size = 12
+readings = [[2070770], [2069618], [2072434], [2065906], [2072178]]
+
+[[figures]]
+name = "apart at 12/certifier/allocations"
+measure = "allocations"
+size = 12
+readings = [[12795], [12781], [12801], [12755], [12802]]
+
+[[figures]]
+name = "apart at 12/certifier/looks"
+measure = "count"
+size = 12
+readings = [[19099], [19099], [19099], [19099], [19099]]
+
+[[figures]]
+name = "apart at 12/certifier"
+measure = "instructions"
+size = 12
+readings = [[18965745], [18954933], [18980415], [18959410], [18973428]]
+
+[[figures]]
+name = "apart at 12/certifier/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "apart at 12/certifier/units"
+measure = "count"
+size = 12
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "apart at 16/elaborator"
+measure = "microseconds"
+size = 16
+readings = [[4779], [4757], [4843], [4727], [4769]]
+
+[[figures]]
+name = "apart at 16/elaborator/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "apart at 16/elaborator/allocated"
+measure = "bytes"
+size = 16
+readings = [[4440165], [4443285], [4441693], [4445389], [4441677]]
+
+[[figures]]
+name = "apart at 16/elaborator/allocations"
+measure = "allocations"
+size = 16
+readings = [[27185], [27202], [27206], [27225], [27191]]
+
+[[figures]]
+name = "apart at 16/elaborator/looks"
+measure = "count"
+size = 16
+readings = [[36990], [36990], [36990], [36990], [36990]]
+
+[[figures]]
+name = "apart at 16/elaborator"
+measure = "instructions"
+size = 16
+readings = [[38773683], [38801733], [38754922], [38842871], [38814555]]
+
+[[figures]]
+name = "apart at 16/elaborator/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "apart at 16/elaborator/units"
+measure = "count"
+size = 16
+readings = [[5036], [5036], [5036], [5036], [5036]]
+
+[[figures]]
+name = "apart at 16/certifier"
+measure = "microseconds"
+size = 16
+readings = [[2652], [2563], [2624], [2596], [2611]]
+
+[[figures]]
+name = "apart at 16/certifier/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "apart at 16/certifier/allocated"
+measure = "bytes"
+size = 16
+readings = [[2329402], [2328634], [2329914], [2329530], [2324794]]
+
+[[figures]]
+name = "apart at 16/certifier/allocations"
+measure = "allocations"
+size = 16
+readings = [[14234], [14227], [14239], [14227], [14197]]
+
+[[figures]]
+name = "apart at 16/certifier/looks"
+measure = "count"
+size = 16
+readings = [[22267], [22267], [22267], [22267], [22267]]
+
+[[figures]]
+name = "apart at 16/certifier"
+measure = "instructions"
+size = 16
+readings = [[21591023], [21599864], [21620675], [21610186], [21627711]]
+
+[[figures]]
+name = "apart at 16/certifier/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "apart at 16/certifier/units"
+measure = "count"
+size = 16
+readings = [[5038], [5038], [5038], [5038], [5038]]
+
+[[figures]]
+name = "bounded at 12/elaborator"
+measure = "microseconds"
+size = 12
+readings = [[29375], [29045], [29212], [28863], [29240]]
+
+[[figures]]
+name = "bounded at 12/elaborator/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "bounded at 12/elaborator/allocated"
+measure = "bytes"
+size = 12
+readings = [[29275693], [29328205], [29236237], [29260501], [29303309]]
+
+[[figures]]
+name = "bounded at 12/elaborator/allocations"
+measure = "allocations"
+size = 12
+readings = [[193040], [193922], [192641], [192995], [193462]]
+
+[[figures]]
+name = "bounded at 12/elaborator/looks"
+measure = "count"
+size = 12
+readings = [[232482], [232482], [232482], [232482], [232482]]
+
+[[figures]]
+name = "bounded at 12/elaborator"
+measure = "instructions"
+size = 12
+readings = [[230264858], [230821537], [230049791], [230067776], [230372435]]
+
+[[figures]]
+name = "bounded at 12/elaborator/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "bounded at 12/elaborator/units"
+measure = "count"
+size = 12
+readings = [[46607], [46607], [46607], [46607], [46607]]
+
+[[figures]]
+name = "bounded at 12/certifier"
+measure = "microseconds"
+size = 12
+readings = [[17896], [17556], [17881], [17517], [17885]]
+
+[[figures]]
+name = "bounded at 12/certifier/calls"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "bounded at 12/certifier/allocated"
+measure = "bytes"
+size = 12
+readings = [[19096241], [19163017], [19194657], [19130161], [19181961]]
+
+[[figures]]
+name = "bounded at 12/certifier/allocations"
+measure = "allocations"
+size = 12
+readings = [[127185], [128155], [128678], [127561], [128407]]
+
+[[figures]]
+name = "bounded at 12/certifier/looks"
+measure = "count"
+size = 12
+readings = [[158693], [158693], [158693], [158693], [158693]]
+
+[[figures]]
+name = "bounded at 12/certifier"
+measure = "instructions"
+size = 12
+readings = [[151560723], [151909340], [152257112], [151669867], [152058509]]
+
+[[figures]]
+name = "bounded at 12/certifier/accepted"
+measure = "count"
+size = 12
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "bounded at 12/certifier/units"
+measure = "count"
+size = 12
+readings = [[46497], [46497], [46497], [46497], [46497]]
+
+[[figures]]
+name = "bounded at 16/elaborator"
+measure = "microseconds"
+size = 16
+readings = [[39938], [39376], [39869], [39376], [39610]]
+
+[[figures]]
+name = "bounded at 16/elaborator/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "bounded at 16/elaborator/allocated"
+measure = "bytes"
+size = 16
+readings = [[41510736], [41585448], [41533824], [41537792], [41555560]]
+
+[[figures]]
+name = "bounded at 16/elaborator/allocations"
+measure = "allocations"
+size = 16
+readings = [[272376], [273423], [272760], [272755], [272963]]
+
+[[figures]]
+name = "bounded at 16/elaborator/looks"
+measure = "count"
+size = 16
+readings = [[341231], [341231], [341231], [341231], [341231]]
+
+[[figures]]
+name = "bounded at 16/elaborator"
+measure = "instructions"
+size = 16
+readings = [[327369915], [327725538], [327323307], [327310811], [327443427]]
+
+[[figures]]
+name = "bounded at 16/elaborator/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "bounded at 16/elaborator/units"
+measure = "count"
+size = 16
+readings = [[62707], [62707], [62707], [62707], [62707]]
+
+[[figures]]
+name = "bounded at 16/certifier"
+measure = "microseconds"
+size = 16
+readings = [[25535], [25462], [25561], [25507], [25485]]
+
+[[figures]]
+name = "bounded at 16/certifier/calls"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "bounded at 16/certifier/allocated"
+measure = "bytes"
+size = 16
+readings = [[28476637], [28587565], [28575661], [28519045], [28522717]]
+
+[[figures]]
+name = "bounded at 16/certifier/allocations"
+measure = "allocations"
+size = 16
+readings = [[186514], [188177], [187694], [187366], [186994]]
+
+[[figures]]
+name = "bounded at 16/certifier/looks"
+measure = "count"
+size = 16
+readings = [[242989], [242989], [242989], [242989], [242989]]
+
+[[figures]]
+name = "bounded at 16/certifier"
+measure = "instructions"
+size = 16
+readings = [[224957314], [225826088], [225535609], [225546047], [225181515]]
+
+[[figures]]
+name = "bounded at 16/certifier/accepted"
+measure = "count"
+size = 16
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "bounded at 16/certifier/units"
+measure = "count"
+size = 16
+readings = [[62417], [62417], [62417], [62417], [62417]]

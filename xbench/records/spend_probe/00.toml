@@ -1,0 +1,215 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "non-tail at 250"
+measure = "count"
+size = 250
+readings = [[20363], [20363]]
+
+[[figures]]
+name = "tail at 250"
+measure = "count"
+size = 250
+readings = [[21144], [21144]]
+
+[[figures]]
+name = "neutral at 250"
+measure = "count"
+size = 250
+readings = [[26374], [26374]]
+
+[[figures]]
+name = "neutral at 250/Transition"
+measure = "count"
+size = 250
+readings = [[2259], [2259]]
+
+[[figures]]
+name = "neutral at 250/Slots"
+measure = "count"
+size = 250
+readings = [[36], [36]]
+
+[[figures]]
+name = "neutral at 250/Reconstruction"
+measure = "count"
+size = 250
+readings = [[12513], [12513]]
+
+[[figures]]
+name = "neutral at 250/Buffer"
+measure = "count"
+size = 250
+readings = [[11566], [11566]]
+
+[[figures]]
+name = "neutral at 250/Construction"
+measure = "count"
+size = 250
+readings = [[0], [0]]
+
+[[figures]]
+name = "non-tail at 500"
+measure = "count"
+size = 500
+readings = [[40613], [40613]]
+
+[[figures]]
+name = "tail at 500"
+measure = "count"
+size = 500
+readings = [[42144], [42144]]
+
+[[figures]]
+name = "neutral at 500"
+measure = "count"
+size = 500
+readings = [[52624], [52624]]
+
+[[figures]]
+name = "neutral at 500/Transition"
+measure = "count"
+size = 500
+readings = [[4509], [4509]]
+
+[[figures]]
+name = "neutral at 500/Slots"
+measure = "count"
+size = 500
+readings = [[36], [36]]
+
+[[figures]]
+name = "neutral at 500/Reconstruction"
+measure = "count"
+size = 500
+readings = [[25013], [25013]]
+
+[[figures]]
+name = "neutral at 500/Buffer"
+measure = "count"
+size = 500
+readings = [[23066], [23066]]
+
+[[figures]]
+name = "neutral at 500/Construction"
+measure = "count"
+size = 500
+readings = [[0], [0]]
+
+[[figures]]
+name = "non-tail at 1000"
+measure = "count"
+size = 1000
+readings = [[81113], [81113]]
+
+[[figures]]
+name = "tail at 1000"
+measure = "count"
+size = 1000
+readings = [[84144], [84144]]
+
+[[figures]]
+name = "neutral at 1000"
+measure = "count"
+size = 1000
+readings = [[105124], [105124]]
+
+[[figures]]
+name = "neutral at 1000/Transition"
+measure = "count"
+size = 1000
+readings = [[9009], [9009]]
+
+[[figures]]
+name = "neutral at 1000/Slots"
+measure = "count"
+size = 1000
+readings = [[36], [36]]
+
+[[figures]]
+name = "neutral at 1000/Reconstruction"
+measure = "count"
+size = 1000
+readings = [[50013], [50013]]
+
+[[figures]]
+name = "neutral at 1000/Buffer"
+measure = "count"
+size = 1000
+readings = [[46066], [46066]]
+
+[[figures]]
+name = "neutral at 1000/Construction"
+measure = "count"
+size = 1000
+readings = [[0], [0]]
+
+[[figures]]
+name = "non-tail at 2000"
+measure = "count"
+size = 2000
+readings = [[162113], [162113]]
+
+[[figures]]
+name = "tail at 2000"
+measure = "count"
+size = 2000
+readings = [[168144], [168144]]
+
+[[figures]]
+name = "neutral at 2000"
+measure = "count"
+size = 2000
+readings = [[210124], [210124]]
+
+[[figures]]
+name = "neutral at 2000/Transition"
+measure = "count"
+size = 2000
+readings = [[18009], [18009]]
+
+[[figures]]
+name = "neutral at 2000/Slots"
+measure = "count"
+size = 2000
+readings = [[36], [36]]
+
+[[figures]]
+name = "neutral at 2000/Reconstruction"
+measure = "count"
+size = 2000
+readings = [[100013], [100013]]
+
+[[figures]]
+name = "neutral at 2000/Buffer"
+measure = "count"
+size = 2000
+readings = [[92066], [92066]]
+
+[[figures]]
+name = "neutral at 2000/Construction"
+measure = "count"
+size = 2000
+readings = [[0], [0]]

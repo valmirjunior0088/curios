@@ -1,0 +1,383 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "Str literal at 250/elaborator/units"
+measure = "count"
+size = 250
+readings = [[22136], [22136]]
+
+[[figures]]
+name = "Str literal at 250/elaborator/depth"
+measure = "count"
+size = 250
+readings = [[1], [1]]
+
+[[figures]]
+name = "Str literal at 250/elaborator/other"
+measure = "count"
+size = 250
+readings = [[21112], [21112]]
+
+[[figures]]
+name = "Str literal at 250/certifier/units"
+measure = "count"
+size = 250
+readings = [[24200], [24200]]
+
+[[figures]]
+name = "Str literal at 250/certifier/depth"
+measure = "count"
+size = 250
+readings = [[3], [3]]
+
+[[figures]]
+name = "Str literal at 250/certifier/other"
+measure = "count"
+size = 250
+readings = [[21128], [21128]]
+
+[[figures]]
+name = "Str literal at 500/elaborator/units"
+measure = "count"
+size = 500
+readings = [[39386], [39386]]
+
+[[figures]]
+name = "Str literal at 500/elaborator/depth"
+measure = "count"
+size = 500
+readings = [[1], [1]]
+
+[[figures]]
+name = "Str literal at 500/elaborator/other"
+measure = "count"
+size = 500
+readings = [[38362], [38362]]
+
+[[figures]]
+name = "Str literal at 500/certifier/units"
+measure = "count"
+size = 500
+readings = [[41450], [41450]]
+
+[[figures]]
+name = "Str literal at 500/certifier/depth"
+measure = "count"
+size = 500
+readings = [[3], [3]]
+
+[[figures]]
+name = "Str literal at 500/certifier/other"
+measure = "count"
+size = 500
+readings = [[38378], [38378]]
+
+[[figures]]
+name = "Str literal at 1000/elaborator/units"
+measure = "count"
+size = 1000
+readings = [[73886], [73886]]
+
+[[figures]]
+name = "Str literal at 1000/elaborator/depth"
+measure = "count"
+size = 1000
+readings = [[1], [1]]
+
+[[figures]]
+name = "Str literal at 1000/elaborator/other"
+measure = "count"
+size = 1000
+readings = [[72862], [72862]]
+
+[[figures]]
+name = "Str literal at 1000/certifier/units"
+measure = "count"
+size = 1000
+readings = [[75950], [75950]]
+
+[[figures]]
+name = "Str literal at 1000/certifier/depth"
+measure = "count"
+size = 1000
+readings = [[3], [3]]
+
+[[figures]]
+name = "Str literal at 1000/certifier/other"
+measure = "count"
+size = 1000
+readings = [[72878], [72878]]
+
+[[figures]]
+name = "Str literal at 2000/elaborator/units"
+measure = "count"
+size = 2000
+readings = [[142886], [142886]]
+
+[[figures]]
+name = "Str literal at 2000/elaborator/depth"
+measure = "count"
+size = 2000
+readings = [[1], [1]]
+
+[[figures]]
+name = "Str literal at 2000/elaborator/other"
+measure = "count"
+size = 2000
+readings = [[141862], [141862]]
+
+[[figures]]
+name = "Str literal at 2000/certifier/units"
+measure = "count"
+size = 2000
+readings = [[144950], [144950]]
+
+[[figures]]
+name = "Str literal at 2000/certifier/depth"
+measure = "count"
+size = 2000
+readings = [[3], [3]]
+
+[[figures]]
+name = "Str literal at 2000/certifier/other"
+measure = "count"
+size = 2000
+readings = [[141878], [141878]]
+
+[[figures]]
+name = "Str literal at 4000/elaborator/units"
+measure = "count"
+size = 4000
+readings = [[280886], [280886]]
+
+[[figures]]
+name = "Str literal at 4000/elaborator/depth"
+measure = "count"
+size = 4000
+readings = [[1], [1]]
+
+[[figures]]
+name = "Str literal at 4000/elaborator/other"
+measure = "count"
+size = 4000
+readings = [[279862], [279862]]
+
+[[figures]]
+name = "Str literal at 4000/certifier/units"
+measure = "count"
+size = 4000
+readings = [[282950], [282950]]
+
+[[figures]]
+name = "Str literal at 4000/certifier/depth"
+measure = "count"
+size = 4000
+readings = [[3], [3]]
+
+[[figures]]
+name = "Str literal at 4000/certifier/other"
+measure = "count"
+size = 4000
+readings = [[279878], [279878]]
+
+[[figures]]
+name = "Str literal at 8000/elaborator/units"
+measure = "count"
+size = 8000
+readings = [[556886], [556886]]
+
+[[figures]]
+name = "Str literal at 8000/elaborator/depth"
+measure = "count"
+size = 8000
+readings = [[1], [1]]
+
+[[figures]]
+name = "Str literal at 8000/elaborator/other"
+measure = "count"
+size = 8000
+readings = [[555862], [555862]]
+
+[[figures]]
+name = "Str literal at 8000/certifier/units"
+measure = "count"
+size = 8000
+readings = [[558950], [558950]]
+
+[[figures]]
+name = "Str literal at 8000/certifier/depth"
+measure = "count"
+size = 8000
+readings = [[3], [3]]
+
+[[figures]]
+name = "Str literal at 8000/certifier/other"
+measure = "count"
+size = 8000
+readings = [[555878], [555878]]
+
+[[figures]]
+name = "Str literal at 500, 1 uses/elaborator/units"
+measure = "count"
+size = 500
+readings = [[39386], [39386]]
+
+[[figures]]
+name = "Str literal at 500, 1 uses/elaborator/depth"
+measure = "count"
+size = 500
+readings = [[1], [1]]
+
+[[figures]]
+name = "Str literal at 500, 1 uses/elaborator/other"
+measure = "count"
+size = 500
+readings = [[38362], [38362]]
+
+[[figures]]
+name = "Str literal at 500, 1 uses/certifier/units"
+measure = "count"
+size = 500
+readings = [[41450], [41450]]
+
+[[figures]]
+name = "Str literal at 500, 1 uses/certifier/depth"
+measure = "count"
+size = 500
+readings = [[3], [3]]
+
+[[figures]]
+name = "Str literal at 500, 1 uses/certifier/other"
+measure = "count"
+size = 500
+readings = [[38378], [38378]]
+
+[[figures]]
+name = "Str literal at 500, 3 uses/elaborator/units"
+measure = "count"
+size = 500
+readings = [[39386], [39386]]
+
+[[figures]]
+name = "Str literal at 500, 3 uses/elaborator/depth"
+measure = "count"
+size = 500
+readings = [[1], [1]]
+
+[[figures]]
+name = "Str literal at 500, 3 uses/elaborator/other"
+measure = "count"
+size = 500
+readings = [[38362], [38362]]
+
+[[figures]]
+name = "Str literal at 500, 3 uses/certifier/units"
+measure = "count"
+size = 500
+readings = [[41450], [41450]]
+
+[[figures]]
+name = "Str literal at 500, 3 uses/certifier/depth"
+measure = "count"
+size = 500
+readings = [[3], [3]]
+
+[[figures]]
+name = "Str literal at 500, 3 uses/certifier/other"
+measure = "count"
+size = 500
+readings = [[38378], [38378]]
+
+[[figures]]
+name = "Bytes literal at 500/elaborator/units"
+measure = "count"
+size = 500
+readings = [[3135], [3135]]
+
+[[figures]]
+name = "Bytes literal at 500/elaborator/depth"
+measure = "count"
+size = 500
+readings = [[3], [3]]
+
+[[figures]]
+name = "Bytes literal at 500/elaborator/other"
+measure = "count"
+size = 500
+readings = [[63], [63]]
+
+[[figures]]
+name = "Bytes literal at 500/certifier/units"
+measure = "count"
+size = 500
+readings = [[3131], [3131]]
+
+[[figures]]
+name = "Bytes literal at 500/certifier/depth"
+measure = "count"
+size = 500
+readings = [[3], [3]]
+
+[[figures]]
+name = "Bytes literal at 500/certifier/other"
+measure = "count"
+size = 500
+readings = [[59], [59]]
+
+[[figures]]
+name = "Str literal at 500, cut/elaborator/units"
+measure = "count"
+size = 500
+readings = [[39386], [39386]]
+
+[[figures]]
+name = "Str literal at 500, cut/elaborator/depth"
+measure = "count"
+size = 500
+readings = [[1], [1]]
+
+[[figures]]
+name = "Str literal at 500, cut/elaborator/other"
+measure = "count"
+size = 500
+readings = [[38362], [38362]]
+
+[[figures]]
+name = "Str literal at 500, cut/certifier/units"
+measure = "count"
+size = 500
+readings = [[41450], [41450]]
+
+[[figures]]
+name = "Str literal at 500, cut/certifier/depth"
+measure = "count"
+size = 500
+readings = [[3], [3]]
+
+[[figures]]
+name = "Str literal at 500, cut/certifier/other"
+measure = "count"
+size = 500
+readings = [[38378], [38378]]

@@ -1,0 +1,263 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "Str/split/elaborator/units"
+measure = "count"
+readings = [[16578], [16578]]
+
+[[figures]]
+name = "Str/split/elaborator/depth"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "Str/split/elaborator/other"
+measure = "count"
+readings = [[15554], [15554]]
+
+[[figures]]
+name = "Str/split/certifier/units"
+measure = "count"
+readings = [[18609], [18609]]
+
+[[figures]]
+name = "Str/split/certifier/depth"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "Str/split/certifier/other"
+measure = "count"
+readings = [[15537], [15537]]
+
+[[figures]]
+name = "Str/split_once/elaborator/units"
+measure = "count"
+readings = [[11047], [11047]]
+
+[[figures]]
+name = "Str/split_once/elaborator/depth"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "Str/split_once/elaborator/other"
+measure = "count"
+readings = [[10023], [10023]]
+
+[[figures]]
+name = "Str/split_once/certifier/units"
+measure = "count"
+readings = [[13097], [13097]]
+
+[[figures]]
+name = "Str/split_once/certifier/depth"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "Str/split_once/certifier/other"
+measure = "count"
+readings = [[10025], [10025]]
+
+[[figures]]
+name = "Str/lines/elaborator/units"
+measure = "count"
+readings = [[13010], [13010]]
+
+[[figures]]
+name = "Str/lines/elaborator/depth"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "Str/lines/elaborator/other"
+measure = "count"
+readings = [[11986], [11986]]
+
+[[figures]]
+name = "Str/lines/certifier/units"
+measure = "count"
+readings = [[15042], [15042]]
+
+[[figures]]
+name = "Str/lines/certifier/depth"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "Str/lines/certifier/other"
+measure = "count"
+readings = [[11970], [11970]]
+
+[[figures]]
+name = "Str/replace/elaborator/units"
+measure = "count"
+readings = [[14156], [14156]]
+
+[[figures]]
+name = "Str/replace/elaborator/depth"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "Str/replace/elaborator/other"
+measure = "count"
+readings = [[13132], [13132]]
+
+[[figures]]
+name = "Str/replace/certifier/units"
+measure = "count"
+readings = [[16164], [16164]]
+
+[[figures]]
+name = "Str/replace/certifier/depth"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "Str/replace/certifier/other"
+measure = "count"
+readings = [[13092], [13092]]
+
+[[figures]]
+name = "Str/trim/elaborator/units"
+measure = "count"
+readings = [[27814], [27814]]
+
+[[figures]]
+name = "Str/trim/elaborator/depth"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "Str/trim/elaborator/other"
+measure = "count"
+readings = [[26790], [26790]]
+
+[[figures]]
+name = "Str/trim/certifier/units"
+measure = "count"
+readings = [[29853], [29853]]
+
+[[figures]]
+name = "Str/trim/certifier/depth"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "Str/trim/certifier/other"
+measure = "count"
+readings = [[26781], [26781]]
+
+[[figures]]
+name = "Str/strip_suffix/elaborator/units"
+measure = "count"
+readings = [[6551], [6551]]
+
+[[figures]]
+name = "Str/strip_suffix/elaborator/depth"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "Str/strip_suffix/elaborator/other"
+measure = "count"
+readings = [[5527], [5527]]
+
+[[figures]]
+name = "Str/strip_suffix/certifier/units"
+measure = "count"
+readings = [[8580], [8580]]
+
+[[figures]]
+name = "Str/strip_suffix/certifier/depth"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "Str/strip_suffix/certifier/other"
+measure = "count"
+readings = [[5508], [5508]]
+
+[[figures]]
+name = "Flt/of_str/elaborator/units"
+measure = "count"
+readings = [[23297], [23297]]
+
+[[figures]]
+name = "Flt/of_str/elaborator/depth"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "Flt/of_str/elaborator/other"
+measure = "count"
+readings = [[22273], [22273]]
+
+[[figures]]
+name = "Flt/of_str/certifier/units"
+measure = "count"
+readings = [[25337], [25337]]
+
+[[figures]]
+name = "Flt/of_str/certifier/depth"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "Flt/of_str/certifier/other"
+measure = "count"
+readings = [[22265], [22265]]
+
+[[figures]]
+name = "Str/index_of/elaborator/units"
+measure = "count"
+readings = [[11138], [11138]]
+
+[[figures]]
+name = "Str/index_of/elaborator/depth"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "Str/index_of/elaborator/other"
+measure = "count"
+readings = [[10114], [10114]]
+
+[[figures]]
+name = "Str/index_of/certifier/units"
+measure = "count"
+readings = [[14173], [14173]]
+
+[[figures]]
+name = "Str/index_of/certifier/depth"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "Str/index_of/certifier/other"
+measure = "count"
+readings = [[10077], [10077]]

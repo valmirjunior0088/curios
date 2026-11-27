@@ -1,0 +1,153 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "terms"
+measure = "count"
+readings = [[6646], [6646]]
+
+[[figures]]
+name = "terms past the floor"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "largest//std/Nat/Coprime/quotients (body)/tree"
+measure = "count"
+readings = [[14769], [14769]]
+
+[[figures]]
+name = "largest//std/Nat/Coprime/quotients (body)/graph"
+measure = "count"
+readings = [[221], [221]]
+
+[[figures]]
+name = "largest/the witness in '/std/time/Month' (body)/tree"
+measure = "count"
+readings = [[136318], [136318]]
+
+[[figures]]
+name = "largest/the witness in '/std/time/Month' (body)/graph"
+measure = "count"
+readings = [[2127], [2127]]
+
+[[figures]]
+name = "largest/the witness in '/std/time/Weekday' (body)/tree"
+measure = "count"
+readings = [[29763], [29763]]
+
+[[figures]]
+name = "largest/the witness in '/std/time/Weekday' (body)/graph"
+measure = "count"
+readings = [[822], [822]]
+
+[[figures]]
+name = "largest/the witness in '/std/Flt/Rounding' (body)/tree"
+measure = "count"
+readings = [[12131], [12131]]
+
+[[figures]]
+name = "largest/the witness in '/std/Flt/Rounding' (body)/graph"
+measure = "count"
+readings = [[482], [482]]
+
+[[figures]]
+name = "largest/the witness in '/std/Ordering' (body)/tree"
+measure = "count"
+readings = [[3595], [3595]]
+
+[[figures]]
+name = "largest/the witness in '/std/Ordering' (body)/graph"
+measure = "count"
+readings = [[245], [245]]
+
+[[figures]]
+name = "largest//std/Char/hangul/composed (body)/tree"
+measure = "count"
+readings = [[2945], [2945]]
+
+[[figures]]
+name = "largest//std/Char/hangul/composed (body)/graph"
+measure = "count"
+readings = [[213], [213]]
+
+[[figures]]
+name = "largest//std/Map/internal/Node/branch_stands (body)/tree"
+measure = "count"
+readings = [[4866], [4866]]
+
+[[figures]]
+name = "largest//std/Map/internal/Node/branch_stands (body)/graph"
+measure = "count"
+readings = [[365], [365]]
+
+[[figures]]
+name = "largest/the witness in '/std/Tuple' (body)/tree"
+measure = "count"
+readings = [[2683], [2683]]
+
+[[figures]]
+name = "largest/the witness in '/std/Tuple' (body)/graph"
+measure = "count"
+readings = [[225], [225]]
+
+[[figures]]
+name = "largest past the floor//std/Nat/Coprime/quotients (body)/tree"
+measure = "count"
+readings = [[14769], [14769]]
+
+[[figures]]
+name = "largest past the floor//std/Nat/Coprime/quotients (body)/graph"
+measure = "count"
+readings = [[221], [221]]
+
+[[figures]]
+name = "largest past the floor/the witness in '/std/time/Month' (body)/tree"
+measure = "count"
+readings = [[136318], [136318]]
+
+[[figures]]
+name = "largest past the floor/the witness in '/std/time/Month' (body)/graph"
+measure = "count"
+readings = [[2127], [2127]]
+
+[[figures]]
+name = "largest past the floor/the witness in '/std/time/Weekday' (body)/tree"
+measure = "count"
+readings = [[29763], [29763]]
+
+[[figures]]
+name = "largest past the floor/the witness in '/std/time/Weekday' (body)/graph"
+measure = "count"
+readings = [[822], [822]]
+
+[[figures]]
+name = "largest past the floor/the witness in '/std/Flt/Rounding' (body)/tree"
+measure = "count"
+readings = [[12131], [12131]]
+
+[[figures]]
+name = "largest past the floor/the witness in '/std/Flt/Rounding' (body)/graph"
+measure = "count"
+readings = [[482], [482]]

@@ -1,0 +1,383 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "push, then read the first at 64000/collections"
+measure = "collections"
+size = 64000
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "push, then read the first at 64000/grown"
+measure = "bytes"
+size = 64000
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "push, then drop the first at 64000/collections"
+measure = "collections"
+size = 64000
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "push, then drop the first at 64000/grown"
+measure = "bytes"
+size = 64000
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "push, then peek (control) at 64000/collections"
+measure = "collections"
+size = 64000
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "push, then peek (control) at 64000/grown"
+measure = "bytes"
+size = 64000
+readings = [[0], [0], [0], [0], [0]]
+
+[[figures]]
+name = "push, then read the first at 16000"
+measure = "microseconds"
+size = 16000
+readings = [[1871, 1653, 1802, 1801, 1745], [1882, 1774, 1646, 1698, 1665], [1635, 1637, 1648, 1750, 1633], [1657, 1833, 1714, 1866, 1768], [1700, 1644, 1577, 1763, 1817]]
+
+[[figures]]
+name = "push, then read the first at 16000/calls"
+measure = "count"
+size = 16000
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "push, then read the first at 16000/allocated"
+measure = "bytes"
+size = 16000
+readings = [[19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568]]
+
+[[figures]]
+name = "push, then read the first at 16000/allocations"
+measure = "allocations"
+size = 16000
+readings = [[392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392]]
+
+[[figures]]
+name = "push, then read the first at 16000/looks"
+measure = "count"
+size = 16000
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "push, then read the first at 16000"
+measure = "instructions"
+size = 16000
+readings = [[13093467, 13072962, 13076052, 13074179, 13075657], [13093016, 13074287, 13073255, 13075505, 13073423], [13093457, 13074221, 13075599, 13075559, 13075446], [13080685, 13074754, 13074948, 13075825, 13074755], [13075189, 13072389, 13076709, 13073675, 13076466]]
+
+[[figures]]
+name = "push, then read the first at 32000"
+measure = "microseconds"
+size = 32000
+readings = [[2932, 3187, 3281, 3327, 3519], [2930, 3231, 3079, 3039, 3111], [2895, 3387, 3314, 3165, 3366], [3236, 3305, 3442, 3068, 3048], [3266, 2791, 3342, 3210, 3109]]
+
+[[figures]]
+name = "push, then read the first at 32000/calls"
+measure = "count"
+size = 32000
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "push, then read the first at 32000/allocated"
+measure = "bytes"
+size = 32000
+readings = [[19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568]]
+
+[[figures]]
+name = "push, then read the first at 32000/allocations"
+measure = "allocations"
+size = 32000
+readings = [[392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392]]
+
+[[figures]]
+name = "push, then read the first at 32000/looks"
+measure = "count"
+size = 32000
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "push, then read the first at 32000"
+measure = "instructions"
+size = 32000
+readings = [[25642880, 25646596, 25643792, 25643932, 25643898], [25644778, 25644392, 25644156, 25646162, 25644170], [25644189, 25646424, 25640481, 25643550, 25640386], [25644539, 25645774, 25644536, 25642053, 25644512], [25642409, 25647424, 25641748, 25643604, 25641846]]
+
+[[figures]]
+name = "push, then read the first at 64000"
+measure = "microseconds"
+size = 64000
+readings = [[5649, 6037, 6451, 6075, 6153], [5718, 6188, 5900, 5732, 6210], [5546, 5506, 5931, 6209, 6083], [5901, 5885, 5804, 6170, 6287], [6030, 5837, 5978, 6230, 6038]]
+
+[[figures]]
+name = "push, then read the first at 64000/calls"
+measure = "count"
+size = 64000
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "push, then read the first at 64000/allocated"
+measure = "bytes"
+size = 64000
+readings = [[19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568]]
+
+[[figures]]
+name = "push, then read the first at 64000/allocations"
+measure = "allocations"
+size = 64000
+readings = [[392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392]]
+
+[[figures]]
+name = "push, then read the first at 64000/looks"
+measure = "count"
+size = 64000
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "push, then read the first at 64000"
+measure = "instructions"
+size = 64000
+readings = [[50783581, 50783702, 50783417, 50783211, 50783568], [50785692, 50784131, 50785580, 50785675, 50779933], [50783154, 50780498, 50782985, 50782868, 50781435], [50781778, 50784480, 50781734, 50784742, 50783615], [50783416, 50782024, 50783194, 50786630, 50784744]]
+
+[[figures]]
+name = "push, then drop the first at 16000"
+measure = "microseconds"
+size = 16000
+readings = [[1911, 2073, 2099, 2057, 2178], [1920, 1896, 1830, 1973, 1917], [2345, 2141, 1897, 1871, 2050], [2006, 1894, 2143, 2025, 2101], [1966, 2106, 2098, 1810, 1960]]
+
+[[figures]]
+name = "push, then drop the first at 16000/calls"
+measure = "count"
+size = 16000
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "push, then drop the first at 16000/allocated"
+measure = "bytes"
+size = 16000
+readings = [[19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568]]
+
+[[figures]]
+name = "push, then drop the first at 16000/allocations"
+measure = "allocations"
+size = 16000
+readings = [[392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392]]
+
+[[figures]]
+name = "push, then drop the first at 16000/looks"
+measure = "count"
+size = 16000
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "push, then drop the first at 16000"
+measure = "instructions"
+size = 16000
+readings = [[14240828, 14238890, 14238986, 14240696, 14238076], [14242635, 14235387, 14241413, 14237091, 14242313], [14239842, 14237108, 14238562, 14238879, 14238845], [14241879, 14239567, 14240459, 14240925, 14235186], [14243396, 14240602, 14242013, 14242116, 14238685]]
+
+[[figures]]
+name = "push, then drop the first at 32000"
+measure = "microseconds"
+size = 32000
+readings = [[3704, 3477, 3934, 3383, 3615], [3740, 3417, 3282, 3414, 3657], [3445, 3518, 3823, 4019, 3862], [3400, 3743, 3503, 3627, 3754], [3633, 3870, 3460, 3610, 3324]]
+
+[[figures]]
+name = "push, then drop the first at 32000/calls"
+measure = "count"
+size = 32000
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "push, then drop the first at 32000/allocated"
+measure = "bytes"
+size = 32000
+readings = [[19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568]]
+
+[[figures]]
+name = "push, then drop the first at 32000/allocations"
+measure = "allocations"
+size = 32000
+readings = [[392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392]]
+
+[[figures]]
+name = "push, then drop the first at 32000/looks"
+measure = "count"
+size = 32000
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "push, then drop the first at 32000"
+measure = "instructions"
+size = 32000
+readings = [[27970329, 27972330, 27970228, 27972331, 27970498], [27969756, 27976624, 27969580, 27976482, 27969580], [27971043, 27973030, 27971179, 27972988, 27971099], [27972901, 27969626, 27972537, 27969490, 27972626], [27972905, 27973129, 27972848, 27972996, 27972764]]
+
+[[figures]]
+name = "push, then drop the first at 64000"
+measure = "microseconds"
+size = 64000
+readings = [[7198, 7326, 7225, 6975, 7168], [6843, 7062, 7094, 6796, 6769], [6721, 7131, 6864, 6887, 7386], [7121, 7114, 7314, 7175, 6930], [7071, 6838, 6976, 6754, 7435]]
+
+[[figures]]
+name = "push, then drop the first at 64000/calls"
+measure = "count"
+size = 64000
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "push, then drop the first at 64000/allocated"
+measure = "bytes"
+size = 64000
+readings = [[19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568]]
+
+[[figures]]
+name = "push, then drop the first at 64000/allocations"
+measure = "allocations"
+size = 64000
+readings = [[392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392]]
+
+[[figures]]
+name = "push, then drop the first at 64000/looks"
+measure = "count"
+size = 64000
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "push, then drop the first at 64000"
+measure = "instructions"
+size = 64000
+readings = [[55441001, 55441529, 55442017, 55441412, 55441018], [55443625, 55440489, 55444627, 55440891, 55443345], [55443734, 55442731, 55444523, 55442746, 55443329], [55439810, 55444719, 55440860, 55444691, 55439776], [55444173, 55442813, 55445201, 55442685, 55444025]]
+
+[[figures]]
+name = "push, then peek (control) at 16000"
+measure = "microseconds"
+size = 16000
+readings = [[1423, 1428, 1570, 1499, 1608], [1430, 1491, 1442, 1341, 1349], [1372, 1466, 1483, 1354, 1458], [1391, 1399, 1475, 1563, 1515], [1480, 1539, 1477, 1440, 1536]]
+
+[[figures]]
+name = "push, then peek (control) at 16000/calls"
+measure = "count"
+size = 16000
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "push, then peek (control) at 16000/allocated"
+measure = "bytes"
+size = 16000
+readings = [[19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568]]
+
+[[figures]]
+name = "push, then peek (control) at 16000/allocations"
+measure = "allocations"
+size = 16000
+readings = [[392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392]]
+
+[[figures]]
+name = "push, then peek (control) at 16000/looks"
+measure = "count"
+size = 16000
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "push, then peek (control) at 16000"
+measure = "instructions"
+size = 16000
+readings = [[8199674, 8197429, 8199667, 8197057, 8199611], [8196348, 8199935, 8196399, 8200348, 8196561], [8198394, 8201583, 8198224, 8201681, 8198091], [8196433, 8199612, 8196279, 8199642, 8196252], [8201098, 8196942, 8200968, 8196898, 8201085]]
+
+[[figures]]
+name = "push, then peek (control) at 32000"
+measure = "microseconds"
+size = 32000
+readings = [[2518, 2457, 2705, 2509, 2789], [2715, 2558, 2243, 2474, 2754], [2617, 2546, 2389, 2762, 2631], [2496, 2686, 2428, 2610, 2504], [2367, 2416, 2396, 2626, 2504]]
+
+[[figures]]
+name = "push, then peek (control) at 32000/calls"
+measure = "count"
+size = 32000
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "push, then peek (control) at 32000/allocated"
+measure = "bytes"
+size = 32000
+readings = [[19567, 19567, 19567, 19567, 19567], [19567, 19567, 19567, 19567, 19567], [19567, 19567, 19567, 19567, 19567], [19567, 19567, 19567, 19567, 19567], [19567, 19567, 19567, 19567, 19567]]
+
+[[figures]]
+name = "push, then peek (control) at 32000/allocations"
+measure = "allocations"
+size = 32000
+readings = [[392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392]]
+
+[[figures]]
+name = "push, then peek (control) at 32000/looks"
+measure = "count"
+size = 32000
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "push, then peek (control) at 32000"
+measure = "instructions"
+size = 32000
+readings = [[15892718, 15898517, 15892645, 15897443, 15893999], [15895151, 15896616, 15895135, 15894875, 15896403], [15891590, 15897742, 15891448, 15896385, 15892636], [15893776, 15893958, 15893737, 15892850, 15895113], [15892476, 15917987, 15892348, 15916446, 15893546]]
+
+[[figures]]
+name = "push, then peek (control) at 64000"
+measure = "microseconds"
+size = 64000
+readings = [[4825, 4881, 5023, 4968, 5024], [4629, 4777, 4710, 4763, 4623], [4509, 4544, 4611, 5152, 5020], [4827, 5018, 4872, 4493, 4885], [4952, 4779, 4757, 4986, 4778]]
+
+[[figures]]
+name = "push, then peek (control) at 64000/calls"
+measure = "count"
+size = 64000
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "push, then peek (control) at 64000/allocated"
+measure = "bytes"
+size = 64000
+readings = [[19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568], [19568, 19568, 19568, 19568, 19568]]
+
+[[figures]]
+name = "push, then peek (control) at 64000/allocations"
+measure = "allocations"
+size = 64000
+readings = [[392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392], [392, 392, 392, 392, 392]]
+
+[[figures]]
+name = "push, then peek (control) at 64000/looks"
+measure = "count"
+size = 64000
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "push, then peek (control) at 64000"
+measure = "instructions"
+size = 64000
+readings = [[31285954, 31307803, 31285894, 31307824, 31285924], [31288285, 31307639, 31288213, 31307550, 31288083], [31286756, 31307437, 31286795, 31307430, 31286974], [31307998, 31290906, 31308069, 31291150, 31307723], [31287877, 31287070, 31287795, 31286981, 31287761]]

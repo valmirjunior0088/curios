@@ -1,0 +1,608 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "/std/Channel/internal/Queue/Stack/slots uniform"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "/std/Channel/internal/Queue/Stack/slots typed"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "/std/Channel/internal/Queue/Stack/typed slots uniform"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/Channel/internal/Queue/Stack/typed slots typed"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "/std/Channel/internal/Queue/Stack/paid"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/Flt/exact/Mode/slots uniform"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "/std/Flt/exact/Mode/slots typed"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "/std/Flt/exact/Mode/typed slots uniform"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/Flt/exact/Mode/typed slots typed"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "/std/Flt/exact/Mode/paid"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/Io/Reader/Stop/slots uniform"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "/std/Io/Reader/Stop/slots typed"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "/std/Io/Reader/Stop/typed slots uniform"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/Io/Reader/Stop/typed slots typed"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "/std/Io/Reader/Stop/paid"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/internal/Status/Settled/slots uniform"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "/std/internal/Status/Settled/slots typed"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "/std/internal/Status/Settled/typed slots uniform"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/internal/Status/Settled/typed slots typed"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "/std/internal/Status/Settled/paid"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/internal/Status/Status/slots uniform"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "/std/internal/Status/Status/slots typed"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "/std/internal/Status/Status/typed slots uniform"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/internal/Status/Status/typed slots typed"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "/std/internal/Status/Status/paid"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/Map/internal/Node/Inserted/slots uniform"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "/std/Map/internal/Node/Inserted/slots typed"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "/std/Map/internal/Node/Inserted/typed slots uniform"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/Map/internal/Node/Inserted/typed slots typed"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "/std/Map/internal/Node/Inserted/paid"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/Map/internal/Node/Removed/slots uniform"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "/std/Map/internal/Node/Removed/slots typed"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "/std/Map/internal/Node/Removed/typed slots uniform"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/Map/internal/Node/Removed/typed slots typed"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "/std/Map/internal/Node/Removed/paid"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/Cli/Failure/slots uniform"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "/std/Cli/Failure/slots typed"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "/std/Cli/Failure/typed slots uniform"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "/std/Cli/Failure/typed slots typed"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "/std/Cli/Failure/paid"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "/std/Fmt/Fmt/slots uniform"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "/std/Fmt/Fmt/slots typed"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "/std/Fmt/Fmt/typed slots uniform"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/Fmt/Fmt/typed slots typed"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "/std/Fmt/Fmt/paid"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/Tui/View/View/slots uniform"
+measure = "count"
+readings = [[10], [10]]
+
+[[figures]]
+name = "/std/Tui/View/View/slots typed"
+measure = "count"
+readings = [[10], [10]]
+
+[[figures]]
+name = "/std/Tui/View/View/typed slots uniform"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "/std/Tui/View/View/typed slots typed"
+measure = "count"
+readings = [[7], [7]]
+
+[[figures]]
+name = "/std/Tui/View/View/paid"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/Cli/Parsed/Values/slots uniform"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "/std/Cli/Parsed/Values/slots typed"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "/std/Cli/Parsed/Values/typed slots uniform"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "/std/Cli/Parsed/Values/typed slots typed"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "/std/Cli/Parsed/Values/paid"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/Cli/Reading/slots uniform"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "/std/Cli/Reading/slots typed"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "/std/Cli/Reading/typed slots uniform"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "/std/Cli/Reading/typed slots typed"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "/std/Cli/Reading/paid"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "/std/Toml/Error/Error/slots uniform"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "/std/Toml/Error/Error/slots typed"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "/std/Toml/Error/Error/typed slots uniform"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "/std/Toml/Error/Error/typed slots typed"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "/std/Toml/Error/Error/paid"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/Tui/Event/Event/slots uniform"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "/std/Tui/Event/Event/slots typed"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "/std/Tui/Event/Event/typed slots uniform"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/Tui/Event/Event/typed slots typed"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/Tui/Event/Event/paid"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/Tui/Wake/slots uniform"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "/std/Tui/Wake/slots typed"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "/std/Tui/Wake/typed slots uniform"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/Tui/Wake/typed slots typed"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "/std/Tui/Wake/paid"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "/std/http/Server/Unread/slots uniform"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "/std/http/Server/Unread/slots typed"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "/std/http/Server/Unread/typed slots uniform"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/http/Server/Unread/typed slots typed"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "/std/http/Server/Unread/paid"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/http/tests/cuts/Fed/slots uniform"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "/std/http/tests/cuts/Fed/slots typed"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "/std/http/tests/cuts/Fed/typed slots uniform"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/http/tests/cuts/Fed/typed slots typed"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "/std/http/tests/cuts/Fed/paid"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "/std/Cli/Parsed/Chosen/slots uniform"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "/std/Cli/Parsed/Chosen/slots typed"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "/std/Cli/Parsed/Chosen/typed slots uniform"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "/std/Cli/Parsed/Chosen/typed slots typed"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "/std/Cli/Parsed/Chosen/paid"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "/std/Cli/Parsed/Parsed/slots uniform"
+measure = "count"
+readings = [[8], [8]]
+
+[[figures]]
+name = "/std/Cli/Parsed/Parsed/slots typed"
+measure = "count"
+readings = [[8], [8]]
+
+[[figures]]
+name = "/std/Cli/Parsed/Parsed/typed slots uniform"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "/std/Cli/Parsed/Parsed/typed slots typed"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "/std/Cli/Parsed/Parsed/paid"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/Toml/Toml/slots uniform"
+measure = "count"
+readings = [[9], [9]]
+
+[[figures]]
+name = "/std/Toml/Toml/slots typed"
+measure = "count"
+readings = [[10], [10]]
+
+[[figures]]
+name = "/std/Toml/Toml/typed slots uniform"
+measure = "count"
+readings = [[7], [7]]
+
+[[figures]]
+name = "/std/Toml/Toml/typed slots typed"
+measure = "count"
+readings = [[8], [8]]
+
+[[figures]]
+name = "/std/Toml/Toml/paid"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "/std/Toml/build/Act/slots uniform"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "/std/Toml/build/Act/slots typed"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "/std/Toml/build/Act/typed slots uniform"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/Toml/build/Act/typed slots typed"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "/std/Toml/build/Act/paid"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "/std/Toml/decode/Stmt/slots uniform"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "/std/Toml/decode/Stmt/slots typed"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "/std/Toml/decode/Stmt/typed slots uniform"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "/std/Toml/decode/Stmt/typed slots typed"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "/std/Toml/decode/Stmt/paid"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "families declared"
+measure = "count"
+readings = [[103], [103]]
+
+[[figures]]
+name = "families holding a family-typed field"
+measure = "count"
+readings = [[22], [22]]
+
+[[figures]]
+name = "free/families"
+measure = "count"
+readings = [[16], [16]]
+
+[[figures]]
+name = "free/slots typed"
+measure = "count"
+readings = [[17], [17]]
+
+[[figures]]
+name = "paid/families"
+measure = "count"
+readings = [[6], [6]]
+
+[[figures]]
+name = "paid/slots typed"
+measure = "count"
+readings = [[8], [8]]
+
+[[figures]]
+name = "paid/width"
+measure = "count"
+readings = [[6], [6]]

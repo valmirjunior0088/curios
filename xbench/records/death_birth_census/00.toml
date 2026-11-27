@@ -1,0 +1,973 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "dependent_vectors/tuple sites"
+measure = "count"
+readings = [[17], [17]]
+
+[[figures]]
+name = "dependent_vectors/constructed-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "dependent_vectors/projected-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "dependent_vectors/row sites"
+measure = "count"
+readings = [[42], [42]]
+
+[[figures]]
+name = "dependent_vectors/same-row pairs"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "dependent_vectors/map spine pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "dependent_vectors/extends"
+measure = "count"
+readings = [[16], [16]]
+
+[[figures]]
+name = "dependent_vectors/linear extends"
+measure = "count"
+readings = [[11], [11]]
+
+[[figures]]
+name = "hello_world/tuple sites"
+measure = "count"
+readings = [[17], [17]]
+
+[[figures]]
+name = "hello_world/constructed-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "hello_world/projected-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "hello_world/row sites"
+measure = "count"
+readings = [[42], [42]]
+
+[[figures]]
+name = "hello_world/same-row pairs"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "hello_world/map spine pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "hello_world/extends"
+measure = "count"
+readings = [[16], [16]]
+
+[[figures]]
+name = "hello_world/linear extends"
+measure = "count"
+readings = [[11], [11]]
+
+[[figures]]
+name = "monad_suspend/tuple sites"
+measure = "count"
+readings = [[30], [30]]
+
+[[figures]]
+name = "monad_suspend/constructed-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "monad_suspend/projected-width pairs"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "monad_suspend/row sites"
+measure = "count"
+readings = [[53], [53]]
+
+[[figures]]
+name = "monad_suspend/same-row pairs"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "monad_suspend/map spine pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "monad_suspend/extends"
+measure = "count"
+readings = [[57], [57]]
+
+[[figures]]
+name = "monad_suspend/linear extends"
+measure = "count"
+readings = [[29], [29]]
+
+[[figures]]
+name = "monad_io/tuple sites"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "monad_io/constructed-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "monad_io/projected-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "monad_io/row sites"
+measure = "count"
+readings = [[42], [42]]
+
+[[figures]]
+name = "monad_io/same-row pairs"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "monad_io/map spine pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "monad_io/extends"
+measure = "count"
+readings = [[23], [23]]
+
+[[figures]]
+name = "monad_io/linear extends"
+measure = "count"
+readings = [[16], [16]]
+
+[[figures]]
+name = "monad_result/tuple sites"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "monad_result/constructed-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "monad_result/projected-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "monad_result/row sites"
+measure = "count"
+readings = [[42], [42]]
+
+[[figures]]
+name = "monad_result/same-row pairs"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "monad_result/map spine pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "monad_result/extends"
+measure = "count"
+readings = [[23], [23]]
+
+[[figures]]
+name = "monad_result/linear extends"
+measure = "count"
+readings = [[16], [16]]
+
+[[figures]]
+name = "parse_bindless/tuple sites"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "parse_bindless/constructed-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "parse_bindless/projected-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "parse_bindless/row sites"
+measure = "count"
+readings = [[42], [42]]
+
+[[figures]]
+name = "parse_bindless/same-row pairs"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "parse_bindless/map spine pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "parse_bindless/extends"
+measure = "count"
+readings = [[27], [27]]
+
+[[figures]]
+name = "parse_bindless/linear extends"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "parse_digits/tuple sites"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "parse_digits/constructed-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "parse_digits/projected-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "parse_digits/row sites"
+measure = "count"
+readings = [[50], [50]]
+
+[[figures]]
+name = "parse_digits/same-row pairs"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "parse_digits/map spine pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "parse_digits/extends"
+measure = "count"
+readings = [[27], [27]]
+
+[[figures]]
+name = "parse_digits/linear extends"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "parse_manual/tuple sites"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "parse_manual/constructed-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "parse_manual/projected-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "parse_manual/row sites"
+measure = "count"
+readings = [[42], [42]]
+
+[[figures]]
+name = "parse_manual/same-row pairs"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "parse_manual/map spine pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "parse_manual/extends"
+measure = "count"
+readings = [[27], [27]]
+
+[[figures]]
+name = "parse_manual/linear extends"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "parse_multibyte/tuple sites"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "parse_multibyte/constructed-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "parse_multibyte/projected-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "parse_multibyte/row sites"
+measure = "count"
+readings = [[42], [42]]
+
+[[figures]]
+name = "parse_multibyte/same-row pairs"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "parse_multibyte/map spine pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "parse_multibyte/extends"
+measure = "count"
+readings = [[28], [28]]
+
+[[figures]]
+name = "parse_multibyte/linear extends"
+measure = "count"
+readings = [[19], [19]]
+
+[[figures]]
+name = "rng_manual/tuple sites"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "rng_manual/constructed-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "rng_manual/projected-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "rng_manual/row sites"
+measure = "count"
+readings = [[42], [42]]
+
+[[figures]]
+name = "rng_manual/same-row pairs"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "rng_manual/map spine pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "rng_manual/extends"
+measure = "count"
+readings = [[23], [23]]
+
+[[figures]]
+name = "rng_manual/linear extends"
+measure = "count"
+readings = [[16], [16]]
+
+[[figures]]
+name = "rng_state/tuple sites"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "rng_state/constructed-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "rng_state/projected-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "rng_state/row sites"
+measure = "count"
+readings = [[42], [42]]
+
+[[figures]]
+name = "rng_state/same-row pairs"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "rng_state/map spine pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "rng_state/extends"
+measure = "count"
+readings = [[23], [23]]
+
+[[figures]]
+name = "rng_state/linear extends"
+measure = "count"
+readings = [[16], [16]]
+
+[[figures]]
+name = "state_manual/tuple sites"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "state_manual/constructed-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "state_manual/projected-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "state_manual/row sites"
+measure = "count"
+readings = [[42], [42]]
+
+[[figures]]
+name = "state_manual/same-row pairs"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "state_manual/map spine pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "state_manual/extends"
+measure = "count"
+readings = [[23], [23]]
+
+[[figures]]
+name = "state_manual/linear extends"
+measure = "count"
+readings = [[16], [16]]
+
+[[figures]]
+name = "state_monad/tuple sites"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "state_monad/constructed-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "state_monad/projected-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "state_monad/row sites"
+measure = "count"
+readings = [[42], [42]]
+
+[[figures]]
+name = "state_monad/same-row pairs"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "state_monad/map spine pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "state_monad/extends"
+measure = "count"
+readings = [[23], [23]]
+
+[[figures]]
+name = "state_monad/linear extends"
+measure = "count"
+readings = [[16], [16]]
+
+[[figures]]
+name = "trees/tuple sites"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "trees/constructed-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "trees/projected-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "trees/row sites"
+measure = "count"
+readings = [[43], [43]]
+
+[[figures]]
+name = "trees/same-row pairs"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "trees/map spine pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "trees/extends"
+measure = "count"
+readings = [[23], [23]]
+
+[[figures]]
+name = "trees/linear extends"
+measure = "count"
+readings = [[16], [16]]
+
+[[figures]]
+name = "chain/tuple sites"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "chain/constructed-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "chain/projected-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "chain/row sites"
+measure = "count"
+readings = [[48], [48]]
+
+[[figures]]
+name = "chain/same-row pairs"
+measure = "count"
+readings = [[11], [11]]
+
+[[figures]]
+name = "chain/map spine pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "chain/extends"
+measure = "count"
+readings = [[23], [23]]
+
+[[figures]]
+name = "chain/linear extends"
+measure = "count"
+readings = [[16], [16]]
+
+[[figures]]
+name = "churn/tuple sites"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "churn/constructed-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "churn/projected-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "churn/row sites"
+measure = "count"
+readings = [[42], [42]]
+
+[[figures]]
+name = "churn/same-row pairs"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "churn/map spine pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "churn/extends"
+measure = "count"
+readings = [[23], [23]]
+
+[[figures]]
+name = "churn/linear extends"
+measure = "count"
+readings = [[16], [16]]
+
+[[figures]]
+name = "spines/tuple sites"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "spines/constructed-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "spines/projected-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "spines/row sites"
+measure = "count"
+readings = [[70], [70]]
+
+[[figures]]
+name = "spines/same-row pairs"
+measure = "count"
+readings = [[8], [8]]
+
+[[figures]]
+name = "spines/map spine pairs"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "spines/extends"
+measure = "count"
+readings = [[31], [31]]
+
+[[figures]]
+name = "spines/linear extends"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "toml_decode/tuple sites"
+measure = "count"
+readings = [[543], [543]]
+
+[[figures]]
+name = "toml_decode/constructed-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "toml_decode/projected-width pairs"
+measure = "count"
+readings = [[398], [398]]
+
+[[figures]]
+name = "toml_decode/row sites"
+measure = "count"
+readings = [[1282], [1282]]
+
+[[figures]]
+name = "toml_decode/same-row pairs"
+measure = "count"
+readings = [[772], [772]]
+
+[[figures]]
+name = "toml_decode/map spine pairs"
+measure = "count"
+readings = [[300], [300]]
+
+[[figures]]
+name = "toml_decode/extends"
+measure = "count"
+readings = [[257], [257]]
+
+[[figures]]
+name = "toml_decode/linear extends"
+measure = "count"
+readings = [[128], [128]]
+
+[[figures]]
+name = "corpus/tuple sites"
+measure = "count"
+readings = [[859], [859]]
+
+[[figures]]
+name = "corpus/constructed-width pairs"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "corpus/projected-width pairs"
+measure = "count"
+readings = [[402], [402]]
+
+[[figures]]
+name = "corpus/row sites"
+measure = "count"
+readings = [[2050], [2050]]
+
+[[figures]]
+name = "corpus/same-row pairs"
+measure = "count"
+readings = [[859], [859]]
+
+[[figures]]
+name = "corpus/map spine pairs"
+measure = "count"
+readings = [[303], [303]]
+
+[[figures]]
+name = "corpus/extends"
+measure = "count"
+readings = [[693], [693]]
+
+[[figures]]
+name = "corpus/linear extends"
+measure = "count"
+readings = [[414], [414]]
+
+[[figures]]
+name = "pair owners//entry/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Io/pass/1/2/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Map/internal/Node/insert"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Parse/chain/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Parse/label/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Parse/or/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Parse/str/char/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Parse/str/expect/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/build/apply_assign"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/build/walk"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/build/walk_final"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/decode/header"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/decode/key_path"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/numbers/exp_part"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/numbers/frac_part"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/numbers/int_magnitude"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/numbers/leading_zero"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/scan/comment"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/scan/newline"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/strings/crlf"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/strings/literal_body"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/strings/ml_basic_body"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/strings/ml_basic_body/2/1/4/1/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/strings/skip_opening_newline"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/strings/trim_run"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/values/array_items"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/values/array_value"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/values/digit_led_value"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/values/inline_table_value"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/values/signed_number_value"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/values/special_value"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/values/str_basic_value"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Toml/values/str_literal_value"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/Try/bind/1"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners//std/time/iso8601/time_after"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners/io/bind"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners/io/carry"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "pair owners/io/resume"
+measure = "count"
+readings = [[1], [1]]

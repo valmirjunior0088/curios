@@ -1,0 +1,183 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "lcg/table slots"
+measure = "count"
+readings = [[48], [48]]
+
+[[figures]]
+name = "lcg/dispatch sites"
+measure = "count"
+readings = [[21], [21]]
+
+[[figures]]
+name = "lcg/environment constructions"
+measure = "count"
+readings = [[44], [44]]
+
+[[figures]]
+name = "lcg/interned as consts"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "trees/table slots"
+measure = "count"
+readings = [[56], [56]]
+
+[[figures]]
+name = "trees/dispatch sites"
+measure = "count"
+readings = [[25], [25]]
+
+[[figures]]
+name = "trees/environment constructions"
+measure = "count"
+readings = [[52], [52]]
+
+[[figures]]
+name = "trees/interned as consts"
+measure = "count"
+readings = [[22], [22]]
+
+[[figures]]
+name = "higher-order/table slots"
+measure = "count"
+readings = [[50], [50]]
+
+[[figures]]
+name = "higher-order/dispatch sites"
+measure = "count"
+readings = [[22], [22]]
+
+[[figures]]
+name = "higher-order/environment constructions"
+measure = "count"
+readings = [[46], [46]]
+
+[[figures]]
+name = "higher-order/interned as consts"
+measure = "count"
+readings = [[20], [20]]
+
+[[figures]]
+name = "uncurry/table slots"
+measure = "count"
+readings = [[48], [48]]
+
+[[figures]]
+name = "uncurry/dispatch sites"
+measure = "count"
+readings = [[21], [21]]
+
+[[figures]]
+name = "uncurry/environment constructions"
+measure = "count"
+readings = [[44], [44]]
+
+[[figures]]
+name = "uncurry/interned as consts"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "string-walk/table slots"
+measure = "count"
+readings = [[48], [48]]
+
+[[figures]]
+name = "string-walk/dispatch sites"
+measure = "count"
+readings = [[21], [21]]
+
+[[figures]]
+name = "string-walk/environment constructions"
+measure = "count"
+readings = [[44], [44]]
+
+[[figures]]
+name = "string-walk/interned as consts"
+measure = "count"
+readings = [[18], [18]]
+
+[[figures]]
+name = "monad_io/table slots"
+measure = "count"
+readings = [[64], [64]]
+
+[[figures]]
+name = "monad_io/dispatch sites"
+measure = "count"
+readings = [[26], [26]]
+
+[[figures]]
+name = "monad_io/environment constructions"
+measure = "count"
+readings = [[56], [56]]
+
+[[figures]]
+name = "monad_io/interned as consts"
+measure = "count"
+readings = [[23], [23]]
+
+[[figures]]
+name = "parse_digits/table slots"
+measure = "count"
+readings = [[62], [62]]
+
+[[figures]]
+name = "parse_digits/dispatch sites"
+measure = "count"
+readings = [[24], [24]]
+
+[[figures]]
+name = "parse_digits/environment constructions"
+measure = "count"
+readings = [[54], [54]]
+
+[[figures]]
+name = "parse_digits/interned as consts"
+measure = "count"
+readings = [[23], [23]]
+
+[[figures]]
+name = "rng_state/table slots"
+measure = "count"
+readings = [[62], [62]]
+
+[[figures]]
+name = "rng_state/dispatch sites"
+measure = "count"
+readings = [[24], [24]]
+
+[[figures]]
+name = "rng_state/environment constructions"
+measure = "count"
+readings = [[54], [54]]
+
+[[figures]]
+name = "rng_state/interned as consts"
+measure = "count"
+readings = [[23], [23]]

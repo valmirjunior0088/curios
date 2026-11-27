@@ -1,0 +1,119 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "Bytes/floor elaborator at 800"
+measure = "count"
+size = 800
+readings = [[131072], [131072]]
+
+[[figures]]
+name = "Bytes/floor certifier at 800"
+measure = "count"
+size = 800
+readings = [[131072], [131072]]
+
+[[figures]]
+name = "Bytes/floor elaborator at 1600"
+measure = "count"
+size = 1600
+readings = [[262144], [262144]]
+
+[[figures]]
+name = "Bytes/floor certifier at 1600"
+measure = "count"
+size = 1600
+readings = [[262144], [262144]]
+
+[[figures]]
+name = "Bytes/floor elaborator at 3200"
+measure = "count"
+size = 3200
+readings = [[524288], [524288]]
+
+[[figures]]
+name = "Bytes/floor certifier at 3200"
+measure = "count"
+size = 3200
+readings = [[524288], [524288]]
+
+[[figures]]
+name = "Bytes/floor elaborator at 6400"
+measure = "count"
+size = 6400
+readings = [[1048576], [1048576]]
+
+[[figures]]
+name = "Bytes/floor certifier at 6400"
+measure = "count"
+size = 6400
+readings = [[1048576], [1048576]]
+
+[[figures]]
+name = "List/floor elaborator at 250"
+measure = "count"
+size = 250
+readings = [[32768], [32768]]
+
+[[figures]]
+name = "List/floor certifier at 250"
+measure = "count"
+size = 250
+readings = [[32768], [32768]]
+
+[[figures]]
+name = "List/floor elaborator at 500"
+measure = "count"
+size = 500
+readings = [[65536], [65536]]
+
+[[figures]]
+name = "List/floor certifier at 500"
+measure = "count"
+size = 500
+readings = [[65536], [65536]]
+
+[[figures]]
+name = "List/floor elaborator at 1000"
+measure = "count"
+size = 1000
+readings = [[131072], [131072]]
+
+[[figures]]
+name = "List/floor certifier at 1000"
+measure = "count"
+size = 1000
+readings = [[131072], [131072]]
+
+[[figures]]
+name = "List/floor elaborator at 2000"
+measure = "count"
+size = 2000
+readings = [[262144], [262144]]
+
+[[figures]]
+name = "List/floor certifier at 2000"
+measure = "count"
+size = 2000
+readings = [[262144], [262144]]

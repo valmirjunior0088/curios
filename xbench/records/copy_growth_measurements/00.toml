@@ -1,0 +1,58 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "lcg/emitted bytes"
+measure = "count"
+readings = [[38755], [38755]]
+
+[[figures]]
+name = "trees/emitted bytes"
+measure = "count"
+readings = [[43415], [43415]]
+
+[[figures]]
+name = "higher-order/emitted bytes"
+measure = "count"
+readings = [[39338], [39338]]
+
+[[figures]]
+name = "direct/escaping/emitted bytes"
+measure = "count"
+readings = [[39016], [39016]]
+
+[[figures]]
+name = "function-only/emitted bytes"
+measure = "count"
+readings = [[38530], [38530]]
+
+[[figures]]
+name = "mutual-recursion/emitted bytes"
+measure = "count"
+readings = [[38771], [38771]]
+
+[[figures]]
+name = "split-return/emitted bytes"
+measure = "count"
+readings = [[40311], [40311]]

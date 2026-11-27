@@ -1,0 +1,83 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "parse_digits/closure sites"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "parse_digits/env sites"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "parse_digits/slice calls"
+measure = "count"
+readings = [[13], [13]]
+
+[[figures]]
+name = "parse_digits/wat bytes"
+measure = "count"
+readings = [[1046644], [1046644]]
+
+[[figures]]
+name = "parse_bindless/closure sites"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "parse_bindless/env sites"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "parse_bindless/slice calls"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "parse_bindless/wat bytes"
+measure = "count"
+readings = [[1135898], [1135898]]
+
+[[figures]]
+name = "parse_manual/closure sites"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "parse_manual/env sites"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "parse_manual/slice calls"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "parse_manual/wat bytes"
+measure = "count"
+readings = [[1065081], [1065081]]

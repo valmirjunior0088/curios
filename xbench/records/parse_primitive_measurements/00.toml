@@ -1,0 +1,413 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "literal/text/elaborator/units"
+measure = "count"
+readings = [[7928], [7928]]
+
+[[figures]]
+name = "literal/text/elaborator/depth"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "literal/text/elaborator/other"
+measure = "count"
+readings = [[4856], [4856]]
+
+[[figures]]
+name = "literal/text/certifier/units"
+measure = "count"
+readings = [[7763], [7763]]
+
+[[figures]]
+name = "literal/text/certifier/depth"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "literal/text/certifier/other"
+measure = "count"
+readings = [[3667], [3667]]
+
+[[figures]]
+name = "literal/bytes/elaborator/units"
+measure = "count"
+readings = [[17680], [17680]]
+
+[[figures]]
+name = "literal/bytes/elaborator/depth"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "literal/bytes/elaborator/other"
+measure = "count"
+readings = [[16656], [16656]]
+
+[[figures]]
+name = "literal/bytes/certifier/units"
+measure = "count"
+readings = [[19718], [19718]]
+
+[[figures]]
+name = "literal/bytes/certifier/depth"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "literal/bytes/certifier/other"
+measure = "count"
+readings = [[16646], [16646]]
+
+[[figures]]
+name = "take_while/text/elaborator/units"
+measure = "count"
+readings = [[14256], [14256]]
+
+[[figures]]
+name = "take_while/text/elaborator/depth"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "take_while/text/elaborator/other"
+measure = "count"
+readings = [[13232], [13232]]
+
+[[figures]]
+name = "take_while/text/certifier/units"
+measure = "count"
+readings = [[16294], [16294]]
+
+[[figures]]
+name = "take_while/text/certifier/depth"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "take_while/text/certifier/other"
+measure = "count"
+readings = [[13222], [13222]]
+
+[[figures]]
+name = "take_while/bytes/elaborator/units"
+measure = "count"
+readings = [[10732], [10732]]
+
+[[figures]]
+name = "take_while/bytes/elaborator/depth"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "take_while/bytes/elaborator/other"
+measure = "count"
+readings = [[9708], [9708]]
+
+[[figures]]
+name = "take_while/bytes/certifier/units"
+measure = "count"
+readings = [[12770], [12770]]
+
+[[figures]]
+name = "take_while/bytes/certifier/depth"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "take_while/bytes/certifier/other"
+measure = "count"
+readings = [[9698], [9698]]
+
+[[figures]]
+name = "char, byte/text/elaborator/units"
+measure = "count"
+readings = [[53050], [53050]]
+
+[[figures]]
+name = "char, byte/text/elaborator/depth"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "char, byte/text/elaborator/other"
+measure = "count"
+readings = [[52026], [52026]]
+
+[[figures]]
+name = "char, byte/text/certifier/units"
+measure = "count"
+readings = [[55088], [55088]]
+
+[[figures]]
+name = "char, byte/text/certifier/depth"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "char, byte/text/certifier/other"
+measure = "count"
+readings = [[52016], [52016]]
+
+[[figures]]
+name = "char, byte/bytes/elaborator/units"
+measure = "count"
+readings = [[28941], [28941]]
+
+[[figures]]
+name = "char, byte/bytes/elaborator/depth"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "char, byte/bytes/elaborator/other"
+measure = "count"
+readings = [[27917], [27917]]
+
+[[figures]]
+name = "char, byte/bytes/certifier/units"
+measure = "count"
+readings = [[30979], [30979]]
+
+[[figures]]
+name = "char, byte/bytes/certifier/depth"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "char, byte/bytes/certifier/other"
+measure = "count"
+readings = [[27907], [27907]]
+
+[[figures]]
+name = "char_if, byte_if/text/elaborator/units"
+measure = "count"
+readings = [[59186], [59186]]
+
+[[figures]]
+name = "char_if, byte_if/text/elaborator/depth"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "char_if, byte_if/text/elaborator/other"
+measure = "count"
+readings = [[58162], [58162]]
+
+[[figures]]
+name = "char_if, byte_if/text/certifier/units"
+measure = "count"
+readings = [[61224], [61224]]
+
+[[figures]]
+name = "char_if, byte_if/text/certifier/depth"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "char_if, byte_if/text/certifier/other"
+measure = "count"
+readings = [[58152], [58152]]
+
+[[figures]]
+name = "char_if, byte_if/bytes/elaborator/units"
+measure = "count"
+readings = [[35084], [35084]]
+
+[[figures]]
+name = "char_if, byte_if/bytes/elaborator/depth"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "char_if, byte_if/bytes/elaborator/other"
+measure = "count"
+readings = [[34060], [34060]]
+
+[[figures]]
+name = "char_if, byte_if/bytes/certifier/units"
+measure = "count"
+readings = [[37122], [37122]]
+
+[[figures]]
+name = "char_if, byte_if/bytes/certifier/depth"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "char_if, byte_if/bytes/certifier/other"
+measure = "count"
+readings = [[34050], [34050]]
+
+[[figures]]
+name = "expect/text/elaborator/units"
+measure = "count"
+readings = [[54817], [54817]]
+
+[[figures]]
+name = "expect/text/elaborator/depth"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "expect/text/elaborator/other"
+measure = "count"
+readings = [[53793], [53793]]
+
+[[figures]]
+name = "expect/text/certifier/units"
+measure = "count"
+readings = [[56855], [56855]]
+
+[[figures]]
+name = "expect/text/certifier/depth"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "expect/text/certifier/other"
+measure = "count"
+readings = [[53783], [53783]]
+
+[[figures]]
+name = "expect/bytes/elaborator/units"
+measure = "count"
+readings = [[31411], [31411]]
+
+[[figures]]
+name = "expect/bytes/elaborator/depth"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "expect/bytes/elaborator/other"
+measure = "count"
+readings = [[30387], [30387]]
+
+[[figures]]
+name = "expect/bytes/certifier/units"
+measure = "count"
+readings = [[33449], [33449]]
+
+[[figures]]
+name = "expect/bytes/certifier/depth"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "expect/bytes/certifier/other"
+measure = "count"
+readings = [[30377], [30377]]
+
+[[figures]]
+name = "rest/text/elaborator/units"
+measure = "count"
+readings = [[7146], [7146]]
+
+[[figures]]
+name = "rest/text/elaborator/depth"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "rest/text/elaborator/other"
+measure = "count"
+readings = [[4074], [4074]]
+
+[[figures]]
+name = "rest/text/certifier/units"
+measure = "count"
+readings = [[7521], [7521]]
+
+[[figures]]
+name = "rest/text/certifier/depth"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "rest/text/certifier/other"
+measure = "count"
+readings = [[3425], [3425]]
+
+[[figures]]
+name = "rest/bytes/elaborator/units"
+measure = "count"
+readings = [[8353], [8353]]
+
+[[figures]]
+name = "rest/bytes/elaborator/depth"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "rest/bytes/elaborator/other"
+measure = "count"
+readings = [[4257], [4257]]
+
+[[figures]]
+name = "rest/bytes/certifier/units"
+measure = "count"
+readings = [[7524], [7524]]
+
+[[figures]]
+name = "rest/bytes/certifier/depth"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "rest/bytes/certifier/other"
+measure = "count"
+readings = [[3428], [3428]]
+
+[[figures]]
+name = "until/text/elaborator/units"
+measure = "count"
+readings = [[13684], [13684]]
+
+[[figures]]
+name = "until/text/elaborator/depth"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "until/text/elaborator/other"
+measure = "count"
+readings = [[12660], [12660]]
+
+[[figures]]
+name = "until/text/certifier/units"
+measure = "count"
+readings = [[15725], [15725]]
+
+[[figures]]
+name = "until/text/certifier/depth"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "until/text/certifier/other"
+measure = "count"
+readings = [[12653], [12653]]

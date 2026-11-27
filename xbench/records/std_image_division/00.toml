@@ -1,0 +1,413 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "the index/bytes"
+measure = "count"
+readings = [[10026975], [10026975], [10026975], [10026975], [10026975]]
+
+[[figures]]
+name = "its blobs/bytes"
+measure = "count"
+readings = [[81705809], [81705809], [81705809], [81705809], [81705809]]
+
+[[figures]]
+name = "what a successor restores/bytes"
+measure = "count"
+readings = [[7180451], [7180451], [7180451], [7180451], [7180451]]
+
+[[figures]]
+name = "what a successor restores/restore"
+measure = "microseconds"
+readings = [[18796, 18107, 18105, 18137, 18159], [18711, 17983, 17938, 18021, 17975], [18511, 17833, 17832, 17821, 17827], [18371, 17736, 17768, 17674, 17708], [18411, 17808, 17773, 17777, 17877]]
+
+[[figures]]
+name = "what a successor restores/restore/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "what a successor restores/restore/allocated"
+measure = "bytes"
+readings = [[14150254, 14150254, 14150254, 14150254, 14150254], [14150254, 14150254, 14150254, 14150254, 14150254], [14150254, 14150254, 14150254, 14150254, 14150254], [14150254, 14150254, 14150254, 14150254, 14150254], [14150254, 14150254, 14150254, 14150254, 14150254]]
+
+[[figures]]
+name = "what a successor restores/restore/allocations"
+measure = "allocations"
+readings = [[106031, 106031, 106031, 106031, 106031], [106031, 106031, 106031, 106031, 106031], [106031, 106031, 106031, 106031, 106031], [106031, 106031, 106031, 106031, 106031], [106031, 106031, 106031, 106031, 106031]]
+
+[[figures]]
+name = "what a successor restores/restore"
+measure = "instructions"
+readings = [[208298652, 208241455, 208316394, 208441235, 208307530], [208181404, 208214688, 208804036, 208472062, 208476381], [208325810, 208263454, 208433476, 208239950, 208193030], [208462568, 208346161, 208396808, 208456978, 208305351], [208372058, 208307583, 208275167, 208305469, 208366616]]
+
+[[figures]]
+name = "what a successor restores/the lowering's state/bytes"
+measure = "count"
+readings = [[4392450], [4392450], [4392450], [4392450], [4392450]]
+
+[[figures]]
+name = "what a successor restores/the lowering's state/restore"
+measure = "microseconds"
+readings = [[9873, 9937, 9913, 9866, 9922], [9788, 9672, 9826, 9744, 9854], [9669, 9658, 9851, 9681, 9653], [9659, 9660, 9635, 9914, 9670], [9683, 9729, 9750, 9742, 9790]]
+
+[[figures]]
+name = "what a successor restores/the lowering's state/restore/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "what a successor restores/the lowering's state/restore/allocated"
+measure = "bytes"
+readings = [[7292761, 7292761, 7292761, 7292761, 7292761], [7292761, 7292761, 7292761, 7292761, 7292761], [7292761, 7292761, 7292761, 7292761, 7292761], [7292761, 7292761, 7292761, 7292761, 7292761], [7292761, 7292761, 7292761, 7292761, 7292761]]
+
+[[figures]]
+name = "what a successor restores/the lowering's state/restore/allocations"
+measure = "allocations"
+readings = [[41186, 41186, 41186, 41186, 41186], [41186, 41186, 41186, 41186, 41186], [41186, 41186, 41186, 41186, 41186], [41186, 41186, 41186, 41186, 41186], [41186, 41186, 41186, 41186, 41186]]
+
+[[figures]]
+name = "what a successor restores/the lowering's state/restore"
+measure = "instructions"
+readings = [[114924613, 114924466, 114921825, 114931217, 114933182], [114928274, 114937044, 114937158, 114937941, 114939964], [114929559, 114916830, 114927687, 114931759, 114925329], [114922445, 114922848, 114923375, 114922606, 114926555], [114915980, 114925688, 114932677, 114930391, 114936354]]
+
+[[figures]]
+name = "what a successor restores/the elaborated module, consed/bytes"
+measure = "count"
+readings = [[13450594], [13450594], [13450594], [13450594], [13450594]]
+
+[[figures]]
+name = "what a successor restores/the elaborated module, consed/restore"
+measure = "microseconds"
+readings = [[26005, 22142, 24546, 22254, 22189], [24602, 22554, 24388, 22593, 22558], [24331, 22279, 24234, 22499, 22300], [26075, 22324, 24454, 22332, 22284], [25947, 22346, 24479, 22497, 22304]]
+
+[[figures]]
+name = "what a successor restores/the elaborated module, consed/restore/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "what a successor restores/the elaborated module, consed/restore/allocated"
+measure = "bytes"
+readings = [[74700971, 74700971, 74700971, 74700971, 74700971], [74700971, 74700971, 74700971, 74700971, 74700971], [74700971, 74700971, 74700971, 74700971, 74700971], [74700971, 74700971, 74700971, 74700971, 74700971], [74700971, 74700971, 74700971, 74700971, 74700971]]
+
+[[figures]]
+name = "what a successor restores/the elaborated module, consed/restore/allocations"
+measure = "allocations"
+readings = [[295815, 295815, 295815, 295815, 295815], [295815, 295815, 295815, 295815, 295815], [295815, 295815, 295815, 295815, 295815], [295815, 295815, 295815, 295815, 295815], [295815, 295815, 295815, 295815, 295815]]
+
+[[figures]]
+name = "what a successor restores/the elaborated module, consed/restore"
+measure = "instructions"
+readings = [[199426340, 198627564, 198647030, 198830337, 198626481], [199433723, 198642279, 198637013, 198677630, 198640127], [199424149, 198623971, 198627817, 198820253, 198626292], [199426517, 198630415, 198644672, 198671522, 198632072], [199435860, 198632767, 198629750, 198829428, 198640906]]
+
+[[figures]]
+name = "what a successor restores/the elaborated module, consed/its items/bytes"
+measure = "count"
+readings = [[13450594], [13450594], [13450594], [13450594], [13450594]]
+
+[[figures]]
+name = "what a successor restores/the elaborated module, consed/its items, each archived alone/bytes"
+measure = "count"
+readings = [[21612952], [21612952], [21612952], [21612952], [21612952]]
+
+[[figures]]
+name = "what a successor restores/its erased forms' index/bytes"
+measure = "count"
+readings = [[296520], [296520], [296520], [296520], [296520]]
+
+[[figures]]
+name = "what a successor restores/its erased forms' index/restore"
+measure = "microseconds"
+readings = [[3185, 3129, 3182, 3113, 3128], [3302, 3107, 3184, 3185, 3186], [3180, 3132, 3131, 3136, 3143], [3183, 3136, 3142, 3111, 3148], [3201, 3145, 3247, 3093, 3118]]
+
+[[figures]]
+name = "what a successor restores/its erased forms' index/restore/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "what a successor restores/its erased forms' index/restore/allocated"
+measure = "bytes"
+readings = [[689176, 689176, 689176, 689176, 689176], [689176, 689176, 689176, 689176, 689176], [689176, 689176, 689176, 689176, 689176], [689176, 689176, 689176, 689176, 689176], [689176, 689176, 689176, 689176, 689176]]
+
+[[figures]]
+name = "what a successor restores/its erased forms' index/restore/allocations"
+measure = "allocations"
+readings = [[8416, 8416, 8416, 8416, 8416], [8416, 8416, 8416, 8416, 8416], [8416, 8416, 8416, 8416, 8416], [8416, 8416, 8416, 8416, 8416], [8416, 8416, 8416, 8416, 8416]]
+
+[[figures]]
+name = "what a successor restores/its erased forms' index/restore"
+measure = "instructions"
+readings = [[30724247, 30922929, 31093615, 30824015, 30721890], [30768783, 30931101, 31028654, 30968755, 30968275], [30961681, 30836623, 30799586, 30874010, 30720180], [30825911, 30818181, 30921080, 30736445, 30837121], [30967909, 30959167, 30813935, 30808036, 30796618]]
+
+[[figures]]
+name = "what a successor restores/the certifier's record/bytes"
+measure = "count"
+readings = [[1069186], [1069186], [1069186], [1069186], [1069186]]
+
+[[figures]]
+name = "what a successor restores/the certifier's record/restore"
+measure = "microseconds"
+readings = [[2675, 2688, 2672, 2714, 2682], [2734, 2731, 2651, 2792, 2657], [2670, 2671, 2684, 2671, 2670], [2705, 2684, 2694, 2667, 2704], [2687, 2658, 2683, 2657, 2678]]
+
+[[figures]]
+name = "what a successor restores/the certifier's record/restore/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "what a successor restores/the certifier's record/restore/allocated"
+measure = "bytes"
+readings = [[2603802, 2603802, 2603802, 2603802, 2603802], [2603802, 2603802, 2603802, 2603802, 2603802], [2603802, 2603802, 2603802, 2603802, 2603802], [2603802, 2603802, 2603802, 2603802, 2603802], [2603802, 2603802, 2603802, 2603802, 2603802]]
+
+[[figures]]
+name = "what a successor restores/the certifier's record/restore/allocations"
+measure = "allocations"
+readings = [[28024, 28024, 28024, 28024, 28024], [28024, 28024, 28024, 28024, 28024], [28024, 28024, 28024, 28024, 28024], [28024, 28024, 28024, 28024, 28024], [28024, 28024, 28024, 28024, 28024]]
+
+[[figures]]
+name = "what a successor restores/the certifier's record/restore"
+measure = "instructions"
+readings = [[29400491, 29439074, 29444245, 29449426, 29446654], [29392355, 29439652, 29445065, 29441682, 29441472], [29387083, 29437561, 29438505, 29438736, 29439379], [29393961, 29442570, 29441894, 29439555, 29440867], [29392631, 29448255, 29442513, 29445653, 29447474]]
+
+[[figures]]
+name = "what a reader of a declaration restores/bytes"
+measure = "count"
+readings = [[43734220], [43734220], [43734220], [43734220], [43734220]]
+
+[[figures]]
+name = "what a reader of a declaration restores/its lowered items, each stored alone/bytes"
+measure = "count"
+readings = [[22118728], [22118728], [22118728], [22118728], [22118728]]
+
+[[figures]]
+name = "what a reader of a declaration restores/its erased forms, each stored alone/bytes"
+measure = "count"
+readings = [[8164898], [8164898], [8164898], [8164898], [8164898]]
+
+[[figures]]
+name = "what a reader of a declaration restores/its elaborated items, one run read by item/bytes"
+measure = "count"
+readings = [[13450594], [13450594], [13450594], [13450594], [13450594]]
+
+[[figures]]
+name = "what a report restores/bytes"
+measure = "count"
+readings = [[2417067], [2417067], [2417067], [2417067], [2417067]]
+
+[[figures]]
+name = "what a report restores/where its declarations lie, each source's texts alone/bytes"
+measure = "count"
+readings = [[2417067], [2417067], [2417067], [2417067], [2417067]]
+
+[[figures]]
+name = "what a recompile alone restores/bytes"
+measure = "count"
+readings = [[37733150], [37733150], [37733150], [37733150], [37733150]]
+
+[[figures]]
+name = "what a recompile alone restores/its import scopes/bytes"
+measure = "count"
+readings = [[1565739], [1565739], [1565739], [1565739], [1565739]]
+
+[[figures]]
+name = "what a recompile alone restores/what its verdicts stand on/bytes"
+measure = "count"
+readings = [[1012873], [1012873], [1012873], [1012873], [1012873]]
+
+[[figures]]
+name = "what a recompile alone restores/the lowering's records and scans/bytes"
+measure = "count"
+readings = [[10708322], [10708322], [10708322], [10708322], [10708322]]
+
+[[figures]]
+name = "what a recompile alone restores/what its declarations asked/bytes"
+measure = "count"
+readings = [[23586787], [23586787], [23586787], [23586787], [23586787]]
+
+[[figures]]
+name = "what a recompile alone restores/what its erasures asked/bytes"
+measure = "count"
+readings = [[859429], [859429], [859429], [859429], [859429]]
+
+[[figures]]
+name = "structures/the module consed in one table"
+measure = "count"
+readings = [[65375], [65375], [65375], [65375], [65375]]
+
+[[figures]]
+name = "structures/each item in its own"
+measure = "count"
+readings = [[123506], [123506], [123506], [123506], [123506]]
+
+[[figures]]
+name = "a filing's steps/consing the elaborated module"
+measure = "microseconds"
+readings = [[52052, 42846, 41983, 41725, 41658], [51018, 43357, 42662, 42459, 42458], [50038, 42415, 41554, 41629, 41467], [50128, 42591, 42435, 42227, 41742], [50436, 42996, 42234, 42147, 42290]]
+
+[[figures]]
+name = "a filing's steps/consing the elaborated module/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "a filing's steps/consing the elaborated module/allocated"
+measure = "bytes"
+readings = [[65661431, 65661431, 65661431, 65661431, 65661431], [65661431, 65661431, 65661431, 65661431, 65661431], [65661431, 65661431, 65661431, 65661431, 65661431], [65661431, 65661431, 65661431, 65661431, 65661431], [65661431, 65661431, 65661431, 65661431, 65661431]]
+
+[[figures]]
+name = "a filing's steps/consing the elaborated module/allocations"
+measure = "allocations"
+readings = [[365991, 365991, 365991, 365991, 365991], [365991, 365991, 365991, 365991, 365991], [365991, 365991, 365991, 365991, 365991], [365991, 365991, 365991, 365991, 365991], [365991, 365991, 365991, 365991, 365991]]
+
+[[figures]]
+name = "a filing's steps/consing the elaborated module"
+measure = "instructions"
+readings = [[377296730, 376696010, 376650071, 376659600, 376634949], [377234787, 376678057, 376591504, 376622332, 376588466], [377226466, 376687279, 376643867, 376604902, 376630910], [377327546, 376680369, 376706893, 376683195, 376613513], [377248878, 376650869, 376601600, 376622181, 376681861]]
+
+[[figures]]
+name = "a filing's steps/serializing the elaborated module alone"
+measure = "microseconds"
+readings = [[13385, 11733, 10973, 10789, 10715], [13560, 11511, 10485, 10398, 10422], [13305, 11657, 10822, 10733, 11146], [13178, 11381, 10315, 10249, 10230], [13348, 11599, 10753, 10756, 10734]]
+
+[[figures]]
+name = "a filing's steps/serializing the elaborated module alone/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "a filing's steps/serializing the elaborated module alone/allocated"
+measure = "bytes"
+readings = [[23353756, 23353756, 23353756, 23353756, 23353756], [23353756, 23353756, 23353756, 23353756, 23353756], [23353756, 23353756, 23353756, 23353756, 23353756], [23353756, 23353756, 23353756, 23353756, 23353756], [23353756, 23353756, 23353756, 23353756, 23353756]]
+
+[[figures]]
+name = "a filing's steps/serializing the elaborated module alone/allocations"
+measure = "allocations"
+readings = [[2907, 2907, 2907, 2907, 2907], [2907, 2907, 2907, 2907, 2907], [2907, 2907, 2907, 2907, 2907], [2907, 2907, 2907, 2907, 2907], [2907, 2907, 2907, 2907, 2907]]
+
+[[figures]]
+name = "a filing's steps/serializing the elaborated module alone"
+measure = "instructions"
+readings = [[79676849, 79651164, 79651361, 79650987, 79650976], [78917343, 78892542, 78893176, 78892551, 78892372], [79662270, 79638719, 79638721, 79638299, 79638300], [78884574, 78860467, 78860706, 78860168, 78860170], [79645899, 79620999, 79621496, 79621143, 79620920]]
+
+[[figures]]
+name = "a filing's steps/indexing the unit, its items named alone"
+measure = "microseconds"
+readings = [[19614, 17999, 17885, 17862, 17865], [20163, 18316, 17964, 17977, 18067], [19627, 17903, 17713, 17705, 17691], [19875, 18060, 17835, 17783, 17854], [19643, 17829, 17780, 17751, 17702]]
+
+[[figures]]
+name = "a filing's steps/indexing the unit, its items named alone/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "a filing's steps/indexing the unit, its items named alone/allocated"
+measure = "bytes"
+readings = [[48909645, 48909645, 48909645, 48909645, 48909645], [48909645, 48909645, 48909645, 48909645, 48909645], [48909645, 48909645, 48909645, 48909645, 48909645], [48909645, 48909645, 48909645, 48909645, 48909645], [48909645, 48909645, 48909645, 48909645, 48909645]]
+
+[[figures]]
+name = "a filing's steps/indexing the unit, its items named alone/allocations"
+measure = "allocations"
+readings = [[176157, 176157, 176157, 176157, 176157], [176157, 176157, 176157, 176157, 176157], [176157, 176157, 176157, 176157, 176157], [176157, 176157, 176157, 176157, 176157], [176157, 176157, 176157, 176157, 176157]]
+
+[[figures]]
+name = "a filing's steps/indexing the unit, its items named alone"
+measure = "instructions"
+readings = [[177759419, 177797731, 177771062, 177787757, 177777938], [177479007, 177457368, 177451986, 177465261, 177462054], [177793803, 177770630, 177726367, 177727265, 177762836], [177771058, 177814339, 177819039, 177783220, 177802340], [177647983, 177636634, 177624821, 177606626, 177636565]]
+
+[[figures]]
+name = "a filing's steps/serializing its blobs, one run consed"
+measure = "microseconds"
+readings = [[259288, 249448, 247767, 246493, 247200], [257013, 263180, 263972, 243549, 253386], [260773, 246965, 245959, 245720, 246976], [254110, 261859, 262282, 262239, 240487], [260670, 249680, 247719, 246179, 248640]]
+
+[[figures]]
+name = "a filing's steps/serializing its blobs, one run consed/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "a filing's steps/serializing its blobs, one run consed/allocated"
+measure = "bytes"
+readings = [[348101836, 348101452, 348101836, 348101708, 348101452], [348101580, 348102092, 348102220, 348101452, 348101836], [348101452, 348101708, 348101964, 348101836, 348101836], [348101836, 348101708, 348101324, 348101708, 348101708], [348101964, 348101964, 348101836, 348101836, 348101580]]
+
+[[figures]]
+name = "a filing's steps/serializing its blobs, one run consed/allocations"
+measure = "allocations"
+readings = [[1084963, 1084960, 1084963, 1084962, 1084960], [1084961, 1084965, 1084966, 1084960, 1084963], [1084960, 1084962, 1084964, 1084963, 1084963], [1084963, 1084962, 1084959, 1084962, 1084962], [1084964, 1084964, 1084963, 1084963, 1084961]]
+
+[[figures]]
+name = "a filing's steps/serializing its blobs, one run consed"
+measure = "instructions"
+readings = [[1900266894, 1900821862, 1900630027, 1900709631, 1900656998], [1898988905, 1901721526, 1901633360, 1899156788, 1898995554], [1900294186, 1900477431, 1900877586, 1900837115, 1900084706], [1899063381, 1901655056, 1901304192, 1901460706, 1899253774], [1900381058, 1900451946, 1900821457, 1900588081, 1900647515]]
+
+[[figures]]
+name = "a filing's steps/digesting the index"
+measure = "microseconds"
+readings = [[4596, 4575, 4573, 4564, 4568], [4550, 4664, 4582, 4487, 4622], [4600, 4545, 4525, 4508, 4488], [4604, 4660, 4510, 4628, 4548], [4558, 4535, 4522, 4512, 4489]]
+
+[[figures]]
+name = "a filing's steps/digesting the index/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "a filing's steps/digesting the index/allocated"
+measure = "bytes"
+readings = [[312, 312, 312, 312, 312], [312, 312, 312, 312, 312], [312, 312, 312, 312, 312], [312, 312, 312, 312, 312], [312, 312, 312, 312, 312]]
+
+[[figures]]
+name = "a filing's steps/digesting the index/allocations"
+measure = "allocations"
+readings = [[35, 35, 35, 35, 35], [35, 35, 35, 35, 35], [35, 35, 35, 35, 35], [35, 35, 35, 35, 35], [35, 35, 35, 35, 35]]
+
+[[figures]]
+name = "a filing's steps/digesting the index"
+measure = "instructions"
+readings = [[25744619, 25743711, 25743231, 25743711, 25743032], [25744734, 25743921, 25743064, 25743893, 25742947], [25744675, 25743817, 25743093, 25743643, 25743024], [25744460, 25743726, 25743213, 25743684, 25743043], [25744660, 25743960, 25743097, 25743611, 25742915]]
+
+[[figures]]
+name = "a filing's steps/restoring the unit"
+measure = "microseconds"
+readings = [[27839, 25660, 25347, 25459, 25265], [27562, 25634, 25279, 24942, 24938], [28030, 26134, 25742, 25453, 25270], [27586, 25372, 25269, 25214, 25262], [28122, 25822, 25301, 25213, 25278]]
+
+[[figures]]
+name = "a filing's steps/restoring the unit/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "a filing's steps/restoring the unit/allocated"
+measure = "bytes"
+readings = [[21331638, 21331638, 21331638, 21331638, 21331638], [21331638, 21331638, 21331638, 21331638, 21331638], [21331638, 21331638, 21331638, 21331638, 21331638], [21331638, 21331638, 21331638, 21331638, 21331638], [21331638, 21331638, 21331638, 21331638, 21331638]]
+
+[[figures]]
+name = "a filing's steps/restoring the unit/allocations"
+measure = "allocations"
+readings = [[112674, 112674, 112674, 112674, 112674], [112674, 112674, 112674, 112674, 112674], [112674, 112674, 112674, 112674, 112674], [112674, 112674, 112674, 112674, 112674], [112674, 112674, 112674, 112674, 112674]]
+
+[[figures]]
+name = "a filing's steps/restoring the unit"
+measure = "instructions"
+readings = [[243961297, 243843678, 244052770, 244025965, 244039985], [244022729, 243822859, 244165223, 243929887, 244049799], [243835406, 244249651, 243975528, 244117468, 244037302], [244034164, 243971732, 243959976, 243978080, 244144013], [243942588, 244124502, 243825677, 244157141, 244088042]]

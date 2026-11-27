@@ -1,0 +1,358 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "roster/products"
+measure = "count"
+readings = [[12], [12]]
+
+[[figures]]
+name = "roster/families"
+measure = "count"
+readings = [[13], [13]]
+
+[[figures]]
+name = "roster/constructors"
+measure = "count"
+readings = [[47], [47]]
+
+[[figures]]
+name = "shapes/bytes"
+measure = "count"
+readings = [[1], [1]]
+
+[[figures]]
+name = "shapes/closure"
+measure = "count"
+readings = [[10], [10]]
+
+[[figures]]
+name = "shapes/family"
+measure = "count"
+readings = [[8], [8]]
+
+[[figures]]
+name = "shapes/immediate"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "shapes/list"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "shapes/number"
+measure = "count"
+readings = [[15], [15]]
+
+[[figures]]
+name = "shapes/opaque"
+measure = "count"
+readings = [[15], [15]]
+
+[[figures]]
+name = "shapes/product"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "spines/i31-cast"
+measure = "count"
+readings = [[266], [266]]
+
+[[figures]]
+name = "spines/box"
+measure = "count"
+readings = [[404], [404]]
+
+[[figures]]
+name = "spines/unbox"
+measure = "count"
+readings = [[368], [368]]
+
+[[figures]]
+name = "spines/rope-cast"
+measure = "count"
+readings = [[118], [118]]
+
+[[figures]]
+name = "spines/envr-cast"
+measure = "count"
+readings = [[73], [73]]
+
+[[figures]]
+name = "spines/tuple-cast"
+measure = "count"
+readings = [[14], [14]]
+
+[[figures]]
+name = "spines/tuple-test"
+measure = "count"
+readings = [[6], [6]]
+
+[[figures]]
+name = "spines/tuple-types"
+measure = "count"
+readings = [[3], [3]]
+
+[[figures]]
+name = "chain/i31-cast"
+measure = "count"
+readings = [[168], [168]]
+
+[[figures]]
+name = "chain/box"
+measure = "count"
+readings = [[275], [275]]
+
+[[figures]]
+name = "chain/unbox"
+measure = "count"
+readings = [[250], [250]]
+
+[[figures]]
+name = "chain/rope-cast"
+measure = "count"
+readings = [[111], [111]]
+
+[[figures]]
+name = "chain/envr-cast"
+measure = "count"
+readings = [[61], [61]]
+
+[[figures]]
+name = "chain/tuple-cast"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "chain/tuple-test"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "chain/tuple-types"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "trees/i31-cast"
+measure = "count"
+readings = [[174], [174]]
+
+[[figures]]
+name = "trees/box"
+measure = "count"
+readings = [[275], [275]]
+
+[[figures]]
+name = "trees/unbox"
+measure = "count"
+readings = [[261], [261]]
+
+[[figures]]
+name = "trees/rope-cast"
+measure = "count"
+readings = [[111], [111]]
+
+[[figures]]
+name = "trees/envr-cast"
+measure = "count"
+readings = [[73], [73]]
+
+[[figures]]
+name = "trees/tuple-cast"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "trees/tuple-test"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "trees/tuple-types"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "churn/i31-cast"
+measure = "count"
+readings = [[156], [156]]
+
+[[figures]]
+name = "churn/box"
+measure = "count"
+readings = [[251], [251]]
+
+[[figures]]
+name = "churn/unbox"
+measure = "count"
+readings = [[238], [238]]
+
+[[figures]]
+name = "churn/rope-cast"
+measure = "count"
+readings = [[111], [111]]
+
+[[figures]]
+name = "churn/envr-cast"
+measure = "count"
+readings = [[61], [61]]
+
+[[figures]]
+name = "churn/tuple-cast"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "churn/tuple-test"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "churn/tuple-types"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "lcg/i31-cast"
+measure = "count"
+readings = [[153], [153]]
+
+[[figures]]
+name = "lcg/box"
+measure = "count"
+readings = [[248], [248]]
+
+[[figures]]
+name = "lcg/unbox"
+measure = "count"
+readings = [[235], [235]]
+
+[[figures]]
+name = "lcg/rope-cast"
+measure = "count"
+readings = [[111], [111]]
+
+[[figures]]
+name = "lcg/envr-cast"
+measure = "count"
+readings = [[61], [61]]
+
+[[figures]]
+name = "lcg/tuple-cast"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "lcg/tuple-test"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "lcg/tuple-types"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "monad_io/i31-cast"
+measure = "count"
+readings = [[157], [157]]
+
+[[figures]]
+name = "monad_io/box"
+measure = "count"
+readings = [[254], [254]]
+
+[[figures]]
+name = "monad_io/unbox"
+measure = "count"
+readings = [[239], [239]]
+
+[[figures]]
+name = "monad_io/rope-cast"
+measure = "count"
+readings = [[111], [111]]
+
+[[figures]]
+name = "monad_io/envr-cast"
+measure = "count"
+readings = [[66], [66]]
+
+[[figures]]
+name = "monad_io/tuple-cast"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "monad_io/tuple-test"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "monad_io/tuple-types"
+measure = "count"
+readings = [[2], [2]]
+
+[[figures]]
+name = "parse_digits/i31-cast"
+measure = "count"
+readings = [[171], [171]]
+
+[[figures]]
+name = "parse_digits/box"
+measure = "count"
+readings = [[266], [266]]
+
+[[figures]]
+name = "parse_digits/unbox"
+measure = "count"
+readings = [[254], [254]]
+
+[[figures]]
+name = "parse_digits/rope-cast"
+measure = "count"
+readings = [[111], [111]]
+
+[[figures]]
+name = "parse_digits/envr-cast"
+measure = "count"
+readings = [[61], [61]]
+
+[[figures]]
+name = "parse_digits/tuple-cast"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "parse_digits/tuple-test"
+measure = "count"
+readings = [[0], [0]]
+
+[[figures]]
+name = "parse_digits/tuple-types"
+measure = "count"
+readings = [[2], [2]]

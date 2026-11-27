@@ -1,0 +1,203 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "leaf/lower"
+measure = "microseconds"
+readings = [[117338], [115281], [114523], [115674], [115604]]
+
+[[figures]]
+name = "leaf/lower/calls"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "leaf/lower/allocated"
+measure = "bytes"
+readings = [[46987595], [46993854], [46983333], [46987268], [47003297]]
+
+[[figures]]
+name = "leaf/lower/allocations"
+measure = "allocations"
+readings = [[430311], [430439], [430086], [430251], [430496]]
+
+[[figures]]
+name = "leaf/lower"
+measure = "instructions"
+readings = [[825062280], [823817851], [824166084], [824182967], [825040548]]
+
+[[figures]]
+name = "leaf/elaborate"
+measure = "microseconds"
+readings = [[100152], [98003], [98275], [99735], [99984]]
+
+[[figures]]
+name = "leaf/elaborate/calls"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "leaf/elaborate/allocated"
+measure = "bytes"
+readings = [[102531575], [102539527], [102534391], [102538903], [102531319]]
+
+[[figures]]
+name = "leaf/elaborate/allocations"
+measure = "allocations"
+readings = [[362430], [362445], [362430], [362442], [362430]]
+
+[[figures]]
+name = "leaf/elaborate"
+measure = "instructions"
+readings = [[685758298], [685541607], [685696656], [685657939], [685800999]]
+
+[[figures]]
+name = "leaf/recompile"
+measure = "microseconds"
+readings = [[156400], [153445], [153112], [155790], [155316]]
+
+[[figures]]
+name = "leaf/recompile/calls"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "leaf/recompile/allocated"
+measure = "bytes"
+readings = [[126350153], [126363572], [126348507], [126358474], [126365871]]
+
+[[figures]]
+name = "leaf/recompile/allocations"
+measure = "allocations"
+readings = [[631948], [632083], [631720], [631919], [632137]]
+
+[[figures]]
+name = "leaf/recompile"
+measure = "instructions"
+readings = [[862751246], [862924703], [863474378], [863567348], [863368402]]
+
+[[figures]]
+name = "leaf/names"
+measure = "count"
+readings = [[3693], [3693], [3693], [3693], [3693]]
+
+[[figures]]
+name = "leaf/lowered again"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "leaf/elaborated again"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "hub/lower"
+measure = "microseconds"
+readings = [[32159], [32198], [31675], [32106], [32065]]
+
+[[figures]]
+name = "hub/lower/calls"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "hub/lower/allocated"
+measure = "bytes"
+readings = [[12669961], [12659385], [12652865], [12677497], [12672457]]
+
+[[figures]]
+name = "hub/lower/allocations"
+measure = "allocations"
+readings = [[88372], [88274], [88158], [88421], [88494]]
+
+[[figures]]
+name = "hub/lower"
+measure = "instructions"
+readings = [[93949159], [93946628], [94172677], [93994143], [93710874]]
+
+[[figures]]
+name = "hub/elaborate"
+measure = "microseconds"
+readings = [[27625673], [27405426], [27443749], [27558901], [27474445]]
+
+[[figures]]
+name = "hub/elaborate/calls"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "hub/elaborate/allocated"
+measure = "bytes"
+readings = [[29107703357], [29107513685], [29107584677], [29107281437], [29107576541]]
+
+[[figures]]
+name = "hub/elaborate/allocations"
+measure = "allocations"
+readings = [[186882785], [186881269], [186884322], [186878005], [186881232]]
+
+[[figures]]
+name = "hub/elaborate"
+measure = "instructions"
+readings = [[228387670083], [228384325214], [228350958262], [228377505856], [228427537295]]
+
+[[figures]]
+name = "hub/recompile"
+measure = "microseconds"
+readings = [[33701772], [33406901], [33443379], [33374165], [33372550]]
+
+[[figures]]
+name = "hub/recompile/calls"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "hub/recompile/allocated"
+measure = "bytes"
+readings = [[34795394892], [34795512588], [34795162772], [34795178732], [34795019640]]
+
+[[figures]]
+name = "hub/recompile/allocations"
+measure = "allocations"
+readings = [[223315870], [223317223], [223314854], [223314737], [223314137]]
+
+[[figures]]
+name = "hub/recompile"
+measure = "instructions"
+readings = [[273733199118], [273709905989], [273625779446], [273654200446], [273737156461]]
+
+[[figures]]
+name = "hub/names"
+measure = "count"
+readings = [[3692], [3692], [3692], [3692], [3692]]
+
+[[figures]]
+name = "hub/lowered again"
+measure = "count"
+readings = [[1], [1], [1], [1], [1]]
+
+[[figures]]
+name = "hub/elaborated again"
+measure = "count"
+readings = [[190], [190], [190], [190], [190]]

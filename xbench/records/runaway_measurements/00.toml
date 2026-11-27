@@ -1,0 +1,527 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "spin at 25000/verdict/refused"
+measure = "count"
+size = 25000
+readings = [[1], [1]]
+
+[[figures]]
+name = "spin at 25000/elaborator/units"
+measure = "count"
+size = 25000
+readings = [[25000], [25000]]
+
+[[figures]]
+name = "spin at 25000/elaborator/looks"
+measure = "count"
+size = 25000
+readings = [[99585], [99585]]
+
+[[figures]]
+name = "spin at 50000/verdict/refused"
+measure = "count"
+size = 50000
+readings = [[1], [1]]
+
+[[figures]]
+name = "spin at 50000/elaborator/units"
+measure = "count"
+size = 50000
+readings = [[50000], [50000]]
+
+[[figures]]
+name = "spin at 50000/elaborator/looks"
+measure = "count"
+size = 50000
+readings = [[202050], [202050]]
+
+[[figures]]
+name = "sums at 25000/verdict/apart"
+measure = "count"
+size = 25000
+readings = [[1], [1]]
+
+[[figures]]
+name = "sums at 25000/elaborator/units"
+measure = "count"
+size = 25000
+readings = [[5129], [5129]]
+
+[[figures]]
+name = "sums at 25000/elaborator/looks"
+measure = "count"
+size = 25000
+readings = [[4303], [4303]]
+
+[[figures]]
+name = "sums at 50000/verdict/apart"
+measure = "count"
+size = 50000
+readings = [[1], [1]]
+
+[[figures]]
+name = "sums at 50000/elaborator/units"
+measure = "count"
+size = 50000
+readings = [[5129], [5129]]
+
+[[figures]]
+name = "sums at 50000/elaborator/looks"
+measure = "count"
+size = 50000
+readings = [[4303], [4303]]
+
+[[figures]]
+name = "sums, apart at 25000/verdict/apart"
+measure = "count"
+size = 25000
+readings = [[1], [1]]
+
+[[figures]]
+name = "sums, apart at 25000/elaborator/units"
+measure = "count"
+size = 25000
+readings = [[5129], [5129]]
+
+[[figures]]
+name = "sums, apart at 25000/elaborator/looks"
+measure = "count"
+size = 25000
+readings = [[4133], [4133]]
+
+[[figures]]
+name = "sums, apart at 50000/verdict/apart"
+measure = "count"
+size = 50000
+readings = [[1], [1]]
+
+[[figures]]
+name = "sums, apart at 50000/elaborator/units"
+measure = "count"
+size = 50000
+readings = [[5129], [5129]]
+
+[[figures]]
+name = "sums, apart at 50000/elaborator/looks"
+measure = "count"
+size = 50000
+readings = [[4133], [4133]]
+
+[[figures]]
+name = "sums of calls at 25000/verdict/apart"
+measure = "count"
+size = 25000
+readings = [[1], [1]]
+
+[[figures]]
+name = "sums of calls at 25000/elaborator/units"
+measure = "count"
+size = 25000
+readings = [[5129], [5129]]
+
+[[figures]]
+name = "sums of calls at 25000/elaborator/looks"
+measure = "count"
+size = 25000
+readings = [[10467], [10467]]
+
+[[figures]]
+name = "sums of calls at 50000/verdict/apart"
+measure = "count"
+size = 50000
+readings = [[1], [1]]
+
+[[figures]]
+name = "sums of calls at 50000/elaborator/units"
+measure = "count"
+size = 50000
+readings = [[5129], [5129]]
+
+[[figures]]
+name = "sums of calls at 50000/elaborator/looks"
+measure = "count"
+size = 50000
+readings = [[10317], [10317]]
+
+[[figures]]
+name = "halvings at 25000/verdict/apart"
+measure = "count"
+size = 25000
+readings = [[1], [1]]
+
+[[figures]]
+name = "halvings at 25000/elaborator/units"
+measure = "count"
+size = 25000
+readings = [[5129], [5129]]
+
+[[figures]]
+name = "halvings at 25000/elaborator/looks"
+measure = "count"
+size = 25000
+readings = [[6580], [6580]]
+
+[[figures]]
+name = "halvings at 50000/verdict/apart"
+measure = "count"
+size = 50000
+readings = [[1], [1]]
+
+[[figures]]
+name = "halvings at 50000/elaborator/units"
+measure = "count"
+size = 50000
+readings = [[5129], [5129]]
+
+[[figures]]
+name = "halvings at 50000/elaborator/looks"
+measure = "count"
+size = 50000
+readings = [[6580], [6580]]
+
+[[figures]]
+name = "rounds at 25000/verdict/accepted"
+measure = "count"
+size = 25000
+readings = [[1], [1]]
+
+[[figures]]
+name = "rounds at 25000/elaborator/units"
+measure = "count"
+size = 25000
+readings = [[4105], [4105]]
+
+[[figures]]
+name = "rounds at 25000/elaborator/looks"
+measure = "count"
+size = 25000
+readings = [[3018], [3018]]
+
+[[figures]]
+name = "rounds at 25000/certifier/units"
+measure = "count"
+size = 25000
+readings = [[4129], [4129]]
+
+[[figures]]
+name = "rounds at 25000/certifier/looks"
+measure = "count"
+size = 25000
+readings = [[3564], [3564]]
+
+[[figures]]
+name = "rounds at 50000/verdict/accepted"
+measure = "count"
+size = 50000
+readings = [[1], [1]]
+
+[[figures]]
+name = "rounds at 50000/elaborator/units"
+measure = "count"
+size = 50000
+readings = [[4105], [4105]]
+
+[[figures]]
+name = "rounds at 50000/elaborator/looks"
+measure = "count"
+size = 50000
+readings = [[3018], [3018]]
+
+[[figures]]
+name = "rounds at 50000/certifier/units"
+measure = "count"
+size = 50000
+readings = [[4129], [4129]]
+
+[[figures]]
+name = "rounds at 50000/certifier/looks"
+measure = "count"
+size = 50000
+readings = [[3564], [3564]]
+
+[[figures]]
+name = "classes at 250000/verdict/apart"
+measure = "count"
+size = 250000
+readings = [[1], [1]]
+
+[[figures]]
+name = "classes at 250000/elaborator/units"
+measure = "count"
+size = 250000
+readings = [[130300], [130300]]
+
+[[figures]]
+name = "classes at 250000/elaborator/looks"
+measure = "count"
+size = 250000
+readings = [[431349], [431349]]
+
+[[figures]]
+name = "classes at 500000/verdict/apart"
+measure = "count"
+size = 500000
+readings = [[1], [1]]
+
+[[figures]]
+name = "classes at 500000/elaborator/units"
+measure = "count"
+size = 500000
+readings = [[130300], [130300]]
+
+[[figures]]
+name = "classes at 500000/elaborator/looks"
+measure = "count"
+size = 500000
+readings = [[431349], [431349]]
+
+[[figures]]
+name = "powers at 1000000/verdict/refused"
+measure = "count"
+size = 1000000
+readings = [[1], [1]]
+
+[[figures]]
+name = "powers at 1000000/elaborator/units"
+measure = "count"
+size = 1000000
+readings = [[1000000], [1000000]]
+
+[[figures]]
+name = "powers at 1000000/elaborator/looks"
+measure = "count"
+size = 1000000
+readings = [[1554072], [1554072]]
+
+[[figures]]
+name = "powers at 2000000/verdict/apart"
+measure = "count"
+size = 2000000
+readings = [[1], [1]]
+
+[[figures]]
+name = "powers at 2000000/elaborator/units"
+measure = "count"
+size = 2000000
+readings = [[1584262], [1584262]]
+
+[[figures]]
+name = "powers at 2000000/elaborator/looks"
+measure = "count"
+size = 2000000
+readings = [[2563629], [2563629]]
+
+[[figures]]
+name = "images at 1250000/verdict/refused"
+measure = "count"
+size = 1250000
+readings = [[1], [1]]
+
+[[figures]]
+name = "images at 1250000/elaborator/units"
+measure = "count"
+size = 1250000
+readings = [[1250000], [1250000]]
+
+[[figures]]
+name = "images at 1250000/elaborator/looks"
+measure = "count"
+size = 1250000
+readings = [[2962896], [2962896]]
+
+[[figures]]
+name = "images at 2500000/verdict/apart"
+measure = "count"
+size = 2500000
+readings = [[1], [1]]
+
+[[figures]]
+name = "images at 2500000/elaborator/units"
+measure = "count"
+size = 2500000
+readings = [[1868375], [1868375]]
+
+[[figures]]
+name = "images at 2500000/elaborator/looks"
+measure = "count"
+size = 2500000
+readings = [[5773997], [5773997]]
+
+[[figures]]
+name = "nests at 750000/verdict/apart"
+measure = "count"
+size = 750000
+readings = [[1], [1]]
+
+[[figures]]
+name = "nests at 750000/elaborator/units"
+measure = "count"
+size = 750000
+readings = [[644990], [644990]]
+
+[[figures]]
+name = "nests at 750000/elaborator/looks"
+measure = "count"
+size = 750000
+readings = [[1712838], [1712838]]
+
+[[figures]]
+name = "nests at 1500000/verdict/apart"
+measure = "count"
+size = 1500000
+readings = [[1], [1]]
+
+[[figures]]
+name = "nests at 1500000/elaborator/units"
+measure = "count"
+size = 1500000
+readings = [[644990], [644990]]
+
+[[figures]]
+name = "nests at 1500000/elaborator/looks"
+measure = "count"
+size = 1500000
+readings = [[1712835], [1712835]]
+
+[[figures]]
+name = "stacks at 200000/verdict/accepted"
+measure = "count"
+size = 200000
+readings = [[1], [1]]
+
+[[figures]]
+name = "stacks at 200000/elaborator/units"
+measure = "count"
+size = 200000
+readings = [[44294], [44294]]
+
+[[figures]]
+name = "stacks at 200000/elaborator/looks"
+measure = "count"
+size = 200000
+readings = [[385706], [385706]]
+
+[[figures]]
+name = "stacks at 200000/certifier/units"
+measure = "count"
+size = 200000
+readings = [[21764], [21764]]
+
+[[figures]]
+name = "stacks at 200000/certifier/looks"
+measure = "count"
+size = 200000
+readings = [[492222], [492222]]
+
+[[figures]]
+name = "stacks at 400000/verdict/accepted"
+measure = "count"
+size = 400000
+readings = [[1], [1]]
+
+[[figures]]
+name = "stacks at 400000/elaborator/units"
+measure = "count"
+size = 400000
+readings = [[44294], [44294]]
+
+[[figures]]
+name = "stacks at 400000/elaborator/looks"
+measure = "count"
+size = 400000
+readings = [[385706], [385706]]
+
+[[figures]]
+name = "stacks at 400000/certifier/units"
+measure = "count"
+size = 400000
+readings = [[21764], [21764]]
+
+[[figures]]
+name = "stacks at 400000/certifier/looks"
+measure = "count"
+size = 400000
+readings = [[492222], [492222]]
+
+[[figures]]
+name = "walks at 150000/verdict/accepted"
+measure = "count"
+size = 150000
+readings = [[1], [1]]
+
+[[figures]]
+name = "walks at 150000/elaborator/units"
+measure = "count"
+size = 150000
+readings = [[108224], [108224]]
+
+[[figures]]
+name = "walks at 150000/elaborator/looks"
+measure = "count"
+size = 150000
+readings = [[656856], [656856]]
+
+[[figures]]
+name = "walks at 150000/certifier/units"
+measure = "count"
+size = 150000
+readings = [[45220], [45220]]
+
+[[figures]]
+name = "walks at 150000/certifier/looks"
+measure = "count"
+size = 150000
+readings = [[504376], [504376]]
+
+[[figures]]
+name = "walks at 300000/verdict/accepted"
+measure = "count"
+size = 300000
+readings = [[1], [1]]
+
+[[figures]]
+name = "walks at 300000/elaborator/units"
+measure = "count"
+size = 300000
+readings = [[108224], [108224]]
+
+[[figures]]
+name = "walks at 300000/elaborator/looks"
+measure = "count"
+size = 300000
+readings = [[656856], [656856]]
+
+[[figures]]
+name = "walks at 300000/certifier/units"
+measure = "count"
+size = 300000
+readings = [[45220], [45220]]
+
+[[figures]]
+name = "walks at 300000/certifier/looks"
+measure = "count"
+size = 300000
+readings = [[504376], [504376]]

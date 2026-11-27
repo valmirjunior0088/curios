@@ -1,0 +1,93 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (db098b2a5)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "lcg/multi-result types"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "lcg/allocation sites"
+measure = "count"
+readings = [[229], [229]]
+
+[[figures]]
+name = "trees/multi-result types"
+measure = "count"
+readings = [[8], [8]]
+
+[[figures]]
+name = "trees/allocation sites"
+measure = "count"
+readings = [[239], [239]]
+
+[[figures]]
+name = "higher-order/multi-result types"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "higher-order/allocation sites"
+measure = "count"
+readings = [[231], [231]]
+
+[[figures]]
+name = "direct/escaping/multi-result types"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "direct/escaping/allocation sites"
+measure = "count"
+readings = [[230], [230]]
+
+[[figures]]
+name = "function-only/multi-result types"
+measure = "count"
+readings = [[4], [4]]
+
+[[figures]]
+name = "function-only/allocation sites"
+measure = "count"
+readings = [[228], [228]]
+
+[[figures]]
+name = "mutual-recursion/multi-result types"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "mutual-recursion/allocation sites"
+measure = "count"
+readings = [[228], [228]]
+
+[[figures]]
+name = "split-return/multi-result types"
+measure = "count"
+readings = [[5], [5]]
+
+[[figures]]
+name = "split-return/allocation sites"
+measure = "count"
+readings = [[229], [229]]
