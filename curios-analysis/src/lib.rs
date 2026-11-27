@@ -80,7 +80,7 @@ mod entail;
 pub use entail::entails;
 
 mod satisfy;
-pub use satisfy::satisfiable;
+pub use satisfy::{model, satisfiable};
 
 #[cfg(test)]
 mod tests;

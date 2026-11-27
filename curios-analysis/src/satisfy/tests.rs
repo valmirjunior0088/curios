@@ -162,6 +162,52 @@ fn constraint_sets() -> Vec<Vec<UniverseConstraint>> {
     sets
 }
 
+/// The model a satisfiable set is answered with meets every one of its constraints, over the sweep the decision is held to; an unsatisfiable set is answered with none.
+#[test]
+fn a_satisfiable_sets_model_meets_every_constraint() {
+    let mut met = 0usize;
+    for constraints in constraint_sets() {
+        match model(&constraints) {
+            Some(assignment) => {
+                let values = [0, 1].map(|index| {
+                    assignment
+                        .get(&LevelHead::Param(UniverseParam(index)))
+                        .map_or(0, |value| u32::try_from(*value).expect("a small model"))
+                });
+                for constraint in &constraints {
+                    assert!(
+                        value(&constraint.lower, &values) <= value(&constraint.upper, &values),
+                        "{constraints:?} answered {assignment:?}"
+                    );
+                }
+                met += 1;
+            }
+            None => assert!(!satisfiable(&constraints), "{constraints:?}"),
+        }
+    }
+
+    assert!(met > 0);
+}
+
+/// A disjunction has a model though it has no least one: `max(u, v + 1) <= max(u, v)` holds with `u` above `v`, and the model says so.
+#[test]
+fn a_disjunction_is_answered_with_a_model() {
+    let (u, v) = (param(0), param(1));
+    let raised = v.succ().expect("level has a successor");
+    let constraints = [leq(Level::max([u.clone(), raised]), Level::max([u, v]))];
+    let assignment = model(&constraints).expect("a disjunction is satisfiable");
+    let values = [0, 1].map(|index| {
+        assignment
+            .get(&LevelHead::Param(UniverseParam(index)))
+            .map_or(0, |value| u32::try_from(*value).expect("a small model"))
+    });
+
+    assert!(
+        value(&constraints[0].lower, &values) <= value(&constraints[0].upper, &values),
+        "{assignment:?}"
+    );
+}
+
 /// `level` under `assignment`.
 fn value(level: &Level, assignment: &[u32]) -> u32 {
     level

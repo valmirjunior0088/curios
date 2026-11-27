@@ -56,6 +56,33 @@ fn non_principal_flexible_bound_is_not_arbitrarily_defaulted() {
     assert_eq!(solver.solution(right), None);
 }
 
+/// What [`non_principal_flexible_bound_is_not_arbitrarily_defaulted`] leaves open for a declaration, the entry closes: a result no one reuses keeps no polymorphism, so a disjunction is closed at a model of its bound, the store kept consistent.
+#[test]
+fn an_entry_closes_a_disjunction_at_a_model() {
+    let mut solver = UniverseSolver::new(0);
+    let left = solver.fresh(UniverseRole::Flexible, None);
+    let right = solver.fresh(UniverseRole::Flexible, None);
+    solver
+        .add_leq(
+            Level::constant(1),
+            Level::max([Level::meta(left), Level::meta(right)]),
+            UniverseConstraintOrigin::Converted,
+        )
+        .unwrap();
+    solver.default([left, right]).unwrap();
+
+    let solved = [left, right].map(|meta| {
+        solver
+            .solution(meta)
+            .map(Level::constant_part)
+            .expect("the entry leaves no level open")
+    });
+    assert!(
+        solved.contains(&1) || solved.iter().any(|value| *value > 1),
+        "{solved:?}"
+    );
+}
+
 /// The companion to [`non_principal_flexible_bound_is_not_arbitrarily_defaulted`].
 ///
 /// Mutual bounds force an equality and therefore *do* have a least solution, so leaving them open is not conservatism — it is a level that never gets solved. Witness dispatch emits exactly this shape, and every `%` slot in a module body would fail to elaborate while propagation stalled on it: each level waits for the other, and neither is defaultable because both occur above.

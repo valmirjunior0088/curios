@@ -17,7 +17,7 @@ mod test_support;
 mod tests;
 
 use {
-    curios_analysis::{LevelModel, satisfiable},
+    curios_analysis::{LevelModel, model, satisfiable},
     curios_common::recurse,
     curios_core::{
         Extent, Global, Level, LevelHead, Quality, QualityMetaId, Term, UniverseConstraint,
@@ -1530,7 +1530,7 @@ impl UniverseSolver {
         Ok(())
     }
 
-    /// Close a non-reusable result (the module entrypoint) at its least universe solution instead of introducing a scheme.
+    /// Close a non-reusable result (the module entrypoint) at its least universe solution instead of introducing a scheme, and a level the least leaves open at a model of what bounds it: a disjunction has no least solution ([`Self::close_stalled_components`]), which a declaration keeps as polymorphism and a result no one reuses has none of to keep, so any model serves it.
     pub fn default(
         &mut self,
         metas: impl IntoIterator<Item = UniverseMetaId>,
@@ -1539,7 +1539,61 @@ impl UniverseSolver {
         let relevant = self.connected_metas(metas);
         self.minimize(&relevant, &relevant)?;
         self.check_consistent()?;
+        self.close_at_a_model(&relevant)?;
         self.discard_constraints(&relevant);
+        Ok(())
+    }
+
+    /// Assign each of `metas` still open the level a model of the constraints mentioning it gives ([`model`]), each read with every solved level in place. A store the assignment leaves inconsistent is put back as it was.
+    fn close_at_a_model(&mut self, metas: &BTreeSet<UniverseMetaId>) -> Result<(), UniverseError> {
+        let open = metas
+            .iter()
+            .copied()
+            .filter(|meta| self.solution(*meta).is_none())
+            .collect::<BTreeSet<_>>();
+        if open.is_empty() {
+            return Ok(());
+        }
+        let positions = open
+            .iter()
+            .flat_map(|meta| self.constraints.mentioning(LevelHead::Meta(*meta)))
+            .collect::<BTreeSet<_>>();
+        let constraints = positions
+            .into_iter()
+            .map(|position| {
+                let constraint = self
+                    .constraints
+                    .get(position)
+                    .expect("the occurrence index names a live constraint");
+                Ok(UniverseConstraint {
+                    lower: self.zonk(&constraint.lower)?,
+                    upper: self.zonk(&constraint.upper)?,
+                })
+            })
+            .collect::<Result<Vec<_>, UniverseError>>()?;
+        let Some(assignment) = model(constraints.iter()) else {
+            return Ok(());
+        };
+
+        let mark = self.mark();
+        let committed = open
+            .iter()
+            .try_for_each(|meta| {
+                let value = assignment
+                    .get(&LevelHead::Meta(*meta))
+                    .copied()
+                    .unwrap_or(0);
+                self.assign(
+                    *meta,
+                    Level::constant(u32::try_from(value).unwrap_or(u32::MAX)),
+                )
+            })
+            .is_ok()
+            && self.consistent();
+        if !committed {
+            self.rollback(mark);
+        }
+        self.release(mark);
         Ok(())
     }
 

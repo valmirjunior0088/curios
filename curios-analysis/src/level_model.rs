@@ -70,6 +70,14 @@ impl LevelModel {
         }
     }
 
+    /// The model as an assignment of naturals: a head bounded at offset `k` below the floor `f` takes `f - k`. The floor stands at or above every reached offset, so each value is a natural, and a settled model has fired every clause at the shift its upper side admits, so the assignment meets every constraint the passes read.
+    pub(crate) fn assignment(&self) -> BTreeMap<LevelHead, u64> {
+        self.reached
+            .iter()
+            .map(|(head, reached)| (*head, self.floor - reached))
+            .collect()
+    }
+
     /// Whether `head` has been bounded at any offset.
     pub(crate) fn reaches(&self, head: LevelHead) -> bool {
         self.reached.contains_key(&head)

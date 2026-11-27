@@ -1,4 +1,4 @@
-//! Whether a universe constraint set can be satisfied at all: whether some assignment of naturals to its heads meets every constraint.
+//! Whether a universe constraint set can be satisfied at all: whether some assignment of naturals to its heads meets every constraint, and one such assignment for a caller that any model serves.
 //!
 //! An unsatisfiable set is a hypothesis set from which everything follows — [`entails`](crate::entails) proves whatever it is asked under one — so a set is decided here before anything is assumed of it.
 //!
@@ -15,14 +15,29 @@ mod tests;
 
 use {
     super::{LevelModel, Settled},
-    curios_core::UniverseConstraint,
+    curios_core::{LevelHead, UniverseConstraint},
+    std::collections::BTreeMap,
 };
 
 /// Whether some assignment of naturals to parameters satisfies every constraint.
 pub fn satisfiable<'a>(
     constraints: impl IntoIterator<Item = &'a UniverseConstraint, IntoIter: Clone>,
 ) -> bool {
+    settled(constraints).is_some()
+}
+
+/// An assignment of naturals to every head `constraints` mention that satisfies each of them, where one exists ([`satisfiable`]): the model the decision settles on, read as levels. It is one model among those a disjunction admits, so a caller takes it only where any model serves.
+pub fn model<'a>(
+    constraints: impl IntoIterator<Item = &'a UniverseConstraint, IntoIter: Clone>,
+) -> Option<BTreeMap<LevelHead, u64>> {
+    settled(constraints).map(|model| model.assignment())
+}
+
+/// The model the decision settles on from Bezem and Coquand's starting point, or `None` where a value climbs past the ceiling, which only a loop makes it do.
+fn settled<'a>(
+    constraints: impl IntoIterator<Item = &'a UniverseConstraint, IntoIter: Clone>,
+) -> Option<LevelModel> {
     let constraints = constraints.into_iter();
     let mut model = LevelModel::throughout(constraints.clone());
-    model.settle(constraints, |_| false) != Settled::Loop
+    (model.settle(constraints, |_| false) != Settled::Loop).then_some(model)
 }
