@@ -9,6 +9,7 @@ use {
         LANE_IN, Mode, Namespace, PANIC, Refusal, RowReply, RunAs, SerialFlow, SerialOp,
         SerialParity, Settled, StdioMode, TEST_REPORT, WireReturn, WireType, for_each_host_op,
     },
+    curios_tracing::tracing::{Dispatch, dispatcher},
     std::{
         collections::{HashMap, hash_map::Entry},
         error::Error,
@@ -71,12 +72,15 @@ const HOST_RESERVE: usize = 16 << 20;
 /// Run `enter` on a thread whose stack is a module's, and answer what it answers.
 ///
 /// **Every entry into a module goes through here**, because the engine's limit bounds a stack and reserves none: where the thread's own stack ends first, the process aborts with no trap. So the limit [`shared_engine`] sets and the stack this thread is built with are one constant, and no caller's thread — a system's main thread, a test's two mebibytes — is what a module runs on. A panic on the thread reaches the caller as itself.
+///
+/// **The caller's recorder goes with it.** A recorder set for one thread alone, as a measurement's phase and a test set theirs, would hear nothing the module does, its host calls among it, so the thread runs under the recorder its caller runs under; one installed for the whole process is every thread's already.
 pub fn on_guest_stack<T: Send>(enter: impl FnOnce() -> T + Send) -> Result<T, Stop> {
+    let recorder = dispatcher::get_default(Dispatch::clone);
     thread::scope(|scope| {
         let guest = thread::Builder::new()
             .name("guest".to_owned())
             .stack_size(GUEST_STACK + HOST_RESERVE)
-            .spawn_scoped(scope, enter)
+            .spawn_scoped(scope, move || dispatcher::with_default(&recorder, enter))
             .map_err(|error| {
                 Stop::of(
                     "host failure",

@@ -1,4 +1,4 @@
-//! An answer is held to the row it is linked to: its operands and what it comes back with must cross as the program declares them, which is refused where the two are linked rather than when a program first calls the row.
+//! An answer is held to the row it is linked to: its operands and what it comes back with must cross as the program declares them, which is refused where the two are linked rather than when a program first calls the row. And a module runs under the recorder its caller set, on the thread built for it.
 
 use {
     super::*,
@@ -6,6 +6,10 @@ use {
     curios_abi::{
         ForeignFunction, ForeignStore, HostOp, Termination, WireResults, WireReturn, WireSignature,
         WireType,
+    },
+    curios_tracing::tracing::{
+        Event, Metadata, Subscriber,
+        span::{Attributes, Id, Record},
     },
     std::sync::Arc,
     wasmtime::Linker,
@@ -176,4 +180,38 @@ fn a_start_with_the_other_choice_is_refused() {
 
     assert!(start_engine(GuestMap::Unwritten).is_ok());
     assert!(start_engine(GuestMap::Written).is_err());
+}
+
+/// A recorder that keeps nothing, told from every other by its type.
+struct Marked;
+
+impl Subscriber for Marked {
+    fn enabled(&self, _: &Metadata<'_>) -> bool {
+        false
+    }
+
+    fn new_span(&self, _: &Attributes<'_>) -> Id {
+        Id::from_u64(1)
+    }
+
+    fn record(&self, _: &Id, _: &Record<'_>) {}
+
+    fn record_follows_from(&self, _: &Id, _: &Id) {}
+
+    fn event(&self, _: &Event<'_>) {}
+
+    fn enter(&self, _: &Id) {}
+
+    fn exit(&self, _: &Id) {}
+}
+
+/// A recorder its caller set for its own thread alone is the one a module runs under on the thread built for it, so a measurement's phase and a test hear the module's host calls. Mutation-checked: with the guest's thread spawned bare, the module runs under the process's default.
+#[test]
+fn a_module_runs_under_the_recorder_its_caller_set() {
+    let recorder = Dispatch::new(Marked);
+    let heard = dispatcher::with_default(&recorder, || {
+        on_guest_stack(|| dispatcher::get_default(|current| current.is::<Marked>()))
+    });
+
+    assert_eq!(heard.ok(), Some(true));
 }
