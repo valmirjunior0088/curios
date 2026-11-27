@@ -187,6 +187,36 @@ let read_field(
         end
     end;
 
+-- The texts the line gave `f`, or the variable it is read from where the line gave none, which a read as the program runs reads again: an option's last value, a `many`'s every value, a choice's chosen name; a flag, a count and a toggle are read as what they are, and give none.
+let given_texts(f: Field, seen: List(Seen), env: Map(Str, Bytes)) -> List(Bytes) =
+    let line =
+        match f.kind
+        | option(_, _) =>
+            match List/last(given_values(seen))
+            | some(t) => [t]
+            | none() => []
+            end
+        | many(_) => given_values(seen)
+        | choice(_, alternatives, _) =>
+            List/concat_map(
+                picks(seen),
+                (i) =>
+                    match List/try_get(alternatives, i)
+                    | some(a) => [Str/to_bytes(a.long)]
+                    | none() => []
+                    end)
+        | flag() | count() | toggle(_) => []
+        end;
+    match f.kind
+    | flag() | count() | toggle(_) => []
+    | option(_, _) | many(_) | choice(_, _, _) =>
+        match line
+        | [] =>
+            match variable(f, env) | some((_, text)) => [text] | none() => [] end
+        | [_, .._] => line
+        end
+    end;
+
 let read_options(
     fields: List(Field),
     at: Nat,
@@ -196,9 +226,10 @@ let read_options(
     match fields
     | [] => Result/success(Values/nil())
     | [f, ..more] =>
-        let head = read_field(f, List/reverse(Option/unwrap_or(Map/try_get(seen, at), [])), env)!;
+        let mine = List/reverse(Option/unwrap_or(Map/try_get(seen, at), []));
+        let head = read_field(f, mine, env)!;
         let tail = read_options(more, at + 1, seen, env)!;
-        Result/success(Values/cons(head, tail))
+        Result/success(Values/cons(head, given_texts(f, mine, env), tail))
     end;
 
 let read_required(
@@ -213,7 +244,7 @@ let read_required(
         | [t, ..rest] =>
             let a = reading(p.v, Str/to_upper(p.name), t)!;
             let (tail, left) = read_required(more, rest)!;
-            Result/success((Values/cons(a, tail), left))
+            Result/success((Values/cons(a, [t], tail), left))
         end
     end;
 
@@ -227,11 +258,11 @@ let read_optional(
         match tokens
         | [] =>
             let (tail, left) = read_optional(more, [])!;
-            Result/success((Values/cons(Option/none(), tail), left))
+            Result/success((Values/cons(Option/none(), [], tail), left))
         | [t, ..rest] =>
             let a = reading(p.v, Str/to_upper(p.name), t)!;
             let (tail, left) = read_optional(more, rest)!;
-            Result/success((Values/cons(Option/some(a), tail), left))
+            Result/success((Values/cons(Option/some(a), [t], tail), left))
         end
     end;
 
@@ -247,7 +278,7 @@ let read_rest(
         end
     | some(r) =>
         let all = readings(r.v, Str/to_upper(r.name), tokens)!;
-        Result/success(Values/cons(all, Values/nil()))
+        Result/success(Values/cons(all, tokens, Values/nil()))
     end;
 
 let leaf_values(

@@ -1,0 +1,77 @@
+-- A command built as the program runs, read as it runs: its names are its caller's, so no read of one is decided as the program is checked, and each answers an `Option`.
+use /std/{Cli, Str, Nat, Bool, List, Option, Map, Test};
+
+-- A command whose flags its caller names, beside a count, an optional option, a `many` and a positional.
+let built(flags: List(Str)) -> Cli/Command =
+    Cli/leaf(
+        "app",
+        "Read as it runs",
+        [
+            ..List/map(flags, (n) => Cli/flag(n, "")),
+            Cli/count("verbose", ""),
+            Cli/optional("level", Cli/nat, ""),
+            Cli/many("tag", Cli/str, "")],
+        Cli/positionals([Cli/positional("input", Cli/str, "")]));
+
+let shown(@A: Type, o: Option(A), show: (A) -> Str) -> Str =
+    match o | some(a) => show(a) | none() => "-" end;
+
+-- A list as one word, `-` where it is empty, as `shown` writes an absent value.
+let listed(texts: List(Str)) -> Str =
+    match texts | [] => "-" | [_, .._] => Str/join(",", texts) end;
+
+-- What each read answers, a word each, for the line `argv` against `built(flags)`.
+let read(flags: List(Str), argv: List(Str)) -> Str =
+    match Cli/checked(built(flags), Option/none())
+    | success(cli) =>
+        match Cli/parse(cli, List/map(argv, Str/to_bytes), Map/empty())
+        | parsed(p) =>
+            Str/join(" ", [
+                shown(Cli/read_flag(p, "fast"), Bool/to_str),
+                shown(Cli/read_count(p, "verbose"), Nat/to_str),
+                shown(Cli/read(p, "level", Cli/nat), Nat/to_str),
+                listed(Cli/read_many(p, "tag", Cli/str)),
+                shown(Cli/read(p, "input", Cli/str), (s) => s)])
+        | _ => "not parsed"
+        end
+    | failure(_) => "refused"
+    end;
+
+-- A flag a command built as the program runs declares is read by its name, given and not.
+test a_flag_of_a_command_built_as_the_program_runs_is_read_by_name =
+    Test/all([
+        Test/equal(read(["fast"], ["--fast", "in"]), "true 0 - - in"),
+        Test/equal(read(["fast"], ["in"]), "false 0 - - in")]);
+
+-- Each kind is read at what it carries: a count counted, an option's last value and a `many`'s every value read by the caller's reader.
+test each_kind_is_read_at_what_it_carries =
+    Test/equal(
+        read(
+            ["fast"],
+            ["--verbose", "--verbose", "--level", "2", "--level", "3", "--tag", "a", "--tag", "b",
+                "in"]),
+        "false 2 3 a,b in");
+
+-- A name the command lacks, or a slot of another kind, reads as nothing.
+test a_name_the_command_lacks_or_another_kinds_reads_as_nothing =
+    Test/equal(read(["slow"], ["in"]), "- 0 - - in");
+
+-- A value is read again by the reader its caller hands, whatever reader the declaration read it with.
+test a_value_is_read_by_the_callers_reader =
+    Test/equal(
+        match Cli/checked(built([]), Option/none())
+        | success(cli) =>
+            match Cli/parse(
+                cli,
+                [Str/to_bytes("--level"), Str/to_bytes("7"), Str/to_bytes("in")],
+                Map/empty())
+            | parsed(p) =>
+                Str/join(" ", [
+                    shown(Cli/read(p, "level", Cli/str), (s) => s),
+                    shown(Cli/read_count(p, "level"), Nat/to_str),
+                    shown(Cli/read_flag(p, "verbose"), Bool/to_str)])
+            | _ => "not parsed"
+            end
+        | failure(_) => "refused"
+        end,
+        "7 - -");

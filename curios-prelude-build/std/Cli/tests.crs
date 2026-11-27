@@ -1,4 +1,4 @@
--- `/std/Cli`: what each kind of argument reads into, the token grammar a line is read by, the screens a command answers with, how a group chooses its command, and what a declaration is refused for.
+-- `/std/Cli`: what each kind of argument reads into, the token grammar a line is read by, the screens a command answers with, how a group chooses its command, what a declaration is refused for, and the reads of a command built as the program runs.
 mod values;
 
 mod parse;
@@ -8,3 +8,5 @@ mod render;
 mod commands;
 
 mod check;
+
+mod built;

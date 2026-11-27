@@ -1,14 +1,24 @@
-use /std/{Str, Nat, Bool, List, Option, Io, Cli};
-use /std/Cli/{Field, Kind, Presence, Positional, Positionals, Command};
+use /std/{Str, Bytes, Nat, Bool, List, Option, Result, Io, Cli};
+use /std/Cli/{Value, Field, Kind, Presence, Positional, Positionals, Command};
 use /std/Bool/{True, False, Holds};
 
---- What a parse fills and `get` reads by name.
-pub struct Slot: pub Type {
-    --- An option's long name, or a positional's name.
-    name: Str,
-    --- The type it is read into.
-    T: Type,
-}
+--- What a parse fills and a read finds by name: an option, held at what its kind carries, or a positional, held as its place among the positionals keeps it.
+pub induct Slot: pub Type
+--- An option, by its long name.
+| option(name: Str, kind: Kind)
+--- A positional the line must give.
+| required(name: Str, v: Value)
+--- A positional the line may leave out.
+| optional(name: Str, v: Value)
+--- The positionals past the others, each read by `v`.
+| rest(name: Str, v: Value)
+end
+
+-- The name a read finds `s` by.
+let label(s: Slot) -> Str =
+    match s
+    | option(n, _) | required(n, _) | optional(n, _) | rest(n, _) => n
+    end;
 
 --- The type a value read as `A` is held at under `presence`: an `Option` where it may be absent, and `A` itself where it is required or has a default.
 pub let Presented(A: Type, presence: Presence(A)) -> Type =
@@ -29,21 +39,27 @@ pub let Carrier(k: Kind) -> Type =
     | choice(A, _, presence) => Presented(A, presence)
     end;
 
+--- The type a parse fills `s` with: what an option's kind carries, a required positional's value, an `Option` of an optional one's, and a list of the rest's.
+pub let Held(s: Slot) -> Type =
+    match s
+    | option(_, k) => Carrier(k)
+    | required(_, v) => v.A
+    | optional(_, v) => Option(v.A)
+    | rest(_, v) => List(v.A)
+    end;
+
 --- What a group's parse holds: its options, in order.
 pub let option_slots(fields: List(Field)) -> List(Slot) =
-    List/map(fields, (f) => Slot { name = f.long, T = Carrier(f.kind) });
+    List/map(fields, (f) => Slot/option(f.long, f.kind));
 
 pub let required_slots(ps: List(Positional)) -> List(Slot) =
-    List/map(ps, (p) => Slot { name = p.name, T = p.v.A });
+    List/map(ps, (p) => Slot/required(p.name, p.v));
 
 pub let optional_slots(ps: List(Positional)) -> List(Slot) =
-    List/map(ps, (p) => Slot { name = p.name, T = Option(p.v.A) });
+    List/map(ps, (p) => Slot/optional(p.name, p.v));
 
 pub let rest_slots(p: Option(Positional)) -> List(Slot) =
-    match p
-    | none() => []
-    | some(r) => [Slot { name = r.name, T = List(r.v.A) }]
-    end;
+    match p | none() => [] | some(r) => [Slot/rest(r.name, r.v)] end;
 
 --- What a leaf's parse holds, in order: every option, then every positional.
 pub let slots(options: List(Field), positionals: Positionals) -> List(Slot) =
@@ -60,18 +76,19 @@ pub let Slots(c: Command) -> List(Slot) =
     | group(_, _, options, _) => option_slots(options)
     end;
 
---- A value for each slot, in order.
+--- A value for each slot, in order, beside the texts the line gave it.
 pub induct Values: (List(Slot)) -> pub Type
 --- No slot is left.
 | nil(): ([])
---- One slot's value, then the rest.
-| cons(@s: Slot, @rest: List(Slot), head: s.T, tail: Values(rest)): ([s, ..rest])
+--- One slot's value and the texts it was read from, then the rest: what an option's line or variable gave, a positional's token, or the rest's, and none where nothing was read.
+| cons(@s: Slot, @rest: List(Slot), head: Held(s), given: List(Bytes), tail: Values(rest)): (
+    [s, ..rest])
 end
 
 pub let appended(@a: List(Slot), @b: List(Slot), x: Values(a), y: Values(b)) -> Values([..a, ..b]) =
     match x
     | nil() => y
-    | cons(head, tail) => Values/cons(head, appended(tail, y))
+    | cons(head, given, tail) => Values/cons(head, given, appended(tail, y))
     end;
 
 --- What a line parsed into against a command: a leaf's values, or a group's values and the parse of the command the line chose.
@@ -109,7 +126,10 @@ pub let Lookup(spec: List(Slot), name: Str) -> Type =
     match spec
     | [] => {}
     | [s, ..rest] =>
-        match s.name == name | true => s.T | false => Lookup(rest, name) end
+        match label(s) == name
+        | true => Held(s)
+        | false => Lookup(rest, name)
+        end
     end;
 
 --- That no option or positional, or no command, is named `name`: what a read of a name the declaration lacks reduces to, with the name there nearest to it, as the line's own refusal names one, and the names there are. Nothing proves it, so the read is refused where it is written.
@@ -122,22 +142,22 @@ let missing(name: Str, names: List(Str)) -> Prop =
 
 --- That `name` is one of `spec`'s, decided by reduction: a name the declaration lacks reduces to `Unknown` of it, refused where it is written.
 pub let Has(spec: List(Slot), name: Str) -> Prop =
-    match List/any(spec, (s) => s.name == name)
+    match List/any(spec, (s) => label(s) == name)
     | true => True
-    | false => missing(name, List/map(spec, (s) => s.name))
+    | false => missing(name, List/map(spec, label))
     end;
 
 -- The search a read hands down the list, which a known name holds.
 let Present(spec: List(Slot), name: Str) -> Prop =
-    Holds(List/any(spec, (s) => s.name == name));
+    Holds(List/any(spec, (s) => label(s) == name));
 
 let present(@spec: List(Slot), name: Str, @ok: Has(spec, name)) -> Present(spec, name) =
-    match List/any(spec, (s) => s.name == name)
+    match List/any(spec, (s) => label(s) == name)
     | true => True/qed()
     | false => match ok end
     end;
 
-let read(
+let walk(
     @spec: List(Slot),
     v: Values(spec),
     name: Str,
@@ -145,10 +165,10 @@ let read(
 ) -> Lookup(spec, name) =
     match v
     | nil() => match ok end
-    | cons(@s, @rest, head, tail) =>
-        match s.name == name
+    | cons(@s, @rest, head, _, tail) =>
+        match label(s) == name
         | true => head
-        | false => read(@rest, tail, name, @ok)
+        | false => walk(@rest, tail, name, @ok)
         end
     end;
 
@@ -159,7 +179,81 @@ pub let get(
     name: Str,
     @ok: Has(Slots(c), name),
 ) -> Lookup(Slots(c), name) =
-    read(values(p), name, @present(name, @ok));
+    walk(values(p), name, @present(name, @ok));
+
+--- A slot a read as the program runs found, the value a parse filled it with, and the texts the line gave it.
+pub struct Entry: pub Type {
+    slot: Slot,
+    value: Held(slot),
+    given: List(Bytes),
+}
+
+-- The first slot of `v` named `name`, told as the program runs: the walk `get` makes, where no proof holds that one is there.
+let find(@spec: List(Slot), v: Values(spec), name: Str) -> Option(Entry) =
+    match v
+    | nil() => Option/none()
+    | cons(@s, @_, head, given, tail) =>
+        match label(s) == name
+        | true => Option/some(Entry { slot = s, value = head, given = given })
+        | false => find(tail, name)
+        end
+    end;
+
+-- An entry's value where its slot is a flag or a toggle, the slot and then its kind taken apart by hand, as the value's type follows each into its arm.
+let switched(e: Entry) -> Option(Bool) =
+    let taken: (Held(e.slot)) -> Option(Bool) =
+        match e.slot
+        | option(_, k) => (held) => switched_kind(k, held)
+        | required(_, _) | optional(_, _) | rest(_, _) => (_) => Option/none()
+        end;
+    taken(e.value);
+
+let switched_kind(k: Kind, held: Carrier(k)) -> Option(Bool) =
+    let taken: (Carrier(k)) -> Option(Bool) =
+        match k
+        | flag() | toggle(_) => (b) => Option/some(b)
+        | count() | option(_, _) | many(_) | choice(_, _, _) => (_) => Option/none()
+        end;
+    taken(held);
+
+-- An entry's value where its slot is a count.
+let counted(e: Entry) -> Option(Nat) =
+    let taken: (Held(e.slot)) -> Option(Nat) =
+        match e.slot
+        | option(_, k) => (held) => counted_kind(k, held)
+        | required(_, _) | optional(_, _) | rest(_, _) => (_) => Option/none()
+        end;
+    taken(e.value);
+
+let counted_kind(k: Kind, held: Carrier(k)) -> Option(Nat) =
+    let taken: (Carrier(k)) -> Option(Nat) =
+        match k
+        | count() => (n) => Option/some(n)
+        | flag() | toggle(_) | option(_, _) | many(_) | choice(_, _, _) => (_) => Option/none()
+        end;
+    taken(held);
+
+--- Whether the flag or the toggle named `name` is set, told as the program runs, for a command built as it runs, whose names `get` cannot decide: `none` where the command has no flag or toggle so named.
+pub let read_flag(@c: Command, p: Parsed(c), name: Str) -> Option(Bool) =
+    Option/bind(find(values(p), name), switched);
+
+--- How many times the count named `name` was given, told as the program runs: `none` where the command has no count so named.
+pub let read_count(@c: Command, p: Parsed(c), name: Str) -> Option(Nat) =
+    Option/bind(find(values(p), name), counted);
+
+--- The option or positional named `name` as `v` reads it, told as the program runs: the last text the line, or the option's variable, gave it. `none` where the command has none so named, where nothing was given — a default is the caller's to apply — or where `v` refuses the text.
+pub let read(@c: Command, p: Parsed(c), name: Str, v: Value) -> Option(v.A) =
+    match find(values(p), name)
+    | some(e) => Option/bind(List/last(e.given), (text) => Result/to_option(v.read(text)))
+    | none() => Option/none()
+    end;
+
+--- Every text the line gave the option or positional named `name`, as `v` reads each, told as the program runs: a `many` option's or the rest's in order, or the one any other was given. Empty where the command has none so named or nothing was given, and short of each text `v` refuses.
+pub let read_many(@c: Command, p: Parsed(c), name: Str, v: Value) -> List(v.A) =
+    match find(values(p), name)
+    | some(e) => List/filter_map(e.given, (text) => Result/to_option(v.read(text)))
+    | none() => []
+    end;
 
 --- That `name` is one of `commands`', decided by reduction: a name the group lacks reduces to `Unknown` of it.
 pub let HasIn(commands: List(Command), name: Str) -> Prop =
