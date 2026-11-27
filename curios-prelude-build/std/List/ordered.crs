@@ -11,7 +11,8 @@ pub let leads(@T: Type, le: (T, T) -> Bool, a: T, l: List(T)) -> Bool =
 pub let ordered(@T: Type, l: List(T), le: (T, T) -> Bool) -> Bool =
     match l
     | [] => true
-    | [h, ..t] => match leads(le, h, t) | true => ordered(t, le) | false => false end
+    | [h, ..t] =>
+        match leads(le, h, t) | true => ordered(t, le) | false => false end
     end;
 
 --- An element that leads a list in order makes a list in order.

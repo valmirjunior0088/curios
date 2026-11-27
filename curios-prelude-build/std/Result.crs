@@ -119,8 +119,10 @@ satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Ord(Result(E, A)) {
     le(a, b) = Ordering/is_le(ord(a, b)),
     flips(a, b) =
         match a
-        | failure(e) => match b | failure(f) => Ord/flips(e, f) | success(_) => Eq/refl() end
-        | success(x) => match b | failure(_) => Eq/refl() | success(y) => Ord/flips(x, y) end
+        | failure(e) =>
+            match b | failure(f) => Ord/flips(e, f) | success(_) => Eq/refl() end
+        | success(x) =>
+            match b | failure(_) => Eq/refl() | success(y) => Ord/flips(x, y) end
         end,
     trans(a, b, c, p, q) =
         match a

@@ -10,7 +10,8 @@ test a_key_an_empty_map_lacks_is_tried_as_none =
 -- A read under a guard on `has` takes the evidence the guard gives and answers the value, with no `Option` to open.
 test get_reads_the_key_its_guard_found =
     let m: Map(Str, Nat) = Map/of_list([("one", 1), ("two", 2)]);
-    let at(k: Str) -> Nat = match Map/has(m, k) | true => Map/get(m, k) | false => 0 end;
+    let at(k: Str) -> Nat =
+        match Map/has(m, k) | true => Map/get(m, k) | false => 0 end;
     Test/equal([at("one"), at("two"), at("three")], [1, 2, 0]);
 
 -- "", "a", "ab", "abc" and "b" force the trie to branch on the presence-marker bits: a key that is a proper prefix of another differs from it only at a marker position, the case a plain per-byte comparison would miss.

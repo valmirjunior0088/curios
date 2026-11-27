@@ -28,6 +28,8 @@ struct PrinterState<'a, 'b, 'c> {
     should_indent: bool,
     /// Characters emitted since the last newline, indentation included — what a [`Printer::Group`]'s fits scan subtracts from `width` to learn the room left on the line.
     column: usize,
+    /// The column the current line's text began at, past its indentation: what a group held to a span measures from.
+    text_from: usize,
     /// The line width [`Printer::Group`]s try to fit; `None` is unbounded, so every group renders flat.
     width: Option<usize>,
     /// The text the document was read from and how far into it the output has got. `None` for every ordinary `Display`, which is what keeps a run with nothing to follow rendering as a pretty printer's.
@@ -62,6 +64,7 @@ impl<'a, 'b, 'c> PrinterState<'a, 'b, 'c> {
             indent_by: 0,
             should_indent: true,
             column: 0,
+            text_from: 0,
             width,
             following: original.map(|original| (original, Cursor::start(original))),
             taken: 0,
@@ -88,6 +91,7 @@ impl<'a, 'b, 'c> PrinterState<'a, 'b, 'c> {
             return Ok(());
         }
 
+        let fresh = self.should_indent;
         let leading = mem::take(&mut self.spaces)
             + match self.should_indent {
                 true => self.indentation(),
@@ -98,6 +102,9 @@ impl<'a, 'b, 'c> PrinterState<'a, 'b, 'c> {
         }
         self.written += leading;
         self.column += leading;
+        if fresh {
+            self.text_from = self.column;
+        }
         self.should_indent = false;
         // A part begins with its first character, past the indentation and the spaces held before it.
         for part in self.parts.iter_mut().filter(|part| part.is_none()) {
@@ -291,6 +298,20 @@ impl<'a, 'b, 'c> PrinterState<'a, 'b, 'c> {
         Ok(())
     }
 
+    /// The column the current line's text begins at, past its indentation: the next character's own on a fresh line, whose text it begins.
+    fn text_start(&self) -> usize {
+        self.effective_column() - self.lead()
+    }
+
+    /// How far the next character lands past where its line's text begins: none on a fresh line, whose text it begins.
+    fn lead(&self) -> usize {
+        let fresh = self.should_indent || self.after_comment;
+        match fresh {
+            true => 0,
+            false => self.effective_column().saturating_sub(self.text_from),
+        }
+    }
+
     /// The column the next character will actually land at: a fresh line still owes its indentation, which [`PrinterState::put`] emits lazily, so the pending spaces must be counted before a [`Printer::Group`] measures the room left on the line — and a line that owes a comment a line of its own, or that a comment has ended, is over.
     fn effective_column(&self) -> usize {
         let fresh = self.should_indent || self.after_comment;
@@ -315,6 +336,8 @@ enum Step {
     /// The remaining items of a [`Printer::Fill`], resumed after the one before them has been emitted — the gap decision needs the column the previous item actually left behind, which only exists once it is printed.
     Fill(Filling),
     Dedent,
+    /// The indentation to take back once a group broken under a flat parent has printed.
+    Indented(usize),
 }
 
 /// A run resumed at the gap after its previous item, in the mode its enclosing group chose.
@@ -500,10 +523,16 @@ struct Measured<'a> {
     strict: bool,
 }
 
-/// One entry of [`fits`]'s stack: a node to measure, or the end of a group held to a share of the width, which began where `from` characters had been measured and may take `cap` of them.
+/// One entry of [`fits`]'s stack: a node to measure, the end of a group held to a span, which its line's text may run to `cap` columns at, or the end of a group nested inside the measured one.
 enum Scanned<'a> {
     Node(Measured<'a>),
-    Held { from: usize, cap: usize },
+    /// A held group's end, `nested` the groups between it and the measured one: a held group directly inside fails the measured group, and one deeper is the nearer group's to break before, measured when that group is.
+    Held {
+        cap: usize,
+        nested: usize,
+    },
+    /// A group's end inside the measured group, which leaves one level of nesting.
+    Closed,
 }
 
 /// What a scan has learned of the comments its group would write past, were it flat.
@@ -561,7 +590,7 @@ fn ahead(rest: &[Step]) -> Option<char> {
     loop {
         let Some((node, flat)) = stack.pop() else {
             match rest.next()? {
-                Step::Dedent => {}
+                Step::Dedent | Step::Indented(_) => {}
                 Step::Fill(filling) => {
                     stack.extend(
                         filling.items.iter().rev().map(|item| {
@@ -607,7 +636,14 @@ fn ahead(rest: &[Step]) -> Option<char> {
     }
 }
 
-/// Whether `printer`'s flat rendering fits in `available` characters — the [`Printer::Group`] decision. Within the group a hard [`Printer::Line`] fails the scan outright, and so does text following a comment that arrives inside the group: a group containing a mandatory break never renders flat, and a comment is one. A comment that arrives with nothing after it in the group leaves the group flat — it rides the end of the line or takes the next either way.
+/// Where a scan's group begins on its line: the characters left on the line for it, and how far past the line's text start it begins, which a group held to a span counts its columns from.
+#[derive(Clone, Copy)]
+struct Start {
+    room: usize,
+    lead: usize,
+}
+
+/// Whether `printer`'s flat rendering fits in the room `start` leaves — the [`Printer::Group`] decision. Within the group a hard [`Printer::Line`] fails the scan outright, and so does text following a comment that arrives inside the group: a group containing a mandatory break never renders flat, and a comment is one. A comment that arrives with nothing after it in the group leaves the group flat — it rides the end of the line or takes the next either way.
 ///
 /// The scan does not stop at the group's edge: a group that fits exactly while unbreakable content trails it would otherwise overrun the line, so measurement continues into `rest` — the renderer's remaining work, in its recorded modes — until the line provably ends. Beyond the group the polarity of a mandatory break flips: a hard line, a text newline, or a soft [`Printer::Line`] in broken surroundings simply ends the line, deciding the scan in favor, and a comment is not looked for — a trailing comment never reflows the code it rides.
 ///
@@ -617,13 +653,19 @@ fn ahead(rest: &[Step]) -> Option<char> {
 fn fits(
     root: &Printer,
     rest: &[Step],
-    available: usize,
+    start: Start,
     inside: bool,
     whole: bool,
     following: Option<(&Original<'_>, Cursor)>,
     width: Option<usize>,
 ) -> bool {
+    let Start {
+        room: available,
+        lead,
+    } = start;
     let mut used = 0usize;
+    // The groups open between the measured group and the node in hand.
+    let mut nested = 0usize;
     // A copy of the cursor, walked through the group as printing would walk the real one.
     let mut arriving = following.map(|(original, cursor)| Arriving {
         original,
@@ -645,7 +687,7 @@ fn fits(
             match rest_iter.next() {
                 // The whole document fits on this line.
                 None => return true,
-                Some(Step::Dedent) => continue,
+                Some(Step::Dedent | Step::Indented(_)) => continue,
                 // A pending fill measures as its items would print. One gap *per item* rather than one fewer, unlike the node below: these are the items still owed a gap, the one before them having already been emitted.
                 Some(Step::Fill(filling)) => {
                     if matches!(filling.style, FillStyle::Structural)
@@ -693,10 +735,17 @@ fn fits(
         } = match scanned {
             Scanned::Node(measured) => measured,
             // A held group ends here, so what was measured since it began is its flat form.
-            Scanned::Held { from, cap } => match used - from > cap {
+            Scanned::Held {
+                cap,
+                nested: within,
+            } => match within == 0 && lead + used > cap {
                 true => return false,
                 false => continue,
             },
+            Scanned::Closed => {
+                nested -= 1;
+                continue;
+            }
         };
 
         // Text of either kind, measured a character at a time: within the group each one that is not blank steps the cursor's copy, and the first to follow a comment refuses flatness.
@@ -802,12 +851,16 @@ fn fits(
             })),
             // A nested group inside a fitting parent must fit wholly flat, including any fills it holds. Only an atomic fill in the measured group itself may wrap without breaking that group. A block that takes its own line only where it breaks is measured as one.
             Printer::Group { inner, within } => {
-                // One held to a span is flat inside the measured group only where its own flat form is within that span.
-                if inside && let (Some(columns), Some(_)) = (*within, width) {
-                    stack.push(Scanned::Held {
-                        from: used,
-                        cap: columns,
-                    });
+                // One held to a span directly inside the measured group is flat only where its line's text, up to its end, is within that span; one inside a nearer group is that group's to break before, and is measured when that group is.
+                if inside {
+                    stack.push(Scanned::Closed);
+                    if let (Some(columns), Some(_)) = (*within, width) {
+                        stack.push(Scanned::Held {
+                            cap: columns,
+                            nested,
+                        });
+                    }
+                    nested += 1;
                 }
                 stack.push(Scanned::Node(Measured {
                     node: inner,
@@ -941,7 +994,10 @@ fn run<'b, 'c>(
                                     true => fits(
                                         &first.printer,
                                         &stack,
-                                        room,
+                                        Start {
+                                            room,
+                                            lead: state.lead(),
+                                        },
                                         true,
                                         false,
                                         state.following,
@@ -950,7 +1006,10 @@ fn run<'b, 'c>(
                                     false => fits(
                                         &first.printer,
                                         &[],
-                                        room,
+                                        Start {
+                                            room,
+                                            lead: state.lead(),
+                                        },
                                         true,
                                         false,
                                         state.following,
@@ -985,9 +1044,12 @@ fn run<'b, 'c>(
                             width => fits(
                                 &inner,
                                 &stack,
-                                width.map_or(usize::MAX, |width| {
-                                    width.saturating_sub(state.effective_column())
-                                }),
+                                Start {
+                                    room: width.map_or(usize::MAX, |width| {
+                                        width.saturating_sub(state.effective_column())
+                                    }),
+                                    lead: state.lead(),
+                                },
                                 true,
                                 true,
                                 state.following,
@@ -1007,28 +1069,67 @@ fn run<'b, 'c>(
                 Printer::Group { inner, within } => {
                     let within = *within;
                     let inner = inner.take();
-                    let inner_fits = flat
-                        || match state.width {
+                    let inner_fits = match flat {
+                        // Under a parent measured flat, what that parent left unmeasured: a group held to a span directly inside this one, which this group breaks before where its line's text would run past the span.
+                        true => {
+                            state.width.is_none()
+                                || fits(
+                                    &inner,
+                                    &[],
+                                    Start {
+                                        room: usize::MAX,
+                                        lead: state.lead(),
+                                    },
+                                    true,
+                                    false,
+                                    None,
+                                    state.width,
+                                )
+                        }
+                        false => match state.width {
                             // Unbounded: everything fits.
                             None => true,
                             // A comment already taken onto this line ends it, so nothing measured now can render flat over the break it forces. Asked here rather than in the scan because it is a fact about the line already written, not about the document ahead.
                             Some(_) if !state.suffix.is_empty() => false,
-                            // Held to a span, its flat form is measured alone against that span too.
+                            // Held to a span, its line's text up to its end is measured against that span too.
                             Some(width) => {
                                 fits(
                                     &inner,
                                     &stack,
-                                    width.saturating_sub(state.effective_column()),
+                                    Start {
+                                        room: width.saturating_sub(state.effective_column()),
+                                        lead: state.lead(),
+                                    },
                                     true,
                                     false,
                                     state.following,
                                     state.width,
                                 ) && within.is_none_or(|columns| {
-                                    fits(&inner, &[], columns, true, false, None, state.width)
+                                    fits(
+                                        &inner,
+                                        &[],
+                                        Start {
+                                            room: columns.saturating_sub(state.lead()),
+                                            lead: state.lead(),
+                                        },
+                                        true,
+                                        false,
+                                        None,
+                                        state.width,
+                                    )
                                 })
                             }
-                        };
-                    stack.push(Step::Print(inner, inner_fits));
+                        },
+                    };
+                    match (flat, inner_fits) {
+                        // Broken under a parent printed flat, whose levels its line never took: its lines indent from where its line's text begins.
+                        (true, false) => {
+                            stack.push(Step::Indented(state.indent_by));
+                            state.indent_by = state.text_start();
+                            stack.push(Step::Print(inner, false));
+                        }
+                        _ => stack.push(Step::Print(inner, inner_fits)),
+                    }
                 }
                 Printer::IfBreak {
                     flat: on_flat,
@@ -1063,7 +1164,10 @@ fn run<'b, 'c>(
                             true => fits(
                                 &item.printer,
                                 &stack,
-                                room,
+                                Start {
+                                    room,
+                                    lead: state.lead(),
+                                },
                                 true,
                                 false,
                                 state.following,
@@ -1072,7 +1176,10 @@ fn run<'b, 'c>(
                             false => fits(
                                 &item.printer,
                                 &[],
-                                room,
+                                Start {
+                                    room,
+                                    lead: state.lead(),
+                                },
                                 true,
                                 false,
                                 state.following,
@@ -1094,6 +1201,7 @@ fn run<'b, 'c>(
                 }
             }
             Step::Dedent => state.indent_by -= state.indent_step,
+            Step::Indented(indent_by) => state.indent_by = indent_by,
         }
     }
 

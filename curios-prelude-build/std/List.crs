@@ -62,7 +62,8 @@ pub let flatten(@T: Type, parts: List(List(T))) -> List(T) =
 pub let find(@T: Type, l: List(T), pred: (T) -> Bool) -> Option(T) =
     match l
     | [] => Option/none()
-    | [h, ..t] => match pred(h) | true => Option/some(h) | false => find(t, pred) end
+    | [h, ..t] =>
+        match pred(h) | true => Option/some(h) | false => find(t, pred) end
     end;
 
 --- The index of the first element `pred` accepts, or `none`.
@@ -70,7 +71,8 @@ pub let find_index(@T: Type, l: List(T), pred: (T) -> Bool) -> Option(Nat) =
     let go(i: Nat, rest: List(T)) -> Option(Nat) =
         match rest
         | [] => Option/none()
-        | [h, ..t] => match pred(h) | true => Option/some(i) | false => go(i + 1, t) end
+        | [h, ..t] =>
+            match pred(h) | true => Option/some(i) | false => go(i + 1, t) end
         end;
     go(0, l);
 
@@ -131,11 +133,13 @@ pub let reverse(@T: Type, l: List(T)) -> List(T) =
 
 --- The elements `pred` accepts.
 pub let filter(@T: Type, l: List(T), pred: (T) -> Bool) -> List(T) =
-    fold(l, [], (x, acc) => match pred(x) | true => [..acc, x] | false => acc end);
+    fold(l, [], (x, acc) =>
+        match pred(x) | true => [..acc, x] | false => acc end);
 
 --- `f` on every element, keeping the values it answers.
 pub let filter_map(@T: Type, @B: Type, l: List(T), f: (T) -> Option(B)) -> List(B) =
-    fold(l, [], (x, acc) => match f(x) | some(y) => [..acc, y] | none() => acc end);
+    fold(l, [], (x, acc) =>
+        match f(x) | some(y) => [..acc, y] | none() => acc end);
 
 --- The elements `pred` accepts, and the rest.
 pub let partition(@T: Type, l: List(T), pred: (T) -> Bool) -> {List(T), List(T)} =
@@ -153,7 +157,8 @@ pub let unzip(@A: Type, @B: Type, l: List({A, B})) -> {List(A), List(B)} =
 
 --- `lo` up to and excluding `hi`; empty when `hi` is not above `lo`.
 pub let range(lo: Nat, hi: Nat) -> List(Nat) =
-    let go(k: Nat, i: Nat) -> List(Nat) = match k | 0 => [] | kp + 1 => [i, ..go(kp, i + 1)] end;
+    let go(k: Nat, i: Nat) -> List(Nat) =
+        match k | 0 => [] | kp + 1 => [i, ..go(kp, i + 1)] end;
     go(hi - lo, lo);
 
 --- `n` copies of `x`.

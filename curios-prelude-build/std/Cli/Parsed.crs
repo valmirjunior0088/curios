@@ -108,7 +108,8 @@ let values(@c: Command, p: Parsed(c)) -> Values(Slots(c)) =
 pub let Lookup(spec: List(Slot), name: Str) -> Type =
     match spec
     | [] => {}
-    | [s, ..rest] => match s.name == name | true => s.T | false => Lookup(rest, name) end
+    | [s, ..rest] =>
+        match s.name == name | true => s.T | false => Lookup(rest, name) end
     end;
 
 --- That no option or positional, or no command, is named `name`: what a read of a name the declaration lacks reduces to, with the name there nearest to it, as the line's own refusal names one, and the names there are. Nothing proves it, so the read is refused where it is written.

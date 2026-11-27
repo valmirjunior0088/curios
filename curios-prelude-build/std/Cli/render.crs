@@ -167,7 +167,8 @@ pub let help(c: Command, version: Option(Str), path: List(Str)) -> Str =
                             Cli/name(child),
                             match child | leaf(_, a, _, _) | group(_, a, _, _) => a end))))
         end;
-    let about = match target | leaf(_, a, _, _) | group(_, a, _, _) => a end;
+    let about =
+        match target | leaf(_, a, _, _) | group(_, a, _, _) => a end;
     Fmt/render("%\n\n%\n\n%")(about)(usage(c, path))(sections);
 
 let tip(near: Option(Str), what: Str) -> Str =

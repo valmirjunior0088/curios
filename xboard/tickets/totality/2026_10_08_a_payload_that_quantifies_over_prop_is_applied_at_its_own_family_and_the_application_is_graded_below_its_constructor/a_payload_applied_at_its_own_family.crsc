@@ -6,5 +6,6 @@ end
 #{node = Rec}
 (let bad: (b: #{node = InductType} /Bad()) -> /sys/Bool/False =
     (b2: #{node = InductType} /Bad()) =>
-        #{goal = /sys/Bool/False} match b2 | c(f) => bad(f(#{node = InductType} /Bad())(b2)) end;
+        #{goal = /sys/Bool/False}
+        match b2 | c(f) => bad(f(#{node = InductType} /Bad())(b2)) end;
 bad(#{node = Variant} /Bad/c((A: Prop) => (x: A) => x)))

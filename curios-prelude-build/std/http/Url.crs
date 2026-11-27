@@ -167,17 +167,20 @@ let without_dots(path: Str) -> Str =
         match segments
         | [] => kept
         | [s, ..more] =>
-            let closed(k: List(Str)) -> List(Str) = match more | [] => [..k, ""] | _ => k end;
+            let closed(k: List(Str)) -> List(Str) =
+                match more | [] => [..k, ""] | _ => k end;
             match s
             | "." => walk(more, closed(kept))
             | ".." =>
                 walk(
                     more,
-                    closed(match List/length(kept) | 0 => [] | n + 1 => List/take(kept, n) end))
+                    closed(
+                        match List/length(kept) | 0 => [] | n + 1 => List/take(kept, n) end))
             | _ => walk(more, [..kept, s])
             end
         end;
-    let segments = match Str/split(path, "/") | [_, ..rest] => rest | [] => [] end;
+    let segments =
+        match Str/split(path, "/") | [_, ..rest] => rest | [] => [] end;
     Str/concat("/", Str/join("/", walk(segments, [])));
 
 -- `reference` beside the last segment of `base`, as RFC 3986 §5.2.3 merges a relative path.

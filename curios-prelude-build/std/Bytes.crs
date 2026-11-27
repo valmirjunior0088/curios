@@ -230,7 +230,8 @@ pub let flatten(parts: List(Bytes)) -> Bytes =
 
 --- Left to right with `f(byte, acc)`.
 pub let fold(@A: Type, b: Bytes, init: A, f: (Byte, A) -> A) -> A =
-    let go(z: Bytes, acc: A) -> A = match z | 0x[] => acc | 0x[h, ..t] => go(t, f(h, acc)) end;
+    let go(z: Bytes, acc: A) -> A =
+        match z | 0x[] => acc | 0x[h, ..t] => go(t, f(h, acc)) end;
     go(b, init);
 
 --- Where the first byte `pred` accepts is, with the proof that it lies within `b`, or `none`.

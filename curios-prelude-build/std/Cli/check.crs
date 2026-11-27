@@ -26,7 +26,8 @@ let clusterable(c: Char) -> Bool =
 -- The names an option answers to.
 let spellings(f: Field) -> List(Spelled) =
     let longs = List/map([f.long, ..f.aliases], Spelled/long);
-    let short = match f.short | none() => [] | some(c) => [Spelled/short(c)] end;
+    let short =
+        match f.short | none() => [] | some(c) => [Spelled/short(c)] end;
     match f.kind
     | toggle(_) => [..longs, ..List/map([f.long, ..f.aliases], Spelled/negated), ..short]
     | choice(_, alternatives, _) => List/map(alternatives, (a) => Spelled/long(a.long))
@@ -92,7 +93,10 @@ let field_problems(f: Field) -> List(Problem) =
         end];
 
 let every(ps: Positionals) -> List(Positional) =
-    [..ps.required, ..ps.optional, ..match ps.rest | none() => [] | some(p) => [p] end];
+    [
+        ..ps.required,
+        ..ps.optional,
+        ..match ps.rest | none() => [] | some(p) => [p] end];
 
 -- What is wrong with a command's own name, options and positionals, beside the built-ins.
 let own(

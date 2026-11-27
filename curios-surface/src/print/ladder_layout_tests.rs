@@ -59,3 +59,42 @@ fn with_no_width_every_ladder_keeps_its_line() {
         );
     }
 }
+
+// A ladder's columns run from where its line's text begins, so one after a long head is read with the head it ends: it takes a line of its own, where it is measured again, and keeps one there within them.
+#[test]
+fn a_ladder_past_its_columns_after_a_head_takes_a_line_of_its_own() {
+    let source = "let go(k: Nat, i: Nat) -> List(Nat) = match k | 0 => [] | kp + 1 => [i, ..go(kp, i + 1)] end;\ngo(2, 0)";
+    assert_eq!(
+        render(source, 100),
+        "let go(k: Nat, i: Nat) -> List(Nat) =\n    match k | 0 => [] | kp + 1 => [i, ..go(kp, i + 1)] end;\ngo(2, 0)"
+    );
+}
+
+// A head short enough that the line's text stays within the columns keeps its ladder on its line.
+#[test]
+fn a_ladder_within_its_columns_after_a_short_head_keeps_the_heads_line() {
+    let source = "let b = match n | 0 => true | p + 1 => even(p) end;\nb";
+    assert_eq!(render(source, 100), source);
+}
+
+// The break a ladder past its columns takes is the one nearest it: a call that ends in a lambda keeps its line, and the lambda's body takes the next.
+#[test]
+fn a_ladder_past_its_columns_breaks_the_group_nearest_it() {
+    let source = "fold(l, [], (x, acc) => match pred(x) | true => [..acc, x] | false => acc end)";
+    assert!(source.len() < 100);
+    assert_eq!(
+        render(source, 100),
+        "fold(l, [], (x, acc) =>\n    match pred(x) | true => [..acc, x] | false => acc end)"
+    );
+}
+
+// A group broken under one laid out flat indents one level past where its line's text begins: the flat groups around it took no level of its line.
+#[test]
+fn a_body_broken_under_a_flat_definition_indents_one_level_past_its_line() {
+    let source = "let nothing: Across(l) = (iu) => match iu | some(v) => absent(v, extra) | none() => fallback end;\nnothing";
+    assert!(source.lines().next().is_some_and(|line| line.len() < 100));
+    assert_eq!(
+        render(source, 100),
+        "let nothing: Across(l) = (iu) =>\n    match iu | some(v) => absent(v, extra) | none() => fallback end;\nnothing"
+    );
+}

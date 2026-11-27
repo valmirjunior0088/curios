@@ -59,7 +59,8 @@ let switch_word(name: Str, text: Str) -> Result(Failure, Bool) =
     end;
 
 let given(seen: List(Seen)) -> Nat =
-    List/length(List/filter(seen, (s) => match s | given() => true | _ => false end));
+    List/length(List/filter(seen, (s) =>
+        match s | given() => true | _ => false end));
 
 let given_values(seen: List(Seen)) -> List(Bytes) =
     List/concat_map(seen, (s) => match s | value(b) => [b] | _ => [] end);
@@ -181,7 +182,8 @@ let read_field(
                 Failure/conflict(
                     List/concat_map(
                         picks(seen),
-                        (i) => match List/try_get(spelled, i) | some(s) => [s] | none() => [] end)))
+                        (i) =>
+                            match List/try_get(spelled, i) | some(s) => [s] | none() => [] end)))
         end
     end;
 

@@ -23,7 +23,8 @@ pub let at(
 ) -> Eq()(List/get(List/set(l, i, x), i), x) =
     match l
     | [] => match ok end
-    | [_, ..t] => match i | 0 => Eq/refl() | j + 1 => at(t, j, x, @proved()) end
+    | [_, ..t] =>
+        match i | 0 => Eq/refl() | j + 1 => at(t, j, x, @proved()) end
     end;
 
 --- An element at another index than the one an update writes is the one there before.

@@ -114,7 +114,8 @@ pub let picked(
 ) -> Eq()(List/get(l, i), pick(l, i)) =
     match l
     | [] => match within end
-    | [_, ..r] => match i | 0 => Eq/refl() | j + 1 => picked(r, j, @proved()) end
+    | [_, ..r] =>
+        match i | 0 => Eq/refl() | j + 1 => picked(r, j, @proved()) end
     end;
 
 --- The value of the key whose encoding is `k` under `t`: a branch's twig at `k`'s digit there holds it where anything does.
@@ -415,7 +416,9 @@ pub let pick_set(
     @ok: Holds(i < List/length(l)),
     n: Node(K, V),
     j: Nat,
-) -> Eq()(pick(List/set(l, i, n), j), match i == j | true => n | false => pick(l, j) end) =
+) -> Eq()(
+    pick(List/set(l, i, n), j),
+    match i == j | true => n | false => pick(l, j) end) =
     match l
     | [] => match ok end
     | [_, ..r] =>
@@ -622,7 +625,9 @@ pub let Answers(
     k: Bytes,
     x: Option(V),
 ) -> Prop =
-    (j: Bytes) -> Eq()(find(n, j), match k == j | true => x | false => find(t, j) end);
+    (j: Bytes) -> Eq()(
+        find(n, j),
+        match k == j | true => x | false => find(t, j) end);
 
 --- What a node keeps of the one it stands in for, at a position the old one forked past: it forks past it too, and its first key agrees with the old one's through it.
 pub struct Held(a: Bytes, b: Bytes, c: Nat, past: Bool): pub Prop {
@@ -671,7 +676,8 @@ pub let pick_vacant(
     | [] => Eq/refl()
     | [h, ..r] =>
         match h
-        | empty() => match i | 0 => Eq/refl() | j + 1 => pick_vacant(r, none, j) end
+        | empty() =>
+            match i | 0 => Eq/refl() | j + 1 => pick_vacant(r, none, j) end
         | leaf(_, _) | branch(_, _) => match none end
         end
     end;
@@ -881,7 +887,8 @@ pub let leaf_answers(
                     match e == j | true => Option/some(v) | false => Option/none() end,
                     match k == j
                     | true => Option/some(v)
-                    | false => match e == j | true => Option/some(v0) | false => Option/none() end
+                    | false =>
+                        match e == j | true => Option/some(v0) | false => Option/none() end
                     end),
             Eq/sym(same),
             match k == j | true | false => Eq/refl() end);
@@ -1627,7 +1634,8 @@ let leaf_gone(
                 Eq()(
                     match k == j
                     | true => Option/none()
-                    | false => match e == j | true => Option/some(v0) | false => Option/none() end
+                    | false =>
+                        match e == j | true => Option/some(v0) | false => Option/none() end
                     end,
                     Option/none()),
             Eq/sym(same),
@@ -1666,7 +1674,8 @@ let leaf_absent(
 pub let lone(@K: Type, @V: Type, l: List(Node(K, V))) -> Node(K, V) =
     match l
     | [] => Node/empty()
-    | [h, ..r] => match h | empty() => lone(r) | leaf(_, _) | branch(_, _) => h end
+    | [h, ..r] =>
+        match h | empty() => lone(r) | leaf(_, _) | branch(_, _) => h end
     end;
 
 --- The first twig that holds anything is the one the first key's digit picks, and holds something.
@@ -1939,7 +1948,8 @@ pub let remove(
     @sound: Sound(t),
 ) -> Removed(K, V, t, k) =
     match t
-    | empty() => Removed/absent(t, @Eq/refl(), (j) => match k == j | true | false => Eq/refl() end)
+    | empty() => Removed/absent(t, @Eq/refl(), (j) =>
+        match k == j | true | false => Eq/refl() end)
     | leaf(k0, v0) =>
         match Hash/hash(k0) == k
         | true => Removed/gone(leaf_gone(k0, v0, k, proved()))
@@ -2130,7 +2140,8 @@ pub and same_in(
 ) -> Bool =
     match a
     | [] => match b | [] => true | [_, .._] => false end
-    | [x, ..xs] => match b | [] => false | [y, ..ys] => same(x, y) && same_in(xs, ys) end
+    | [x, ..xs] =>
+        match b | [] => false | [y, ..ys] => same(x, y) && same_in(xs, ys) end
     end;
 
 -- By recursion on both nodes: two nodes [`same`] holds alike are at one case, a leaf's keys one by [`Hash/Key/same`] and its values by the values' own law, and a branch's twigs one by one.
@@ -2432,7 +2443,8 @@ pub let mapped_find(
 ) -> Eq()(find(map(t, f), k), Option/map(find(t, k), f)) =
     match t
     | empty() => Eq/refl()
-    | leaf(k0, _) => match Hash/hash(k0) == k | true | false => Eq/refl() end
+    | leaf(k0, _) =>
+        match Hash/hash(k0) == k | true | false => Eq/refl() end
     | branch(at, tw) =>
         let s = small(k, at);
         mapped_find(List/get(tw.list, digit(k, at)), f, k)
@@ -2574,7 +2586,8 @@ pub let least(@K: Type, @V: Type, t: Node(K, V)) -> Option({K, V}) =
 pub and least_in(@K: Type, @V: Type, l: List(Node(K, V))) -> Option({K, V}) =
     match l
     | [] => Option/none()
-    | [h, ..r] => match least(h) | some(e) => Option/some(e) | none() => least_in(r) end
+    | [h, ..r] =>
+        match least(h) | some(e) => Option/some(e) | none() => least_in(r) end
     end;
 
 --- The entry of the greatest key, the last twig's that holds any; none of an empty node.
@@ -3443,7 +3456,8 @@ pub let canonical(
                 n1,
                 s1,
                 True/qed(),
-                (x, i) => match carried_find(n1, n2, x, same(x), found(n1, s1, x, i)) end)
+                (x, i) =>
+                    match carried_find(n1, n2, x, same(x), found(n1, s1, x, i)) end)
         | leaf(k2, v2) =>
             let contra: False =
                 two_keys(

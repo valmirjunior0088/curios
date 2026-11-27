@@ -95,7 +95,8 @@ pub let exponent_after(lower: Char, upper: Char) -> Parse(Str, Int) =
         | true => Parse/fail("expected an exponent")
         | false =>
             let magnitude = Nat/to_int(decimal_value(run));
-            Parse/pure(match negative | true => +0 - magnitude | false => magnitude end)
+            Parse/pure(
+                match negative | true => +0 - magnitude | false => magnitude end)
         end
     end;
 
@@ -130,7 +131,8 @@ pub let nan(negative: Bool, signaling: Bool) -> Parse(Str, Flt) =
     match payload < pow2(51) && (Bool/not(signaling) || payload >= 1)
     | true =>
         let positive = exact/of_bits(kind + payload);
-        Parse/pure(match negative | true => Flt/neg(positive) | false => positive end)
+        Parse/pure(
+            match negative | true => Flt/neg(positive) | false => positive end)
     | false => Parse/fail("a payload the kind cannot carry")
     end;
 

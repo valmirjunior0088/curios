@@ -267,7 +267,8 @@ let total(hours: Nat, minutes: Nat, seconds: Nat, nanos: Nat) -> Parse(Str, Int)
 -- A duration's parts after its `PT`: hours, minutes and seconds, each optional and in that order, `last` the one read last, one at least.
 let duration_parts(hours: Nat, minutes: Nat, last: Nat) -> Parse(Str, Int) =
     let next = Parse/str/peek()!;
-    let digits = match next | some(c) => Char/is_ascii_digit(c) | none() => false end;
+    let digits =
+        match next | some(c) => Char/is_ascii_digit(c) | none() => false end;
     match digits
     | true =>
         let read = more_digits(0, 0)!;

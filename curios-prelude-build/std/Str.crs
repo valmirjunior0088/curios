@@ -127,7 +127,8 @@ pub let of_bytes_lossy(b: Bytes) -> Str =
     | success(s) => s
     | failure(_) =>
         let (scan, _, read) = Bytes/fold(b, (Scan/lead(), 0, []), replaced);
-        let chars = match scan | cont(_, _, _) => [replacement, ..read] | _ => read end;
+        let chars =
+            match scan | cont(_, _, _) => [replacement, ..read] | _ => read end;
         flatten(List/map(List/reverse(chars), of_char))
     end;
 

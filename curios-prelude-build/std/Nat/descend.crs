@@ -18,7 +18,8 @@ pub let descend(
 ) -> P(s) =
     let go(k: Nat, s: S, within: Holds(measure(s) <= k)) -> P(s) =
         match k
-        | 0 => step(s, (t, r) => match none_below(measure(t), measure(s), r, within) end)
+        | 0 => step(s, (t, r) =>
+            match none_below(measure(t), measure(s), r, within) end)
         | kp + 1 => step(s, (t, r) => go(kp, t, proved()))
         end;
     go(measure(s), s, Nat/le/refl(measure(s)));

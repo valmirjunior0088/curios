@@ -173,7 +173,8 @@ let merge_ordered(
             let below: Holds(le(y, x)) =
                 Eq/subst(
                     (o: Ordering) =>
-                        Holds(match o | lt() => true | eq() => second(y, x) | gt() => false end),
+                        Holds(
+                            match o | lt() => true | eq() => second(y, x) | gt() => false end),
                     Eq/sym(flips(x, y)),
                     True/qed());
             let rest =
@@ -405,7 +406,8 @@ let push_layered(
 ) -> Layered(second)(push(ord, stack, run)) =
     match stack
     | [] =>
-        let nothing: Across(second, [], run) = (_, _, iu, _) => match Member/absent(iu) end;
+        let nothing: Across(second, [], run) = (_, _, iu, _) =>
+            match Member/absent(iu) end;
         Layered/level(nothing, Layered/bottom())
     | [none(), .._] => Layered/level(across, layered_below(layered))
     | [some(older), ..rest] =>
@@ -599,7 +601,8 @@ pub let ordered(
     l: List(T),
     given: Pairwise(second)(l),
 ) -> Holds(List/ordered(sort_by(l, ord), Ord/then(ord, second))) =
-    let nothing: Across(second, [], l) = (_, _, iu, _) => match Member/absent(iu) end;
+    let nothing: Across(second, [], l) = (_, _, iu, _) =>
+        match Member/absent(iu) end;
     drive_ordered(ord, flips, second, [], l, True/qed(), Layered/bottom(), nothing, given);
 
 --- The sort's answer is in order by `ord`, under `ord`'s flip.

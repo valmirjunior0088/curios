@@ -5,7 +5,8 @@ use /std/Bool/{Holds};
 pub let all(@T: Type, l: List(T), pred: (T) -> Bool) -> Bool =
     match l
     | [] => true
-    | [h, ..t] => match pred(h) | true => all(t, pred) | false => false end
+    | [h, ..t] =>
+        match pred(h) | true => all(t, pred) | false => false end
     end;
 
 --- An element `pred` accepts, before a list it accepts throughout, makes a list it accepts throughout.

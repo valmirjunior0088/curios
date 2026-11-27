@@ -131,7 +131,10 @@ let leads(p: Bytes, b: Bytes) -> Bool =
                 (
                     at.0 + 1,
                     at.1
-                        && match Bytes/try_get(b, at.0) | some(y) => y == x | none() => false end));
+                        && match Bytes/try_get(b, at.0)
+                        | some(y) => y == x
+                        | none() => false
+                        end));
     matched.1;
 
 -- The bytes of `b` after its first `k`, or none where it holds no more.

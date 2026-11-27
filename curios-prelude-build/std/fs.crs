@@ -197,7 +197,8 @@ and walked(directory: Path, entries: List(Path)) -> Try(Io, Io/Error, List(Path)
     | [entry, ..rest] =>
         let joined = Path/join(directory, entry);
         let found = lstat(joined)!;
-        let beneath = match found.kind | directory() => walk(joined) | _ => Try/pure([]) end;
+        let beneath =
+            match found.kind | directory() => walk(joined) | _ => Try/pure([]) end;
         let inner = beneath!;
         let after = walked(directory, rest)!;
         Try/pure([joined, ..inner, ..after])

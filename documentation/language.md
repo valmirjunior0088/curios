@@ -1306,7 +1306,8 @@ pub and Forest: pub Type
 end
 
 satisfy Show(Tree) {
-    show(t) = match t | leaf(n) => Show/show(n) | node(f) => Show/show(f) end,
+    show(t) =
+        match t | leaf(n) => Show/show(n) | node(f) => Show/show(f) end,
 }
 and Show(Forest) {
     show(f) =

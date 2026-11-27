@@ -64,7 +64,9 @@ pub let parse(s: Str) -> Fmt =
     let start: Walk = (Fmt/nil(), "", false);
     let (read, run, escaped) = Str/fold(s, start, step);
     turned(
-        Fmt/lit(match escaped | true => Str/concat(run, "\\") | false => run end, read),
+        Fmt/lit(
+            match escaped | true => Str/concat(run, "\\") | false => run end,
+            read),
         Fmt/nil());
 
 let go_with(T: Type, finish: (Str) -> T, f: Fmt, acc: Str) -> format_type_with(T, f) =

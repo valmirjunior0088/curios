@@ -4,7 +4,8 @@ let /def: (n: #NatType, f: (#NatType) -> #{node = InductType} /sys/Bool/False())
     (#NatType) -> #{node = InductType} /sys/Bool/False()} =
     (n: #NatType, f: (#NatType) -> #{node = InductType} /sys/Bool/False()) =>
         (
-            #{goal = #NatType} match n | 0 => 0 | k + 1 => #{goal = #NatType} match f(k) end end,
+            #{goal = #NatType}
+            match n | 0 => 0 | k + 1 => #{goal = #NatType} match f(k) end end,
             (m: #NatType) => /app(n, f))
 #{proof = true}
 and /app: (n: #NatType, f: (#NatType) -> #{node = InductType} /sys/Bool/False()) ->

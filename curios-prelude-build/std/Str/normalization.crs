@@ -98,7 +98,8 @@ let composition(state: Composing) -> List(Char) =
 
 --- `s` in `form`: every character decomposed, canonically or by compatibility as `form` asks, the marks put in canonical order, and composed again where `form` is a composed one.
 pub let normalized(s: Str, form: Form) -> Str =
-    let compatible = match form | nfkc() | nfkd() => true | nfc() | nfd() => false end;
+    let compatible =
+        match form | nfkc() | nfkd() => true | nfc() | nfd() => false end;
     let reversed =
         Str/fold(
             Str/flatten(List/map(Str/to_list(s), (c) => decomposed(c, compatible))),

@@ -285,7 +285,8 @@ let running(
         let answer =
             Io/bind(
                 Channel/take(answers),
-                (got) => match got | some(e) => Io/pure(Wake/answer(e)) | none() => never end);
+                (got) =>
+                    match got | some(e) => Io/pure(Wake/answer(e)) | none() => never end);
         let tick =
             match due
             | some(task) => Io/bind(Io/Scope/Task/join(task), (()) => Io/pure(Wake/tick()))

@@ -50,7 +50,8 @@ pub let unique(
     | 0 =>
         match j
         | 0 => (count = Eq/refl(), half = Nat/le/antisym(m, n, proved(), proved()))
-        | _ + 1 => match Eq/subst((t: Nat) => Holds(2 * m + 1 == t), e, True/qed()) end
+        | _ + 1 =>
+            match Eq/subst((t: Nat) => Holds(2 * m + 1 == t), e, True/qed()) end
         end
     | kp + 1 =>
         match j

@@ -8,7 +8,8 @@ let run(k: Nat, s: Nat, built: List(Nat), acc: Nat) -> Nat =
     | m + 1 =>
         let n = 75 * s % 65537;
         let grown = [..built, n];
-        let first = match List/try_get(grown, 0) | some(x) => x | none() => 0 end;
+        let first =
+            match List/try_get(grown, 0) | some(x) => x | none() => 0 end;
         run(m, n, grown, (acc + first) % 1000003)
     end;
 

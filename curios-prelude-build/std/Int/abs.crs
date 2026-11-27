@@ -34,5 +34,6 @@ pub let at_least_negated(a: Int) -> Holds(+0 - a <= Nat/to_int(abs(a))) =
 --- Conversion takes it where both operands are widened naturals or their negations and not at a product of two symbols, which reaches `abs` distributed.
 pub let of_mul(a: Int, b: Int) -> Eq()(abs(a * b), abs(a) * abs(b)) =
     match Int/view(a)
-    | nonneg(_) | neg(_) => match Int/view(b) | nonneg(_) | neg(_) => Eq/refl() end
+    | nonneg(_) | neg(_) =>
+        match Int/view(b) | nonneg(_) | neg(_) => Eq/refl() end
     end;

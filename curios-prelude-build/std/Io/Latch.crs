@@ -9,7 +9,8 @@ use /std/internal/{on_tripped, until};
 -- What a wait asks of `l` each time something it waits on has moved: an answer once `l` is tripped.
 let passed(l: Latch) -> Io(Option({})) =
     let is = tripped(l)!;
-    Io/pure(match is | true => Option/some(()) | false => Option/none() end);
+    Io/pure(
+        match is | true => Option/some(()) | false => Option/none() end);
 
 --- Until `l` is tripped: at once where it already is, and otherwise once another branch trips it. Only the program trips a latch, so a wait on one nothing will trip is a deadlock the host reports.
 pub let wait(l: Latch) -> Io({}) =

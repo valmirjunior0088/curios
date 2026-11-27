@@ -401,7 +401,8 @@ let rounds_and_records() -> Env(Flt) =
     let after = Env/rounding!;
     let _ = Env/mul(Flt/of_le_bytes(0x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]), +2.0)!;
     let status = State/get()!;
-    Env/pure(match after == status.rounding | true => third | false => +nan.0 end);
+    Env/pure(
+        match after == status.rounding | true => third | false => +nan.0 end);
 
 test the_environment_rounds_and_records =
     let (third, raised) = Env/run(rounds_and_records());

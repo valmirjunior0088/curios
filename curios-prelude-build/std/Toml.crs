@@ -66,8 +66,10 @@ satisfy Eql(Toml) {
         | int(x) => match b | int(y) => x == y | _ => false end
         | flt(x) => match b | flt(y) => Flt/identical(x, y) | _ => false end
         | bool(x) => match b | bool(y) => x == y | _ => false end
-        | offset_date_time(x) => match b | offset_date_time(y) => x == y | _ => false end
-        | local_date_time(x) => match b | local_date_time(y) => x == y | _ => false end
+        | offset_date_time(x) =>
+            match b | offset_date_time(y) => x == y | _ => false end
+        | local_date_time(x) =>
+            match b | local_date_time(y) => x == y | _ => false end
         | local_date(x) => match b | local_date(y) => x == y | _ => false end
         | local_time(x) => match b | local_time(y) => x == y | _ => false end
         | arr(x) => match b | arr(y) => x == y | _ => false end

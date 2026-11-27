@@ -74,7 +74,8 @@ let color_params(c: Color, base: Nat) -> List(Str) =
 
 --- The whole of `s` as one attribute sequence, from a reset.
 pub let sgr(s: Style) -> Bytes =
-    let flag(on: Bool, code: Str) -> List(Str) = match on | true => [code] | false => [] end;
+    let flag(on: Bool, code: Str) -> List(Str) =
+        match on | true => [code] | false => [] end;
     csi(
         Str/concat(
             Str/join(

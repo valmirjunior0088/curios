@@ -14,7 +14,8 @@ let top_below(n: Nat) -> Holds(top(n) < 16) =
     Nat/descend(
         (m: Nat) => m,
         (m) => Holds(top(m) < 16),
-        (m, ih) => match m < 16 | true => proved() | false => ih(m / 256, proved()) end,
+        (m, ih) =>
+            match m < 16 | true => proved() | false => ih(m / 256, proved()) end,
         n);
 
 -- The first byte of a number of rank `l` and top `t`, behind a `0xFF` for every seven of its rank past six.
@@ -153,7 +154,8 @@ let first_ranks(
                             0x[..first(lb - 7, tb), ..u],
                             proved())
                     end
-                | false => match lb < 7 | false => ih(l - 7, proved())(lb - 7, proved()) end
+                | false =>
+                    match lb < 7 | false => ih(l - 7, proved())(lb - 7, proved()) end
                 end,
         la)(
         lb,

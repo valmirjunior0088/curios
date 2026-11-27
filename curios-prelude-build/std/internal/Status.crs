@@ -49,7 +49,8 @@ let settled_of(code: Nat) -> Settled =
             List/fold(
                 errors,
                 Io/Error/other(code - /sys/status/other_base),
-                (entry, acc) => match code == entry.0 | true => entry.1 | false => acc end))
+                (entry, acc) =>
+                    match code == entry.0 | true => entry.1 | false => acc end))
     end;
 
 --- Nothing where `code` is `ok`, and the failure it names otherwise: what a reading asks of a reply before it reads its payload. A read's end or a wait, which a reply read so cannot answer, is a reply its row rules out.

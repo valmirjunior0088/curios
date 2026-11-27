@@ -127,7 +127,8 @@ pub let all(tests: List(Test({}))) -> Test({}) =
                             state.found,
                             step(Str/concat("case ", Nat/to_str(state.index)), next)),
                     index = state.index + 1)).found;
-    bind(found, (failures) => match failures | [] => pure(()) | _ => Test/failure(failures) end);
+    bind(found, (failures) =>
+        match failures | [] => pure(()) | _ => Test/failure(failures) end);
 
 -- Keeping an outcome inside Io lets a scope release before the failure resumes propagating through Test.
 let finish(@A: Type, test: Test(A)) -> Io(Result(List(Failure), A)) =

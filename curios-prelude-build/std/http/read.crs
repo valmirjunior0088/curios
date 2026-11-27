@@ -147,7 +147,8 @@ let hex(byte: Byte) -> Option(Nat) =
 let chunk_size(line: Bytes) -> Option(Nat) =
     let go(i: Nat, value: Nat, digits: Nat) -> Option(Nat) =
         match Bool/holds(i < Bytes/length(line))
-        | none() => match digits | 0 => Option/none() | _ => Option/some(value) end
+        | none() =>
+            match digits | 0 => Option/none() | _ => Option/some(value) end
         | some(inside) =>
             let byte = Bytes/get(line, i, @inside);
             match hex(byte)

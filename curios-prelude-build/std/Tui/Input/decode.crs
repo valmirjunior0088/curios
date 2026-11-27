@@ -156,7 +156,8 @@ let sequence(b: Bytes, i: Nat) -> Option(Sequence) =
                 let last: List(List(Option(Nat))) =
                     match current
                     | some(_) => [List/reverse([current, ..subs])]
-                    | none() => match subs | [] => [] | _ => [List/reverse([current, ..subs])] end
+                    | none() =>
+                        match subs | [] => [] | _ => [List/reverse([current, ..subs])] end
                     end;
                 Option/some(
                     Sequence {

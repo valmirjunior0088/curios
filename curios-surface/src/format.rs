@@ -129,7 +129,7 @@ impl FromStr for Indent {
     }
 }
 
-/// The most a match keeps on one line, from `match` to `end`: its span in columns and its arms. A decision on one line is read as one thing, and past some span or some count of arms the eye loses which arm a body belongs to, and a dispatch table is read as rows: a property of the reader, not of the page, so it is the same at every line width, and a page narrower than the span decides by what fits.
+/// The most a match keeps on one line: the columns its line's text spans, from where it begins past the indentation to the match's `end`, and its arms. A decision on one line is read as one thing, and past some span or some count of arms the eye loses which arm a body belongs to, and a dispatch table is read as rows: a property of the reader, not of the page, so it is the same at every line width, and a page narrower than the span decides by what fits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FlatMatch {
     width: usize,

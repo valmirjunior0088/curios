@@ -32,7 +32,7 @@ pub struct FormatSettings {
     #[arg(long, value_name = "COLUMNS", help = indent_width_help())]
     #[serde(default, deserialize_with = "indent_width")]
     pub indent_width: Option<Indent>,
-    /// The most columns a match keeps on one line, from `match` to `end`.
+    /// The most columns a match's line runs to its `end`, counted from where the line's text begins past its indentation.
     #[arg(long, value_name = "COLUMNS", help = flat_match_width_help())]
     #[serde(default)]
     pub flat_match_width: Option<usize>,
@@ -164,7 +164,7 @@ fn spelled(setting: FlatMatchSetting) -> (&'static str, &'static str) {
 /// `--flat-match-width`'s help, its default read off the constant that sets it.
 fn flat_match_width_help() -> String {
     format!(
-        "The most columns a match keeps on one line, from `match` to `end`, `0` through the line width, for standard input or a file no package governs; a package states its own under `[format]` (default: `{DEFAULT_FLAT_MATCH_WIDTH}`, or the line width where that is narrower)"
+        "The most columns a match's line runs to its `end`, counted from where its text begins past the indentation, `0` through the line width, for standard input or a file no package governs; a package states its own under `[format]` (default: `{DEFAULT_FLAT_MATCH_WIDTH}`, or the line width where that is narrower)"
     )
 }
 

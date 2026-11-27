@@ -71,7 +71,8 @@ pub let handle(@A: Type, l: Listing(A), k: Key, rows: Nat) -> Listing(A) =
 pub let view(@A: Type, l: Listing(A), show: (A) -> Str, style: Style, highlight: Style) -> Pane =
     (w, h) =>
         let chosen = index(l);
-        let first = match chosen | some(i) => kept(l.first, i, h) | none() => l.first end;
+        let first =
+            match chosen | some(i) => kept(l.first, i, h) | none() => l.first end;
         let shown =
             List/take(
                 List/drop_while(

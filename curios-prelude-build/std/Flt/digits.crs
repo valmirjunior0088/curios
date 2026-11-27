@@ -103,7 +103,8 @@ pub let generate(
                 let mp10 = mp * 10;
                 let mm10 = mm * 10;
                 let (d, rem) = div_mod(r * 10, s);
-                let high = match even | true => rem + mp10 >= s | false => rem + mp10 > s end;
+                let high =
+                    match even | true => rem + mp10 >= s | false => rem + mp10 > s end;
                 match rem < mm10
                 | true => [closing(d, rem, s, true, high)]
                 | false =>

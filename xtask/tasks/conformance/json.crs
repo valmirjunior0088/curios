@@ -5,7 +5,8 @@ use /std/{Str, List, Option, Result, Try, Io, Proc, Fmt, Json, Path, File, fs, B
 let reads(bytes: Bytes) -> Bool =
     match Str/of_bytes(bytes)
     | failure(_) => false
-    | success(text) => match Json/decode(text) | failure(_) => false | success(_) => true end
+    | success(text) =>
+        match Json/decode(text) | failure(_) => false | success(_) => true end
     end;
 
 --- What is wrong with the case `name`, which the decoder answered `read`: nothing where its prefix leaves the answer free or the answer is the one the prefix asks for.

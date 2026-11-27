@@ -55,7 +55,8 @@ let asked: Bytes =
 
 -- What a session sets once the terminal has answered: the alternate screen, the hidden cursor, bracketed paste and focus events, and the keyboard protocol, grapheme clusters and in-band resize where the terminal confirmed them.
 let entering(support: Support) -> Bytes =
-    let where(confirmed: Bool, b: Bytes) -> Bytes = match confirmed | true => b | false => 0x[] end;
+    let where(confirmed: Bool, b: Bytes) -> Bytes =
+        match confirmed | true => b | false => 0x[] end;
     0x[
         ..ansi/on(Mode/alternate_screen()),
         ..ansi/cursor_hide,
@@ -108,7 +109,8 @@ let answered(
 let supported(replies: List(Reply)) -> Support =
     let mode(m: Mode) -> Bool = List/contains(replies, Reply/mode(m, true));
     Support {
-        keyboard = List/any(replies, (r: Reply) => match r | keyboard(_) => true | _ => false end),
+        keyboard = List/any(replies, (r: Reply) =>
+            match r | keyboard(_) => true | _ => false end),
         synchronized = mode(Mode/synchronized_output()),
         clusters = mode(Mode/grapheme_clusters()),
         resize = mode(Mode/in_band_resize()) };

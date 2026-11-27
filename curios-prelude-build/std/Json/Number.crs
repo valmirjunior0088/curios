@@ -50,7 +50,8 @@ pub let of_flt(f: Flt) -> Option(Number) =
             end;
         let (whole, fraction) = Option/unwrap_or(Str/split_once(unsigned, "."), (unsigned, ""));
         let magnitude = Nat/to_int(Option/unwrap_or(Nat/of_str(Str/concat(whole, fraction)), 0));
-        let mantissa = match negative | true => +0 - magnitude | false => magnitude end;
+        let mantissa =
+            match negative | true => +0 - magnitude | false => magnitude end;
         Option/some(of(mantissa, +0 - Nat/to_int(Str/length(fraction))))
     end;
 

@@ -11,9 +11,11 @@ induct /B: pub Type
 end
 
 ((sa: (x: #{node = InductType} /B()) -> #{node = InductType} /E()) =>
-    #{goal = /sys/Bool/False} match sa(#{node = Variant} /B/b(#{node = Variant} /A/a(sa))) end)((
+    #{goal = /sys/Bool/False}
+    match sa(#{node = Variant} /B/b(#{node = Variant} /A/a(sa))) end)((
     x2: #{node = InductType} /B()) =>
     #{goal = #{node = InductType} /E()}
     match x2
-    | b(y) => #{goal = #{node = InductType} /E()} match y | a(g) => g(x2) end
+    | b(y) =>
+        #{goal = #{node = InductType} /E()} match y | a(g) => g(x2) end
     end)

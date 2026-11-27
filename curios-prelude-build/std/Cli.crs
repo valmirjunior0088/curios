@@ -401,10 +401,12 @@ pub let report(cli: Cli, path: List(Str), failure: Failure) -> Str =
 let variables(c: Command) -> List(Str) =
     match c
     | leaf(_, _, options, _) =>
-        List/concat_map(options, (f) => match f.env | some(n) => [n] | none() => [] end)
+        List/concat_map(options, (f) =>
+            match f.env | some(n) => [n] | none() => [] end)
     | group(_, _, options, commands) =>
         [
-            ..List/concat_map(options, (f) => match f.env | some(n) => [n] | none() => [] end),
+            ..List/concat_map(options, (f) =>
+                match f.env | some(n) => [n] | none() => [] end),
             ..variables_of(commands)]
     end
 and variables_of(commands: List(Command)) -> List(Str) =

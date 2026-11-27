@@ -6,10 +6,12 @@
     p: #{goal = Type} match c | false => #NatType | true => {} end,
     q: #{goal = Type} match c | false => #NatType | true => {} end,
     guard: /sys/Bool/Holds(
-        #{goal = #BoolType} match #NatEql(h(p), h(q)) | false => k(1) | true => k(0) end)) =>
+        #{goal = #BoolType}
+        match #NatEql(h(p), h(q)) | false => k(1) | true => k(0) end)) =>
     #{node = Rec}
     (let g: (i: #NatType) -> #NatType =
-        (i2: #NatType) => #{goal = #NatType} match i2 | 0 => h(p) | j + 1 => h(q) end
+        (i2: #NatType) =>
+            #{goal = #NatType} match i2 | 0 => h(p) | j + 1 => h(q) end
     and f: (
         gd: /sys/Bool/Holds(
             #{goal = #BoolType}
@@ -20,7 +22,9 @@
                 #{goal = #BoolType}
                 match #NatEql(g(0), g(1)) | false => k(1) | true => k(0) end)) =>
             #{goal = /sys/Bool/Holds(k(0))}
-            match #{goal = #BoolType} match #NatEql(g(0), g(1)) | false => k(1) | true => k(0) end
+            match
+                #{goal = #BoolType}
+                match #NatEql(g(0), g(1)) | false => k(1) | true => k(0) end
             | false => #{goal = /sys/Bool/Holds(k(0))} match gd2 end
             | true =>
                 let w: #{node = InductType} /sys/Bool/True() =

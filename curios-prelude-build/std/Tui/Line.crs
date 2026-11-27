@@ -65,7 +65,8 @@ let words(glyphs: List(Glyph)) -> List(List(Glyph)) =
         (g, acc) =>
             match Glyph/text(g)
             | " " => [none, ..acc]
-            | _ => match acc | [] => [[g]] | [word, ..rest] => [[g, ..word], ..rest] end
+            | _ =>
+                match acc | [] => [[g]] | [word, ..rest] => [[g, ..word], ..rest] end
             end);
 
 --- `l` as lines no wider than `w`, broken at spaces; a word wider than `w` is a line of its own, which a view crops.

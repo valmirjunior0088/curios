@@ -79,7 +79,8 @@ satisfy (@A: Type, use Eql(A)) => Eql(Option(A)) {
 }
 
 satisfy (@A: Type, use Show(A)) => Show(Option(A)) {
-    show(m) = match m | some(x) => Fmt/render("some(%)")(x) | none() => "none()" end,
+    show(m) =
+        match m | some(x) => Fmt/render("some(%)")(x) | none() => "none()" end,
 }
 
 satisfy (@A: Type, use Spell(A)) => Spell(Option(A)) {

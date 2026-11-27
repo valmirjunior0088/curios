@@ -29,7 +29,8 @@ pub let of_heads(
     under: Holds(h < k),
 ) -> Holds(below(0x[h, ..t], 0x[k, ..r])) =
     Eq/subst(
-        (o: Ordering) => Holds(match o | eq() => below(t, r) | lt() => true | gt() => false end),
+        (o: Ordering) => Holds(
+            match o | eq() => below(t, r) | lt() => true | gt() => false end),
         Eq/sym(Ord/of_lt(Byte/to_nat(h), Byte/to_nat(k), proved())),
         True/qed());
 

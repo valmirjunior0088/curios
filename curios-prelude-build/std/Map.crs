@@ -160,7 +160,8 @@ pub let filter(
     fold(
         m,
         empty(),
-        (k, v, acc) => match pred(k, v) | true => insert(acc, k, v) | false => acc end);
+        (k, v, acc) =>
+            match pred(k, v) | true => insert(acc, k, v) | false => acc end);
 
 --- Every entry of either, `b`'s winning under a shared key. Both are maps of one type, so of one dictionary.
 pub let union(@K: Type, use Hash/Key(K), @V: Type, a: Map(K, V), b: Map(K, V)) -> Map(K, V) =
