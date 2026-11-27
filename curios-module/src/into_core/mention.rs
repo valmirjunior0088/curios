@@ -64,10 +64,12 @@ impl PreparedText {
         entry: Option<&'a curios_core::Entrypoint>,
         lies: impl Fn(&Source) -> bool,
     ) -> Vec<Text<'a>> {
-        let anchors = self.anchors();
+        curios_common::profile!("texts");
+        // Each table this reads is restored or built the first time anything asks, so a span here times the first reader's share of it.
+        let anchors = curios_common::profile!("texts::anchors" => self.anchors());
         let items = &self.core().items;
-        let scans = self.scans();
-        let bodies = self.bodies();
+        let scans = curios_common::profile!("texts::restored" => self.scans());
+        let bodies = curios_common::profile!("texts::bodies" => self.bodies());
 
         // The module bodies written in the sources asked about: each file's own with the ones its text writes inline, and each no file backs.
         let mut written = Vec::new();
@@ -87,38 +89,41 @@ impl PreparedText {
         written.extend(unfiled);
 
         // Each declaration written in them, with the names its items declare, and the program's closing term.
-        let mut keys = Vec::new();
-        for module in &written {
-            let Some(body) = bodies.get(module) else {
-                continue;
-            };
-            for &first in &body.firsts {
-                let Some(record) = self.lowerings().get(first) else {
+        let mut keys = curios_common::profile!("texts::declarations" => {
+            let mut keys = Vec::new();
+            for module in &written {
+                let Some(body) = bodies.get(module) else {
                     continue;
                 };
-                let Some(key) = record.text() else {
-                    continue;
-                };
-                let mut names = Vec::new();
-                let mut place = usize::try_from(first).ok();
-                for _ in 0..record.facts().len() {
-                    let Some(at) = place else {
-                        break;
+                for &first in &body.firsts {
+                    let Some(record) = self.lowerings().get(first) else {
+                        continue;
                     };
-                    names.extend(items.names(at));
-                    place = items.place_after(Some(at));
+                    let Some(key) = record.text() else {
+                        continue;
+                    };
+                    let mut names = Vec::new();
+                    let mut place = usize::try_from(first).ok();
+                    for _ in 0..record.facts().len() {
+                        let Some(at) = place else {
+                            break;
+                        };
+                        names.extend(items.names(at));
+                        place = items.place_after(Some(at));
+                    }
+                    // A concept's methods are names its declaration writes, which no item declares; a family's constructors, the other members a former writes, its item declares already.
+                    let methods = record
+                        .facts()
+                        .iter()
+                        .flat_map(|fact| fact.members.iter().map(|(name, _)| *name))
+                        .filter(|name| !names.contains(name))
+                        .collect::<Vec<_>>();
+                    names.extend(methods);
+                    keys.push((key, names));
                 }
-                // A concept's methods are names its declaration writes, which no item declares; a family's constructors, the other members a former writes, its item declares already.
-                let methods = record
-                    .facts()
-                    .iter()
-                    .flat_map(|fact| fact.members.iter().map(|(name, _)| *name))
-                    .filter(|name| !names.contains(name))
-                    .collect::<Vec<_>>();
-                names.extend(methods);
-                keys.push((key, names));
             }
-        }
+            keys
+        });
         // Each `use` and `mod` line of those bodies, a text of its body's namespace.
         for module in &written {
             let namespace = curios_core::Anchor::of(curios_core::Anchored::Namespace(*module));
@@ -137,32 +142,34 @@ impl PreparedText {
                 .map(|(stamp, _)| ((closing, stamp), Vec::new())),
         );
 
-        let mut texts = keys
-            .into_iter()
-            .filter_map(|(key, names)| {
-                let span = anchors.text_of(key)?;
-                if !lies(&span.source) {
-                    return None;
-                }
-                let mut labels = names
-                    .into_iter()
-                    .filter_map(|name| {
-                        let label = anchors.label_of(&name)?;
-                        ((label.anchor, label.stamp) == key).then_some((name, *label))
-                    })
-                    .collect::<Vec<_>>();
-                labels.sort_by_key(|(_, label)| (label.start, label.end));
+        let mut texts = curios_common::profile!("texts::labels" => {
+            keys
+                .into_iter()
+                .filter_map(|(key, names)| {
+                    let span = anchors.text_of(key)?;
+                    if !lies(&span.source) {
+                        return None;
+                    }
+                    let mut labels = names
+                        .into_iter()
+                        .filter_map(|name| {
+                            let label = anchors.label_of(&name)?;
+                            ((label.anchor, label.stamp) == key).then_some((name, *label))
+                        })
+                        .collect::<Vec<_>>();
+                    labels.sort_by_key(|(_, label)| (label.start, label.end));
 
-                Some(Text {
-                    unit: self,
-                    entry: entry
-                        .filter(|_| matches!(key.0.anchored(), curios_core::Anchored::Entry)),
-                    key,
-                    span,
-                    labels,
+                    Some(Text {
+                        unit: self,
+                        entry: entry
+                            .filter(|_| matches!(key.0.anchored(), curios_core::Anchored::Entry)),
+                        key,
+                        span,
+                        labels,
+                    })
                 })
-            })
-            .collect::<Vec<_>>();
+                .collect::<Vec<_>>()
+        });
         texts.sort_by(|one, other| {
             let (one, other) = (&one.span, &other.span);
 

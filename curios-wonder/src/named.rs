@@ -727,11 +727,13 @@ impl Reading {
             .lying
             .borrow_mut()
             .entry(ptr::from_ref(source))
-            .or_insert_with(|| match source.file() {
-                Some(file) => identity(file) == self.file,
-                None => source
-                    .name()
-                    .is_some_and(|name| Path::new(name.as_str()) == self.asked),
+            .or_insert_with(|| {
+                curios_common::profile!("lies" => match source.file() {
+                    Some(file) => identity(file) == self.file,
+                    None => source
+                        .name()
+                        .is_some_and(|name| Path::new(name.as_str()) == self.asked),
+                })
             })
     }
 }
